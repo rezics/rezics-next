@@ -48,7 +48,13 @@ import type {
 import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
 import { OwnerCurrentRestartRequired, revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
-import { admitTaggedWorkPlan, taggedWorkHitScanBound, taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
+import {
+  admitTaggedWorkPlan,
+  taggedWorkEngineWindow,
+  taggedWorkHitScanBound,
+  taggedWorkRawBound,
+  taggedWorkRemainingHasConcept,
+} from './tagged-work-plan.ts';
 import { proveCurrentKindCounts } from './type-facet.ts';
 import { kindWitnessCounts, selectCurrentPredicatePage } from './current-predicate.ts';
 import { projectKindDirectoryCounts } from './kind-count-proof.ts';
@@ -415,7 +421,14 @@ function executeDiscoverySearch(
           queried = token.state.queried;
           observationOpened = true;
           repair = token.state.repair;
-          refill = { ...token.state.retained, size: Math.min(200, 2 * admitted.limit + 1) };
+          refill = {
+            ...token.state.retained,
+            size: taggedWorkEngineWindow({
+              prepared: queried.snapshot.kind === 'prepared',
+              remainingHits: admitted.limit,
+              remainingRaw: taggedWorkRawBound(queried.snapshot.kind === 'prepared', taggedWork, admitted.limit),
+            }),
+          };
         }
       }
       const conceptFilter =
@@ -560,7 +573,9 @@ function executeDiscoverySearch(
           directoryNextAfter = paged.nextAfter;
           exhausted = paged.exhausted;
         }
+        let preparedTraversal = queried.snapshot.kind === 'prepared';
         scan: for (;;) {
+          const scanBound = taggedWorkRawBound(preparedTraversal, taggedWork, admitted.limit);
           for (let round = 0; !admitted.collectionDirectory && round < 3; round++) {
             const batch = await coverage.queryDiscovery(queried, refill);
             if (batch.status !== 'queried') {
@@ -576,6 +591,7 @@ function executeDiscoverySearch(
             }
             last = batch;
             queried = batch.queried;
+            preparedTraversal = queried.snapshot.kind === 'prepared';
             const { window, result } = batch;
             if (
               !Number.isSafeInteger(window.examined) ||
@@ -592,7 +608,7 @@ function executeDiscoverySearch(
             )
               throw ready();
             examined += window.examined;
-            if (examined > taggedScanBound) throw ready();
+            if (examined > scanBound) throw ready();
             const inSpace = new Set<string>();
             if (spacePopulation) {
               const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
@@ -629,16 +645,21 @@ function executeDiscoverySearch(
             await coverage.consume(batch.execution, consumed);
             exhausted = consumed === window.examined && window.exhausted;
             if (exhausted || hits.length === admitted.limit) break;
-            const remaining = taggedScanBound - examined;
-            if (remaining < 1) break;
+            const remaining = scanBound - examined;
+            const size = taggedWorkEngineWindow({
+              prepared: preparedTraversal,
+              remainingHits: admitted.limit - hits.length,
+              remainingRaw: remaining,
+            });
+            if (size < 1) break;
             refill = {
               execution: batch.execution,
               consumed,
-              size: Math.min(200, remaining, 2 * (admitted.limit - hits.length) + 1),
+              size,
             };
           }
           if (!last || (!exhausted && hits.length < admitted.limit)) {
-            if (taggedWork && !request.cursor && !admitted.collectionDirectory) {
+            if (taggedWork && !request.cursor && !admitted.collectionDirectory && !preparedTraversal) {
               // Sparse direct output cannot publish a useful cursor. Retire its observation,
               // then materialize this same admitted predicate, source and canonical order.
               await coverage.dispose();
@@ -657,6 +678,7 @@ function executeDiscoverySearch(
               queried = prepared.queried;
               observationOpened = true;
               repair = prepared.repair;
+              preparedTraversal = true;
               refill = undefined;
               hits.length = 0;
               seen.clear();

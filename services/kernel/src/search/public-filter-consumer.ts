@@ -1419,6 +1419,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         seen.add(identity);
       }
     }
+    m.cost.rows += hits.length;
+    m.cost.bytes += Buffer.byteLength(encodeState(hits));
     return { rows, accepted };
   }
   async function nativeBatch(
@@ -1615,10 +1617,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         );
         const raw = result.raw;
         m.cost.candidates += raw.length;
-        const checked =
-          'representation' in recovery.bootstrap.definition.capture
-            ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
-            : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+        m.cost.rows += raw.length;
+        m.cost.bytes += Buffer.byteLength(encodeState(raw));
+        let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
+        try {
+          checked =
+            'representation' in recovery.bootstrap.definition.capture
+              ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
+              : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+        } catch (error) {
+          if (error instanceof MixedOwnerPending) {
+            await save(work, encoded, true, m);
+            return { status: 'preparing', repair: job, cost: m.cost };
+          }
+          throw error;
+        }
         work.prepared.push(
           ...('representation' in recovery.bootstrap.definition.capture
             ? raw
@@ -1870,9 +1883,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let previous: RetainedWindow | undefined;
       let previousEncoded: string | null = null;
       const pageSize = 'purpose' in plan ? plan.size : (plan.pageSize ?? plan.size);
-      const allowance = Math.min(600, 6 * pageSize + 3);
-      const size = prefix?.size ?? plan.size;
-      if (!Number.isInteger(size) || size < 1 || size > Math.min(200, 2 * pageSize + 1))
+      const preparedMixed = mixed && q.snapshot.kind === 'prepared';
+      const allowance = preparedMixed ? 600 : Math.min(600, 6 * pageSize + 3);
+      const maxWindow = preparedMixed ? Math.min(200, allowance) : Math.min(200, 2 * pageSize + 1);
+      const size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
+      if (!Number.isInteger(size) || size < 1 || size > maxWindow)
         throw new TypeError('Invalid retained refill size');
       let after = 'purpose' in plan ? undefined : plan.after;
       let reused: RetainedWindow['raw'] = [];

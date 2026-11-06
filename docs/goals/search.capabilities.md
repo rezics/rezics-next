@@ -109,8 +109,10 @@ and properties≤8 do not supply a continuation schema. Owner adoption is pendin
 `bun run --cwd services/kernel check test/search/outcomes.test.ts test/search/relation-facet-outcomes.test.ts`.
 Path 7 tagged-work admission, remaining-predicate kind proof, same-statement quantity matching and cursor
 traversal are `test/search/tagged-work-plan.test.ts`, `test/search/tagged-work-query.test.ts` and
-`test/search/type-facet-kind.test.ts`; the mounted Concept list and Search weight control are
-`apps/web/tests/concept-tagged-works.test.ts`. Released meaning IDs come from Definitions; LN/HAREM Concept
+`test/search/type-facet-kind.test.ts`; native direct/prepared agreement, bounded resume and current-owner
+retirement are `test/search/tagged-work-native.test.ts`; the mounted Concept list and Search weight control are
+`apps/web/tests/concept-tagged-works.test.ts`. Direct tagged-work walks `min(600, 6s+3)` raw rows; prepared serving
+walks at most 600 retained superset rows because concept statements stay a property-superset until current proof. Released meaning IDs come from Definitions; LN/HAREM Concept
 UUIDs and crossed platform/language tuples stay Semantic `classification()`/`platform` prerequisites.
 No complete six-surface catalogue command is registered. Semantic/Imports first supply released definitions and
 builder/pins; Commerce adopts owner query, then consumers reuse those records. Unsupported required requests remain

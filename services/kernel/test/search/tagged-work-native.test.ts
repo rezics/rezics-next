@@ -142,6 +142,7 @@ test('released tagged discovery agrees across native direct and resumed prepared
     expect(ids(preparedFirst)).toHaveLength(1);
     expect(preparedFirst.body.next).toEqual(expect.any(String));
     expect(preparedFirst.body).not.toHaveProperty('total');
+    expect(preparedFirst.body).not.toHaveProperty('facets');
     expect(ids(preparedFirst)).not.toContain(decoys[0]!.id);
     const preparedSecond = await usefulPage(fixture, { ...idRequest, cursor: preparedFirst.body.next });
     const preparedIds = [...ids(preparedFirst), ...ids(preparedSecond)];
@@ -182,9 +183,11 @@ test('released tagged discovery agrees across native direct and resumed prepared
         ],
       },
     };
-    const descendantPage = await usefulPage(fixture, descendantRequest);
-    expect(ids(descendantPage)).toEqual([descendant.id]);
+    const descendantPage = await usefulPage(fixture, { ...descendantRequest, limit: 10 });
+    expect(ids(descendantPage).sort()).toEqual([exactA.id, excluded.id, descendant.id].sort());
     expect(descendantPage.body.next).toBeNull();
+    expect(ids(descendantPage)).not.toContain(exactB.id);
+    expect(ids(descendantPage)).not.toContain(wrongSpoiler.id);
 
     await fixture.search.rebuild();
     const retired = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
