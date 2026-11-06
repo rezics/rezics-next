@@ -111,7 +111,9 @@ export async function runBangumiJourney() {
     await writeFile(resolve(evidence, 'native.json'), JSON.stringify(reads, null, 2), { mode: 0o600 });
     phase = 'anonymous-browser';
     const require = createRequire(resolve(root, 'apps/web/package.json'));
-    const { chromium } = require('playwright') as typeof import('../../../apps/web/node_modules/playwright');
+    const { chromium } = require('playwright') as {
+      chromium: { launch(options: { headless: boolean }): Promise<any> };
+    };
     const browser = await chromium.launch({ headless: true });
     try {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
@@ -125,14 +127,14 @@ export async function runBangumiJourney() {
         const text = await page.locator('main').innerText();
         const links = await page
           .locator('main a[href]')
-          .evaluateAll((nodes) =>
-            nodes.map((node) => ({ href: node.getAttribute('href')!, text: node.textContent ?? '' })),
+          .evaluateAll((nodes: any[]) =>
+            nodes.map((node: any) => ({ href: node.getAttribute('href')! as string, text: (node.textContent ?? '') as string })),
           );
         visits.push({ sourceKey: work.sourceKey, url: page.url(), text, links });
         await page.screenshot({ path: resolve(evidence, `anonymous-${work.sourceKey}.png`), fullPage: true });
         assert.ok(text.includes('STEINS;GATE') || text.includes('CLANNAD'), 'selected anime title rendered');
         assert.ok(
-          links.some((link) => link.href.includes('bgm.tv')),
+          links.some((link: { href: string }) => link.href.includes('bgm.tv')),
           'source citation rendered',
         );
       }

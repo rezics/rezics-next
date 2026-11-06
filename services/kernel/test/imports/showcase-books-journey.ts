@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { chromium, type Page } from '../../../../apps/web/node_modules/playwright';
+import { createRequire } from 'node:module';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
@@ -13,6 +13,11 @@ import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from '../..
 import source from './showcase-books-source.json';
 
 const root = resolve(import.meta.dir, '../../../..');
+// Playwright is installed with the web app; only the calls this journey makes are typed here.
+type Page = any;
+const { chromium } = createRequire(resolve(root, 'apps/web/package.json'))('playwright') as {
+  chromium: { launch(options: { headless: boolean }): Promise<any> };
+};
 const directory = resolve(root, '.temp/book-journey');
 await mkdir(directory, { recursive: true, mode: 0o700 });
 const handle = `rezics-books-${randomUUID().slice(0, 8)}`;
@@ -129,8 +134,12 @@ try {
   for (const [key, property, target] of [
     ['5329', 'wdt:P179', '2815'], ['10862', 'wdt:P179', '2815'],
     ['2815', 'schema:author', 'person:1466'], ['2815', 'schema:illustrator', 'person:1467'],
-    ['2815', 'schema:publisher', 'person:128'], ['2815', 'rezics:crossMediaCounterpart', '233'],
+    ['2815', 'schema:publisher', 'person:128'],
   ]) assert(values(key!, property!).some((row: any) => row.value.content === ids[target!]!.id), `${key} missing ${property} → ${target}`);
+  // The symmetric counterpart is stored once on its canonical side; the series reads it through its inverse links.
+  const counterpart = await (await fetch(`${origins.kernel}/v1/subjects/${ids['2815']!.id}/links?property=${encodeURIComponent('rezics:crossMediaCounterpart')}`)).json() as { links: { summary: { id: string } }[] };
+  assert(counterpart.links.some((link) => link.summary.id === ids['233']!.id), '2815 lacks its inverse anime counterpart');
+  assert(values('233', 'schema:name').some((row: any) => JSON.stringify(row.value.content) === JSON.stringify({ language: 'und', text: '劇場版 空の境界 第一章 俯瞰風景' })), 'anime 233 lacks its exact und name');
   for (const key of first.selected.volumes) {
     assert.equal(values(key, 'schema:isbn').length, 0);
     assert.equal(values(key, 'schema:numberOfPages').length, 0);
@@ -161,7 +170,7 @@ try {
       await page.getByLabel(/email/i).fill('developer@rezics.test');
       await page.locator('input[name="password"]').fill(password);
       await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-      await page.waitForURL((url) => url.origin === origins.web, { timeout: 60_000 });
+      await page.waitForURL((url: URL) => url.origin === origins.web, { timeout: 60_000 });
     }
     for (const series of first.selected.series) {
       await visit(page, persona, series);
