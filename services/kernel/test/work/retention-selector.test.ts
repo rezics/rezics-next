@@ -1,15 +1,25 @@
 import { expect, mock, test } from 'bun:test';
 import {
   WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS,
+  WORKFLOW_RETENTION_FAMILY_LIMITS,
+  WORKFLOW_RETENTION_NESTED_FK_STATEMENTS,
   WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS,
   WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS,
   WORKFLOW_RETENTION_SELECT_TAG,
+  WORKFLOW_RETENTION_STATUS_DELETE_STATEMENTS,
 } from '../../src/work/contract/bounds.ts';
 import {
+  admitRetentionFamilyCopies,
   classifyRetentionStatement,
   freezeWorkflowRetentionStart,
+  isRetentionCascadeDelete,
   retentionBatchWork,
+  retentionCompleteBatchWork,
+  retentionInterruptedBatchWork,
+  retentionMixedNeighbourhoodFanout,
+  retentionPayloadByteInventory,
   retentionPayloadFanoutInventory,
+  retentionReplayBatchWork,
   retentionSelectionBinds,
   retentionSweepWork,
 } from '../../src/work/core/index.ts';
@@ -133,7 +143,38 @@ test('statement classification names the selector tag and the four exact-ID dele
   expect(classifyRetentionStatement('DELETE FROM "dbos".workflow_status WHERE workflow_uuid = ANY($1::text[])')).toBe(
     'delete-workflow_status',
   );
+  expect(classifyRetentionStatement('DELETE FROM ONLY dbos.workflow_events WHERE workflow_uuid = $1')).toBe(
+    'cascade-workflow_events',
+  );
+  expect(classifyRetentionStatement('DELETE FROM ONLY dbos.workflow_events_history WHERE workflow_uuid = $1')).toBe(
+    'cascade-workflow_events_history',
+  );
+  expect(classifyRetentionStatement('DELETE FROM ONLY dbos.notifications WHERE destination_uuid = $1')).toBe(
+    'cascade-notifications',
+  );
+  expect(classifyRetentionStatement('DELETE FROM ONLY dbos.streams WHERE workflow_uuid = $1')).toBe('cascade-streams');
+  expect(isRetentionCascadeDelete('cascade-workflow_events')).toBe(true);
   expect(classifyRetentionStatement('SELECT 1')).toBe('other');
+});
+
+test('complete nested deletion charges selected IDs, payload copies, FK cascades, fences and replay', () => {
+  const mixed = retentionPayloadFanoutInventory(10, retentionMixedNeighbourhoodFanout());
+  const bytes = retentionPayloadByteInventory(10, retentionMixedNeighbourhoodFanout(), 1024);
+  const work = retentionCompleteBatchWork(10, mixed, bytes, 10);
+  expect(work.selected).toBe(10);
+  expect(work.nestedFkStatements).toBe(WORKFLOW_RETENTION_NESTED_FK_STATEMENTS);
+  expect(work.statusDeleteStatements).toBe(WORKFLOW_RETENTION_STATUS_DELETE_STATEMENTS);
+  expect(work.cascadeRows).toBeGreaterThan(work.selected);
+  expect(work.deletionRows).toBeGreaterThan(work.cascadeRows);
+  expect(work.payloadBytes).toBeGreaterThan(0);
+  expect(work.fenceRows).toBe(10);
+  expect(work.rollbackStatements).toBe(1);
+  expect(admitRetentionFamilyCopies('workflow_events', 64)).toBe(WORKFLOW_RETENTION_FAMILY_LIMITS.workflow_events);
+  const interrupted = retentionInterruptedBatchWork(10, mixed, bytes, false);
+  const replayed = retentionReplayBatchWork(interrupted, work);
+  expect(replayed.batches).toBe(2);
+  expect(replayed.applicationStatements).toBe(work.applicationStatements * 2);
+  expect(replayed.replayApplicationStatements).toBe(work.applicationStatements);
 });
 
 test('the durable start snapshot freezes days, time and application together', () => {

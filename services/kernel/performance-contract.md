@@ -44,14 +44,19 @@ receipt association and selected-admission adapters stay in `kernel-platform` an
 `composition/work-modules.ts`. Compact `domain-composition` tests pin enqueue, registration, selected admission and
 retirement against fake ports; the existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
 sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention deletion cost is selected
-IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload. The growth-retention suite
-uses one folded capture per measured batch or sweep: nested SDK-delete auto_explain notices exceed the 32 MiB raw
-cap and the 20,000 retained-entry cap at a 1,000-id batch. Selector-plan notices from acquired pool clients prove
-`workflow_retention_selector`. Payload tables share the 32,768-row planner floor so fanout 1/8/64 keeps indexed
-equality deletes of `operation_outputs`; cascade families stay unit copies. Measured nonempty batches are five
-application statements plus two control. Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1,
-short 90/5+2, full/backlog 107304/5+2, fanout 90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0.
-Folded notice envelopes and walk occupancy are released after each summary.
+IDs plus owned payload/FK cascade rows and admitted payload bytes; a selected count alone cannot bound that payload.
+The growth-retention suite uses one folded capture per measured batch or sweep: nested SDK-delete auto_explain
+notices exceed the 32 MiB raw cap and the 20,000 retained-entry cap at a 1,000-id batch. Selector-plan notices from
+acquired pool clients prove `workflow_retention_selector`. Payload tables share the 32,768-row planner floor so
+fanout 1/8/64 keeps indexed equality deletes. Variable families grow independently within owner limits; single-copy
+families stay one row and vary admitted bytes; mixed-maximum and sparse/deep selected identities grow unrelated
+workflow/payload history at 64/512/4096. Nested FK work is four engine statements inside status delete. Measured
+nonempty batches are five application statements plus two control. Bound revision
+`e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2, operations fanout
+90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0. This complete outcome distinguishes those
+already-passing series from the family/byte/mixed/sparse cascade proof. Folded notice envelopes and walk occupancy
+are released after each summary. Packing and plan transitions stay in relation-page evidence and the affine
+envelope; the linear classifier is unchanged because that envelope is intercept plus slope.
 
 ## Semantic domain composition
 

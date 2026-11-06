@@ -62,35 +62,40 @@ the returned batch plus logarithmic index descent. Unrelated applications, nonte
 index), recent completions and long-lived terminals completed after the cutoff are outside that range. Eligible
 backlog beyond 1,000 stays unvisited. SDK `deleteWorkflows(ids, false)` is six transaction statements (BEGIN, four
 exact-ID DELETEs of input/output/operations/status, COMMIT) plus owned payload rows and FK cascades into events,
-event history, notifications and streams. Those cascade and payload rows grow with the selected neighbourhood's
-owned copies, not with unrelated history or with the selected workflow count. Permanent writer fences stay. MVCC
-visibility work is excluded. The growth harness counts BEGIN/COMMIT as control statements, not `Cost.statements`.
-Empty batches are the selector only (one application statement, zero control, zero deletion rows). A nonempty batch
-is five application statements plus two control (seven). A two-batch sweep of 1,000 then 10 is ten application
-plus four control (fourteen).
+event history, notifications and streams. Nested FK SQL is four engine statements inside the status delete (five
+points including the parent). Those cascade and payload rows grow with the selected neighbourhood's owned copies
+and admitted payload bytes, not with unrelated history or with the selected workflow count. Permanent writer
+fences stay. MVCC visibility work is excluded. The growth harness counts BEGIN/COMMIT as control statements, not
+`Cost.statements`. Empty batches are the selector only (one application statement, zero control, zero deletion
+rows). A nonempty batch is five application statements plus two control (seven). A two-batch sweep of 1,000 then
+10 is ten application plus four control (fourteen). A failed batch before its checkpoint prices the same five
+application statements plus BEGIN/ROLLBACK; replay repeats that envelope on the remaining identities.
 
 `test/work/growth-retention.test.ts` measures empty, short (10) and full (1,000) batches at scales 64, 512 and 4,096
 history units (16 rows each) with selected work and unit payload fixed; eligible-application backlog with the
-returned batch fixed at 1,000; independent payload fanout 1/8/64 on a short batch; and a 1,010-row two-batch sweep.
+returned batch fixed at 1,000; the already-passing `operation_outputs` fanout 1/8/64; independent copy axes for
+every variable family within owner limits (operations/history/notifications/streams 1/8/64, events 1/8 capped at
+8); payload-byte axis 1,024/8,192/65,536 with single-copy families held at one row; mixed maximum admitted
+neighbourhoods; unrelated payload history; sparse/deep selected identities; and a 1,010-row two-batch sweep.
 Each check uses `captureMode: 'cost-folded'` so nested SDK-delete auto_explain notices stay inside the 32 MiB
 and 20,000-entry telemetry caps; raw retention of those notices overflowed on eligible-backlog, payload-fanout and
 two-batch sweep. Folded captures recycle each notice envelope and plan-walk occupancy after charging summaries;
 unmeasured prepare/warmup records only top-level write plans.
 The 32,768-row planner floor owns unit copies of every payload family so exact-ID deletes keep indexed seeks when
 fanout is 1, 8 or 64; a selected-only payload table seq-scans at small N and the linear blocks family cannot fit
-that plan change. Payload fanout grows only `operation_outputs` on a short batch of 10; cascade families stay at
-one copy so FK nested-loop page work stays a constant neighbourhood. Growing events/history/streams with fanout
-makes `DELETE workflow_status` blocks fail the linear family: per-parent index descent dominates at fanout 1 and
-heap packing improves at 64, so additive slope from 1→8 overshoots 64. A selected count of 10 still cannot bound
-10 vs 640 operation rows. Selector-plan notices are sampled from acquired pool clients after the auto_explain probe.
-Selector plans use `workflow_retention_selector` (Index Only Scan, no sequential scan); folded lists classify the
-four exact-ID deletes. Statement pins are `Cost.statements + Cost.controlStatements` = 1/7/14. Native recovery
-`test/work/retention.test.ts` interrupts before and after the durable batch checkpoint, resumes the same workflow
-identity on the frozen cutoff/application, and finishes on repeated empty. Bound revision
-`e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full and backlog 107304/5+2, fanout
-90→160→720, sweep 41868/10+4 at 64/512/4096 (fanout 1/8/64); background 0. A 1,000-id delete seq-scans the 32,768-row
-selected payload neighbourhood; fanout stays indexed. The full-batch series retires the former `GROWTH_BASELINE`
-step exemption for `workflow retention batch`.
+that plan change. Cascade inserts pack by parent so each FK nested loop reads adjacent heap tuples. The derived
+envelope is affine in owned copies: a constant per-parent index probe plus linear heap pages. Packing or a plan
+transition is retained in relation pages, sequential-scan evidence and the affine residual; it is not removed by
+holding cascade families at one copy. Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed the
+selected-count series (empty 0/1, short 90/5+2, full/backlog 107304/5+2, operations fanout 90→160→720, sweep
+41868/10+4); this complete outcome adds the family/byte/mixed/sparse series on top of that envelope. Selector-plan
+notices are sampled from acquired pool clients after the auto_explain probe. Selector plans use
+`workflow_retention_selector` (Index Only Scan, no sequential scan); folded lists classify the four exact-ID
+deletes and nested FK kinds. Statement pins are `Cost.statements + Cost.controlStatements` = 1/7/14. Native
+recovery `test/work/retention.test.ts` interrupts before and after the durable batch checkpoint, resumes the same
+workflow identity on the frozen cutoff/application, reads owned rows/bytes/fences before and after, and finishes
+on repeated empty. A 1,000-id delete seq-scans the 32,768-row selected payload neighbourhood; fanout stays indexed.
+The full-batch series retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`.
 
 ### Cost: workflow retention batch
 
@@ -99,19 +104,23 @@ step exemption for `workflow retention batch`.
   notifications and streams. Permanent writer fences are not deleted.
 - Bound: empty batch 1 application statement, 0 control, 0 deletion rows; nonempty batch 5 application + 2 control
   (7); a 1,000-then-10 sweep 10 application + 4 control (14). Deletion/examined rows are selected IDs plus owned
-  payload and cascade copies, constant in unrelated history and in eligible backlog beyond 1,000, linear in
-  `operation_outputs` fanout 1/8/64 with cascade families held at unit copies. Selector blocks are logarithmic.
-  Nested engine work is folded into those occurrence costs.
-- Growth check: `test/work/growth-retention.test.ts` empty, short, full, eligible-backlog, payload-fanout and
-  two-batch sweep titles.
+  payload and cascade copies, constant in unrelated workflow/payload history and in eligible backlog beyond 1,000,
+  linear in each variable family within owner limits and in admitted payload bytes with single-copy families held
+  at one row. Nested FK work is four engine statements / five points inside `DELETE workflow_status`. Selector
+  blocks are logarithmic; cascade-fanout blocks are affine (per-parent index probes plus heap pages), declared
+  `indexProbes` for depth/packing staircases. Interrupted batches price BEGIN/ROLLBACK in the same operation
+  context; replay repeats the remaining identities. Fences are not deleted.
+- Growth check: `test/work/growth-retention.test.ts` empty, short, full, eligible-backlog, operations fanout,
+  per-family cascade, payload-byte, mixed-maximum, unrelated-payload, sparse/deep and two-batch sweep titles.
 
-Decision: pin this outcome with the four named native suites only — compact selector and migration pins, registered
-interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog/fanout/sweep — rather than
-extra stories. Each growth series uses its own application and seed identities so a selected count cannot borrow
-another series' payload. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain
-document under the shared 32 MiB or 20,000 retained-entry caps. Payload-family planner floors are part of that pin:
-fanout 1/8/64 must remain an indexed equality delete of owned copies, not a sequential scan of a tiny selected-only
-table.
+Decision: pin complete installed retention cleanup with the four named native suites only — compact selector and
+migration pins, registered interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog
+plus independent family-count, payload-byte, mixed-max and sparse/deep series — rather than extra stories. Each
+growth series uses its own application and seed identities so a selected count cannot borrow another series'
+payload. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain document under
+the shared 32 MiB or 20,000 retained-entry caps. Payload-family planner floors are part of that pin: fanout 1/8/64
+must remain an indexed equality delete of owned copies, not a sequential scan of a tiny selected-only table.
+Cascade copies are packed by parent; packing residuals stay in the affine envelope and relation-page evidence.
 
 A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
 SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or
