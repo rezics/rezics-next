@@ -2813,18 +2813,14 @@ locale and Context across destination/return links. The immutable profile remain
 For an initial large forward directory, the existing native Subject counts choose the first populated declared role;
 an explicit node or continuation always wins. This adds no discovery read and never reorders rows.
 
-Decision: receive the Concept control/return corrections and public metadata date correction as supporting source;
-retain the existing Person correction lifetime. Pin native stream selection and public rendering with focused tests,
-and repair the existing 105-target fixture through native statements and current hidden-target moderation. Editions
+Decision: the Concept control and return corrections and the public metadata date correction are supporting source;
+the existing Person correction lifetime is kept. Native stream selection and public rendering are pinned by focused
+tests, and the existing 105-target fixture is written as native statements with current hidden-target moderation. Editions
 use released dates, contents use native names, and credits retain released position qualifiers. Recipe and game
 release templates expose their released descriptive properties. Relation previews reuse the current Subject, while
 full views retain separate forward and inverse windows. Unsupported calendars, precision and uncertainty no longer
 produce a Gregorian date in the public title or compact frame.
 
-Dates remain single-valued: accepting a competing sourced candidate does not replace the selected date. Candidate
-comparison is explicitly opened after session preparation; Changes exposes the native revision trail without
-inserting private review data into public HTML. Its signed-in interaction requires browser acceptance, rather than
-asserting both candidates in a static public response. Served anonymous/editor/verified-agent
-traversal, private correction resumption and responsive browser acceptance are deferred to integration. This work
-read the corresponding Web capability row, Web guide, Subject reading/relations/return contracts, the reference
-index and Schema.org 30.1's contributor, exampleOfWork and isPartOf vocabulary before implementation.
+Dates remain single-valued: a competing sourced candidate never replaces the selected date. Candidate comparison opens
+only after a current signed-in reading; Changes shows the native revision trail without putting private review data
+into public HTML. A static public response does not show both candidates.
