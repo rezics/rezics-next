@@ -173,6 +173,7 @@ Diagnostic7: published board, current `content.board.owner`, board/subject read 
 the board projection. Shared-database board-read current-role projection repair stays with Accounts.
 `grant.create` re-authenticates the governance bearer on that Access so command admission binds the same actor
 snapshot; Content's `native.auth.issue` actor object is not admitted there.
+Order and Checkout sale capture use the same Auth consent reader as offer create.
 `prepareNativeRetainedOrder` is the Accounts terminal-graph export. Fresh `POST /v1/offers` sends only
 `contentEditionId` and ordinary commercial terms; `targetSubjectId` is the historical-replay body and is rejected
 on the same object. Native `POST /v1/orders` binds `expectedOfferRevision` from public `GET /v1/offers/:offerId`;

@@ -396,6 +396,8 @@ edition ID, immutable revision ID/hash and publication `editionRevision`. It is 
 permission token. `sameCapturedContentEdition` compares every immutable field, including that reference. The
 `captureCurrentContentEdition` / `requireCurrentContentEdition` helpers use the actual request Actor;
 `requireMechanicalContentEdition` uses only Content's mechanical entrypoint for trusted order work.
+Order create, Checkout create and apply forward the same Auth consent reader as offer create, so
+initiator restoration can run; omitting it refuses the sale as unavailable.
 
 The private `withSalePreparation` composition in [commands](commands.ts) forwards parent `prepare`, `authorize`
 and `finalize` with the exact original evidence, preserving the creation registry and account floor before receipt
