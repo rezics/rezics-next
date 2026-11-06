@@ -14,19 +14,24 @@ import {
   unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
-import { bootstrapGovernance, PLATFORM_GOVERNANCE_ROLE } from '../../../src/access/bootstrap-governance.ts';
+import {
+  bootstrapGovernance,
+  PLATFORM_GOVERNANCE_ROLE,
+  PLATFORM_RESOURCE,
+} from '../../../src/access/bootstrap-governance.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../../src/access/lifecycle.ts';
+import { resourceRoleCatalogue } from '../../../src/access/resource-roles.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { actionCatalogue } from '../../../src/http/request.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
 import type { Access, AccountActor } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
@@ -40,7 +45,7 @@ export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
 export const entryStates = { game: 'playing', recipe: 'cooking', record: 'listening' };
 export const entryKey = () => randomUUID();
-const global = { route: 0, id: GLOBAL_CONTEXT };
+const global = { route: PLATFORM_RESOURCE.route, id: PLATFORM_RESOURCE.id };
 const clientId = 'native-profile-entry';
 const entryScopes = [
   'subject:create',
@@ -250,41 +255,29 @@ export async function createProfileEntryFixture(
       const actor = await authenticateAccount(access, { pool, deadline: deadlineFor(300_000) }, claims);
       return { actor, bearer: await accountToken(claims) };
     }
+    // Grant-routes and outcome-driver admit platform.governance only on a token
+    // that carries the complete mounted catalogue plus gate:any. A reduced sibling
+    // list is denied even when the role row exists. media:complete stays off the
+    // token; it is reserved to the confidential website client.
     const steward = await identity([
-      'access:grant',
-      'subject:batch_write',
-      'offer:create',
-      'subject:create',
-      'statement:propose',
-      'definitions:read',
-      'definitions:publish',
-      'definitions:activate',
-      'account:suspend',
-      'moderation:hide',
-      'subject:read',
-      'exposure:open',
-      'exposure:close',
-      'gate:any',
+      ...new Set([...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete').concat('gate:any')),
     ]);
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
     // Bootstrap writes platform.governance on the Global Context for this steward.
-    // That role includes access:grant, gate:any, definitions:publish, subject:batch_write
-    // and subject:merge. Access admits a grantor only on the deadline that authenticated
-    // it, using that live identity snapshot. Every fixture grant therefore authenticates
-    // the original governance scopes onto this command's deadline. 68d8/0b00 sibling
-    // tokens omitted gate:any and were denied with the role row present; 07cc HTTP
-    // create was forbidden because admission binds the inner Access snapshot, not the
-    // wrapped HTTP actor. Putting gate:personal_library on the grantor identity drops
-    // coverage; gate:any on the original scopes covers library-gate delegation.
+    // Access admits that identity only on the deadline that authenticated it.
+    // Re-authenticate the original catalogue scopes onto each grant command;
+    // HTTP /v1/grants binds a wrapped request actor that command admission
+    // does not accept. gate:any on those original scopes covers library-gate
+    // delegation; putting gate:personal_library on the grantor identity does not.
     const grants = createGrantCommands({
       pool,
       access,
       managementAction: 'access:grant',
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
-    async function grantFacts() {
+    async function grantFacts(actor: AccountActor, granted: readonly string[]) {
       const roles = await reader.query(
         `SELECT grant_role AS fact, subject_kind, subject_id::text AS subject
            FROM access.resource_role_grant
@@ -299,7 +292,22 @@ export async function createProfileEntryFixture(
           ORDER BY action, subject_kind, subject`,
         [global.id, steward.actor.accountId],
       );
-      return { role: PLATFORM_GOVERNANCE_ROLE, roles: roles.rows, grants: held.rows };
+      const account = await reader.query(
+        `SELECT kind, state, authn_fenced AS fenced, membership_inverse_complete AS complete
+           FROM access.account WHERE route = $1 AND account_id = $2`,
+        [routeOf(steward.actor.accountId), steward.actor.accountId],
+      );
+      const roleActions = [...(resourceRoleCatalogue(access)?.roles.get(PLATFORM_GOVERNANCE_ROLE) ?? [])];
+      const needed = ['access:grant', 'gate:any', ...granted];
+      return {
+        role: PLATFORM_GOVERNANCE_ROLE,
+        roles: roles.rows,
+        grants: held.rows,
+        account: account.rows[0] ?? null,
+        bound: actor.accountId === steward.actor.accountId && actor.clientId === steward.actor.clientId,
+        missingFromToken: needed.filter((action) => !actor.scopes.includes(action)),
+        missingFromRole: needed.filter((action) => !roleActions.includes(action)),
+      };
     }
     async function grantOnDeadline(
       subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
@@ -331,7 +339,7 @@ export async function createProfileEntryFixture(
         else await grants.create(command, input);
       } catch (error) {
         throw new Error(
-          `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts())}`,
+          `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts(actor, actions))}`,
           { cause: error },
         );
       }

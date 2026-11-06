@@ -43,8 +43,9 @@ scale, Content's current standard question/revision/meaning and owner-selected 0
 an explicit native clear separately. Apply needs a separate `confirmNativeVoteEffects:true`; source privacy,
 upload confirmation, state import and the score value do not provide that consent.
 
-Decision: native import tests keep the platform steward identity on the original governance scopes, including
-`gate:any`. Bootstrap installs `platform.governance` on the Global Context; that role already holds `access:grant`,
+Decision: native import tests keep the platform steward identity on the original governance scopes: every mounted
+catalogue action except `media:complete`, plus `gate:any`. That is the same token grant-routes and outcome-driver use
+to exercise `platform.governance`. Bootstrap installs that role on the Global Context; it already holds `access:grant`,
 `gate:any` and the extra import actions. Every fixture grant authenticates those original scopes onto the command
 deadline so Access admits the live identity snapshot. `gate:any` covers library-gate delegation. A reduced sibling
 token is denied even when the role row exists; mounted HTTP `/v1/grants` authenticates a wrapped actor that command
