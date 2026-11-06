@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import { createCommunityDeclaration } from '../../src/community/declaration.ts';
 import { createCommunityHttpDeclaration } from '../../src/community/http-declaration.ts';
 import { COMMUNITY_EVENTS } from '../../src/community/events.ts';
 import { startCommunityApplication, unbindCommunityApplication } from '../../src/community/adapters/index.ts';
 import { deadlineElapsed } from '../../src/community/core/index.ts';
+import { SpaceDiscoveryInvalidation } from '../../src/community/space-discovery-events.ts';
 
 test('Community declarations are values that name the module inventory without starting it', () => {
   const ambient = { deadlineNow: () => 1_000 };
@@ -33,6 +35,25 @@ test('the bound application exposes deadline, access and effect capabilities fro
   expect(deadlineElapsed(50, 50)).toBe(true);
   started.stop();
   unbindCommunityApplication();
+});
+
+test('Space discovery invalidation origin accepts a log UUID and an empty-head position', () => {
+  const spaceId = '00000000-0000-8000-8000-000000000001';
+  expect(
+    Value.Check(SpaceDiscoveryInvalidation, {
+      target: { kind: 'space', id: spaceId },
+      origin: {
+        partition: 0,
+        epoch: 1,
+        position: '0',
+        eventId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        resourceId: spaceId,
+        type: 'com.rezics.community.space.created.v1',
+      },
+      revisionId: spaceId,
+      nativeVersion: '0',
+    }),
+  ).toBe(true);
 });
 
 test('Access-facing claim capabilities load in a fresh process without the composition root', () => {

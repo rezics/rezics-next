@@ -8,7 +8,16 @@ export type {
   CommunityQueryClient,
   CommunityQueryResult,
 } from './vocabulary.ts';
-export { COMMUNITY_UUID_PATTERN, isCommunityUuid } from './vocabulary.ts';
+export {
+  COMMUNITY_LOG_POSITION,
+  COMMUNITY_LOG_POSITION_PATTERN,
+  COMMUNITY_ROUTED_UUID,
+  COMMUNITY_ROUTED_UUID_PATTERN,
+  COMMUNITY_UUID,
+  COMMUNITY_UUID_PATTERN,
+  isCommunityRoutedUuid,
+  isCommunityUuid,
+} from './vocabulary.ts';
 export {
   COMMUNITY_DISCOVERY_PAGE,
   COMMUNITY_PARTITION_COUNT,
