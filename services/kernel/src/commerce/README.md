@@ -998,8 +998,9 @@ Decision: genuine-order native acceptance uses Content's isolated native system 
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
 Decision: one native purchase/retention/expiry journey plus the unused-actor operator-history case. Board and offer
 grants, edition publication and Commerce HTTP share one composed kernel whose Access is compiled from that kernel's
-catalogue and Score `nativeAuth.handler`. `grant.create` authenticates the governance bearer on that Access so
-command admission sees the same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
+catalogue and Score `nativeAuth.handler`. After mount, tokens are issued for a client registered with that catalogue.
+`grant.create` authenticates the governance bearer on that Access so command admission sees the same actor snapshot; a
+Content-issued actor object is not reused. Seller Global grants are
 `board:create` and `offer:create` only, because Content already installed `subject:create`. The composed worker is
 the production module list under `workerTestEnv`; readiness waits for the effects consumer to observe and catch up
 and uses the existing 5ms queue poll. The board-read current-role projection stays with Accounts.
