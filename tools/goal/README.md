@@ -674,6 +674,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.integration.candidatePatchCharacters`         | `5000`                               | Maximum redacted candidate patch characters.                                                                                                                                                |
 | `policy.promotion.commandRecordBytes`                 | `32768`                              | Maximum full promotion command record size before hash-only omission (bytes).                                                                                                               |
 | `policy.promotion.reasonBytes`                        | `1024`                               | Maximum promotion observation reason before hash-only omission (bytes).                                                                                                                     |
+| `policy.goalMaxInFlight`                              | `6`                                  | Maximum started nonurgent tasks per Goal; waiting checks and landing count.                                                                                                                 |
 | `policy.backlog.lowWater`                             | `8`                                  | Ready briefs below which a running manager is woken.                                                                                                                                        |
 | `policy.backlog.wakeIntervalMs`                       | `3600000`                            | Minimum interval between low-backlog wakeups (ms).                                                                                                                                          |
 | `policy.backlog.stoppedTaskLimitMs`                   | `3600000`                            | Stopped product task age before cancellation into failed backlog (ms).                                                                                                                      |
@@ -2270,6 +2271,11 @@ host's socket. The host skips the minute while the previous child is still runni
   A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
   reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
   lists path-prefix merge candidates; status and hourly reports count them.
+  Worker starts also obey `policy.goalMaxInFlight` per Goal, default six. Running tasks, including those parked on
+  checks, and landing tasks count; dependency-held, urgent and control-plane tasks do not. A brief can be accepted
+  into the task queue while its Goal is full and remains ready until a slot opens. Start admission reserves slots in
+  ready order across fresh dispatches, retries and dependency releases. `goal backlog status` reports each Goal's
+  in-flight count and cap (`exempt` for control-plane); older shared local settings need no new key.
   Decision: omitted estimates on ordinary product briefs count as 1,500 lines, matching parseBrief. Interface, claim and
   bulk-text are product. Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix
   overlap, at most three. Invalid YAML in a backlog file is untrusted input and is not a size return.

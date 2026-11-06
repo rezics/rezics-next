@@ -224,7 +224,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     }
     const json = flags.length === 0 && id === '--json';
     if (subcommand !== 'status' || flags.length || (id !== undefined && !json)) throw new Error(usage);
-    const rows = backlogStatus(runtime.stateDirectory);
+    const rows = backlogStatus(runtime.stateDirectory, runtime.db, runtime.policy?.goalMaxInFlight);
     console.log(json ? JSON.stringify(rows) : formatBacklogStatus(rows));
     return 0;
   }

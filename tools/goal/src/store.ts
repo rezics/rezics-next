@@ -598,6 +598,49 @@ export class WorkerStore implements AttemptFence {
   runningAttemptsByPool(): Record<string, number> {
     return this.countAttemptsByPool(['pending', 'running']);
   }
+  /** Started, waiting-check and landing tasks that count against one Goal's start cap. */
+  goalInFlightCount(goal: string, excludeTaskId?: string): number {
+    if (goal === 'control-plane') return 0;
+    const excluded = excludeTaskId ? ' AND id != ?' : '';
+    const row = this.db
+      .query(
+        `SELECT count(*) AS count FROM worker_tasks
+         WHERE json_extract(body, '$.brief.goal') = ?
+           AND coalesce(json_extract(body, '$.brief.urgent'), 0) != 1
+           AND json_extract(body, '$.state') IN ('running', 'landing')${excluded}`,
+      )
+      .get(...(excludeTaskId ? [goal, excludeTaskId] : [goal])) as { count: number };
+    return row.count;
+  }
+  /** Goal metadata for a live capacity ticket written by an older controller process. */
+  taskGoal(taskId: string): string | undefined {
+    const row = this.db
+      .query("SELECT json_extract(body, '$.brief.goal') AS goal FROM worker_tasks WHERE id=?")
+      .get(taskId) as { goal: string | null } | null;
+    return typeof row?.goal === 'string' ? row.goal : undefined;
+  }
+  /** Dispatch sequence used to keep same-Goal ready starts in their accepted order. */
+  taskSequence(taskId: string): number | undefined {
+    const row = this.db.query('SELECT sequence FROM worker_tasks WHERE id=?').get(taskId) as {
+      sequence: number;
+    } | null;
+    return row?.sequence;
+  }
+  /** Ready, nonurgent tasks accepted earlier than one queued start for the same Goal. */
+  goalReadyTaskIdsBefore(goal: string, sequence: number): string[] {
+    return (
+      this.db
+        .query(
+          `SELECT id FROM worker_tasks
+           WHERE json_extract(body, '$.brief.goal') = ?
+             AND coalesce(json_extract(body, '$.brief.urgent'), 0) != 1
+             AND json_extract(body, '$.state') = 'ready'
+             AND sequence < ?
+           ORDER BY sequence`,
+        )
+        .all(goal, sequence) as { id: string }[]
+    ).map((row) => row.id);
+  }
   /** Attempts parked on checks; they do not occupy `policy.maxConcurrent`. */
   waitingAttemptsByPool(): Record<string, number> {
     return this.countAttemptsByPool(['waiting']);

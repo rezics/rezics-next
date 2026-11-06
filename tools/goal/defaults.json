@@ -175,6 +175,7 @@
     "attemptsPerIntegrated": 1.5
   },
   "policy": {
+    "goalMaxInFlight": 6,
     "backlog": {
       "continuationReview": {},
       "lowWater": 8,

@@ -103,6 +103,10 @@ export type BacklogGoalCounts = {
   dispatched: number;
   failed: number;
   returned: number;
+  /** Started or landing tasks counted against this Goal's cap; control-plane shows its full in-flight count. */
+  inFlight?: number;
+  /** `null` marks Goals whose work is exempt from the per-Goal cap. */
+  maxInFlight?: number | null;
 };
 
 export type BacklogRuntime = {
@@ -159,26 +163,79 @@ function directories(path: string): string[] {
 
 /** Markdown briefs directly in a directory, oldest first by modification time. */
 /** Ready, dispatched and refused brief counts for every Goal backlog directory. */
-export function backlogStatus(stateDirectory: string): BacklogGoalCounts[] {
+export function backlogStatus(
+  stateDirectory: string,
+  db?: Database,
+  maxInFlight = defaultPolicy.goalMaxInFlight,
+): BacklogGoalCounts[] {
   const root = backlogDirectory(stateDirectory);
-  return directories(root).map((goal) => ({
+  const inFlight = new Map<string, number>();
+  if (db && tableExists(db, 'worker_tasks')) {
+    for (const row of db
+      .query(
+        `SELECT json_extract(body, '$.brief.goal') AS goal,
+                sum(CASE WHEN json_extract(body, '$.brief.goal') = 'control-plane'
+                          OR coalesce(json_extract(body, '$.brief.urgent'), 0) != 1 THEN 1 ELSE 0 END) AS count
+         FROM worker_tasks
+         WHERE json_extract(body, '$.state') IN ('running', 'landing')
+           AND json_extract(body, '$.brief.goal') IS NOT NULL
+         GROUP BY json_extract(body, '$.brief.goal')`,
+      )
+      .all() as { goal: string; count: number }[]) {
+      inFlight.set(row.goal, row.count);
+    }
+  }
+  const goals = new Set([...directories(root), ...inFlight.keys()]);
+  return [...goals].sort().map((goal) => ({
     goal,
     ready: briefs(join(root, goal)).length,
     dispatched: briefs(join(root, goal, DISPATCHED_DIRECTORY)).length,
     failed: briefs(join(root, goal, FAILED_DIRECTORY)).length,
     returned: briefs(join(root, goal, RETURNED_DIRECTORY)).length,
+    ...(db
+      ? {
+          inFlight: inFlight.get(goal) ?? 0,
+          maxInFlight: goal === 'control-plane' ? null : maxInFlight,
+        }
+      : {}),
   }));
 }
 
 export function formatBacklogStatus(rows: BacklogGoalCounts[]): string {
   if (!rows.length) return 'No Goal backlog directories.';
   const width = Math.max(4, ...rows.map((row) => row.goal.length));
-  const line = (goal: string, ready: string, dispatched: string, failed: string, returned: string) =>
-    `${goal.padEnd(width)}  ${ready.padStart(5)}  ${dispatched.padStart(10)}  ${failed.padStart(6)}  ${returned.padStart(8)}`;
+  const hasInFlight = rows.some((row) => row.inFlight !== undefined);
+  const line = (
+    goal: string,
+    ready: string,
+    dispatched: string,
+    failed: string,
+    returned: string,
+    inFlight?: string,
+    maxInFlight?: string,
+  ) =>
+    `${goal.padEnd(width)}  ${ready.padStart(5)}  ${dispatched.padStart(10)}  ${failed.padStart(6)}  ${returned.padStart(8)}` +
+    (hasInFlight ? `  ${(inFlight ?? '0').padStart(8)}  ${(maxInFlight ?? '6').padStart(4)}` : '');
   return [
-    line('goal', 'ready', 'dispatched', 'failed', 'returned'),
+    line(
+      'goal',
+      'ready',
+      'dispatched',
+      'failed',
+      'returned',
+      hasInFlight ? 'in-flight' : undefined,
+      hasInFlight ? 'cap' : undefined,
+    ),
     ...rows.map((row) =>
-      line(row.goal, String(row.ready), String(row.dispatched), String(row.failed), String(row.returned)),
+      line(
+        row.goal,
+        String(row.ready),
+        String(row.dispatched),
+        String(row.failed),
+        String(row.returned),
+        row.inFlight === undefined ? undefined : String(row.inFlight),
+        row.maxInFlight === undefined ? undefined : row.maxInFlight === null ? 'exempt' : String(row.maxInFlight),
+      ),
     ),
   ].join('\n');
 }

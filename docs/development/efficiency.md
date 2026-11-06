@@ -97,6 +97,8 @@ These rules were adopted on 2026-10-29. The
 [delivery report on main](https://github.com/rezics/rezics-next/blob/main/tools/goal/reports/delivery-efficiency-20261029.md)
 provides the evidence.
 
+Decision: enforce the six-task per-Goal limit at worker start admission; waiting checks and landing count, dependency-held, urgent and control-plane tasks are exempt, and ready work starts in order when a slot opens.
+
 ## Operating discipline
 
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused

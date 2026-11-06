@@ -1300,7 +1300,13 @@ export class WorkerTasks {
       startsFirst(task),
       taskId,
       task.currentAttempt + 1,
-      { policy: this.settings.policy?.capacity, urgent: task.brief.urgent },
+      {
+        policy: this.settings.policy?.capacity,
+        urgent: task.brief.urgent,
+        goal: task.brief.goal,
+        goalMaxInFlight: this.settings.policy?.goalMaxInFlight ?? defaultPolicy.goalMaxInFlight,
+        excludeTaskId: task.id,
+      },
     );
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
@@ -1474,6 +1480,9 @@ export class WorkerTasks {
         ? await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId, targetAttempt, {
             policy: this.settings.policy?.capacity,
             urgent: this.store.task(taskId).brief.urgent,
+            goal: this.store.task(taskId).brief.goal,
+            goalMaxInFlight: this.settings.policy?.goalMaxInFlight ?? defaultPolicy.goalMaxInFlight,
+            excludeTaskId: taskId,
           })
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
