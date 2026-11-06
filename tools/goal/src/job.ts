@@ -708,6 +708,17 @@ export class WorkerJob implements GateOutcomeSink {
         const headSample = await worktreeHeadSample(task.worktree);
         const newest = await newestWorktreeMtime(task.worktree);
         const cpu = await processGroupCpuTicks(attempt.process ?? null);
+        store.assertCurrent(ref);
+        if (store.attempt(ref).state !== 'running') return;
+        const logAfterSample = statSync(ref.logPath, { throwIfNoEntry: false });
+        const sizeAfter = logAfterSample?.size ?? 0;
+        const mtimeAfter = logAfterSample?.mtimeMs ?? 0;
+        if (sizeAfter !== lastLogSize || mtimeAfter !== lastLogMtime) {
+          lastLogSize = sizeAfter;
+          lastLogMtime = mtimeAfter;
+          noteNow();
+        }
+        const hadWorkBaseline = sampledWork;
         if (sampledWork) {
           if (headSample.head !== undefined && lastHead !== undefined && headSample.head !== lastHead) noteNow();
           if (newest > lastNewestMtime) noteNow();
@@ -721,6 +732,10 @@ export class WorkerJob implements GateOutcomeSink {
         if (headSample.head !== undefined) lastHead = headSample.head;
         if (newest > lastNewestMtime) lastNewestMtime = newest;
         if (cpu !== undefined) lastCpu = cpu;
+        // Stall requires a later sample that shows log, HEAD, files and CPU all unchanged. The first worktree
+        // sample only records that baseline: a worker still starting has an empty log, checkout mtimes and no
+        // CPU pair, so treating that sample as silence stops file-active CLIs on a loaded host.
+        if (!hadWorkBaseline) return;
         // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
         // a local or remote check does not look silent while the command is running.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
