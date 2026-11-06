@@ -40,3 +40,5 @@ stories and focused consumer tests do not establish installed native or signed-i
 controller retains native, command acknowledgement/current-reader/focus, classification and browser checks.
 
 Decision: the installed package still publishes declarations only for the management and label-history callables, so their closed runtime schemas remain the Kernel seam in [native](native.ts) until the official publisher ships runtime exports. The persona walk for this page has not reached a manager step: the walk stack stopped mid-run in each attempt.
+
+Decision: the six-persona walk for this page runs as the seeded question-management walk under worker-check, so the check owns the walk stack, its startup and its cleanup. Its acceptance stays open until a check passes every recorded step.
