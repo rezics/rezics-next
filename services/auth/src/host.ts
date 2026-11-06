@@ -161,15 +161,12 @@ function databaseIdentity(value: string | undefined) {
   try {
     const url = new URL(value!);
     const socket = url.searchParams.get('host');
-    const unixSocket =
-      socket !== null && socket.startsWith('/') && socket.length > 1 && !/[:\n\r,]/.test(socket);
+    const unixSocket = socket !== null && socket.startsWith('/') && socket.length > 1 && !/[:\n\r,]/.test(socket);
     if (
       !['postgres:', 'postgresql:'].includes(url.protocol) ||
       !url.hostname ||
       url.pathname.length < 2 ||
-      ['hostaddr', 'port', 'database', 'dbname', 'service', 'options'].some((field) =>
-        url.searchParams.has(field),
-      ) ||
+      ['hostaddr', 'port', 'database', 'dbname', 'service', 'options'].some((field) => url.searchParams.has(field)) ||
       (url.searchParams.has('host') && !unixSocket)
     )
       throw new Error();

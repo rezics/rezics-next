@@ -97,10 +97,7 @@ test('a Realm appearance reservation forwards the caller key so a repeated comma
 
 test('a malformed reservation key is refused before a second Realm object is created', async () => {
   const before = reservations.size;
-  const response = await mediaRequest(
-    reserveRequest('unused', { 'idempotency-key': 'not-a-structured-key' }),
-    env,
-  );
+  const response = await mediaRequest(reserveRequest('unused', { 'idempotency-key': 'not-a-structured-key' }), env);
   expect(response.status).toBe(400);
   expect(reservations.size).toBe(before);
 });

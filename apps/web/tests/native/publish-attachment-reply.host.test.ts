@@ -406,4 +406,3 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   await replier.context.close();
   await anonymous.close();
 });
-

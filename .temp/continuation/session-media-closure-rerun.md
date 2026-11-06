@@ -7,10 +7,12 @@ This branch's caller, reservation-key and native attachment source is committed.
 (`6284aa99-a84a-4c94-8353-b12beb9dd722`) failures are owned by shared startup 2e0b5513, not by this source.
 
 Check 6284aa99: 13 fail, 1 error. Generation/startup:
+
 - `error: dev server did not start: $ bun scripts/storybook-dev.ts --app --host "127.0.0.1" --port "43631" --strictPort`
 - `error: ENOENT reading ".../apps/web/src/paraglide/messages/access_account.js"`
 
 Failing files/cases:
+
 - `tests/media-reserve.test.ts`: a signed-in uploader reserves through the site and uploads to the address it returns
 - `tests/media-reserve.test.ts`: an avatar reservation keeps the account container and avatar purpose through the site upload route
 - `tests/media-reserve.test.ts`: reservations are read through the site by their uploader only

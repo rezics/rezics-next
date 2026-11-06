@@ -965,8 +965,9 @@ async function untilReady(
     failed();
     const remaining = deadline - Date.now();
     const ready = await Promise.all(
-      urls.map(async (url) =>
-        [url, await walkHttpAnswers(url, Math.min(remaining, walkReadyFetchTimeoutMs(remaining)))] as const,
+      urls.map(
+        async (url) =>
+          [url, await walkHttpAnswers(url, Math.min(remaining, walkReadyFetchTimeoutMs(remaining)))] as const,
       ),
     );
     failed();

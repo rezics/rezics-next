@@ -809,7 +809,8 @@ test('The default admitted community management journey resolves a same-site ima
   const concealed = (node: Element) => node.closest('[hidden], [aria-hidden="true"]') !== null;
   const hasAlert = () =>
     [...host.querySelectorAll('p')].some((node) => node.getAttribute('role') === 'alert' && !concealed(node));
-  const imageBySrc = (src: string) => [...host.querySelectorAll('img')].find((node) => node.getAttribute('src') === src);
+  const imageBySrc = (src: string) =>
+    [...host.querySelectorAll('img')].find((node) => node.getAttribute('src') === src);
   const labelled = (tag: string, name: string) =>
     [...host.querySelectorAll(tag)].find((node) => (node.textContent ?? '').trim() === name);
   const button = (name: string) => {
@@ -818,7 +819,9 @@ test('The default admitted community management journey resolves a same-site ima
     return node as HTMLButtonElement;
   };
   const buttons = (name: string) =>
-    [...host.querySelectorAll('button')].filter((node) => (node.textContent ?? '').trim() === name) as HTMLButtonElement[];
+    [...host.querySelectorAll('button')].filter(
+      (node) => (node.textContent ?? '').trim() === name,
+    ) as HTMLButtonElement[];
   const link = (name: string) => {
     const node = labelled('a', name);
     if (!node) throw new Error(`missing link ${name}`);

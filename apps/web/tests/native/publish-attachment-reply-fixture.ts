@@ -59,9 +59,7 @@ export type PublishAttachmentWorkBoard = {
 };
 
 /** Same Global discussion Board command seed:dev uses, with identities from the live native responses. */
-export async function createPublishAttachmentWorkBoard(
-  stack: NativeWebStack,
-): Promise<PublishAttachmentWorkBoard> {
+export async function createPublishAttachmentWorkBoard(stack: NativeWebStack): Promise<PublishAttachmentWorkBoard> {
   const alice = await stack.authPersona('alice');
   const suffix = randomUUID().slice(0, 8);
   await requireOk(stack, 'governor', 'POST', '/v1/grants', {
@@ -100,7 +98,9 @@ export async function createPublishAttachmentWorkBoard(
   const boards = Array.isArray(directory.value.boards) ? directory.value.boards : [];
   const admitted = boards.some((item) => {
     const row = item as JsonObject;
-    return row.id === board.id && row.realmId === null && row.purpose === 'discussion' && row.visibility === 'published';
+    return (
+      row.id === board.id && row.realmId === null && row.purpose === 'discussion' && row.visibility === 'published'
+    );
   });
   if (!admitted)
     throw new Error(`Anonymous directory did not admit Global board ${board.id}: ${JSON.stringify(directory.value)}`);

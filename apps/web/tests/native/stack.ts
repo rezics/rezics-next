@@ -186,7 +186,10 @@ async function disconnectTemplateSessions(databaseUrl: string): Promise<void> {
     );
     if (terminated !== true) throw new Error('Disconnecting template sessions exceeded 8000ms');
   } finally {
-    await settledWithin(admin.end().then(() => true), 1_000);
+    await settledWithin(
+      admin.end().then(() => true),
+      1_000,
+    );
   }
 }
 
@@ -198,14 +201,20 @@ async function postgresConnectionWorks(url: string): Promise<Error | undefined> 
   });
   try {
     try {
-      const ready = await settledWithin(probe.query('SELECT 1').then(() => true as const), 2_000);
+      const ready = await settledWithin(
+        probe.query('SELECT 1').then(() => true as const),
+        2_000,
+      );
       if (ready !== true) return new Error('PostgreSQL probe exceeded 2000ms');
       return undefined;
     } catch (error) {
       return error instanceof Error ? error : new Error(String(error));
     }
   } finally {
-    await settledWithin(probe.end().then(() => true), 500);
+    await settledWithin(
+      probe.end().then(() => true),
+      500,
+    );
   }
 }
 
@@ -261,9 +270,7 @@ async function waitForOwnedPostgres(container: string, port: number, socketDirec
         `Native web stack startup: waiting for PostgreSQL unix socket (published ${port}, ${socketError.message})`,
       );
     }
-    const status = Bun.spawnSync(['docker', 'inspect', '-f', '{{.State.Status}}', container])
-      .stdout.toString()
-      .trim();
+    const status = Bun.spawnSync(['docker', 'inspect', '-f', '{{.State.Status}}', container]).stdout.toString().trim();
     if (status !== '' && status !== 'running' && status !== 'created')
       throw await postgresReadinessError(container, socketDirectory, lastError);
     await Bun.sleep(Math.min(500, remaining));
@@ -765,7 +772,10 @@ async function startStack(): Promise<
       );
       if (created !== true) throw new Error('CREATE DATABASE for SQL analysis exceeded 20000ms');
     } finally {
-      const ended = await settledWithin(admin.end().then(() => true as const), 1_000);
+      const ended = await settledWithin(
+        admin.end().then(() => true as const),
+        1_000,
+      );
       if (ended !== true) throw new Error('SQL analysis admin pool end exceeded 1000ms');
     }
     reportStackProgress('Native web stack startup: SQL analysis database cloned');
