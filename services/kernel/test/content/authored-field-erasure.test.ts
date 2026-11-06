@@ -6,6 +6,7 @@ import { fromPlainText } from '@rezics/document';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { runCommand, principalCommandIdentity } from '../../src/command/command.ts';
+import { declareCommandHistory } from '../../src/history/application/index.ts';
 import { appendAuthoredField, eraseAuthoredField, readAuthoredField } from '../../src/content/authored-fields.ts';
 import { ContentNotFoundError } from '../../src/content/commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -138,17 +139,19 @@ async function appendThroughSemanticSubjectCommand(): Promise<{ id: string; subj
         },
       });
       if (!appended) throw new Error('The semantic proposal did not append its authored document');
-      return {
-        value: proposal.value,
-        events: [
-          ...proposal.events,
-          {
-            type: authoredCreated,
-            subject,
-            data: { id: appended.id, subject, candidate: proposal.value.candidate, authorId: author.accountId },
-          },
-        ],
-      };
+      const events = [
+        ...proposal.events,
+        {
+          type: authoredCreated,
+          subject,
+          data: { id: appended.id, subject, candidate: proposal.value.candidate, authorId: author.accountId },
+        },
+      ];
+      await declareCommandHistory(tx, 'subject.propose', {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
+      return { value: proposal.value, events };
     },
   );
   if (!appended) throw new Error('No authored field was appended');

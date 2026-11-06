@@ -32,6 +32,8 @@ import { EVENT_TYPES } from '../../src/events/log.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 import { runCommand, noEffect } from '../../src/command/command.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/command-evidence.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/index.ts';
 import {
   loadAccountIdentitySource,
   deliverAccountIdentity,
@@ -153,7 +155,14 @@ async function catalogueSubject(type: 'schema:Person' | 'schema:Organization', l
       action: 'subject:create',
       resource,
       denied: () => new Error('Fixture subject authorization denied'),
-      async authorize() {
+      async authorize(tx) {
+        bindCommandHistoryEvidence(tx, [
+          {
+            accountRoute,
+            accountId: staff.id,
+            roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+          },
+        ]);
         return 'execute';
       },
     },
@@ -2521,13 +2530,17 @@ test("Original Account reversal writer publishes exact native reversal settlemen
   expect(await verify(reference, {} as typeof proof)).toBe(false);
   expect(await verify(reference, proof, 0)).toBe(false);
   expect(await independent()).toEqual(before);
-  // Original owner restoration invalidates both the read and a previously issued proof.
-  await pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [source.partition]);
+  // A fenced home invalidates both the read and a previously issued proof. Epoch rotation
+  // stays refused until native live-copy lineage is reconciled.
+  await expect(
+    pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [source.partition]),
+  ).rejects.toThrow('Live copy domain requires native lineage reconciliation before activation');
+  await pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [source.partition]);
   try {
     expect(await verify()).toBe(false);
     expect(await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
   } finally {
-    await pool.query('UPDATE core.partition SET epoch=epoch-1 WHERE partition_no=$1', [source.partition]);
+    await pool.query("UPDATE core.partition SET write_state='active' WHERE partition_no=$1", [source.partition]);
   }
   expect(await verify()).toBe(true);
   // Existing old-image-loss fixture: no synthetic terminal flags or fake receiver.
