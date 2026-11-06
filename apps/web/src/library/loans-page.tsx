@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { Loan } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
@@ -6,6 +6,7 @@ import { PageHeading } from '../shell/page-heading';
 import { Exposure, type GatedOperation } from '../kernel/exposure';
 import { pageText } from '../features/pages/shared';
 import { getLocale } from '../paraglide/runtime.js';
+import { CalendarDayField } from './calendar-day-field';
 import type { LoansPageData, LoanWriteResult } from './loans-read';
 import type { LoansAddress } from './loans-query';
 import { createLoan, completeLoan, updateLoanDue } from './loans-actions';
@@ -234,6 +235,7 @@ function LoanCard({
 }) {
   const [dueOn, setDueOn] = useState(item.loan.dueOn ?? '');
   const [returnedOn, setReturnedOn] = useState(today ?? '');
+  const fieldsId = useId();
   return (
     <li className="min-w-0 space-y-3 rounded-xl border border-border p-4">
       <p className="font-medium [overflow-wrap:anywhere]">{copyTitle(item, locale)}</p>
@@ -268,18 +270,17 @@ function LoanCard({
             onExtend(dueOn);
           }}
         >
-          <label className="min-w-0 flex-1 space-y-1">
-            <span className="text-sm">{m.library_loans_due()}</span>
-            <input
-              className={field}
-              type="date"
-              min={item.loan.dueOn ?? item.loan.startedOn}
+          <div className="min-w-0 flex-1">
+            <CalendarDayField
+              id={`${fieldsId}-due`}
+              label={m.library_loans_due()}
               value={dueOn}
+              min={item.loan.dueOn ?? item.loan.startedOn}
               disabled={disabled}
               required
-              onChange={(event) => setDueOn(event.currentTarget.value)}
+              onChange={setDueOn}
             />
-          </label>
+          </div>
           <button type="submit" className={button} disabled={disabled}>
             {m.library_loans_extend()}
           </button>
@@ -293,19 +294,18 @@ function LoanCard({
             onReturn(returnedOn);
           }}
         >
-          <label className="min-w-0 flex-1 space-y-1">
-            <span className="text-sm">{m.library_loans_returned()}</span>
-            <input
-              className={field}
-              type="date"
+          <div className="min-w-0 flex-1">
+            <CalendarDayField
+              id={`${fieldsId}-returned`}
+              label={m.library_loans_returned()}
+              value={returnedOn}
               min={item.loan.startedOn}
               max={today ?? undefined}
-              value={returnedOn}
               disabled={disabled}
               required
-              onChange={(event) => setReturnedOn(event.currentTarget.value)}
+              onChange={setReturnedOn}
             />
-          </label>
+          </div>
           <button type="submit" className={button} disabled={disabled}>
             {m.library_loans_return()}
           </button>
@@ -332,6 +332,7 @@ function LoanCreateForm({
   const [name, setName] = useState('');
   const [startedOn, setStartedOn] = useState(today ?? '');
   const [dueOn, setDueOn] = useState('');
+  const fieldsId = useId();
   return (
     <form
       className="space-y-3 rounded-xl border border-border p-4"
@@ -394,28 +395,22 @@ function LoanCreateForm({
             onChange={(event) => current() && setName(event.currentTarget.value)}
           />
         </label>
-        <label className="min-w-0 space-y-1">
-          <span className="text-sm">{m.library_loans_started()}</span>
-          <input
-            className={field}
-            type="date"
-            value={startedOn}
-            required
-            disabled={disabled}
-            onChange={(event) => current() && setStartedOn(event.currentTarget.value)}
-          />
-        </label>
-        <label className="min-w-0 space-y-1">
-          <span className="text-sm">{m.library_loans_due()}</span>
-          <input
-            className={field}
-            type="date"
-            min={startedOn}
-            value={dueOn}
-            disabled={disabled}
-            onChange={(event) => current() && setDueOn(event.currentTarget.value)}
-          />
-        </label>
+        <CalendarDayField
+          id={`${fieldsId}-started`}
+          label={m.library_loans_started()}
+          value={startedOn}
+          required
+          disabled={disabled}
+          onChange={(value) => current() && setStartedOn(value)}
+        />
+        <CalendarDayField
+          id={`${fieldsId}-due`}
+          label={m.library_loans_due()}
+          value={dueOn}
+          min={startedOn}
+          disabled={disabled}
+          onChange={(value) => current() && setDueOn(value)}
+        />
       </div>
       <button type="submit" className={button} disabled={disabled || !current('copy.create')}>
         {m.library_loans_submit()}

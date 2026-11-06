@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { GatedOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
+import { CalendarDayField } from './calendar-day-field';
 import type { CopyItem } from './copies-read';
 import type { LoanWriteResult, LoansPageData } from './loans-read';
 
@@ -166,18 +167,17 @@ export function CopyLoanPanel({
           </p>
           {item.loan.actions.extend.allowed ? (
             <div className="flex min-w-0 flex-wrap items-end gap-3">
-              <label className="min-w-0 flex-1 space-y-1">
-                <span className="text-sm">{m.library_loans_due()}</span>
-                <input
-                  className={field}
-                  type="date"
-                  min={item.loan.dueOn ?? item.loan.startedOn}
+              <div className="min-w-0 flex-1">
+                <CalendarDayField
+                  id={`${formId}-extend`}
+                  label={m.library_loans_due()}
                   value={extendDue}
+                  min={item.loan.dueOn ?? item.loan.startedOn}
                   disabled={busy}
                   required
-                  onChange={(event) => current() && setExtendDue(event.currentTarget.value)}
+                  onChange={(value) => current() && setExtendDue(value)}
                 />
-              </label>
+              </div>
               <button type="button" className={button} disabled={busy || !current('copy.update')} onClick={() => void extend()}>
                 {m.library_loans_extend()}
               </button>
@@ -185,19 +185,18 @@ export function CopyLoanPanel({
           ) : null}
           {item.loan.actions.return.allowed ? (
             <div className="flex min-w-0 flex-wrap items-end gap-3">
-              <label className="min-w-0 flex-1 space-y-1">
-                <span className="text-sm">{m.library_loans_returned()}</span>
-                <input
-                  className={field}
-                  type="date"
+              <div className="min-w-0 flex-1">
+                <CalendarDayField
+                  id={`${formId}-return`}
+                  label={m.library_loans_returned()}
+                  value={returnedOn}
                   min={item.loan.startedOn}
                   max={today}
-                  value={returnedOn}
                   disabled={busy}
                   required
-                  onChange={(event) => current() && setReturnedOn(event.currentTarget.value)}
+                  onChange={(value) => current() && setReturnedOn(value)}
                 />
-              </label>
+              </div>
               <button type="button" className={button} disabled={busy || !current('copy.update')} onClick={() => void complete()}>
                 {m.library_loans_return()}
               </button>
@@ -231,27 +230,22 @@ export function CopyLoanPanel({
                 onChange={(event) => current() && setName(event.currentTarget.value)}
               />
             </label>
-            <label className="min-w-0 space-y-1">
-              <span className="text-sm">{m.library_loans_started()}</span>
-              <input
-                className={field}
-                type="date"
-                value={startedOn}
-                disabled={busy}
-                onChange={(event) => current() && setStartedOn(event.currentTarget.value)}
-              />
-            </label>
-            <label className="min-w-0 space-y-1">
-              <span className="text-sm">{m.library_loans_due()}</span>
-              <input
-                className={field}
-                type="date"
-                min={startedOn}
-                value={dueOn}
-                disabled={busy}
-                onChange={(event) => current() && setDueOn(event.currentTarget.value)}
-              />
-            </label>
+            <CalendarDayField
+              id={`${formId}-started`}
+              label={m.library_loans_started()}
+              value={startedOn}
+              disabled={busy}
+              required
+              onChange={(value) => current() && setStartedOn(value)}
+            />
+            <CalendarDayField
+              id={`${formId}-due`}
+              label={m.library_loans_due()}
+              value={dueOn}
+              min={startedOn}
+              disabled={busy}
+              onChange={(value) => current() && setDueOn(value)}
+            />
           </div>
           <button type="button" className={button} disabled={busy || !current('copy.create')} onClick={() => void create()}>
             {m.library_loans_submit()}

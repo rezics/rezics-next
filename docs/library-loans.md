@@ -15,6 +15,9 @@ the package's partial dates and astronomical years do not widen these inputs. Va
 trimming or reserialization, and trailing newlines are invalid. Copy dates remain nullable, Web empty fields become
 null, and omitted native updates leave the stored day unchanged.
 
+Decision: Web chooses those days through the locale Calendar grid, never a native date input, so stored Gregorian
+days are not passed through browser timezone controls.
+
 Years range from 0001 through 9999. Impossible calendar days, partial dates, instants and normalized overflow dates
 are invalid. Stored dates are compared as dates and are never passed through browser timezone formatting. An absent
 due date is undated. A date equal to the response boundary is due; an earlier date is overdue. Return takes precedence

@@ -3,7 +3,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { CalendarDayField } from './calendar-day-field';
 import { copyFieldInputIsTooLong, copyTextFieldLimits, type CopyTextField } from './copy-field-input';
 import {
   COPY_CONDITION_CLEAR,
@@ -158,23 +158,15 @@ function CopyDateInput({
   prefix: string;
   onChange: (value: string) => void;
 }) {
-  const id = `${prefix}-${field}`;
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>
-        {field === 'acquiredOn' ? m.library_copy_acquired() : m.library_copy_disposed()}
-      </FieldLabel>
-      <input
-        id={id}
-        name={field}
-        type="date"
-        lang={getLocale()}
-        className={inputClass}
-        value={value}
-        aria-describedby={`${prefix}-dates-hint`}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-    </Field>
+    <CalendarDayField
+      id={`${prefix}-${field}`}
+      name={field}
+      label={field === 'acquiredOn' ? m.library_copy_acquired() : m.library_copy_disposed()}
+      value={value}
+      describedBy={`${prefix}-dates-hint`}
+      onChange={onChange}
+    />
   );
 }
 

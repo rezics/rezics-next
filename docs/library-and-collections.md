@@ -50,7 +50,8 @@ Personal notes and priority remain owner-local and revisioned; import evidence d
 explicit review. Copies remain separate holdings with their own status, revision and accepted kind. Optional
 physical-condition observations use the finite `physical-v1` media and packaging vocabulary only when the exact
 accepted Copy kind declares that condition; omission, explicit `unknown` and intentional `null` clear have distinct
-meaning. Current profile advice never changes historical admission.
+meaning. Current profile advice never changes historical admission. Copy and Loan day fields use the locale Calendar
+grid rather than a native date input, so stored Gregorian days keep their calendar meaning.
 
 Personal-score ordering, diary/history, statistics, Progress snapshots and published logs retain the separate
 contracts linked above. An active progress session can coexist with a non-active explicit state. Every allowed

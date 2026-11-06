@@ -102,6 +102,13 @@ const form = (value: CopyItem, extra: object = {}) =>
     }),
   );
 
+test('copy editor dates are locale calendar controls rather than native date inputs', () => {
+  const html = form(copy());
+  expect(html).not.toContain('type="date"');
+  expect(html).toContain(m.library_copy_acquired());
+  expect(html).toContain('aria-haspopup="dialog"');
+});
+
 test('raw list keeps two same-edition identities and original facts, with no point-detail requests', async () => {
   const second = { ...native, id: '01a17a3b-7065-7048-8c7f-f4ccfae1f401', kind: 'digital', note: 'Second copy' };
   const options = {
