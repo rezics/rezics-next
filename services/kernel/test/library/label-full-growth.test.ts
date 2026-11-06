@@ -2,12 +2,14 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountToken } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
+  capture,
   captureWithFoldedCost,
   catalogStatementBound,
   checkGrowth,
   costOf,
   openGrowthDatabase,
   seed,
+  type Capture,
   type Cost,
   type GrowthDatabase,
 } from '../support/growth.ts';
@@ -50,6 +52,19 @@ async function start(bearer: string, subjectId: string) {
       total: '10',
     })
   ).progressSession;
+}
+function nodes(value: unknown): Record<string, unknown>[] {
+  if (!value || typeof value !== 'object') return [];
+  return [...('Node Type' in value ? [value as Record<string, unknown>] : []), ...Object.values(value).flatMap(nodes)];
+}
+function privateScans(raw: Capture) {
+  return raw.plans
+    .flatMap(nodes)
+    .filter(
+      (n) =>
+        n.Schema === 'library' &&
+        ['entry', 'progress_session', 'personal_label', 'label_assignment'].includes(String(n['Relation Name'])),
+    );
 }
 function libraryRelation(cost: Cost, name: string) {
   return Object.values(cost.relations).find(
