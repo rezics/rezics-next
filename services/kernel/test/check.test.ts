@@ -164,7 +164,7 @@ test('a failed postgres create reaps the check nonce', () => {
     if (args[0] === 'run') throw new Error('spawnSync docker ETIMEDOUT');
     return args[0] === 'ps' ? 'half-pg' : '';
   };
-  expect(() => startPostgresContainer(docker, 'nonce-check')).toThrow(/ETIMEDOUT/);
+  expect(() => startPostgresContainer(docker, { nonce: 'nonce-check' })).toThrow(/ETIMEDOUT/);
   expect(calls[0]).toContain(`${KERNEL_CHECK_PID_LABEL}=${process.pid}`);
   expect(calls[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
   expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
