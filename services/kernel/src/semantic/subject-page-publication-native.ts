@@ -10,7 +10,7 @@ import { candidateSources, sourceTuple, fenceKey, fencedIds } from './fences.ts'
 import readTermSupport from './terms-read-support.sql';
 import type { Source } from '@rezics/definitions/bulk';
 import { readFences } from '../content/source-fences.ts';
-import type { ImportedFieldGroup } from '../content/imported-contract.ts';
+import type { ContentImportedFieldGroup as ImportedFieldGroup } from './contract/domain-ports.ts';
 import {
   readSubjectPageSourceOwner,
   retainSubjectPageSource,

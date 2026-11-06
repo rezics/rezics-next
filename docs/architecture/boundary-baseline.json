@@ -9970,11 +9970,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-presentation.ts",
           "edge": "value import \"../content/media.ts\" #1 => services/kernel/src/content/media.ts"
         },
         {
@@ -11845,11 +11840,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-anilist.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-anilist.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
         {
@@ -11945,11 +11935,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-bangumi.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-bangumi.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
         },
         {
@@ -12031,11 +12016,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-mal.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-mal.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -12151,11 +12131,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-vndb.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-vndb.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -18132,11 +18107,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification.ts",
           "edge": "value import \"../content/source-fences.ts\" #1 => services/kernel/src/content/source-fences.ts"
         },
         {
@@ -18158,11 +18128,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-observation-read.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -18203,11 +18168,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-statistics.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-statistics.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -21498,11 +21458,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/account-erasure-source.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/semantic/account-erasure.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
@@ -21510,11 +21465,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/authored.ts",
           "edge": "value import \"../content/authored-fields.ts\" #1 => services/kernel/src/content/authored-fields.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/bulk.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -21809,11 +21759,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/fences.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/fences.ts",
           "edge": "value import \"../content/source-fences.ts\" #1 => services/kernel/src/content/source-fences.ts"
         },
         {
@@ -21845,11 +21790,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/http/bulk.ts",
           "edge": "value import \"../../access/resource-authorization.ts\" #1 => services/kernel/src/access/resource-authorization.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/http/bulk.ts",
-          "edge": "value import \"../../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts"
         },
         {
           "rule": "rule 2",
@@ -21975,11 +21915,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/http/source-records.ts",
           "edge": "value import \"../../access/resource-authorization.ts\" #1 => services/kernel/src/access/resource-authorization.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/http/source-records.ts",
-          "edge": "value import \"../../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -22185,11 +22120,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-rating-admission.ts",
           "edge": "value import \"../database/read-snapshot.ts\" #1 => services/kernel/src/database/read-snapshot.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-rating-admission.ts",
-          "edge": "value import \"../rating/own-votes-review.ts\" #1 => services/kernel/src/rating/own-votes-review.ts"
         },
         {
           "rule": "rule 2",
@@ -23154,11 +23084,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/source-records.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/source-records.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
         },
         {
@@ -23194,17 +23119,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/subject-page-publication-native.ts",
-          "edge": "type import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject-page-publication-native.ts",
           "edge": "value import \"../content/source-fences.ts\" #1 => services/kernel/src/content/source-fences.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject-page-publication-reader.ts",
-          "edge": "type import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -23249,16 +23164,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/subject.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
         {
@@ -23275,16 +23180,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/summaries.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/summaries.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/summaries.ts",
-          "edge": "value import \"../content/imported-contract.ts\" #1 => services/kernel/src/content/imported-contract.ts"
         },
         {
           "rule": "rule 2",

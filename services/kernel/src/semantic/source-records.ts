@@ -4,7 +4,7 @@ import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import { noEffect, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { isSpdxLicense } from '../content/document.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
+import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -138,7 +138,7 @@ export async function writeSourceRecordMetadata(
 ) {
   if (!options.validated) validateSourceRecordMetadata(options.command);
   const { source, external_id, metadata, expected_metadata_revision } = options.command;
-  const route = tupleRoute(options.routeKey, source, external_id);
+  const route = importedTupleRouteOf(pool)(options.routeKey, source, external_id);
   const actor = options.actor;
   const outcome = await runCommand<{ status: 200 | 201; value: SourceRecordMetadataResult }>(
     pool,
@@ -204,7 +204,7 @@ export async function readSourceRecords(
     const key = JSON.stringify([source.source, source.external_id]);
     if (!tuples.has(key))
       tuples.set(key, {
-        route: tupleRoute(routeKey, source.source, source.external_id),
+        route: importedTupleRouteOf(pool)(routeKey, source.source, source.external_id),
         source: source.source,
         external_id: source.external_id,
       });

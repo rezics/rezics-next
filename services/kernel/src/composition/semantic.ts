@@ -6,6 +6,12 @@ import { createSearchIdentityEpochParticipant } from '../search/identity-epoch-p
 import { readSearchConfig } from '../search/work.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
 import type { IdentityEpochParticipantPorts } from '../semantic/contract/identity-epoch-ports.ts';
+import {
+  createNativeSemanticDomain,
+  nativeContentLifecycle,
+  nativeRatingReview,
+  type NativeSemanticDomain,
+} from '../semantic/adapters/index.ts';
 
 /** Real fixed identity participants for the default worker: Search currentness and Library custody, bound to the
  * worker pool. Returns null when Search configuration or the membership route key is absent, so the coordinator is
@@ -25,5 +31,24 @@ export function composeSemanticIdentityParticipants(context: {
       routeKey,
     }),
     'library-private-follow-counts': stepLibraryIdentityEpoch,
+  });
+}
+
+/** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */
+export function composeSemanticDomain(context: {
+  readonly env: Readonly<Record<string, string | undefined>>;
+}): NativeSemanticDomain | null {
+  const participants = composeSemanticIdentityParticipants(context);
+  if (!participants) return null;
+  return createNativeSemanticDomain(participants, {
+    libraryCustody: Object.freeze({
+      stepIdentityEpoch: participants['library-private-follow-counts'],
+      readSourcePage: (native, job) => participants['library-private-follow-counts'](native, job),
+    }),
+    searchCurrentness: Object.freeze({
+      stepCanonicalIndex: participants['search-canonical-index'],
+    }),
+    ratingReview: nativeRatingReview(),
+    contentLifecycle: nativeContentLifecycle(),
   });
 }

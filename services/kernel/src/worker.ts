@@ -8,14 +8,14 @@ import { historyExecutionPort } from './history/operational-work.ts';
 import { workExecutionPort } from './work/selected-runtime.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
-import { composeSemanticIdentityParticipants } from './composition/semantic.ts';
+import { composeSemanticDomain } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
 import { startContentApplication } from './composition/content.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
-import { startRelays } from './events/relays.ts';
+import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import type { KeyRing } from './tokens/seal.ts';
 
@@ -80,7 +80,7 @@ export async function startWorker(
     createKernelWorkModules(
       createDiscoveryProducerEntry,
       createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
+      composeSemanticDomain,
       {
         fetch: content.application.ambient.fetch,
         now: content.application.ambient.now,
@@ -150,7 +150,9 @@ export async function startWorker(
     starting = (async () => {
       work = await composeWork(resolvedModules, { ...config, pool, client, env });
       await work.launch();
-      relays = startRelays(pool, [effectsRelay(pool, work.effects)]);
+      relays = startRelays(pool, [effectsRelay(pool, work.effects)], {
+        concurrency: relayConcurrencyForPool(pool),
+      });
     })();
     await starting;
     return { stop };

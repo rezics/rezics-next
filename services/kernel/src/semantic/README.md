@@ -14,11 +14,15 @@ Subject IDs are permanent and never reused. Global subject:create creates revisi
 
 The pure kernel-identity-core leaf owns mapping DTOs, bounded evidence classification and immutable merge/unmerge/repoint transforms. Its public entry is identity-core/index.ts: no SQL, runtime, command, Access, environment, clock, randomness or crypto. It indexes acquired evidence once and performs O(N) time/space for at most 100 originals; its four states and reasons are unchanged, and pending never implies self.
 
-Semantic is split into four registered layers. Contract (`semantic/contract/`) holds the identity vocabulary and the fixed participant ports and has no runtime imports. Core (`semantic/core/`) holds pure next-step and receipt derivations over contract values. Application (`semantic/application/`) installs the fixed participant composition over those ports. Effectful adapters remain in kernel-semantic: the exact entries are identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, and identity-adapters/identity-epoch-binding.ts for the public binding. `identity-core/values.ts` re-exports the contract vocabulary. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings, readIdentityRatingReview and readIdentityBasis stay on read.ts and do not load the store or binding graph; published identity digest reads share the mapping-read module rather than identity-basis.ts so Search can consume them without a value-import cycle through semantic/read. The [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
+Semantic is split into registered contract, core, application and adapter modules. This domain split supersedes the earlier single-adapter-module instruction that retained identity cycles inside one adapter. Contract (`semantic/contract/`) holds identity vocabulary, item facts, subject values and typed ports for Library custody, Search currentness, Rating review, Content lifecycle, hashing, routing and the fact store, with no runtime imports. Core (`semantic/core/`) holds pure next-step, receipt and item-projection derivations over those values. identity-core remains the pure mapping, remainder and rating-review classifier; its `rating-review-bounds.ts` file is the literal-only leaf for keys 2 / locators 2 / operand 16,384 bytes, which identity-epoch adapters import. Application (`semantic/application/`) installs the frozen Semantic domain over those ports: item projection, subject fact plans, identity coordination and rating-review mapping. Effectful adapters remain in kernel-semantic: identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, identity-adapters/identity-epoch-binding.ts for the public binding, and adapters/native-domain.ts for hashing, routing and fact-store binding. `item.ts` is a compatibility facade that calls the item application. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings, readIdentityRatingReview and readIdentityBasis stay on read.ts and do not load the store or binding graph; published identity digest reads share the mapping-read module rather than identity-basis.ts so Search can consume them without a value-import cycle through semantic/read. The [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
 
-The identity coordinator receives the fixed Search currentness and Library custody participants as `IdentityEpochParticipantPorts`. The process composition root (`composition/semantic.ts`) binds the real implementations to the worker pool and injects them through `createKernelWorkModules` and `createSemanticWorkModule`. The coordinator, Semantic work module and identity-epoch contract facade therefore no longer import the Library or Search participants, the OpenSearch client or the membership route-key reader. Retention, binding, index and identity still form value cycles inside the adapters; those rule 3 records stay in the boundary baseline until a later extraction breaks them. Semantic edges to Library, Search, Rating and Content that are not yet ports remain baseline entries.
+The identity coordinator receives Search currentness and Library custody as `IdentityEpochParticipantPorts` and dispatches producers through the composed application. The process composition root (`composition/semantic.ts`) binds the real Library, Search, Rating and Content implementations, hashing and routing, and injects them through `createKernelWorkModules` and `createSemanticWorkModule`. Ordinary createKernel/server/worker uses those native adapters; a fake-port application loads without them. Native authority and opaque proof contracts retain their owners. Remaining adapter-internal retention, binding and index cycles stay in the boundary baseline until a later extraction breaks them.
+
+Composed native identity produce owns one worker pool: coordination is installed at registration, HTTP uses the process default bound at composition, and relays share that pool at concurrency 1 when the pool is max-one so commands are not queued behind a spare-slot rule. Max-one relays skip a tick while the only connection is checked out or has waiters, so they consume the existing command lease instead of competing for a second checkout. The terminal-closure growth fixture binds `SET LOCAL ROLE` on acquire after BEGIN only, preserves pg callback/Query overloads so Pool.query still releases the lease, and uses leakproof `semantic.terminal_test_home()` for indexable `partition_no` equality or closed `route` range RLS. Nested functions and partition activation keep authorization without sequential scans. Preparing jobs own the prepare reservation; pending jobs own the pending reservation.
 
 Adapters own independent repeatable-read collection, route/home selection, support jobs, SQL, authorization, prearm, native receipt hashing, binding proofs, admission and publication. Library keeps originals and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps lifecycle writes. Mapping/store/publication/admission and three-scale growth remain owner acceptance. No wildcard custody export, second Library resolver, permission cache or new protocol is introduced.
+
+Public entries: `semantic/contract/index.ts` (values and ports), `semantic/core/index.ts` (next-step and item projection), `semantic/application/index.ts` (`createSemanticDomain`), `semantic/identity-core/index.ts` (mapping and rating-review classifier), `semantic/identity-core/rating-review-bounds.ts` (literal rating-review limits), `semantic/adapters/native-domain.ts` and `adapters/index.ts` (hashing, routing, fact store, Rating review, Content lifecycle, domain registry), plus the existing identity-adapters mapping-read, store and binding entries. Ports on `SemanticDomainPorts`: `identityEpoch`, `libraryCustody`, `searchCurrentness`, `ratingReview`, `contentLifecycle`, `hashing`, `routing`, `facts`. Observed counters: item facts 512; rating-review keys 2, control locators 2, operand 16,384 bytes; identity page 100 originals; epoch segment 100 pages, frontier 8 keys / 2,048 bytes, 100 rows per step. Cost derivations stay in the existing identity-epoch and item growth contracts. Compact landing tests: fake-port domain load plus ordinary native composition of one identity epoch through the composed participants.
 
 ## Bounded current relation visits
 
@@ -1485,23 +1489,31 @@ change.
 
 ### Identity epoch domain composition
 
-- Public entries: `semantic/contract/identity-values.ts` (vocabulary), `semantic/contract/identity-epoch-ports.ts` (fixed
-  participant ports), `semantic/core/identity-epoch-sequence.ts` (next-step, workflow-ID and receipt derivations),
-  `semantic/application/identity-epoch-participants.ts` (installed composition), `semantic/work-module.ts`
-  (`createSemanticWorkModule`) and `composition/semantic.ts` (`composeSemanticIdentityParticipants`).
-- Touches: the fixed two-port participant composition, bound once per worker pool at process composition; one job read and
-  one control row per durable page for the next-step derivation; one producer result per page for receipt validation. No new
-  statement, index, table or background work is added.
+- Public entries: `semantic/contract/index.ts` (identity, item, subject and domain ports), `semantic/core/index.ts`
+  (next-step, receipt and item projection), `semantic/application/index.ts` (installed Semantic domain),
+  `semantic/identity-core/index.ts` (mapping and rating-review classifier), `semantic/identity-core/rating-review-bounds.ts`
+  (literal keys/locators/operand limits), `semantic/adapters/native-domain.ts`,
+  `semantic/work-module.ts` and `composition/semantic.ts` (`composeSemanticIdentityParticipants`, `composeSemanticDomain`).
+- Ports: Library custody (`stepIdentityEpoch`, `readSourcePage`), Search currentness (`stepCanonicalIndex`), Rating review
+  (stale/unavailable constructors), Content lifecycle (`checkCover`, `checkCovers`, `importedTupleRoute`), hashing (`sha256Hex`) and routing
+  (`routeOf`, `derivedId`, `partitionOf`).
+- Touches: the fixed two-port participant composition plus Rating and Content adapters, bound once per worker pool at
+  process composition; one job read and one control row per durable page for the next-step derivation; one producer result
+  per page for receipt validation. Item projection hashes one reference body per statement and derives slot IDs from the
+  routed subject. No new statement, index, table or background work is added.
 - Bound: composition is O(1) with no I/O at construction; the next-step derivation is O(1) over the observed row; receipt
   validation is capped at 8 frontier keys, 2048 JSON bytes, 100 rows and one receipt per page; a workflow identifier is O(job
-  identifier length). The existing 100-page segment bound and per-page producer call are unchanged, so scale stays with the
-  identity growth checks (`test/semantic/growth-identity-epoch-coordinator.test.ts`).
-- Regression: `test/semantic/domain-composition.test.ts` (six tests: fixed ports, next-step sequencing, receipt bounds,
-  workflow identifiers, composed bindings and layer imports). The native composed path is covered by the identity epoch
-  coordinator and work-module suites.
-- Observed architecture counters, base to candidate: Semantic outward file edges to non-Semantic modules 822 to 817, with
-  the coordinator's direct Library, Search and Access implementation imports moved to composition; kernel value cycle
-  unchanged at 405 files and largest SCC 388; 18 boundary-baseline entries removed; no violation added against the base commit.
+  identifier length); itemFacts/resolveItem are O(F) for F ≤ 512 facts. The existing 100-page segment bound and per-page
+  producer call are unchanged, so scale stays with the identity growth checks (`test/semantic/growth-identity-epoch-coordinator.test.ts`)
+  and item identity version (`test/semantic/growth-item-identity-version.test.ts`).
+- Regression: the fewest tests that pin the composed surface — `test/semantic/domain-application.test.ts` (fake-port
+  application without native modules), `test/semantic/domain-composition.test.ts` (native ports, sequencing, receipts,
+  workflow identifiers, composed bindings and layer imports), plus the existing item unit and identity-core suites.
+  The native composed path is covered by the identity epoch coordinator, terminal closure and item identity-version suites.
+- Observed architecture: `--changed` against the assigned base reports no new errors; contract, core, application and
+  identity-core have no outward behavior value edges. kernel-semantic baseline rule 2/3 is 361/383 (from 521/384);
+  total baseline 8,513 (from 9,390). Kernel value-cycle files 398; largest value SCC 381. Adapter outward behaviour
+  edges: Library 19, Search 29, Rating 4, Content 31. Full-graph inherited ratchet errors stay with their owners.
 
 ### Command and receipt
 

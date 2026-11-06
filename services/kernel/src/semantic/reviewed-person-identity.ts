@@ -5,7 +5,7 @@ import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
+import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { EditorialConflictError } from './candidates.ts';
 import { effectiveGlobalSlotFacts } from './slots.ts';
 import readClaim from './reviewed-person-identity-read-claim.sql';
@@ -123,7 +123,7 @@ export async function observeReviewedPersonIdentity(
   if (visible?.type !== 'schema:Person') return null;
   if ((await readRedirect.run(tx, { route, subject_id: subject }))?.target) return null;
   const claim = await readClaim.run(tx, {
-    route: tupleRoute(routeKey, source.source, source.externalId),
+    route: importedTupleRouteOf()(routeKey, source.source, source.externalId),
     source: source.source,
     external_id: source.externalId,
   });
@@ -180,7 +180,7 @@ export async function guardReviewedPersonIdentity(
   const keys = expected.endpoints.map((endpoint) => ({
     endpoint,
     route: routeOf(endpoint.subject),
-    claimRoute: tupleRoute(routeKey, endpoint.source, endpoint.externalId),
+    claimRoute: importedTupleRouteOf()(routeKey, endpoint.source, endpoint.externalId),
   }));
   if (
     keys.some(
