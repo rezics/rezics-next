@@ -19,6 +19,7 @@ import type {
   IdentityJobRef,
   IdentityReceipt,
 } from '../../../src/semantic/identity-epoch-contract.ts';
+import { composeLibraryDomain, peekLibraryDomain } from '../../../src/composition/library.ts';
 import { digest, epochFixture, release, type EpochFixture } from './identity-epoch.ts';
 
 /** Own the database we perturb. Never fence, drop or stop a neighbour's resource. */
@@ -362,6 +363,7 @@ export async function withInFlightControlMove<T>(f: EpochFixture, operation: () 
 
 /** Real Library source commands. No canonical rows, directory readiness or ACKs are fixture-written. */
 export async function libraryCutoverInput(f: EpochFixture, originals: readonly string[]) {
+  if (!peekLibraryDomain()) composeLibraryDomain();
   const { createCollectionCommands } = await import('../../../src/library/collections.ts');
   const { createFollowCommands } = await import('../../../src/library/follows.ts');
   const { linkProjection } = await import('../../../src/semantic/links.ts');
@@ -384,6 +386,7 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
         {
           anonymous: action === 'subject:read',
           ...(action.startsWith('collection:') ? { 'x-resource-types': ['library.collection'] } : {}),
+          ...(action === 'follow:create' || action === 'follow:delete' ? { authority: 'own-account' as const } : {}),
         },
       ]),
     ),

@@ -3,6 +3,9 @@ import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { readRelease } from '../semantic/definitions.ts';
+import { publicFilterSource } from '../semantic/public-filter-source.ts';
+import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { subjectSource } from '../semantic/search-source.ts';
 import {
   identityEpochStore,
@@ -33,6 +36,35 @@ const digest = (value: unknown) => createHash('sha256').update(json(value)).dige
 
 function planned(original: string, existing: ReadonlySet<string>) {
   return existing.has(original);
+}
+
+function receivingDisposition(
+  change: IdentityChange,
+  retained: readonly { original: string }[],
+): SearchIdentityReceivingSelection['disposition'] {
+  if (change.original !== change.terminal) return 'OLD';
+  return retained.length > 0 ? 'NEW' : 'first-apply';
+}
+
+/** Resolve the admitted public-filter definition once per home. A release digest is not a definition id. */
+async function publishedSourceDefinition(
+  pool: Pool,
+  configuration: SearchReceivingConfiguration,
+  releaseDigest: string,
+  deadline: number,
+) {
+  const release = await readRelease(pool, releaseDigest);
+  if (!release) throw unavailable('Search receiving plans require the admitted Source release');
+  const resolved = await createPublicFilterSourceBinding(pool, configuration.routeKey, configuration.access).resolve(
+    {
+      source: publicFilterSource(configuration),
+      meaning: { digest: releaseDigest, release, type: 'schema:Thing' },
+      capture: { sort: 'id', size: 20, filterDocument: undefined, text: undefined },
+    },
+    { deadline },
+  );
+  if (resolved.status !== 'resolved') throw unavailable('Search receiving plans require a published Source definition');
+  return resolved.definition;
 }
 
 /** Source-owned Search native plans and common receiving enrollment for one bounded home page.
@@ -114,10 +146,17 @@ export async function commitSearchIdentityReceivingPlans(
     context.deadline,
   );
   if (!scopeDigest) throw unavailable('Search receiving plans lost the admitted job scope');
+  const definition = await publishedSourceDefinition(pool, configuration, saved.intent.release, context.deadline);
   for (const change of cohort) {
     const fence = fences.get(change.original);
     if (!fence) throw unavailable('Search receiving original fence is missing');
-    const disposition = change.original === change.terminal ? 'NEW' : 'OLD';
+    const mapping = await identityEpochStore().readMapping(pool, change.original);
+    if (mapping.state !== 'mapped')
+      throw unavailable('Search receiving original has no published mapping; absence is not a self binding');
+    if (mapping.terminal !== change.terminal)
+      throw unavailable('Search receiving mapping disagrees with the change page');
+    const retained = copies.filter((copy) => copy.original === change.original);
+    const disposition = receivingDisposition(change, retained);
     const documentId = disposition === 'OLD' ? change.original : change.terminal;
     const ownerRoute = routeOf(documentId);
     if (ownerRoute === null || partitionOf(ownerRoute) !== partition)
@@ -139,7 +178,6 @@ export async function commitSearchIdentityReceivingPlans(
       disposition,
       native: locator,
     };
-    const retained = copies.filter((copy) => copy.original === change.original);
     const input: SearchNativeReceivingPreparation = {
       selection,
       source: {
@@ -167,8 +205,8 @@ export async function commitSearchIdentityReceivingPlans(
       references: {
         originalSupport: null,
         terminalSupport: null,
-        definition: saved.intent.release,
-        release: saved.intent.release,
+        definition: definition.readDefinition,
+        release: definition.meaning.digest,
         documentFence: fence.gate,
         predecessor: null,
       },

@@ -85,3 +85,13 @@ native final pass for all homes and complete engine identities and settled exter
 engine extras; legacy coverage certificates and equal counts do not stand in for native publication.
 The publication suite separately pins filtered/terminal native cursors and maintenance resumption, and
 the metadata suite pins released calendar metadata under an applied-but-lost write response.
+
+Native identity receiving suites construct `searchIdentityReceivingComposition` and run each step inside
+Semantic's Source maintenance frame. They consume published mappings and the resolved public-filter
+definition; a missing mapping is unavailable, not a self binding. Collection source setup composes the
+Library domain through `composeLibraryDomain`; Collection create does not invent a Search presentation
+path. Cutover keeps Collection create on the owner account through own-account commands and JWT
+scopes, and mounts follow:create/delete as own-account so follow writes keep the verified Access
+actor. access.grant of collection:* onto the owner-account resource is denied because
+collection:create is typed to library.collection. Accounts original-funded transfer is
+observed on the next native run.

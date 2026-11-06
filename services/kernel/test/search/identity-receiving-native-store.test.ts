@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
@@ -22,6 +23,8 @@ import { subjectPartition } from '../../src/search/source.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { digest, epochFixture, release, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 import { libraryCutoverInput } from '../semantic/support/identity-epoch-cutover.ts';
+
+composeLibraryDomain();
 
 // Additional production-core regressions. Full integrated receiving acceptance remains in the protected suite.
 // Authored only: the current execution policy permits workspace typing, not this native/engine suite.

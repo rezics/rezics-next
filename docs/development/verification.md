@@ -47,7 +47,8 @@ Decision: under minimal verification a type error blocks a worker's success, and
 
 Decision: environment walks run per Goal, not per outcome. An implementation brief declares no `native` or `browser`
 `acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk-and-repair task
-running; it walks dev on a seeded stack as each persona and briefs what fails as repairs. Outcomes that each carried
+running; it walks dev on a seeded stack as each persona and briefs what fails as repairs. Goal dispatch and retry refuse
+a second such brief while one of that Goal is ready, running, held or landing. Outcomes that each carried
 their own walk rarely landed: on 2026-11-06, 2 of 81 tasks integrated after 12:00 UTC carried one, while 14 of 29
 running tasks did, at 17 hours and 3.7 attempts on average.
 

@@ -26,54 +26,6 @@ nothing; it becomes frozen with its executable acceptance. Existing frozen tests
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
 workers where relevant, and recorded revision evidence.
 
-## First-public journey walk
-
-This is Performance's receiving matrix for its assigned interface journeys within the [first public scope](../scope.md).
-Product owners keep native policy and schema authority. The one Performance walk executes integrated `dev`, records
-its exact revision and seed, and replaces each pending result with **passing** or **failing** by 2026-11-07 00:30 UTC.
-The finishing target is 2026-11-07 09:30 UTC. Repeat the walk hourly until that target; report passing/17 and the
-slowest failing path. A failure records its first causal error, elapsed time, affected owner and evidence link;
-infrastructure or unavailable evidence remains an explicit failing walk, without claiming product denial.
-A pass requires the complete visible path and its applicable native work proof, not typing or a focused unit result.
-
-| Path | Scope row and assigned user-visible journey | Current dev result and evidence |
-| ---- | ------------------------------------------ | ------------------------------- |
-| P01 | Accounts/preferences: open signed-in Settings Profile, edit, Save, read back the current private profile, leave and return with correct draft and focus recovery. | Pending initial dev walk. |
-| P02 | Agents/public profiles: change the admitted public profile fields and view flags, Save/read back, then view the immutable public profile as owner, another member and anonymous. | Pending initial dev walk. |
-| P03 | Accounts: open Safety's managed-account directory, page to an admitted account, open its detail/profile and return to the exact directory frontier and focus. | Pending initial dev walk. |
-| P04 | Authentication: follow Settings' account security action into the trusted native Auth security page and return using the current session. | Pending initial dev walk. |
-| P05 | Accounts: follow Settings' rename action into native Auth, complete the admitted rename and return to the current account identity. | Pending initial dev walk. |
-| P06 | Accounts/deletion: follow Settings' deletion action into native Auth and complete the owner-admitted deletion/recovery path; consume Accounts' native evidence for irreversible effects. | Pending initial dev walk. |
-| P07 | Authentication: sign out through the native action, reach the signed-out destination and recover an uncertain response through the current session read. | Pending initial dev walk. |
-| P08 | Accounts: from Safety choose an eligible verification subject, submit, revisit and withdraw the exact request, then return to Safety with the current status. | Pending initial dev walk. |
-| P09 | Notifications/preferences: open per-kind notification preferences, edit and Save/read back, then Reset/read back with compulsory kinds and current admission visible. | Pending initial dev walk. |
-| P10 | Accounts/preferences: open Reading, Save/read back spoiler and suitability choices, then Reset and read back native defaults. | Pending initial dev walk. |
-| P11 | Accounts/preferences: open layout defaults, select a native type, Save/read back its override, remove it and read back the resulting default. | Pending initial dev walk. |
-| P12 | Library/Collections: open Settings' private Collection inventory, change an admitted Collection's privacy, Save/read back and recover a current-version conflict for that same row. | Pending initial dev walk. |
-| P13 | Notifications: open the in-app Inbox, page to a reply, mention or moderation notice, visit its admitted destination, return to the same range and acknowledge with the correct unread badge. | Pending initial dev walk. |
-| P14 | Follows: follow a supported target, read and page the private Following list, visit the current target, return to the original frontier, remove the edge and recover its acknowledged replay. | Pending initial dev walk. |
-| P15 | Library/labels: create or select an admitted label, assign it to a subject, read the FULL assignment and label shelf, then remove the exact assignment and read back. | Pending initial dev walk. |
-| P16 | Library/progress: open the assigned active shelf, page to a session, follow its target and return, then complete or retire the session and read the updated shelf. | Pending initial dev walk. |
-| P17 | Library/Collections: publish a session Log, read its public snapshot as owner/member/anonymous, retract and restore the eligible episode, and return to the captured private My Logs frontier under the current session. | Pending initial dev walk. |
-
-[Settings](../../apps/web/src/settings/README.md), [Profile](../../apps/web/src/accounts/profile-editor/README.md),
-[Inbox](../../apps/web/src/inbox/README.md), [Web Library](../../apps/web/src/library/README.md) and the
-[Library performance contract](../../services/kernel/src/library/performance-contract.md) own these paths' recovery
-and cost semantics. Accounts supplies native Auth security, rename, deletion and session evidence; this Goal receives
-that evidence through its Settings handoffs. Record first HTML and hydrated behavior where applicable, current
-admission, conflict/uncertain-result recovery, phone/desktop rendering and the complete nested native cost.
-
-The assigned Profile/Watches return milestone remains an additional frozen integration check. Watches are second
-scope in the public scope table and do not enter this public denominator. Grant-closed discovery, prepared/mounted
-Source plans and Realm rating sorts likewise retain their existing proof obligations without public exposure.
-Installed Rating, Work/Auth retention, History/Command and the shared growth harness supply the native proof for
-reached public paths; their technical operations are not extra user-journey rows.
-
-After the initial walk, dispatch only complete repairs of failing rows and same-day net-new architecture violations.
-Consolidate shared causes and send repairs to existing owners. Implementation attempts land on clean changed-workspace
-typing with money-path tests remaining strict; the single Goal walk owns environment and growth execution. Each hourly
-result replaces the previous row evidence and keeps unresolved native evidence explicit.
-
 ## composed-discovery-cost
 
 **User job:** Anonymous and Alice find light novels tagged harem with more than 1,000,000 words, and vegetarian
