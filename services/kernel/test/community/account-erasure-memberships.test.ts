@@ -182,7 +182,11 @@ test.serial(
       (await pool.query('SELECT * FROM community.realm_member_terminal WHERE account_id=$1', [member.accountId])).rows,
     ).toHaveLength(2);
     await expect(
-      eraseAccountMembershipsPage({ pool, access, deadlineNow: () => Date.now() }, fixture.outsider.id, null),
+      eraseAccountMembershipsPage(
+        { pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
+        fixture.outsider.id,
+        null,
+      ),
     ).rejects.toThrow();
     await deletePersona({ version: 1, pool, auth: deletion.auth }, member);
     await drainEffects(pool, partitionOf(routeOf(member.accountId)!));
@@ -190,7 +194,7 @@ test.serial(
     let found = 0;
     for (let step = 0; step < 20; step++) {
       const page = await eraseAccountMembershipsPage(
-        { pool, access, deadlineNow: () => Date.now() },
+        { pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
         member.accountId,
         after,
       );
@@ -211,7 +215,11 @@ test.serial(
       (await pool.query('SELECT * FROM community.realm_ban WHERE account_id=$1', [member.accountId])).rows,
     ).toEqual(bans);
     expect(
-      await eraseAccountMembershipsPage({ pool, access, deadlineNow: () => Date.now() }, member.accountId, null),
+      await eraseAccountMembershipsPage(
+        { pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
+        member.accountId,
+        null,
+      ),
     ).toEqual({
       next: null,
       found: 0,
@@ -301,7 +309,7 @@ test.serial(
       async operation() {
         await restore();
         const page = await eraseAccountMembershipsPage(
-          { pool: growth.pool, access, deadlineNow: () => Date.now() },
+          { pool: growth.pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
           member.accountId,
           null,
         );

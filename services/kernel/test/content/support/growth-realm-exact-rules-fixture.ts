@@ -163,8 +163,11 @@ export async function createRulesFixture() {
     const exact = (refs: readonly Pin[], access = system.access, pool = database.pool) =>
       readExactPublishedRules({ clock: () => new Date(), pool, access }, refs, readContext());
     const presentations = (ids: readonly string[], access = system.access) =>
-      readCommunityPresentations({ pool: database.pool, access, deadlineNow: () => Date.now() },
-      ids, readContext());
+      readCommunityPresentations(
+        { pool: database.pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
+        ids,
+        readContext(),
+      );
     async function adopt(pin: Pin) {
       return patchRealm(pin.realmId, {
         presentation: {

@@ -279,7 +279,7 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
 
   const governance = await contentGovernanceCredential(system);
   await takedownSourceFence(
-    { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+    { pool: system.database.pool, access: system.access, routeKey: system.routeKey, clock: () => new Date() },
     governance.actor,
     {
       source: tuple.source,
@@ -467,7 +467,7 @@ test('native exposure wakes include standalone Spaces; tuple fences wait for com
   expect((direct.data as SpaceDiscoveryInvalidation).target).toEqual({ kind: 'space', id: space.spaceId });
   const tuple = { source: 'example', external_id: 'space-dependency-unavailable', field_group: 'cover' as const };
   await takedownSourceFence(
-    { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+    { pool: system.database.pool, access: system.access, routeKey: system.routeKey, clock: () => new Date() },
     governance.actor,
     { ...tuple, reason: 'Private evidence' },
     { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },

@@ -165,7 +165,7 @@ export type ContentReadDependencies = Readonly<{
   pool: Pool;
   access: Access;
   tokens: KeyRing;
-  clock?: () => Date;
+  clock: () => Date;
   /** Real wall time for realm read deadlines; absent callers keep the composition clock. */
   deadlineNow?: () => number;
 }>;

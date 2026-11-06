@@ -88,10 +88,13 @@ WorkClient; native queue registration refuses a stub. Tests pin the declaration,
 and worker-import graph; no extra stories.
 
 Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm
-witness revision/replay native test including stale work; no extra stories.
+witness revision/replay native test including stale work; no extra stories. Domain clocks stay required on holders;
+deadlineNow is a separate ambient; Access-facing public entry includes realmReadEligibility.
 
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
-changing behavior.
+changing behavior. Community domain clocks stay required on holders that already have one; deadlineNow is a
+separate ambient; Access-facing public entry includes realmReadEligibility. Tests pin declaration inventory,
+ambient deadline refusal, and one populated Realm witness revision/replay including stale work; no extra stories.
 
 ## Dependencies
 

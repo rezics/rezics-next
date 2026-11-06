@@ -43,7 +43,7 @@ async function patch(realmId: string, head: string, body: unknown) {
 
 function read(realmId: string, access = world.system.access) {
   return readRealmHomePresentation(
-    { pool: world.system.database.pool, access, deadlineNow: () => Date.now() },
+    { pool: world.system.database.pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
     realmId,
     {
       actor: { kind: 'anonymous' },

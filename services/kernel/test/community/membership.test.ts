@@ -740,7 +740,7 @@ function holdingClient() {
 }
 
 function acceptanceDependencies(held: ReturnType<typeof holdingClient>) {
-  return { pool, access, tokens, client: held.client };
+  return { pool, access, tokens, client: held.client, clock: () => new Date() };
 }
 
 function accepted(held: ReturnType<typeof holdingClient>, workflowId: string): Accepted {

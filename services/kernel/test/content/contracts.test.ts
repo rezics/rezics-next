@@ -339,7 +339,7 @@ function publishedModels(): void {
   same<
     Equal<
       reads.ContentReadDependencies,
-      Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date; deadlineNow?: () => number }>
+      Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date; deadlineNow?: () => number }>
     >
   >();
   same<

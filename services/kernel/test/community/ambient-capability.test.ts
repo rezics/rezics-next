@@ -52,7 +52,7 @@ describe('Community ambient capability', () => {
   test('a supplied deadline clock closes a realm read before any database access', async () => {
     const realmId = newId(1);
     const deadline = Date.now() + 30_000;
-    const deps = { pool, access, routeKey, deadlineNow: () => deadline + 1 };
+    const deps = { pool, access, routeKey, clock, deadlineNow: () => deadline + 1 };
 
     await expect(readRealm(deps, { kind: 'anonymous' }, realmId, { deadline })).resolves.toBeNull();
   });

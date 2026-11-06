@@ -687,7 +687,7 @@ test.serial(
         },
         async operation() {
           const changed = await board.setBoardScheme(
-            { pool, access, routeKey, deadlineNow: () => Date.now() },
+            { pool, access, routeKey, clock: () => new Date(), deadlineNow: () => Date.now() },
             actor,
             { realmId: probe.realmId, schemeId, expectedHead: head },
             { deadline: Date.now() + 90_000, idempotencyKey: crypto.randomUUID() },

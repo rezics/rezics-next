@@ -16,7 +16,7 @@ export async function openFollowingSpace(
     access: Access;
     contentAccess: Access;
     tokens: KeyRing;
-    clock?: () => Date;
+    clock: () => Date;
     deadlineNow?: () => number;
   },
   actor: Actor,

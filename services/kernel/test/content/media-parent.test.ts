@@ -188,7 +188,7 @@ test('media reserve reads a remote board on its own native anchor and releases b
   db.pool.on('acquire', acquire);
   db.pool.on('release', release);
   try {
-    const result = await reserveMedia({ pool: db.pool, access }, actor, input(thread), request());
+    const result = await reserveMedia(dependencies(), actor, input(thread), request());
     expect(peak).toBe(1);
     expect(held).toBe(0);
     for (const checkout of checkouts) {

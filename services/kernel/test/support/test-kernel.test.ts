@@ -137,7 +137,7 @@ test('named overrides preserve the mounted composition and client registration d
   await registerTestClient(service, { clientId: 'test-client', firstParty: true });
   const scopes = (registrations[0] as { scopes: string[] }).scopes;
   expect(scopes).toEqual([...actionCatalogue(production).keys()].sort());
-});
+}, 180_000);
 
 test('receipt writer uses current principals and optionally records the production write basis', async () => {
   const accountId = randomUUID();

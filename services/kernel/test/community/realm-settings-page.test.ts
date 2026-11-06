@@ -211,7 +211,7 @@ test.serial(
         }
       });
       await expect(
-        readRealmSettingsPage({ pool: f.db.pool, access, deadlineNow: () => Date.now() },
+        readRealmSettingsPage({ pool: f.db.pool, access, clock: () => new Date(), deadlineNow: () => Date.now() },
       actor, s.realmId, {
           deadline: Date.now() + 30_000,
         }),

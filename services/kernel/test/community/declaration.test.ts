@@ -33,5 +33,7 @@ test('Access-facing claim capabilities load in a fresh process without the compo
     timeout: 120_000,
   });
   expect(result.exitCode, result.stderr.toString()).toBe(0);
-  expect(result.stdout.toString().trim()).toBe('applyRealmClaimApproval,lockRealmClaimApprovalSource');
+  expect(result.stdout.toString().trim()).toBe(
+    'applyRealmClaimApproval,lockRealmClaimApprovalSource,realmReadEligibility',
+  );
 });

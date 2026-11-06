@@ -679,9 +679,16 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
         const expected = new Map<string, string[]>();
         const generations = new Map<string, Set<string>>();
         for (const ref of refs) {
+          if (ref.space_id === null) throw new TypeError('Space tuple witness reference is missing its Space');
+          const tuple = checkedTuple({
+            route: ref.route,
+            source: ref.source,
+            external_id: ref.external_id,
+            field_group: ref.field_group,
+          });
           if (ref.kind === 'expected') {
             const list = expected.get(ref.space_id) ?? [];
-            list.push(identity(ref));
+            list.push(identity(tuple));
             expected.set(ref.space_id, list);
             continue;
           }
@@ -689,12 +696,7 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
           observed.add(ref.witness_generation);
           generations.set(ref.space_id, observed);
           const list = tuples.get(ref.space_id) ?? [];
-          list.push({
-            route: ref.route,
-            source: ref.source,
-            external_id: ref.external_id,
-            field_group: ref.field_group as SourceFenceTuple['field_group'],
-          });
+          list.push(tuple);
           tuples.set(ref.space_id, list);
         }
         for (const row of rows) {

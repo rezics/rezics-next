@@ -5,7 +5,6 @@ import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { systemCommunityClock } from './ambient.ts';
 import { memberLocatorQuery } from './member-locator-query.ts';
 import obligation from './account-erasure-memberships-obligation.sql';
 import page from './member-locator-page.sql';
@@ -71,11 +70,11 @@ async function qualifiesForSuccession(
 }
 
 export async function eraseAccountMembershipsPage(
-  deps: { pool: Pool; access?: Access; clock?: () => Date; deadlineNow: () => number; deadline?: number },
+  deps: { pool: Pool; access?: Access; clock: () => Date; deadlineNow: () => number; deadline?: number },
   accountId: string,
   after: MembershipErasureCursor | null,
 ): Promise<{ next: MembershipErasureCursor | null; found: number; pending: number }> {
-  const { pool, access, clock = systemCommunityClock } = deps;
+  const { pool, access, clock } = deps;
   const route = routeOf(accountId);
   if (route === null || (after !== null && after !== beginning && routeOf(after) === null))
     throw new TypeError('Invalid account membership erasure key');
