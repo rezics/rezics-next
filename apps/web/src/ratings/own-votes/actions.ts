@@ -171,7 +171,8 @@ async function currentCommand(intent: OwnVoteIntent): Promise<OwnVoteCommandResu
   if (!origin) return { kind: 'uncertain' };
   const { client } = createNativeTransport(origin, authorization);
   const vote = client.subjects({ id: intent.targetId }).ratings({ questionId: intent.questionId }).vote;
-  const headers = { authorization, 'idempotency-key': intent.key };
+  // The kernel reads Idempotency-Key as a structured-field string, so the UUID travels quoted.
+  const headers = { authorization, 'idempotency-key': JSON.stringify(intent.key) };
   try {
     const response =
       intent.method === 'PUT'

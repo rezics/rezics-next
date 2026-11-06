@@ -191,7 +191,7 @@ test('native denied/admitted responses keep strict page admission and the origin
     ['PUT', intent.path],
     ['GET', intent.path],
   ]);
-  expect(calls[0]!.headers.get('idempotency-key')).toBe(intent.key);
+  expect(calls[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(intent.key));
   expect(await calls[0]!.json()).toEqual({ units: 2 });
   expect(calls[1]!.headers.get('rezics-session-token')).toBe('readback-session');
   expect(calls.every((call) => call.headers.get('authorization') === 'Bearer admitted')).toBe(true);

@@ -409,9 +409,10 @@ export async function writeRatingVote(
   },
 ): Promise<'successful' | 'rejected' | 'uncertain'> {
   const vote = client.subjects({ id: input.subjectId }).ratings({ questionId: input.questionId }).vote;
+  // The kernel reads Idempotency-Key as a structured-field string, so the UUID travels quoted.
   const headers = {
     authorization: input.authorization,
-    'idempotency-key': input.idempotencyKey,
+    'idempotency-key': JSON.stringify(input.idempotencyKey),
     ...(input.observation ? { 'x-rating-observation': JSON.stringify(input.observation) } : {}),
   };
   try {
