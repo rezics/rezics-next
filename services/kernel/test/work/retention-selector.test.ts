@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import {
+  WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS,
+  WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS,
   WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS,
   WORKFLOW_RETENTION_SELECT_TAG,
 } from '../../src/work/contract/bounds.ts';
@@ -81,12 +83,18 @@ test('a selected workflow count does not bound owned payload or cascade rows', (
   const fanoutWork = retentionBatchWork(10, fanout);
   expect(unitWork.selected).toBe(10);
   expect(fanoutWork.selected).toBe(10);
+  expect(unitWork.applicationStatements).toBe(WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS);
+  expect(unitWork.controlStatements).toBe(WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS);
   expect(unitWork.statements).toBe(WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS);
+  expect(unitWork.applicationStatements + unitWork.controlStatements).toBe(unitWork.statements);
   expect(fanoutWork.statements).toBe(unitWork.statements);
+  expect(fanoutWork.applicationStatements).toBe(unitWork.applicationStatements);
   expect(fanoutWork.payloadRows).toBeGreaterThan(unitWork.payloadRows);
   expect(fanoutWork.deletionRows).toBeGreaterThan(unitWork.deletionRows);
   expect(fanoutWork.examinedRows).toBeGreaterThan(unitWork.examinedRows);
   expect(retentionBatchWork(0, unit).statements).toBe(1);
+  expect(retentionBatchWork(0, unit).applicationStatements).toBe(1);
+  expect(retentionBatchWork(0, unit).controlStatements).toBe(0);
   expect(retentionBatchWork(0, unit).deletionRows).toBe(0);
 });
 
@@ -99,6 +107,9 @@ test('a two-batch sweep charges each nonempty delete plus the empty reselection'
   expect(work.lastBatchSize).toBe(0);
   expect(work.selected).toBe(1010);
   expect(work.statements).toBe(7 + 7 + 1);
+  expect(work.applicationStatements).toBe(5 + 5 + 1);
+  expect(work.controlStatements).toBe(2 + 2 + 0);
+  expect(work.applicationStatements + work.controlStatements).toBe(work.statements);
   expect(work.deletionRows).toBeGreaterThan(1010);
 });
 

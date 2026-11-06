@@ -92,7 +92,9 @@ and retirement against fake ports; worker and kernel landing tests carry `KERNEL
 `workerTestEnv`. The existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
 sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention growth uses folded
 capture so a 1,000-id SDK delete stays inside the 32 MiB and 20,000-entry caps; selector-plan notices come from
-acquired pool clients, and payload tables share the 32,768-row planner floor. Search tombstone registration
+acquired pool clients, payload tables share the 32,768-row planner floor, fanout 1/8/64 grows only
+`operation_outputs`, and measured nonempty batches are five application statements plus two BEGIN/COMMIT control.
+Search tombstone registration
 includes both `search_account_erasure` and `search_erasure`. Contract/core/application load no downstream
 implementations. Native adapters are bound by ordinary `createKernel`/`server`/`worker` composition, with product
 assembly in `composition/work-modules.ts` using `ratingNativeWorkModule`. The split adds no query or extra
