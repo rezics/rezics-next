@@ -111,7 +111,10 @@ receipt, source position and deadline. Publication rereads Mapping `readJob` and
 complete participant ACKs without inserting a new event. Access owns the original-source reader
 and reversal settlement; Commerce and Search own their participant bodies; Library owns
 `revalidateHold`. Installed owner declarations determine the disposition. Absent operands name
-that owner and callable. Subject erasure keeps a separate source walk.
+that owner and callable. Subject erasure keeps a separate source walk. Native History composition
+installs the Accounts declaration binder before commands; merge, replay, custody and Accounts
+readback keep those original bodies. Worker-installed Search and Library participants remain
+required before Accounts verify/unverify can resume a job.
 
 ## Concurrent control and coherent admission
 
