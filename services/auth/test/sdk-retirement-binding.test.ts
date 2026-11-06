@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import { completeCopy, copiesAbsent, eraseCopy } from '../src/erasure-copy.ts';
 import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
+import { workflowStatusScanReadiness } from '../src/retention-scan.ts';
 import { authSdkRetirementReadiness, nativeFence, readAuthSdkFence } from '../src/sdk-retirement-fence.ts';
 import { failNativeQueries, nativeFixture, runNativeRetentionTick } from './support/erasure-native.ts';
 
@@ -11,6 +12,7 @@ test('default Auth retirement persists the actual SDK fence before physical dele
     // These cases consume the producer's actual package after integration. No
     // synthetic native receipt, writer coverage bit or result ACK is installed.
     expect(authSdkRetirementReadiness().ready).toBe(true);
+    expect(workflowStatusScanReadiness().ready).toBe(true);
     const person = await f.person('native-fence-binding');
     const survivor = await f.person('native-fence-living');
     const original = (

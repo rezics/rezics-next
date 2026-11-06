@@ -5,6 +5,7 @@ import { testDatabase } from '../scripts/database.ts';
 import { createAuthHost, type AuthHostOptions } from '../src/host.ts';
 import type { AuthService } from '../src/index.ts';
 import { AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
+import { AUTH_WORKFLOW_STATUS_SCAN_UNAVAILABLE, workflowStatusScanReadiness } from '../src/retention-scan.ts';
 import {
   AUTH_WORKFLOW_APPLICATION,
   installWorkflowRequestRetention,
@@ -50,7 +51,7 @@ afterAll(async () => {
 async function reset() {
   await pool.query('DELETE FROM auth_dbos.workflow_status');
   await pool.query('DELETE FROM auth_workflow_request');
-  await pool.query('UPDATE auth_workflow_retention SET cutoff=NULL,through_key=NULL,after_key=NULL');
+  await pool.query('UPDATE auth_workflow_retention SET continuation=NULL');
 }
 async function seed(
   id: string,
@@ -58,12 +59,13 @@ async function seed(
   completedAt: number | null,
   application = AUTH_WORKFLOW_APPLICATION,
   name = 'auth.maintenance.tick',
+  createdAt = cutoff - day,
 ) {
   await pool.query(
     `INSERT INTO auth_dbos.workflow_status
       (workflow_uuid,status,name,authenticated_roles,recovery_attempts,created_at,updated_at,completed_at,application_name)
      VALUES ($1,$2,$6,'[]',0,$3,$3,$4,$5)`,
-    [id, status, cutoff - day, completedAt, application, name],
+    [id, status, createdAt, completedAt, application, name],
   );
   await pool.query('INSERT INTO auth_workflow_request(workflow_id,digest,request) VALUES ($1,$2,$3)', [
     id,
@@ -72,6 +74,9 @@ async function seed(
   ]);
 }
 const page = (at = now, retire = unclassified) => runWorkflowRetentionPage(pool, 30, DBOS, at, retire);
+async function continuation() {
+  return (await pool.query('SELECT continuation FROM auth_workflow_retention')).rows[0].continuation;
+}
 
 test('Auth retention validates its independent configuration before constructing or launching a host', async () => {
   expect(readWorkflowRetentionConfig({})).toEqual({ retentionDays: 30 });
@@ -118,7 +123,7 @@ test('the native scheduled Auth sweep deletes all terminal kinds and their reque
   }
 });
 
-test('unclassified request custody survives SDK rollback and strict cutoff rows remain', async () => {
+test('unclassified request custody survives SDK rollback and inclusive cutoff rows retire', async () => {
   await reset();
   await seed('cutoff:exact', 'SUCCESS', cutoff);
   await seed('rollback:old', 'SUCCESS', cutoff - day);
@@ -134,11 +139,14 @@ test('unclassified request custody survives SDK rollback and strict cutoff rows 
   } finally {
     connection.release();
   }
-  expect(await runWorkflowRetentionSweep(pool, 30, DBOS, now, unclassified)).toBe(1);
+  expect(await runWorkflowRetentionSweep(pool, 30, DBOS, now, unclassified)).toBe(2);
   expect((await pool.query("SELECT 1 FROM auth_workflow_request WHERE workflow_id='cutoff:exact'")).rowCount).toBe(1);
+  expect(
+    (await pool.query("SELECT 1 FROM auth_dbos.workflow_status WHERE workflow_uuid='cutoff:exact'")).rowCount,
+  ).toBe(0);
 });
 
-test('raw pages pass pending consumers and cutoff ties, resume the fixed horizon and revisit recovered custody', async () => {
+test('raw pages pass pending consumers and timestamp ties, resume the fixed horizon and revisit recovered custody', async () => {
   await reset();
   await pool.query(
     `INSERT INTO auth_dbos.workflow_status
@@ -150,20 +158,27 @@ test('raw pages pass pending consumers and cutoff ties, resume the fixed horizon
   await seed('b:eligible', 'SUCCESS', cutoff - 1);
   await seed('c:tie', 'SUCCESS', cutoff);
   await seed('d:recent', 'SUCCESS', now.getTime());
-  await seed('e:creation-tie', 'SUCCESS', cutoff - 1);
-  await pool.query("UPDATE auth_dbos.workflow_status SET created_at=$1 WHERE workflow_uuid='e:creation-tie'", [cutoff]);
+  await seed('e:creation-tie', 'SUCCESS', cutoff - 1, AUTH_WORKFLOW_APPLICATION, 'auth.maintenance.tick', cutoff);
   const first = await page();
   expect(first).toEqual({ cutoff, examined: 1000, eligible: 1000, retired: 0, pending: 1000, done: false });
-  expect((await pool.query('SELECT cutoff::float8,after_key FROM auth_workflow_retention')).rows[0]).toEqual({
-    cutoff,
-    after_key: 'a:01000',
+  expect(await continuation()).toMatchObject({
+    applicationName: AUTH_WORKFLOW_APPLICATION,
+    createdBefore: cutoff,
+    lastExaminedKey: { createdAt: cutoff - day, workflowID: 'a:01000' },
+    upperKey: { createdAt: cutoff, workflowID: 'e:creation-tie' },
   });
-  // Neither a later clock nor a new, lexically later workflow changes this sweep.
+  // A later clock cannot reopen this sweep. An insert still inside the captured
+  // upper key can appear on a later page of this open; keys after the upper key wait.
   await seed('z:new', 'SUCCESS', cutoff - 1);
-  expect(await page(new Date(now.getTime() + 2 * day))).toMatchObject({ cutoff, examined: 4, retired: 1, done: true });
+  await seed('z:after-upper', 'SUCCESS', cutoff - 1, AUTH_WORKFLOW_APPLICATION, 'auth.maintenance.tick', cutoff + 1);
+  const second = await page(new Date(now.getTime() + 2 * day));
+  expect(second.cutoff).toBe(cutoff);
+  expect(second.done).toBe(true);
+  expect(second.retired).toBeGreaterThanOrEqual(2);
   expect(
-    (await pool.query("SELECT 1 FROM auth_dbos.workflow_status WHERE workflow_uuid IN ('c:tie','z:new')")).rowCount,
-  ).toBe(2);
+    (await pool.query("SELECT 1 FROM auth_dbos.workflow_status WHERE workflow_uuid='z:after-upper'")).rowCount,
+  ).toBe(1);
+  expect(await continuation()).toBeNull();
   const recovered: string[] = [];
   const next = await page(now, async (id) => {
     recovered.push(id);
@@ -172,7 +187,7 @@ test('raw pages pass pending consumers and cutoff ties, resume the fixed horizon
   });
   expect(next).toMatchObject({ examined: 1000, retired: 1000, pending: 0, done: false });
   expect(new Set(recovered).size).toBe(1000);
-  expect(await page()).toMatchObject({ retired: 1, done: true });
+  expect(await page()).toMatchObject({ done: true });
 });
 
 test('a lost deletion reply preserves cutoff and replays while retaining unclassified request bindings', async () => {
@@ -196,9 +211,10 @@ test('a lost deletion reply preserves cutoff and replays while retaining unclass
     ),
   ).rejects.toThrow('lost native delete reply');
   expect(failed).toBe(true);
-  expect((await pool.query('SELECT cutoff::float8,after_key FROM auth_workflow_retention')).rows[0]).toEqual({
-    cutoff,
-    after_key: null,
+  expect(await continuation()).toMatchObject({
+    createdBefore: cutoff,
+    lastExaminedKey: null,
+    upperKey: { workflowID: 'b:delete' },
   });
   expect(await page(new Date(now.getTime() + day))).toMatchObject({ cutoff, retired: 0, done: true });
   expect(
@@ -217,9 +233,9 @@ test('sixty raw batches leave a durable continuation even when every consumer is
   );
   await seed('b:later', 'SUCCESS', cutoff - 1);
   expect(await runWorkflowRetentionSweep(pool, 30, DBOS, now, unclassified)).toBe(0);
-  expect((await pool.query('SELECT cutoff::float8,after_key FROM auth_workflow_retention')).rows[0]).toEqual({
-    cutoff,
-    after_key: 'a:60000',
+  expect(await continuation()).toMatchObject({
+    createdBefore: cutoff,
+    lastExaminedKey: { workflowID: 'a:60000' },
   });
   expect(await page(new Date(now.getTime() + day))).toMatchObject({ cutoff, examined: 1, retired: 1, done: true });
 });
@@ -237,10 +253,24 @@ test('fully drained native history repeats empty pages without retaining a stale
       pending: 0,
       done: true,
     });
-    expect((await pool.query('SELECT cutoff,through_key,after_key FROM auth_workflow_retention')).rows[0]).toEqual({
-      cutoff: null,
-      through_key: null,
-      after_key: null,
-    });
+    expect(await continuation()).toBeNull();
+  }
+});
+
+test('an unavailable scan producer refuses before Auth reads private SDK tables', async () => {
+  expect(workflowStatusScanReadiness().ready).toBe(true);
+  const open = Object.getOwnPropertyDescriptor(DBOS, 'openWorkflowStatusScan');
+  try {
+    if (!open || !Reflect.deleteProperty(DBOS, 'openWorkflowStatusScan'))
+      throw new Error('Scan producer cannot be removed for absence case');
+    expect(workflowStatusScanReadiness().ready).toBe(false);
+    await reset();
+    await seed('a:absent', 'SUCCESS', cutoff - 1);
+    await expect(page()).rejects.toThrow(AUTH_WORKFLOW_STATUS_SCAN_UNAVAILABLE);
+    expect((await pool.query("SELECT 1 FROM auth_dbos.workflow_status WHERE workflow_uuid='a:absent'")).rowCount).toBe(
+      1,
+    );
+  } finally {
+    if (open) Object.defineProperty(DBOS, 'openWorkflowStatusScan', open);
   }
 });

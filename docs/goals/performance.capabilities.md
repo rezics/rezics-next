@@ -325,21 +325,26 @@ Cost assertions exclude database-engine invisible MVCC versions; ordinary design
 ### Auth workflow retention
 
 The [Auth owner derivation](../../services/auth/README.md#workflow-history-retention)
-admits at most 1000 raw workflow keys before eligibility and persists cutoff/upper/
-after across native maintenance ticks. This permits O(H) complete sweeps while
+admits at most 1000 raw workflow keys through the supported SDK
+`openWorkflowStatusScan` / `readWorkflowStatusScanPage` producer and persists that
+continuation across native maintenance ticks. This permits O(H) complete sweeps while
 bounding every page, including all rejected candidates and pending consumers.
 Fewest tests: extend the two existing growth suites, retention causal cases and SDK
 binding cases; use the existing genuine erasure fixture and consumable target helper.
 Do not substitute returned counts or a callback stub for retirement-body work.
+Auth does not query `auth_dbos.workflow_status`; producer inclusive
+`completed_at <= createdBefore` eligibility is received as-is.
 
 Frozen full/short, zero-eligible and drain/repeated-empty titles remain in the Auth
 inventory. Each independently grows workflow rows, old-created/recent-completed
 terminal history, request bindings and irrelevant accounts/custody roles at 256/1024/4096. The
 full/short registered maintenance path consumes actual registration results and an
 HTTP revoke request, closes native writers, deletes payload/FK families and verifies
-raw absence. Missing consumer custody stays pending. Strict ties, late inserts,
-60-page continuation, original-cut recovery, interruption and replay stay causal
-cases; old synthetic technical bindings have no source proof and must be retained.
+raw absence. Missing consumer custody stays pending. Timestamp ties, late inserts
+inside the captured upper key, 60-page continuation, original-cut recovery,
+interruption and replay stay causal cases; old synthetic technical bindings have no
+source proof and must be retained. The SDK connection-retry loop still has no finite
+attempt limit; persistent native failure stays an explicit unavailable producer bound.
 
 Run through the Auth owning runner:
 
@@ -354,7 +359,8 @@ FK and request trigger in the original operation context. Raw pages, not deletio
 counts, price empty work. Test existence and clean typing provide no native pass.
 The current SDK connection-retry loop has no finite attempt limit; persistent native
 failure requires producer-owned retry admission before a finite whole-operation
-failure bound can close. No SDK schema/API patch or synthetic fence is supplied here.
+failure bound can close. Selection uses the received scan producer; no Auth-owned
+SDK SQL or synthetic fence is supplied here.
 
 ### Control-plane operation coverage
 

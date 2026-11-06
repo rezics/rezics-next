@@ -203,7 +203,7 @@ export async function prepareRetentionPage(
     await db.admin.query(`DELETE FROM auth_dbos.${table} WHERE workflow_uuid LIKE '!retention-page:%'`);
   await db.admin.query("DELETE FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE '!retention-page:%'");
   await db.admin.query("DELETE FROM auth_workflow_request WHERE workflow_id LIKE '!retention-page:%'");
-  await db.admin.query('UPDATE auth_workflow_retention SET cutoff=NULL,through_key=NULL,after_key=NULL');
+  await db.admin.query('UPDATE auth_workflow_retention SET continuation=NULL');
   const tag = `!retention-page:${id}:`;
   await db.admin.query(
     `INSERT INTO auth_dbos.workflow_status

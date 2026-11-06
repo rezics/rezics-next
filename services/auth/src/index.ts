@@ -268,7 +268,7 @@ export interface AuthService {
   security: SecurityInventory;
   verifier: VerifierConfiguration;
   internal: {
-    /** One raw-key retention page; durable cutoff and continuation stay native. */
+    /** One SDK scan page; durable createdBefore and continuation stay native. */
     retainWorkflowHistory(retentionDays: number): Promise<number>;
     receivingClosure?: import('@rezics/auth-contract').AuthReceivingClosureProducer;
     /** Native Auth-owned participant used before Collection Kind evidence work. */
