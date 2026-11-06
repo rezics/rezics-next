@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { PublicCollectionDiscoverySummary } from '../../src/library/index.ts';
-import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../../src/library/collection-discovery-source.ts';
+import type {
+  CollectionDiscoveryItem,
+  CollectionDiscoverySource,
+} from '../../src/library/collection-discovery-source.ts';
 import type { PublicCollectionDiscoveryOperand } from '../../src/library/collection-discovery-summaries.ts';
 import {
   collectionDirectoryOrder,
@@ -116,8 +119,9 @@ function indexed(
 }
 
 function source(items: CollectionDiscoveryItem[], pageLimit = 100): CollectionDiscoverySource {
-  const ordered = [...items].sort((left, right) =>
-    left.key.route - right.key.route || (left.key.id < right.key.id ? -1 : left.key.id > right.key.id ? 1 : 0),
+  const ordered = [...items].sort(
+    (left, right) =>
+      left.key.route - right.key.route || (left.key.id < right.key.id ? -1 : left.key.id > right.key.id ? 1 : 0),
   );
   return {
     async read(_partition, keys) {
@@ -170,7 +174,9 @@ function registry(collection: 'ready' | 'unavailable') {
                 kind: 'collection',
                 metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'collection' },
                 async readCurrent(ids) {
-                  return new Map(ids.map((id) => [id, row(id, { recency: ['1', route, id], popularity: null }).summary]));
+                  return new Map(
+                    ids.map((id) => [id, row(id, { recency: ['1', route, id], popularity: null }).summary]),
+                  );
                 },
               },
             },
@@ -322,7 +328,15 @@ test('directory capability absent returns index_not_ready before enumeration', a
         collectionDirectory: { order: 'recent' },
         limit: 2,
       },
-      { access: new Proxy({} as Access, { get() { throw new Error('Unexpected Access read'); } }), actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 },
+      {
+        access: new Proxy({} as Access, {
+          get() {
+            throw new Error('Unexpected Access read');
+          },
+        }),
+        actor: { kind: 'anonymous' },
+        deadline: Date.now() + 30_000,
+      },
     ),
   ).rejects.toMatchObject({ code: 'index_not_ready' });
   expect(queried.consumer.physicalTarget).toBe('discovery-unit');
