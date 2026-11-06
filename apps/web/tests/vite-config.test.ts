@@ -139,6 +139,15 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     );
     expect(worker).toBeTruthy();
     expect(worker && 'enforce' in worker ? worker.enforce : undefined).toBe('post');
+    const denied = plugins.find(
+      (plugin) =>
+        plugin !== null &&
+        typeof plugin === 'object' &&
+        'name' in plugin &&
+        plugin.name === 'worker-denied-dependencies',
+    );
+    expect(denied).toBeTruthy();
+    expect(denied && 'enforce' in denied ? denied.enforce : undefined).toBe('pre');
     const align = plugins.find(
       (plugin) =>
         plugin !== null &&

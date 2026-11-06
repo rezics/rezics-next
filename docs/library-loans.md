@@ -123,6 +123,13 @@ Acceptance pins the mounted return path and the locale Calendar source, and keep
 page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and
 five custody suites; do not add page stories.
 
+Cross-capability receiving keeps the existing exposure parity assertion narrow: run only its operation-to-group
+case from `closed-controls.test.ts`, together with Home Continue admission and viewer-exposure lifetime, before the
+Copies journey. The remaining closed-controls browser cases stay out of this selection. The Worker denied-file
+loader resolves `/src/...` and realpath aliases before its browser guard; the served-startup case must still load the
+Worker while browser reads of those files remain denied. The generated Semantic contract currently omits the mounted
+`definitions.import` operation, so parity must expose that producer gap until the supported OpenAPI command emits it.
+
 The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
 concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases
 for every pool. Complete measured costs for admission/currentness, SQL, locks, dispatch, receipts, hydration,

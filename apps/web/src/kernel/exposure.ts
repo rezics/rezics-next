@@ -78,6 +78,11 @@ export const operationGroups = {
   'published_log.delete': 'reading_progress',
   'published_log.read': 'reading_progress',
   'subject_collection.list': 'collections',
+  'definitions.publish': 'definition_publication',
+  'definitions.activate': 'definition_publication',
+  'definitions.import': 'definition_publication',
+  'definitions.publish_extension': 'definition_publication',
+  'definitions.activate_extension': 'definition_publication',
 } as const;
 export type GatedOperation = keyof typeof operationGroups;
 export type LibraryLabelOperation =
