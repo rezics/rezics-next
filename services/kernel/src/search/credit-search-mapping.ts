@@ -37,7 +37,10 @@ export function creditSearchIndexDefinition(base: Record<string, unknown>): Reco
       name: {
         type: 'object',
         dynamic: 'strict',
-        properties: { language: { type: 'keyword' }, value: { type: 'text', analyzer: names.analyzer } },
+        properties: {
+          language: { type: 'keyword' },
+          value: { type: 'text', analyzer: names.analyzer, index_options: 'offsets' },
+        },
       },
     },
   };

@@ -80,6 +80,7 @@
       "names": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets",
         "copy_to": "search_text",
         "fields": {
           "exact": {
@@ -96,11 +97,13 @@
       "descriptions": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets",
         "copy_to": "search_text"
       },
       "search_text": {
         "type": "text",
-        "analyzer": "cjk_bigram_v2"
+        "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets"
       },
       "document_text_coverage": {
         "type": "keyword"
@@ -138,7 +141,8 @@
           },
           "text": {
             "type": "text",
-            "analyzer": "cjk_bigram_v2"
+            "analyzer": "cjk_bigram_v2",
+            "index_options": "offsets"
           }
         }
       },

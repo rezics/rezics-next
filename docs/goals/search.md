@@ -8,6 +8,7 @@ publish safe page compositions without adding a page implementation for each ver
 ## Done when
 
 - A documented development OpenSearch setup supplies the required analyzer and regression cases.
+  Decision: that setup is the workspace `search up` image (OpenSearch 3.9.0 with `analysis-icu`), production `cjk_bigram_v2` offsets, and native regressions in `cjk-engine.test.ts` plus the retained analyzer token cases.
 - Real relays index semantic public projections, publish observable checkpoints and recover/rebuild into a new
   generation with reconciled coverage before switching it into use.
 - Search, facets, typeahead, ordering and cursors have typed invalid, preparing, unavailable and restart outcomes.

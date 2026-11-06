@@ -1,22 +1,8 @@
 import { MAX_NAME_SORT_CHARACTERS } from './document.ts';
+import { analyzeInstalled, NAME_KEY_NORMALIZER } from './engine-analysis.ts';
 import type { OpenSearch } from './opensearch.ts';
 
 const MAX_ANALYZE_CONCURRENCY = 16;
-
-type AnalyzeToken = {
-  token: unknown;
-  position: unknown;
-  start_offset: unknown;
-  end_offset: unknown;
-};
-
-type AnalyzeResponse = {
-  tokens: unknown;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 function isScalarString(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -30,34 +16,18 @@ function isScalarString(value: string): boolean {
   return true;
 }
 
-function normalizedKey(response: { status: number; body: AnalyzeResponse }, input: string): string {
-  if (response.status !== 200) throw new Error(`OpenSearch analyze returned HTTP ${response.status}`);
-  if (!isRecord(response.body) || !Array.isArray(response.body.tokens))
-    throw new TypeError('OpenSearch analyze returned an invalid token list');
-
-  const tokens = response.body.tokens as unknown[];
+async function analyzeOne(search: OpenSearch, index: string, input: string): Promise<string> {
+  const tokens = await analyzeInstalled(search, index, { normalizer: NAME_KEY_NORMALIZER, text: input });
   if (tokens.length !== 1) throw new TypeError('OpenSearch name_key must return exactly one token per input');
-
-  const token = tokens[0] as AnalyzeToken;
+  const token = tokens[0]!;
   if (
-    !isRecord(token) ||
-    typeof token.token !== 'string' ||
     !isScalarString(token.token) ||
     token.position !== 0 ||
-    token.start_offset !== 0 ||
-    token.end_offset !== input.length
-  ) {
+    token.startOffset !== 0 ||
+    token.endOffset !== input.length
+  )
     throw new TypeError('OpenSearch name_key returned an invalid token position or value');
-  }
   return token.token;
-}
-
-async function analyzeOne(search: OpenSearch, index: string, input: string): Promise<string> {
-  const response = await search.request<AnalyzeResponse>('POST', `/${index}/_analyze`, {
-    normalizer: 'name_key',
-    text: input,
-  });
-  return normalizedKey(response, input);
 }
 
 /** Prepare full native name sort keys before bulk writes, replacing oversized keys with null. */

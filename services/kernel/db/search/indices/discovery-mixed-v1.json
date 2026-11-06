@@ -88,6 +88,7 @@
       "names": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets",
         "copy_to": "search_text",
         "fields": {
           "exact": {
@@ -104,11 +105,13 @@
       "descriptions": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets",
         "copy_to": "search_text"
       },
       "search_text": {
         "type": "text",
-        "analyzer": "cjk_bigram_v2"
+        "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets"
       },
       "name_sort": {
         "type": "keyword",
@@ -173,6 +176,7 @@
       "handle": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets",
         "fields": {
           "exact": {
             "type": "keyword",
@@ -188,6 +192,7 @@
       "display_name": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",
+        "index_options": "offsets",
         "fields": {
           "exact": {
             "type": "keyword",

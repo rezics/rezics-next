@@ -32,6 +32,7 @@ test('evidence adds zero-score field probes without changing positive phrase and
   expect(JSON.stringify(query.should)).not.toContain('rubble');
   expect(query.should.every((probe) => JSON.stringify(probe).includes('"boost":0'))).toBe(true);
   expect(JSON.stringify(evidence.highlight)).toContain('"minimum_should_match":1');
+  expect(JSON.stringify(evidence.highlight)).toContain('"force_source":true');
 });
 
 test('projects only uniquely mapped current engine excerpts with their actual language and revision', () => {

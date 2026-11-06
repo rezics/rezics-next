@@ -1,30 +1,16 @@
 import { publicNames } from '../document-names.ts';
-import { SearchUnavailableError, type OpenSearch } from '../opensearch.ts';
+import {
+  analyzeInstalled,
+  CJK_ANALYZER,
+  NAME_PREFIX_ANALYZER,
+  type EngineToken,
+} from '../engine-analysis.ts';
+import type { OpenSearch } from '../opensearch.ts';
 import type { IndexedSubject } from '../source.ts';
 import type { TextNode } from '../text.ts';
 
-type Analyzer = 'cjk_bigram_v2' | 'name_prefix';
+type Analyzer = typeof CJK_ANALYZER | typeof NAME_PREFIX_ANALYZER;
 type Token = Readonly<{ text: string; position: number }>;
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function readTokens(value: unknown): Token[] {
-  if (!record(value) || !Array.isArray(value.tokens))
-    throw new SearchUnavailableError('OpenSearch current-text analysis is malformed');
-  return value.tokens.map((entry: unknown) => {
-    if (
-      !record(entry) ||
-      typeof entry.token !== 'string' ||
-      !entry.token.isWellFormed() ||
-      !Number.isSafeInteger(entry.position) ||
-      (entry.position as number) < 0
-    )
-      throw new SearchUnavailableError('OpenSearch current-text analysis is malformed');
-    return { text: entry.token, position: entry.position as number };
-  });
-}
 
 /** Analyze current native text with the same analyzer installed on the queried Search generation. */
 export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
@@ -40,10 +26,8 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
         if (active >= 16) await new Promise<void>((resolve) => waiting.push(resolve));
         else active++;
         try {
-          const response = await search.request<unknown>('POST', `/${index}/_analyze`, { analyzer, text });
-          if (response.status !== 200)
-            throw new SearchUnavailableError(`OpenSearch current-text analysis returned HTTP ${response.status}`);
-          return readTokens(response.body);
+          const tokens: readonly EngineToken[] = await analyzeInstalled(search, index, { analyzer, text });
+          return tokens.map(({ token, position }) => ({ text: token, position }));
         } finally {
           const next = waiting.shift();
           if (next) next();
@@ -70,7 +54,7 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
             case 'term':
             case 'phrase': {
               const key = `${node.kind}\0${node.value}`;
-              if (!leaves.has(key)) leaves.set(key, await analyze('cjk_bigram_v2', node.value));
+              if (!leaves.has(key)) leaves.set(key, await analyze(CJK_ANALYZER, node.value));
               return;
             }
             case 'not':
@@ -83,7 +67,7 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
         await visit(query);
         return leaves;
       })(),
-      Promise.all(texts.map((text) => analyze('cjk_bigram_v2', text))),
+      Promise.all(texts.map((text) => analyze(CJK_ANALYZER, text))),
     ]);
     const all = new Set(currentValues.flatMap((tokens) => tokens.map(({ text }) => text)));
     const leafMatches = new Map<string, boolean>();
@@ -133,10 +117,10 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
   }
 
   async function matchesPrefix(subject: IndexedSubject, prefix: string): Promise<boolean> {
-    const query = await analyze('name_prefix', prefix);
+    const query = await analyze(NAME_PREFIX_ANALYZER, prefix);
     if (!query.length) return false;
     const names = [...new Set(publicNames(subject).map(({ value }) => value))];
-    const candidates = await Promise.all(names.map((name) => analyze('name_prefix', name)));
+    const candidates = await Promise.all(names.map((name) => analyze(NAME_PREFIX_ANALYZER, name)));
     const exact = new Set(candidates.flatMap((tokens) => tokens.map(({ text }) => text)));
     const final = query.at(-1)!.text;
     return (
