@@ -79,11 +79,14 @@ export function cgroupArgs(env: NodeJS.ProcessEnv = process.env): string[] {
   return env.KERNEL_CHECK_ON_REMOTE ? [`--cgroup-parent=${env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`] : [];
 }
 
-export function searchRunArgs(image: string): string[] {
+export function searchRunArgs(image: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const javaOpts = env.OPENSEARCH_JAVA_OPTS ?? '-Xms512m -Xmx512m';
+  const memory = env.KERNEL_SEARCH_MEMORY;
   return [
     'run',
     '-d',
     ...cgroupArgs(),
+    ...(memory ? ['--memory', memory] : []),
     '--name',
     container,
     '-p',
@@ -99,7 +102,7 @@ export function searchRunArgs(image: string): string[] {
     '-e',
     'DISABLE_INSTALL_DEMO_CONFIG=true',
     '-e',
-    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+    `OPENSEARCH_JAVA_OPTS=${javaOpts}`,
     image,
   ];
 }

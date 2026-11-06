@@ -11223,5 +11223,7 @@
   "library_archive_observation_correct": "Conservar o corregir una observación existente",
   "library_archive_observation_admit": "Añadir una observación nueva",
   "library_archive_observation_revision": "Revisión actual de la observación",
-  "library_archive_observation_admit_help": "Se usan todos los campos archivados, incluidos los borrados explícitos. La revisión nativa comprueba que no exista una observación."
+  "library_archive_observation_admit_help": "Se usan todos los campos archivados, incluidos los borrados explícitos. La revisión nativa comprueba que no exista una observación.",
+  "managed_create_automation": "Crear una cuenta de software",
+  "managed_open_automation": "Abrir una cuenta de software"
 }

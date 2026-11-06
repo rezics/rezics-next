@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+// The full scope composition imports Kernel SQL, so run its existing assertions in the native database lane.
+import '../scripts/dev-stack.test.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -22,6 +24,8 @@ import {
   resetLocalContentMedia,
   localShowcaseClientRegistration,
   importerScopes,
+  stackProcessCommands,
+  walkSetupScripts,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -255,6 +259,17 @@ test('generated Web bindings preserve literal JWK JSON and the selected deployme
       WEBSITE_CONFIGURATION_FILE: file,
     });
     expect(developmentWebsiteBindings({ website: key }, selected).WEBSITE_CONFIGURATION_FILE).toBe(file);
+    const routes = JSON.stringify([
+      '/account/rename',
+      '/organizations/members',
+      '/operators/transfer',
+      '/organizations/delete',
+    ]);
+    expect(developmentWebsiteBindings({ website: key }, selected, {}).AUTH_MANAGEMENT_PAGE_ROUTES).toBe(routes);
+    expect(
+      developmentWebsiteBindings({ website: key }, selected, { AUTH_MANAGEMENT_PAGE_ROUTES: '[]' })
+        .AUTH_MANAGEMENT_PAGE_ROUTES,
+    ).toBe('[]');
     expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -294,6 +309,24 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('walk stacks start Kernel without a watcher and can omit Vite until mounted pages', () => {
+  expect(stackProcessCommands({}).some((command) => command.includes('dev'))).toBe(true);
+  expect(stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1' }).some((command) => command.at(-1) === 'start')).toBe(
+    true,
+  );
+  const deferred = stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1', REZICS_WALK_DEFER_FRONTENDS: '1' });
+  expect(deferred).toEqual([['bun', 'services/auth/scripts/dev-stack.ts', 'host']]);
+  expect(walkSetupScripts({ REZICS_WALK_DEFER_FRONTENDS: '1' })).toEqual([
+    ['services/kernel/scripts/database.ts', 'up'],
+    ['services/auth/scripts/dev-stack.ts', 'setup'],
+  ]);
+  expect(walkSetupScripts({})).toEqual([
+    ['services/kernel/scripts/database.ts', 'up'],
+    ['services/kernel/scripts/search.ts', 'up'],
+    ['services/auth/scripts/dev-stack.ts', 'setup'],
+  ]);
 });
 
 test('an authorized password rotation retains the original registration input', async () => {

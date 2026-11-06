@@ -1152,6 +1152,31 @@ Invalid/excess advice becomes unavailable, preserving original handoff, command 
 Retry. This adds zero native calls and cannot approve, accept or acknowledge execution. Native/browser acceptance
 and broader integration checks remain controller-owned qualifications.
 
+Decision: transfer approval and execution use installed `readJsonBounded` with public account-operation bounds,
+counting raw bytes before fatal UTF-8 and JSON parsing. Approval allows its empty JSON skeleton plus `6 × 4096 + 27`
+bytes for opaque reference escaping and native ISO expiry; only an unexpired exact `{ reference, expiresAt }` advances
+its original attempt. Exact execution is `{ accountId }` for the original UUID36 subject (skeleton plus 36 bytes).
+Expired/pending/extra-field/wrong-subject results never acknowledge execution. Error bytes are the maximum fixed
+native denial/step-up/platform-closed and uncertain envelopes. Only `account_operation_denied` with
+400/401/403/409/413/415/503, `step_up_required` with 401, or `platform_closed` with 403, each with exactly
+`effect_status: "not_applied"`, classify known refusal. Malformed 200/4xx, decoding failure, overflow and stalled/
+missing replies remain uncertain. A later refusal cannot settle a prior unknown source send.
+
+Each existing command has an independent five-second headers-and-body lifetime, including abort-ignoring fetch/body;
+the route signal also reaches existing session, advice and readback reads without combining their budgets. Generation,
+exact command and storage replacement are checked before dispatch, phase saves and later stages. Retirement before
+dispatch sends nothing; retirement after dispatch cannot cancel native completion. Old completion cannot overwrite
+replacement storage, read back after retirement or reveal former operands. Valid original acknowledgement survives
+failed persistence/readback and account loss in generic mounted history. Relation observation alone cannot acknowledge
+the send; strict newer version and different reservation remain required for matching readback.
+
+Whole-call command costs are unchanged: fresh source submit uses five session reads, selected advice, approval,
+execution and selected readback (nine Auth requests); destination submit uses three session reads, selected advice
+and approval (five). Exact source execution retry uses three sessions, execution and selected readback (five).
+No automatic command, renewal, queue or history format is added. Reauthentication consumes sign-in's admitted fixed-
+profile receiver and retains its existing confirmation and session comparisons. Native/browser acceptance remains
+unverified by source fixtures.
+
 Stay/Leave protects meaningful input and unresolved review. Only a review created here and never submitted is
 discarded; restored attempts are retained because approval may already have reached native. Caller replacement and
 permission loss retire authority without prompting away an unresolved send.

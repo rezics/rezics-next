@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   automatedOperatorPage,
   approval,
+  nativeApprovalReference,
   button,
   creationFixture,
   dom,
@@ -284,7 +285,7 @@ test('a lost execute reply retains the original unknown command without a refusa
       accountId: original.accountId,
       operationKey: original.operationKey,
       operation: original.operation,
-      reference: 'native-approval',
+      reference: nativeApprovalReference,
       submitted: true,
     });
   } finally {
@@ -319,7 +320,7 @@ test('retirement aborts a stalled execution body that ignores cancellation witho
     expect(executeSignal?.aborted).toBe(true);
     expect(page.host.textContent).toContain('A creation may have been sent; its result remains unresolved.');
     expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created]);
-    expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true, reference: 'native-approval' });
+    expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true, reference: nativeApprovalReference });
   } finally {
     globalThis.fetch = fetch;
   }
@@ -354,7 +355,7 @@ test('retirement between approval and execute aborts the later caller read witho
 
     await flush(leave);
     expect(laterSessionSignal?.aborted).toBe(true);
-    expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true, reference: 'native-approval' });
+    expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true, reference: nativeApprovalReference });
     releaseLaterSession!(Response.json(session));
     await flush(() => {});
 

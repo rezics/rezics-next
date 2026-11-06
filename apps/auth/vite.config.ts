@@ -32,6 +32,7 @@ export default defineConfig((context) => {
       },
     },
     define: {
+      'import.meta.env.PUBLIC_ORIGIN': JSON.stringify(process.env.PUBLIC_ORIGIN ?? 'https://rezics.com'),
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
     },
     plugins: [

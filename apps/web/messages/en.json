@@ -11519,5 +11519,7 @@
   "library_archive_observation_correct": "Preserve or correct an existing observation",
   "library_archive_observation_admit": "Admit a new observation",
   "library_archive_observation_revision": "Current observation revision",
-  "library_archive_observation_admit_help": "Admission uses every archived field, including explicit clears. Native review checks that no observation exists."
+  "library_archive_observation_admit_help": "Admission uses every archived field, including explicit clears. Native review checks that no observation exists.",
+  "managed_create_automation": "Create a software account",
+  "managed_open_automation": "Open a software account"
 }

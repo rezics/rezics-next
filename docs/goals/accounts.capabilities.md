@@ -52,6 +52,8 @@ The subsequent internal service-factory move passed the architecture check again
 supported remote submissions lost their connection during Auth service typing. Only Auth Pages typing
 completed on that revision; service typing and focused native tests have no completed result after the move.
 
+**Lifecycle journey acceptance:** Not accepted. Native lifecycle, focused Auth creation/opening/membership/rename/transfer, and Web management fixtures remain as previously executed. The seeded multi-persona walk uses the stack host persona and public signup, talks to native Auth for HTTP, defers Vite until after native work, serves Kernel HTTP from that host, skips OpenSearch and the Kernel worker, and keeps one Chromium process; it does not run catalogue import or a second persona assemble. Checks 372c5fd6-82e7-4339-b7d8-b86a199f08b1, 9d3d14ee-1fc4-4a6b-b868-b73746a017ec, 40d48ab8-5c90-4290-9925-2e3287750d21 and ec795905-e787-417b-87fe-07d13e8e21b0 exceeded the 6 GiB run memory cap (import, duplicate assemble, Vite plus Chromium beside a second Kernel and OpenSearch).
+
 ## credential-session-consent
 
 **User job:** Replace a password, enroll/name/remove a passkey, review and revoke sessions, and explicitly approve

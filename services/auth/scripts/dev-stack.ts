@@ -104,9 +104,15 @@ export function developmentWebsiteScopeConfiguration(
 export function developmentWebsiteBindings(
   keys: Pick<DevelopmentKeys, 'website'>,
   website: { scopes: readonly string[]; WEBSITE_CONFIGURATION_FILE?: string },
+  deployment: { AUTH_MANAGEMENT_PAGE_ROUTES?: string | undefined } = {
+    AUTH_MANAGEMENT_PAGE_ROUTES: process.env.AUTH_MANAGEMENT_PAGE_ROUTES,
+  },
 ) {
   return {
     AUTH_ISSUER: origins.issuer,
+    AUTH_MANAGEMENT_PAGE_ROUTES:
+      deployment.AUTH_MANAGEMENT_PAGE_ROUTES ??
+      JSON.stringify(['/account/rename', '/organizations/members', '/operators/transfer', '/organizations/delete']),
     API_RESOURCE: origins.audience,
     WEBSITE_CLIENT_ID: 'rezics-website',
     WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
@@ -681,6 +687,20 @@ export function issuerRequest(request: Request): Request {
   return new Request(url, request);
 }
 
+function loopbackServe(
+  port: number,
+  fetch: (request: Request) => Response | Promise<Response>,
+): ReturnType<typeof Bun.serve> {
+  return Bun.serve({
+    hostname: '127.0.0.1',
+    port,
+    fetch: async (request) => {
+      if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
+      return fetch(request);
+    },
+  });
+}
+
 async function serveHost() {
   const composition = await assemble();
   try {
@@ -694,19 +714,20 @@ async function serveHost() {
   const media = mediaBindings.LOCAL_MEDIA_TOKEN
     ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
     : undefined;
-  const server = Bun.serve({
-    hostname: '127.0.0.1',
-    port: localPort(origins.native),
-    fetch: async (request) => {
-      if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
-      if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
-      if (new URL(request.url).pathname === '/local-turnstile.js')
-        return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
-      return composition.host.handler(issuerRequest(request));
-    },
+  const composeKernel = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
+  const native = loopbackServe(localPort(origins.native), async (request) => {
+    if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
+    if (new URL(request.url).pathname === '/local-turnstile.js')
+      return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
+    return composition.host.handler(issuerRequest(request));
   });
+  // Account journeys do not need a second Kernel process, worker, or OpenSearch: the host already assembled Kernel.
+  const kernel = composeKernel
+    ? loopbackServe(localPort(origins.kernel), (request) => composition.kernel.fetch(request))
+    : undefined;
   const stop = async () => {
-    await server.stop(true);
+    await native.stop(true);
+    await kernel?.stop(true);
     await composition.stop();
     process.exit(0);
   };
@@ -717,6 +738,7 @@ async function serveHost() {
     void stop();
   });
   console.log(`Native Auth: ${origins.native} (issuer ${origins.issuer})`);
+  if (kernel) console.log(`Kernel: ${origins.kernel}`);
 }
 
 async function launch(action: 'pages' | 'web', args: string[]) {
@@ -765,12 +787,44 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
+/** Walk stacks skip `--watch` and can omit Vite until the child starts mounted pages. */
+export function stackProcessCommands(env: Record<string, string | undefined> = process.env): string[][] {
+  const walk = env.REZICS_WALK_STACK_SLOT !== undefined;
+  const frontends = env.REZICS_WALK_DEFER_FRONTENDS !== '1';
+  const composedKernel = env.REZICS_WALK_DEFER_FRONTENDS === '1';
+  return [
+    ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
+    ...(frontends
+      ? [
+          ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
+          ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
+        ]
+      : []),
+    ...(composedKernel
+      ? []
+      : [
+          ['bun', 'run', '--cwd', 'services/kernel', walk ? 'start' : 'dev'],
+          ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
+        ]),
+  ];
+}
+
+/** Deferred walks skip OpenSearch: account HTTP does not use catalogue search. */
+export function walkSetupScripts(env: Record<string, string | undefined> = process.env): string[][] {
+  return [
+    ['services/kernel/scripts/database.ts', 'up'],
+    ...(env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [] : [['services/kernel/scripts/search.ts', 'up']]),
+    ['services/auth/scripts/dev-stack.ts', 'setup'],
+  ];
+}
+
 /**
  * Starts the local stack in three ordered phases, each gated on what the next one needs. The issuer origin is served by
  * the Pages process, which proxies to the native Auth host, and the kernel fetches its keys from that issuer while it
  * boots. So identity, Pages and the workflow worker start first: the worker's DBOS launch creates the system schema the
  * kernel boots against, and its "Worker ready" line marks that launch complete. The kernel boots next and must answer
  * before Web, the heaviest compilation, begins. Each phase logs when it is ready and names itself when it stalls.
+ * Deferred walks serve Kernel HTTP from the Auth host and skip Pages, Web, OpenSearch and a second Kernel process.
  */
 async function start() {
   const env = {
@@ -816,22 +870,32 @@ async function start() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
-    const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
     const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
-    const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
-    await phase(
-      'identity',
-      Promise.all([
-        untilOutput(worker, 'Worker ready'),
-        untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker, pages]),
-      ]),
-    );
-    if (stopping) return;
-    const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
-    await phase('kernel', untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity, pages]));
-    if (stopping) return;
-    const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
-    await phase('web', untilReady([`${origins.web}/`], [web]));
+    if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
+      await phase('identity', untilReady([`${origins.native}/`, `${origins.kernel}/health`], [identity]));
+    } else {
+      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
+      const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+      await phase(
+        'identity',
+        Promise.all([
+          untilOutput(worker, 'Worker ready'),
+          untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker, pages]),
+        ]),
+      );
+      if (stopping) return;
+      const kernel = launch([
+        'bun',
+        'run',
+        '--cwd',
+        'services/kernel',
+        env.REZICS_WALK_STACK_SLOT !== undefined ? 'start' : 'dev',
+      ]);
+      await phase('kernel', untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity, pages]));
+      if (stopping) return;
+      const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
+      await phase('web', untilReady([`${origins.web}/`], [web]));
+    }
     await Promise.race([stopped, ...children.map((_, index) => supervise(index))]);
     process.exitCode = 0;
   } finally {
@@ -908,29 +972,36 @@ function dockerOutput(args: string[], timeoutMs?: number): string {
 }
 
 /** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
-function removeWalkStack(names: WalkNames): void {
-  for (const container of [names.database, names.search]) {
-    if (!dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) continue;
-    try {
-      dockerOutput(['kill', container], 15_000);
-    } catch {
-      // Already stopped, Created, or removing.
+function removeWalkStack(names: WalkNames, required = true): void {
+  try {
+    for (const container of [names.database, names.search]) {
+      if (!dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) continue;
+      try {
+        dockerOutput(['kill', container], 15_000);
+      } catch {
+        // Already stopped, Created, or removing.
+      }
+      try {
+        dockerOutput(['rm', '-f', '-v', container], WALK_DOCKER_REMOVE_MS);
+      } catch (error) {
+        if (required) throw error;
+        console.error(`walk: docker rm ${container} failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
-    try {
-      dockerOutput(['rm', '-f', '-v', container], WALK_DOCKER_REMOVE_MS);
-    } catch (error) {
-      console.error(`walk: docker rm ${container} failed: ${error instanceof Error ? error.message : String(error)}`);
+    for (const volume of [names.database, names.search]) {
+      if (!dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) continue;
+      try {
+        dockerOutput(['volume', 'rm', volume], WALK_DOCKER_REMOVE_MS);
+      } catch (error) {
+        if (required) throw error;
+        console.error(
+          `walk: docker volume rm ${volume} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
-  }
-  for (const volume of [names.database, names.search]) {
-    if (!dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) continue;
-    try {
-      dockerOutput(['volume', 'rm', volume], WALK_DOCKER_REMOVE_MS);
-    } catch (error) {
-      console.error(
-        `walk: docker volume rm ${volume} failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+  } catch (error) {
+    if (required) throw error;
+    console.error(error);
   }
 }
 
@@ -1008,11 +1079,7 @@ async function walk(command: string[]): Promise<number> {
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     try {
       removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
-      for (const script of [
-        ['services/kernel/scripts/database.ts', 'up'],
-        ['services/kernel/scripts/search.ts', 'up'],
-        ['services/auth/scripts/dev-stack.ts', 'setup'],
-      ]) {
+      for (const script of walkSetupScripts(env)) {
         let code = 1;
         for (let attempt = 0; attempt < 2 && code !== 0; attempt++) {
           current = Bun.spawn([process.execPath, ...script], {
@@ -1038,12 +1105,17 @@ async function walk(command: string[]): Promise<number> {
         stdout: Bun.file(log),
         stderr: Bun.file(log),
       });
-      await untilReady(walkReadyUrls(ports), starting);
+      await untilReady(
+        env.REZICS_WALK_DEFER_FRONTENDS === '1'
+          ? [`http://127.0.0.1:${ports.native}/`, `http://127.0.0.1:${ports.kernel}/health`]
+          : walkReadyUrls(ports),
+        starting,
+      );
       current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
       code = await current.exited;
     } finally {
       if (starting) await stopSpawned(starting);
-      removeWalkStack(names);
+      removeWalkStack(names, false);
     }
   } catch (error) {
     if (interrupted === undefined) throw error;
