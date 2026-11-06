@@ -220,10 +220,9 @@ test('platform and Context editors publish, resume, activate and use a compiled 
     labels: { en: 'Fixture vertical work' },
   });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
-  const subjectId = created.body.subject.id as string;
-  const read = await call('editor', 'GET', `/v1/subjects/${subjectId}`);
-  expect(read.status, JSON.stringify(read.body)).toBe(200);
-  expect(read.body.subject.type).toBe(typeId);
+  expect(created.body.subject.type).toBe(typeId);
+  expect(created.body.subject.release).toBe(digest);
+  expect(created.body.subject.labels.en).toBe('Fixture vertical work');
   for (const locale of VERTICAL_LOCALES) {
     const descriptor = await call(
       'anonymous',
