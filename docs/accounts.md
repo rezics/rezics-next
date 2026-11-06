@@ -263,6 +263,10 @@ composed revision and does not add stories.
 Decision: kernel typecheck repairs keep SearchService and PublicSearchPage assertions; duplicate
 `savedCatalogueMembers` methods, a duplicate `matchEvidence` key, the missing catalogue-publication `record`
 guard, and docker stdout encoding are fixture and helper shape updates. No new behaviour tests.
+Decision: Web typecheck under workers-types keeps existing assertions. Duplicate reading and board fixture keys
+are dropped while preserving runtime values; ReceivedValue accepts the full slot entry; Auth protocol JSON and
+Kernel problem JSON keep their response shapes; bodyOf accepts the incoming request structurally; catalogue
+byte counting uses Uint8Array; map and some callbacks are explicit. No new behaviour tests.
 Decision: Accounts management projects native `authActions` and inventory DTOs locally so web-accounts does not
 import Settings private reads.
 

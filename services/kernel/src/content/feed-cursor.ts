@@ -52,7 +52,7 @@ export async function encodeFeedCursor(
   const parts = bytes.match(/.{1,1800}/g)!;
   if (parts.length > 12) throw new ProblemError('dependency_unavailable');
   const encoded = await Promise.all(
-    parts.map((part, index) =>
+    parts.map((part: string, index: number) =>
       encodeListCursor(
         tokens,
         { ...binding, query: { ...binding.query, digest, index, count: parts.length } },

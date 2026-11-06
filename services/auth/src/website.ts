@@ -85,7 +85,7 @@ async function protocolResponse(run: () => Promise<Response>, token: boolean) {
     if (response.status >= 500) return failure('temporarily_unavailable');
     if (response.status >= 400) {
       if (!token) return failure('invalid_request');
-      const { error } = await response.json();
+      const { error } = (await response.json()) as { error?: unknown };
       switch (error) {
         case 'invalid_request':
         case 'invalid_client':
@@ -521,7 +521,7 @@ export function websiteRoutes(input: {
           if (request.method !== 'GET' || url.search) deny('invalid_request');
           const response = await input.native().handler(request);
           if (!response.ok) return response;
-          const metadata = await response.json();
+          const metadata = (await response.json()) as object;
           return Response.json(
             {
               ...metadata,
@@ -647,7 +647,7 @@ export function websiteRoutes(input: {
             if (
               invalidated &&
               response.status === 400 &&
-              (await response.clone().json()).error === 'unsupported_token_type'
+              ((await response.clone().json()) as { error?: unknown }).error === 'unsupported_token_type'
             )
               return Response.json(null, { headers: { 'cache-control': 'no-store' } });
             return response;
