@@ -243,3 +243,16 @@ test('terminateProcessGroup waits until a memberless kernel group becomes absent
     killSpy.mockRestore();
   }
 });
+test('terminateProcessGroup settles a memberless kernel group that stays visible past the grace', async () => {
+  const identity = { pid: 2_000_000_002, group: 2_000_000_002, start: '0', boot: 'fixture-boot' };
+  const kill = process.kill.bind(process);
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid === -identity.group && signal === 0) return true;
+    return kill(pid, signal);
+  });
+  try {
+    await terminateProcessGroup(identity, 80);
+  } finally {
+    killSpy.mockRestore();
+  }
+});

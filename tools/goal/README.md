@@ -1867,9 +1867,9 @@ leader PID may settle only when the original group has no live members and the k
 signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
 descendants is still followed and its identified members are reaped during terminal cleanup. When `/proc` shows no live
 members, termination waits up to the grace for that kernel group to go absent so a zombie leftover after the wrapper
-exits can settle; a group that stays visible with no inspectable members is still unconfirmed. Unreadable process state
-or denied group inspection is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
-notifies the manager once and retains the running attempt and its slot. A later sweep can settle it after visibility
+exits can settle; a group that stays visible with no inspectable members after that wait is treated as gone.
+Unreadable process state or denied group inspection is an explicit operational condition: recovery records
+`process-cleanup-unconfirmed`, notifies the manager once and retains the running attempt and its slot. A later sweep can settle it after visibility
 returns. Stop and cancellation publish terminal records only after cleanup succeeds. Each termination signal uses a
 pidfd and rechecks birth and group identity after opening it, so PID reuse between inspection and signalling cannot
 redirect a signal to a replacement process.

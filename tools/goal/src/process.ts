@@ -217,7 +217,10 @@ export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[
 function noLiveMembersVisible(error: unknown): boolean {
   return error instanceof Error && error.message.includes('no live members visible');
 }
-/** Wait for zombie-only groups to become absent; a kernel-visible group with no /proc members still throws. */
+/**
+ * Wait out a scan race and init reaping. A kernel-visible group with no live /proc members after the grace is gone:
+ * there is nobody to signal, and treating that leftover as unconfirmed custody left finished workers running.
+ */
 async function checkedProcessGroupAfterZombies(
   identity: ProcessIdentity,
   graceMs: number,
@@ -230,7 +233,7 @@ async function checkedProcessGroupAfterZombies(
     } catch (error) {
       if (!noLiveMembersVisible(error)) throw error;
       const remaining = deadline - Date.now();
-      if (remaining <= 0) throw error;
+      if (remaining <= 0) return [];
       await new Promise<void>((resolve) => setTimeout(resolve, Math.min(policy.exitPollMs, remaining)));
     }
   }
