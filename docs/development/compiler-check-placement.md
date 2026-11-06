@@ -29,6 +29,11 @@ root run prepares one database with both schemas, shares it with the selected wo
 consumers finish. Direct Kernel and Auth retain their existing migration, SQL analysis, construct, diagnostic,
 failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged. A workspace whose tsconfig names a content mapper declares that mapper's package itself, so the mapper resolves from that workspace (Web declares `reylo` 0.7.0 beside its `contentMappers` entry).
 
+Decision: Web's official typecheck and check gate both execute `tsc --noEmit --runExternalCode` for `tsconfig.json`
+then `tsconfig.scripts.json`. The scripts program still runs after a red web program. The check gate does not
+substitute `bun check --no-script`. Pin with `apps/web/scripts/typecheck.test.ts`. Native, browser and full root
+journeys remain separate acceptance.
+
 Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving
 entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
 projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes declare their bounded
@@ -37,6 +42,26 @@ schema.sql returns. Disposable compiler analyses are consumed within the same ru
 Its bounded versioned bundle uses the existing physical return pipeline. Source, attempt and complete byte custody
 must validate before whole-tree publication, including deletions. Already admitted direct execution and nested placement
 use that same profile; external projects remain unsupported.
+
+## Execution failure classification
+
+Decision: Root, Kernel and Auth classify placed host statuses 75, 124, 130 and 143 as infrastructure status 75,
+retaining the raw host status and `phase=placement` in diagnostics. Other placed statuses and ordinary compiler
+statuses remain native. Exceptions at placement, database setup, executable launch and database cleanup are
+infrastructure failures, not compiler diagnostics. Direct wrappers report `placement`, `database-setup`, `compiler`
+or `database-cleanup`; Kernel output publication has its own phase. Cleanup still runs after compiler failure, and
+cleanup diagnostics retain the original compiler error or native status. Invalid external configuration continues
+to fail validation before any placement or database starts.
+
+The existing direct-wrapper acceptance in `scripts/typecheck-placement.test.ts` pins these cases with inert
+placement, database and compiler boundaries. Its old Auth executable-launch assertion expected a rejected promise;
+it now expects status 75 while retaining the original cleanup assertion. Placement-path units inject a refusing
+recognizer so they still relocate when the suite itself runs inside a check-host checkout. Composition fixtures that
+call `runOnCheckHost` also inject that recognizer and a fake remote so nested-candidate refusal does not fire against
+the admitted checkout. Compiler diagnostic assertions unset `REZICS_CHECK_PHASES` so observation lines do not mix with
+tsc stderr. Compiler diagnostic/status,
+selection, output and physical admission assertions remain unchanged. Native, browser and full root journeys remain
+separate acceptance; focused execution does not establish them.
 
 ## Authored acceptance and execution receipts
 

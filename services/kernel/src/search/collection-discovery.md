@@ -87,6 +87,8 @@ eligible identity appears in its global position; continuation is a sort keyset,
 `hasCollectionDirectoryCapability`, `consumeCollectionDirectoryFrontier`, `hydrateCollectionDirectory` and
 `executeCollectionDirectory` are the mounted consumer. Working-draft timestamps never replace released public
 owner recency or the selected publication generation.
+Decision: Collection directory consumes `COLLECTION_DISCOVERY_BATCH_SIZE` at execution for identity-frontier
+pages and hydration batches; it does not alias that imported value at module initialization.
 
 ## Cost Touches / Bound / Growth check
 

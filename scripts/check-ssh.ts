@@ -6,16 +6,23 @@
  * when the runtime directory is unset (`REMOTE_CHECK_SSH_CONTROL_DIR` overrides). OpenSSH's unix_listener adds a
  * `.XXXXXXXXXX` suffix, so a path at or over 97 bytes fails; a long override or runtime directory relocates to a
  * hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that master.
- * Completing a run never `-O exit`s it. A stale master is recovered with `-O check` then `-O exit`.
+ * Completing a run never `-O exit`s it, and a failed probe never does either: a socket is removed only when `-O check`
+ * reports its listener refused.
  */
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export const CONTROL_MASTER = 'auto';
 export const CONTROL_PERSIST = '10m';
 export const SSH_CONTROL_DIR_MODE = 0o700;
-export const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 8_000;
+/**
+ * ConnectTimeout bounds only the TCP connect; banner exchange, key exchange and authentication run unbounded. A cold
+ * master on a loaded check host took 57 s on 2026-11-06, so the probe waits well past that before it gives up.
+ */
+export const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 90_000;
+/** Bounds a local `-O check`; a timeout is not evidence that the master is gone. */
+const CONTROL_CHECK_TIMEOUT_MS = 5_000;
 /** Linux `sockaddr_un.sun_path` length, including the trailing NUL OpenSSH writes. */
 export const UNIX_LISTENER_PATH_LIMIT = 108;
 /** OpenSSH `unix_listener` temporary suffix `.XXXXXXXXXX`. */
@@ -106,9 +113,14 @@ export function ensureSshControlDirectory(directory: string, uid = unixUserId())
   return directory;
 }
 
+/** The short, user-owned directory the sockets live in, created on first use. */
+function relocatedControlDirectory(directory: string): string {
+  return ensureSshControlDirectory(relocateIfTooLong(directory, unixUserId()));
+}
+
 /** OpenSSH options for every operational SSH and rsync path, including probes, polling, heartbeat and cleanup. */
 export function sshControlOptions(host: SshControlHost, directory: string): string[] {
-  const root = ensureSshControlDirectory(relocateIfTooLong(directory, unixUserId()));
+  const root = relocatedControlDirectory(directory);
   return [
     '-i',
     host.identity,
@@ -193,14 +205,38 @@ async function stopAndReap(child: ReturnType<typeof Bun.spawn>): Promise<void> {
 
 export type MasterControlResult = { code: number; output: string };
 
+/** OpenSSH warns about a stale socket and then connects directly; the warning is not the failure. */
+const MULTIPLEX_WARNING = /disabling multiplexing/;
+
 function probeFailureDetail(output: string, code: number | null): string {
-  const line = output
+  const lines = output
     .split(/\r?\n/)
     .map((entry) => entry.trim())
-    .find(Boolean);
+    .filter(Boolean);
+  const line = lines.find((entry) => !MULTIPLEX_WARNING.test(entry)) ?? lines[0];
   if (line) return line;
   if (code === null) return 'control probe timed out';
   return `exit ${code}`;
+}
+
+/**
+ * Removes a control socket that no master listens on. OpenSSH leaves the file behind when its master is killed, and
+ * ControlMaster=auto then cannot bind the path again ("already exists, disabling multiplexing"): every later connection
+ * is a full handshake until someone removes the file. Only a refused or missing listener qualifies; a timed-out check
+ * leaves a possibly live master alone.
+ */
+async function removeDeadControlSocket(host: SshControlHost, directory: string): Promise<boolean> {
+  const root = relocatedControlDirectory(directory);
+  const path = hostControlSocketPath(root, host.name);
+  try {
+    if (!lstatSync(path).isSocket()) return false;
+  } catch {
+    return false;
+  }
+  const result = await masterControl(host, root, 'check', CONTROL_CHECK_TIMEOUT_MS);
+  if (result.code === 0 || !/Connection refused|No such file or directory/.test(result.output)) return false;
+  rmSync(path, { force: true });
+  return true;
 }
 
 async function masterControl(
@@ -240,6 +276,7 @@ export async function hostMasterIsLive(host: SshControlHost, directory: string, 
 export async function dropStaleHostMaster(host: SshControlHost, directory: string, timeoutMs = 1_000): Promise<void> {
   if (await hostMasterIsLive(host, directory, timeoutMs)) return;
   await masterControl(host, directory, 'exit', timeoutMs);
+  await removeDeadControlSocket(host, directory);
 }
 
 const CONTROL_OK = 'REMOTE_CHECK_CONTROL_OK';
@@ -277,15 +314,14 @@ export async function acquireHostControl(
   directory: string,
   timeoutMs = DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
 ): Promise<HostControlLease> {
-  const root = ensureSshControlDirectory(relocateIfTooLong(directory, unixUserId()));
+  const root = relocatedControlDirectory(directory);
   const started = performance.now();
-  let recovered = false;
+  let recovered = await removeDeadControlSocket(host, root);
   let lastDetail = 'control probe failed';
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (attempt === 1) {
-      recovered = true;
-      await masterControl(host, root, 'exit', 1_000);
-    }
+    // A failed probe does not make the master dead: a busy master times out too, and `-O exit` would cut every run
+    // multiplexed through it. Only a socket whose listener refused is removed before the retry.
+    if (attempt === 1) recovered = (await removeDeadControlSocket(host, root)) || recovered;
     const child = Bun.spawn(
       sshControlArgv(host, root, undefined, `# REMOTE_CHECK_CONTROL_PROBE\nprintf '${CONTROL_OK}\\n'`),
       { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },

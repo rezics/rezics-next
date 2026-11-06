@@ -1,18 +1,69 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Generated Paraglide output is current when it is at least as new as every message catalogue. */
-export function messagesCurrent(appDirectory: string): boolean {
+const PARAGLIDE = 'src/paraglide';
+const PER_MESSAGE_IMPORT = /(?:from|import)\s+['"](\.\/messages\/[^'"]+)['"]/g;
+/** Vite failed after a partial compile with this exact module missing. */
+export const REQUIRED_PER_MESSAGE_MODULE = 'access_account.js';
+
+/** Relative `./messages/...` modules that the generated barrel imports. */
+export function generatedMessageModules(source: string): string[] {
+  const modules = new Set<string>();
+  PER_MESSAGE_IMPORT.lastIndex = 0;
+  for (const match of source.matchAll(PER_MESSAGE_IMPORT)) {
+    const specifier = match[1]!;
+    modules.add(specifier.endsWith('.js') ? specifier : `${specifier}.js`);
+  }
+  return [...modules];
+}
+
+function newestCatalogueTime(appDirectory: string): number {
   const messagesDirectory = join(appDirectory, 'messages');
-  const output = join(appDirectory, 'src/paraglide/messages.js');
-  if (!existsSync(output)) return false;
-  const outputTime = statSync(output).mtimeMs;
-  const messageFiles = readdirSync(messagesDirectory).filter((name) => name.endsWith('.json'));
-  const newestMessageTime = messageFiles.reduce(
-    (newest, name) => Math.max(newest, statSync(join(messagesDirectory, name)).mtimeMs),
-    Number.NEGATIVE_INFINITY,
-  );
-  return outputTime >= newestMessageTime;
+  if (!existsSync(messagesDirectory)) return Number.NEGATIVE_INFINITY;
+  return readdirSync(messagesDirectory)
+    .filter((name) => name.endsWith('.json'))
+    .reduce(
+      (newest, name) => Math.max(newest, statSync(join(messagesDirectory, name)).mtimeMs),
+      Number.NEGATIVE_INFINITY,
+    );
+}
+
+function fileTime(path: string): number | undefined {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Generated Paraglide output is current when the barrel, runtime and every per-message module they import are at
+ * least as new as every catalogue. A barrel without `messages/access_account.js` is not current: Vite then serves
+ * nothing at /en and SSR imports fail ENOENT.
+ */
+export function messagesCurrent(appDirectory: string): boolean {
+  const outputDirectory = join(appDirectory, PARAGLIDE);
+  const barrel = join(outputDirectory, 'messages.js');
+  const runtime = join(outputDirectory, 'runtime.js');
+  const barrelTime = fileTime(barrel);
+  const runtimeTime = fileTime(runtime);
+  if (barrelTime === undefined || runtimeTime === undefined) return false;
+  const newestMessageTime = newestCatalogueTime(appDirectory);
+  if (Math.min(barrelTime, runtimeTime) < newestMessageTime) return false;
+
+  const source = readFileSync(barrel, 'utf8');
+  const imported = generatedMessageModules(source);
+  const perMessageDirectory = join(outputDirectory, 'messages');
+  const required =
+    existsSync(perMessageDirectory) && statSync(perMessageDirectory).isDirectory()
+      ? [...new Set([...imported, `./messages/${REQUIRED_PER_MESSAGE_MODULE}`])]
+      : imported;
+  for (const relative of required) {
+    const path = join(outputDirectory, relative);
+    const time = fileTime(path);
+    if (time === undefined || time < newestMessageTime) return false;
+  }
+  return true;
 }
 
 export function ensureMessagesReady(appDirectory: string, env: NodeJS.ProcessEnv = process.env): number {

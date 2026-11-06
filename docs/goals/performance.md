@@ -164,3 +164,26 @@ reporting with the existing runner tests in `scripts/check.test.ts`, `test/check
 second suite. Named `*.test.ts` arguments run, including `scripts/check.test.ts`; full-module discovery stays
 `test/**/*.test.ts`. Module CREATE EXTENSION is a product failure that still reaches tests; future/duplicate
 migration versions and schema dump mismatch remain infrastructure.
+Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel without watch, and defer Auth pages and Web
+until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Pin that
+startup, Docker string|Buffer output, original-plus-cleanup diagnostics, seed-journal database identity, same-host
+preload and mapper-resolution seams with the existing compiler-database, walk-stack, Kernel check, Auth stack and
+ratings-walk unit files rather than a second suite. Original native acceptance remains open.
+Decision: mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web compilers do not share an
+admitted 6GiB slice; remaining workspaces stay parallel. The compiler database uses 32MB shared_buffers and 40
+connections. Admitted runs reclaim inactive file pages in the run slice after install and before each mapper compiler.
+Pin that order with the existing root typecheck and remote-check unit files. Original native acceptance remains open.
+Decision: generate Paraglide messages before Vite starts and treat `/en` as ready only when it returns HTML without a
+missing-module overlay. Readiness reports the observed probe, fetch or child-exit cause; only an actual ECONNREFUSED
+is hydration startup. A closed-listener probe does not invent that code. Pin with the existing walk-stack,
+messages-ready and storybook-dev unit files. Original native acceptance remains open.
+Decision: Web official typecheck and the check gate both run `tsc --noEmit --runExternalCode` for `tsconfig.json` then
+`tsconfig.scripts.json`; the scripts program still runs after a red web program. Fewest tests: one shared-program pin
+and one continue-after-red pin in `apps/web/scripts/typecheck.test.ts`. Original native acceptance remains open.
+Decision: leftover History callers import the contract and application public entries; placement-path units inject a
+refusing recognizer so they relocate on check hosts; Kernel/Auth map host 75/124/130/143 and placement exceptions to
+infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files. Original native
+acceptance remains open.
+Decision: keep the existing placement composition tests; inject a refusing recognizer into `runOnCheckHost` and skip
+nested-candidate refusal for injected remotes so those tests still relocate on an admitted checkout. Type repairs for
+bulk write payloads and the ratings-walk assert import add no new tests. Original native acceptance remains open.

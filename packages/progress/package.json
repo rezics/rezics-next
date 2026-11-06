@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "check": "bun check --no-script -p tsconfig.json",
     "typecheck": "bun check --no-script -p tsconfig.json"
   }
 }

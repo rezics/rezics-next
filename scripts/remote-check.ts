@@ -35,6 +35,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
   acquireHostControl,
+  DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   releaseHostControl,
   rsyncRemoteShell,
   sshControlDirectory,
@@ -44,6 +45,7 @@ import {
 } from './check-ssh.ts';
 
 export { controlSocketDirectoryPath, sshControlDirectory, unixListenerFits } from './check-ssh.ts';
+export { DEFAULT_CONTROL_PROBE_TIMEOUT_MS };
 import {
   appendFileSync,
   chmodSync,
@@ -795,9 +797,8 @@ const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
-// Fresh SSH setup to the check hosts takes 4 to 7 s (key exchange and auth over a 0.3 s round trip); a 5 s probe failed
-// 109 checks in 90 minutes on 2026-11-06 with exit 75 before any command ran.
-const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 20_000;
+// Shared DEFAULT_CONTROL_PROBE_TIMEOUT_MS is check-ssh.ts. A 5 s probe failed 109 checks with exit 75 before any
+// command ran; a 20 s probe still lost a 57 s cold master whose ConnectTimeout had already succeeded.
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
@@ -1623,18 +1624,8 @@ exec 8>&-
 flock -u 6
 exec 6>&-
 mkdir -p ${ROOT}/bases
-# Keep the parent slot descriptors open while base cleanup reuses descriptor 9.
-(
-exec 9>"${ROOT}/bases/.lock"
-flock -x 9
-current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
-for base in ${ROOT}/bases/*; do
-  [ -d "$base" ] || continue
-  [ "$base" = "$current" ] && continue
-  if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
-done
-flock -u 9
-)
+# Retirement holds the bases lock only for renames; the parent slot descriptors stay open meanwhile.
+${retireExpiredBasesShell()}
 echo "SLOTS ${count}"
 run_id=
 run_directory=
@@ -3673,6 +3664,21 @@ report_run_memory_kill() {
   fi
   : > ${reported}
 }
+reclaim_run_file_cache() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+  case "$slice_cgroup" in /*)
+    reclaim="/sys/fs/cgroup$slice_cgroup/memory.reclaim"
+    if [ -e "$reclaim" ] && [ -w "$reclaim" ]; then
+      inactive=$(awk '/^inactive_file / { print $2; exit }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
+      case "$inactive" in ''|*[!0-9]*|0) ;; *)
+        printf '%s\\n' "$inactive" > "$reclaim" 2>/dev/null || true
+        printf 'remote-check: reclaimed %s inactive file bytes in the run slice\\n' "$inactive" >&2
+      ;;
+      esac
+    fi
+    ;;
+  esac
+}
 apply_run_memory_limit`;
 }
 
@@ -3836,6 +3842,7 @@ host=$REMOTE_CHECK_HOST
     if [ "$code" -eq 0 ]; then [ -f ${quote(`${directory}/.bun-install-complete`)} ] || touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
+    if [ "$code" -eq 0 ]; then reclaim_run_file_cache; fi
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       ${preparationScript}
@@ -3894,6 +3901,7 @@ host=$REMOTE_CHECK_HOST
             ;;
         esac
         ${fixedLifecycleExecution(command) ? `export REZICS_LIFECYCLE_REMOTE_RUN=${quote(id)}` : ''}
+        reclaim_run_file_cache
         "$@" &
         command_pid=$!
         (
@@ -4040,26 +4048,41 @@ printf 'STOPPED\\n'`;
 }
 
 /** Serializes stale-base cleanup and reports the immutable current base used by this upload. */
+/**
+ * Moves expired immutable bases aside under `bases/.lock`, then deletes them after the lock is released. A recursive
+ * delete under the lock held every base lookup until it finished. Each run retires into its own directory, so
+ * concurrent runs cannot remove one another's entries. The current base is never retired.
+ */
+export function retireExpiredBasesShell(root: string = ROOT): string {
+  return `retired=${root}/bases/.retired-$$
+mkdir -p "$retired"
+(
+  exec 9>"${root}/bases/.lock"
+  flock -x 9
+  current=$(readlink -f ${root}/bases/current 2>/dev/null || true)
+  for base in ${root}/bases/*; do
+    [ -d "$base" ] || continue
+    [ "$base" = "$current" ] && continue
+    if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then mv -- "$base" "$retired/" || true; fi
+  done
+  flock -u 9
+)
+(rm -rf -- "$retired" </dev/null >/dev/null 2>&1 &)`;
+}
+
 function baseStateScript(): string {
   return `# REMOTE_CHECK_BASE_STATE
 set -eu
 mkdir -p ${ROOT}/bases
-exec 9>"${ROOT}/bases/.lock"
-flock -x 9
+${retireExpiredBasesShell()}
 current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
-for base in ${ROOT}/bases/*; do
-  [ -d "$base" ] || continue
-  [ "$base" = "$current" ] && continue
-  if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
-done
 if [ -n "$current" ] && [ -d "$current" ]; then
   age=$(( $(date +%s) - $(stat -c %Y "$current") ))
   printf 'BASE %s\\nAGE %s\\n' "$current" "$age"
 else
   printf 'BASE -\\nAGE -\\n'
 fi
-if rsync --version 2>/dev/null | grep -qi zstd; then echo ZSTD 1; else echo ZSTD 0; fi
-flock -u 9`;
+if rsync --version 2>/dev/null | grep -qi zstd; then echo ZSTD 1; else echo ZSTD 0; fi`;
 }
 
 /** Refreshes only when the current immutable base is old enough; replacing the symlink is atomic. */

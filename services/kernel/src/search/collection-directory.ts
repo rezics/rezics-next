@@ -37,9 +37,6 @@ export type CollectionDirectoryPage = Readonly<{
   exhausted: boolean;
 }>;
 
-const DIRECTORY_PAGE_LIMIT = COLLECTION_DISCOVERY_BATCH_SIZE;
-const DIRECTORY_HYDRATE_BATCH = COLLECTION_DISCOVERY_BATCH_SIZE;
-
 function partitionOfId(id: string): number {
   const route = routeOf(id);
   if (route === null) throw new TypeError('Collection directory identity is not a canonical UUID');
@@ -239,7 +236,7 @@ export async function consumeCollectionDirectoryFrontier(input: {
       if (remaining < 1) {
         throw new CollectionDiscoveryReadinessError('unavailable', 'collection_directory_frontier_exceeds_bound');
       }
-      const limit = Math.min(DIRECTORY_PAGE_LIMIT, remaining);
+      const limit = Math.min(COLLECTION_DISCOVERY_BATCH_SIZE, remaining);
       const page = await input.source.page(partition, after, limit, input.query, { deadline: input.deadline });
       if (page.status !== 'available') throw new CollectionDiscoveryReadinessError('unavailable', page.reason);
       if (stamp && (stamp.epoch !== page.stamp.epoch || stamp.position !== page.stamp.position))
@@ -282,8 +279,8 @@ export async function hydrateCollectionDirectory(
 ): Promise<Map<string, DiscoveryOwnerMetadataSummary<'collection'>>> {
   const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
   const unique = [...new Set(identities)];
-  for (let offset = 0; offset < unique.length; offset += DIRECTORY_HYDRATE_BATCH) {
-    const batch = unique.slice(offset, offset + DIRECTORY_HYDRATE_BATCH);
+  for (let offset = 0; offset < unique.length; offset += COLLECTION_DISCOVERY_BATCH_SIZE) {
+    const batch = unique.slice(offset, offset + COLLECTION_DISCOVERY_BATCH_SIZE);
     const summaries = await readCurrent(batch, context);
     for (const [id, summary] of summaries) current.set(id, summary);
   }

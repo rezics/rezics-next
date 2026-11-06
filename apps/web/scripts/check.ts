@@ -24,6 +24,7 @@ import {
   TEMPLATE_DATABASE,
 } from '../../../services/auth/scripts/database.ts';
 import { ensureLocalWorkerVars } from './dev-vars.ts';
+import { compileWebPrograms } from './typecheck.ts';
 
 export { ensureLocalWorkerVars };
 
@@ -333,6 +334,24 @@ export async function placeBrowserCheck(
   }
 }
 
+/** Same two tsc programs as official typecheck; generate already ran in `prepare`. */
+async function runWebTypecheck(env: NodeJS.ProcessEnv): Promise<void> {
+  process.stdout.write('\n[web check] typecheck\n');
+  const started = performance.now();
+  const code = await compileWebPrograms(async (args) => {
+    const child = Bun.spawn([...args], {
+      cwd: app,
+      env,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    return await child.exited;
+  });
+  process.stdout.write(`[web check] typecheck ${(performance.now() - started) / 1000}s\n`);
+  if (code !== 0) throw new Error(`typecheck failed with status ${code}`);
+}
+
 async function runCommand(label: string, command: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
   process.stdout.write(`\n[web check] ${label}\n`);
   const started = performance.now();
@@ -637,10 +656,7 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     await runTests(files, env, testScript);
     return;
   }
-  const results = await Promise.allSettled([
-    runCommand('typecheck', 'bun', ['check', '--no-script', '-p', 'tsconfig.json'], env),
-    runTests(files, env, testScript),
-  ]);
+  const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript)]);
   const hostResult = await Promise.allSettled([runHostTests(env)]);
   const failures = results
     .flatMap((result) =>

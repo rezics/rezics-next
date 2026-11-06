@@ -7,7 +7,9 @@ import { createPool } from '../../src/database/pool.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { SubjectDocument } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
-import { createOpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
+import { physicalSubjectGenerationsFromSettings } from '../../src/search/generation-inventory.ts';
+import { assertRetainedPitDeletion } from '../../src/search/erasure-pit.ts';
+import { createOpenSearch, OpenSearchError, SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../src/search/query.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -57,7 +59,7 @@ afterAll(async () => {
 });
 
 async function eventually<T>(read: () => Promise<T>, accepts: (value: T) => boolean, stage: string) {
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + workerControlMs;
   let last: T;
   do {
     last = await read();
@@ -605,8 +607,23 @@ test.serial(
   360_000,
 );
 
-import { assertRetainedPitDeletion } from '../../src/search/erasure-pit.ts';
-import { SearchUnavailableError } from '../../src/search/opensearch.ts';
+test('live subject settings treat empty inventory as no-data and refuse more than three generations', () => {
+  expect(physicalSubjectGenerationsFromSettings('p-', {})).toEqual([]);
+  expect(
+    physicalSubjectGenerationsFromSettings('p-', {
+      'p-subjects-g1': { settings: { index: { uuid: 'u1' } } },
+      'p-subjects-g1-writer-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': { settings: { index: { uuid: 'u1' } } },
+    }),
+  ).toEqual([{ physicalTarget: 'p-subjects-g1', incarnation: 'u1', consumerGeneration: '1', generation: 1 }]);
+  expect(
+    physicalSubjectGenerationsFromSettings('p-', {
+      'p-subjects-g1': { settings: { index: { uuid: 'u1' } } },
+      'p-subjects-g2': { settings: { index: { uuid: 'u2' } } },
+      'p-subjects-g3': { settings: { index: { uuid: 'u3' } } },
+      'p-subjects-g4': { settings: { index: { uuid: 'u4' } } },
+    }),
+  ).toBeNull();
+});
 
 // Receipt validation is one cleanup boundary, not an all-copy participant completion oracle.
 test('retained PIT custody can be released only by its exact native successful cleanup receipt', () => {

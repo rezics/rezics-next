@@ -7,6 +7,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
+import {
+  firstRedactedDiagnostic,
+  isStartupTransportError,
+  kernelLaunchCommand,
+  nativeJwksUrl,
+} from '../../../scripts/walk-stack.ts';
+import { retireStaleSeedJournals } from '../../../services/auth/scripts/dev-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/vndb-journey');
@@ -71,15 +78,16 @@ async function ready(url: string, child: Bun.Subprocess) {
       if (response.ok) return;
       lastFailure = `HTTP ${response.status}\n${(await response.text()).slice(0, 16000)}`;
     } catch (error) {
-      if (!(error instanceof TypeError) && !(error instanceof DOMException)) throw error;
+      if (!isStartupTransportError(error)) throw error;
       lastFailure = String(error);
     }
     await Bun.sleep(500);
   }
-  throw new Error(`Development stack readiness timed out: ${url}\n${lastFailure}`);
+  throw new Error(`Development stack readiness timed out: ${url}\n${firstRedactedDiagnostic(lastFailure, [password])}`);
 }
 
 let stack: Bun.Subprocess | undefined;
+const pageChildren: Bun.Subprocess[] = [];
 let stackDescriptor: number | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
@@ -90,23 +98,28 @@ try {
     kernelEnvFile,
     (await readFile(kernelEnvFile, 'utf8'))
       .replace(/^AUTH_ISSUER=.*$/m, `AUTH_ISSUER=${issuerOrigin}`)
-      .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuerOrigin}/.well-known/jwks.json`),
+      .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${nativeJwksUrl(`http://127.0.0.1:${nativePort}`)}`),
     { mode: 0o600 },
   );
   await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']);
+  const kernelUrl = (await readFile(kernelEnvFile, 'utf8')).match(/^DATABASE_URL=(.*)$/m)?.[1];
+  if (kernelUrl) await retireStaleSeedJournals(root, kernelUrl);
   await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
   const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8'));
   password = keys.password;
   const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
   stackDescriptor = openSync(stackLog.name!, 'a', 0o600);
+  const nativeEnv = { ...env, REZICS_WALK_STACK_SLOT: env.REZICS_WALK_STACK_SLOT ?? 'journey' };
   stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
     cwd: root,
-    env,
+    env: nativeEnv,
     stdout: stackDescriptor,
     stderr: stackDescriptor,
   });
-  await ready(`${issuerOrigin}/.well-known/jwks.json`, stack);
+  await ready(nativeJwksUrl(`http://127.0.0.1:${nativePort}`), stack);
+  await ready(`${kernelOrigin}/v1/definitions`, stack);
   report.phases.push('auth-ready');
+  report.phases.push(`kernel:${kernelLaunchCommand(nativeEnv).join(' ')}`);
   const seedEnv = Object.fromEntries(
     (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8'))
       .trim()
@@ -120,7 +133,7 @@ try {
     accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
     account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!,
     client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
-    authOrigin: issuerOrigin,
+    authOrigin: `http://127.0.0.1:${nativePort}`,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
   const reviewerBearer = await reviewerToken();
@@ -133,7 +146,7 @@ try {
     ['bun', '--eval', 'await (await import("./scripts/datasets/cross-media-seed.ts")).runDevelopmentSeed()'],
     {
       cwd: root,
-      env: { ...env, ...seedEnv },
+      env: { ...env, ...seedEnv, AUTH_ORIGIN: `http://127.0.0.1:${nativePort}` },
       stdout: seedDescriptor,
       stderr: seedDescriptor,
     },
@@ -177,7 +190,21 @@ try {
     { mode: 0o600 },
   );
   report.phases.push('seed-returned');
-  await ready(`${webOrigin}/en`, stack);
+  const pages = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'pages'], {
+    cwd: root,
+    env: nativeEnv,
+    stdout: stackDescriptor,
+    stderr: stackDescriptor,
+  });
+  const web = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'web'], {
+    cwd: root,
+    env: nativeEnv,
+    stdout: stackDescriptor,
+    stderr: stackDescriptor,
+  });
+  pageChildren.push(pages, web);
+  await ready(`${issuerOrigin}/.well-known/openid-configuration`, pages);
+  await ready(`${webOrigin}/en`, web);
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -212,6 +239,10 @@ try {
 } finally {
   await writeFile(resolve(evidence, 'journey.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
   await browser?.close();
+  for (const child of pageChildren) {
+    child.kill('SIGTERM');
+    await child.exited;
+  }
   if (stack) {
     stack.kill('SIGTERM');
     await stack.exited;

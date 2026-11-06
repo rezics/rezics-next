@@ -1,5 +1,4 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
-import { spawnSync } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -15,18 +14,26 @@ import { developmentPersonalListScopes } from '../../importer/src/showcase-perso
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
+  ownerProcessIdentity,
+  runDocker,
+  retainOriginalAndCleanupFailure,
+} from '../../../scripts/compiler-database.ts';
+import {
   admitWalkStack,
-  walkHttpAnswers,
+  firstRedactedDiagnostic,
+  nativeJwksUrl,
+  SEED_JOURNAL_IDENTITY_FILE,
+  seedJournalDatabaseIdentity,
+  seedJournalsNameDifferentDatabase,
+  stackPhaseLine,
+  stackStartPlan,
   walkProcessEnvironment,
-  walkReadyUrls,
+  SEEDED_WEB_READY_PATH,
   walkStackNames,
   walkStackPorts,
   WALK_DOCKER_REMOVE_MS,
-  WALK_READY_DEADLINE_MS,
-  WALK_READY_POLL_MS,
-  walkReadyFetchTimeoutMs,
   stopSpawned,
-  walkOriginListening,
+  waitUntilWalkReady,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 
@@ -70,11 +77,13 @@ export const origins = {
 };
 
 /** Every process in an isolated stack uses the same issuer identity, including its port. */
-export function developmentKernelBindings(selected: Pick<typeof origins, 'issuer' | 'audience' | 'kernel'> = origins) {
+export function developmentKernelBindings(
+  selected: Pick<typeof origins, 'issuer' | 'audience' | 'kernel' | 'native'> = origins,
+) {
   return {
     AUTH_ISSUER: selected.issuer,
     AUTH_AUDIENCE: selected.audience,
-    AUTH_JWKS_URL: `${selected.issuer}/.well-known/jwks.json`,
+    AUTH_JWKS_URL: nativeJwksUrl(selected.native),
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(localPort(selected.kernel)),
   };
@@ -346,6 +355,28 @@ export async function retireDevelopmentSeedState(repository = root): Promise<str
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return undefined;
   }
+}
+
+/** A leftover journal that names another PostgreSQL identity cannot replay into this stack's database. */
+export async function retireStaleSeedJournals(repository: string, databaseUrl: string): Promise<string | undefined> {
+  const seedDirectory = resolve(repository, '.temp/cross-media-seed');
+  const identityPath = resolve(seedDirectory, SEED_JOURNAL_IDENTITY_FILE);
+  const current = seedJournalDatabaseIdentity(databaseUrl);
+  let recorded: string | undefined;
+  try {
+    recorded = (await readFile(identityPath, 'utf8')).trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  if (!seedJournalsNameDifferentDatabase(recorded, current)) {
+    await mkdir(seedDirectory, { recursive: true, mode: 0o700 });
+    await writeFile(identityPath, `${current}\n`, { mode: 0o600 });
+    return undefined;
+  }
+  const archived = await retireDevelopmentSeedState(repository);
+  await mkdir(seedDirectory, { recursive: true, mode: 0o700 });
+  await writeFile(identityPath, `${current}\n`, { mode: 0o600 });
+  return archived;
 }
 
 export async function kernelEnvironment(): Promise<Record<string, string>> {
@@ -766,11 +797,8 @@ async function launch(action: 'pages' | 'web', args: string[]) {
 }
 
 /**
- * Starts the local stack in three ordered phases, each gated on what the next one needs. The issuer origin is served by
- * the Pages process, which proxies to the native Auth host, and the kernel fetches its keys from that issuer while it
- * boots. So identity, Pages and the workflow worker start first: the worker's DBOS launch creates the system schema the
- * kernel boots against, and its "Worker ready" line marks that launch complete. The kernel boots next and must answer
- * before Web, the heaviest compilation, begins. Each phase logs when it is ready and names itself when it stalls.
+ * Starts native Auth, the worker and Kernel first. Kernel reads issuer JWKS from native Auth, so Auth pages and Web
+ * can wait until seeding finishes on an admitted walk. Local `task dev` still starts pages after Kernel.
  */
 async function start() {
   const env = {
@@ -778,6 +806,9 @@ async function start() {
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
+  const plan = stackStartPlan(env, origins);
+  const identityLine = ownerProcessIdentity();
+  console.info(stackPhaseLine('owner', identityLine));
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const commands: string[][] = [];
   const spawnChild = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') =>
@@ -818,20 +849,22 @@ async function start() {
   try {
     const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
     const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
-    const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
     await phase(
       'identity',
-      Promise.all([
-        untilOutput(worker, 'Worker ready'),
-        untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker, pages]),
-      ]),
+      Promise.all([untilOutput(worker, 'Worker ready'), untilReady(plan.nativeReady, [identity, worker])]),
     );
     if (stopping) return;
-    const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
-    await phase('kernel', untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity, pages]));
+    const kernel = launch(plan.kernel);
+    await phase('kernel', untilReady(plan.kernelReady, [kernel, worker, identity]));
     if (stopping) return;
-    const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
-    await phase('web', untilReady([`${origins.web}/`], [web]));
+    if (!plan.deferPages) {
+      const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+      await phase('pages', untilReady([`${origins.issuer}/.well-known/openid-configuration`], [pages]));
+      if (stopping) return;
+      const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
+      await phase('web', untilReady([`${origins.web}${SEEDED_WEB_READY_PATH}`], [web]));
+      if (stopping) return;
+    }
     await Promise.race([stopped, ...children.map((_, index) => supervise(index))]);
     process.exitCode = 0;
   } finally {
@@ -896,15 +929,9 @@ async function stopChildren(children: ReturnType<typeof Bun.spawn>[], graceMs = 
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
+/** Cleanup passes its own bound: a probe timeout is too short to remove a busy container or volume. */
 function dockerOutput(args: string[], timeoutMs?: number): string {
-  const result = spawnSync('docker', args, {
-    encoding: 'utf8',
-    ...(timeoutMs === undefined ? {} : { timeout: timeoutMs, killSignal: 'SIGKILL' }),
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0)
-    throw new Error(`docker ${args.join(' ')} failed: ${(result.stderr || result.stdout).trim()}`);
-  return result.stdout.trim();
+  return runDocker(args, timeoutMs === undefined ? {} : { timeout: timeoutMs });
 }
 
 /** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
@@ -940,41 +967,44 @@ async function untilReady(
   starting: ReturnType<typeof Bun.spawn> | readonly ReturnType<typeof Bun.spawn>[],
 ): Promise<void> {
   const processes = Array.isArray(starting) ? starting : [starting as ReturnType<typeof Bun.spawn>];
-  const deadline = Date.now() + WALK_READY_DEADLINE_MS;
-  const failed = () => {
-    const exited = processes.find((child) => child.exitCode !== null || child.signalCode !== null);
-    if (exited)
-      throw new Error(`walk: the local stack exited (${exited.exitCode ?? exited.signalCode}) before it was ready`);
-    if (Date.now() >= deadline)
-      throw new Error(`walk: the local stack was not ready after ${WALK_READY_DEADLINE_MS} ms (${urls.join(', ')})`);
+  await waitUntilWalkReady({ urls, children: processes });
+}
+
+/**
+ * Starts Auth pages and Web for a journey that has already seeded its admitted stack. An admitted `start` leaves them
+ * out, so Vite never compiles while the seed runs. Children are killed on exit, so a failed journey cannot leave the
+ * slot's ports listening; `stop` is the normal teardown.
+ */
+export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }> {
+  const children = ['pages', 'web'].map((action) =>
+    Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
+      cwd: root,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }),
+  );
+  const killOnExit = () => {
+    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
   };
-  let lastReport = 0;
-  const report = (waiting: string[]) => {
-    if (Date.now() - lastReport < 30_000) return;
-    console.error(`walk: waiting for ${waiting.join(', ')}`);
-    lastReport = Date.now();
-  };
-  for (;;) {
-    failed();
-    const listening = await Promise.all(urls.map(async (url) => [url, await walkOriginListening(url)] as const));
-    if (listening.every(([, open]) => open)) break;
-    report(listening.filter(([, open]) => !open).map(([url]) => url));
-    await Bun.sleep(WALK_READY_POLL_MS);
-  }
-  for (;;) {
-    failed();
-    const remaining = deadline - Date.now();
-    const ready = await Promise.all(
-      urls.map(
-        async (url) =>
-          [url, await walkHttpAnswers(url, Math.min(remaining, walkReadyFetchTimeoutMs(remaining)))] as const,
-      ),
+  process.once('exit', killOnExit);
+  try {
+    await untilReady(
+      [`${origins.issuer}/.well-known/openid-configuration`, `${origins.web}${SEEDED_WEB_READY_PATH}`],
+      children,
     );
-    failed();
-    if (ready.every(([, ok]) => ok)) return;
-    report(ready.filter(([, ok]) => !ok).map(([url]) => url));
-    await Bun.sleep(WALK_READY_POLL_MS);
+  } catch (error) {
+    await Promise.all(children.map((child) => stopSpawned(child)));
+    process.off('exit', killOnExit);
+    throw error;
   }
+  return {
+    stop: async () => {
+      process.off('exit', killOnExit);
+      await Promise.all(children.map((child) => stopSpawned(child)));
+    },
+  };
 }
 
 /**
@@ -1006,6 +1036,7 @@ async function walk(command: string[]): Promise<number> {
     const env = walkProcessEnvironment(task, slot.index!);
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
+    let walkFailure: unknown;
     try {
       removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
       for (const script of [
@@ -1013,8 +1044,9 @@ async function walk(command: string[]): Promise<number> {
         ['services/kernel/scripts/search.ts', 'up'],
         ['services/auth/scripts/dev-stack.ts', 'setup'],
       ]) {
-        let code = 1;
-        for (let attempt = 0; attempt < 2 && code !== 0; attempt++) {
+        // A setup step that fails once is retried: a busy host can time out a container start.
+        let status = 1;
+        for (let attempt = 0; attempt < 2 && status !== 0; attempt++) {
           current = Bun.spawn([process.execPath, ...script], {
             cwd: root,
             env,
@@ -1022,15 +1054,18 @@ async function walk(command: string[]): Promise<number> {
             stdout: 'inherit',
             stderr: 'inherit',
           });
-          code = await current.exited;
-          if (code !== 0 && attempt === 0 && script[1] === 'up' && script[0]?.endsWith('database.ts'))
+          status = await current.exited;
+          if (status !== 0 && attempt === 0 && script[1] === 'up' && script[0]?.endsWith('database.ts'))
             removeWalkStack(names);
         }
-        if (code !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
+        if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
       }
       const log = join(root, '.temp', 'walk', task, 'stack.log');
       await mkdir(dirname(log), { recursive: true });
       await writeFile(log, '');
+      // Journals from another database cannot replay into this stack; retire them before the seed reads them.
+      const kernelEnv = await kernelEnvironment();
+      if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
       starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
         cwd: root,
         env,
@@ -1038,16 +1073,31 @@ async function walk(command: string[]): Promise<number> {
         stdout: Bun.file(log),
         stderr: Bun.file(log),
       });
-      await untilReady(walkReadyUrls(ports), starting);
+      // An admitted stack's frontends start after its journey seeds, so readiness is Auth JWKS and Kernel only.
+      const plan = stackStartPlan(env, {
+        web: `http://127.0.0.1:${ports.web}`,
+        issuer: `http://127.0.0.1:${ports.issuer}`,
+        native: `http://127.0.0.1:${ports.native}`,
+        kernel: `http://127.0.0.1:${ports.kernel}`,
+      });
+      await untilReady([...plan.nativeReady, ...plan.kernelReady], starting);
       current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
       code = await current.exited;
+    } catch (error) {
+      walkFailure = error;
+      throw error;
     } finally {
       if (starting) await stopSpawned(starting);
-      removeWalkStack(names);
+      try {
+        removeWalkStack(names);
+      } catch (cleanupError) {
+        if (walkFailure) throw retainOriginalAndCleanupFailure(walkFailure, cleanupError, 'walk failed');
+        throw cleanupError;
+      }
     }
   } catch (error) {
     if (interrupted === undefined) throw error;
-    console.error(error);
+    console.error(firstRedactedDiagnostic(error instanceof Error ? error.message : String(error)));
   } finally {
     for (const [signal, handler] of handlers) process.off(signal, handler);
     await slot?.release();
