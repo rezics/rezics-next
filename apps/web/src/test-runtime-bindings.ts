@@ -1,8 +1,8 @@
-export * from 'cloudflare:workers';
-import { env as workerEnv } from 'cloudflare:workers';
+import { env as workerEnv, DurableObject, WorkflowEntrypoint } from 'cloudflare:workers';
 import { testFixtureEnvHeader } from './test-fixture-header.ts';
 
-export { testFixtureEnvHeader };
+export { DurableObject, WorkflowEntrypoint, testFixtureEnvHeader };
+export type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 
 export type TestFixtureOverlay = Record<string, string>;
 

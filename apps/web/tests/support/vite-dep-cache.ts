@@ -84,7 +84,11 @@ async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, ap
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const custody = ownBunProcess(child, { label: 'Vite dependency pre-bundle' });
+  const custody = ownBunProcess(child, {
+    label: 'Vite dependency pre-bundle',
+    termGraceMs: 2_000,
+    settleTimeoutMs: 4_000,
+  });
   let lastError: unknown = new Error('pre-bundle has not served /en');
   try {
     const deadline = Date.now() + 180_000;
@@ -102,7 +106,7 @@ async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, ap
       await Bun.sleep(250);
     }
   } finally {
-    await cleanupAll([{ label: 'Vite dependency pre-bundle', run: () => custody.close(), timeoutMs: 8000 }]);
+    await cleanupAll([{ label: 'Vite dependency pre-bundle', run: () => custody.close(), timeoutMs: 12_000 }]);
   }
 }
 

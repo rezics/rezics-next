@@ -14,6 +14,7 @@ type Fixture = {
   childCompletion: Promise<unknown>;
   outputCompletion: Promise<unknown>;
   descendantReady: Promise<number>;
+  descendantPid?: number;
 };
 
 const fixtures: Fixture[] = [];
@@ -51,6 +52,13 @@ async function safetyCleanup(fixture: Fixture): Promise<void> {
     if (processGroupExists(fixture.pid)) {
       try {
         process.kill(-fixture.pid, 'SIGKILL');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+    if (fixture.descendantPid !== undefined) {
+      try {
+        process.kill(fixture.descendantPid, 'SIGKILL');
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
@@ -259,6 +267,74 @@ test('server group cleanup runs even when browser close hangs', async () => {
   expect(failure).toBeInstanceOf(AggregateError);
   expect(Date.now() - began).toBeLessThan(1500);
   expect(fixture.custody.settled).toBe(true);
+});
+
+function bunDetachedDescendantFixture(): Fixture {
+  let output = '';
+  const descendantScript = `setInterval(() => {}, 1000);`;
+  const source = `
+    const descendant = Bun.spawn(['bun', '-e', ${JSON.stringify(descendantScript)}], {
+      detached: true,
+      stdin: 'ignore',
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    descendant.unref();
+    console.log('descendant=' + descendant.pid);
+    process.on('SIGTERM', () => {});
+    setInterval(() => {}, 1000);
+  `;
+  const child = Bun.spawn(['bun', '-e', source], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const stdout = child.stdout.tee();
+  const stderr = child.stderr.tee();
+  const independentOutputCompletion = Promise.all([drainFixtureOutput(stdout[1]), drainFixtureOutput(stderr[1])]).then(
+    () => undefined,
+  );
+  const custody = ownBunProcess(child, {
+    label: 'Bun detached-descendant fixture',
+    termGraceMs: 80,
+    settleTimeoutMs: 1500,
+    pollIntervalMs: 10,
+    streams: { stdout: stdout[0], stderr: stderr[0] },
+    onOutput: (chunk) => {
+      output += Buffer.from(chunk).toString();
+    },
+  });
+  const descendantReady = new Promise<number>((resolve, reject) => {
+    const deadline = Date.now() + 2000;
+    const inspect = () => {
+      const match = /descendant=(\d+)/.exec(output);
+      if (match) return resolve(Number(match[1]));
+      if (Date.now() >= deadline) return reject(new Error(`Timed out waiting for fixture descendant: ${output}`));
+      setTimeout(inspect, 10);
+    };
+    inspect();
+  });
+  const fixture: Fixture = {
+    pid: child.pid,
+    custody,
+    childCompletion: Promise.resolve(child.exited),
+    outputCompletion: independentOutputCompletion,
+    descendantReady,
+  };
+  fixtures.push(fixture);
+  return fixture;
+}
+
+test('Bun process custody reaps a descendant that left the process group', async () => {
+  const fixture = bunDetachedDescendantFixture();
+  const descendant = await fixture.descendantReady;
+  fixture.descendantPid = descendant;
+  expect(process.kill(descendant, 0)).toBe(true);
+  await fixture.custody.close();
+  expect(fixture.custody.settled).toBe(true);
+  expect(fixture.pid === undefined ? false : processGroupExists(fixture.pid)).toBe(false);
+  expect(() => process.kill(descendant, 0)).toThrow();
 });
 
 test('closing one process group repeatedly shares the same bounded settlement', async () => {
