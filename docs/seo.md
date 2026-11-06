@@ -158,6 +158,10 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 - `aggregateRating` only from the Global population of native votes and only above the display threshold, with
   `ratingCount`, `bestRating` and `worstRating`; imported source statistics never appear in it;
 - a recipe's ingredients and steps as `recipeIngredient` and `recipeInstructions`;
+  Decision: Recipe and software-release overviews publish the current anonymous cook-time, diet, ingredient,
+  instruction, platform, date and language statements; JSON-LD matches that projection, `recipeIngredient` is
+  Schema.org Text, and released work form is `additionalType` rather than an identifier. Locale switches reload
+  the document so canonical heads match the URL.
 - an agent as `Person` or `Organization` with `sameAs` links the agent published;
 - `BreadcrumbList` for type and parent pages.
 
