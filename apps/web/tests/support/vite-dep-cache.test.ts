@@ -47,6 +47,7 @@ test('the default pre-bundle is vite optimize --force, not a second HTTP server'
   expect(webViteWorkerSsrEnvironment.optimizeDeps.include).toEqual([...webViteWorkerSsrOptimizeDeps.include]);
   expect(webViteWorkerSsrEnvironment.optimizeDeps.exclude).toEqual([...webViteWorkerSsrOptimizeDeps.exclude]);
   expect(webViteWorkerSsrOptimizeDeps.include.includes('react-dom/server')).toBe(false);
+  expect(webViteWorkerSsrOptimizeDeps.include.includes('react-dom/server.edge')).toBe(true);
   expect(webViteWorkerSsrEnvironment.resolve.conditions).toContain('workerd');
   expect(webViteWorkerSsrEnvironment.optimizeDeps.noDiscovery).toBe(true);
 });

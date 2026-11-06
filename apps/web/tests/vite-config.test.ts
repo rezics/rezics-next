@@ -386,6 +386,10 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
                 false,
                 command + ':' + name + ':without:' + pkg,
               );
+            assert.ok(
+              (optimizeDeps.include ?? []).includes('react-dom/server.edge'),
+              command + ':' + name + ':worker-server-entry',
+            );
             for (const pkg of ['react', 'react-dom', 'react-dom/server'])
               assert.equal(
                 (optimizeDeps.exclude ?? []).includes(pkg),

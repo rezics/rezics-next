@@ -93,9 +93,10 @@ const linkedDependencyRoot = linkedDependencyAllow(
  * Host-b evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...` and then
  * nothing for 150s. Empty include plus `noDiscovery` printed no Vite line at all. The composition
  * that reaches ready is Web's host-local optimizeDeps cache plus Worker `noDiscovery` with an
- * explicit React/TanStack/paraglide include. Leave `urlpattern-polyfill` and `react-dom/server`
- * off include: the nested package is resolved to ESM, and `react-dom/server` stays on Vite's
- * transform path. Calendar packages stay excluded.
+ * explicit React/TanStack/paraglide include. Leave `urlpattern-polyfill` and the generic
+ * `react-dom/server` entry off include: the nested package is resolved to ESM, while
+ * `react-dom/server.edge` is pre-bundled to convert its CommonJS wrapper for Worker SSR.
+ * Calendar packages stay excluded.
  */
 const webRequire = createRequire(import.meta.url);
 const paraglideRequire = createRequire(webRequire.resolve('@inlang/paraglide-js'));
