@@ -1422,10 +1422,10 @@ if (import.meta.main) {
   // transport routes that exact JWKS request to the real fixture Auth handler.
   const nativeFetch = globalThis.fetch;
   globalThis.fetch = ((input, init) => {
-    const request = new Request(input, init);
-    if (request.url !== workerEnv.AUTH_JWKS_URL) return nativeFetch(input, init);
+    const location = input instanceof Request ? input.url : String(input);
+    if (location !== workerEnv.AUTH_JWKS_URL) return nativeFetch(input, init);
     return nativeFetch(
-      new Request(`${process.env.LIBRARY_OUTCOME_AUTH_ORIGIN}/.well-known/jwks.json`, request),
+      new Request(`${process.env.LIBRARY_OUTCOME_AUTH_ORIGIN}/.well-known/jwks.json`, new Request(input, init)),
     );
   }) as typeof fetch;
   let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
