@@ -58,9 +58,31 @@ test('test Worker bindings are startup-only and production has no fixture header
     process.env.WEB_TEST_WORKER_BINDINGS = '{"KERNEL_ORIGIN":"https://test.example"}';
     const testRuntime = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
     expect(pluginNames(testRuntime)).toContain('rezics-test-env-bindings');
-    expect(testRuntime.define).toMatchObject({
-      __REZICS_TEST_WORKER_BINDINGS__: process.env.WEB_TEST_WORKER_BINDINGS,
-    });
+    expect(testRuntime.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
+    const plugins = (testRuntime.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const bindingsPlugin = plugins.find(
+      (plugin) =>
+        plugin !== null &&
+        typeof plugin === 'object' &&
+        'name' in plugin &&
+        plugin.name === 'rezics-test-env-bindings',
+    );
+    const transformHook =
+      bindingsPlugin && 'transform' in bindingsPlugin ? bindingsPlugin.transform : undefined;
+    const transform =
+      typeof transformHook === 'function' ? transformHook : transformHook && 'handler' in transformHook
+        ? transformHook.handler
+        : undefined;
+    expect(typeof transform).toBe('function');
+    const transformed = transform?.call(
+      undefined,
+      bindingsSource,
+      join(appRoot, 'src/test-runtime-bindings.ts'),
+    );
+    expect(transformed).toHaveProperty(
+      'code',
+      expect.stringContaining('= {"KERNEL_ORIGIN":"https://test.example"};'),
+    );
   } finally {
     if (previous === undefined) delete process.env.REZICS_TEST_RUNTIME;
     else process.env.REZICS_TEST_RUNTIME = previous;

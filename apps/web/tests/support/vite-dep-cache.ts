@@ -121,7 +121,7 @@ export type ViteEnvironmentForDepHash = {
     optimizeDeps?: {
       include?: string[];
       exclude?: string[];
-      rolldownOptions?: Record<string, unknown>;
+      rolldownOptions?: Record<string, unknown> & { output?: Record<string, unknown> };
     };
     optimizeDepsPluginNames?: string[];
   };

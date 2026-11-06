@@ -267,11 +267,9 @@ export default defineConfig((context) => {
   }
   const persistence = createWorkerPersistence('web', context, appRoot);
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
+  const testWorkerBindings = process.env[testWorkerBindingsEnvName] ?? '{}';
   return {
     ...(viteCacheDir ? { cacheDir: viteCacheDir } : {}),
-    define: testRuntime
-      ? { __REZICS_TEST_WORKER_BINDINGS__: process.env[testWorkerBindingsEnvName] ?? '{}' }
-      : {},
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
@@ -291,7 +289,9 @@ export default defineConfig((context) => {
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
-      ...webViteClientOptimizeDeps,
+      entries: [...webViteClientOptimizeDeps.entries],
+      holdUntilCrawlEnd: webViteClientOptimizeDeps.holdUntilCrawlEnd,
+      exclude: [...webViteClientOptimizeDeps.exclude],
     },
     ssr: {
       resolve: { alias: [urlpatternPolyfillAlias] },
@@ -353,6 +353,15 @@ export default defineConfig((context) => {
               name: 'rezics-test-env-bindings',
               enforce: 'pre' as const,
               transform(code: string, id: string) {
+                if (filePathOf(id) === filePathOf(testRuntimeBindings)) {
+                  return {
+                    code: code.replace(
+                      'declare const __REZICS_TEST_WORKER_BINDINGS__: Record<string, string>;',
+                      `const __REZICS_TEST_WORKER_BINDINGS__: Record<string, string> = ${testWorkerBindings};`,
+                    ),
+                    map: null,
+                  };
+                }
                 if (id.includes('test-runtime-bindings')) return;
                 if (!code.includes("from 'cloudflare:workers'")) return;
                 return {

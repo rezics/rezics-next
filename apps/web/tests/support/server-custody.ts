@@ -56,6 +56,10 @@ function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
+function bunOutputStream(stream: Bun.Subprocess['stdout']): ReadableStream<Uint8Array> | null {
+  return stream instanceof ReadableStream ? (stream as ReadableStream<Uint8Array>) : null;
+}
+
 /** Bun may reject a drained pipe with one of these codes after this owner starts stopping the group. */
 function isExpectedStoppedStreamClose(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -405,7 +409,10 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
       );
     }
   };
-  const streams = options.streams ?? { stdout: child.stdout, stderr: child.stderr };
+  const streams = options.streams ?? {
+    stdout: bunOutputStream(child.stdout),
+    stderr: bunOutputStream(child.stderr),
+  };
   const outputCompletion = Promise.all([drain(streams.stdout, 'stdout'), drain(streams.stderr, 'stderr')]).then(
     () => undefined,
   );
