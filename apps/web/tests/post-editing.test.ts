@@ -652,7 +652,7 @@ test(
         ifMatch: `"${id(112)}"`,
         body: { licence, mediaIds: [] },
       });
-      expect(revision.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(JSON.parse(revision.key!)).toMatch(/^[0-9a-f-]{36}$/i);
       expect(JSON.stringify(revision.body)).toContain('A revised contribution');
       expect(await postSlot(page, 1).getByRole('button', { name: 'More actions' }).count()).toBe(1);
     } finally {
@@ -789,7 +789,7 @@ test(
       expect(await slot.getByRole('button', { name: 'More actions' }).count()).toBe(0);
       expect(await postSlot(page, 1).getByText('A reply', { exact: true }).count()).toBe(1);
       const deletion = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/posts/${id(12)}`)!;
-      expect(deletion.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(JSON.parse(deletion.key!)).toMatch(/^[0-9a-f-]{36}$/i);
 
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 });
       await hydrated(page);

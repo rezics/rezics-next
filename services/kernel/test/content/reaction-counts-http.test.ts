@@ -395,7 +395,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     const running = workers.splice(0);
     for (const worker of running) await worker.stop();
     await host?.stop();
-    if (authPool && !authPool.ending) await authPool.end();
+    if (authPool && !authPool.ending && !authPool.ended) await authPool.end();
     if (authDatabaseName) await dropTestDatabase(db!.admin, authDatabaseName);
     await db?.close();
   });

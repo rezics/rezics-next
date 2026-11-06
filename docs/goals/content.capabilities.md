@@ -44,8 +44,9 @@ the post slots; nested presentation lists are not indexes. Journey navigation wa
 hydration. Owner edit and erase use the reading-page viewer when that page was admitted for the account, otherwise
 the signed-in session subject after anonymous SSR. Inline revisions send the inherited native licence; a permanent
 author-erased slot shows “Removed by its author” without overflow, while a restorable deletion keeps its deleted
-tombstone and restore window. Edit discard confirms from live draft dirtiness, including editor host text and a
-pending snapshot so Escape can confirm before the next paint.
+tombstone and restore window. Edit discard confirms from live draft dirtiness, including capture-phase editor input, host text and a
+pending snapshot so Escape can confirm before the next paint. Revision and erase Idempotency-Key headers
+stay RFC 8941 quoted strings.
 
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

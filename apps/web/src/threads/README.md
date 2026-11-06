@@ -10,7 +10,10 @@ the composed `reading-page` so edit, delete and edited-marker journeys see curre
 the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
 anonymous SSR; the personal read still supplies reactions and review votes. Journey navigation waits for
 DOMContentLoaded and hydration, not network idle. Post slots are the thread conversation rows
-(`ol[id^="thread-"] > li`); nested presentation lists are not indexes.
+(`ol[id^="thread-"] > li`); nested presentation lists are not indexes. Inline-edit discard
+confirms from a capture-phase host-input flag as well as published snapshot and host text, so
+Escape can confirm before Tiptap paints. Revision and erase Idempotency-Key values stay RFC 8941
+quoted strings; focused post-editing cases parse that header.
 
 ## New-thread destination and community rules
 

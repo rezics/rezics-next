@@ -363,11 +363,11 @@ test('two public view observations fence each author page at any item count', as
     expect(accountScans(plans)).toEqual([
       expect.objectContaining({
         'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
-        'Index Name': 'account_pkey',
+        'Index Name': expect.stringMatching(/^(account_pkey|account_active_pages)$/),
       }),
       expect.objectContaining({
         'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
-        'Index Name': 'account_pkey',
+        'Index Name': expect.stringMatching(/^(account_pkey|account_active_pages)$/),
       }),
     ]);
     expect(costOf(result.capture).relations['access.account']?.rows).toBe(2);

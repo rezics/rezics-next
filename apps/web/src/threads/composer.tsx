@@ -1432,6 +1432,7 @@ function InlinePostEditorContent({
   );
   const ready =
     snapshotPhase === 'ready' && hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
+  const liveHostDirtyRef = useRef(false);
   function liveEditorHost() {
     return (
       editorRoot.current?.querySelector<HTMLElement>(
@@ -1439,19 +1440,28 @@ function InlinePostEditorContent({
       ) ?? null
     );
   }
+  function initialHostText() {
+    return documentText(initialBodyRef.current).trim();
+  }
+  function hostText(host: HTMLElement) {
+    return host.innerText.replace(/\u00a0/g, ' ').trim();
+  }
+  function noteLiveHostInput() {
+    if (!lifetime.current()) return;
+    liveHostDirtyRef.current = true;
+  }
   function liveDraftDirty() {
+    const host = liveEditorHost();
+    if (host && hostText(host) !== initialHostText()) liveHostDirtyRef.current = true;
     if (
+      liveHostDirtyRef.current ||
       JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
       snapshotPhaseRef.current !== 'ready' ||
       pendingRef.current > 0 ||
       editIntent.current.unresolved
     )
       return true;
-    const host = liveEditorHost();
-    return (
-      host !== null &&
-      host.innerText.replace(/\u00a0/g, ' ').trim() !== documentText(initialBodyRef.current).trim()
-    );
+    return host !== null && hostText(host) !== initialHostText();
   }
   const departureSignature = JSON.stringify([
     bodyRef.current,
@@ -1535,6 +1545,7 @@ function InlinePostEditorContent({
     publishingSnapshot.current = true;
     snapshotPhaseRef.current = 'ready';
     setSnapshotPhase('ready');
+    liveHostDirtyRef.current = false;
     invalidateInspection();
     bodyRef.current = next;
     setBody(next);
@@ -1656,6 +1667,7 @@ function InlinePostEditorContent({
     if (!lifetime.current()) return;
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
+    noteLiveHostInput();
     // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
     if (target.classList.contains('ProseMirror')) return;
     const next = fromPlainText(target.innerText, 'blocks');
@@ -1780,6 +1792,7 @@ function InlinePostEditorContent({
     <div
       ref={editorRoot}
       className="min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-5 [overflow-wrap:anywhere]"
+      onBeforeInputCapture={noteLiveHostInput}
       onInputCapture={captureEditorInput}
       onKeyDownCapture={(event) => {
         if (event.key !== 'Escape' || submittingRef.current) return;
@@ -1787,12 +1800,13 @@ function InlinePostEditorContent({
         if (
           target instanceof HTMLElement &&
           (target.closest('[data-slot="editor-mention"]') ||
-            target.closest('[role="alertdialog"], [role="dialog"]') ||
+            target.closest('[role="alertdialog"][data-state="open"], [role="dialog"][data-state="open"]') ||
             (target.closest('[role="combobox"][aria-expanded="true"]') &&
               event.currentTarget.querySelector('[data-slot="editor-mention"]')))
         )
           return;
         event.preventDefault();
+        event.stopPropagation();
         departure.requestDiscard(onCancel);
       }}
     >
