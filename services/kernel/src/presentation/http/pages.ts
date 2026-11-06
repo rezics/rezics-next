@@ -833,7 +833,8 @@ async function pageAnswer(input: {
       result?.status === 200 &&
       descriptor.kind === 'subject' &&
       descriptor.id === input.subject &&
-      isRecord(result.body)
+      isRecord(result.body) &&
+      Object.keys(page.documents).length > 0
     )
       result = { ...result, body: { ...result.body, documents: page.documents } };
     if (!result) throw new Error('Page read did not return a result');

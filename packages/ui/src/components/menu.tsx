@@ -204,9 +204,6 @@ export function Menu({
     formRef.current = next;
     setForm(next);
     setOpen(true);
-    queueMicrotask(() => {
-      openingRef.current = false;
-    });
     if (sheet && historyDepth.current === 0 && !closeOnNavigation) {
       window.history.pushState({ rezicsMenu: true }, '', window.location.href);
       historyDepth.current = 1;
@@ -220,6 +217,19 @@ export function Menu({
     historyDepth.current = 0;
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
   };
+  useEffect(() => {
+    if (!open) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        openingRef.current = false;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [open, form]);
   useEffect(() => {
     const back = () => {
       if (!open || form !== 'sheet') return;
@@ -316,6 +326,8 @@ export function Menu({
               {content}
             </PopoverContent>
           </Popover>
+        ) : form === 'sheet' ? (
+          triggerNode
         ) : (
           <D.DropdownMenu
             open={open && form === 'dropdown'}
@@ -341,7 +353,10 @@ export function Menu({
       {form === 'sheet' && (
         <BottomSheet
           open={open}
-          onOpenChange={(value) => (value ? openMenu() : close())}
+          onOpenChange={(value) => {
+            if (value) openMenu();
+            else close();
+          }}
           title={page?.label ?? title}
           before={
             page ? (
