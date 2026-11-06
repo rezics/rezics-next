@@ -346,7 +346,12 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     };
     // Built-in role definitions already come from createAccess. Expose their exact
     // resolved data for observation, without attempting to redefine built-ins.
-    const access = createAccess({ actions, auth: accessConfig.auth! });
+    const access = createAccess({ actions, auth: accessConfig.auth!, clock });
+    const accountManagementReads = createAccountManagementReadAccess({
+      pool: database.pool,
+      access,
+      clock,
+    });
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool: database.pool,
@@ -373,10 +378,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const context = () => ({ pool: database.pool, deadline: Date.now() + 10000 });
       return {
         context,
-        readOperatorTransferState: createAccountManagementReadAccess({
-          pool: database.pool,
-          access,
-        }).readOperatorTransferState,
+        readOperatorTransferState: accountManagementReads.readOperatorTransferState,
         approve: (token, input, ctx) => approval.approve(token, input as never, ctx as never),
         resolveForCaller: (token, reference, operation, ctx) =>
           approval.resolveForCaller(token, reference, operation as never, ctx as never),
@@ -415,6 +417,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
       accountOperations,
+      accountManagementReads,
       stagingKey: registrationStagingKey,
       executorId: `identity-${randomUUID()}`,
       maintenanceSchedule: '0 0 1 1 *',
