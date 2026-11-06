@@ -913,6 +913,8 @@ function instrument(client: PoolClient, state: CaptureState): void {
 
     const capture = attribution.capture;
     const side = attribution.background ? 'background' : 'foreground';
+    // Unmeasured warmup/prepare only needs top-level ModifyTable identities for settle.
+    if (capture.mode === 'warmup' && notice.where) return;
     const noticeBytes = Buffer.byteLength(message, 'utf8');
     const owner = wireStatement?.record?.index;
     let plan: unknown;
@@ -926,7 +928,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
           JSON.parse(message.slice(message.indexOf(marker) + marker.length)),
         );
       }
-      retainNativePlanNodes(plan, capture, side);
+      if (!capture.costFolder) retainNativePlanNodes(plan, capture, side);
       if (capture.costFolder) {
         const database = connectedDatabase(client) ?? '';
         const planIndex = capture.costFolder.addNotice(plan, {

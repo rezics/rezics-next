@@ -71,7 +71,9 @@ batch is seven statements. A two-batch sweep of 1,000 then 10 is fourteen.
 history units (16 rows each) with selected work and unit payload fixed; eligible-application backlog with the
 returned batch fixed at 1,000; independent payload fanout 1/8/64 on a short batch; and a 1,010-row two-batch sweep.
 Each check uses `captureMode: 'cost-folded'` so nested SDK-delete auto_explain notices stay inside the 32 MiB
-telemetry cap; raw retention of those notices overflowed on eligible-backlog, payload-fanout and two-batch sweep.
+and 20,000-entry telemetry caps; raw retention of those notices overflowed on eligible-backlog, payload-fanout and
+two-batch sweep. Folded captures recycle each notice envelope and plan-walk occupancy after charging summaries;
+unmeasured prepare/warmup records only top-level write plans.
 Plans must use `workflow_retention_selector` with no sequential scan. The suite samples only selector-plan notices
 for that index proof and classifies the four exact-ID deletes from folded statement lists. The full-batch series
 bound retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`. Native recovery
@@ -96,7 +98,7 @@ Decision: pin this outcome with the four named native suites only — compact se
 interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog/fanout/sweep — rather than
 extra stories. Each growth series uses its own application and seed identities so a selected count cannot borrow
 another series' payload. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain
-document under the shared 32 MiB cap.
+document under the shared 32 MiB or 20,000 retained-entry caps.
 
 A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
 SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or

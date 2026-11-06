@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
 import { costOf } from './growth-cost.ts';
-import { collectModifyTargets, MAX_CAPTURE_PLAN_NODES, MAX_PLAN_DEPTH, MAX_PLAN_NODES } from './growth-plan-walk.ts';
+import {
+  collectModifyTargets,
+  createPlanWalkSession,
+  MAX_CAPTURE_PLAN_NODES,
+  MAX_PLAN_DEPTH,
+  MAX_PLAN_NODES,
+} from './growth-plan-walk.ts';
 import { relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 import { statementAttributions, statementOccurrences } from './growth-report.ts';
 
@@ -66,6 +72,18 @@ test('plan traversal enforces documented depth and node limits', () => {
   const children = Array.from({ length: MAX_PLAN_NODES - 1 }, () => node());
   children[children.length - 1]!.Plans = [null];
   expect(() => costOf(capture(node({}, children)))).toThrow(/maximum node count 10000/);
+});
+
+test('a folded walk releases occupancy so later trees reuse the capture envelope', () => {
+  const session = createPlanWalkSession();
+  for (let index = 0; index < MAX_CAPTURE_PLAN_NODES + 8; index++) {
+    const tree = node();
+    const location = `plans[${index}].Plan`;
+    expect([...session.walk(tree, location, 'preorder')]).toHaveLength(1);
+    expect(session.occupancy).toBe(1);
+    session.forget(location, tree);
+    expect(session.occupancy).toBe(0);
+  }
 });
 
 test('cost and diagnostics bound aggregate plan nodes across a capture forest', () => {

@@ -53,9 +53,9 @@ test('a folded capacity failure drains its caller and the next folded capture is
         operationFinished = true;
         return result.rows[0];
       },
-      { telemetryLimits: { entries: 2 } },
+      { telemetryLimits: { entries: 1 } },
     ),
-  ).rejects.toThrow(/telemetry entry capacity \(2 entries\).*foreground statement occurrence 0/);
+  ).rejects.toThrow(/telemetry entry capacity \(1 entries\).*foreground statement occurrence 0/);
   expect(operationFinished).toBe(true);
 
   const recovered = await captureWithFoldedCost(database!, () =>
@@ -93,17 +93,25 @@ test('foreground and background evidence share limits and oversized notices are 
   expect(parsed).toBe(false);
 });
 
-test('folded summaries replace temporary notice bytes without recycling evidence entries', () => {
+test('folded summaries replace temporary notice bytes and recycle notice envelope entries', () => {
   const budget = new GrowthCaptureBudget(74, { entries: 2, bytes: 1_000, nativeNoticeBytes: 100 });
   const notice = budget.retainNativeNotice(50, 'foreground');
   expect(budget.entriesUsed).toBe(1);
   expect(budget.chargedBytes).toBe(400);
   budget.retainFoldedSummary('foreground', 'cost summary', 0, 300);
   notice.release();
-  expect(budget.entriesUsed).toBe(1);
+  expect(budget.entriesUsed).toBe(0);
   expect(budget.chargedBytes).toBe(300);
+  for (let index = 0; index < 8; index++) {
+    const next = budget.retainNativeNotice(10, 'foreground');
+    expect(budget.entriesUsed).toBe(1);
+    next.release();
+    expect(budget.entriesUsed).toBe(0);
+  }
   budget.retainNativePlanNode('foreground');
-  expect(() => budget.retainFoldedSummary('background', 'next occurrence', 1, 0)).toThrow(
+  budget.retainFoldedSummary('background', 'next occurrence', 1, 0);
+  expect(budget.entriesUsed).toBe(2);
+  expect(() => budget.retainFoldedSummary('background', 'overflow', 1, 0)).toThrow(
     /current 2, requested 1, total 3 entries/,
   );
 });
