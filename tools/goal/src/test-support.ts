@@ -79,7 +79,7 @@ function leaderIsDeadAlone(identity: ProcessIdentity): boolean {
 }
 
 function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
-  return leaderIsDeadAlone(identity) ? [] : checkedProcessGroup(identity);
+  return checkedProcessGroup(identity);
 }
 
 async function signalFixtureGroup(identity: ProcessIdentity, signal: NodeJS.Signals): Promise<void> {
@@ -96,7 +96,8 @@ async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: num
 }
 
 async function reapFixtureGroup(identity: ProcessIdentity): Promise<void> {
-  if (!checkedFixtureGroup(identity).length) return;
+  // Teardown only: a dead leader's group is empty here. Liveness checks during the run keep the strict custody check.
+  if (leaderIsDeadAlone(identity) || !checkedFixtureGroup(identity).length) return;
   await signalFixtureGroup(identity, 'SIGTERM');
   if (await waitForFixtureGroupExit(identity, FIXTURE_TERM_GRACE_MS)) return;
   await signalFixtureGroup(identity, 'SIGKILL');
