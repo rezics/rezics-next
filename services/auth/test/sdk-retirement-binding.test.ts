@@ -3,7 +3,13 @@ import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import { completeCopy, copiesAbsent, eraseCopy } from '../src/erasure-copy.ts';
 import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
 import { workflowStatusScanReadiness } from '../src/retention-scan.ts';
-import { authSdkRetirementReadiness, nativeFence, readAuthSdkFence } from '../src/sdk-retirement-fence.ts';
+import {
+  AUTH_SDK_RETIREMENT,
+  authSdkFundedReadiness,
+  authSdkRetirementReadiness,
+  nativeFence,
+  readAuthSdkFence,
+} from '../src/sdk-retirement-fence.ts';
 import { failNativeQueries, nativeFixture, runNativeRetentionTick } from './support/erasure-native.ts';
 
 test('default Auth retirement persists the actual SDK fence before physical deletion and preserves living history', async () => {
@@ -12,6 +18,7 @@ test('default Auth retirement persists the actual SDK fence before physical dele
     // These cases consume the producer's actual package after integration. No
     // synthetic native receipt, writer coverage bit or result ACK is installed.
     expect(authSdkRetirementReadiness().ready).toBe(true);
+    expect(authSdkFundedReadiness().ready).toBe(true);
     expect(workflowStatusScanReadiness().ready).toBe(true);
     const person = await f.person('native-fence-binding');
     const survivor = await f.person('native-fence-living');
@@ -87,7 +94,7 @@ test('default Auth retirement persists the actual SDK fence before physical dele
 
 test('absent SDK retirement capability preserves genuine consumed Auth custody and physical history', async () => {
   const f = await nativeFixture();
-  const retirement = Object.getOwnPropertyDescriptor(DBOS, 'retireWorkflow');
+  const maintain = Object.getOwnPropertyDescriptor(DBOSClient.prototype, 'maintainWorkflowOnce');
   try {
     const person = await f.person('native-fence-unavailable');
     const original = (
@@ -99,10 +106,10 @@ test('absent SDK retirement capability preserves genuine consumed Auth custody a
       )
     ).rows[0]!;
     expect(await completeCopy(f.pool, original.workflow_id)).toBe(true);
-    // Exercise an actually absent runtime method, without a replacement body or receipt.
-    if (!retirement || !Reflect.deleteProperty(DBOS, 'retireWorkflow'))
-      throw new Error('Native retirement method cannot be removed for absence case');
-    expect(authSdkRetirementReadiness().ready).toBe(false);
+    // Exercise an actually absent funded runtime method, without a replacement body or receipt.
+    if (!maintain || !Reflect.deleteProperty(DBOSClient.prototype, 'maintainWorkflowOnce'))
+      throw new Error('Funded maintenance method cannot be removed for absence case');
+    expect(authSdkFundedReadiness().ready).toBe(false);
     await f.pool.query('UPDATE auth_dbos.workflow_status SET created_at=$2,completed_at=$2 WHERE workflow_uuid=$1', [
       original.workflow_id,
       Date.now() - 90 * 86400000,
@@ -132,13 +139,13 @@ test('absent SDK retirement capability preserves genuine consumed Auth custody a
       sdk_fence_generation: null,
       sdk_fence_closure_id: null,
       sdk_fence_closed_at: null,
-      sdk_fence_pending: 'auth-sdk-permanent-late-writer-fence-unavailable',
+      sdk_fence_pending: AUTH_SDK_RETIREMENT.fundedGap,
     });
-    if (retirement) Object.defineProperty(DBOS, 'retireWorkflow', retirement);
+    if (maintain) Object.defineProperty(DBOSClient.prototype, 'maintainWorkflowOnce', maintain);
     expect(await f.host.service.internal.retainWorkflowHistory(30)).toBe(1);
     expect(await copiesAbsent(f.pool, original.workflow_id)).toBe(true);
   } finally {
-    if (retirement) Object.defineProperty(DBOS, 'retireWorkflow', retirement);
+    if (maintain) Object.defineProperty(DBOSClient.prototype, 'maintainWorkflowOnce', maintain);
     await f.close();
   }
 }, 180_000);

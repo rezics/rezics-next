@@ -1,38 +1,30 @@
-import { DBOS } from '@dbos-inc/dbos-sdk';
+import {
+  DBOS,
+  type OpenWorkflowStatusScanInput,
+  type ReadWorkflowStatusScanPageOptions,
+  type WorkflowStatusScanContinuation,
+  type WorkflowStatusScanCopy,
+  type WorkflowStatusScanHorizon,
+  type WorkflowStatusScanKey,
+  type WorkflowStatusScanPage,
+} from '@dbos-inc/dbos-sdk';
+
+export type {
+  OpenWorkflowStatusScanInput,
+  ReadWorkflowStatusScanPageOptions,
+  WorkflowStatusScanContinuation,
+  WorkflowStatusScanCopy,
+  WorkflowStatusScanHorizon,
+  WorkflowStatusScanKey,
+  WorkflowStatusScanPage,
+};
 
 /** Received Accounts SDK vocabulary. Auth persists this continuation; it does not query SDK tables. */
-export type WorkflowStatusScanKey = Readonly<{ createdAt: number; workflowID: string }>;
-export type WorkflowStatusScanHorizon = Readonly<{
-  applicationName: string;
-  createdBefore: number;
-  upperKey: WorkflowStatusScanKey | null;
-}>;
-export type WorkflowStatusScanContinuation = WorkflowStatusScanHorizon &
-  Readonly<{ lastExaminedKey: WorkflowStatusScanKey | null }>;
-export type WorkflowStatusScanCopy = Readonly<{
-  workflowID: string;
-  workflowName: string;
-  status: string;
-  createdAt: number;
-  completedAt: number | null;
-  applicationName: string;
-}>;
-export type WorkflowStatusScanPage = Readonly<{
-  copies: readonly WorkflowStatusScanCopy[];
-  lastExaminedKey: WorkflowStatusScanKey | null;
-  examined: number;
-  exhausted: boolean;
-  continuation: WorkflowStatusScanContinuation;
-}>;
-
 export type WorkflowStatusScanSdk = Readonly<{
-  openWorkflowStatusScan(input: {
-    applicationName: string;
-    createdBefore: number;
-  }): Promise<WorkflowStatusScanContinuation>;
+  openWorkflowStatusScan(input: OpenWorkflowStatusScanInput): Promise<WorkflowStatusScanContinuation>;
   readWorkflowStatusScanPage(
     continuation: WorkflowStatusScanHorizon | WorkflowStatusScanContinuation,
-    options?: { rawLimit?: number },
+    options?: ReadWorkflowStatusScanPageOptions,
   ): Promise<WorkflowStatusScanPage>;
 }>;
 
