@@ -74,7 +74,10 @@ async function mount(attempt: TransferAttempt, viewer: string = 'ready', owner: 
     account_id: owner.kind === 'ready' ? owner.accountId : session.accountId,
   });
   await settle();
-  if (page.calls[0]) await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' }, viewer)));
+  if (page.calls[0])
+    await settle(() =>
+      page.calls[0]!.resolve(response({ kind: viewer === 'ready' ? 'readiness' : 'refused' }, viewer)),
+    );
   return page;
 }
 function privateValues() {
@@ -285,7 +288,7 @@ test.each(['failed-read', 'conflicting-read', 'replaced', 'retired', 'failed-sav
     if (mode === 'retired') await settle(() => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event));
     const save =
       mode === 'failed-save'
-        ? spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+        ? spyOn(Object.getPrototypeOf(window.sessionStorage) as Storage, 'setItem').mockImplementation(() => {
             throw new Error('storage unavailable');
           })
         : null;

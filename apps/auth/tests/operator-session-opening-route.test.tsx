@@ -186,7 +186,7 @@ test('failed initial and review reads recover the exact identity and key through
     expect(p.requests.map((request) => request.path)).toEqual(['/operator-sessions/open', '/session']);
     await p.respond(1, Response.json(proof(true)));
     expect(p.host.querySelector('#opening-current-state-heading')!.parentElement!.textContent).toContain(subject);
-    expect(p.host.querySelector('a[href="https://rezics.com/en/"]')).not.toBeNull();
+    expect(p.host.querySelector('a[href="https://rezics.com/auth/sign-in?return_to=%2Fen%2F"]')).not.toBeNull();
     expect(p.requests.filter((r) => r.path === '/operator-sessions/open')).toHaveLength(1);
   } finally {
     await p.close();

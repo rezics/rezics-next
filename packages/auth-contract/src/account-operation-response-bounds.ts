@@ -83,7 +83,10 @@ export const parseRenameOperationRefusal = parseAccountOperationRefusal;
 export const DELETION_APPROVAL_MAX_RESPONSE_BYTES =
   JSON.stringify({ reference: '', expiresAt: '' }).length + 6 * ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH + 27;
 export const DELETION_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPONSE_BYTES;
-export const parseRenameApprovalResponse = parseAccountOperationApprovalResponse;
+export function parseRenameApprovalResponse(value: unknown): RenameApprovalResponse | null {
+  const approval = parseAccountOperationApprovalResponse(value);
+  return approval && isAccountOperationReference(approval.reference) ? approval : null;
+}
 export const parseDeletionExecutionResponse = parseRenameExecutionResponse;
 export const parseDeletionOperationRefusal = parseRenameOperationRefusal;
 
@@ -204,15 +207,12 @@ export function parseOrganizationOperationError(value: unknown, status: number):
   return null;
 }
 
-
-
 /** Access seals a locator and emits Date.toISOString(), including extended years.
  * Opaque locators retain the installed 4,096 UTF-16-unit allowance. */
 export const ACCOUNT_OPERATION_REFERENCE_MAX_UNITS = 4096;
 export type AccountOperationApproval = { reference: string; expiresAt: string };
 const approvalSkeleton = JSON.stringify({ reference: '', expiresAt: '' }).length;
-export const TRANSFER_APPROVAL_MAX_RESPONSE_BYTES =
-  approvalSkeleton + 6 * ACCOUNT_OPERATION_REFERENCE_MAX_UNITS + 27;
+export const TRANSFER_APPROVAL_MAX_RESPONSE_BYTES = approvalSkeleton + 6 * ACCOUNT_OPERATION_REFERENCE_MAX_UNITS + 27;
 export const TRANSFER_EXECUTION_MAX_RESPONSE_BYTES = JSON.stringify({ accountId: '' }).length + OPERATOR_PAGE_ID_BYTES;
 const deniedStatuses = [400, 401, 403, 409, 413, 415, 503];
 export const TRANSFER_MAX_ERROR_BYTES = Math.max(

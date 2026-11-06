@@ -17,7 +17,7 @@ test('installed readback and metadata admit bounded native streams without comma
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityScopeLimit, securityResponseByteBudgets, securityResponseLimits: l,
       managementOperationProfile, OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES: pageCap } = await import('@rezics/auth-contract');
-    const { readOpenedSession: read, loadOpeningMetadata: metadata } = await import('./apps/auth/src/operator-session-opening');
+    const { readOpenedSession: read, loadOpeningMetadata: metadata } = await import('./src/operator-session-opening');
     const subject = '00000000-0000-8000-8000-000000000001';
     const operator = '00000000-0000-8000-8000-000000000002';
     const input = { accountId: 'opaque-human', operationKey: 'one-read', operation: {
@@ -93,7 +93,7 @@ test('installed readback and metadata admit bounded native streams without comma
     JSON.parse = parse; globalThis.setTimeout = timeout;
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
+    cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
     stderr: 'pipe',
   });

@@ -57,6 +57,9 @@ After forwarding expires, [reservation SQL][handle-reserve] keeps the former spe
 Another account cannot claim it through expiry or cleanup. The owner may reclaim it through the native handle
 transition. Privacy unlinking and dispute/reassignment procedures in the research remain proposals.
 
+Rename approval responses retain the sealed ASCII reference format at the HTTP boundary.
+An arbitrary unsealed reference cannot dispatch execution, even with a canonical future expiry.
+
 ### Editable profile
 
 `GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) reads editable source by immutable ID,
@@ -838,3 +841,4 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-boundary]: ../services/auth/README.md#application-boundary-and-configuration
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
+

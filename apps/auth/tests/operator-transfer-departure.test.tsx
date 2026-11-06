@@ -36,7 +36,11 @@ const source: TransferAttempt = {
   phase: 'approve',
   request: {
     version: 1,
-    previous: { operatorAccountId: 'old', subjectAccountId: 'subject', reservationId: 'reservation' },
+    previous: {
+      operatorAccountId: 'old',
+      subjectAccountId: '00000000-0000-7000-8000-000000000001',
+      reservationId: 'reservation',
+    },
     expectedVersion: '12',
     operatorAccountId: 'new',
     sourceOperationKey: 'original-key',
@@ -268,7 +272,7 @@ test('reconciled results leave normally and permission loss revokes a draft with
     if (String(input) === '/account-management/operators/transfer-review') {
       const body = JSON.parse(String(init?.body));
       if (body.kind === 'readiness')
-        return Promise.resolve(Response.json({ viewer: { kind: 'refused' }, review: { kind: 'readiness' } }));
+        return Promise.resolve(Response.json({ viewer: { kind: 'refused' }, review: { kind: 'refused' } }));
     }
     throw new Error(`Unexpected permission-loss read: ${input}`);
   }) as typeof fetch;
@@ -295,7 +299,7 @@ test('authority loss keeps the unresolved departure choice and focuses the notic
       return Promise.resolve(
         Response.json({
           viewer: { kind: refused ? 'refused' : 'ready' },
-          review: { kind: 'readiness' },
+          review: { kind: refused ? 'refused' : 'readiness' },
         }),
       );
     throw new Error(`Unexpected authority-retirement read: ${input}`);

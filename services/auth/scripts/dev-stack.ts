@@ -85,7 +85,9 @@ export function developmentWebsiteScopeConfiguration(
 export function developmentWebsiteBindings(
   keys: Pick<DevelopmentKeys, 'website'>,
   website: { scopes: readonly string[]; WEBSITE_CONFIGURATION_FILE?: string },
-  deployment: { AUTH_MANAGEMENT_PAGE_ROUTES?: string } = process.env,
+  deployment: { AUTH_MANAGEMENT_PAGE_ROUTES?: string | undefined } = {
+    AUTH_MANAGEMENT_PAGE_ROUTES: process.env.AUTH_MANAGEMENT_PAGE_ROUTES,
+  },
 ) {
   return {
     AUTH_ISSUER: origins.issuer,
