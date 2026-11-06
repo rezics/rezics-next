@@ -7,7 +7,12 @@ import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { createCommunityHttpDeclaration, type CommunityHttpDeclaration } from '../community/http-declaration.ts';
-import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
+import {
+  assertReceiptKeyRing,
+  configuredReceiptKeys,
+  configureReceiptKeys,
+  readReceiptKeyRing,
+} from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
 import { zoneViewerActionResource } from '../zones/viewer-actions.ts';
@@ -406,7 +411,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     keys: new Map([[1, new Uint8Array(randomBytes(32))]]),
   };
   configureDefinitionCatalogue(dependencies.pool, tokens);
-  const receiptKeys = readReceiptKeyRing(process.env, dependencies.receiptKeys);
+  const receiptKeys = readReceiptKeyRing(
+    process.env,
+    dependencies.receiptKeys ?? configuredReceiptKeys(dependencies.pool),
+  );
   assertReceiptKeyRing(receiptKeys, tokens);
   configureReceiptKeys(dependencies.pool, receiptKeys);
   let composedActions: AccessConfig['actions'] | undefined;

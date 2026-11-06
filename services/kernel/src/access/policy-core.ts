@@ -50,6 +50,7 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
     }
   }
   const hasOwnAccountAction = [...actions.values()].some((metadata) => metadata.authority === 'own-account');
+  const knownTypes = new Set([...roles.types.keys(), ...(hasOwnAccountAction ? (['access.account'] as const) : [])]);
   const result = compilePolicyCatalogue({
     actions: [...actions].map(([action, metadata]) => ({
       action,
@@ -61,7 +62,7 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
           ...(typesByAction.get(action) ?? []),
           ...(metadata.authority === 'own-account' ? ['access.account'] : []),
         ]),
-      ],
+      ].filter((type) => knownTypes.has(type)),
       globalReach: isGlobalReachAction(action),
     })),
     roles: [...roles.roles].map(([role, values]) => ({ role, actions: [...values] })),

@@ -89,7 +89,10 @@ and worker-import graph; no extra stories.
 
 Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm
 witness revision/replay native test including stale work; no extra stories. Domain clocks stay required on holders;
-deadlineNow is a separate ambient; Access-facing public entry includes realmReadEligibility.
+deadlineNow is a separate ambient; Access-facing public entry includes realmReadEligibility. Command pools supply
+declared receipt keys before setup and grants; `createKernel` reuses a pool ring when composition omits `receiptKeys`.
+Policy catalogues drop resource types that did not resolve for the mounted action subset. JSON-array readers bind
+keys as text so `jsonb_to_recordset` never sees a non-array.
 
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior. Community domain clocks stay required on holders that already have one; deadlineNow is a

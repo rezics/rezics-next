@@ -24,6 +24,7 @@ import {
 import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
@@ -203,6 +204,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       (access = createAccess({
         ...config,
