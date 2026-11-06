@@ -37,6 +37,8 @@ beforeAll(async () => {
     env: workerTestEnv({
       KERNEL_ROUTE_KEY: Buffer.from(new Uint8Array(32).fill(37)).toString('base64url'),
       OPENSEARCH_URL: process.env.OPENSEARCH_URL,
+      // Test files share one OpenSearch per check run; each composed Search owns its own index names.
+      KERNEL_SEARCH_PREFIX: 'canonical-targets-',
     }),
     receiptKeys: testReceiptKeys(),
   });
