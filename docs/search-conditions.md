@@ -226,6 +226,8 @@ These selected work records have no Japanese-language kanji title; do not relabe
 Japanese spelling. Japanese kanji coverage uses an actual accepted title when the verifier's retained seed includes
 one. For the above records, `ja` readers retain the available Japanese label or existing fallback; matching `und`
 aliases do not become translated labels. VNDB v2002's `zh-Hant` label remains 命運石之門 for kana/Latin queries.
+Decision: discovery rows keep every current alias language in native order; the Search row picks among them with
+existing locale fallback, independently of the matched alias and of the requested label languages.
 
 Integration verification owns real OpenSearch and production localized Search at 390/1440 in light/dark, including
 mixed-kind rows and canonical destinations. Refresh affected Bangumi records through normal registration and

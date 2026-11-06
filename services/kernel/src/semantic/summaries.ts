@@ -2,8 +2,8 @@ import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
-import { checkMediaObjects, type CoverReference } from '../content/cover-reference.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
+import type { ContentCoverRef } from './contract/domain-ports.ts';
+import { contentLifecycleOf } from './adapters/ports.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -426,8 +426,9 @@ async function projectSummaries(
     }),
   ))
     partitions.add(partition);
-  const media: Map<string, CoverReference | null> = mediaIds.length
-    ? await checkMediaObjects(deps.client, mediaIds, 'cover')
+  const lifecycle = contentLifecycleOf(deps.pool);
+  const media: Map<string, ContentCoverRef | null> = mediaIds.length
+    ? await lifecycle.checkCovers(deps.client, mediaIds)
     : new Map();
   // Read each exact selected source tuple once, in independently anchored homes.
   // Media custody and source fences are facts, not permission or disclosure caches.
@@ -435,7 +436,12 @@ async function projectSummaries(
   for (const reference of media.values()) {
     if (!reference) continue;
     const { source, external_id, field_group } = reference.source;
-    const tuple = { route: tupleRoute(deps.routeKey, source, external_id), source, external_id, field_group };
+    const tuple = {
+      route: lifecycle.importedTupleRoute(deps.routeKey, source, external_id),
+      source,
+      external_id,
+      field_group,
+    };
     tuples.set(fenceKey(tuple), tuple);
   }
   const homes = new Map<number, SourceFenceTuple[]>();
@@ -476,7 +482,12 @@ async function projectSummaries(
     )
       continue;
     const { source, external_id, field_group } = reference.source;
-    const tuple = { route: tupleRoute(deps.routeKey, source, external_id), source, external_id, field_group };
+    const tuple = {
+      route: lifecycle.importedTupleRoute(deps.routeKey, source, external_id),
+      source,
+      external_id,
+      field_group,
+    };
     if (!unfenced.has(fenceKey(tuple))) continue;
     summary.cover = {
       media: mediaId,

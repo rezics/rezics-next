@@ -55,6 +55,19 @@ derivations and consume the common harness. Semantic supplies disclosure depende
 concrete admitted plans. Performance derives and verifies their budgets without reproducing owner logic in a
 benchmark.
 
+Decision: Semantic domain composition is proved by a fake-port application load and one ordinary native identity
+epoch through the composed participants. Public ports are Library custody, Search currentness, Rating review,
+Content lifecycle including batch cover reads, hashing, routing and the fact store. Inward subject, summaries and
+bulk HTTP resolve Content lifecycle through `adapters/ports.ts`; composition binds the native cover adapter even
+when identity participants are absent. Rating-review keys 2 / locators 2
+/ operand 16,384 bytes live in identity-core `rating-review-bounds.ts`. Observed counters remain item facts 512, those
+rating-review limits, identity page 100 originals, epoch segment 100 pages and frontier 8 keys / 2,048 bytes / 100
+step rows. Cost derivations stay on the existing identity-epoch and item growth contracts. Compact tests pin the
+fake-port domain and ordinary native composition; kernel-semantic baseline rule 2/3 is 361/383 (from 521/384).
+Composed native identity owns the worker pool and max-one relay sharing that yields a held command lease;
+terminal-closure growth binds a non-owner home role with leakproof indexable RLS after BEGIN. Preparing jobs own the
+prepare reservation.
+
 ## Acceptance
 
 The [capability acceptance](performance.capabilities.md) owns user cases and frozen scenarios. Use the

@@ -206,7 +206,10 @@ export function createApp({
         ...(action ? { action } : {}),
       });
       // Log hidden server failures, including unavailable native dependencies, never request content.
-      if (problem.status === 500 || (problem.status === 503 && !(error instanceof ProblemError))) {
+      if (
+        problem.status === 500 ||
+        (problem.status === 503 && (!(error instanceof ProblemError) || error.code === 'overloaded'))
+      ) {
         logInternalError({
           requestId: idFor(request),
           method: request.method,

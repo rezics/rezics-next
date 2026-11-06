@@ -15,6 +15,8 @@ import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import { createKernelRuntimeDefaults, decodeKey, required } from './composition/runtime-defaults.ts';
+import { composeSemanticDomain } from './composition/semantic.ts';
+import { bindDefaultSemanticDomain } from './semantic/adapters/index.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -152,6 +154,8 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const activeRequests = new Set<Promise<void>>();
   const boot = (async () => {
     await fillPool(pool);
+    const domain = composeSemanticDomain({ env: process.env });
+    if (domain) bindDefaultSemanticDomain(domain);
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);

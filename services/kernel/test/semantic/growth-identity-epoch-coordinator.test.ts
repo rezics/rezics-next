@@ -25,6 +25,7 @@ beforeAll(async () => {
   f = await cutoverFixture();
   db = await openGrowthDatabase(f.pool.options.connectionString);
   db.pool.options.max = 1;
+  db.pool.options.idleTimeoutMillis = 0;
   nativePool = db.pool;
   await installIdentityEpochBootstrap(nativePool);
   const env = workerTestEnv({

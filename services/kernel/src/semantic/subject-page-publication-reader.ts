@@ -1,5 +1,5 @@
 import type { CommandTransaction } from '../command/command.ts';
-import type { ImportedFieldGroup } from '../content/imported-contract.ts';
+import type { ContentImportedFieldGroup as ImportedFieldGroup } from './contract/domain-ports.ts';
 import { readFences } from '../content/source-fences.ts';
 import { readRelease } from './definitions.ts';
 import { subjectPageFacts, subjectPageSlot } from './subject-page-publication-native.ts';

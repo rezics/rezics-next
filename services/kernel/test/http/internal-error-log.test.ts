@@ -28,6 +28,9 @@ const app = createApp({ pool })
   .get('/unavailable', { detail: detail('probe.unavailable') }, () => {
     throw new AccessUnavailableError('overloaded');
   })
+  .get('/overloaded', { detail: detail('probe.overloaded') }, () => {
+    throw new ProblemError('overloaded');
+  })
   .get('/plain', { detail: detail('probe.plain') }, () => {
     throw new Error('plain failure');
   });
@@ -123,4 +126,18 @@ test('native dependency failures retain an internal cause without disclosing it 
   });
   expect(line.stack).toContain('Access unavailable: overloaded');
   expect(lines[0]![0]).not.toContain('query-secret');
+});
+
+test('an admission overload retains its producing stack in a private diagnostic', async () => {
+  const { response, text, lines } = await call('GET', '/overloaded');
+  expect(response.status).toBe(503);
+  expect(JSON.parse(text).code).toBe('overloaded');
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0]![0] as string)).toMatchObject({
+    event: 'dependency_unavailable',
+    route: '/overloaded',
+    name: 'ProblemError',
+    stack: expect.any(String),
+  });
+  expect(JSON.parse(text).stack).toBeUndefined();
 });

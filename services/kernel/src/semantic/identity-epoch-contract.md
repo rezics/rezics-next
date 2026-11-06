@@ -675,6 +675,15 @@ provisional and fails unavailable. The integrated Search and Library modules pre
 unavailable boundaries; neither supplies a completion ACK without native coverage. Real producer integration, the frozen real positive fixture and native
 publication/crash/growth evidence remain required; no native-tested coordinator revision is claimed.
 
+Decision: ordinary `createKernel` / `server` / `worker` install those participants through
+`composeSemanticIdentityParticipants` and `composeSemanticDomain` as `IdentityEpochParticipantPorts` on
+`SemanticDomainPorts.identityEpoch`. Library custody and Search currentness remain that version-1 pair; Rating
+review, Content lifecycle (batch cover reads and imported-tuple routing), hashing, routing and the fact store are
+the other installed adapters. Inward subject, summaries and bulk HTTP resolve Content lifecycle through
+`adapters/ports.ts`; they do not value-import the native cover adapter. Contract/core/application add no SQL. Cost
+stays on this document's identity-epoch derivations. Compact tests pin fake-port load and ordinary composition;
+native epoch growth remains later acceptance.
+
 ### Complete Library canonical coverage under the fixed participant
 
 The SAME version-1 `library-private-follow-counts` identity participant covers every canonical directory,

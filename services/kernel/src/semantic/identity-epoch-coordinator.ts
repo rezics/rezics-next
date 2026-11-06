@@ -13,6 +13,7 @@ import type {
   WaitIdentityEpochPublished,
 } from './identity-epoch-contract.ts';
 import type { IdentityEpochParticipantPorts, IdentityStepReceiptLocator } from './contract/identity-epoch-ports.ts';
+import { createIdentityCoordination, type IdentityCoordination } from './application/identity-coordination.ts';
 import {
   identityEpochNext,
   identityEpochReceiptLocator,
@@ -23,6 +24,7 @@ import {
 } from './core/identity-epoch-sequence.ts';
 import { stepIdentityEpochMapping } from './identity-epoch-mapping.ts';
 import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from './identity-adapters/index.ts';
+import { registeredSemanticDomain } from './adapters/registry.ts';
 import control from './identity-epoch-coordinator-control.sql';
 import { withReadTransaction } from './read.ts';
 
@@ -33,7 +35,7 @@ type Next = IdentityEpochNext;
 type WorkflowState = Readonly<{ status: string; nextSegment: number | null }> | null;
 type Installation = Readonly<{
   client: WorkContext['client'];
-  participants: IdentityEpochParticipantPorts<Pool> | null;
+  identity: IdentityCoordination<Pool> | null;
   read: (job: JobLocator) => Promise<Next>;
   status: (id: string) => Promise<WorkflowState>;
 }>;
@@ -114,11 +116,11 @@ function nativeReceipt(receipt: ReceiptLocator): IdentityStepReceipt {
   };
 }
 
-function installed(pool: Pool): Installation {
+function installed(pool: Pool): Installation & { identity: IdentityCoordination<Pool> } {
   const binding = installations.get(pool);
-  if (!binding?.participants)
+  if (!binding?.identity)
     throw unavailable('Fixed identity participants or trusted Search configuration are unavailable');
-  return binding;
+  return binding as Installation & { identity: IdentityCoordination<Pool> };
 }
 
 /** Trusted registration only. The composition root supplies the fixed participants; null leaves the coordinator
@@ -147,12 +149,10 @@ export function registerIdentityEpochCoordinator(
   const produce = DBOS.registerStep(
     async (job: JobLocator, step: IdentityStepName) => {
       const ref = nativeJob(job);
-      const binding = installed(context.pool);
+      const dispatched = installed(context.pool).identity.dispatch(step, stepIdentityEpochMapping);
+      if ('kind' in dispatched) throw unavailable('Identity coordinator received a control step');
       // The producer rereads its saved frontier and commits locally. Its home has been released on return.
-      const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
-        context.pool,
-        ref,
-      );
+      const progress = await dispatched.run(context.pool, ref);
       return { receipt: receiptLocator(ref, step, progress), state: progress.state };
     },
     { name: `${workflowName}.produce`, ...COMMAND_STEP_RETRIES },
@@ -217,7 +217,9 @@ export function registerIdentityEpochCoordinator(
     },
     { name: workflowName },
   );
-  installations.set(context.pool, Object.freeze({ client: context.client, participants, read, status }));
+  const domain = registeredSemanticDomain(context.pool);
+  const identity = domain?.identity ?? (participants ? createIdentityCoordination(participants) : null);
+  installations.set(context.pool, Object.freeze({ client: context.client, identity, read, status }));
 }
 
 /** Enqueue only the original saved identity. Returning from enqueue is never publication completion. */

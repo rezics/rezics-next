@@ -1,6 +1,6 @@
 import { partitionOf, routeOf, PARTITIONS } from '../route/route.ts';
 import type { CommandTransaction } from '../command/command.ts';
-import type { IdentityRatingReviewOperand } from '../semantic/index.ts';
+import type { IdentityRatingReviewOperand } from '../semantic/identity-core/index.ts';
 import reviewSlots from './own-votes-review.sql';
 
 export const VOTE_SCOPE = 'rating:vote';

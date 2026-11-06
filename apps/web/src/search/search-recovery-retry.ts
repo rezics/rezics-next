@@ -18,18 +18,18 @@ export function narrowSearchRetryAt(existing: number | undefined, incoming: numb
 
 /** Enable a manual action after the native delay, without fetching or polling. */
 export function useSearchRetryWait(retryAt?: number): boolean {
-  // SSR and the first hydrated render must agree even if the delay expired
-  // while the document and its scripts were travelling to the reader.
+  // Server rendering and the first hydration render must agree even if the delay expires in transit.
+  // Keep a supplied deadline waiting until the mounted effect samples the current clock.
   const [now, setNow] = useState<number>();
   useEffect(() => {
+    if (retryAt === undefined) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const settle = () => {
+    const update = () => {
       const current = Date.now();
       setNow(current);
-      if (retryAt !== undefined && retryAt > current)
-        timer = setTimeout(settle, Math.min(retryAt - current, 2_147_483_647));
+      if (retryAt > current) timer = setTimeout(update, Math.min(retryAt - current, 2_147_483_647));
     };
-    settle();
+    update();
     return () => clearTimeout(timer);
   }, [retryAt]);
   return retryAt !== undefined && (now === undefined || retryAt > now);

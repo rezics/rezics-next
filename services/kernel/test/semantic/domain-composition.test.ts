@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
+import { composeSemanticDomain, composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
+import { contentLifecycleOf } from '../../src/semantic/adapters/index.ts';
 import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
 import { createIdentityEpochParticipants } from '../../src/semantic/application/identity-epoch-participants.ts';
 import type { IdentityJobRef, IdentityStepProgress } from '../../src/semantic/contract/identity-values.ts';
@@ -170,27 +171,58 @@ test('workflow identifiers are stable per job and distinct per continuation segm
 
 test('ordinary composition binds the real Search and Library participants and stays unavailable without Search configuration', () => {
   expect(composeSemanticIdentityParticipants({ env: {} })).toBeNull();
+  expect(composeSemanticDomain({ env: {} })).toBeNull();
+  expect(contentLifecycleOf().importedTupleRoute).toBeTypeOf('function');
   const routeKey = Buffer.alloc(32, 7).toString('base64url');
-  const participants = composeSemanticIdentityParticipants({
-    env: { OPENSEARCH_URL: 'http://127.0.0.1:9200', KERNEL_ROUTE_KEY: routeKey },
-  });
+  const env = { OPENSEARCH_URL: 'http://127.0.0.1:9200', KERNEL_ROUTE_KEY: routeKey };
+  const participants = composeSemanticIdentityParticipants({ env });
   expect(participants).not.toBeNull();
   expect(Object.isFrozen(participants)).toBe(true);
   expect(participants?.['library-private-follow-counts']).toBe(stepLibraryIdentityEpoch);
   expect(typeof participants?.['search-canonical-index']).toBe('function');
+  const domain = composeSemanticDomain({ env });
+  expect(domain).not.toBeNull();
+  expect(domain?.version).toBe(1);
+  expect(domain?.ports.identityEpoch['library-private-follow-counts']).toBe(stepLibraryIdentityEpoch);
+  expect(domain?.ports.contentLifecycle.importedTupleRoute(new Uint8Array(32), 'vndb', 'v1')).toBeTypeOf('number');
+  expect(domain?.ports.contentLifecycle.checkCovers).toBeTypeOf('function');
+  expect(domain?.ports.ratingReview.identityEpochChanged().name).toBe('VoteReviewStaleError');
+  expect(domain?.ports.hashing.sha256Hex('a')).toHaveLength(64);
+  expect(Object.keys(domain!.ports).sort()).toEqual([
+    'contentLifecycle',
+    'facts',
+    'hashing',
+    'identityEpoch',
+    'libraryCustody',
+    'ratingReview',
+    'routing',
+    'searchCurrentness',
+    'version',
+  ]);
 });
 
-test('contract, core and application sources import only their own layers', () => {
+test('inward subject and summary adapters do not value-import native Content lifecycle', () => {
+  const semantic = fileURLToPath(new URL('../../src/semantic/', import.meta.url));
+  const forbidden = /from ['"][^'"]*adapters\/content-lifecycle\.ts['"]/;
+  const violations = ['subject.ts', 'summaries.ts', 'http/bulk.ts'].filter((file) =>
+    forbidden.test(readFileSync(`${semantic}${file}`, 'utf8')),
+  );
+  expect(violations).toEqual([]);
+});
+
+test('contract, core and application sources import only their own layers, identity-core and Definitions', () => {
   const semantic = fileURLToPath(new URL('../../src/semantic/', import.meta.url));
   const layers = ['contract', 'core', 'application'];
   const local = /^\.\/[\w-]+\.ts$/;
-  const sibling = new RegExp(`^\\.\\./(${layers.join('|')})/[\\w-]+\\.ts$`);
+  const sibling = new RegExp(`^\\.\\./(${layers.join('|')}|identity-core)/[\\w-]+\\.ts$`);
+  const allowed = /^(?:@rezics\/definitions(?:\/validate)?)$/;
   const violations: string[] = [];
   for (const layer of layers) {
     for (const file of readdirSync(`${semantic}${layer}`).filter((name) => name.endsWith('.ts'))) {
       const source = readFileSync(`${semantic}${layer}/${file}`, 'utf8');
       for (const [, specifier] of source.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
-        if (!local.test(specifier!) && !sibling.test(specifier!)) violations.push(`${layer}/${file} -> ${specifier}`);
+        if (!local.test(specifier!) && !sibling.test(specifier!) && !allowed.test(specifier!))
+          violations.push(`${layer}/${file} -> ${specifier}`);
       }
     }
   }

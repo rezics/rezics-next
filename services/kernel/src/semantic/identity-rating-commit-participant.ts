@@ -2,7 +2,12 @@ import { memoizedValue } from '../memoized.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
-import { VoteReviewStaleError, VoteReviewUnavailableError } from '../rating/own-votes-review.ts';
+import { ratingReviewOf, VoteReviewUnavailableError } from './adapters/rating-review.ts';
+import {
+  IDENTITY_RATING_REVIEW_MAX_CONTROL_LOCATORS,
+  IDENTITY_RATING_REVIEW_MAX_KEYS,
+  IDENTITY_RATING_REVIEW_MAX_OPERAND_BYTES,
+} from './identity-core/rating-review-bounds.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   classifyIdentityRatingReviewEvidence,
@@ -15,9 +20,9 @@ import {
 } from './identity-adapters/identity-epoch-read.ts';
 import lockOwner from './identity-rating-commit-participant-lock-owner.sql';
 
-const MAX_REVIEW_KEYS = 2;
-const MAX_REVIEW_CONTROL_LOCATORS = 2;
-const MAX_REVIEW_OPERAND_BYTES = 16_384;
+const MAX_REVIEW_KEYS = IDENTITY_RATING_REVIEW_MAX_KEYS;
+const MAX_REVIEW_CONTROL_LOCATORS = IDENTITY_RATING_REVIEW_MAX_CONTROL_LOCATORS;
+const MAX_REVIEW_OPERAND_BYTES = IDENTITY_RATING_REVIEW_MAX_OPERAND_BYTES;
 const U64_MAX = 18_446_744_073_709_551_615n;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DECIMAL = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -524,7 +529,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         operand.sourceHomes,
         native.evidence,
       );
-      if (reviewed.state === 'changed') throw new VoteReviewStaleError('subject_changed');
+      if (reviewed.state === 'changed') throw ratingReviewOf().subjectChanged();
       // A withdrawn/replaced directory can make the new cut unclassifiable while
       // its source epoch stays unchanged. It still invalidates this exact review.
       if (
@@ -532,7 +537,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         reviewed.reason !== 'missing-owner' &&
         identityRatingReviewEvidence(native.evidence) !== operand.evidence
       )
-        throw new VoteReviewStaleError('identity_epoch_changed');
+        throw ratingReviewOf().identityEpochChanged();
       if (reviewed.state !== 'reviewed') throwUnavailable(reviewed);
       if (
         reviewed.operand.evidence !== operand.evidence ||
@@ -545,7 +550,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
             locator.group !== operand.controlLocators[index]?.group,
         )
       )
-        throw new VoteReviewStaleError('identity_epoch_changed');
+        throw ratingReviewOf().identityEpochChanged();
       requireAccessDeadline(deadline);
       const publishedHeads = operand.controlLocators.map((locator) => {
         const row = native.evidence.mapping.currentRows.find(

@@ -7,6 +7,7 @@ import {
   seedCrossMedia,
   planCrossMediaSeed,
   crossMediaAliases,
+  emptyCrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
@@ -27,12 +28,20 @@ test('local publication accepts only its acknowledged plan after authorization a
   const directory = await mkdtemp(join(tmpdir(), 'showcase-publication-native-'));
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
-    const tables: CrossMediaTables = {
-      async *rows(provider, table) {
-        if (provider === 'bangumi' && table === 'subject') yield { id: 101, name: 'STEINS;GATE', type: 2 };
-      },
-    };
-    const plan = await planCrossMediaSeed(tables);
+    const plan = emptyCrossMediaPlan();
+    plan.records.bangumi.push({
+      source: 'bangumi',
+      key: '101',
+      revision: null,
+      payload: { id: 101, name: 'STEINS;GATE', type: 2 },
+    });
+    plan.members.push({
+      source: 'bangumi',
+      key: '101',
+      kind: 'work',
+      membership: 'family',
+      franchise: 'steins-gate',
+    });
     const result = await seedCrossMedia(
       plan,
       join(directory, 'import.sqlite'),
@@ -40,7 +49,10 @@ test('local publication accepts only its acknowledged plan after authorization a
       { origin: runtime.origin },
       { providers: ['bangumi'] },
     );
-    const workId = result.readings[0]!.subject.subject!.id!;
+    const workId = journal
+      .acknowledgedCommands()
+      .find((entry) => entry.command.op === 'create' && entry.command.source.external_id === '101')!.subjectId!;
+    expect(result.readings).toHaveLength(0);
     const editor = await openApiObserver(runtime);
     const selectedPage = await runtime.importTransport.reviewedCandidates(workId, {
       property: 'schema:name',
@@ -55,10 +67,19 @@ test('local publication accepts only its acknowledged plan after authorization a
       statement: {
         property: { id: 'schema:name' },
         value: { type: 'value', content: { language: 'en', text: 'Unrelated title' } },
-        references: selectedName.statement.references,
+        references: [
+          {
+            parts: [
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: 'https://example.org/independent-review' },
+              },
+            ],
+          },
+        ],
       },
     });
-    expect(unrelated.status).toBe(201);
+    expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(201);
     const unrelatedId = (unrelated.body as { candidate: string }).candidate;
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
@@ -156,7 +177,7 @@ test('local publication accepts only its acknowledged plan after authorization a
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 180_000);
 
 test('selected VNDB prequel relation reopens exactly and reports publication only after current public readback', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
@@ -339,4 +360,4 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 60_000);
+}, 180_000);

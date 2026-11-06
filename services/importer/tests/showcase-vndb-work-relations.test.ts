@@ -37,7 +37,13 @@ test('selected VNDB relation handoff keeps mapped direction, cited source and ex
       if (table === 'vn_titles') {
         yield { id: 'v4', lang: 'en', official: 't', title: 'CLANNAD', latin: null };
         yield { id: 'v7983', lang: 'en', official: 't', title: 'Clannad -The Past Path-', latin: null };
-        yield { id: 'v2002', lang: 'en', official: 't', title: 'STEINS;GATE', latin: null };
+        yield {
+          id: 'v2002',
+          lang: 'en',
+          official: 't',
+          title: 'Selected title outside the franchise catalogue',
+          latin: null,
+        };
         yield { id: 'v17102', lang: 'en', official: 't', title: 'STEINS;GATE side story', latin: null };
       }
       if (table === 'vn') {
@@ -58,6 +64,8 @@ test('selected VNDB relation handoff keeps mapped direction, cited source and ex
   const plan = await planCrossMediaSeed(tables, {
     selection: { bangumi: [51], vndb: ['v4', 'v7983', 'v2002', 'v17102'], includeReleases: false },
   });
+  expect(plan.records.vndb.map((record) => record.key)).toContain('v2002');
+  expect(plan.franchises['steins-gate'].vndb).not.toContain('v2002');
   const edges = plan.edges.filter((edge) => edge.source === 'vndb' && edge.table === 'vn_relations');
   expect(edges).toHaveLength(2);
   const edge = edges[0]!;

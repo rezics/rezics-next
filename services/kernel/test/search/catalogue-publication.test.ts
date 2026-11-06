@@ -27,6 +27,10 @@ function allowance(keys = 32): WorkAllowance {
   };
 }
 
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function hit(id: string, index: string) {
   return {
     _id: id,
@@ -34,6 +38,10 @@ function hit(id: string, index: string) {
     _source: { partition: partitionOf(routeOf(id)!), security_revision: 1 },
     sort: [id],
   };
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function catalogueClient(options: {

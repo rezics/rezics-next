@@ -209,6 +209,81 @@ export async function atBoundary<T>(
   }
 }
 
+function statementOf(args: unknown[]): { sql: string; values: unknown[] } {
+  const params = args.filter((arg) => typeof arg !== 'function');
+  const head = params[0];
+  if (typeof head === 'string') return { sql: head, values: Array.isArray(params[1]) ? params[1] : [] };
+  if (head && typeof head === 'object' && typeof (head as { text?: unknown }).text === 'string') {
+    const config = head as { text: string; values?: unknown };
+    if (Array.isArray(config.values)) return { sql: config.text, values: config.values };
+    if (Array.isArray(params[1])) return { sql: config.text, values: params[1] };
+    if (config.values && typeof config.values === 'object') {
+      const named = config.values as Record<string, unknown>;
+      const partition = named.partition_no ?? named.partition;
+      return { sql: config.text, values: typeof partition === 'number' ? [partition] : [] };
+    }
+  }
+  return { sql: '', values: [] };
+}
+
+function homeOf(values: unknown[]): number {
+  const first = values[0];
+  const partition = Array.isArray(first) ? first[0] : first;
+  if (typeof partition !== 'number' || partition < 0 || partition > 4095)
+    throw new Error('Native transaction did not identify its home before protected access');
+  if (Array.isArray(first)) expect(new Set(first).size).toBe(1);
+  return partition;
+}
+
+function homePolicy(key: string): string {
+  // current_setting() in the policy itself is not a planner constant; the leakproof wrapper is.
+  if (key === 'partition_no') return 'partition_no=semantic.terminal_test_home()';
+  return `route >= semantic.terminal_test_home() * 16 AND route < (semantic.terminal_test_home() + 1) * 16`;
+}
+
+function bindHomeQuery(client: PoolClient, original: PoolClient['query'], role: string, partition: number) {
+  return Promise.resolve(Reflect.apply(original, client, [`SET LOCAL ROLE ${role}`])).then(() =>
+    Reflect.apply(original, client, ["SELECT set_config('terminal_test.home',$1,true)", [String(partition)]]),
+  );
+}
+
+/** Preserve pg's callback and Query overloads. An async wrapper drops Pool.query's done() and leaks the lease. */
+function wrapHomeQuery(
+  client: PoolClient,
+  original: PoolClient['query'],
+  role: string,
+  onBound: () => void,
+): PoolClient['query'] {
+  let inTransaction = false;
+  let bound = false;
+  return function wrapped(this: PoolClient, ...args: unknown[]) {
+    const { sql, values } = statementOf(args);
+    if (/^BEGIN\b/i.test(sql)) {
+      inTransaction = true;
+      bound = false;
+    } else if (/^(COMMIT|ROLLBACK)\b/i.test(sql)) {
+      inTransaction = false;
+      bound = false;
+    }
+    const dispatch = () => Reflect.apply(original, client, args);
+    if (!inTransaction || bound || !/(?:core\.partition|semantic\.identity_epoch_)/.test(sql)) return dispatch();
+    const partition = homeOf(values);
+    const callback =
+      typeof args.at(-1) === 'function' ? (args.at(-1) as (error: unknown, result?: unknown) => unknown) : undefined;
+    const work = bindHomeQuery(client, original, role, partition).then(() => {
+      bound = true;
+      onBound();
+      return dispatch();
+    });
+    if (!callback) return work;
+    void work.then(
+      () => {},
+      (error) => callback(error),
+    );
+    return undefined;
+  } as PoolClient['query'];
+}
+
 /** PostgreSQL, including nested functions, enforces one home per transaction.
  * The role has no owner/superuser/RLS bypass; each BEGIN must bind a new home.
  */
@@ -219,42 +294,34 @@ export async function isolatedDeployment() {
   const saved = new Map<PoolClient, PoolClient['query']>();
   let enforcedTransactions = 0;
   const acquire = (client: PoolClient) => {
-    if (saved.has(client)) return;
-    const query = client.query;
+    const query = saved.get(client) ?? client.query;
     saved.set(client, query);
-    let bound = false;
-    client.query = async function (...args: unknown[]) {
-      const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
-      if (/^BEGIN\b/.test(sql)) bound = false;
-      if (!bound && /(?:core\.partition|semantic\.identity_epoch_)/.test(sql)) {
-        const parameters = args[1] as unknown[] | undefined;
-        const first = parameters?.[0];
-        const partition = Array.isArray(first) ? first[0] : first;
-        if (typeof partition !== 'number' || partition < 0 || partition > 4095)
-          throw new Error('Native transaction did not identify its home before protected access');
-        if (Array.isArray(first)) expect(new Set(first).size).toBe(1);
-        await Reflect.apply(query, client, [`SET LOCAL ROLE ${role}`]);
-        await Reflect.apply(query, client, ["SELECT set_config('terminal_test.home',$1,true)", [String(partition)]]);
-        bound = true;
-        enforcedTransactions++;
-      }
-      return Reflect.apply(query, client, args);
-    } as PoolClient['query'];
+    client.query = wrapHomeQuery(client, query, role, () => {
+      enforcedTransactions++;
+    });
   };
   return {
     ...db,
     async install() {
       expect((await installIdentityEpochBootstrap(db.pool)).mode).toBe('legacy');
       await db.admin.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOBYPASSRLS`);
-      await db.admin.query(`GRANT USAGE ON SCHEMA semantic,core,editorial TO ${role}`);
+      await db.admin.query(`CREATE OR REPLACE FUNCTION semantic.terminal_test_home() RETURNS integer
+        LANGUAGE sql STABLE LEAKPROOF PARALLEL SAFE
+        AS $$ SELECT current_setting('terminal_test.home', true)::integer $$`);
+      await db.admin.query(`GRANT USAGE ON SCHEMA semantic,core,editorial,access,library TO ${role}`);
       await db.admin.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA semantic,core TO ${role}`);
+      await db.admin.query(`GRANT SELECT ON ALL TABLES IN SCHEMA access,editorial,library TO ${role}`);
       await db.admin.query(`GRANT SELECT,INSERT ON editorial.write_basis TO ${role}`);
-      await db.admin.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA semantic,core TO ${role}`);
+      await db.admin.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA semantic,core,access,editorial TO ${role}`);
+      await db.admin.query(
+        `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA semantic,core,access,editorial,library TO ${role}`,
+      );
+      await db.admin.query(`GRANT EXECUTE ON FUNCTION semantic.terminal_test_home() TO ${role}`);
       const protectedTables = (
         await db.admin.query<{ schema: string; name: string; key: string }>(`
           SELECT n.nspname schema,c.relname name,
             CASE WHEN EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attname='partition_no')
-              THEN 'partition_no' ELSE 'route / 16' END key
+              THEN 'partition_no' ELSE 'route' END key
           FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE c.relkind='r' AND (
             (n.nspname='semantic' AND (c.relname LIKE 'identity_epoch_%'
@@ -265,10 +332,11 @@ export async function isolatedDeployment() {
         `)
       ).rows;
       for (const table of protectedTables) {
+        const predicate = homePolicy(table.key);
         await db.admin.query(`ALTER TABLE ${table.schema}.${table.name} ENABLE ROW LEVEL SECURITY`);
         await db.admin.query(`CREATE POLICY terminal_native_home ON ${table.schema}.${table.name} TO ${role}
-          USING (${table.key}=current_setting('terminal_test.home')::integer)
-          WITH CHECK (${table.key}=current_setting('terminal_test.home')::integer)`);
+          USING (${predicate})
+          WITH CHECK (${predicate})`);
         tables.push(table);
       }
       db.pool.on('acquire', acquire);
@@ -283,6 +351,7 @@ export async function isolatedDeployment() {
             await db.admin.query(`DROP POLICY terminal_native_home ON ${table.schema}.${table.name}`);
             await db.admin.query(`ALTER TABLE ${table.schema}.${table.name} DISABLE ROW LEVEL SECURITY`);
           }
+          await db.admin.query(`DROP FUNCTION IF EXISTS semantic.terminal_test_home()`);
           await db.admin.query(`DROP OWNED BY ${role}`);
           await db.admin.query(`DROP ROLE ${role}`);
         }

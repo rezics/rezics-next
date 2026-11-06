@@ -1,10 +1,30 @@
 import type { Pool } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import { NestedPoolCheckoutError, withConnection } from '../database/pool.ts';
 import scanPartitions from './scan-partitions.sql';
 import upsertConsumerLag from './upsert-consumer-lag.sql';
 import type { BatchResult } from './log.ts';
 
 export type Relay = { consumer: string; run(partition: number): Promise<BatchResult> };
+
+/** Default in-flight relay homes. A max-one pool shares its only connection; larger pools keep one slot free. */
+export function relayConcurrencyForPool(pool: Pool): number {
+  const max = pool.options.max ?? 10;
+  if (!Number.isInteger(max) || max < 1) return 1;
+  return max <= 1 ? 1 : Math.min(4, max - 1);
+}
+
+/** A command already holds the only connection; do not queue behind it until the next interval. */
+function maxOnePoolBusy(pool: Pool): boolean {
+  const max = pool.options.max ?? 10;
+  return max <= 1 && (pool.waitingCount > 0 || (pool.totalCount > 0 && pool.idleCount === 0));
+}
+
+function isPoolAcquireTimeout(error: unknown): boolean {
+  return (
+    error instanceof NestedPoolCheckoutError ||
+    (error instanceof Error && /timeout exceeded when trying to connect/i.test(error.message))
+  );
+}
 
 export function startRelays(
   pool: Pool,
@@ -12,9 +32,13 @@ export function startRelays(
   options: { intervalMs?: number; concurrency?: number; paused?: boolean } = {},
 ) {
   const intervalMs = options.intervalMs ?? 100;
-  const concurrency = options.concurrency ?? 4;
+  const max = pool.options.max ?? 10;
+  const concurrency = options.concurrency ?? relayConcurrencyForPool(pool);
   if (!Number.isInteger(intervalMs) || intervalMs < 1) throw new RangeError('intervalMs must be a positive integer');
-  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency >= pool.options.max!) {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new RangeError('concurrency must be a positive integer below the pool size');
+  }
+  if (max <= 1 ? concurrency !== 1 : concurrency >= max) {
     throw new RangeError('concurrency must be a positive integer below the pool size');
   }
   let paused = options.paused ?? false;
@@ -53,7 +77,8 @@ export function startRelays(
         if (result.status === 'busy' || result.envelopes === 0) return;
       }
     } catch (error) {
-      console.error(`Relay ${relay.consumer} failed on partition ${partition}`, error);
+      if (!(max <= 1 && isPoolAcquireTimeout(error)))
+        console.error(`Relay ${relay.consumer} failed on partition ${partition}`, error);
     } finally {
       inFlight.delete(identity);
       active--;
@@ -65,6 +90,7 @@ export function startRelays(
     if (stopped || paused || ticking) return;
     ticking = true;
     try {
+      if (maxOnePoolBusy(pool)) return;
       for (const relay of relays) {
         const partitions = await withConnection(pool, async (client) => {
           const rows = await scanPartitions.run(client, { consumer: relay.consumer });
@@ -91,7 +117,7 @@ export function startRelays(
         }
       }
     } catch (error) {
-      console.error('Relay partition scan failed', error);
+      if (!(max <= 1 && isPoolAcquireTimeout(error))) console.error('Relay partition scan failed', error);
     } finally {
       ticking = false;
       notifyIdle();
