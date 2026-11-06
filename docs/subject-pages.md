@@ -2819,7 +2819,8 @@ tests, and the existing 105-target fixture is written as native statements with 
 use released dates, contents use native names, and credits retain released position qualifiers. Recipe and game
 release templates expose their released descriptive properties. Relation previews reuse the current Subject, while
 full views retain separate forward and inverse windows. Unsupported calendars, precision and uncertainty no longer
-produce a Gregorian date in the public title or compact frame.
+produce a Gregorian date in the public title or compact frame. Forward relation previews are declared on work-like
+templates only, and the stream directory reads the relation labels it needs without importing Subject internals.
 
 Dates remain single-valued: a competing sourced candidate never replaces the selected date. Candidate comparison opens
 only after a current signed-in reading; Changes shows the native revision trail without putting private review data
