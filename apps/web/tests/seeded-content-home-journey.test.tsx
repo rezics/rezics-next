@@ -43,7 +43,6 @@ const readerId = 'reader-1';
 const spaceId = '00000000-0000-7000-8000-000000000002';
 const collectionId = '00000000-0000-7000-8000-0000000000c1';
 const memberId = '00000000-0000-7000-8000-0000000000b1';
-const threadId = '00000000-0000-7000-8000-0000000000e1';
 const standardQuestion = {
   id: '00000000-0000-7000-8000-000000000001',
   revision: 1,
@@ -52,7 +51,7 @@ const standardQuestion = {
   meaning: 'Overall',
 };
 
-/** The seeded persona's Home page: a discovery Collection with installed facts, an admitted work and a discussion. */
+/** The seeded persona's Home page: a discovery Collection with installed facts and an admitted work. */
 function seededPage(): FeedPage {
   const work = homeFeedStoryPage('en', true, 'mixed').feedItems.find((item) => admittedFeedWorkId(item));
   if (!work) throw new Error('The Home story fixture must supply an admitted work row');
@@ -88,33 +87,11 @@ function seededPage(): FeedPage {
     },
     destination: { kind: 'collection', id: collectionId, title: 'Seeded shelf' },
   };
-  const discussion: FeedItem = {
-    id: `following:content:${threadId}`,
-    source: 'following',
-    occurredAt: null,
-    key: { owner: 'content', kind: 'thread', route: 0, id: threadId },
-    summary: {
-      id: threadId,
-      kind: 'discussion',
-      title: 'Seeded discussion',
-      createdAt: '2026-11-04T00:00:00Z',
-      reactionTarget: { targetKind: 'thread', targetId: threadId },
-      reactions: { upvote: 2 },
-      viewerReaction: null,
-      reactionAdvice: {
-        target: { targetKind: 'thread', targetId: threadId },
-        state: 'current',
-        allowed: ['upvote'],
-      },
-    },
-    destination: { kind: 'thread', id: threadId, title: 'Seeded discussion' },
-  };
   return {
-    feedItems: [collection, work, discussion],
+    feedItems: [collection, work],
     next: null,
     asOf: '2026-11-04T00:00:00Z',
-    reactionsAsOf: { epoch: 1, position: '2' },
-    sources: { discovery: 'ready', following: 'ready', continue: 'not_requested' },
+    sources: { discovery: 'ready', following: 'not_requested', continue: 'not_requested' },
   };
 }
 
@@ -215,8 +192,7 @@ test('seeded Home persona journey: public Collection facts show to everyone, pri
   expect(host.querySelector('[data-collection-member-id]')).not.toBeNull();
   expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
 
-  // Signed-in reader: the same page now also carries the reader's own facts. Reaction advice is covered by its own
-  // focused Home receiver test, because a consumer mount needs the healthy session probe that tests do not supply.
+  // Signed-in reader: the same page now also carries the reader's own facts.
   await paint(journey('signed-in', withPersonalFacts(page), readerId));
   expect(host.querySelector('[data-slot="home-work-library-entry"]')?.textContent).toContain(
     m.library_other({}, { locale: 'en' }),
