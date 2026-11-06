@@ -24,6 +24,13 @@ export function importLibraryLabels(page: ImportLibraryPage, locale: string, rel
   });
 }
 
+type CurrentViewerFacts = Extract<NonNullable<ImportLibraryPage['viewerFacts']>, { state: 'current' }>;
+
+function currentViewerFacts(page: ImportLibraryPage): CurrentViewerFacts | undefined {
+  const facts = page.viewerFacts;
+  return facts?.state === 'current' ? facts : undefined;
+}
+
 export type ImportLibraryRow = {
   /** Local occurrence key includes page position; two entries for one disclosed Subject are distinct rows. */
   key: string;
@@ -34,8 +41,8 @@ export type ImportLibraryRow = {
   state: string;
   stateLanguage?: string;
   progress: ProgressView | null;
-  vote: NonNullable<ImportLibraryPage['viewerFacts']>['rows'][number]['vote'] | null;
-  voteQuestion: NonNullable<ImportLibraryPage['viewerFacts']>['question'];
+  vote: CurrentViewerFacts['rows'][number]['vote'] | null;
+  voteQuestion: CurrentViewerFacts['question'];
 };
 
 /** Only current facts supplied by this FULL page participate. No source XML, receipts or point reads. */
@@ -44,6 +51,7 @@ export function importLibraryRows(
   locale: string,
   labels?: readonly ImportLibraryLabels[],
 ): ImportLibraryRow[] {
+  const facts = currentViewerFacts(page);
   return page.libraryEntries.map((entry, index) => {
     const subject = subjectOf(entry.subject);
     const title = subject
@@ -58,8 +66,8 @@ export function importLibraryRows(
       state: labels?.[index]?.state ?? m.library_other({}, { locale: locale as Locale }),
       ...(labels?.[index]?.stateLanguage ? { stateLanguage: labels[index]!.stateLanguage } : {}),
       // The native projection preserves input occurrence order, including repeated Subjects.
-      vote: page.viewerFacts?.rows[index]?.vote ?? null,
-      voteQuestion: page.viewerFacts?.question ?? null,
+      vote: facts?.rows[index]?.vote ?? null,
+      voteQuestion: facts?.question ?? null,
       progress: progressView('activeProgressSession' in entry ? (entry.activeProgressSession ?? null) : null, locale),
     };
   });

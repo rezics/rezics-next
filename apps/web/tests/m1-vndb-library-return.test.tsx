@@ -332,6 +332,7 @@ test('refused apply and foreign receipts retain original operands; source replac
       baseline: null,
       replace: false,
       action: 'state' as const,
+      progress: null,
     },
   };
   const journey = createVndbJourney({
@@ -599,7 +600,10 @@ test('fresh native vote projection keeps zero, absence and unavailable distinct 
         rowKey: `occurrence-${index}`,
         subjectId: first.subjectId,
         entry: { state: 'absent' },
-        vote: vote as NonNullable<ImportLibraryPage['viewerFacts']>['rows'][number]['vote'],
+        vote: vote as Extract<
+          NonNullable<ImportLibraryPage['viewerFacts']>,
+          { state: 'current' }
+        >['rows'][number]['vote'],
       })),
     },
   };
@@ -617,4 +621,28 @@ test('fresh native vote projection keeps zero, absence and unavailable distinct 
     expect(html).toContain('The current vote could not be read.');
     expect(html).not.toContain('Ratings are not included');
   }
+});
+
+test('non-current viewer facts omit vote rows while keeping disclosed Library entries in occurrence order', async () => {
+  setLocale('en', { reload: false });
+  const first = nativePage.libraryEntries[0]!;
+  const second = nativePage.libraryEntries[1]!;
+  const page: ImportLibraryPage = {
+    libraryEntries: [first, second],
+    next: null,
+    viewerFacts: { state: 'unavailable', reason: 'currentness', retryable: true },
+  };
+  const rows = importLibraryRows(page, 'en');
+  expect(rows.map((row) => row.entry.subjectId)).toEqual([first.subjectId, second.subjectId]);
+  expect(rows.map((row) => [row.vote, row.voteQuestion])).toEqual([
+    [null, null],
+    [null, null],
+  ]);
+  const html = await render(
+    <ImportLibraryView result={{ state: 'current', page }} layout="list" busy={false} onRead={nothing} />,
+  );
+  expect(html.match(/data-vndb-current-entry=/g)).toHaveLength(2);
+  expect(html.match(/data-vndb-native-vote="unavailable"/g)).toHaveLength(2);
+  expect(html).not.toContain('Current vote: 0 units');
+  expect(html).not.toContain('There is no current vote.');
 });

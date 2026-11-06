@@ -108,11 +108,13 @@ test('reopening reads retained decisions without another upload or mutation and 
     baseline: null,
     replace: false,
     action: 'state',
+    progress: null,
   };
   const { journey, calls } = setup([completed, authoredRow(1)]);
   const snap = await journey.reopen(address);
   expect(calls).toEqual([{ kind: 'page', ...address }]);
   expect(snap.outcomes).toEqual([{ ordinal: 0, reviewId, status: 'applied' }]);
+  expect(snap.page?.rows[0]?.decision?.progress).toBeNull();
   expect(snap.settledEffects[0]?.targetId).toBe(targetId);
   expect(snap.selectedEffects).toBe(0);
   expect(snap.page?.rows[1]?.match.status).toBe('unmatched');
@@ -129,6 +131,7 @@ test('a reopened in-flight decision reconciles the original review and freezes a
     baseline: null,
     replace: true,
     action: 'state',
+    progress: null,
   };
   const attempts: VndbCommand[] = [];
   const { journey } = setup([source], {
@@ -234,6 +237,7 @@ test('review keeps an explicit unmatched target selectable only while native rea
     baseline: null,
     replace: false,
     action: 'state',
+    progress: null,
   };
   source.target = { targetId, states: [{ id: 'playing', labels: { en: 'Playing' } }], baseline: null };
   const render = () =>
@@ -267,6 +271,7 @@ test('an explicit match refreshes the native target and vote without replacing t
     baseline: null,
     replace: false,
     action: 'state' as const,
+    progress: null,
   };
   const commands: VndbCommand[] = [];
   const { journey, page } = setup([source], {
@@ -293,5 +298,6 @@ test('an explicit match refreshes the native target and vote without replacing t
   expect(snap.page?.rows[0]?.nativeScore.currentVote).toMatchObject({ state: 'set', units: 0 });
   expect(snap.page?.rows[0]?.match.status).toBe('unmatched');
   expect(snap.page?.rows[0]?.decision).toEqual(decision);
+  expect(snap.page?.rows[0]?.decision?.progress).toBeNull();
   expect(snap.selectedEffects).toBe(1);
 });
