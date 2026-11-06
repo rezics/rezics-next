@@ -713,6 +713,45 @@ test('cancel then restart reuses the original archive text under a new upload ke
     expect(uploads[1]!.body).toBe(raw);
     expect(uploads[1]!.key).not.toBe(uploads[0]!.key);
     expect(f.journey.snapshot().state!.upload?.id).toBe(id);
+    f.journey.retire();
+    expect(f.journey.snapshot().hasOriginalArchive).toBe(false);
+  } finally {
+    f.journey.retire();
+  }
+});
+
+test('reviewable provenance uses observation identity and preserve fields, never assignment controls', async () => {
+  const f = fixture();
+  try {
+    const row: ArchiveRow = {
+      ordinal: 6,
+      section: 'provenance',
+      status: 'unresolved',
+      review: null,
+      reviewRevision: 0,
+      evidence: {
+        subjectId,
+        observation: {
+          provider: 'vndb',
+          recordId: 'v1',
+          privacy: { status: 'unknown' },
+          sourceCreated: { status: 'absent' },
+          sourceUpdated: { status: 'cleared' },
+        },
+      },
+    };
+    f.pages(new Map([[-1, previewPage([row], null)]]), new Map());
+    await f.journey.upload(new File(['{}'], 'original-v4.json'));
+    const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />);
+    expect(html).toContain('archive-observation-6');
+    expect(html).toContain('name="revision"');
+    expect(html).toContain('name="privacy"');
+    expect(html).toContain('name="sourceCreated"');
+    expect(html).toContain('name="sourceUpdated"');
+    expect(html).toContain('value="preserve" selected');
+    expect(html).not.toContain('value="assign"');
+    expect(html).not.toContain('name="labelId"');
+    expect(f.journey.snapshot().state!.choices).toEqual([]);
   } finally {
     f.journey.retire();
   }

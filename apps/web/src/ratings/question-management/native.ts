@@ -1,9 +1,4 @@
-import { createKernelClient } from '@rezics/client';
-import { Value } from 'typebox/value';
-import {
-  QuestionManagementResponseSchema,
-  RatingQuestionLabelHistorySchema,
-} from '../../../../../services/kernel/src/rating/schemas.ts';
+import { createKernelClient, decodeQuestionManagementPage, decodeQuestionLabelHistory } from '@rezics/client';
 import { requestLanguages } from '../../kernel/languages';
 import { parseQuestionManagementIntent } from './intent';
 import type {
@@ -137,8 +132,8 @@ export async function readQuestionManagementSource(input: {
   try {
     const body = await boundedBody(response);
     const source: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
-    if (!Value.Check(QuestionManagementResponseSchema(), source)) return { state: 'unavailable' };
-    const page = source as QuestionManagementPageData;
+    const page = decodeQuestionManagementPage(source);
+    if (!page) return { state: 'unavailable' };
     if (
       page.realmId !== input.address.realmId ||
       page.directory.ratingQuestions.some((question) => question.realmId !== input.address.realmId) ||
@@ -186,15 +181,15 @@ export async function createQuestionManagementClient(input: {
         query: { limit: 20, ...(cursor === null ? {} : { cursor }) },
       });
       if (result.status === 409) return unavailable('stale-cursor');
-      if (result.status !== 200 || !Value.Check(RatingQuestionLabelHistorySchema, result.data))
-        return unavailable('unavailable');
+      const page = result.status === 200 ? decodeQuestionLabelHistory(result.data) : null;
+      if (!page) return unavailable('unavailable');
       if (
-        result.data.labels.length > 20 ||
-        (result.data.next !== null && result.data.next.length > 4096) ||
-        result.data.labels.some((label) => label.questionId !== questionId)
+        page.labels.length > 20 ||
+        (page.next !== null && page.next.length > 4096) ||
+        page.labels.some((label) => label.questionId !== questionId)
       )
         return unavailable('unavailable');
-      return { state: 'ready', questionId, cursor, page: result.data };
+      return { state: 'ready', questionId, cursor, page };
     } catch {
       return unavailable('unavailable');
     }

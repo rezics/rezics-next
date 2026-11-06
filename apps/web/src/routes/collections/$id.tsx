@@ -79,7 +79,10 @@ export const Route = createFileRoute('/collections/$id')({
     filters: search.filters,
   }),
   loader: ({ params, deps, context }) => {
-    return context.queryClient.ensureQueryData(collectionPageQuery(params.id, deps.cursor, 'anonymous', deps.filters));
+    return context.queryClient.fetchQuery({
+      ...collectionPageQuery(params.id, deps.cursor, 'anonymous', deps.filters),
+      staleTime: 0,
+    });
   },
   head: ({ loaderData, match }) => {
     if (!loaderData)
@@ -217,7 +220,10 @@ function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult
     navigate({
       to: '/collections/$id',
       params: { id },
-      search: (previous) => ({ ...previous, cursor }),
+      search: (previous) => {
+        const { cursor: _cursor, ...search } = previous;
+        return cursor === undefined ? search : { ...search, cursor };
+      },
     });
   return (
     <CollectionContentLifetime

@@ -26,6 +26,7 @@ export function HomeFeedSpaceControl({
   const messages = {
     invalid: m.home_space_invalid,
     unavailable: m.home_space_unavailable,
+    not_found: m.home_space_not_found,
     denied: m.home_feed_denied,
     auth: m.home_feed_auth,
     closed: m.home_feed_closed,

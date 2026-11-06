@@ -22,6 +22,7 @@ test('independent Space refusal or point failure disables an already selected ad
     [401, 'authentication_required', 'auth'],
     [403, 'forbidden', 'denied'],
     [403, 'platform_closed', 'closed'],
+    [404, 'not_found', 'not_found'],
     [503, 'index_not_ready', 'unavailable'],
     [409, 'stale_cursor', 'unavailable'],
     [0, 'network', 'unavailable'],

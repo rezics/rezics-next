@@ -1,3 +1,4 @@
+import { capturePageRead, admitPageRead } from './page-read-failure';
 import { queryOptions } from '@tanstack/react-query';
 import { isView, type View } from '@rezics/composition';
 import { notFound } from '@tanstack/react-router';
@@ -132,33 +133,35 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
       reader: validateReader(value.reader),
     };
   })
-  .handler(async ({ data }) => {
-    const signal = getRequest().signal;
-    setResponseHeader('cache-control', 'private, no-store');
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    assertSubjectPageReadActive(signal);
-    let loaded = await loadSubjectPage(client, data.id, data.view, data.locale, {
-      realm: data.realm,
-      authorization,
-      signal,
-    });
-    assertSubjectPageReadActive(signal);
-    if (loaded.kind === 'page') {
-      loaded = {
-        kind: 'page',
-        page: await includeReleasedWorkCatalogue(client, loaded.page, authorization, signal),
-      };
-      loaded.page.requestedReader = data.reader;
-    }
-    const cardLocale = locales.find((locale) => locale === data.locale);
-    const shareCard =
-      data.realm === undefined && authorization === undefined && cardLocale !== undefined
-        ? projectShareCardPage(loaded, { id: data.id, locale: cardLocale })
-        : undefined;
-    const composed = await withComposedCommunity(client, loaded, signal);
-    assertSubjectPageReadActive(signal);
-    return { ...composed, shareCard };
-  });
+  .handler(async ({ data }) =>
+    capturePageRead(async () => {
+      const signal = getRequest().signal;
+      setResponseHeader('cache-control', 'private, no-store');
+      const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+      assertSubjectPageReadActive(signal);
+      let loaded = await loadSubjectPage(client, data.id, data.view, data.locale, {
+        realm: data.realm,
+        authorization,
+        signal,
+      });
+      assertSubjectPageReadActive(signal);
+      if (loaded.kind === 'page') {
+        loaded = {
+          kind: 'page',
+          page: await includeReleasedWorkCatalogue(client, loaded.page, authorization, signal),
+        };
+        loaded.page.requestedReader = data.reader;
+      }
+      const cardLocale = locales.find((locale) => locale === data.locale);
+      const shareCard =
+        data.realm === undefined && authorization === undefined && cardLocale !== undefined
+          ? projectShareCardPage(loaded, { id: data.id, locale: cardLocale })
+          : undefined;
+      const composed = await withComposedCommunity(client, loaded, signal);
+      assertSubjectPageReadActive(signal);
+      return { ...composed, shareCard };
+    }),
+  );
 
 /** Read one public Subject document without refreshing the rest of its configured page. */
 export const readPublicSubjectDocument = createServerFn({ method: 'GET', strict: false })
@@ -221,44 +224,46 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       node: validatePageNode(value.node),
     };
   })
-  .handler(async ({ data }) => {
-    const signal = getRequest().signal;
-    setResponseHeader('cache-control', 'private, no-store');
-    const { loadViewPages } = await import('./subject-frame');
-    assertSubjectPageReadActive(signal);
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    assertSubjectPageReadActive(signal);
-    const loaded = await loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
-      realm: data.realm,
-      node: data.node,
-      authorization,
-      signal,
-    });
-    assertSubjectPageReadActive(signal);
-    if (loaded.kind !== 'page') return loaded;
-    const page = await includeReleasedWorkCatalogue(client, loaded.page, authorization, signal);
-    const overview =
-      page.subject === loaded.overview.subject && page.catalogue
-        ? { ...loaded.overview, catalogue: page.catalogue }
-        : await includeReleasedWorkCatalogue(client, loaded.overview, authorization, signal);
-    const enriched = { ...loaded, page, overview };
-    const cardLocale = locales.find((locale) => locale === data.locale);
-    const shareCard =
-      data.realm === undefined && authorization === undefined && cardLocale !== undefined
-        ? projectShareCardPage({ kind: 'page', page: overview }, { id: data.id, locale: cardLocale })
-        : undefined;
-    page.requestedReader = data.reader;
-    overview.requestedReader = data.reader;
-    const result = await withComposedCommunity(client, { kind: 'page', page }, signal);
-    assertSubjectPageReadActive(signal);
-    if (result.kind !== 'page') return result;
-    return {
-      ...enriched,
-      shareCard,
-      page: result.page,
-      overview: communityOverview(loaded.overview),
-    };
-  });
+  .handler(async ({ data }) =>
+    capturePageRead(async () => {
+      const signal = getRequest().signal;
+      setResponseHeader('cache-control', 'private, no-store');
+      const { loadViewPages } = await import('./subject-frame');
+      assertSubjectPageReadActive(signal);
+      const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+      assertSubjectPageReadActive(signal);
+      const loaded = await loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
+        realm: data.realm,
+        node: data.node,
+        authorization,
+        signal,
+      });
+      assertSubjectPageReadActive(signal);
+      if (loaded.kind !== 'page') return loaded;
+      const page = await includeReleasedWorkCatalogue(client, loaded.page, authorization, signal);
+      const overview =
+        page.subject === loaded.overview.subject && page.catalogue
+          ? { ...loaded.overview, catalogue: page.catalogue }
+          : await includeReleasedWorkCatalogue(client, loaded.overview, authorization, signal);
+      const enriched = { ...loaded, page, overview };
+      const cardLocale = locales.find((locale) => locale === data.locale);
+      const shareCard =
+        data.realm === undefined && authorization === undefined && cardLocale !== undefined
+          ? projectShareCardPage({ kind: 'page', page: overview }, { id: data.id, locale: cardLocale })
+          : undefined;
+      page.requestedReader = data.reader;
+      overview.requestedReader = data.reader;
+      const result = await withComposedCommunity(client, { kind: 'page', page }, signal);
+      assertSubjectPageReadActive(signal);
+      if (result.kind !== 'page') return result;
+      return {
+        ...enriched,
+        shareCard,
+        page: result.page,
+        overview: communityOverview(loaded.overview),
+      };
+    }),
+  );
 
 const readSubjectCanonical = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {
@@ -608,7 +613,12 @@ export const subjectPageQuery = (
     queryKey: [...key('subject-page', id, locale, view), realm ?? null, reader],
     retry: false,
     queryFn: async ({ signal }) =>
-      readSubjectPage({ data: { id, locale, realm, reader, ...(view !== 'overview' ? { view } : {}) }, signal }),
+      admitPageRead(
+        await readSubjectPage({
+          data: { id, locale, realm, reader, ...(view !== 'overview' ? { view } : {}) },
+          signal,
+        }),
+      ),
   });
 
 export const subjectViewPagesQuery = (
@@ -627,11 +637,13 @@ export const subjectViewPagesQuery = (
     gcTime: 0,
     queryKey: ['subject-view-pages', id, locale, view, cursor ?? null, realm ?? null, node ?? null, reader] as const,
     retry: false,
-    queryFn: ({ signal }) =>
-      readSubjectViewPages({
-        data: { id, locale, view, realm, node, reader, ...(cursor !== undefined ? { cursor } : {}) },
-        signal,
-      }),
+    queryFn: async ({ signal }) =>
+      admitPageRead(
+        await readSubjectViewPages({
+          data: { id, locale, view, realm, node, reader, ...(cursor !== undefined ? { cursor } : {}) },
+          signal,
+        }),
+      ),
   });
 
 export const subjectCanonicalQuery = (id: string, locale: string, realm?: string, reader: string | null = null) =>

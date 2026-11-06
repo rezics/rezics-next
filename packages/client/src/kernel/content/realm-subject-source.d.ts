@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { ScopeWork } from '../search/scope-execution.ts';
 import { type RealmSubjectCandidate, type RealmSubjectCoverage } from './realm-subject-candidates.ts';
 export type { RealmSubjectCandidate, RealmSubjectCoverage } from './realm-subject-candidates.ts';

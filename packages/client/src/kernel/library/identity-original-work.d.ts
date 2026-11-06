@@ -1,4 +1,4 @@
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 import { type NativeSourceCustodyOperation } from './native-source-custody-bounds.ts';
 /** Producer composition only. A component is neither an allowance nor an original grant. */

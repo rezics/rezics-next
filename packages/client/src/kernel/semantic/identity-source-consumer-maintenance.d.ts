@@ -3,7 +3,7 @@ import type { WorkClient } from '../work/client.ts';
 import type { HistoryRegistry } from '../history/registry.ts';
 import type { KernelClock } from '../clock.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
-import type { WorkDimensions, WorkAllowance } from '../library/collection-source.ts';
+import type { WorkDimensions, WorkAllowance } from '../library/contract/work-dimensions.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { type HistoryOriginalDependencies, type IdentityOriginalSourceContext } from '../access/identity-original-admission.ts';
 import { type IdentitySourceLibraryOperation, type IdentitySourceScheduledOperation } from './identity-source-maintenance-config.ts';

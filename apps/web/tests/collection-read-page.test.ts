@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { defaultCoverRatio } from '@rezics/ui/cover';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -83,10 +85,20 @@ test('Collection read page has real owner actions, readable member rows and comp
   expect(html).toContain('First occurrence');
   expect(html).toContain('Second occurrence');
   expect(html).not.toContain('Type:');
-  expect(html).not.toContain('text-primary');
+  expect(html.match(/data-slot="member-list-row-title"[^>]*>/g)?.join('')).not.toContain('text-primary');
   expect(html).not.toContain('<input');
   expect(html).not.toContain('<textarea');
-  expect(collectionMemberRatio({ type: 'schema:Movie' })).toBe('16:9');
+  // Movie uses the admitted portrait presentation; a missing definition uses the shared default.
+  expect(collectionMemberRatio({ type: 'schema:Movie' })).toBe(defaultCoverRatio);
+  expect(
+    collectionMemberRatio(
+      { type: 'schema:Movie' },
+      {},
+      {
+        'schema:Movie': bundledRelease.types['schema:Movie']!.listPresentation!,
+      },
+    ),
+  ).toBe(defaultCoverRatio);
   expect(collectionMemberRatio({ type: 'custom:Bookish' }, { 'custom:Bookish': '2:3' })).toBe('2:3');
 
   for (const status of [200, 202, 503]) {
@@ -133,7 +145,7 @@ test('Collection read page has real owner actions, readable member rows and comp
     expect(page.memberState).toBe(status === 200 ? 'ready' : status === 202 ? 'preparing' : 'unavailable');
     expect(page.memberCount).toBe(status === 200 ? 0 : null);
     expect(page.publicExport).toBe(status === 200);
-    expect(paths).toHaveLength(3);
+    expect(paths).toEqual([`/v1/collections/${id}`, `/v1/collections/${id}/members`]);
   }
 });
 
@@ -364,7 +376,7 @@ test('Members recovery retains its Collection, filter and opaque cursor through 
   });
   for (const [next, state] of [
     [500, 'failed'],
-    [0, 'failed'],
+    [0, 'unavailable'],
     [503, 'unavailable'],
     [202, 'preparing'],
     [200, 'ready'],
@@ -394,4 +406,43 @@ test('Members status exposes native preparation, unavailable admission and faile
   expect(markup('ready')).toBe('');
   expect(markup('preparing', true)).toContain('disabled=""');
   expect(markup('preparing')).not.toContain('disabled=""');
+});
+
+test('Collection header outages retain native status and delay across the server result boundary', async () => {
+  const { captureCollectionRead, admitCollectionRead } =
+    await import('../src/library/collection-public-reading/failure');
+  const { routeFailure } = await import('../src/shell/error-state');
+  let status = 503;
+  let calls = 0;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      calls++;
+      return Response.json(
+        { code: status === 503 ? 'dependency_unavailable' : 'not_found' },
+        { status, headers: { 'retry-after': '9' } },
+      );
+    },
+  });
+  const read = () =>
+    loadEditableCollectionPage(client, new Request(`https://site.test/fr/collections/${id}`), {}, { id }, 'anonymous');
+  const result = JSON.parse(JSON.stringify(await captureCollectionRead(read)));
+  expect(result).toEqual({
+    kind: 'collection-read-failed',
+    failure: { status: 503, code: 'dependency_unavailable', retryAfter: '9' },
+  });
+  let error: unknown;
+  try {
+    admitCollectionRead(result);
+  } catch (failure) {
+    error = failure;
+  }
+  expect(routeFailure([{ status: 'error', error }], 500)).toMatchObject({
+    status: 503,
+    unavailable: true,
+    retryAfter: '9',
+  });
+  expect(calls).toBe(1);
+  status = 404;
+  await expect(captureCollectionRead(read)).rejects.toMatchObject({ isNotFound: true });
+  expect(calls).toBe(2);
 });

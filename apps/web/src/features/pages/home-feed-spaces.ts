@@ -7,7 +7,7 @@ export type HomeSpace = Pick<NativeSpace, 'spaceId' | 'title' | 'address' | 'hea
 export type HomeSpaceRequest = { address: string; spaceId?: never } | { spaceId: string; address?: never };
 export type HomeSpaceResult =
   | { status: 'ready'; space: HomeSpace }
-  | { status: 'invalid' | 'unavailable' | 'denied' | 'auth' | 'closed'; spaceId?: string };
+  | { status: 'invalid' | 'unavailable' | 'not_found' | 'denied' | 'auth' | 'closed'; spaceId?: string };
 export type HomeSpaceReader = (input: HomeSpaceRequest, signal: AbortSignal) => Promise<HomeSpaceResult>;
 
 export function homeFeedId(value: unknown): string | undefined {
@@ -62,7 +62,9 @@ export async function readHomeSpace(
           ? 'denied'
           : status === 400 || status === 422
             ? 'invalid'
-            : 'unavailable',
+            : status === 404
+              ? 'not_found'
+              : 'unavailable',
   });
   try {
     if (spaceId === undefined) {

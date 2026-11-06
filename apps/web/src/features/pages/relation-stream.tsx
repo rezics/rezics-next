@@ -1,3 +1,4 @@
+import { nativePageMessage, PageReadState } from './page-read-state';
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
@@ -188,7 +189,7 @@ function failure(status: number | undefined, locale: string, retrySeconds?: numb
           ? retrySeconds !== undefined
             ? m.subject_relation_retry_after({ seconds: retrySeconds }, options)
             : m.subject_relation_limited({}, options)
-          : m.subject_section_failed({}, options);
+          : nativePageMessage({ status }, locale);
 }
 
 export function relationStreamItems(section: Section, value: OverviewValue, limit = Number.POSITIVE_INFINITY) {
@@ -710,9 +711,16 @@ function StreamState({
       ) : items.length ? (
         <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
       ) : !visibleError ? (
-        <p role={!section.ok ? 'status' : undefined}>
-          {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
-        </p>
+        section.ok ? (
+          <p role="status">{cursor ? m.public_read_sparse({}, options) : m.subject_relation_empty_page({}, options)}</p>
+        ) : (
+          <PageReadState
+            key={JSON.stringify(section)}
+            failure={section}
+            locale={value.locale}
+            describedBy={`${node}-status`}
+          />
+        )
       ) : null}
       <p
         id={`${node}-status`}

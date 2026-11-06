@@ -1,3 +1,6 @@
+import { useLocation } from '@tanstack/react-router';
+import type { ComponentProps } from 'react';
+import { sessionRecoverySignInHref } from './unavailable';
 import { DependencyUnavailablePage } from '../shell/dependency-recovery/page';
 import { isSessionUnavailableError, SessionUnavailableError } from './unavailable';
 import type { SessionAccess } from './guard';
@@ -13,6 +16,7 @@ export async function loadPrivatePage<T>(access: SessionAccess, read: () => T | 
   }
 }
 
-export function SessionUnavailablePrompt() {
-  return <DependencyUnavailablePage />;
+export function SessionUnavailablePrompt(props: ComponentProps<typeof DependencyUnavailablePage>) {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  return <DependencyUnavailablePage {...props} signInHref={sessionRecoverySignInHref(pathname)} />;
 }

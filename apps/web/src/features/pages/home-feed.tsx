@@ -523,14 +523,13 @@ export function HomeFeedConsumer({
       onRemove: spaces.clear,
     });
   }
+  // The producer refuses a selected question's feed before enumeration; the question's own control explains it.
+  const questionRefused =
+    Boolean(questionSnapshot.selected) &&
+    snapshot.result.state === 'unavailable' &&
+    snapshot.result.code === 'dependency_unavailable';
   if (snapshot.input.ratingQuestionId) {
     const selected = questionSnapshot.selected;
-    const grains = {
-      work: m.home_question_work,
-      release: m.home_question_release,
-      episode: m.home_question_episode,
-      character: m.home_question_character,
-    };
     const states = {
       loading: m.home_questions_loading,
       unavailable: m.home_questions_unavailable,
@@ -541,28 +540,17 @@ export function HomeFeedConsumer({
       invalid: m.home_questions_invalid,
       lost: m.home_questions_lost,
     };
-    const number = new Intl.NumberFormat(locale);
+    // Grain, scale and revision stay in the question control's closed information disclosure.
     filterSelections.push({
       key: 'question',
       label: m.home_question_label({}, options),
       value: selected?.label ?? m.home_filter_metadata_unavailable({}, options),
-      description: selected
-        ? `${m.home_question_help({}, options)} ${m.home_question_metadata(
-            {
-              label: selected.label,
-              revision: number.format(selected.revision),
-              grain: grains[selected.grain]({}, options),
-              min: number.format(selected.scale.min),
-              max: number.format(selected.scale.max),
-              step: number.format(selected.scale.displayStep),
-            },
-            options,
-          )}`
-        : m.home_question_help({}, options),
       state:
         questionSnapshot.selection !== 'none' && questionSnapshot.selection !== 'ready'
           ? states[questionSnapshot.selection]({}, options)
-          : undefined,
+          : questionRefused
+            ? states.unavailable({}, options)
+            : undefined,
       onRemove: () => void questions.select(undefined),
     });
   }
@@ -576,6 +564,7 @@ export function HomeFeedConsumer({
   const questionOwnsResultMessage =
     Boolean(questionSnapshot.selected) &&
     ((questionSnapshot.selection === 'loading' && currentResult.state === 'loading') ||
+      questionRefused ||
       (questionFailure !== undefined &&
         currentResult.state !== 'ready' &&
         currentResult.state !== 'loading' &&

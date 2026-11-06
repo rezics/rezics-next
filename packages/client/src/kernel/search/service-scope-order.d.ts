@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { type CollectionSourceObservation, type CollectionAliasProgress, type PreparedCollectionSource, type WorkAllowance, type WorkReceipt } from '../library/collection-source.ts';
+import { type CollectionSourceObservation, type CollectionAliasProgress, type PreparedCollectionSource } from '../library/collection-source.ts';
+import { type WorkAllowance, type WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { NativeOrdinalFrontier, NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../library/collection-source-order.ts';
 import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';

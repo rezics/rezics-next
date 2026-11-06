@@ -85,7 +85,7 @@ function draftResponse() {
 }
 const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.String() }, closed) }, closed);
 
-type ReadResult = { status: number; body: unknown };
+type ReadResult = { status: number; body: unknown; headers?: Record<string, string> };
 type PageAccount = { id: string; handle: string; automated: boolean; operatorId: string | null };
 type PageTarget = ({ subject: string; realm?: string } | { route: string } | { account: string }) & { view?: View };
 
@@ -251,8 +251,17 @@ function mergedSession(ring: KeyRing, scope: string, first: string | null, secon
   return encodeSession(ring, scope, components);
 }
 
-function respond(status: number, body: unknown, session: string | null, cache: boolean): Response {
+function respond(
+  status: number,
+  body: unknown,
+  session: string | null,
+  cache: boolean,
+  nativeHeaders?: Record<string, string>,
+): Response {
   const headers = new Headers();
+  // Only this native response hint belongs to the outer read; no owner cookies or credentials escape.
+  const retryAfter = nativeHeaders?.['retry-after'];
+  if (retryAfter) headers.set('retry-after', retryAfter);
   headers.set('content-type', status >= 400 ? 'application/problem+json' : 'application/json');
   if (cache) headers.set('cache-control', 'private, no-store');
   if (session !== null) headers.set(SESSION_HEADER, session);
@@ -288,6 +297,7 @@ function nativePageRoute<App, const Path extends string>(
       query: t.Object({ target: t.Optional(t.String()) }),
       response: {
         200: withHeaders(draftPreview ? draftResponse() : pageResponse(), { 'cache-control': t.String() }),
+        202: withHeaders(t.Object({ preparing: t.Literal(true) }, closed), { 'retry-after': t.String() }),
         308: withHeaders(pageRedirect, { location: t.String() }),
         400: problemSchema('invalid_request'),
         401: unauthorized(),
@@ -485,7 +495,7 @@ function nativePageRoute<App, const Path extends string>(
           }
         } else {
           const result = await probe({ kind: 'account', handle: target.account });
-          if (result.status !== 200) return respond(result.status, result.body, probeSession, draftPreview);
+          if (result.status !== 200) return respond(result.status, result.body, probeSession, true, result.headers);
           const found = accountOf(result.body);
           if (found === null || found.state !== 'active') throw new ProblemError('not_found');
           account = { id: found.id, handle: target.account, automated: found.automated, operatorId: found.operatorId };
@@ -495,7 +505,8 @@ function nativePageRoute<App, const Path extends string>(
         }
         if (subjectTarget !== null) {
           const probed = await subjectProbe(subjectTarget);
-          if ('failed' in probed) return respond(probed.failed.status, probed.failed.body, probeSession, draftPreview);
+          if ('failed' in probed)
+            return respond(probed.failed.status, probed.failed.body, probeSession, true, probed.failed.headers);
           subject = probed.subject;
           if ('subject' in target) {
             const [agent] = await admission.run('normal', job, () => readPublicAccountByAgent(pool, probed.subject.id));
@@ -831,7 +842,7 @@ async function pageAnswer(input: {
       result = { ...result, body: { ...result.body, documents: page.documents } };
     if (!result) throw new Error('Page read did not return a result');
     if (descriptor.kind === 'subject' && descriptor.id === input.subject && result.status !== 200) {
-      return respond(result.status, result.body, readSession, true);
+      return respond(result.status, result.body, readSession, true, result.headers);
     }
     // A subject page without an active verified account must not name an account through its subject read.
     reads[key] =
