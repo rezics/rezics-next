@@ -335,6 +335,7 @@ After Search assertions the native harness reaps its owned worker. Production `s
 modules' pending erasure coordinators, including Semantic's durable 60s custody sleep, so fixture teardown does not
 use that drain as proof of Search completion. Shared-fixture native cases run one at a time.
 Kernel typecheck repairs update SearchService stubs and preparation fixtures to the current saved-catalogue members contract; they do not add behaviour tests. Rebase onto main keeps Catalogue's `catalogue` Source declaration.
+Permission-check SQL keeps one `deadlineLive` alias plus the `live` column policy-core reads.
 
 The [native participant acceptance](../../test/search/erasure-participant.test.ts) freezes default-module
 registration (also with no Search configuration), actual Auth step-up approve/execute through `deletePersona`
