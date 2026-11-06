@@ -663,9 +663,12 @@ export type IdentityHistoryOriginalBodyDeclaration = Readonly<{
 function installedDeclaration(module: object, name: string): WorkDimensions | null {
   const descriptor = Object.getOwnPropertyDescriptor(module, name);
   if (!descriptor) return null;
-  if (!('value' in descriptor) || !descriptor.value || typeof descriptor.value !== 'object')
+  // A module that defers its frozen declaration exports a memoized function; the value it returns is validated alike.
+  const exported =
+    'value' in descriptor && typeof descriptor.value === 'function' ? descriptor.value() : descriptor.value;
+  if (!('value' in descriptor) || !exported || typeof exported !== 'object')
     throw new IdentityOriginalUnavailable('identity-history-original-child-declaration-invalid');
-  const declaration = descriptor.value as IdentityHistoryOriginalBodyDeclaration;
+  const declaration = exported as IdentityHistoryOriginalBodyDeclaration;
   if (
     declaration.engineRequests !== 0 ||
     Reflect.ownKeys(declaration).length !== 2 ||
