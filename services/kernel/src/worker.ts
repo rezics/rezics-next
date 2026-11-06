@@ -80,16 +80,11 @@ export async function startWorker(
   composeWorkApplication();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
-    createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticDomain,
-      {
-        fetch: content.application.ambient.fetch,
-        now: content.application.ambient.now,
-        id: content.application.ambient.id,
-      },
-    );
+    createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults, composeSemanticDomain, {
+      fetch: content.application.ambient.fetch,
+      now: content.application.ambient.now,
+      id: content.application.ambient.id,
+    });
   const resolvedModules =
     modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
