@@ -70,7 +70,6 @@ import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './v
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
-import { readSavedCatalogueMembers } from '../search/service-saved-collection.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -1235,7 +1234,7 @@ export function createCollectionReads(
         };
         const firstLifetime = await lifetime();
         await authorize(time);
-        return await readSavedCatalogueMembers(dependencies.search, {
+        return await dependencies.search.savedCatalogueMembers({
           actor: viewer,
           collection: {
             id: collectionId,
@@ -1265,6 +1264,11 @@ export function createCollectionReads(
               releaseOperationalTime(finalTime);
             }
           },
+        }).catch((error: unknown) => {
+          // Search's restart from a superseded saved cursor is this members cursor's stale response.
+          if (options.cursor != null && error instanceof ProblemError && error.code === 'search_restart_required')
+            throw new ProblemError('stale_cursor');
+          throw error;
         });
       } finally {
         releaseOperationalTime(time);

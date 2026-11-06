@@ -1,52 +1,54 @@
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
 import type { AccountActor } from '../request/access.ts';
-import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { SearchService } from './service-scope.ts';
-import type { PublicSearchReadContext } from './service.ts';
+import type { PublicSearchPage, PublicSearchReadContext } from './service.ts';
+
+/** One saved Collection members page. The Library caller owns the members cursor and its stale response. */
+export type SavedCatalogueMembersInput = Readonly<{
+  actor: AccountActor;
+  collection: NonNullable<PublicSearchReadContext['savedCollection']>;
+  filter: FilterDocument;
+  release: { digest: string; release: FilterRelease };
+  limit: number;
+  cursor?: string | null;
+  scope: NonNullable<PublicSearchReadContext['scope']>;
+  revalidate: () => Promise<void>;
+}>;
+export type SavedCatalogueMembersPage = Readonly<{
+  members: readonly Readonly<{ kind: 'dynamic'; subjectId: string }>[];
+  next: PublicSearchPage['next'];
+}>;
+/** The Search service's saved-membership entry, reached by Library through its injected Search service. */
+export type SavedCatalogueMembers = (input: SavedCatalogueMembersInput) => Promise<SavedCatalogueMembersPage>;
 
 /** The ordinary complete public Search consumer supplies catalogue membership, including preparation,
  * canonical DISTINCT, current disclosure, native recovery and retained continuation. Library supplies
  * the saved identity/meaning and current private authority; no Library presence is added to the query.
+ * A restart from a superseded cursor is passed through unchanged for the Library caller to answer.
  */
 export async function readSavedCatalogueMembers(
   search: Pick<SearchService, 'search'>,
-  input: Readonly<{
-    actor: AccountActor;
-    collection: NonNullable<PublicSearchReadContext['savedCollection']>;
-    filter: FilterDocument;
-    release: { digest: string; release: FilterRelease };
-    limit: number;
-    cursor?: string | null;
-    scope: LeafOptions;
-    revalidate: () => Promise<void>;
-  }>,
-) {
-  try {
-    const page = await search.search(
-      `account:${input.actor.accountId}`,
-      {
-        filter: input.filter,
-        sort: 'id',
-        limit: input.limit,
-        ...(input.cursor == null ? {} : { cursor: input.cursor }),
-      },
-      undefined,
-      input.release,
-      {
-        deadline: input.scope.deadline,
-        scope: input.scope,
-        savedCollection: input.collection,
-        complete: input.revalidate,
-      },
-    );
-    return {
-      members: page.subjects.map(({ id }) => ({ kind: 'dynamic' as const, subjectId: id })),
-      next: page.next,
-    };
-  } catch (error) {
-    if (input.cursor != null && error instanceof ProblemError && error.code === 'search_restart_required')
-      throw new ProblemError('stale_cursor');
-    throw error;
-  }
+  input: SavedCatalogueMembersInput,
+): Promise<SavedCatalogueMembersPage> {
+  const page = await search.search(
+    `account:${input.actor.accountId}`,
+    {
+      filter: input.filter,
+      sort: 'id',
+      limit: input.limit,
+      ...(input.cursor == null ? {} : { cursor: input.cursor }),
+    },
+    undefined,
+    input.release,
+    {
+      deadline: input.scope.deadline,
+      scope: input.scope,
+      savedCollection: input.collection,
+      complete: input.revalidate,
+    },
+  );
+  return {
+    members: page.subjects.map(({ id }) => ({ kind: 'dynamic' as const, subjectId: id })),
+    next: page.next,
+  };
 }

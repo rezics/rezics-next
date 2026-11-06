@@ -85,7 +85,7 @@ test('saved catalogue delegates the exact property query, accepted meaning and n
   expect(finalized).toBe(1);
 });
 
-test('native catalogue restart becomes a stale members cursor while preparation and unexpected errors keep their meaning', async () => {
+test('native restart and failures pass through the saved members consumer unchanged', async () => {
   for (const failure of [
     new ProblemError('search_restart_required'),
     new ProblemError('index_not_ready'),
@@ -96,11 +96,7 @@ test('native catalogue restart becomes a stale members cursor while preparation 
         throw failure;
       },
     };
-    await expect(readSavedCatalogueMembers(search, { ...input, cursor: 'native-continuation' })).rejects.toMatchObject(
-      failure instanceof ProblemError && failure.code === 'search_restart_required'
-        ? { code: 'stale_cursor' }
-        : failure,
-    );
+    await expect(readSavedCatalogueMembers(search, { ...input, cursor: 'native-continuation' })).rejects.toBe(failure);
     await expect(readSavedCatalogueMembers(search, input)).rejects.toBe(failure);
   }
 });

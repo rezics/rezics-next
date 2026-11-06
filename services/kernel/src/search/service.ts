@@ -85,6 +85,7 @@ import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { ScopeWork, scopeAllowance } from './scope-execution.ts';
 import type { ScopeBasis } from './scope-source.ts';
+import { readSavedCatalogueMembers, type SavedCatalogueMembers } from './service-saved-collection.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 import { compileText, parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';
@@ -947,8 +948,12 @@ export function createSearchService({
     }
   }
 
+  // Library reads saved catalogue members through its injected Search service; this closure is that same service.
+  const savedCatalogueMembers: SavedCatalogueMembers = (input) => readSavedCatalogueMembers(service, input);
+
   const service = {
     releaseGroups: groupedReleaseSearch,
+    savedCatalogueMembers,
     async search(
       principal: 'anonymous' | `account:${string}`,
       request: SearchRequest,
