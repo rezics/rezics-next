@@ -24,7 +24,8 @@ Members fixtures evaluate current grants plus collection eligibility on a repeat
 members `loadCollection` authorizes, using the kernel request deadline and without a second minted T that prepare did
 not capture. Extra kernel HTTP probes mount through `createKernel.modules` before compile. Native Search and HTTP
 fixtures release source-database sessions before clone and after the original context. Command-running bootstrap
-installs native History the same way server and worker do.
+installs native History the same way server and worker do. After History moved the native record-source-set loader
+into `history/adapters`, that loader reads Semantic from `../../semantic/record-source-set.ts` as a filesystem path.
 
 Decision: the exported native receiving statement catalogue is SearchNativeReceivingSql-indexed `{ sql: string }`;
 consumers use that SQL text, so reylo generator metadata stays off the declaration surface.

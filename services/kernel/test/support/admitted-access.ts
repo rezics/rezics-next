@@ -1,6 +1,9 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
+import { EMPTY_ACCESS_WORK } from '../../src/access/work.ts';
 import { createAccess, createResourcePublicEligibility, type AccessConfig } from '../../src/access/index.ts';
+import { statementBytes } from '../../src/database/statement-bytes.ts';
+import { collectionDirectoryRowPlan } from '../../src/library/collection-directory-bounds.ts';
 import collectionRead from '../../src/library/collection-reads-collection.sql';
 import type { Access, AccessCheck, AccessContext, AccountActor, Resource } from '../../src/request/access.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
@@ -77,14 +80,27 @@ export async function authenticateAccount(
 /** Current GET members floor: private collections are not public; owner grants remain the read path. */
 export function collectionReadEligibility(resource: Pick<Resource, 'route' | 'id'>) {
   const identity = Object.freeze({ route: resource.route, id: resource.id });
+  const declared = collectionDirectoryRowPlan(identity).total;
+  const native = Object.freeze({
+    keys: declared.candidateKeys,
+    points: declared.nativePoints,
+    rows: declared.nativeRows,
+    witnesses: declared.witnessKeys,
+    emptySeeks: declared.emptySeeks,
+    bytes: declared.bytes - statementBytes(collectionRead),
+  });
   return createResourcePublicEligibility({
+    work: {
+      prepare: { bound: () => EMPTY_ACCESS_WORK, actual: () => EMPTY_ACCESS_WORK },
+      verify: { bound: () => native, actual: () => native },
+    },
     resource: identity,
     action: 'collection:read',
     async prepare() {
       return { ready: true as const };
     },
     async verify({ client }) {
-      const row = await collectionRead.run(client, identity);
+      const row = await collectionDirectoryRowPlan(identity).run({ query: client.query.bind(client) });
       return row != null && row.state === 'active' && row.visibility !== 'private';
     },
   });
