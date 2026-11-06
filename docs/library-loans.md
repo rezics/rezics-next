@@ -90,7 +90,12 @@ GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses o
 extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
 extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
 links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
-or `date-fns`, so Vite's SSR crawl never scans those packages before Copies or other signed-in routes are ready.
+or `date-fns`. Web's Vite SSR optimizer disables discovery and excludes those packages, so Copies
+and other signed-in routes can print ready without prebundling them. Return uses the mounted
+`POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method.
+
+Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
+page/browser cases. No extra page stories.
 
 The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
 concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases

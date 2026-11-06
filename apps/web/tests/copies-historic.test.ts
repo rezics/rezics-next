@@ -143,11 +143,13 @@ const pageMarkup = (page: Parameters<typeof CopiesPage>[0]['page']) => {
   );
 };
 
-test('copy editor dates are locale calendar controls rather than native date inputs', () => {
+test('copy editor dates are locale calendar controls rather than native date inputs', async () => {
   const html = form(copy());
   expect(html).not.toContain('type="date"');
   expect(html).toContain(m.library_copy_acquired());
   expect(html).toContain('aria-haspopup="dialog"');
+  const calendar = await Bun.file(new URL('../src/library/calendar-day-field.tsx', import.meta.url)).text();
+  expect(calendar).not.toMatch(/react-day-picker|date-fns/);
 });
 
 test('raw list keeps two same-edition identities and original facts, with no point-detail requests', async () => {

@@ -218,7 +218,7 @@ export async function returnLoan(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (typeof authorization !== 'string') return authorization;
-    const result = await client['copy-loans']({ loanId: draft.loanId }).$return.post(
+    const result = await client['copy-loans']({ loanId: draft.loanId }).return.post(
       { revision: draft.revision, returnedOn: draft.day },
       { headers: writeHeaders(authorization, draft.idempotencyKey) },
     );

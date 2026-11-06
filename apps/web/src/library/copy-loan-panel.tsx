@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { GatedOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
@@ -51,17 +51,19 @@ export function CopyLoanPanel({
   const [extendDue, setExtendDue] = useState('');
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const current = originating.isCurrent;
+  const originatingRef = useRef(originating);
+  originatingRef.current = originating;
+  const current = (operation?: GatedOperation) => originatingRef.current.isCurrent(operation);
   const busy = disabled || pending;
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      if (!current('copy.list')) return;
+      if (!originatingRef.current.isCurrent('copy.list')) return;
       try {
         const { readOpenCopyLoan } = await import('./loans-actions');
         const result = await readOpenCopyLoan({ data: { copyId: copy.id } });
-        if (!active || !current('copy.list')) return;
+        if (!active || !originatingRef.current.isCurrent('copy.list')) return;
         if (result.page.boundary?.today) {
           setToday(result.page.boundary.today);
           setStartedOn((value) => value || result.page.boundary!.today);
@@ -69,20 +71,20 @@ export function CopyLoanPanel({
         }
         setItem(result.item);
       } catch {
-        if (active && current('copy.list')) setFailure(m.library_loans_failure());
+        if (active && originatingRef.current.isCurrent('copy.list')) setFailure(m.library_loans_failure());
       }
     })();
     return () => {
       active = false;
     };
-  }, [copy.id, current]);
+  }, [copy.id]);
 
   async function send(
     operation: 'copy.create' | 'copy.update',
     run: (headers: HeadersInit) => Promise<LoanWriteResult>,
   ) {
     if (!current(operation) || busy) return;
-    const headers = originating.headers(operation);
+    const headers = originatingRef.current.headers(operation);
     if (!headers) return;
     setPending(true);
     setFailure(null);

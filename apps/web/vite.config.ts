@@ -62,6 +62,10 @@ export default defineConfig((context) => {
     ssr: {
       optimizeDeps: {
         include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+        // Copies and Loans keep a locale Calendar grid. Discovering react-day-picker/date-fns
+        // during SSR prebundle prevents Vite from printing ready for signed-in routes.
+        noDiscovery: true,
+        exclude: ['react-day-picker', 'date-fns', '@date-fns/tz'],
       },
     },
     plugins: [

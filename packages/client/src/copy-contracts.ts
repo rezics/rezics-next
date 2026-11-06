@@ -117,7 +117,7 @@ type WriteOptions = { headers: Record<string, string> & { 'idempotency-key': str
 
 export type CopyLoansClient = ((params: { loanId: string }) => {
   patch(body: LoanExtend, options: WriteOptions): Call<LoanMutation>;
-  $return: { post(body: LoanReturn, options: WriteOptions): Call<LoanMutation> };
+  return: { post(body: LoanReturn, options: WriteOptions): Call<LoanMutation> };
 }) & {
   get(
     options?: ReadOptions & { query?: { filter?: LoanFilter; cursor?: string; limit?: number } },
