@@ -17,7 +17,7 @@ test('a grantor can revoke its own action using permission held before the mutat
   const result = await commands.revoke(context, {
     resource: f.resource,
     subjectId: f.actor,
-    subjectRole: '',
+    subjectRole: '' as const,
     actions: ['subject:update'],
     valid: '(,)',
     key: Bun.randomUUIDv7(),
@@ -45,7 +45,7 @@ test('a recipient keeps the same authenticated bearer while a native grant is cr
   const input = {
     resource: f.resource,
     subjectId: f.recipient,
-    subjectRole: '',
+    subjectRole: '' as const,
     actions: ['subject:update'],
     valid: '(,)',
     key: Bun.randomUUIDv7(),

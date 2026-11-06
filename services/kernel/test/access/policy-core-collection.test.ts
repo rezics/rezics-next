@@ -163,6 +163,6 @@ test('mounted production actions retain complete board ownership and exact defin
     ['thread:create', 'content.board'],
     ['definitions:activate', 'semantic.context'],
     ['media:import_from_url', 'content.media'],
-  ])
+  ] as const)
     expect(production.actionByName[action]?.resourceTypes).toContain(resourceType);
 });
