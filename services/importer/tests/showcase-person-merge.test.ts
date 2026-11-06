@@ -182,12 +182,12 @@ test('unknown delivery replays the exact sealed body and key, while a definite r
     const refused = transport({ mergeError: Object.assign(new Error('refused'), { status: 403 }) });
     expect(await run(refused.native, refusedJournal)).toEqual({
       state: 'withheld',
-      reason: 'Native merge refused with HTTP 403',
+      reason: 'merge403',
     });
     const again = transport();
     expect(await run(again.native, refusedJournal)).toEqual({
       state: 'withheld',
-      reason: 'review-http-403',
+      reason: 'merge403',
     });
     expect(again.calls.merges).toHaveLength(0);
   } finally {
@@ -293,9 +293,10 @@ test('a not-yet-current Subject read is observed again, while any other read fai
     await expect(
       reader('https://rezics.com/problems/semantic_not_ready').readSubject(bangumiOriginal),
     ).rejects.toBeInstanceOf(ReviewedSubjectNotReady);
-    await expect(reader('https://rezics.com/problems/overloaded').readSubject(bangumiOriginal)).rejects.toThrow(
-      'returned 503',
-    );
+    await expect(reader('https://rezics.com/problems/overloaded').readSubject(bangumiOriginal)).rejects.toMatchObject({
+      phase: 'SubjectGET503',
+      status: 503,
+    });
     await expect(
       publishReviewedPersonMerge({
         pair,

@@ -7,7 +7,8 @@ Terms and qualified name assertions remain separate; identical names never estab
 Decision: show supplied character facts on the ordinary Subject overview and link to the existing bounded
 character relationships reader for appearances and contextual voice credits, preserving its producer session.
 
-Person biographies remain in the existing Person reader. Its definitions can come from the current native page;
+Person biographies remain in the existing Person reader. Combined credits after a reviewed merge stay on the
+existing connections window. Its definitions can come from the current native page;
 when unavailable there, the existing definitions loader has explicit loading, failure and retry states. Neither
 reader hydrates individual rows or creates relationships. Supplied names keep wrapping 44px targets; seeded people
 without both provider identifiers stay named unconfirmed while the supplied title remains readable. The surrounding

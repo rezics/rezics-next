@@ -10,10 +10,24 @@ export const SUBJECT_NOT_READY_TYPE = 'https://rezics.com/problems/semantic_not_
 /** A public read that Semantic reports as not ready. Callers observe the same Subject again later. */
 export class ReviewedSubjectNotReady extends Error {
   readonly subject: string;
+  readonly phase = 'readiness' as const;
 
   constructor(subject: string) {
     super(`Public subject ${subject} is not ready`);
     this.name = 'ReviewedSubjectNotReady';
+    this.subject = subject;
+  }
+}
+
+/** Any other public Subject GET 503. Callers treat this as terminal for the current run. */
+export class PublicSubjectGetUnavailable extends Error {
+  readonly subject: string;
+  readonly status = 503 as const;
+  readonly phase = 'SubjectGET503' as const;
+
+  constructor(subject: string) {
+    super(`Public subject ${subject} returned 503`);
+    this.name = 'PublicSubjectGetUnavailable';
     this.subject = subject;
   }
 }
@@ -168,6 +182,7 @@ async function readCurrentSubject(
       const problem =
         response.status === 503 ? ((await response.json().catch(() => null)) as { type?: unknown } | null) : null;
       if (problem?.type === SUBJECT_NOT_READY_TYPE) throw new ReviewedSubjectNotReady(current);
+      if (response.status === 503) throw new PublicSubjectGetUnavailable(current);
       throw new Error(`Public subject read returned ${response.status}`);
     }
     const body = (await response.json()) as ReviewedSubjectRead;

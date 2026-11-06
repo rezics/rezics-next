@@ -6,12 +6,19 @@ import type { SourceRecord } from '@rezics/conversion';
 import type { ReviewedPersonRead } from '@rezics/client';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import type { MediaVariantDecision, ReviewedSubjectRead } from '../src/import-client.ts';
+import { ImportTransportError } from '../src/import-client.ts';
+import { PublicSubjectGetUnavailable, ReviewedSubjectNotReady } from '../src/public-bulk-client.ts';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
 import {
+  characterIdentityForSource,
+  importProducerPhase,
+  observeCharacterIdentity,
   observePersonIdentity,
   personIdentityForSource,
   publishReviewedPersonMerge,
+  readAdoptedCharacter,
+  recordCombinedPersonCredits,
   rereadCanonicalPersonIdentities,
   type BoundPersonIdentity,
   type PersonReviewSource,
@@ -25,7 +32,9 @@ const survivor = bangumiOriginal;
 const operation = '00000000-0000-4000-8000-0000000000c1';
 const claim = '00000000-0000-4000-8000-0000000000d1';
 const angelBeats = '00000000-0000-4000-8000-000000001851';
+const clannad = '00000000-0000-4000-8000-00000000000v4';
 const yui = '00000000-0000-4000-8000-0000000000c3';
+const media = '00000000-0000-4000-8000-0000000000e1';
 
 const bangumi = personIdentityForSource('bangumi', 'person:1916', 'schema:Person')!;
 const vndb = personIdentityForSource('vndb', 's224', 'schema:Person')!;
@@ -67,8 +76,42 @@ function characterRead(): ReviewedSubjectRead {
       statements: {
         'wdt:P6296': [{ rank: 'normal', value: { type: 'value', content: '116' } }],
         'schema:name': [{ rank: 'normal', value: { type: 'value', content: 'ユイ' } }],
+        'schema:alternateName': [{ rank: 'normal', value: { type: 'value', content: 'Yui' } }],
+        'schema:gender': [{ rank: 'normal', value: { type: 'value', content: 'female' } }],
+        'schema:height': [{ rank: 'normal', value: { type: 'value', content: { amount: '+155', unit: 'Q174728' } } }],
+        'schema:url': [{ rank: 'normal', value: { type: 'value', content: 'https://bgm.tv/character/116' } }],
       },
     },
+    summary: {
+      cover: {
+        media,
+        credit: { holder: 'Key', via: 'https://bgm.tv/character/116' },
+        variants: [
+          { format: 'avif', width: 240 },
+          { format: 'webp', width: 240 },
+        ],
+      },
+    },
+  } as unknown as ReviewedSubjectRead;
+}
+
+function workCredits(id: string, person: string, property: string, cited: string): ReviewedSubjectRead {
+  return {
+    subject: {
+      id,
+      type: id === angelBeats ? 'schema:TVSeries' : 'wd:Q689445',
+      statements: {
+        [property]: [
+          {
+            rank: 'normal',
+            value: { type: 'value', content: person },
+            qualifiers: [{ property: { id: 'wdt:P1932' }, value: { type: 'value', content: '麻枝准' } }],
+            references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: cited } }] }],
+          },
+        ],
+      },
+    },
+    related: person === survivor ? {} : { [person]: { redirect: survivor } },
   } as unknown as ReviewedSubjectRead;
 }
 
@@ -193,11 +236,60 @@ test('Publish reviewed Person identities with Character and credit reads through
       characterRead(),
     );
     expect(character.state).toBe('wrong_type');
-    expect(characterRead().subject.id).toBe(yui);
-    expect(characterRead().subject.statements['wdt:P6296']?.[0]?.value).toEqual({
-      type: 'value',
-      content: '116',
+    const characterIdentity = characterIdentityForSource('bangumi', 'character:116', 'wd:Q95074')!;
+    expect(observeCharacterIdentity(characterIdentity, characterRead())).toMatchObject({
+      state: 'current',
+      currentSubjectId: yui,
     });
+    const adopted = await readAdoptedCharacter({
+      identity: characterIdentity,
+      boundSubjectId: yui,
+      readPublic: async () => characterRead(),
+      appearances: [angelBeats],
+      performers: [survivor],
+      authorizeMediaVariant: async (mediaId, variant) =>
+        ({
+          allowed: true,
+          key: variant,
+          sha256: 'a'.repeat(64),
+          mediaType: variant.startsWith('avif') ? 'image/avif' : 'image/webp',
+          byteCount: 2048,
+          publicCache: false,
+          cacheControl: 'private, no-cache',
+        }) as MediaVariantDecision,
+    });
+    expect(adopted).toMatchObject({
+      state: 'current',
+      names: ['ユイ', 'Yui'],
+      traits: ['female'],
+      measurements: ['+155'],
+      sourceLinks: ['https://bgm.tv/character/116'],
+      appearances: [angelBeats],
+      performers: [survivor],
+      image: { state: 'served', mediaId: media },
+    });
+
+    const combined = recordCombinedPersonCredits({
+      canonicalPersonId: survivor,
+      originals: [
+        { boundPersonId: bangumiOriginal, personExternalId: 'person:1916' },
+        { boundPersonId: vndbOriginal, personExternalId: 's224' },
+      ],
+      works: [
+        { externalId: '1851', read: workCredits(angelBeats, bangumiOriginal, 'wdt:P725', 'https://bgm.tv/subject/1851') },
+        { externalId: 'v4', read: workCredits(clannad, vndbOriginal, 'schema:author', 'https://vndb.org/v4') },
+      ],
+    });
+    expect(combined.credits).toHaveLength(2);
+    expect(combined.credits.map((credit) => credit.workExternalId).sort()).toEqual(['1851', 'v4']);
+    expect(new Set(combined.credits.map((credit) => credit.canonicalPersonId))).toEqual(new Set([survivor]));
+    expect(combined.credits.every((credit) => credit.citations.length === 1)).toBe(true);
+
+    expect(importProducerPhase(new ReviewedSubjectNotReady(yui))).toBe('readiness');
+    expect(importProducerPhase(new PublicSubjectGetUnavailable(yui))).toBe('SubjectGET503');
+    expect(importProducerPhase(new ImportTransportError(403, undefined, undefined, false, undefined, 'merge403'))).toBe(
+      'merge403',
+    );
 
     const redirected: ReviewedPersonMergeTransport = {
       ...native,

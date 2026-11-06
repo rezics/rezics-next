@@ -32,9 +32,14 @@ import {
   personReviewSource,
   publishReviewedPersonMerge,
   rereadCanonicalPersonIdentities,
+  readAdoptedCharacters,
+  readCombinedPersonCredits,
+  characterIdentityForSource,
   selectPersonReviewPair,
   showcasePersonReview,
+  type AdoptedCharacterCurrent,
   type BoundPersonIdentity,
+  type CombinedPersonCredits,
   type PersonReviewSource,
   type PersonReviewPair,
   type ReviewedPersonPublication,
@@ -2151,6 +2156,10 @@ export type CrossMediaSeedResult = {
   personIdentities: CrossMediaPersonIdentity[];
   /** Current canonical Person beside each credit Person's durable original source key. */
   canonicalPersons: Record<string, string>;
+  /** Independently reread adopted Character names, traits, measurements, links and served image. */
+  characterCurrents?: readonly AdoptedCharacterCurrent[];
+  /** Angel Beats and CLANNAD credit windows on one canonical Person after merge. */
+  combinedCredits?: CombinedPersonCredits;
   /** Private comparison inputs from actual admitted records, independent of canonical read availability. */
   personReviewSources?: readonly PersonReviewSource[];
   personReview?: typeof showcasePersonReview & { pair: PersonReviewPair };
@@ -4548,6 +4557,48 @@ export async function runCrossMediaSeedCli(
             readPublic: (id) => publicClient.readSubject(id),
           })
         : undefined;
+    const characterBindings = publicClient
+      ? combinedResult.readings.flatMap((reading) => {
+          const identity = characterIdentityForSource(
+            reading.source,
+            reading.externalId,
+            (reading.subject.subject as { type?: string }).type,
+          );
+          const bound = reading.boundSubjectId ?? reading.subject.subject.id;
+          return identity ? [{ identity, boundSubjectId: bound }] : [];
+        })
+      : [];
+    const characterCurrents =
+      publicClient && characterBindings.length
+        ? await readAdoptedCharacters({
+            characters: characterBindings,
+            readPublic: (id) => publicClient.readSubject(id),
+            authorizeMediaVariant: (mediaId, variant) => importPort.authorizeMediaVariant(mediaId, variant),
+          })
+        : undefined;
+    const canonicalPersonId =
+      afterMerge?.identities[0]?.currentSubjectId ??
+      combinedResult.personIdentities.find((entry) => entry.identity.externalId === 'person:1916')
+        ?.currentSubjectId;
+    const creditWorks = publicClient
+      ? combinedResult.readings.flatMap((reading) =>
+          reading.externalId === '1851' || reading.externalId === 'v4'
+            ? [{ externalId: reading.externalId, boundSubjectId: reading.boundSubjectId ?? reading.subject.subject.id }]
+            : [],
+        )
+      : [];
+    const combinedCredits =
+      publicClient && canonicalPersonId && creditWorks.length
+        ? await readCombinedPersonCredits({
+            canonicalPersonId,
+            originals: combinedResult.personIdentities.map((entry) => ({
+              boundPersonId: entry.boundSubjectId,
+              personExternalId: entry.identity.externalId,
+            })),
+            works: creditWorks,
+            readPublic: (id) => publicClient.readSubject(id),
+          })
+        : undefined;
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {
       ...publicCombinedResultFields,
@@ -4559,6 +4610,13 @@ export async function runCrossMediaSeedCli(
             ...(afterMerge.unconfirmed.length ? { status: 'imported-with-gaps' as const } : {}),
           }
         : {}),
+      ...(characterCurrents
+        ? {
+            characterCurrents: characterCurrents.currents,
+            ...(characterCurrents.unconfirmed.length ? { status: 'imported-with-gaps' as const } : {}),
+          }
+        : {}),
+      ...(combinedCredits && !('state' in combinedCredits) ? { combinedCredits } : {}),
     };
     const persona =
       options.composePersona && journal && options.selection

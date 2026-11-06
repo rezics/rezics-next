@@ -7,10 +7,25 @@ import type {
   ReviewedPersonRead,
   ReviewedPersonSource,
 } from '@rezics/client';
-import type { ReviewedSubjectRead } from './import-client.ts';
+import type { MediaVariantDecision, ReviewedSubjectRead } from './import-client.ts';
 import { ReviewedSubjectNotReady } from './public-bulk-client.ts';
 import type { Provider } from './cross-media-bindings.ts';
 import type { SourceRecord } from '@rezics/conversion';
+
+export type ImportProducerPhase = 'readiness' | 'merge403' | 'SubjectGET503';
+
+/** Map a public or merge failure onto the exact producer phase the seed already reports. */
+export function importProducerPhase(error: unknown): ImportProducerPhase | undefined {
+  if (error instanceof ReviewedSubjectNotReady) return 'readiness';
+  const status = (error as { status?: unknown }).status;
+  const type = (error as { type?: unknown }).type;
+  const phase = (error as { phase?: unknown }).phase;
+  if (phase === 'readiness' || phase === 'merge403' || phase === 'SubjectGET503') return phase;
+  if (status === 403) return 'merge403';
+  if (status === 503 && type === 'https://rezics.com/problems/semantic_not_ready') return 'readiness';
+  if (status === 503) return 'SubjectGET503';
+  return undefined;
+}
 
 export type PersonIdentity = Readonly<{
   source: Provider;
@@ -276,8 +291,9 @@ export async function publishReviewedPersonMerge(input: {
       // A definite client refusal is terminal. Other failures may have reached Kernel: resume replays this exact intent.
       const status = (error as { status?: unknown }).status;
       if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429) {
-        input.journal.refuseAction(actionKey, `review-http-${status}`);
-        return { state: 'withheld', reason: `Native merge refused with HTTP ${status}` };
+        const phase = status === 403 ? 'merge403' : `review-http-${status}`;
+        input.journal.refuseAction(actionKey, phase);
+        return { state: 'withheld', reason: phase };
       }
       throw error;
     }
@@ -333,4 +349,344 @@ export async function publishReviewedPersonMerge(input: {
     if (attempt + 1 < MERGE_READ_ATTEMPTS) await pause(MERGE_POLL_MS);
   }
   return { state: 'unconfirmed', operation };
+}
+
+export type CharacterIdentity = Readonly<{
+  source: Provider;
+  externalId: string;
+  property: 'wdt:P6296' | 'wdt:P3180';
+  value: string;
+}>;
+
+export type CharacterIdentityObservation =
+  | Readonly<{ state: 'current'; currentSubjectId: string; identity: CharacterIdentity }>
+  | Readonly<{ state: 'missing' | 'wrong_type' | 'conflicting'; identity: CharacterIdentity }>;
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const creditProperties = new Set([
+  'schema:author',
+  'schema:contributor',
+  'schema:creator',
+  'schema:composer',
+  'wdt:P86',
+  'wdt:P676',
+  'wdt:P725',
+  'wdt:P161',
+  'wdt:P170',
+  'wdt:P110',
+]);
+
+type StatementRow = {
+  rank?: unknown;
+  value?: { type?: unknown; content?: unknown };
+  qualifiers?: readonly { property?: { id?: unknown }; value?: { type?: unknown; content?: unknown } }[];
+  references?: readonly { parts?: readonly { property?: { id?: unknown }; value?: { type?: unknown; content?: unknown } }[] }[];
+};
+
+function subjectStatements(read: ReviewedSubjectRead): Record<string, readonly StatementRow[]> {
+  const statements = (read.subject as { statements?: Record<string, readonly StatementRow[]> }).statements;
+  return statements ?? {};
+}
+
+function selectedValues(rows: readonly StatementRow[] | undefined): string[] {
+  const selected = (rows ?? []).filter((row) => row.rank !== 'deprecated');
+  return selected.flatMap((row) => {
+    if (row.value?.type !== 'value') return [];
+    if (typeof row.value.content === 'string') return [row.value.content];
+    const quantity = row.value.content as { amount?: unknown } | null;
+    return quantity && typeof quantity.amount === 'string' ? [quantity.amount] : [];
+  });
+}
+
+function selectedFacts(
+  rows: readonly StatementRow[] | undefined,
+): readonly Readonly<{ content: string; qualifiers: readonly string[]; citations: readonly string[] }>[] {
+  return (rows ?? [])
+    .filter((row) => row.rank !== 'deprecated' && row.value?.type === 'value' && typeof row.value.content === 'string')
+    .map((row) => ({
+      content: row.value!.content as string,
+      qualifiers: (row.qualifiers ?? []).flatMap((part) =>
+        part.property?.id === 'wdt:P1932' && part.value?.type === 'value' && typeof part.value.content === 'string'
+          ? [part.value.content]
+          : [],
+      ),
+      citations: (row.references ?? []).flatMap((reference) =>
+        (reference.parts ?? []).flatMap((part) =>
+          part.property?.id === 'schema:url' && part.value?.type === 'value' && typeof part.value.content === 'string'
+            ? [part.value.content]
+            : [],
+        ),
+      ),
+    }));
+}
+
+/** Only exact Character source keys qualify; a name or appearance never creates a binding. */
+export function characterIdentityForSource(
+  source: Provider,
+  externalId: string,
+  expectedType: string | undefined,
+): CharacterIdentity | undefined {
+  if (expectedType !== 'wd:Q95074') return undefined;
+  if (source === 'bangumi' && /^character:[1-9][0-9]*$(?![\s\S])/u.test(externalId))
+    return { source, externalId, property: 'wdt:P6296', value: externalId.slice('character:'.length) };
+  if (source === 'vndb' && /^c[1-9][0-9]*$(?![\s\S])/u.test(externalId))
+    return { source, externalId, property: 'wdt:P3180', value: externalId };
+  return undefined;
+}
+
+export function observeCharacterIdentity(
+  identity: CharacterIdentity,
+  read: ReviewedSubjectRead,
+): CharacterIdentityObservation {
+  const subject = read.subject as { id: string; type?: unknown; statements?: Record<string, readonly StatementRow[]> };
+  if (subject.type !== 'wd:Q95074') return { state: 'wrong_type', identity };
+  const values = selectedValues(subject.statements?.[identity.property]);
+  if (!values.length) return { state: 'missing', identity };
+  const unique = new Set(values);
+  if (unique.size !== 1 || !unique.has(identity.value)) return { state: 'conflicting', identity };
+  return { state: 'current', currentSubjectId: subject.id, identity };
+}
+
+export type AdoptedCharacterImage =
+  | Readonly<{
+      state: 'served';
+      mediaId: string;
+      variants: readonly Readonly<{ format: 'avif' | 'webp'; width: number }>[];
+    }>
+  | Readonly<{ state: 'unavailable' | 'uncredited' }>;
+
+export type AdoptedCharacterCurrent = Readonly<{
+  state: 'current';
+  boundSubjectId: string;
+  currentSubjectId: string;
+  identity: CharacterIdentity;
+  names: readonly string[];
+  traits: readonly string[];
+  measurements: readonly string[];
+  appearances: readonly string[];
+  performers: readonly string[];
+  sourceLinks: readonly string[];
+  image: AdoptedCharacterImage;
+}>;
+
+function characterCover(read: ReviewedSubjectRead): AdoptedCharacterImage {
+  const summary = (read as { summary?: { cover?: { media?: unknown; variants?: unknown; credit?: unknown } } }).summary;
+  const cover = summary?.cover;
+  if (!cover || typeof cover.media !== 'string' || !uuid.test(cover.media) || !Array.isArray(cover.variants))
+    return { state: 'unavailable' };
+  const variants = cover.variants.flatMap((entry) => {
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      ((entry as { format?: unknown }).format !== 'avif' && (entry as { format?: unknown }).format !== 'webp') ||
+      typeof (entry as { width?: unknown }).width !== 'number'
+    )
+      return [];
+    return [{ format: (entry as { format: 'avif' | 'webp' }).format, width: (entry as { width: number }).width }];
+  });
+  if (!variants.length) return { state: 'unavailable' };
+  if (cover.credit == null) return { state: 'uncredited' };
+  return { state: 'served', mediaId: cover.media, variants };
+}
+
+async function imageServedCurrent(
+  image: AdoptedCharacterImage,
+  authorize?: (mediaId: string, variant: string) => Promise<MediaVariantDecision>,
+): Promise<AdoptedCharacterImage> {
+  if (image.state !== 'served' || !authorize) return image;
+  const smallest = new Map<string, { format: 'avif' | 'webp'; width: number }>();
+  for (const variant of image.variants) if (!smallest.has(variant.format)) smallest.set(variant.format, variant);
+  try {
+    for (const variant of smallest.values()) {
+      const decision = await authorize(image.mediaId, `${variant.format}-${variant.width}`);
+      if (!decision.allowed || decision.mediaType !== `image/${variant.format}` || decision.byteCount < 1)
+        return { state: 'unavailable' };
+    }
+    return image;
+  } catch (error) {
+    if (importProducerPhase(error) === 'readiness') return { state: 'unavailable' };
+    throw error;
+  }
+}
+
+/**
+ * Independently reread an adopted Character. Names, traits, measurements, source links and the
+ * rights-credited image come from this subject; appearance and performer facts stay on the work.
+ */
+export async function readAdoptedCharacter(input: {
+  identity: CharacterIdentity;
+  boundSubjectId: string;
+  readPublic: (id: string) => Promise<ReviewedSubjectRead>;
+  authorizeMediaVariant?: (mediaId: string, variant: string) => Promise<MediaVariantDecision>;
+  appearances?: readonly string[];
+  performers?: readonly string[];
+}): Promise<AdoptedCharacterCurrent | { state: 'unconfirmed'; identity: CharacterIdentity }> {
+  const read = await input.readPublic(input.boundSubjectId).catch((error: unknown) => {
+    if (importProducerPhase(error) === 'readiness') return null;
+    throw error;
+  });
+  if (!read) return { state: 'unconfirmed', identity: input.identity };
+  const observed = observeCharacterIdentity(input.identity, read);
+  if (observed.state !== 'current') return { state: 'unconfirmed', identity: input.identity };
+  const statements = subjectStatements(read);
+  const image = await imageServedCurrent(characterCover(read), input.authorizeMediaVariant);
+  return {
+    state: 'current',
+    boundSubjectId: input.boundSubjectId,
+    currentSubjectId: observed.currentSubjectId,
+    identity: input.identity,
+    names: [
+      ...selectedValues(statements['schema:name']),
+      ...selectedValues(statements['schema:alternateName']),
+    ],
+    traits: [
+      ...selectedValues(statements['schema:gender']),
+      ...selectedValues(statements['schema:keywords']),
+      ...selectedValues(statements['wdt:P1853']),
+    ],
+    measurements: [
+      ...selectedValues(statements['schema:height']),
+      ...selectedValues(statements['schema:weight']),
+      ...selectedValues(statements['schema:birthDate']),
+    ],
+    appearances: input.appearances ? [...input.appearances] : selectedValues(statements['wdt:P1441']),
+    performers: input.performers ? [...input.performers] : [],
+    sourceLinks: [...selectedValues(statements['schema:url']), ...selectedValues(statements['schema:sameAs'])],
+    image,
+  };
+}
+
+export async function readAdoptedCharacters(input: {
+  characters: readonly Readonly<{ identity: CharacterIdentity; boundSubjectId: string }>[];
+  readPublic: (id: string) => Promise<ReviewedSubjectRead>;
+  authorizeMediaVariant?: (mediaId: string, variant: string) => Promise<MediaVariantDecision>;
+  appearances?: Readonly<Record<string, readonly string[]>>;
+  performers?: Readonly<Record<string, readonly string[]>>;
+}): Promise<{
+  currents: AdoptedCharacterCurrent[];
+  unconfirmed: readonly CharacterIdentity[];
+}> {
+  const currents: AdoptedCharacterCurrent[] = [];
+  const unconfirmed: CharacterIdentity[] = [];
+  for (const entry of input.characters) {
+    const observed = await readAdoptedCharacter({
+      ...entry,
+      readPublic: input.readPublic,
+      authorizeMediaVariant: input.authorizeMediaVariant,
+      appearances: input.appearances?.[entry.identity.externalId],
+      performers: input.performers?.[entry.identity.externalId],
+    });
+    if (observed.state !== 'current') {
+      unconfirmed.push(entry.identity);
+      continue;
+    }
+    currents.push(observed);
+  }
+  return { currents, unconfirmed };
+}
+
+export type CombinedPersonCredit = Readonly<{
+  workExternalId: string;
+  workSubjectId: string;
+  personExternalId: string;
+  boundPersonId: string;
+  canonicalPersonId: string;
+  property: string;
+  creditedAs: readonly string[];
+  citations: readonly string[];
+  characterExternalId?: string;
+}>;
+
+export type CombinedPersonCredits = Readonly<{
+  canonicalPersonId: string;
+  credits: readonly CombinedPersonCredit[];
+}>;
+
+function creditCharacter(row: StatementRow): string | undefined {
+  for (const part of row.qualifiers ?? []) {
+    if (
+      (part.property?.id === 'wdt:P453' || part.property?.id === 'schema:character') &&
+      part.value?.type === 'value' &&
+      typeof part.value.content === 'string' &&
+      uuid.test(part.value.content)
+    )
+      return part.value.content;
+  }
+  return undefined;
+}
+
+/**
+ * After merge, both original works keep their credit statements. The value may still name the
+ * durable Person; a one-hop redirect names the survivor. Combined credits are those two windows.
+ */
+export function recordCombinedPersonCredits(input: {
+  canonicalPersonId: string;
+  originals: readonly Readonly<{ boundPersonId: string; personExternalId: string }>[];
+  works: readonly Readonly<{ externalId: string; read: ReviewedSubjectRead }>[];
+  related?: Readonly<Record<string, { redirect?: string }>>;
+}): CombinedPersonCredits {
+  const originals = new Map(input.originals.map((entry) => [entry.boundPersonId, entry.personExternalId]));
+  const credits: CombinedPersonCredit[] = [];
+  for (const work of input.works) {
+    const workId = (work.read.subject as { id: string }).id;
+    const related = {
+      ...(work.read as { related?: Record<string, { redirect?: string }> }).related,
+      ...input.related,
+    };
+    for (const [property, rows] of Object.entries(subjectStatements(work.read))) {
+      if (!creditProperties.has(property)) continue;
+      for (const row of selectedFacts(rows)) {
+        const target = row.content;
+        const survivor =
+          target === input.canonicalPersonId
+            ? target
+            : related[target]?.redirect === input.canonicalPersonId
+              ? input.canonicalPersonId
+              : originals.has(target)
+                ? input.canonicalPersonId
+                : undefined;
+        if (!survivor) continue;
+        const boundPersonId = originals.has(target) ? target : input.canonicalPersonId;
+        const personExternalId = originals.get(boundPersonId) ?? originals.get(input.canonicalPersonId);
+        if (!personExternalId) continue;
+        const character = creditCharacter(
+          (rows ?? []).find((entry) => entry.value?.content === target) ?? { value: { content: target } },
+        );
+        credits.push({
+          workExternalId: work.externalId,
+          workSubjectId: workId,
+          personExternalId,
+          boundPersonId,
+          canonicalPersonId: survivor,
+          property,
+          creditedAs: row.qualifiers,
+          citations: row.citations,
+          ...(character ? { characterExternalId: character } : {}),
+        });
+      }
+    }
+  }
+  return { canonicalPersonId: input.canonicalPersonId, credits };
+}
+
+export async function readCombinedPersonCredits(input: {
+  canonicalPersonId: string;
+  originals: readonly Readonly<{ boundPersonId: string; personExternalId: string }>[];
+  works: readonly Readonly<{ externalId: string; boundSubjectId: string }>[];
+  readPublic: (id: string) => Promise<ReviewedSubjectRead>;
+}): Promise<CombinedPersonCredits | { state: 'unconfirmed' }> {
+  const works: { externalId: string; read: ReviewedSubjectRead }[] = [];
+  for (const work of input.works) {
+    const read = await input.readPublic(work.boundSubjectId).catch((error: unknown) => {
+      if (importProducerPhase(error) === 'readiness') return null;
+      throw error;
+    });
+    if (!read) return { state: 'unconfirmed' };
+    works.push({ externalId: work.externalId, read });
+  }
+  return recordCombinedPersonCredits({
+    canonicalPersonId: input.canonicalPersonId,
+    originals: input.originals,
+    works,
+  });
 }
