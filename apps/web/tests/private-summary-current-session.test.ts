@@ -51,6 +51,7 @@ describe('Continue and private follow counts discard refused current-session con
     for (const input of [{}, target, { targetId: target.targetId }])
       expect(await loadPrivateFollowCounts(client, request, env, input)).toEqual({
         viewer: null,
+        locale: 'en',
         context: followCountsSearch(input),
         outgoing: { state: 'signed-out' },
         target: null,
@@ -67,6 +68,7 @@ describe('Continue and private follow counts discard refused current-session con
     await expect(loadContinue(client, request, env)).rejects.toMatchObject({ state: 'unavailable' });
     expect(await loadPrivateFollowCounts(client, request, env, target)).toEqual({
       viewer: null,
+      locale: 'en',
       context: target,
       outgoing: { state: 'unavailable', status: 502, code: 'dependency_unavailable' },
       target: null,
@@ -74,6 +76,7 @@ describe('Continue and private follow counts discard refused current-session con
     const explicit = new Request('https://site.test/en/library', { headers: { authorization: 'Bearer explicit' } });
     expect(await loadPrivateFollowCounts(client, explicit, env, target)).toEqual({
       viewer: null,
+      locale: 'en',
       context: target,
       outgoing: { state: 'signed-out' },
       target: null,
@@ -164,6 +167,7 @@ describe('Continue and private follow counts discard refused current-session con
     });
     expect(await loadPrivateFollowCounts(client, request, env, target)).toEqual({
       viewer,
+      locale: 'en',
       context: target,
       outgoing: { state: 'ready', count: 0 },
       target: { state: 'ready', count: 8 },
@@ -190,6 +194,7 @@ describe('Continue and private follow counts discard refused current-session con
     ).toBe(true);
     expect(await loadPrivateFollowCounts(null, request, env, target)).toEqual({
       viewer,
+      locale: 'en',
       context: target,
       outgoing: { state: 'unavailable' },
       target: null,

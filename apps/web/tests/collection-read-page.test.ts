@@ -145,7 +145,7 @@ test('Collection read page has real owner actions, readable member rows and comp
     expect(page.memberState).toBe(status === 200 ? 'ready' : status === 202 ? 'preparing' : 'unavailable');
     expect(page.memberCount).toBe(status === 200 ? 0 : null);
     expect(page.publicExport).toBe(status === 200);
-    expect(paths).toHaveLength(3);
+    expect(paths).toEqual([`/v1/collections/${id}`, `/v1/collections/${id}/members`]);
   }
 });
 

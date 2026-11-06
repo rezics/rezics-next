@@ -295,7 +295,7 @@ function nativePageRoute<App, const Path extends string>(
       query: t.Object({ target: t.Optional(t.String()) }),
       response: {
         200: withHeaders(draftPreview ? draftResponse() : pageResponse(), { 'cache-control': t.String() }),
-        202: withHeaders(t.Any(), { 'retry-after': t.String() }),
+        202: withHeaders(t.Object({ preparing: t.Literal(true) }, closed), { 'retry-after': t.String() }),
         308: withHeaders(pageRedirect, { location: t.String() }),
         400: problemSchema('invalid_request'),
         401: unauthorized(),

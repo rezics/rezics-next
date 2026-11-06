@@ -164,7 +164,7 @@ test('a subject page resolves its type template and runs its reads in one round 
   expect(answer.body.document).toEqual(templateViews(profile.types[0]!).overview);
   expect(Object.keys(answer.body.reads).sort()).toEqual(['r0', 'r1']);
   const standalone = await call('GET', `/v1/subjects/${id}`);
-  expect(answer.body.reads.r0).toEqual({ status: 200, body: standalone.body });
+  expect(answer.body.reads.r0).toEqual({ status: 200, body: { ...standalone.body, documents: {} } });
   const links = await call('GET', `/v1/subjects/${id}/links?property=schema%3Aauthor&limit=6`);
   expect(answer.body.reads.r1.status).toBe(links.response.status);
   expect(links.response.status).toBe(200);
@@ -249,7 +249,9 @@ test('a subject without a type template falls back through its structural bases'
   expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
   expect(answer.body.template).toEqual({ scope: 'base', key: base.base });
   expect(answer.body.document).toEqual(profile.bases[0]!.document);
-  expect(answer.body.reads).toEqual({ r0: { status: 200, body: (await call('GET', `/v1/subjects/${id}`)).body } });
+  expect(answer.body.reads).toEqual({
+    r0: { status: 200, body: { ...(await call('GET', `/v1/subjects/${id}`)).body, documents: {} } },
+  });
 });
 
 test('a view target answers that view, falling back to the generic view, and lists the views a page defines', async () => {
@@ -327,6 +329,7 @@ test('native subject redirect, credentials and aggregate observations retain sta
     await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'reader', action);
   const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
   const native = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32).fill(7),
     requestDeadlineMs: 30_000,
@@ -436,6 +439,7 @@ test('a fixed native admitted plan retains dispatch, row and byte bounds at 64, 
     );
     await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
     const native = createKernel({
+      receiptKeys: testReceiptKeys(),
       pool: db.pool,
       routeKey: new Uint8Array(32).fill(7),
       requestDeadlineMs: 30_000,
