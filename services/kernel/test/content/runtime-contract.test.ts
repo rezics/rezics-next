@@ -3,6 +3,7 @@ import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
 import type { ContentBoardDependencies } from '../../src/content/boards.ts';
+import type { DisclosureBarrier } from '../../src/content/reads.ts';
 import * as routes from '../../src/content/routes.ts';
 import type { ContentRuntime } from '../../src/content/runtime.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
@@ -14,6 +15,8 @@ type KernelContent = ContentRuntime &
   Pick<ContentBoardDependencies, 'cursorNow'> & {
     readConsent?: CurrentConsentReader;
     shelfTitleInputs?: ContentShelfTitleInputs;
+    // Composed-test timing seam; it is not a native port and production never sets it.
+    disclosureBarrier?: DisclosureBarrier;
   };
 test('trusted optional content runtime types retain exactly the three native ports', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
