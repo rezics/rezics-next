@@ -47,6 +47,12 @@ TVAnime official websites, descriptive links and copyright notices keep separate
 
 Cases: [Person careers](../../services/importer/tests/showcase-bangumi-person-careers.test.ts), [Person names](../../packages/conversion/tests/bangumi-person-names.test.ts), [websites](../../services/importer/tests/bangumi-official-websites.test.ts), [work evidence](../../services/importer/tests/bangumi-work-evidence.test.ts), [Game names](../../services/importer/tests/bangumi-game-names.test.ts), [publication dates](../../services/importer/tests/bangumi-game-publication.test.ts), [credits](../../services/importer/tests/bangumi-creator-credits.test.ts) and [Character appearance](../../services/importer/tests/showcase-bangumi-characters.test.ts). Native and public-page outcomes remain separately owned.
 
+### Bangumi light novels and anime counterpart
+
+Decision: the two pinned light-novel families publish their BookSeries and Book identities, exact und aliases, volume membership through `wdt:P179`, series-grain publisher credits and the TVAnime counterpart (Kara no Kyoukai 2815 and anime 233) through `rezics:crossMediaCounterpart`. A BookSeries admits no author or illustrator slot, so series-grain individual credits (Book Girl 499 credits 6023 and 5839; Kara no Kyoukai 2815 credits 1466 and 1467) stay exact `property_not_admitted` gaps. Pinned volumes carry no credit rows, so no volume credit is invented.
+
+Cases: [importer pinned publication](../../services/importer/tests/showcase-books.test.ts) and [native pinned publication](../../services/kernel/test/imports/showcase-books.test.ts), with the [native journey](../../services/kernel/test/imports/showcase-books-journey.ts). Native, browser and growth results stay open until observed on the promoted source.
+
 ### Open Library Work publication date
 
 Decision: retain the ordinary proposal-only Open Library CLI and separate Work/Edition bindings; reviewers adopt Work dates and Edition page counts/ISBNs independently. Only optional Work first_publish_date creates its independently cited schema:datePublished assertion; existing publish_date behavior stays separate. [Conversion cases](../../packages/conversion/tests/open-library-first-publication.test.ts) pin precision, citation, digest changes, malformed values and Edition exclusion. [Native cases](../../services/kernel/test/imports/open-library-first-publication.test.ts) retain separate selection, adoption and current public reads.
