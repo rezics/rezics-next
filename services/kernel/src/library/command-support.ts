@@ -173,6 +173,17 @@ export type LibraryCommandExecutionBinding = <T>(
   plan?: LibraryCommandExecutionPlan,
 ) => Promise<T>;
 
+/** Published Log commands bind the native interceptor when a caller has not supplied its own execution wrap. */
+function publishedLogCommandExecution(
+  kind: string,
+  deadline: number,
+  bind?: LibraryCommandExecutionBinding,
+): LibraryCommandExecutionBinding | undefined {
+  if (bind) return bind;
+  if (!kind.startsWith('published_log.')) return;
+  return (dispatch) => withPublishedLogNativeWork(deadline, dispatch);
+}
+
 export function runLibraryCommand<T>(
   dispatch: () => Promise<T>,
   bind?: LibraryCommandExecutionBinding,
@@ -410,7 +421,7 @@ export function createLibraryCommandRunner(config: {
               ? withSessionCommandPlan(plan, execute)
               : execute(),
         ),
-      request.execution,
+      publishedLogCommandExecution(request.kind, deadline, request.execution),
       request.executionPlan,
     );
   }
@@ -547,7 +558,7 @@ export function createLibraryCommandRunner(config: {
           );
         return followPlan ? withFollowCommandWork(followPlan, execute) : execute();
       },
-      request.execution,
+      publishedLogCommandExecution(request.kind, deadline, request.execution),
       request.executionPlan,
     );
   }

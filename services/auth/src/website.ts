@@ -79,28 +79,30 @@ function failure(code: RefusalCode | 'temporarily_unavailable') {
     },
   );
 }
+function protocolRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+function protocolErrorCode(value: unknown): RefusalCode | undefined {
+  const error = protocolRecord(value)?.error;
+  if (typeof error !== 'string') return;
+  switch (error) {
+    case 'invalid_request':
+    case 'invalid_client':
+    case 'invalid_grant':
+    case 'unsupported_grant_type':
+    case 'invalid_scope':
+    case 'invalid_target':
+      return error;
+  }
+}
 async function protocolResponse(run: () => Promise<Response>, token: boolean) {
   try {
     const response = await run();
     if (response.status >= 500) return failure('temporarily_unavailable');
     if (response.status >= 400) {
       if (!token) return failure('invalid_request');
-      const payload: unknown = await response.json();
-      const error =
-        payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-          ? payload.error
-          : undefined;
-      switch (error) {
-        case 'invalid_request':
-        case 'invalid_client':
-        case 'invalid_grant':
-        case 'unsupported_grant_type':
-        case 'invalid_scope':
-        case 'invalid_target':
-          return failure(error);
-        default:
-          return failure('temporarily_unavailable');
-      }
+      const error = protocolErrorCode(await response.json());
+      return failure(error ?? 'temporarily_unavailable');
     }
     const headers = new Headers(response.headers);
     headers.set('cache-control', 'no-store');
@@ -525,8 +527,8 @@ export function websiteRoutes(input: {
           if (request.method !== 'GET' || url.search) deny('invalid_request');
           const response = await input.native().handler(request);
           if (!response.ok) return response;
-          const metadata: unknown = await response.json();
-          if (!metadata || typeof metadata !== 'object') return response;
+          const metadata = protocolRecord(await response.json());
+          if (!metadata) return response;
           return Response.json(
             {
               ...metadata,
@@ -652,7 +654,7 @@ export function websiteRoutes(input: {
             if (
               invalidated &&
               response.status === 400 &&
-              ((await response.clone().json()) as { error?: unknown }).error === 'unsupported_token_type'
+              protocolRecord(await response.clone().json())?.error === 'unsupported_token_type'
             )
               return Response.json(null, { headers: { 'cache-control': 'no-store' } });
             return response;

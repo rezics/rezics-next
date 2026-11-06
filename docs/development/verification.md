@@ -51,10 +51,6 @@ Decision: under minimal verification a type error blocks a worker's success, and
 Decision: private follow native/browser/growth capability stays open until the installed controller-owned driver and
 Auth-persona walk pass after integration; typed transport, FULL withhold, frozen command frame and list-frontier
 return land under ordinary clean-workspace typing.
-Decision: Published Log public-lifecycle verification on this landing is changed-workspace typing plus the seven Log
-and five Search suites through the worker-check wrapper; FULL withhold and My Logs return-frontier pins land with
-those suites. The seeded Auth walk, phone/desktop pages and 64/512/4096 native rows remain deferred until observed
-passing.
 
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.

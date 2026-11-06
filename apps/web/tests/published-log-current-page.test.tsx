@@ -453,3 +453,15 @@ test('public snapshots remain readable without owner revision or dispatch contro
     }
   }
 });
+
+test('a withheld changed Source still renders the published snapshot', async () => {
+  const props = { ...page(), isOwner: false, log: { ...page().log, subject: null } };
+  const h = await mount(props);
+  try {
+    expect(h.host.textContent).toContain(props.log.note!);
+    expect(h.host.textContent).toContain(m.library_subject_unavailable());
+    expect(h.host.querySelector('button')).toBeNull();
+  } finally {
+    await h.close();
+  }
+});
