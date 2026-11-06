@@ -5,6 +5,7 @@ import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { installIdentityGrants } from '../../support/trusted-grants.ts';
 import type { Pool } from 'pg';
 import {
   createNativeContentSystemWithWriteRateOverrides,
@@ -286,20 +287,7 @@ async function installGrant(
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  const resourceRoute = route(resourceId);
-  await system.database.pool.query(
-    `INSERT INTO access.resource_grant
-       (route,resource_id,subject_id,subject_role,action,valid,transaction_id,subject_kind)
-     SELECT $1,$2,$3,'',candidate.action,'(,)'::tstzrange,$4,'identity'
-     FROM unnest($5::text[]) AS candidate(action)
-     WHERE NOT EXISTS (
-       SELECT 1 FROM access.resource_grant existing
-       WHERE existing.route=$1 AND existing.resource_id=$2 AND existing.subject_id=$3
-         AND existing.subject_role='' AND existing.action=candidate.action
-         AND existing.subject_kind='identity' AND existing.valid @> $6::timestamptz
-     )`,
-    [resourceRoute, resourceId, accountId, randomUUID(), [...actions], new Date().toISOString()],
-  );
+  await installIdentityGrants(system.database.pool, resourceId, accountId, actions);
 }
 
 export async function createNotificationFixture(options: { growth?: boolean } = {}): Promise<NotificationFixture> {
@@ -369,8 +357,12 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     await system.clock.setCommandTime(fixture.now);
     await system.clock.setCursorVerificationTime(fixture.now);
     await bootstrapRelease(system.database.pool, bundledRelease, () => new Date(fixture.now));
-    await installGrant(system, GLOBAL_CONTEXT, author.id, ['subject:read']);
-    await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, ['space:create', 'realm:create', 'subject:create']);
+    // Parent creation rows sit on the Global Context, the platform root anchor that Space and Realm
+    // creation authorize against. Whether Access admits them is the Access producer's decision (see
+    // the accounts continuation brief); the fixture installs the same rows the other native fixtures use.
+    const parentCreation = ['space:create', 'realm:create', 'subject:create'];
+    await installGrant(system, GLOBAL_CONTEXT, author.id, ['subject:read', ...parentCreation]);
+    await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, parentCreation);
 
     const [publicBoard, protectedBoard] = await Promise.all([
       createBoard(system, author, 'public', 'public'),

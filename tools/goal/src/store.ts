@@ -14,7 +14,9 @@ import type {
   Brief,
   DevVerifierFinding,
   DevVerifierRun,
+  BriefProposalRecord,
   IntegrationPlan,
+  PendingBriefProposal,
   PoolReading,
   PromotionRun,
   RetryIntent,
@@ -224,6 +226,17 @@ CREATE TRIGGER worker_current_attempts_attempt_delete AFTER DELETE ON worker_att
 END;`,
   },
   workerRecordEndedAtMigration,
+  {
+    module: 'worker',
+    version: 13,
+    sql: `CREATE TABLE worker_brief_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL REFERENCES worker_tasks(id),
+      written_for_attempt INTEGER NOT NULL,
+      body TEXT NOT NULL
+    );
+    CREATE INDEX worker_brief_proposals_task ON worker_brief_proposals(task_id, id);`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',
@@ -1504,6 +1517,37 @@ export class WorkerStore implements AttemptFence {
     return decode<RetryIntent>(
       this.db.query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
     );
+  }
+  saveBriefProposal(record: BriefProposalRecord): PendingBriefProposal {
+    return this.db
+      .transaction(() => {
+        const inserted = this.db
+          .query('INSERT INTO worker_brief_proposals(task_id, written_for_attempt, body) VALUES (?,?,?)')
+          .run(record.taskId, record.writtenForAttempt, JSON.stringify(record));
+        return { ...record, id: Number(inserted.lastInsertRowid) };
+      })
+      .immediate();
+  }
+  pendingBriefProposals(taskId: string): PendingBriefProposal[] {
+    return this.db
+      .query('SELECT id, body FROM worker_brief_proposals WHERE task_id=? ORDER BY id')
+      .all(taskId)
+      .map((row) => {
+        const value = row as { id: number; body: string };
+        return { ...JSON.parse(value.body), id: value.id } as PendingBriefProposal;
+      });
+  }
+  newestPendingBriefProposal(taskId: string): PendingBriefProposal | undefined {
+    return this.pendingBriefProposals(taskId).at(-1);
+  }
+  takePendingBriefProposals(taskId: string): PendingBriefProposal[] {
+    return this.db
+      .transaction(() => {
+        const pending = this.pendingBriefProposals(taskId);
+        if (pending.length) this.db.query('DELETE FROM worker_brief_proposals WHERE task_id=?').run(taskId);
+        return pending;
+      })
+      .immediate();
   }
   updateRetryIntent(ref: AttemptRef, update: (intent: RetryIntent) => void): RetryIntent {
     return this.db

@@ -4,8 +4,10 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createPreferenceCommands } from '../../src/access/preferences.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
+configureTestReceiptKeys(pool);
 afterAll(() => pool.end());
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const commands = createLifecycleCommands({ pool, access });

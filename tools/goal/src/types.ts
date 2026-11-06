@@ -351,6 +351,17 @@ export type RetryIntent = AttemptRef & {
   abandonedBy?: 'stop' | 'cancel';
   nextAttempt?: number;
 };
+/** A manager-accepted replacement brief waiting for the next retry to consume it. */
+export type PendingBriefProposal = {
+  id: number;
+  taskId: string;
+  writtenForAttempt: number;
+  previousBriefHash: string;
+  newBriefHash: string;
+  markdown: string;
+  createdAt: string;
+};
+export type BriefProposalRecord = Omit<PendingBriefProposal, 'id'>;
 export type WorktreeCleanupDisposition = {
   taskId: string;
   /** Fingerprint of the exact offending path and its in-worktree ancestors. */

@@ -24,6 +24,7 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
+import { installIdentityGrants } from '../../support/trusted-grants.ts';
 import { assertSetupResponse } from './setup-response.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
 
@@ -462,20 +463,15 @@ async function createNativeContentSystemWithOptions(
       });
       await assertSetupResponse(await kernel.handle(request), request, status);
     };
-    // Parent creation permissions only. Product resource ownership/standing
-    // remains the responsibility of each real creation command.
-    for (const actor of [author, other, moderator, suspended]) {
-      await command(
-        '/v1/grants',
-        {
-          resource: PLATFORM_RESOURCE,
-          subject: { kind: 'account', id: actor.actor.accountId },
-          actions: ['space:create', 'realm:create', 'subject:create'],
-          valid: '(,)',
-        },
-        201,
-      );
-    }
+    // Parent creation permissions only, installed on the platform parent as trusted fixture authority
+    // (not through the grant command). Product resource ownership/standing remains the responsibility
+    // of each real creation command.
+    for (const actor of [author, other, moderator, suspended])
+      await installIdentityGrants(pool, PLATFORM_RESOURCE.id, actor.actor.accountId, [
+        'space:create',
+        'realm:create',
+        'subject:create',
+      ]);
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 
     const deletion: AccountDeletionRuntime = {
