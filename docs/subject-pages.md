@@ -2825,6 +2825,9 @@ templates only, and the stream directory reads the relation labels it needs with
 Dates remain single-valued: a competing sourced candidate never replaces the selected date. Candidate comparison opens
 only after a current signed-in reading; Changes shows the native revision trail without putting private review data
 into public HTML. A static public response does not show both candidates.
+An occupation target whose current related summary withholds its Type remains unavailable; a disclosed label alone
+does not establish the released Concept meaning. Public identity-operation types derive from installed Subject routes
+and travel through normal declaration generation.
 
 Decision: the shared traversal fixture provisions its automated reader through native operator approval and the Auth
 creation workflow, then signs in with that account's own credentials; its Subject reads carry its own Auth-issued

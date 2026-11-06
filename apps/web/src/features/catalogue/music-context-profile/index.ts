@@ -229,7 +229,7 @@ export async function readMusicContext(
         links = page.data.relations
           .filter((row) => row.statement.property.id === stream.id)
           .slice(0, MUSIC_CONTEXT_PAGE_CAP)
-          .map((row, index) => {
+          .map((row, index): MusicContextLink => {
             const summary = row.summary;
             if (!summary?.id) {
               return {
@@ -250,6 +250,7 @@ export async function readMusicContext(
             const roleVisible =
               !!role && (role.value.type !== 'value' || roleField?.datatype !== 'wikibase-item' || !!roleTarget);
             const targetKind = summary.type ? musicContextKind(release, summary.type) : 'unsupported';
+            const roleTargetKind = roleTarget?.type ? musicContextKind(release, roleTarget.type) : 'unsupported';
             return {
               id: summary.id,
               label: summary.label?.value ?? '',
@@ -276,9 +277,7 @@ export async function readMusicContext(
                             target: {
                               id: roleTarget.id,
                               label: roleTarget.label?.value ?? '',
-                              ...(musicContextKind(release, roleTarget.type) !== 'unsupported'
-                                ? { targetKind: musicContextKind(release, roleTarget.type) }
-                                : {}),
+                              ...(roleTargetKind !== 'unsupported' ? { targetKind: roleTargetKind } : {}),
                             },
                           }
                         : {}),

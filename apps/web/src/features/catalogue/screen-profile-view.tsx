@@ -442,7 +442,7 @@ function ScreenProfileLive({
         revision={`${id}:${context}:${admitted?.public?.subject.release ?? visit?.definition ?? ''}:${readingRevision}`}
         reload={reload}
         intro={intro}
-        returnHref={returnAddress}
+        {...(returnAddress ? { returnHref: returnAddress } : {})}
         {...(currentInspection ? { inspection: currentInspection } : {})}
         inspectionRetired={retiredInspection}
         readingChanged={readingChanged}

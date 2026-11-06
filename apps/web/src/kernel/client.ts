@@ -1,4 +1,4 @@
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, type KernelClient } from '@rezics/client';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -81,7 +81,7 @@ export function kernelClient(
   locale?: string,
   authorization?: string,
   decorateFetch: (fetcher: typeof fetch) => typeof fetch = (fetcher) => fetcher,
-) {
+): KernelClient {
   const language = uiLocale(locale) ?? requestLocale();
   const headers = {
     ...(language === undefined ? {} : { 'accept-language': acceptLanguage(language) }),
