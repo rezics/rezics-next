@@ -16,12 +16,22 @@ import {
   retentionAdmittedByteScale,
   retentionBatchWork,
   retentionCompleteBatchWork,
+  retentionControlEnvelope,
+  retentionEngineEnvelope,
+  retentionFamilyCountScale,
   retentionInterruptedBatchWork,
+  retentionLoadClass,
   retentionMixedNeighbourhoodFanout,
+  retentionNestedFkEnvelope,
+  retentionNestedFkStatements,
+  retentionObservedMatchesDerived,
+  retentionObservedWork,
   retentionPayloadByteInventory,
   retentionPayloadFanoutInventory,
   retentionReplayBatchWork,
   retentionSelectionBinds,
+  retentionSelectorPlanProof,
+  retentionSingleCopyByteInventory,
   retentionSweepWork,
   WORKFLOW_RETENTION_BYTE_SCALES,
   WORKFLOW_RETENTION_COUNT_SCALES,
@@ -175,12 +185,20 @@ test('complete nested deletion charges selected IDs, payload copies, FK cascades
   expect(work.deletionRows).toBeGreaterThan(work.cascadeRows);
   expect(work.payloadBytes).toBeGreaterThan(0);
   expect(work.fenceRows).toBe(10);
-  expect(work.rollbackStatements).toBe(1);
+  expect(work.commitStatements).toBe(1);
+  expect(work.rollbackStatements).toBe(0);
+  expect(work.backgroundStatements).toBe(0);
+  expect(work.exactIdDeletes).toBe(4);
   expect(admitRetentionFamilyCopies('workflow_events', 64)).toBe(WORKFLOW_RETENTION_FAMILY_LIMITS.workflow_events);
   const interrupted = retentionInterruptedBatchWork(10, mixed, bytes, false);
+  expect(interrupted.commitStatements).toBe(0);
+  expect(interrupted.rollbackStatements).toBe(1);
+  expect(interrupted.controlStatements).toBe(2);
   const replayed = retentionReplayBatchWork(interrupted, work);
   expect(replayed.batches).toBe(2);
   expect(replayed.applicationStatements).toBe(work.applicationStatements * 2);
+  expect(replayed.rollbackStatements).toBe(1);
+  expect(replayed.commitStatements).toBe(1);
   expect(replayed.replayApplicationStatements).toBe(work.applicationStatements);
 });
 
@@ -192,4 +210,112 @@ test('the durable start snapshot freezes days, time and application together', (
     applicationName: 'retention-recovery:fixture',
   });
   expect(() => freezeWorkflowRetentionStart(6, 0, 'rezics-kernel')).toThrow('Invalid workflow retention period');
+});
+
+const nonemptyStatements = [
+  '/* work:workflow-retention-select */ SELECT workflow_uuid FROM dbos.workflow_status ORDER BY completed_at, workflow_uuid LIMIT 1000',
+  'BEGIN',
+  'DELETE FROM dbos.workflow_input WHERE workflow_uuid = ANY($1::text[])',
+  'DELETE FROM dbos.workflow_output WHERE workflow_uuid = ANY($1::text[])',
+  'DELETE FROM dbos.operation_outputs WHERE workflow_uuid = ANY($1::text[])',
+  'DELETE FROM dbos.workflow_status WHERE workflow_uuid = ANY($1::text[])',
+  'COMMIT',
+];
+
+test('observed nonempty statements match the derived five-plus-two envelope', () => {
+  const inventory = retentionPayloadFanoutInventory(10, { operations: 1, events: 1, history: 1 });
+  const derived = retentionCompleteBatchWork(10, inventory);
+  const observed = retentionObservedWork(nonemptyStatements, inventory);
+  expect(observed.applicationStatements).toBe(5);
+  expect(observed.controlStatements).toBe(2);
+  expect(observed.outcome).toBe('commit');
+  expect(observed.exactIdDeletes).toBe(4);
+  expect(retentionObservedMatchesDerived(observed, derived)).toBe(true);
+  expect(retentionControlEnvelope('commit')).toEqual({ begin: 1, commit: 1, rollback: 0, control: 2 });
+});
+
+test('a failed attempt prices BEGIN/ROLLBACK and replay repeats the remaining identities', () => {
+  const inventory = retentionPayloadFanoutInventory(10, { operations: 8, events: 1, history: 1 });
+  const failed = [
+    nonemptyStatements[0]!,
+    'BEGIN',
+    ...nonemptyStatements.slice(2, 6),
+    'ROLLBACK',
+  ];
+  const observed = retentionObservedWork(failed, inventory);
+  expect(observed.outcome).toBe('rollback');
+  expect(observed.commitStatements).toBe(0);
+  expect(observed.rollbackStatements).toBe(1);
+  expect(observed.applicationStatements).toBe(5);
+  const replayed = retentionObservedWork(nonemptyStatements, inventory);
+  expect(replayed.outcome).toBe('commit');
+  expect(retentionReplayBatchWork(observed, replayed).applicationStatements).toBe(10);
+  expect(retentionControlEnvelope('rollback')).toEqual({ begin: 1, commit: 0, rollback: 1, control: 2 });
+});
+
+test('family count and single-copy byte axes admit owner limits independently of selected IDs', () => {
+  expect(WORKFLOW_RETENTION_COUNT_SCALES.map((scale) => retentionFamilyCountScale('operation_outputs', scale))).toEqual([
+    1, 8, 64,
+  ]);
+  expect(WORKFLOW_RETENTION_COUNT_SCALES.map((scale) => retentionFamilyCountScale('workflow_events', scale))).toEqual([
+    1, 8, 8,
+  ]);
+  expect(retentionFamilyCountScale('workflow_input', 64)).toBe(1);
+  const unit = retentionPayloadFanoutInventory(10, { operations: 1 });
+  const bytes = retentionSingleCopyByteInventory(10, 65_536);
+  expect(bytes.workflow_input).toBe(10 * 65_536);
+  expect(bytes.operation_outputs).toBe(0);
+  expect(retentionCompleteBatchWork(10, unit, bytes).payloadBytes).toBeGreaterThan(0);
+  expect(retentionCompleteBatchWork(10, unit, bytes).selected).toBe(10);
+});
+
+test('nested FK work stays four engine statements for every nonempty neighbourhood', () => {
+  const empty = retentionNestedFkEnvelope(0);
+  const nonempty = retentionNestedFkEnvelope(10);
+  expect(empty).toEqual({ statements: 0, points: 0, parentStatements: 0 });
+  expect(nonempty).toEqual({ statements: 4, points: 5, parentStatements: 1 });
+  expect(retentionNestedFkStatements(10, retentionPayloadFanoutInventory(10, { operations: 64, events: 0 }))).toBe(4);
+});
+
+test('selector plan proof requires the retention index and rejects sequential scans', () => {
+  const indexed = {
+    'Query Text': '/* work:workflow-retention-select */ SELECT workflow_uuid',
+    Plan: {
+      'Node Type': 'Index Only Scan',
+      'Index Name': 'workflow_retention_selector',
+      'Relation Name': 'workflow_status',
+    },
+  };
+  const proof = retentionSelectorPlanProof([indexed]);
+  expect(proof.indexed).toBe(true);
+  expect(proof.indexOnly).toBe(true);
+  expect(proof.sequential).toBe(false);
+  const sequential = retentionSelectorPlanProof([
+    {
+      'Query Text': 'SELECT workflow_uuid FROM dbos.workflow_status ORDER BY completed_at, workflow_uuid',
+      Plan: { 'Node Type': 'Seq Scan', 'Relation Name': 'workflow_status' },
+    },
+  ]);
+  expect(sequential.sequential).toBe(true);
+  expect(sequential.indexed).toBe(false);
+});
+
+test('the engine envelope is intercept plus slope; packing is a residual not a new family', () => {
+  const envelope = retentionEngineEnvelope(10, 64, 2, 3);
+  expect(envelope.intercept).toBe(retentionEngineEnvelope(10, 1).indexProbes);
+  expect(envelope.slope).toBe(2);
+  expect(envelope.predictedBlocks).toBe(envelope.intercept + 128);
+  expect(envelope.packingResidual).toBe(3);
+  expect(
+    retentionLoadClass({ packingResidual: 3, sequentialScanChanged: false, backgroundGrew: false, affineResidual: 1 }),
+  ).toBe('packing');
+  expect(
+    retentionLoadClass({ packingResidual: 0, sequentialScanChanged: true, backgroundGrew: false, affineResidual: 0 }),
+  ).toBe('plan-transition');
+  expect(
+    retentionLoadClass({ packingResidual: 0, sequentialScanChanged: false, backgroundGrew: true, affineResidual: 0 }),
+  ).toBe('background');
+  expect(
+    retentionLoadClass({ packingResidual: 0, sequentialScanChanged: false, backgroundGrew: false, affineResidual: 0 }),
+  ).toBe('affine');
 });

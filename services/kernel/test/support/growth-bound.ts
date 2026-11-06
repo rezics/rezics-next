@@ -26,6 +26,9 @@ export const DEFAULT_BYTE_SLACK: Readonly<Record<ByteMetric, Slack>> = {
 export type Measured = Readonly<Record<Metric, number>> & {
   readonly requestBytes?: number;
   readonly responseBytes?: number;
+  readonly backgroundStatements?: number;
+  readonly backgroundRows?: number;
+  readonly backgroundBlocks?: number;
   readonly relations?: Readonly<
     Record<string, { readonly rows: number; readonly blocks: number; readonly sequentialScans?: number }>
   >;
@@ -263,6 +266,90 @@ export type AffineEnvelope = Readonly<{
   residuals: readonly number[];
   maxResidual: number;
 }>;
+
+export type EngineWorkClass = 'affine' | 'packing' | 'plan-transition' | 'background';
+
+export type EngineWorkClassification = Readonly<{
+  envelope: AffineEnvelope;
+  packing: readonly string[];
+  planTransitions: readonly string[];
+  backgroundGrew: boolean;
+  class: EngineWorkClass;
+  samples: readonly GrowthSample[];
+}>;
+
+function packingDiagnostics(samples: readonly GrowthSample[]): string[] {
+  const first = samples[0];
+  const last = samples.at(-1);
+  const firstSizes = first?.relationSizes;
+  const lastSizes = last?.relationSizes;
+  if (!first || !last || !firstSizes || !lastSizes) return [];
+  return Object.entries(firstSizes)
+    .flatMap(([name, size]) => {
+      const lastSize = lastSizes[name];
+      if (!lastSize || size.relpages <= 0 || lastSize.relpages <= 0) return [];
+      const firstDensity = size.reltuples / size.relpages;
+      const lastDensity = lastSize.reltuples / lastSize.relpages;
+      if (!(lastDensity > firstDensity * 1.25) && !(firstDensity > lastDensity * 1.25)) return [];
+      return [
+        `${formatRelationName(name)} ${lastDensity > firstDensity ? 'heap packing' : 'page expansion'} (${firstDensity.toFixed(1)} to ${lastDensity.toFixed(1)} tuples/page)`,
+      ];
+    })
+    .toSorted((left, right) => left.localeCompare(right));
+}
+
+function planTransitionDiagnostics(samples: readonly GrowthSample[]): string[] {
+  return samples.flatMap(({ scale, cost }, index) => {
+    if (index === 0) return [];
+    const previous = samples[index - 1]!;
+    return Object.entries(cost.relations ?? {}).flatMap(([name, relation]) => {
+      const before = previous.cost.relations?.[name]?.sequentialScans ?? 0;
+      const after = relation.sequentialScans ?? 0;
+      if (before === after) return [];
+      return [
+        `${formatRelationName(name)} sequential scans ${before} at scale ${previous.scale} to ${after} at scale ${scale}`,
+      ];
+    });
+  });
+}
+
+function backgroundGrew(samples: readonly GrowthSample[]): boolean {
+  if (samples.length === 0) return false;
+  const firstStatements = samples[0]!.cost.backgroundStatements ?? 0;
+  return samples.slice(1).some((sample) => (sample.cost.backgroundStatements ?? 0) > firstStatements);
+}
+
+/**
+ * Fit intercept+slope without changing the linear family. Packing, plan transitions and
+ * background growth stay visible diagnostics; they do not reprice rows or statements.
+ */
+export function classifyEngineWork(
+  samples: readonly GrowthSample[],
+  metric: Metric = 'blocks',
+): EngineWorkClassification {
+  validateSamples(samples);
+  const scales = samples.map((sample) => sample.scale);
+  const values = samples.map((sample) => sample.cost[metric]);
+  const envelope = affineEnvelope(scales, values);
+  const packing = packingDiagnostics(samples);
+  const planTransitions = planTransitionDiagnostics(samples);
+  const background = backgroundGrew(samples);
+  const className: EngineWorkClass = background
+    ? 'background'
+    : planTransitions.length > 0
+      ? 'plan-transition'
+      : packing.length > 0 && envelope.maxResidual > 0
+        ? 'packing'
+        : 'affine';
+  return {
+    envelope,
+    packing,
+    planTransitions,
+    backgroundGrew: background,
+    class: className,
+    samples,
+  };
+}
 
 /** Least-squares a + b·x envelope with a ≥ 0, b ≥ 0. Packing or a plan floor shows up as a residual, not a new family. */
 export function affineEnvelope(scales: readonly number[], values: readonly number[]): AffineEnvelope {

@@ -116,11 +116,18 @@ The full-batch series retires the former `GROWTH_BASELINE` step exemption for `w
 - Growth check: `test/work/growth-retention.test.ts` empty, short, full, eligible-backlog, operations fanout,
   per-family cascade, payload-byte, mixed-maximum, unrelated-payload, sparse/deep and two-batch sweep titles.
 
+Test choice: extend the four named native suites with observed-statement, rollback/replay, family-count,
+single-copy-byte and engine-envelope pins; keep the already-passing operations fanout distinct; native evidence
+stays open after typing.
+
 Decision: pin complete installed retention cleanup with the four named native suites only — compact selector and
 migration pins, registered interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog
 plus independent family-count, payload-byte, mixed-max and sparse/deep series — rather than extra stories. Each
 growth series uses its own application and seed identities so a selected count cannot borrow another series'
-payload. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain document under
+payload. Nested FK work is four engine statements for every nonempty neighbourhood, including empty cascade
+tables. A healthy batch commits; a failed attempt before the checkpoint prices BEGIN/ROLLBACK and replay repeats
+the remaining identities. Single-copy families stay one row while admitted payload bytes grow. Packing and plan
+transitions stay in the affine residual and `classifyEngineWork`; the linear family is unchanged. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain document under
 the shared 32 MiB or 20,000 retained-entry caps. Payload-family planner floors are part of that pin: fanout 1/8/64
 must remain an indexed equality delete of owned copies, not a sequential scan of a tiny selected-only table.
 Cascade copies are packed by parent; packing residuals stay in the affine envelope and relation-page evidence.

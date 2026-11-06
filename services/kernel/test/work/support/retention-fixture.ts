@@ -3,6 +3,7 @@ import {
   WORKFLOW_RETENTION_FAMILY_LIMITS,
   WORKFLOW_RETENTION_PAYLOAD_BYTES,
   WORKFLOW_RETENTION_PAYLOAD_FAMILIES,
+  WORKFLOW_RETENTION_SINGLE_COPY_FAMILIES,
   WORKFLOW_RETENTION_VARIABLE_FAMILIES,
   emptyWorkflowRetentionInventory,
   retentionAdmittedFanout,
@@ -161,20 +162,28 @@ function payloadValues(table: WorkflowRetentionPayloadFamily, bytesPerCopy: numb
   }
 }
 
+export const SINGLE_COPY_BYTE_FAMILIES = WORKFLOW_RETENTION_SINGLE_COPY_FAMILIES.filter(
+  (family) => family !== 'workflow_status',
+);
+
 export async function insertRetentionPayload(
   pool: Pick<Pool, 'query'>,
   ids: readonly string[],
   fanout: RetentionPayloadFanout | WorkflowRetentionFanout = UNIT_RETENTION_PAYLOAD,
   bytesPerCopy = 0,
+  byteFamilies: readonly WorkflowRetentionPayloadFamily[] = WORKFLOW_RETENTION_PAYLOAD_FAMILIES.map(
+    (family) => family.table,
+  ),
 ): Promise<void> {
   if (ids.length === 0) return;
   const copies = copiesFor({ ...UNIT_RETENTION_PAYLOAD, ...fanout });
+  const byteTargets = new Set(byteFamilies);
   for (const family of WORKFLOW_RETENTION_PAYLOAD_FAMILIES) {
     const copiesForTable = copies[family.table];
     const spec = familyInsert[family.table];
     if (copiesForTable === 0) continue;
     const repeating = family.table === 'workflow_input' || family.table === 'workflow_output';
-    const values = payloadValues(family.table, bytesPerCopy);
+    const values = payloadValues(family.table, byteTargets.has(family.table) ? bytesPerCopy : 0);
     await pool.query(
       repeating
         ? `INSERT INTO dbos.${family.table} (${spec.key}, ${spec.columns})

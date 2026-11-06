@@ -6,8 +6,10 @@ import {
   WORKFLOW_RETENTION_WRITER_FENCE_TABLE,
 } from './contract/bounds.ts';
 import {
+  byteInventoriesMatch,
   emptyWorkflowRetentionBytes,
   emptyWorkflowRetentionInventory,
+  inventoriesMatch,
   workflowRetentionBytes,
   workflowRetentionInventory,
   type WorkflowRetentionByteInventory,
@@ -150,4 +152,19 @@ export async function readWorkflowRetentionFences(pool: Pick<Pool, 'query'>, ids
   const result = await countOwnedFences.run(pool, { ids: [...ids] });
   const row = Array.isArray(result) ? result[0] : result;
   return Number(row?.n ?? 0);
+}
+
+export function emptyWorkflowRetentionOwned(): WorkflowRetentionOwnedSnapshot {
+  return { rows: emptyWorkflowRetentionInventory(), bytes: emptyWorkflowRetentionBytes(), fences: 0 };
+}
+
+export function ownedSnapshotsMatch(
+  actual: WorkflowRetentionOwnedSnapshot,
+  expected: WorkflowRetentionOwnedSnapshot,
+): boolean {
+  return (
+    inventoriesMatch(actual.rows, expected.rows) &&
+    byteInventoriesMatch(actual.bytes, expected.bytes) &&
+    actual.fences === expected.fences
+  );
 }

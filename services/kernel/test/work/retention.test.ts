@@ -156,6 +156,10 @@ for (const lostResult of [false, true]) {
     expect(derived.cascadeRows).toBeGreaterThan(workflowIDs.length);
     expect(derived.nestedFkStatements).toBe(4);
     expect(derived.payloadBytes).toBeGreaterThan(0);
+    expect(derived.commitStatements).toBe(1);
+    expect(derived.rollbackStatements).toBe(0);
+    expect(derived.backgroundStatements).toBe(0);
+    expect(derived.exactIdDeletes).toBe(4);
     if (lostResult) {
       const sdk: WorkflowRetentionSdk = {
         async deleteWorkflows(ids, deleteChildren) {

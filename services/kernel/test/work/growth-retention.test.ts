@@ -9,12 +9,16 @@ import {
   retentionAdmittedByteScale,
   retentionBatchWork,
   retentionCompleteBatchWork,
+  retentionFamilyCountScale,
   retentionIndexProbes,
+  retentionObservedWork,
   retentionPayloadFanoutInventory,
+  retentionSelectorPlanProof,
   retentionSweepWork,
   WORKFLOW_RETENTION_COUNT_SCALES,
   WORKFLOW_RETENTION_FAMILY_LIMITS,
   WORKFLOW_RETENTION_VARIABLE_FAMILIES,
+  type WorkflowRetentionPayloadFamily,
   type WorkflowRetentionSelection,
 } from '../../src/work/core/index.ts';
 import {
@@ -26,9 +30,11 @@ import {
   WORKFLOW_RETENTION_SELECTOR_INDEX,
   WORKFLOW_RETENTION_SELECT_TAG,
   createWorkflowRetentionSelector,
+  emptyWorkflowRetentionOwned,
+  ownedSnapshotsMatch,
   readWorkflowRetentionOwned,
 } from '../../src/work/retention-selector.ts';
-import { affineEnvelope } from '../support/growth-bound.ts';
+import { affineEnvelope, classifyEngineWork } from '../support/growth-bound.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
 import {
   deleteOwnedRetentionRows,
@@ -36,6 +42,7 @@ import {
   familyFanout,
   insertRetentionPayload,
   MIXED_MAX_RETENTION_PAYLOAD,
+  SINGLE_COPY_BYTE_FAMILIES,
   UNIT_RETENTION_PAYLOAD,
   type RetentionPayloadFanout,
 } from './support/retention-fixture.ts';
@@ -194,6 +201,10 @@ function expectSelectorIndex(runs: readonly RunEvidence[]): void {
   for (const scale of new Set(runs.map((run) => run.scale))) {
     const plans = runs.filter((run) => run.scale === scale).flatMap((run) => run.plans);
     expect(plans.length, `retention selector plan at scale ${scale}`).toBeGreaterThan(0);
+    const documents = plans.map(({ query, plan }) => ({ 'Query Text': query, Plan: plan }));
+    const proof = retentionSelectorPlanProof(documents);
+    expect(proof.indexed, `retention selector index at scale ${scale}`).toBe(true);
+    expect(proof.sequential, `retention selector sequential scan at scale ${scale}`).toBe(false);
     const indexes = new Set(plans.flatMap(({ plan }) => indexNamesIn(plan)));
     expect([...indexes]).toContain(WORKFLOW_RETENTION_SELECTOR_INDEX);
     expect(plans.flatMap(({ plan }) => nodeTypesIn(plan)).includes('Seq Scan')).toBe(false);
@@ -360,6 +371,7 @@ async function seedEligible(
   offset: number,
   fanout: RetentionPayloadFanout = UNIT_RETENTION_PAYLOAD,
   bytesPerCopy = 0,
+  byteFamilies?: readonly WorkflowRetentionPayloadFamily[],
 ): Promise<string[]> {
   const ids = await seed(growth, `${series}-${kind}`, amount, offset, {
     application: applicationFor(series),
@@ -367,7 +379,7 @@ async function seedEligible(
     createdAt: origin - 401 * dayMs,
     completedAt: origin - 400 * dayMs,
   });
-  await insertRetentionPayload(growth.pool, ids, fanout, bytesPerCopy);
+  await insertRetentionPayload(growth.pool, ids, fanout, bytesPerCopy, byteFamilies);
   return ids;
 }
 
@@ -404,7 +416,30 @@ function expectDerivedStatements(
       sample.cost.statements + sample.cost.controlStatements,
       `application plus control statements at scale ${sample.scale}`,
     ).toBe(derived.statements);
+    const observed = retentionObservedWork(
+      (sample.statementRepetitions[0] ?? []).flatMap((entry) =>
+        Array.from({ length: Math.max(1, entry.count) }, () => entry.statement),
+      ),
+    );
+    expect(observed.applicationStatements, `observed application statements at scale ${sample.scale}`).toBe(
+      derived.applicationStatements,
+    );
+    if (derived.applicationStatements > 1) expect(observed.exactIdDeletes).toBe(4);
+    expect(observed.backgroundStatements).toBe(0);
   }
+}
+
+function expectEngineEnvelope(report: GrowthReport, copiesGrew: boolean): void {
+  const classified = classifyEngineWork(
+    report.samples.map((sample) => ({
+      scale: sample.scale,
+      cost: sample.cost,
+      relationSizes: sample.relationSizes,
+    })),
+  );
+  expect(classified.backgroundGrew).toBe(false);
+  expect(classified.class).not.toBe('background');
+  if (copiesGrew) expect(classified.envelope.slope).toBeGreaterThanOrEqual(0);
 }
 
 const foldedCapture = { captureMode: 'cost-folded' as const, includeBackends: true, rule: 'series' as const };
@@ -418,10 +453,9 @@ function expectOwnedInventory(
 }
 
 async function verifyEmptyOwned(growth: GrowthDatabase, seriesName: string): Promise<void> {
-  expectOwnedInventory(
-    await readWorkflowRetentionOwned(growth.admin, prepared.get(seriesName) ?? []),
-    emptyWorkflowRetentionInventory(),
-  );
+  const actual = await readWorkflowRetentionOwned(growth.admin, prepared.get(seriesName) ?? []);
+  expectOwnedInventory(actual, emptyWorkflowRetentionInventory());
+  expect(ownedSnapshotsMatch(actual, emptyWorkflowRetentionOwned())).toBe(true);
 }
 
 function relationTableName(name: string): string {
@@ -560,10 +594,15 @@ test('a short retention batch stays bounded as unrelated workflow history grows'
       expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('short'))).toBe(shortBatch);
     },
     async prepare(growth, scale) {
-      await seedEligible(growth, 'short', 'eligible', shortBatch, scale * shortBatch);
+      const ids = await seedEligible(growth, 'short', 'eligible', shortBatch, scale * shortBatch);
+      prepared.set('short', ids);
+      expectOwnedInventory(await readWorkflowRetentionOwned(growth.admin, ids), expectedRetentionInventory(shortBatch));
     },
     async operation(_growth, scale, repetition) {
       return measureBatch(shortBatch, 'short', scale, repetition, runs);
+    },
+    async verify(growth) {
+      await verifyEmptyOwned(growth, 'short');
     },
   });
   expectSelectorIndex(runs);
@@ -573,6 +612,7 @@ test('a short retention batch stays bounded as unrelated workflow history grows'
   logEvidence('short workflow retention batch', report, runs);
   const derived = retentionBatchWork(shortBatch, expectedRetentionInventory(shortBatch));
   expectDerivedStatements(report, derived);
+  expectEngineEnvelope(report, false);
   expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[0]!.cost.rows).toBeGreaterThan(shortBatch);
@@ -598,10 +638,15 @@ test('a full retention batch stays bounded as unrelated workflow history grows',
       expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('full'))).toBe(fullBatch);
     },
     async prepare(growth, scale) {
-      await seedEligible(growth, 'full', 'eligible', fullBatch, scale * fullBatch);
+      const ids = await seedEligible(growth, 'full', 'eligible', fullBatch, scale * fullBatch);
+      prepared.set('full', ids);
+      expectOwnedInventory(await readWorkflowRetentionOwned(growth.admin, ids), expectedRetentionInventory(fullBatch));
     },
     async operation(_growth, scale, repetition) {
       return measureBatch(fullBatch, 'full', scale, repetition, runs);
+    },
+    async verify(growth) {
+      await verifyEmptyOwned(growth, 'full');
     },
   });
   expectSelectorIndex(runs);
@@ -611,6 +656,7 @@ test('a full retention batch stays bounded as unrelated workflow history grows',
   logEvidence('workflow retention batch', report, runs);
   const derived = retentionBatchWork(fullBatch, expectedRetentionInventory(fullBatch));
   expectDerivedStatements(report, derived);
+  expectEngineEnvelope(report, false);
   expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[0]!.cost.rows).toBeGreaterThan(fullBatch);
@@ -752,7 +798,7 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
       counted: {
         read: (value, scale) => ({
           selected: Number(value),
-          copies: Math.min(scale, WORKFLOW_RETENTION_FAMILY_LIMITS[family]),
+          copies: retentionFamilyCountScale(family, scale),
         }),
         bounds: { selected: 'constant', copies: 'linear' },
       },
@@ -764,7 +810,7 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
           'warmup',
           shortBatch,
           0,
-          familyFanout(family, Math.min(scale, WORKFLOW_RETENTION_FAMILY_LIMITS[family])),
+          familyFanout(family, retentionFamilyCountScale(family, scale)),
         );
       },
       async warmup() {
@@ -777,15 +823,12 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
           'eligible',
           shortBatch,
           0,
-          familyFanout(family, Math.min(scale, WORKFLOW_RETENTION_FAMILY_LIMITS[family])),
+          familyFanout(family, retentionFamilyCountScale(family, scale)),
         );
         prepared.set(seriesName, ids);
         expectOwnedInventory(
           await readWorkflowRetentionOwned(growth.admin, ids),
-          expectedRetentionInventory(
-            shortBatch,
-            familyFanout(family, Math.min(scale, WORKFLOW_RETENTION_FAMILY_LIMITS[family])),
-          ),
+          expectedRetentionInventory(shortBatch, familyFanout(family, retentionFamilyCountScale(family, scale))),
         );
       },
       async operation(_growth, scale, repetition) {
@@ -808,12 +851,14 @@ for (const family of WORKFLOW_RETENTION_VARIABLE_FAMILIES) {
       shortBatch,
       retentionPayloadFanoutInventory(
         shortBatch,
-        familyFanout(family, Math.min(64, WORKFLOW_RETENTION_FAMILY_LIMITS[family])),
+        familyFanout(family, retentionFamilyCountScale(family, 64)),
       ),
     );
     expect(last.selected).toBe(first.selected);
     expect(last.nestedFkStatements).toBe(first.nestedFkStatements);
+    expect(last.nestedFkStatements).toBe(4);
     expectDerivedStatements(report, first);
+    expectEngineEnvelope(report, WORKFLOW_RETENTION_FAMILY_LIMITS[family] >= 64);
     logCompleteEvidence(`${family} cascade workflow retention batch`, report, runs, last);
     if (WORKFLOW_RETENTION_FAMILY_LIMITS[family] >= 64)
       expect(report.samples[2]!.cost.rows).toBeGreaterThan(report.samples[0]!.cost.rows);
@@ -845,6 +890,7 @@ test('a short retention batch stays bounded as admitted payload bytes grow', asy
         0,
         UNIT_RETENTION_PAYLOAD,
         retentionAdmittedByteScale(scale),
+        SINGLE_COPY_BYTE_FAMILIES,
       );
     },
     async warmup() {
@@ -859,6 +905,7 @@ test('a short retention batch stays bounded as admitted payload bytes grow', asy
         0,
         UNIT_RETENTION_PAYLOAD,
         retentionAdmittedByteScale(scale),
+        SINGLE_COPY_BYTE_FAMILIES,
       );
       prepared.set(seriesName, ids);
       const owned = await readWorkflowRetentionOwned(growth.admin, ids);
@@ -878,6 +925,7 @@ test('a short retention batch stays bounded as admitted payload bytes grow', asy
   expectBackgroundIndependent(report);
   const derived = retentionCompleteBatchWork(shortBatch, expectedRetentionInventory(shortBatch));
   expectDerivedStatements(report, derived);
+  expectEngineEnvelope(report, false);
   logCompleteEvidence('payload byte workflow retention batch', report, runs, derived);
   expect(report.samples[0]!.cost.rows).toBe(report.samples[2]!.cost.rows);
 }, 180_000);
@@ -937,6 +985,7 @@ test('a mixed-maximum neighbourhood stays bounded as unrelated workflow and payl
   expect(derived.cascadeRows).toBeGreaterThan(shortBatch);
   expect(derived.nestedFkStatements).toBe(4);
   expectDerivedStatements(report, derived);
+  expectEngineEnvelope(report, false);
   logCompleteEvidence('mixed maximum workflow retention batch', report, runs, derived);
   expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
@@ -981,6 +1030,7 @@ test('a short retention batch stays bounded as unrelated payload history grows',
   expectBackgroundIndependent(report);
   const derived = retentionCompleteBatchWork(shortBatch, expectedRetentionInventory(shortBatch));
   expectDerivedStatements(report, derived);
+  expectEngineEnvelope(report, false);
   logCompleteEvidence('unrelated payload workflow retention batch', report, runs, derived);
   expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
@@ -1026,6 +1076,7 @@ test('sparse and deep selected identities stay bounded as unrelated workflow his
   expectBackgroundIndependent(report);
   const derived = retentionCompleteBatchWork(shortBatch, expectedRetentionInventory(shortBatch));
   expectDerivedStatements(report, derived);
+  expectEngineEnvelope(report, false);
   logCompleteEvidence('sparse deep workflow retention batch', report, runs, derived);
   expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);

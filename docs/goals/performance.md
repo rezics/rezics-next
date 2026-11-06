@@ -95,6 +95,8 @@ capture so a 1,000-id SDK delete stays inside the 32 MiB and 20,000-entry caps; 
 acquired pool clients, payload tables share the 32,768-row planner floor, and measured nonempty batches are five
 application statements plus two BEGIN/COMMIT control. Independent family-count, payload-byte, mixed-maximum and
 sparse/deep series prove nested FK cascades; the already-passing operations-only fanout remains a distinct series.
+Observed statements, rollback/replay and `classifyEngineWork` pin the complete envelope; native evidence stays open
+after typing.
 Payload bytes use harness scales 1/8/64 mapped to admitted 1,024/8,192/65,536; inventory readback is after capture.
 Installed `retireWorkflow` uses unlimited `withDbRetry`; finite invocation stays open with Accounts SDK owner e18b.
 Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2,

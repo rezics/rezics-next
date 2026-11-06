@@ -57,8 +57,11 @@ stays open with Accounts SDK owner e18b. Bound revision
 `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2, operations fanout
 90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0. This complete outcome distinguishes those
 already-passing series from the family/byte/mixed/sparse cascade proof. Folded notice envelopes and walk occupancy
-are released after each summary. Packing and plan transitions stay in relation-page evidence and the affine
-envelope; the linear classifier is unchanged because that envelope is intercept plus slope.
+are released after each summary. Packing and plan transitions stay in relation-page evidence and `classifyEngineWork`;
+the linear classifier is unchanged because that envelope is intercept plus slope. Nested FK work is four engine
+statements for every nonempty neighbourhood. A healthy batch commits; interruption before acknowledgement prices
+BEGIN/ROLLBACK and replay repeats the remaining identities. Single-copy families keep one row while admitted bytes
+grow. Native evidence stays open after typing.
 
 ## Semantic domain composition
 

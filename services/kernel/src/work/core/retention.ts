@@ -5,7 +5,6 @@ import {
   TERMINAL_WORKFLOW_STATUSES,
   WORKFLOW_RETENTION_BATCH_SIZE,
   WORKFLOW_RETENTION_BYTE_SCALES,
-  WORKFLOW_RETENTION_CASCADE_TABLES,
   WORKFLOW_RETENTION_COUNT_SCALES,
   WORKFLOW_RETENTION_DAY_MS,
   WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS,
@@ -86,7 +85,11 @@ export type WorkflowRetentionCompleteWork = WorkflowRetentionBatchWork &
     indexProbes: number;
     payloadBytes: number;
     fenceRows: number;
+    beginStatements: number;
+    commitStatements: number;
     rollbackStatements: number;
+    exactIdDeletes: number;
+    backgroundStatements: number;
     replayApplicationStatements: number;
     replayControlStatements: number;
     familyRows: WorkflowRetentionPayloadInventory;
@@ -110,7 +113,11 @@ export type WorkflowRetentionCompleteSweepWork = WorkflowRetentionSweepWork &
     indexProbes: number;
     payloadBytes: number;
     fenceRows: number;
+    beginStatements: number;
+    commitStatements: number;
     rollbackStatements: number;
+    exactIdDeletes: number;
+    backgroundStatements: number;
     replayApplicationStatements: number;
     replayControlStatements: number;
   }>;
@@ -211,6 +218,34 @@ export function retentionAdmittedByteScale(countScale: number): number {
   return WORKFLOW_RETENTION_BYTE_SCALES[index]!;
 }
 
+export function retentionFamilyCountScale(
+  family: WorkflowRetentionPayloadFamily,
+  countScale: number,
+): number {
+  if (!(WORKFLOW_RETENTION_COUNT_SCALES as readonly number[]).includes(countScale))
+    throw new RangeError('countScale');
+  return admitRetentionFamilyCopies(family, countScale);
+}
+
+export function retentionSingleCopyByteInventory(
+  selected: number,
+  bytesPerCopy: number,
+  metadataBytes = 0,
+): WorkflowRetentionByteInventory {
+  const payload = admitRetentionPayloadBytes(bytesPerCopy);
+  const metadata = admitRetentionMetadataBytes(metadataBytes);
+  return workflowRetentionBytes({
+    workflow_status: selected * metadata,
+    workflow_input: selected * payload,
+    workflow_output: selected * payload,
+    operation_outputs: 0,
+    workflow_events: 0,
+    workflow_events_history: 0,
+    notifications: 0,
+    streams: 0,
+  });
+}
+
 export function admitRetentionMetadataBytes(bytes: number): number {
   if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError('metadataBytes');
   return Math.min(bytes, WORKFLOW_RETENTION_METADATA_BYTES);
@@ -275,11 +310,8 @@ export function retentionSweepStatementCount(fullBatches: number, lastBatchSize:
   return fullBatches * WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS + retentionBatchStatementCount(lastBatchSize);
 }
 
-export function retentionNestedFkStatements(selected: number, inventory: WorkflowRetentionPayloadInventory): number {
-  if (selected === 0) return 0;
-  let nested = 0;
-  for (const table of WORKFLOW_RETENTION_CASCADE_TABLES) if (inventory[table] > 0) nested += 1;
-  return nested === 0 ? WORKFLOW_RETENTION_NESTED_FK_STATEMENTS : nested;
+export function retentionNestedFkStatements(selected: number, _inventory?: WorkflowRetentionPayloadInventory): number {
+  return selected === 0 ? 0 : WORKFLOW_RETENTION_NESTED_FK_STATEMENTS;
 }
 
 export function retentionStatusDeleteStatements(
@@ -333,7 +365,8 @@ export function retentionCompleteBatchWork(
   const batch = retentionBatchWork(selected, inventory);
   const nestedFkStatements = selected === 0 ? 0 : retentionNestedFkStatements(selected, inventory);
   const payloadByteTotal = selected === 0 ? 0 : retentionPayloadBytes(bytes);
-  const rollbackStatements = selected === 0 ? 0 : WORKFLOW_RETENTION_ROLLBACK_STATEMENTS;
+  const beginStatements = selected === 0 ? 0 : 1;
+  const commitStatements = selected === 0 ? 0 : 1;
   return {
     ...batch,
     nestedFkStatements,
@@ -342,7 +375,11 @@ export function retentionCompleteBatchWork(
     indexProbes: retentionIndexProbes(selected),
     payloadBytes: payloadByteTotal,
     fenceRows: selected === 0 ? 0 : fenceRows,
-    rollbackStatements,
+    beginStatements,
+    commitStatements,
+    rollbackStatements: 0,
+    exactIdDeletes: selected === 0 ? 0 : WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES.length,
+    backgroundStatements: 0,
     replayApplicationStatements: batch.applicationStatements,
     replayControlStatements: batch.controlStatements,
     familyRows: inventory,
@@ -357,11 +394,13 @@ export function retentionInterruptedBatchWork(
   acknowledged: boolean,
 ): WorkflowRetentionCompleteWork {
   const work = retentionCompleteBatchWork(selected, inventory, bytes);
-  if (acknowledged) return work;
+  if (acknowledged || selected === 0) return work;
   return {
     ...work,
-    controlStatements: work.controlStatements,
-    rollbackStatements: work.rollbackStatements,
+    controlStatements: WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS,
+    beginStatements: 1,
+    commitStatements: 0,
+    rollbackStatements: WORKFLOW_RETENTION_ROLLBACK_STATEMENTS,
     replayApplicationStatements: work.applicationStatements,
     replayControlStatements: work.controlStatements,
   };
@@ -386,7 +425,11 @@ export function retentionReplayBatchWork(
     indexProbes: first.indexProbes + retry.indexProbes,
     payloadBytes: first.payloadBytes + retry.payloadBytes,
     fenceRows: Math.max(first.fenceRows, retry.fenceRows),
+    beginStatements: first.beginStatements + retry.beginStatements,
+    commitStatements: first.commitStatements + retry.commitStatements,
     rollbackStatements: first.rollbackStatements + retry.rollbackStatements,
+    exactIdDeletes: first.exactIdDeletes + retry.exactIdDeletes,
+    backgroundStatements: 0,
     replayApplicationStatements: retry.applicationStatements,
     replayControlStatements: retry.controlStatements,
   };
@@ -442,7 +485,10 @@ export function retentionCompleteSweepWork(
   let indexProbes = 0;
   let payloadBytes = 0;
   let fences = 0;
+  let beginStatements = 0;
+  let commitStatements = 0;
   let rollbackStatements = 0;
+  let exactIdDeletes = 0;
   let replayApplicationStatements = 0;
   let replayControlStatements = 0;
   for (const [index, size] of batchSizes.entries()) {
@@ -456,7 +502,10 @@ export function retentionCompleteSweepWork(
     indexProbes += work.indexProbes;
     payloadBytes += work.payloadBytes;
     fences += work.fenceRows;
+    beginStatements += work.beginStatements;
+    commitStatements += work.commitStatements;
     rollbackStatements += work.rollbackStatements;
+    exactIdDeletes += work.exactIdDeletes;
     replayApplicationStatements += work.replayApplicationStatements;
     replayControlStatements += work.replayControlStatements;
   }
@@ -466,7 +515,11 @@ export function retentionCompleteSweepWork(
     indexProbes,
     payloadBytes,
     fenceRows: fences,
+    beginStatements,
+    commitStatements,
     rollbackStatements,
+    exactIdDeletes,
+    backgroundStatements: 0,
     replayApplicationStatements,
     replayControlStatements,
   };
@@ -681,6 +734,13 @@ export function inventoriesMatch(
     if (actual[family.table] !== expected[family.table]) return false;
   }
   return true;
+}
+
+export function byteInventoriesMatch(
+  actual: WorkflowRetentionByteInventory,
+  expected: WorkflowRetentionByteInventory,
+): boolean {
+  return inventoriesMatch(actual, expected);
 }
 
 export {

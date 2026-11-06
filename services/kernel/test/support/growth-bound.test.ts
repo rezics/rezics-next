@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   affineEnvelope,
   assertGrowth,
+  classifyEngineWork,
   GrowthBoundError,
   growthViolations,
   type Bound,
@@ -443,4 +444,34 @@ test('a packing jump that is not affine fails linear and keeps relation and scan
     [80, 90, 400],
   );
   expect(envelope.maxResidual).toBeGreaterThan(50);
+  const classified = classifyEngineWork(samples);
+  expect(classified.class).toBe('plan-transition');
+  expect(classified.packing.some((line) => line.includes('heap packing'))).toBe(true);
+  expect(classified.planTransitions.length).toBeGreaterThan(0);
+  expect(classified.envelope.maxResidual).toBeGreaterThan(50);
+});
+
+test('an affine series stays affine and does not reprice background or packing', () => {
+  const blocks = [80, 97.5, 240] as const;
+  const samples = series([1, 8, 64], [10, 10, 10]).map((sample, index) => ({
+    ...sample,
+    cost: { ...sample.cost, blocks: blocks[index]!, backgroundStatements: 0 },
+  }));
+  const classified = classifyEngineWork(samples);
+  expect(classified.class).toBe('affine');
+  expect(classified.backgroundGrew).toBe(false);
+  expect(classified.envelope.slope).toBeGreaterThan(0);
+  expect(growthViolations(samples, { rows: 'constant', blocks: 'linear', statements: 'constant' })).toEqual([]);
+});
+
+test('background growth is classified separately from the linear family', () => {
+  const blocks = [80, 97.5, 240] as const;
+  const samples = series([1, 8, 64], [10, 10, 10]).map((sample, index) => ({
+    ...sample,
+    cost: { ...sample.cost, blocks: blocks[index]!, backgroundStatements: index },
+  }));
+  const classified = classifyEngineWork(samples);
+  expect(classified.class).toBe('background');
+  expect(classified.backgroundGrew).toBe(true);
+  expect(growthViolations(samples, { rows: 'constant', blocks: 'linear', statements: 'constant' })).toEqual([]);
 });
