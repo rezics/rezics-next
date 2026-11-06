@@ -117,6 +117,7 @@ Decision: `space_discovery_tuple_reference` stores tuple identity only. Witness 
 remove-work with `producer_epoch` and `source_position` 0, and copies existing work rows with their stored epoch.
 The `INSERT … SELECT` aliases both sources so PostgreSQL does not bind `producer_epoch` to the INSERT target.
 A later Realm on an already-committed Space is the production path that takes this copy.
+Access grant and account-Realm reads consume `realmReadEligibility` through `access-capabilities.ts`.
 
 **Space-source seam.** The population/bootstrap producer below uses current native positions alongside these existing native events
 and the retained origin tuple, without importing its reader here. Direct targets are canonical Space IDs. Shared

@@ -5,3 +5,4 @@ export {
   type LockedRealmClaimApproval,
   type RealmClaimApprovalResult,
 } from './realm-claim-approval.ts';
+export { realmReadEligibility } from './realm.ts';

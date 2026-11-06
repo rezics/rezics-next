@@ -1,6 +1,6 @@
 import { hasNativeRealmGrantCommands, type createGrantCommands } from './grant-commands.ts';
 import type { Pool } from 'pg';
-import { realmReadEligibility } from '../community/realm.ts';
+import { realmReadEligibility } from '../community/access-capabilities.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

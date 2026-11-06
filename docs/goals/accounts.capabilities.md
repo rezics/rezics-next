@@ -101,7 +101,7 @@ its authoritative T and mounted gate delegation advice. The native composition r
 opaque source custody, atomic rollback, HTTP replay and ordinary Global gate grant/revoke readback.
 A later Realm on an already-committed Space copies discovery-reference tuples into remove-work without binding
 `producer_epoch` to the INSERT target. Architecture repair of Access/application boundaries keeps these tests
-and adds no stories.
+and adds no stories. Live grant authorization uses Community's public eligibility entry; no extra grant-read stories.
 
 **Mounted evidence:** The session-bound operator page retains immutable open/close review and retry and links to
 the existing ordinary Global grant screen. `apps/web/tests/platform-exposure.test.ts` covers that navigation and

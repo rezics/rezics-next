@@ -305,6 +305,8 @@ mounted exposure catalogue. Current native actor/client/principal checks decide 
 exception; it grants no other action or resource. The grant page's current rows use that same advice for revoke.
 The exposure page links to this ordinary screen; configuration-read and open/close authority never imply grant
 authority. Every write retains the original native authorization, anti-amplification, currentness and replay.
+Live Realm grant and account-Realm reads take `realmReadEligibility` through Community's `access-capabilities`
+public entry.
 
 Cost: preparation adds one existing owner preparation for the exact target before checkout. Gate advice adds at
 most G+1 ordinary native checks for the fixed mounted group count G, with the existing K<=1,000 formula bound;
@@ -1864,6 +1866,8 @@ mounted exposure catalogue. Current native actor/client/principal checks decide 
 exception; it grants no other action or resource. The grant page's current rows use that same advice for revoke.
 The exposure page links to this ordinary screen; configuration-read and open/close authority never imply grant
 authority. Every write retains the original native authorization, anti-amplification, currentness and replay.
+Live Realm grant and account-Realm reads take `realmReadEligibility` through Community's `access-capabilities`
+public entry.
 
 Cost: preparation adds one existing owner preparation for the exact target before checkout. Gate advice adds at
 most G+1 ordinary native checks for the fixed mounted group count G, with the existing K<=1,000 formula bound;
