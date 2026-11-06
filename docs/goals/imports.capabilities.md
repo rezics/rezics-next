@@ -4,7 +4,7 @@ Current user cases, native scenarios and evidence limits for the [Imports Goal](
 
 Authority split: module READMEs hold current contracts and costs; this file holds user outcomes, exact native scenarios, commands and what the evidence does not prove.
 
-Decision: preserve original showcase claim aliases, source bindings and sealed replay; distinguish native merge admission, operation publication and independent canonical public reads. Focused caller/manifest/redirect cases supplement the unchanged native and browser outcome assertions.
+Decision: preserve original showcase claim aliases, source bindings and sealed replay; distinguish native merge admission, operation publication and independent canonical public reads. Focused caller/manifest/redirect cases supplement the unchanged native and browser outcome assertions. Decision: fewest Game/VNDB pins are bangumi@17, run-scoped Concept rereads, separate identity adoption before public Game reads, and shared WorkClient pool lifetime; remaining native Game publication current-read, VNDB release seed/reseed, and VNDB statistics Auth-registration failures are capability repairs.
 
 ## User outcome
 
