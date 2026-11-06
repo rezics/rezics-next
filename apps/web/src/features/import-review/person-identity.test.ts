@@ -157,7 +157,11 @@ test('original showcase claims enable admission; publication waits for the nativ
             ? { id: operation, done: true, result: { survivor: uuid(7), redirected: uuid(8), revision: 10 } }
             : { id: operation, done: false },
         });
-      if (request.method === 'POST') return Response.json({ operation: { id: operation } }, { status: 202 });
+      if (request.method === 'POST')
+        return Response.json(
+          { operation: { id: operation } },
+          { status: 202, headers: { Location: `/v1/subjectIdentityOperations/${operation}` } },
+        );
       if (url.searchParams.has('reviewIdentitySource')) {
         const read = structuredClone(native[url.pathname.endsWith(uuid(8)) ? 0 : 1]!);
         if (ineligible) read.reviewedIdentity = null;
@@ -175,17 +179,19 @@ test('original showcase claims enable admission; publication waits for the nativ
   const comparison = await readPersonComparison(client, 'Bearer reviewer', pair);
   if (!comparison.ok || !comparison.merge) throw new Error('Missing showcase comparison');
   const command = { body: comparison.merge, key: uuid(99) };
+  const location = `/v1/subjectIdentityOperations/${operation}`;
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({
     ok: true,
     admission: { operation: { id: operation } },
+    location,
   });
-  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation })).toEqual({
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation, location })).toEqual({
     ok: true,
     state: 'pending',
   });
   expect(seen).toHaveLength(4);
   done = true;
-  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation })).toMatchObject({
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation, location })).toMatchObject({
     ok: true,
     state: 'published',
     read: { subject: { id: uuid(7) } },
@@ -195,7 +201,7 @@ test('original showcase claims enable admission; publication waits for the nativ
   );
   expect(seen.slice(-2).every((request) => !request.headers.has('authorization'))).toBe(true);
   withdrawn = true;
-  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation })).toEqual({
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation, location })).toEqual({
     ok: true,
     state: 'unconfirmed',
   });
@@ -233,10 +239,33 @@ test('publication reads a merged original through its body-named survivor exactl
       return Response.json(survivor);
     }) as typeof fetch,
   });
-  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation: uuid(100) })).toMatchObject({
+  expect(
+    await readPersonPublication(client, 'Bearer reviewer', {
+      command,
+      operation: uuid(100),
+      location: `/v1/subjectIdentityOperations/${uuid(100)}`,
+    }),
+  ).toMatchObject({
     ok: true,
     state: 'published',
     read: { subject: { id: uuid(7) } },
   });
   expect(seen).toHaveLength(4);
+});
+
+test('HTTP 202 identity admission without a matching Location is not a current job', async () => {
+  const comparison = personComparison(originals, reads());
+  if (!comparison.ok || !comparison.merge) throw new Error('Missing comparison');
+  const command = { body: comparison.merge, key: uuid(99) };
+  const operation = uuid(100);
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === 'POST') return Response.json({ operation: { id: operation } }, { status: 202 });
+      return Response.json({ operation: { id: operation, done: false } });
+    }) as typeof fetch,
+  });
+  await expect(mergePersonComparison(client, 'Bearer reviewer', command)).rejects.toThrow(
+    'Invalid native identity admission',
+  );
 });

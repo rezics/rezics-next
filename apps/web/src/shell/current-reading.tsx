@@ -5,6 +5,8 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import { isPreparingReadError } from '../session/unavailable';
 import { PendingPage } from './pending';
 
+export { createDefaultReaderQueryClient, DefaultReaderProvider } from './default-reader';
+
 type ReadingMatch = { status: string; isFetching?: boolean | string; _notFound?: boolean };
 type ReadingRoute = { pathname: string; isLoading: boolean; matches: readonly ReadingMatch[] };
 

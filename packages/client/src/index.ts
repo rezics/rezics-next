@@ -315,6 +315,8 @@ export {
   reviewedPersonMergeInput,
   isReviewedPersonSource,
   isReviewedPersonEndpoint,
+  identityOperationLocation,
+  identityOperationId,
 } from './reviewed-person-identity.ts';
 export type {
   ReviewedPersonEndpoint,

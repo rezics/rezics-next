@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
 import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
@@ -12,6 +12,7 @@ const signals = [
   ['SIGHUP', 1],
 ] as const;
 const hostTestFile = /\.host\.test\.[cm]?[jt]sx?$/u;
+const testFile = /\.test\.[cm]?[jt]sx?$/u;
 
 /** bunfig excludes `*.host.test.ts`; named host files use the same CLI override as `test:host`. */
 export function admitExplicitHostTestCommand(command: string[]): string[] {
@@ -24,10 +25,37 @@ export function admitExplicitHostTestCommand(command: string[]): string[] {
   return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
 }
 
+/** Map a named test file onto the focused child's working directory. Option operands stay untouched. */
+export function focusedChildTestFile(
+  file: string,
+  appDirectory: string,
+  repoRoot = resolve(appDirectory, '../..'),
+): string {
+  const appDirectoryPath = resolve(appDirectory);
+  const posix = (value: string) => value.split(sep).join('/');
+  const childRelative = (absolute: string) => {
+    const rel = relative(appDirectoryPath, absolute);
+    return rel && !rel.startsWith('..') && !isAbsolute(rel) ? posix(rel) : null;
+  };
+  if (isAbsolute(file)) return childRelative(resolve(file)) ?? file;
+  return childRelative(resolve(repoRoot, file)) ?? childRelative(resolve(appDirectoryPath, file)) ?? file;
+}
+
+/** Canonicalize only explicit test-file selectors; flags and their values keep their original tokens. */
+export function focusedChildTestCommand(
+  command: string[],
+  appDirectory: string,
+  repoRoot = resolve(appDirectory, '../..'),
+): string[] {
+  return command.map((argument) =>
+    testFile.test(argument) ? focusedChildTestFile(argument, appDirectory, repoRoot) : argument,
+  );
+}
+
 /** Explicit files run in fresh runtimes: Bun's module mocks otherwise survive across file boundaries. */
 export function focusedTestCommands(command: string[]): string[][] {
   if (command[0] !== 'bun' || command[1] !== 'test') return [command];
-  const files = command.slice(2).filter((argument) => /\.test\.[cm]?[jt]sx?$/.test(argument));
+  const files = command.slice(2).filter((argument) => testFile.test(argument));
   if (files.length < 2) return [command];
   const selected = new Set(files);
   const prefix = command.filter((argument) => !selected.has(argument));
@@ -133,12 +161,11 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     { ...process.env, ...options.env },
   );
   if (routed !== null) return routed;
-  const admitted = admitExplicitHostTestCommand(command);
+  const admitted = admitExplicitHostTestCommand(focusedChildTestCommand(command, appDirectory));
   const wrapShared =
     commandNeedsSharedDevServer(admitted) &&
     existsSync(join(appDirectory, 'vite.config.ts')) &&
     existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
-  const hosted = wrapShared ? ['bun', 'scripts/with-dev-server.ts', '--', ...admitted] : admitted;
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
@@ -157,11 +184,13 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     'KERNEL_ORIGIN',
   ])
     delete childEnvironment[name];
-  const invocations = wrapShared
-    ? [hosted]
-    : focusedTestCommands(admitted).map((command) =>
-        options.privateNetwork ? privateNetworkCommand(command) : command,
-      );
+  const invocations = focusedTestCommands(admitted).map((command) =>
+    wrapShared
+      ? ['bun', 'scripts/with-dev-server.ts', '--', ...command]
+      : options.privateNetwork
+        ? privateNetworkCommand(command)
+        : command,
+  );
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;
