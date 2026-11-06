@@ -9,8 +9,16 @@ import type { CopyInventoryOptions } from './copy-inventory-filters';
 import type { CopyReadingContext, NativeCopyListContext, NativeCopyListRow } from './copy-reading-context/types';
 import { copyListContextFromNativeRow } from './copy-reading-context/read';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
-import type { KernelClient } from '@rezics/client';
 import {
+  COPY_CONDITION_VALUES,
+  type CopyConditionDisplay,
+  type CopyConditionEditing,
+  type CopyConditionPatch,
+  type CopyConditionValue,
+  type KernelClient,
+} from '@rezics/client';
+import {
+  nativeCopyInventory,
   nativeCopyPresentation,
   nativeCopyPresentationQuery,
   type NativeCopy,
@@ -58,6 +66,9 @@ export type CopyItem = {
         statuses?: { id: string; label: string; labelLanguage?: string }[];
       }
     | undefined;
+  mediaCondition?: CopyConditionDisplay | undefined;
+  packagingCondition?: CopyConditionDisplay | undefined;
+  conditionEditing?: CopyConditionEditing | undefined;
   readingContext?: CopyReadingContext | undefined;
 };
 
@@ -134,7 +145,7 @@ type CopyFields = {
   acquiredOn: string | null;
   disposedOn: string | null;
   note: string | null;
-};
+} & CopyConditionPatch;
 type CreateInput = CopyFields & { subjectId: string; kind?: string; idempotencyKey: string };
 type UpdateInput = Omit<CopyFields, 'status'> & { status?: string } & {
   id: string;
@@ -204,6 +215,15 @@ function revisionOf(value: unknown): number | undefined {
   return value;
 }
 
+function conditionOf(record: Record<string, unknown>, field: keyof CopyConditionPatch): CopyConditionValue | null | false | undefined {
+  if (!Object.hasOwn(record, field)) return undefined;
+  const value = record[field];
+  if (value === null) return null;
+  if (typeof value === 'string' && (COPY_CONDITION_VALUES as readonly string[]).includes(value))
+    return value as CopyConditionValue;
+  return false;
+}
+
 function fieldsOf(record: Record<string, unknown>): CopyFields | undefined {
   const status = statusWriteOf(record.status);
   const location = textOf(record.location, textLimit.location);
@@ -211,16 +231,29 @@ function fieldsOf(record: Record<string, unknown>): CopyFields | undefined {
   const acquiredOn = dateOf(record.acquiredOn);
   const disposedOn = dateOf(record.disposedOn);
   const note = textOf(record.note, textLimit.note);
+  const mediaCondition = conditionOf(record, 'mediaCondition');
+  const packagingCondition = conditionOf(record, 'packagingCondition');
   if (
     status === undefined ||
     location === undefined ||
     source === undefined ||
     acquiredOn === undefined ||
     disposedOn === undefined ||
-    note === undefined
+    note === undefined ||
+    mediaCondition === false ||
+    packagingCondition === false
   )
     return undefined;
-  return { status, location, source, acquiredOn, disposedOn, note };
+  return {
+    status,
+    location,
+    source,
+    acquiredOn,
+    disposedOn,
+    note,
+    ...(mediaCondition === undefined ? {} : { mediaCondition }),
+    ...(packagingCondition === undefined ? {} : { packagingCondition }),
+  };
 }
 
 function parseCreate(input: unknown): CreateInput | undefined {
@@ -320,16 +353,25 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
   return authorization;
 }
 
+class CopyFilterUnavailableError extends Error {
+  constructor() {
+    super('Copy inventory filter unavailable');
+    this.name = 'CopyFilterUnavailableError';
+  }
+}
+
 async function readCopyPage(
   client: KernelClient,
   authorization: string,
-  input: { subjectId?: string; cursor?: string },
+  input: { subjectId?: string; kind?: string; status?: string; cursor?: string },
   recovered?: () => void,
 ) {
   const read = async (pageCursor?: string) => {
     const query: NativeCopyListQuery = {
       ...libraryListQuery(pageCursor),
       ...(input.subjectId ? { subjectId: input.subjectId } : {}),
+      ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.status ? { status: input.status } : {}),
     };
     const result = await client.copies.get({
       query,
@@ -338,6 +380,7 @@ async function readCopyPage(
     });
     const body = problemBody(result.error);
     if (result.status === 400 && isRecord(body) && body.code === 'invalid_cursor') throw new StaleCursorError();
+    if (result.status === 400 && (input.kind || input.status)) throw new CopyFilterUnavailableError();
     return readLibraryResult(result);
   };
   try {
@@ -375,21 +418,6 @@ export async function loadCopiesPage(
       addKey: crypto.randomUUID(),
     };
   onPrepared?.(authorization);
-  // The installed generated query has no kind/status inputs or filterOptions output.
-  // Keep the exact address without observing a broader inventory as its result.
-  if (kind || status)
-    return {
-      signedIn: true,
-      subjectId,
-      kind,
-      status,
-      ...provenance,
-      inventoryState: 'unavailable',
-      copies: [],
-      next: null,
-      addKey: crypto.randomUUID(),
-      sendKind: true,
-    };
   let cursorRestarted = false;
   let page: Awaited<ReturnType<typeof readCopyPage>>;
   try {
@@ -398,6 +426,8 @@ export async function loadCopiesPage(
       authorization,
       {
         ...(subjectId ? { subjectId } : {}),
+        ...(kind ? { kind } : {}),
+        ...(status ? { status } : {}),
         ...(input.cursor ? { cursor: input.cursor } : {}),
       },
       () => {
@@ -405,6 +435,21 @@ export async function loadCopiesPage(
       },
     );
   } catch (error) {
+    if (error instanceof CopyFilterUnavailableError) {
+      return {
+        signedIn: true,
+        subjectId,
+        kind,
+        status,
+        ...provenance,
+        ...(cursorRestarted ? { cursorRestarted: true } : {}),
+        inventoryState: 'unavailable',
+        copies: [],
+        next: null,
+        addKey: crypto.randomUUID(),
+        sendKind: true,
+      };
+    }
     if (!(error instanceof LibraryReadForbiddenError)) throw error;
     return {
       signedIn: true,
@@ -424,6 +469,7 @@ export async function loadCopiesPage(
   // including an empty filtered page. Do not infer producer support from rows.
   const sendKind = true;
   const copies = page.copies.map(presentListCopy);
+  const filterOptions = nativeCopyInventory(page);
   return {
     signedIn: true,
     subjectId,
@@ -431,6 +477,7 @@ export async function loadCopiesPage(
     status,
     ...provenance,
     ...(cursorRestarted ? { cursorRestarted: true } : {}),
+    ...(filterOptions === undefined ? {} : { filterOptions }),
     copies,
     next: page.next,
     addKey: crypto.randomUUID(),
@@ -504,6 +551,8 @@ export async function submitCopy(
         acquiredOn: draft.acquiredOn,
         disposedOn: draft.disposedOn,
         note: draft.note,
+        ...(draft.mediaCondition === undefined ? {} : { mediaCondition: draft.mediaCondition }),
+        ...(draft.packagingCondition === undefined ? {} : { packagingCondition: draft.packagingCondition }),
       },
       { headers: writeHeaders(authorization, draft.idempotencyKey) },
     );
@@ -536,6 +585,8 @@ export async function saveCopy(
         acquiredOn: draft.acquiredOn,
         disposedOn: draft.disposedOn,
         note: draft.note,
+        ...(draft.mediaCondition === undefined ? {} : { mediaCondition: draft.mediaCondition }),
+        ...(draft.packagingCondition === undefined ? {} : { packagingCondition: draft.packagingCondition }),
       },
       { headers: writeHeaders(authorization, draft.idempotencyKey) },
     );

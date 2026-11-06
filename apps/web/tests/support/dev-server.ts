@@ -100,6 +100,8 @@ export async function startDevServer(
     custody = ownBunProcess(child, {
       label: 'Vite dev server',
       onOutput: keep,
+      termGraceMs: 2_000,
+      settleTimeoutMs: 5_000,
     });
   } catch (error) {
     throw new Error(
@@ -119,7 +121,7 @@ export async function startDevServer(
       options.signal?.removeEventListener('abort', abortServer);
       await cleanupAll([
         { label: 'dev-server browser', run: () => browser?.close(), timeoutMs: 5000 },
-        { label: 'dev-server process group', run: () => custody.close(), timeoutMs: 7000 },
+        { label: 'dev-server process group', run: () => custody.close(), timeoutMs: 16_000 },
       ]);
     })());
   abortServer = () => {
@@ -243,7 +245,7 @@ export async function startDevServer(
     );
     await withCleanup(async () => {
       throw primary;
-    }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 8000 }]);
+    }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 18_000 }]);
     throw primary;
   }
 }

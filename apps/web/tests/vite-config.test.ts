@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
 import { createServer as createViteServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
+import { shouldGenerateLocalization } from '../vite.config.ts';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
@@ -14,6 +15,34 @@ const workspaceRoot = resolve(appRoot, '../..');
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+}
+
+async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<string> {
+  const candidates = [tmpdir(), '/tmp', '/var/tmp', '/dev/shm'];
+  const seen = new Set<string>();
+  const errors: string[] = [];
+  for (const candidate of candidates) {
+    let root: string;
+    try {
+      root = realpathSync(candidate);
+    } catch (error) {
+      errors.push(`${candidate}: ${String(error)}`);
+      continue;
+    }
+    if (seen.has(root)) continue;
+    seen.add(root);
+    try {
+      const directory = await mkdtemp(join(root, 'web-vite-outside-'));
+      if (allow.some((allowed) => isWithin(allowed, directory))) {
+        await rm(directory, { recursive: true, force: true });
+        continue;
+      }
+      return directory;
+    } catch (error) {
+      errors.push(`${root}: ${String(error)}`);
+    }
+  }
+  throw new Error(`no directory outside Vite fs.allow (${allow.join(', ')}): ${errors.join('; ')}`);
 }
 
 test('Vite serves resolved workspace dependencies while keeping files outside its roots denied', async () => {
@@ -24,10 +53,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
   const allow = config.server?.fs?.allow ?? [];
   expect(allow).toContain(workspaceRoot);
   expect(allow).toContain(dependencyRoot);
-  expect(isWithin(dependencyRoot, dependencyFile)).toBe(true);
+  expect(allow.some((root) => isWithin(root, dependencyFile))).toBe(true);
 
-  const privateDirectory = await mkdtemp(join(tmpdir(), 'web-vite-fs-'));
-  const outsideFile = join(privateDirectory, 'outside.js');
+  const cacheDirectory = await mkdtemp(join(tmpdir(), 'web-vite-cache-'));
+  const outsideDirectory = await makeDirectoryOutsideAllow(allow);
+  const outsideFile = join(outsideDirectory, 'outside.js');
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let http: ReturnType<typeof createHttpServer> | undefined;
   try {
@@ -35,11 +65,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
     vite = await createViteServer({
       configFile: false,
       root: appRoot,
-      cacheDir: join(privateDirectory, 'vite-cache'),
+      cacheDir: join(cacheDirectory, 'vite-cache'),
       appType: 'custom',
       logLevel: 'silent',
       optimizeDeps: { noDiscovery: true, include: [] },
-      server: { middlewareMode: true, fs: { allow } },
+      server: { middlewareMode: true, fs: { strict: true, allow } },
     });
     http = createHttpServer((request, response) => {
       vite!.middlewares(request, response, () => {
@@ -73,11 +103,61 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
       try {
         await vite?.close();
       } finally {
-        await rm(privateDirectory, { recursive: true, force: true });
+        await rm(cacheDirectory, { recursive: true, force: true });
+        await rm(outsideDirectory, { recursive: true, force: true });
       }
     }
   }
 });
+
+test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environment merge', async () => {
+  // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
+  // Serve is the Copies/signed-in ready path; build previously passed while serve still discovered.
+  const result = Bun.spawnSync({
+    cmd: [
+      'node',
+      '--input-type=module',
+      '-e',
+      `
+        import assert from 'node:assert/strict';
+        import { resolveConfig } from 'vite';
+        for (const command of ['serve', 'build']) {
+          const config = await resolveConfig({ logLevel: 'silent' }, command, 'development');
+          for (const [name, environment] of Object.entries(config.environments)) {
+            if (name === 'client') continue;
+            const optimizeDeps = environment.optimizeDeps;
+            assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name);
+            assert.deepEqual(
+              optimizeDeps.include,
+              ['@inlang/paraglide-js/urlpattern-polyfill'],
+              command + ':' + name + ':include',
+            );
+            for (const pkg of ['react', 'react-dom', 'react-dom/server', 'react-day-picker', 'date-fns'])
+              assert.equal(
+                optimizeDeps.include.includes(pkg),
+                false,
+                command + ':' + name + ':without:' + pkg,
+              );
+            for (const pkg of ['react', 'react-dom', 'react-dom/server'])
+              assert.equal(
+                optimizeDeps.exclude.includes(pkg),
+                false,
+                command + ':' + name + ':not-excluded:' + pkg,
+              );
+            for (const pkg of ['react-day-picker', 'date-fns', '@date-fns/tz'])
+              assert.ok(optimizeDeps.exclude.includes(pkg), command + ':' + name + ':' + pkg);
+          }
+        }
+      `,
+    ],
+    cwd: appRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 55_000,
+  });
+  if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
+  expect(result.exitCode).toBe(0);
+}, 60_000);
 
 test('Workers resolve both share-card public Wasm exports through the installed dependency links', async () => {
   // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
@@ -109,4 +189,12 @@ test('Workers resolve both share-card public Wasm exports through the installed 
   });
   if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
   expect(result.exitCode).toBe(0);
+});
+
+test('serve skips Paraglide generate under test runtime unless a compiler module is supplied', () => {
+  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1' })).toBe(false);
+  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1', REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' })).toBe(
+    true,
+  );
+  expect(shouldGenerateLocalization({})).toBe(true);
 });
