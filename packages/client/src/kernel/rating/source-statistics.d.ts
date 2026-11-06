@@ -1,3 +1,4 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import type { CommandAuthorization, CommandOutcome } from '../command/command.ts';
 import { type Access, type Actor } from '../request/access.ts';
@@ -41,11 +42,13 @@ type Dependencies = {
     access: () => Access;
     routeKey: Uint8Array;
     tokens: KeyRing;
+    capabilities?: RatingCapabilities;
     clock?: KernelClock;
 };
 type CommandDependencies = {
     pool: Pool;
     routeKey: Uint8Array;
+    capabilities?: RatingCapabilities;
     clock?: KernelClock;
 };
 type WriteInput = {
@@ -93,7 +96,1899 @@ export declare function createSourceStatisticCommands(config: CommandDependencie
     read: (subjectId: string, deadline?: number, expectedFence?: ExpectedFenceRevision) => Promise<SourceStatistic[]>;
 };
 /** Source statistics have their own read/write routes and never enter native vote storage. */
-export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+/** HTTP registrations are data; composition inspects these before mounting handlers. */
+export declare function sourceStatisticRouteDeclarations(): {
+    route1: {
+        method: 'GET';
+        path: '/v1/subjects/:id/source-statistics';
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+            }>;
+            response: {
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                200: import("typebox").TArray<import("typebox").TObject<{
+                    source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+                    observation: import("typebox").TOptional<import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>>;
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                    sourceRecordId: import("typebox").TString;
+                    figures: import("typebox").TOptional<import("typebox").TObject<{
+                        schemaVersion: import("typebox").TLiteral<1>;
+                        distribution: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"ratings">;
+                            completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                            bins: import("typebox").TArray<import("typebox").TObject<{
+                                score: import("typebox").TInteger;
+                                count: import("typebox").TInteger;
+                            }>>;
+                        }>>;
+                        rank: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"subjects">;
+                            position: import("typebox").TInteger;
+                            population: import("typebox").TOptional<import("typebox").TInteger>;
+                        }>>;
+                    }>>;
+                    scale: import("typebox").TObject<{
+                        min: import("typebox").TInteger;
+                        max: import("typebox").TInteger;
+                    }>;
+                    mean: import("typebox").TNumber;
+                    count: import("typebox").TInteger;
+                    asOf: import("typebox").TString;
+                    licence: import("typebox").TString;
+                    attribution: import("typebox").TString;
+                }>>;
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: ({
+                    bearerAuth: never[];
+                } | {
+                    bearerAuth?: never;
+                })[];
+            };
+        };
+    };
+    route2: {
+        method: 'PUT';
+        path: '/v1/subjects/:id/source-statistics/:source';
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+                source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+            }>;
+            headers: import("typebox").TObject<{
+                "idempotency-key": import("typebox").TString;
+            }>;
+            body: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            figures?: {
+                                schemaVersion: 1;
+                                distribution?: {
+                                    unit: "ratings";
+                                    completeness: "complete" | "partial";
+                                    bins: {
+                                        score: number;
+                                        count: number;
+                                    }[];
+                                };
+                                rank?: {
+                                    unit: "subjects";
+                                    position: number;
+                                    population?: number;
+                                };
+                            };
+                            scale: {
+                                min: number;
+                                max: number;
+                            };
+                            mean: number;
+                            count: number;
+                            asOf: string;
+                            licence: string;
+                            attribution: string;
+                        };
+                        output: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            figures?: {
+                                schemaVersion: 1;
+                                distribution?: {
+                                    unit: "ratings";
+                                    completeness: "complete" | "partial";
+                                    bins: {
+                                        score: number;
+                                        count: number;
+                                    }[];
+                                };
+                                rank?: {
+                                    unit: "subjects";
+                                    position: number;
+                                    population?: number;
+                                };
+                            };
+                            scale: {
+                                min: number;
+                                max: number;
+                            };
+                            mean: number;
+                            count: number;
+                            asOf: string;
+                            licence: string;
+                            attribution: string;
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            figures?: {
+                                schemaVersion: 1;
+                                distribution?: {
+                                    unit: "ratings";
+                                    completeness: "complete" | "partial";
+                                    bins: {
+                                        score: number;
+                                        count: number;
+                                    }[];
+                                };
+                                rank?: {
+                                    unit: "subjects";
+                                    position: number;
+                                    population?: number;
+                                };
+                            };
+                            scale: {
+                                min: number;
+                                max: number;
+                            };
+                            mean: number;
+                            count: number;
+                            asOf: string;
+                            licence: string;
+                            attribution: string;
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>;
+                    };
+                };
+            };
+            response: {
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                200: import("typebox").TObject<{
+                    source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+                    observation: import("typebox").TOptional<import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>>;
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                    sourceRecordId: import("typebox").TString;
+                    figures: import("typebox").TOptional<import("typebox").TObject<{
+                        schemaVersion: import("typebox").TLiteral<1>;
+                        distribution: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"ratings">;
+                            completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                            bins: import("typebox").TArray<import("typebox").TObject<{
+                                score: import("typebox").TInteger;
+                                count: import("typebox").TInteger;
+                            }>>;
+                        }>>;
+                        rank: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"subjects">;
+                            position: import("typebox").TInteger;
+                            population: import("typebox").TOptional<import("typebox").TInteger>;
+                        }>>;
+                    }>>;
+                    scale: import("typebox").TObject<{
+                        min: import("typebox").TInteger;
+                        max: import("typebox").TInteger;
+                    }>;
+                    mean: import("typebox").TNumber;
+                    count: import("typebox").TInteger;
+                    asOf: import("typebox").TString;
+                    licence: import("typebox").TString;
+                    attribution: import("typebox").TString;
+                }> & {
+                    headers: {
+                        readonly "rezics-session-token": import("typebox").TOptional<import("typebox").TString>;
+                    };
+                };
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: {
+                    bearerAuth: never[];
+                }[];
+                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            };
+        };
+    };
+    route3: {
+        method: 'POST';
+        path: "/v1/subjects/:id/source-statistics/:source/$clear";
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+                source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+            }>;
+            headers: import("typebox").TObject<{
+                "idempotency-key": import("typebox").TString;
+            }>;
+            body: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            count: 0;
+                            asOf: string;
+                        };
+                        output: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            count: 0;
+                            asOf: string;
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            count: 0;
+                            asOf: string;
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>;
+                    };
+                };
+            };
+            response: {
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                204: import("typebox").TVoid & {
+                    headers: {
+                        readonly "rezics-session-token": import("typebox").TString;
+                    };
+                };
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: {
+                    bearerAuth: never[];
+                }[];
+                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            };
+        };
+    };
+    route4: {
+        method: 'GET';
+        path: '/v1/subjects/:id/source-statistics/:source/observations';
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+                source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+            }>;
+            query: import("typebox").TObject<{
+                digest: import("typebox").TOptional<import("typebox").TString>;
+                cursor: import("typebox").TOptional<import("typebox").TString>;
+                history: import("typebox").TOptional<import("typebox").TLiteral<"true">>;
+            }>;
+            response: {
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                200: import("typebox").TObject<{
+                    source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+                    head: import("typebox").TObject<{
+                        digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"published">, import("typebox").TLiteral<"cleared">]>;
+                        observation: import("typebox").TUnion<[import("typebox").TObject<{
+                            digest: import("typebox").TString;
+                            payloadVersion: import("typebox").TLiteral<1>;
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            asOf: import("typebox").TString;
+                            nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            legacy: import("typebox").TBoolean;
+                            provenance: import("typebox").TObject<{
+                                kind: import("typebox").TLiteral<"unversioned">;
+                                digest: import("typebox").TString;
+                            }>;
+                            payload: import("typebox").TUnion<[import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                scale: import("typebox").TObject<{
+                                    min: import("typebox").TInteger;
+                                    max: import("typebox").TInteger;
+                                }>;
+                                mean: import("typebox").TNumber;
+                                figures: import("typebox").TOptional<import("typebox").TObject<{
+                                    schemaVersion: import("typebox").TLiteral<1>;
+                                    distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"ratings">;
+                                        completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                        bins: import("typebox").TArray<import("typebox").TObject<{
+                                            score: import("typebox").TInteger;
+                                            count: import("typebox").TInteger;
+                                        }>>;
+                                    }>>;
+                                    rank: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"subjects">;
+                                        position: import("typebox").TInteger;
+                                        population: import("typebox").TOptional<import("typebox").TInteger>;
+                                    }>>;
+                                }>>;
+                                count: import("typebox").TInteger;
+                                asOf: import("typebox").TString;
+                                licence: import("typebox").TString;
+                                attribution: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                count: import("typebox").TLiteral<0>;
+                                asOf: import("typebox").TString;
+                            }>]>;
+                        }>, import("typebox").TNull]>;
+                    }>;
+                    resolution: import("typebox").TObject<{
+                        put: import("typebox").TObject<{
+                            expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                        clear: import("typebox").TObject<{
+                            expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                    }>;
+                    selectedObservation: import("typebox").TOptional<import("typebox").TObject<{
+                        digest: import("typebox").TString;
+                        payloadVersion: import("typebox").TLiteral<1>;
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        asOf: import("typebox").TString;
+                        nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        legacy: import("typebox").TBoolean;
+                        provenance: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"unversioned">;
+                            digest: import("typebox").TString;
+                        }>;
+                        payload: import("typebox").TUnion<[import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>]>;
+                    }>>;
+                    history: import("typebox").TOptional<import("typebox").TObject<{
+                        items: import("typebox").TArray<import("typebox").TObject<{
+                            digest: import("typebox").TString;
+                            payloadVersion: import("typebox").TLiteral<1>;
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            asOf: import("typebox").TString;
+                            nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            legacy: import("typebox").TBoolean;
+                            provenance: import("typebox").TObject<{
+                                kind: import("typebox").TLiteral<"unversioned">;
+                                digest: import("typebox").TString;
+                            }>;
+                            payload: import("typebox").TUnion<[import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                scale: import("typebox").TObject<{
+                                    min: import("typebox").TInteger;
+                                    max: import("typebox").TInteger;
+                                }>;
+                                mean: import("typebox").TNumber;
+                                figures: import("typebox").TOptional<import("typebox").TObject<{
+                                    schemaVersion: import("typebox").TLiteral<1>;
+                                    distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"ratings">;
+                                        completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                        bins: import("typebox").TArray<import("typebox").TObject<{
+                                            score: import("typebox").TInteger;
+                                            count: import("typebox").TInteger;
+                                        }>>;
+                                    }>>;
+                                    rank: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"subjects">;
+                                        position: import("typebox").TInteger;
+                                        population: import("typebox").TOptional<import("typebox").TInteger>;
+                                    }>>;
+                                }>>;
+                                count: import("typebox").TInteger;
+                                asOf: import("typebox").TString;
+                                licence: import("typebox").TString;
+                                attribution: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                count: import("typebox").TLiteral<0>;
+                                asOf: import("typebox").TString;
+                            }>]>;
+                        }>>;
+                        nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>>;
+                }>;
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: {
+                    bearerAuth: never[];
+                }[];
+                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            };
+        };
+    };
+};
+export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies, declarations?: {
+    route1: {
+        method: 'GET';
+        path: '/v1/subjects/:id/source-statistics';
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+            }>;
+            response: {
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                200: import("typebox").TArray<import("typebox").TObject<{
+                    source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+                    observation: import("typebox").TOptional<import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>>;
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                    sourceRecordId: import("typebox").TString;
+                    figures: import("typebox").TOptional<import("typebox").TObject<{
+                        schemaVersion: import("typebox").TLiteral<1>;
+                        distribution: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"ratings">;
+                            completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                            bins: import("typebox").TArray<import("typebox").TObject<{
+                                score: import("typebox").TInteger;
+                                count: import("typebox").TInteger;
+                            }>>;
+                        }>>;
+                        rank: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"subjects">;
+                            position: import("typebox").TInteger;
+                            population: import("typebox").TOptional<import("typebox").TInteger>;
+                        }>>;
+                    }>>;
+                    scale: import("typebox").TObject<{
+                        min: import("typebox").TInteger;
+                        max: import("typebox").TInteger;
+                    }>;
+                    mean: import("typebox").TNumber;
+                    count: import("typebox").TInteger;
+                    asOf: import("typebox").TString;
+                    licence: import("typebox").TString;
+                    attribution: import("typebox").TString;
+                }>>;
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: ({
+                    bearerAuth: never[];
+                } | {
+                    bearerAuth?: never;
+                })[];
+            };
+        };
+    };
+    route2: {
+        method: 'PUT';
+        path: '/v1/subjects/:id/source-statistics/:source';
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+                source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+            }>;
+            headers: import("typebox").TObject<{
+                "idempotency-key": import("typebox").TString;
+            }>;
+            body: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            figures?: {
+                                schemaVersion: 1;
+                                distribution?: {
+                                    unit: "ratings";
+                                    completeness: "complete" | "partial";
+                                    bins: {
+                                        score: number;
+                                        count: number;
+                                    }[];
+                                };
+                                rank?: {
+                                    unit: "subjects";
+                                    position: number;
+                                    population?: number;
+                                };
+                            };
+                            scale: {
+                                min: number;
+                                max: number;
+                            };
+                            mean: number;
+                            count: number;
+                            asOf: string;
+                            licence: string;
+                            attribution: string;
+                        };
+                        output: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            figures?: {
+                                schemaVersion: 1;
+                                distribution?: {
+                                    unit: "ratings";
+                                    completeness: "complete" | "partial";
+                                    bins: {
+                                        score: number;
+                                        count: number;
+                                    }[];
+                                };
+                                rank?: {
+                                    unit: "subjects";
+                                    position: number;
+                                    population?: number;
+                                };
+                            };
+                            scale: {
+                                min: number;
+                                max: number;
+                            };
+                            mean: number;
+                            count: number;
+                            asOf: string;
+                            licence: string;
+                            attribution: string;
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            figures?: {
+                                schemaVersion: 1;
+                                distribution?: {
+                                    unit: "ratings";
+                                    completeness: "complete" | "partial";
+                                    bins: {
+                                        score: number;
+                                        count: number;
+                                    }[];
+                                };
+                                rank?: {
+                                    unit: "subjects";
+                                    position: number;
+                                    population?: number;
+                                };
+                            };
+                            scale: {
+                                min: number;
+                                max: number;
+                            };
+                            mean: number;
+                            count: number;
+                            asOf: string;
+                            licence: string;
+                            attribution: string;
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>;
+                    };
+                };
+            };
+            response: {
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                200: import("typebox").TObject<{
+                    source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+                    observation: import("typebox").TOptional<import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>>;
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                    sourceRecordId: import("typebox").TString;
+                    figures: import("typebox").TOptional<import("typebox").TObject<{
+                        schemaVersion: import("typebox").TLiteral<1>;
+                        distribution: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"ratings">;
+                            completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                            bins: import("typebox").TArray<import("typebox").TObject<{
+                                score: import("typebox").TInteger;
+                                count: import("typebox").TInteger;
+                            }>>;
+                        }>>;
+                        rank: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"subjects">;
+                            position: import("typebox").TInteger;
+                            population: import("typebox").TOptional<import("typebox").TInteger>;
+                        }>>;
+                    }>>;
+                    scale: import("typebox").TObject<{
+                        min: import("typebox").TInteger;
+                        max: import("typebox").TInteger;
+                    }>;
+                    mean: import("typebox").TNumber;
+                    count: import("typebox").TInteger;
+                    asOf: import("typebox").TString;
+                    licence: import("typebox").TString;
+                    attribution: import("typebox").TString;
+                }> & {
+                    headers: {
+                        readonly "rezics-session-token": import("typebox").TOptional<import("typebox").TString>;
+                    };
+                };
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: {
+                    bearerAuth: never[];
+                }[];
+                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            };
+        };
+    };
+    route3: {
+        method: 'POST';
+        path: "/v1/subjects/:id/source-statistics/:source/$clear";
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+                source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+            }>;
+            headers: import("typebox").TObject<{
+                "idempotency-key": import("typebox").TString;
+            }>;
+            body: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            count: 0;
+                            asOf: string;
+                        };
+                        output: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            count: 0;
+                            asOf: string;
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            expectedObservation?: string | null;
+                            sourceAlias?: string;
+                            sourceRecordId: string;
+                            count: 0;
+                            asOf: string;
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            expectedObservation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+                            sourceAlias: import("typebox").TOptional<import("typebox").TString>;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>;
+                    };
+                };
+            };
+            response: {
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                204: import("typebox").TVoid & {
+                    headers: {
+                        readonly "rezics-session-token": import("typebox").TString;
+                    };
+                };
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: {
+                    bearerAuth: never[];
+                }[];
+                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            };
+        };
+    };
+    route4: {
+        method: 'GET';
+        path: '/v1/subjects/:id/source-statistics/:source/observations';
+        options: {
+            params: import("typebox").TObject<{
+                id: import("typebox").TString;
+                source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+            }>;
+            query: import("typebox").TObject<{
+                digest: import("typebox").TOptional<import("typebox").TString>;
+                cursor: import("typebox").TOptional<import("typebox").TString>;
+                history: import("typebox").TOptional<import("typebox").TLiteral<"true">>;
+            }>;
+            response: {
+                401: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                409: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                503: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                400: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                200: import("typebox").TObject<{
+                    source: import("typebox").TUnion<[import("typebox").TLiteral<"vndb">, import("typebox").TLiteral<"bangumi">]>;
+                    head: import("typebox").TObject<{
+                        digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"published">, import("typebox").TLiteral<"cleared">]>;
+                        observation: import("typebox").TUnion<[import("typebox").TObject<{
+                            digest: import("typebox").TString;
+                            payloadVersion: import("typebox").TLiteral<1>;
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            asOf: import("typebox").TString;
+                            nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            legacy: import("typebox").TBoolean;
+                            provenance: import("typebox").TObject<{
+                                kind: import("typebox").TLiteral<"unversioned">;
+                                digest: import("typebox").TString;
+                            }>;
+                            payload: import("typebox").TUnion<[import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                scale: import("typebox").TObject<{
+                                    min: import("typebox").TInteger;
+                                    max: import("typebox").TInteger;
+                                }>;
+                                mean: import("typebox").TNumber;
+                                figures: import("typebox").TOptional<import("typebox").TObject<{
+                                    schemaVersion: import("typebox").TLiteral<1>;
+                                    distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"ratings">;
+                                        completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                        bins: import("typebox").TArray<import("typebox").TObject<{
+                                            score: import("typebox").TInteger;
+                                            count: import("typebox").TInteger;
+                                        }>>;
+                                    }>>;
+                                    rank: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"subjects">;
+                                        position: import("typebox").TInteger;
+                                        population: import("typebox").TOptional<import("typebox").TInteger>;
+                                    }>>;
+                                }>>;
+                                count: import("typebox").TInteger;
+                                asOf: import("typebox").TString;
+                                licence: import("typebox").TString;
+                                attribution: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                count: import("typebox").TLiteral<0>;
+                                asOf: import("typebox").TString;
+                            }>]>;
+                        }>, import("typebox").TNull]>;
+                    }>;
+                    resolution: import("typebox").TObject<{
+                        put: import("typebox").TObject<{
+                            expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                        clear: import("typebox").TObject<{
+                            expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                    }>;
+                    selectedObservation: import("typebox").TOptional<import("typebox").TObject<{
+                        digest: import("typebox").TString;
+                        payloadVersion: import("typebox").TLiteral<1>;
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        asOf: import("typebox").TString;
+                        nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        legacy: import("typebox").TBoolean;
+                        provenance: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"unversioned">;
+                            digest: import("typebox").TString;
+                        }>;
+                        payload: import("typebox").TUnion<[import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>]>;
+                    }>>;
+                    history: import("typebox").TOptional<import("typebox").TObject<{
+                        items: import("typebox").TArray<import("typebox").TObject<{
+                            digest: import("typebox").TString;
+                            payloadVersion: import("typebox").TLiteral<1>;
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            asOf: import("typebox").TString;
+                            nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            legacy: import("typebox").TBoolean;
+                            provenance: import("typebox").TObject<{
+                                kind: import("typebox").TLiteral<"unversioned">;
+                                digest: import("typebox").TString;
+                            }>;
+                            payload: import("typebox").TUnion<[import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                scale: import("typebox").TObject<{
+                                    min: import("typebox").TInteger;
+                                    max: import("typebox").TInteger;
+                                }>;
+                                mean: import("typebox").TNumber;
+                                figures: import("typebox").TOptional<import("typebox").TObject<{
+                                    schemaVersion: import("typebox").TLiteral<1>;
+                                    distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"ratings">;
+                                        completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                        bins: import("typebox").TArray<import("typebox").TObject<{
+                                            score: import("typebox").TInteger;
+                                            count: import("typebox").TInteger;
+                                        }>>;
+                                    }>>;
+                                    rank: import("typebox").TOptional<import("typebox").TObject<{
+                                        unit: import("typebox").TLiteral<"subjects">;
+                                        position: import("typebox").TInteger;
+                                        population: import("typebox").TOptional<import("typebox").TInteger>;
+                                    }>>;
+                                }>>;
+                                count: import("typebox").TInteger;
+                                asOf: import("typebox").TString;
+                                licence: import("typebox").TString;
+                                attribution: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                sourceAlias: import("typebox").TString;
+                                sourceRecordId: import("typebox").TString;
+                                count: import("typebox").TLiteral<0>;
+                                asOf: import("typebox").TString;
+                            }>]>;
+                        }>>;
+                        nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>>;
+                }>;
+            };
+            detail: {
+                operationId: string;
+                'x-action': string;
+                'x-exposure': string;
+                security: {
+                    bearerAuth: never[];
+                }[];
+                'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            };
+        };
+    };
+}): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
         error: Error;

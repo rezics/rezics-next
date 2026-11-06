@@ -16,7 +16,6 @@ import {
   type ContentEditionBuyerFact,
   type ContentEditionBuyerFactReader,
 } from './authenticated-benefit.ts';
-import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contracts.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
@@ -90,6 +89,7 @@ import {
   uniqueNativePolicyResourceType,
 } from './policy-core.ts';
 import type { PolicyCatalogue } from '@rezics/access';
+import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contract/index.ts';
 // Only the Kind original invocation needs a Source-eight-axis declaration for
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
@@ -162,7 +162,7 @@ type Prepared = {
   work?: AccessWorkAccounting;
   time?: AuthoritativeTime;
   buyerEvidence?: BuyerEvidence;
-  historyAccounts: readonly import('../history/locator.ts').AccountReference[];
+  historyAccounts: readonly import('../history/contract/locator.ts').AccountReference[];
   ownAccount: boolean;
   binding: string;
   deadline: number;

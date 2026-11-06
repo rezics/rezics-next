@@ -2,9 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { decodeLocator } from '../../src/history/locator.ts';
-import { commandHistoryKind } from '../../src/history/record.ts';
-import { recordHistorySourceKey } from '../../src/history/record-source.ts';
+import { decodeLocator } from '../../src/history/contract/locator.ts';
+import { commandHistoryKind } from '../../src/history/adapters/record.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   prepareRecordPurgeAuthority,
@@ -21,6 +20,7 @@ import { semanticRetention } from '../../src/semantic/retention.ts';
 import { checkGrowth } from '../support/growth.ts';
 import { createBody, day, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
+import { recordHistorySourceKey } from '../../src/history/contract/record-vocabulary.ts';
 
 let zones: ResourceFixture;
 let f: Awaited<ReturnType<typeof createDeletionFixture>>;

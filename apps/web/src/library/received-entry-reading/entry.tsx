@@ -28,7 +28,7 @@ function RowOutcome({ row, locale }: { row: ShelfRow; locale: string }) {
     row.unknownRemove ? m.library_entry_reading_removal_unknown({}, options) : null,
     row.conflict ? m.library_entry_reading_conflict({}, options) : null,
     row.failure ? m.library_entry_reading_failure({}, options) : null,
-  ].filter((message): message is string => message !== null);
+  ].filter((message) => message !== null);
   if (!messages.length) return null;
   return (
     <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-50/60 p-3 text-sm dark:bg-amber-950/20">

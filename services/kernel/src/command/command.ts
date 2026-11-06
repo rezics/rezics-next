@@ -1,7 +1,4 @@
 import { jsonParameter } from '../database/json.ts';
-import { commandRecordSources, finalizeCommandRecordSources } from '../history/record-source.ts';
-import { hasCommandRecordSourceSet } from '../history/record-source-set.ts';
-import { commandAgentIdentitySource } from '../history/agent-identity-source.ts';
 import {
   claimCommandDispatchLifetime,
   COMMAND_DISPATCH_TIME_SQL,
@@ -30,11 +27,15 @@ import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
+  commandAgentIdentitySource,
+  commandRecordSources,
+  finalizeCommandRecordSources,
+  hasCommandRecordSourceSet,
   recordCommandHistory,
   releaseCommandHistory,
   validateCommandHistory,
   validateCommandHistoryScope,
-} from '../history/record.ts';
+} from '../history/application/index.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;

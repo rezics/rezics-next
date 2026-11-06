@@ -1,5 +1,5 @@
 import { type IdentityMappingEvidence } from '../identity-core/index.ts';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
 export type IdentityRatingControlLocator = Readonly<{
     partition: number;
@@ -72,4 +72,26 @@ export declare function readIdentityRatingEvidenceInTransaction(client: Queryabl
 export declare function classifyIdentityRatingReviewEvidence(requestedOriginalId: string, canonicalTerminalId: string, sourceIdentities: readonly string[], sourceHomes: readonly number[], evidence: IdentityRatingNativeEvidence): IdentityRatingReviewResult;
 /** Bounded exact mapping proof, with source and control homes released independently. */
 export declare function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
+/** Native structural tuple. Generation/pending remain Semantic's identity authority. */
+export type HomeIdentity = Readonly<{
+    partition: number;
+    epoch: number;
+    home: string;
+    generation: bigint;
+    pending: bigint;
+}>;
+export type IdentityBasis = Readonly<{
+    digest: string;
+}>;
+export type BasisRead = {
+    state: 'ready';
+    basis: IdentityBasis;
+} | {
+    state: 'not_ready';
+};
+export declare function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
+/** Two released observations, never an Access decision or promise about subsequent writes. */
+export declare function readIdentityBasis(pool: Pool, options: {
+    deadline: number;
+}): Promise<BasisRead>;
 export {};

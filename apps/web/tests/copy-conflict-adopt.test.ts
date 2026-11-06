@@ -33,7 +33,7 @@ test('conflict review keeps local field edits and adopts newly read values for u
   expect(adopted.draft.note).toBe('My draft');
   expect(adopted.draft.location).toBe('Shelf');
   expect(adopted.copy.revision).toBe(10);
-  expect(adopted.copy.note).toBe('My draft');
+  expect(adopted.copy.note).toBe('Current note');
   expect(adopted.copy.location).toBe('Shelf');
   expect(adopted.kind).toBe('print');
 });
@@ -43,7 +43,7 @@ test('a local clear stays local while untouched fields adopt newer saved values'
   const local = { draft: draft('Original note', ''), kind: 'print' };
   const adopted = adoptCopyConflictDraft(baseline, local, copy('Current note', 10));
   expect(adopted.draft.location).toBe('');
-  expect(adopted.copy.location).toBeNull();
+  expect(adopted.copy.location).toBe('Shelf');
   expect(adopted.draft.note).toBe('Current note');
   expect(adopted.copy.revision).toBe(10);
 });
@@ -60,4 +60,18 @@ test('untouched drafts take every newly read field including a blank stored valu
     note: 'Current note',
   });
   expect(adopted.copy.location).toBeNull();
+});
+
+test('repeated adoption compares the dirty draft against each clean server baseline', () => {
+  const original = { draft: draft('Original note'), kind: 'print' };
+  const incoming = copy('Another device', 10);
+  const first = adoptCopyConflictDraft(original, { ...original, draft: draft('My note', '') }, incoming);
+  expect(first.copy).toBe(incoming);
+  const second = adoptCopyConflictDraft(
+    { draft: { ...original.draft, note: incoming.note!, location: incoming.location! }, kind: incoming.kind! },
+    { draft: first.draft, kind: first.kind },
+    { ...incoming, note: 'Newest server note', location: 'New shelf', source: 'Gift', revision: 11 },
+  );
+  expect(second.draft).toMatchObject({ note: 'My note', location: '', source: 'Gift' });
+  expect(second.copy).toMatchObject({ note: 'Newest server note', location: 'New shelf', revision: 11 });
 });

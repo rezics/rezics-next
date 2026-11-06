@@ -4,7 +4,7 @@ import type { WorkClient } from './client.ts';
 import type { WorkScopedRequest } from './contract/index.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
 
-export { receiveOperationalWorkDestination as receiveOperationalHistoryWork } from '../history/operational-work-receiving.ts';
+export { receiveOperationalWorkDestination as receiveOperationalHistoryWork } from '../history/application/index.ts';
 export type ScopedWorkRequest = WorkScopedRequest;
 
 /** Origin intent and exact role-union custody commit with the source command. */

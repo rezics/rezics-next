@@ -1,15 +1,15 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { decodeLocator, encodeLocator } from '../../src/history/locator.ts';
-import { commandHistoryKind } from '../../src/history/record.ts';
-import type { HistoryArtifact, HistoryBarrier } from '../../src/history/registry.ts';
+import { decodeLocator, encodeLocator } from '../../src/history/contract/locator.ts';
+import { commandHistoryKind } from '../../src/history/adapters/record.ts';
+import type { HistoryArtifact, HistoryBarrier } from '../../src/history/contract/registry.ts';
 import {
   readHistoryOwnerCoverage,
   readHistoryReceivingReceipt,
   verifyHistoryOwnerCoverage,
   verifyHistoryReceivingReceipt,
-} from '../../src/history/receiving.ts';
+} from '../../src/history/adapters/receiving.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { readSemanticErasure } from '../../src/semantic/account-erasure.ts';

@@ -19,7 +19,7 @@ export type ReceivedEntryVisit = {
   active: boolean;
   originKey: object;
   origin: ShelfOrigin | null;
-  originCurrent?: () => boolean;
+  originCurrent?: (() => boolean) | undefined;
   sourceCurrent: () => boolean;
   population: readonly string[];
   locale: string;

@@ -10,7 +10,7 @@ import { noEffect, runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import {
   withSelectedHistoryOriginal,

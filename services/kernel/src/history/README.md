@@ -1,5 +1,46 @@
 # History
 
+## Layers, ports and native composition
+
+History is split into four architecture modules. `kernel-history-contract` owns locators, scopes, record and identity
+vocabulary, receiving and operational types, error classes, and the typed `HistoryComposition` capability in
+`contract/ports.ts`. `kernel-history-core` owns pure operational cost declarations. `kernel-history-application`
+exports the receiving, record, operational, shared-work and identity facades; they invoke only the installed contract
+capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
+and Access, Semantic, Search, Zones and Work owner bindings.
+
+Foreign Kernel modules import the declared History application and contract entries. Access keeps compatibility
+re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. Native adapters
+import owner facade leaves (`application/composition.ts`, `identity.ts`, `records.ts`, `receiving.ts`, `shared.ts`,
+`operational.ts`) rather than the application barrel, so sibling cycles stay on those public entries. The composition root in
+`composition/history.ts` binds every capability method to its native adapter. Server and worker startup, and the shared
+runtime defaults in `composition/runtime-defaults.ts`, install that composition before use; `composition/preload.ts`
+exposes the same binding through an explicit preload hook used by
+`test/support/native-history-composition.ts`. Calling a facade before installation throws; there is no fallback
+implementation. Fake `HistoryComposition` capabilities exercise the application facades independently, while
+`native-composition.test.ts` exercises the installed native binding. Opaque handles
+represent foreign nominal values (`HistoryTransaction`, `HistoryPool`, `HistoryWorkClient`, `HistoryWorkContext` and
+`HistoryHandle`); adapters narrow them in `adapters/handles.ts` or at the owner-specific read boundary.
+
+Contract, core and application contain no foreign implementation imports. Adapters own native bindings and depend on
+the typed History contract; they reach other owner implementations only from this native layer. Application facade
+modules have no behavior edges to implementations. The architecture manifest records the four layers and their
+allowed dependency direction.
+
+Measured with `scripts/architecture.ts` against base `a311990286`: the changed-base check passes, and the full graph
+keeps its inherited unbaselined errors at final. Kernel files in value cycles are 345, the largest value component is
+326 files, and History files in value cycles are zero. Violations that touch History source fell from 312 to zero, and
+unbaselined History errors are zero. Value imports from other modules into History files outside the contract and
+application entries are the declared contract and core entries (Access and Library callers) or the composition root's
+adapter barrel. History source files have 109 outgoing value edges to other modules at final; the increase is the
+native owner bindings in adapters. Contract, core and application import no implementation: their outgoing value
+edges reach only contract modules, `bounds` and `memoized`.
+
+Decision: native composition is installed by server and worker startup, the shared runtime defaults and the preload
+hook; facades never fall back to an implementation. Only typed History vocabulary imports the contract; comment or
+string matches of Pending are not consumers. The inherited ZoneWorkLedger ClassDeclaration load-time read is
+`membership.ts:90`.
+
 ## Zone receipts, outbox events and current closure boundary
 
 The delivered Zone producer cut is the five native command receipts `zone.create`, `zone.configure`,

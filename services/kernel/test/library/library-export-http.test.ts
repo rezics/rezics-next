@@ -7,7 +7,7 @@ import { createKernelClient } from '../../../../packages/client/src/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
 import { newId } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
@@ -107,6 +107,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   await bootstrapRelease(db.pool, bundledRelease);
   fixture = await createRealAccess(db.admin, { owner, other }, scopes);
+  await fixture.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
   workClient = await createWorkClient(process.env.DATABASE_URL!);
   app = createKernel({
     receiptKeys: testReceiptKeys(),
@@ -181,7 +182,7 @@ beforeAll(async () => {
     ),
     'POINT_10_DECIMAL',
   );
-  await sql`INSERT INTO library.vndb_import(route,account_id,upload_id,expires_at,xml,rows) VALUES(${route},${owner},${copy},now()+interval '1 day','never-export-raw-vndb',${vndbRows})`;
+  await sql`INSERT INTO library.vndb_import(route,account_id,upload_id,expires_at,xml,rows) VALUES(${route},${owner},${copy},now()+interval '1 day','never-export-raw-vndb',${JSON.stringify(vndbRows)})`;
   await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},-1,${{ rawUpload: 'never-export-raw-anilist', document: { secret: 'never-export-wrapper' }, scoreFormat: anilist.scoreFormat, cancelled: true, count: anilist.rows.length }})`;
   for (const [ordinal, source] of anilist.rows.entries())
     await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},${ordinal},${{ source, review: { id: 'never-export-review-id' }, outcome: { receipt: 'never-export-receipt' } }})`;
@@ -296,7 +297,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { identifier: { value: '17' } } });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { dates: { started: { precision: 'year' } } } });
-  expect(() => decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })))).toThrow();
+  expect(
+    decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records }))).manifest.version,
+  ).toBe(4);
   const archiveRecords = records.filter((record) =>
     exportSections.includes(record.section as (typeof exportSections)[number]),
   );
@@ -311,7 +314,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
     rows: archiveRecords.length,
     recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
   };
-  const v2Records = records.filter((record) => exportSectionsV2.includes(record.section));
+  const v2Records = records.filter((record) =>
+    exportSectionsV2.includes(record.section as (typeof exportSectionsV2)[number]),
+  );
   const v2Manifest = {
     ...libraryExportManifest({
       export_id: id,
@@ -970,7 +975,7 @@ test('stored V3 keeps its assessment sections and provider oversize refuses the 
   for (const provider of ['vndb', 'anilist']) {
     if (provider === 'vndb')
       await sql`INSERT INTO library.vndb_import(route,account_id,upload_id,expires_at,xml,rows)
-        VALUES(${route},${owner},${copy},now()+interval '1 day','inert',${[evidence]})`;
+        VALUES(${route},${owner},${copy},now()+interval '1 day','inert',${JSON.stringify([evidence])})`;
     else
       await sql`UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{source}',${evidence}::jsonb)
         WHERE route=${route} AND account_id=${owner} AND ordinal=0`;

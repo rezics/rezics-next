@@ -58,9 +58,8 @@ import type { CollectionSourceObservation } from './collection-source.ts';
 import {
   registerPositionedOperationalHistoryWork,
   reserveOperationalWorkTransfer,
-  type OperationalWorkRegistration,
-} from '../history/operational-work.ts';
-import { type OperationalWorkTransfer } from '../history/operational-work-budget.ts';
+} from '../history/application/index.ts';
+import { type OperationalWorkRegistration, type OperationalWorkTransfer } from '../history/contract/index.ts';
 
 const LIVE_LIMIT = 32;
 const IDLE_MS = 24 * 60 * 60 * 1000;

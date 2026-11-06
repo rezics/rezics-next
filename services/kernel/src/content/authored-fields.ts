@@ -12,9 +12,6 @@ import {
 import { creationDeclares } from '../access/index.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { declareCommandHistory } from '../history/record.ts';
-import { declareCommandRecordSources } from '../history/record-source.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { admitAuthoredLanguage, admitAuthoredRevision, authoredFieldContainsMedia } from './core/index.ts';
 import { readAuthoredFieldHistorySource } from './authored-fields-history.ts';
@@ -26,6 +23,8 @@ import initializeAuthoredFieldOwner from '../access/resource-initialization.sql'
 import erase from './erase-authored-field.sql';
 import authorizeErase from './authored-fields-history-author.sql';
 import type { RequestContext } from './model.ts';
+import { declareCommandHistory, declareCommandRecordSources } from '../history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 
 // Permanent Content-owned command kind, independent of registration order.
 const eraseCommandKind = 'content.authored_field.erase';

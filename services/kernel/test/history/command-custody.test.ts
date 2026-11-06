@@ -10,11 +10,11 @@ import {
   CommandResultErasedError,
 } from '../../src/command/command.ts';
 import { receiptKeysFor } from '../../src/command/receipt-key.ts';
-import { decodeLocator } from '../../src/history/locator.ts';
-import { ACCOUNT_ROLE_BITS as R } from '../../src/history/contracts.ts';
-import { COMMAND_HISTORY_COVERAGE, declareCommandHistory } from '../../src/history/record.ts';
-import { advancePreferenceHistory } from '../../src/history/receipt.ts';
-import { HistorySealedError, sealHistoryAccount } from '../../src/history/gates.ts';
+import { decodeLocator } from '../../src/history/contract/locator.ts';
+import { ACCOUNT_ROLE_BITS as R } from '../../src/history/contract/contracts.ts';
+import { COMMAND_HISTORY_COVERAGE, declareCommandHistory } from '../../src/history/adapters/record.ts';
+import { advancePreferenceHistory } from '../../src/history/adapters/receipt.ts';
+import { sealHistoryAccount } from '../../src/history/adapters/gates.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { problemResponse } from '../../src/http/problem.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -34,6 +34,7 @@ import {
   waitForLock,
   type CustodyFixture,
 } from './command-custody-fixture.ts';
+import { HistorySealedError } from '../../src/history/contract/errors.ts';
 
 let f: CustodyFixture;
 let work: Awaited<ReturnType<typeof composeWork>>;
@@ -238,7 +239,7 @@ test('a native signed delegation captures its verified principal and human deleg
           [
             result.partition,
             Buffer.from(
-              (await import('../../src/history/locator.ts')).encodeLocator({
+              (await import('../../src/history/contract/locator.ts')).encodeLocator({
                 artifactType: 'outbox-event/v1',
                 partitionNo: result.partition,
                 position: result.position,
@@ -632,7 +633,7 @@ test('each actual emitted event has its own scope union and persisted sequence',
       };
     },
   );
-  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { encodeLocator } = await import('../../src/history/contract/locator.ts');
   for (const eventSeq of [0, 1]) {
     const locator = Buffer.from(
       encodeLocator({

@@ -1,6 +1,6 @@
 /** Static cost declarations for one ordinary Collection members page. */
 import { type Bound } from '@rezics/bounds';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 export declare const ORDINARY_COLLECTION_PAGE_LIMIT = 100;
 export declare const ORDINARY_COLLECTION_PREFIX_ROUNDS = 3;
 export declare const ORDINARY_COLLECTION_PREFIX_GROUP_LIMIT = 100;

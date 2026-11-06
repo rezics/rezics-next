@@ -376,6 +376,13 @@ establish currentness or authorize those operations.
 one ordinary enqueue. Commerce's installed Members specification stub is unchanged. This source delivery does
 not install a Commerce caller or establish native acceptance.
 
+Work's shared History module and receiving compatibility export come from `history/application/index.ts`;
+`HistoryRegistry`, selected-runtime shapes and durable locator scopes come from `history/contract/index.ts`.
+`work/adapters/history-store.ts` records a durable locator through the History facade, and
+`composition/work-modules.ts` installs the same shared History module used by native composition. History is
+installed before worker dispatch by server and worker startup and the shared runtime defaults; these entry changes preserve existing admitted Work
+bounds.
+
 The exact consumer ABI is `WorkContext.getSelectedRuntime?(): SelectedRuntime`, then
 `registerMembersStep<R>(body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>,
 children?: SelectedChildren): (locator: SelectedLocator) => Promise<R>`. Registration must happen in trusted Work

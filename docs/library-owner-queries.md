@@ -583,6 +583,11 @@ Decision: Web diary and import consumers take Diary, Bangumi and MAL tag types f
 public entry, not Kernel source. Saved-results rule and publish links stay in the first HTML from page viewerActions.
 Fewest tests remain the existing catalogue publication cases plus `saved-query-results.test.ts`.
 
+Decision: Catalogue receives Performance History application facades and the installed native composition through
+existing Members preparation and publication. Prepared-Members owner `collection:read` uses the kernel Access pool on
+the one-connection fixture, not a held checkout. Fewest tests remain the existing catalogue publication cases plus
+`members-preparation.test.ts` and `saved-query-results.test.ts`.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.

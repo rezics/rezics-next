@@ -13,6 +13,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 export type Persona = 'owner' | 'editor' | 'other' | 'suspended' | 'operator' | 'anonymous';
 export const day = 86_400_000;
@@ -61,6 +62,7 @@ export async function resourceFixture(options: { scopes?: readonly string[] } = 
       clock,
       routeKey: new Uint8Array(32).fill(73),
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(74)]]) },
+      receiptKeys: testReceiptKeys(),
       requestDeadlineMs: 30_000,
       access: (config) => {
         // Lifecycle time may advance by months; credential expiry retains actual wall time.

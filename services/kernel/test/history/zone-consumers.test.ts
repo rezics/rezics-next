@@ -5,11 +5,11 @@ import {
   ZONE_HISTORY_EVENT_TYPES,
   ZONE_HISTORY_RECEIPT_KINDS,
   type HistoryArtifactType,
-} from '../../src/history/contracts.ts';
-import { decodeLocator } from '../../src/history/locator.ts';
-import { commandHistoryKind } from '../../src/history/record.ts';
-import { HistoryRegistry, type HistoryArtifact, type HistoryBarrier } from '../../src/history/registry.ts';
-import { registerZoneHistoryConsumers } from '../../src/history/zone-consumers.ts';
+} from '../../src/history/contract/contracts.ts';
+import { decodeLocator } from '../../src/history/contract/locator.ts';
+import { commandHistoryKind } from '../../src/history/adapters/record.ts';
+import { HistoryRegistry, type HistoryArtifact, type HistoryBarrier } from '../../src/history/contract/registry.ts';
+import { registerZoneHistoryConsumers } from '../../src/history/adapters/zone-consumers.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createBody, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 

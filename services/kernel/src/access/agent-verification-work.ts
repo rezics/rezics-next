@@ -1,11 +1,3 @@
-import {
-  AGENT_IDENTITY_WORK_OWNER,
-  agentIdentityRetirementReadiness,
-  associateAgentIdentityWorkSource,
-  enqueueAgentIdentityReversal,
-  enqueueAgentIdentityVerification,
-  verifyAgentIdentityWorkReplay,
-} from '../history/agent-identity-work.ts';
 import { deliverAccountIdentity } from './agent-verification-identity.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import { classifyUnavailability } from './unavailable.ts';
@@ -33,6 +25,14 @@ import {
   writeAgentVerificationPage,
   type AgentVerificationWorkflowRequest,
 } from './agent-verification.ts';
+import {
+  agentIdentityRetirementReadiness,
+  associateAgentIdentityWorkSource,
+  enqueueAgentIdentityReversal,
+  enqueueAgentIdentityVerification,
+  verifyAgentIdentityWorkReplay,
+} from '../history/application/index.ts';
+import { AGENT_IDENTITY_WORK_OWNER } from '../history/contract/index.ts';
 
 const workflowName = 'accounts.agent-verification';
 const approvalEvent = 'com.rezics.access.agent-verification.approved.v1';

@@ -9,7 +9,6 @@ import ownersSql from '../semantic/identity-epoch-read-owners.sql';
 import sourcesSql from '../semantic/identity-epoch-read-sources.sql';
 import pendingSql from '../semantic/identity-epoch-read-pending.sql';
 import currentSql from '../semantic/identity-terminal-closure-current.sql';
-import { OPERATIONAL_WORK_COST } from '../history/operational-work-budget.ts';
 import {
   SELECTED_CLEANUP_DECLARATION,
   SELECTED_COST,
@@ -19,6 +18,7 @@ import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts'
 import ownerFactsSql from './collection-source-native-facts.sql';
 import labelOriginalsSql from './owner-index-native-label-originals.sql';
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
+import { OPERATIONAL_WORK_COST } from '../history/core/operational-work-budget.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
 export function CANONICAL_SOURCE_AXES() {

@@ -1,4 +1,3 @@
-import type { HistoryBarrier } from '../history/registry.ts';
 export type SubjectErasureSourceBarrier = HistoryBarrier;
 import type {
   PublicFilterCost,
@@ -7,6 +6,7 @@ import type {
   PublicFilterRepairLocator,
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
+import { type HistoryBarrier } from '../history/contract/index.ts';
 
 declare const subjectErasurePageReceipt: unique symbol;
 declare const subjectErasureSourceProof: unique symbol;

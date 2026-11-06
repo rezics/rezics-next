@@ -67,7 +67,7 @@ export function CopiesCurrent({
     address,
     reader: origin.id,
     viewer: value.viewer,
-    active: hydrated && allowed && !address.issue && origin.isCurrent('copy.list'),
+    active: hydrated && allowed && !address.issue && origin.isCurrent(),
   });
   const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
   if (scope.id !== origin.id)
@@ -248,7 +248,7 @@ function CurrentCopiesRead({
       originating={operand ?? closed}
       windows={windows}
       onRetryInventory={() => {
-        if (origin.isCurrent('copy.list')) void query.refetch();
+        if (origin.isCurrent()) void query.refetch();
       }}
     />
   );

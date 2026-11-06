@@ -40,6 +40,7 @@ import { createPublicPreparationStore } from './search/public-preparation-store.
 import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
+import { installNativeHistory } from './composition/history.ts';
 
 export { createKernelCreditSearchSource, createKernelRuntimeDefaults };
 export type { KernelRuntimeDefaults, KernelRuntimeOverrides } from './composition/runtime-defaults.ts';
@@ -117,6 +118,7 @@ async function fillPool(pool: Pool): Promise<void> {
 }
 
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
+  installNativeHistory();
   const defaults = createKernelRuntimeDefaults({
     tokens: config.tokens,
     ...(config.receiptKeys === undefined ? {} : { receiptKeys: config.receiptKeys }),

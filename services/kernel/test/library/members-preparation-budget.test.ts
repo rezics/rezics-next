@@ -7,10 +7,6 @@ import {
   openWorkExecutionOriginal,
 } from '../../src/work/selected-runtime.ts';
 import { WORK_EXECUTION_ATTEMPT_BOUND } from '../../src/work/selected-runtime-cost.ts';
-import {
-  OPERATIONAL_WORK_LOCAL_DECLARATION,
-  OPERATIONAL_WORK_REGISTRATION,
-} from '../../src/history/operational-work-budget.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import {
@@ -23,6 +19,10 @@ import {
   MEMBERS_PREPARATION_STEP_CEILING,
 } from '../../src/library/members-preparation-cost.ts';
 import { declareMembersPreparationRequest } from '../../src/library/members-preparation-request.ts';
+import {
+  OPERATIONAL_WORK_LOCAL_DECLARATION,
+  OPERATIONAL_WORK_REGISTRATION,
+} from '../../src/history/core/operational-work-budget.ts';
 
 const cost = (amount: number): WorkDimensions => ({
   candidateKeys: amount,

@@ -26,8 +26,11 @@ beforeAll(async () => {
   }
 });
 afterAll(async () => {
-  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
-  await pool.end();
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
 });
 
 process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
@@ -68,9 +71,9 @@ const detail = {
   security: [{ bearerAuth: [] }, {}],
 };
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool,
   routeKey: new Uint8Array(32).fill(1),
-  receiptKeys: testReceiptKeys(),
   access: {
     async authenticate() {
       authentications++;

@@ -10,7 +10,9 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import type { AccessWorkDimensions as WorkDimensions } from './contract/index.ts';
-import type { HistoryRegistry } from '../history/registry.ts';
+import type { HistoryRegistry } from '../history/contract/index.ts';
+import { withPrepaidAgentIdentityHistoryUnit } from '../history/application/index.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/access-capabilities.ts';
 import type { WorkClient } from '../work/client.ts';
 import { routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
@@ -811,9 +813,7 @@ export type PrepaidAgentIdentityHistoryUnit = <T>(
       clock: () => Date;
     }>,
   parent: IdentityOriginalSourceContext,
-  body: (
-    funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext,
-  ) => Promise<T>,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
 ) => Promise<T>;
 
 /** Fixed native caller integration only; neither a callback parameter nor a module path
@@ -824,18 +824,13 @@ export async function withSelectedHistoryOriginalChild<T>(
     Readonly<{ env: Readonly<Record<string, string | undefined>>; clock: () => Date }>,
   token: IdentityOriginalTransfer,
   jobId: string,
-  body: (
-    funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext,
-  ) => Promise<T>,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
 ): Promise<T> {
   live(deps, token, jobId);
-  const installed = await import('../history/agent-identity-retirement.ts');
   live(deps, token, jobId);
-  const caller = Object.getOwnPropertyDescriptor(installed, 'withPrepaidAgentIdentityHistoryUnit');
-  if (!caller || !('value' in caller) || typeof caller.value !== 'function')
-    throw new IdentityOriginalUnavailable(IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING);
-  const enter = caller.value as PrepaidAgentIdentityHistoryUnit;
-  return withIdentityOriginalSourceTransfer(deps, token, jobId, (parent) => enter(deps, parent, body));
+  return withIdentityOriginalSourceTransfer(deps, token, jobId, (parent) =>
+    withPrepaidAgentIdentityHistoryUnit(deps, parent, body),
+  );
 }
 
 /** The single Library ledger may escape an awaited page call, but its authority may

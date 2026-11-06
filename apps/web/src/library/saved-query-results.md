@@ -37,6 +37,7 @@ release pins stay off this page. Missing publisher support stays unavailable. Pu
 complete permitted set. Management owns metadata/delete; Commerce owns execution, immutable rule release, publication
 and lifecycle. Bind `collections({id}).$publishSelected.post` when generated; an absent runtime stays unavailable.
 
+Decision: the owner rule review stays mounted across page observations and resets through its pageObservation binding, so an in-flight owner read settles on the handler that started it.
 Decision: reuse the installed Dynamic Collection reader and members GET; do not fork a second members runtime.
 Decision: keep result traversal in an in-memory QueryClient visit with eight admitted predecessor cursors, the current cursor and at most one staged destination; commit a move only after its exact composed page is ready.
 Decision: previously published membership is inspectable only from a verified complete `publishSelected` response in

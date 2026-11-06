@@ -23,25 +23,11 @@ export function adoptCopyConflictDraft(
     if (local.draft[key] !== baseline.draft[key]) draft[key] = local.draft[key];
   }
   const kind = local.kind !== baseline.kind ? local.kind : (incoming.kind ?? '');
-  const stored = (value: string) => (value === '' ? null : value);
-  return {
-    copy: {
-      ...incoming,
-      status: draft.status,
-      location: stored(draft.location),
-      source: stored(draft.source),
-      acquiredOn: stored(draft.acquiredOn),
-      disposedOn: stored(draft.disposedOn),
-      note: stored(draft.note),
-      kind: kind || incoming.kind,
-    },
-    draft,
-    kind,
-  };
+  return { copy: incoming, draft, kind };
 }
 
 export type ConflictReview =
-  | { state: 'idle' | 'loading' | 'unavailable' | 'forbidden' }
+  | { state: 'idle' | 'loading' | 'unavailable' | 'forbidden' | 'closed' }
   | { state: 'ready'; copy: CopyItem };
 
 export function CopyConflictReview({
@@ -69,6 +55,7 @@ export function CopyConflictReview({
       {review.state === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
       {review.state === 'unavailable' ? <p role="status">{m.library_copy_detail_unavailable()}</p> : null}
       {review.state === 'forbidden' ? <p role="alert">{m.library_copy_detail_forbidden()}</p> : null}
+      {review.state === 'closed' ? <p role="alert">{m.library_subject_closed()}</p> : null}
       {copy ? (
         <>
           <h3 className="font-medium">{m.library_copy_conflict_review_title()}</h3>

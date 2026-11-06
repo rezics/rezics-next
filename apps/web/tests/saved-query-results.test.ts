@@ -12,6 +12,7 @@ import {
 } from '../src/library/saved-query-results.tsx';
 import {
   admitSavedQueryResultsWindow,
+  cancelSavedQueryResultsWindowFocus,
   failSavedQueryResultsWindowMove,
   hasPendingSavedQueryResultsWindowTarget,
   readSavedQueryResultsWindow,
@@ -385,4 +386,10 @@ test('restarted cursors and named stories keep recovery, empty, denied and unava
     ])
       expect(messages[key]?.trim().length).toBeGreaterThan(0);
   }
+});
+
+test('first result window can cancel focus without a staged movement', () => {
+  const queries = new QueryClient();
+  admitSavedQueryResultsWindow(queries, 'base', 'session', 'scope', undefined, false);
+  expect(cancelSavedQueryResultsWindowFocus(queries, 'base', 'session', 'scope', undefined)).toBe(false);
 });

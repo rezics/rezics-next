@@ -2,7 +2,7 @@
 import { type Bound } from '@rezics/bounds';
 import type { Pool, PoolClient } from 'pg';
 import type { LegacyCommandOptions, PrincipalCommandOptions } from '../command/command.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import type { PreparationSourceExecution } from './preparation-source.ts';
 export declare const SHELF_MAINTENANCE_LIMITS: Readonly<{
     page: 100;

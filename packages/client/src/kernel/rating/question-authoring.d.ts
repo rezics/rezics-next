@@ -1,3 +1,4 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -29,6 +30,7 @@ export declare function validateQuestionDefinition(input: RealmQuestionInput): v
 export declare function createRealmRatingQuestion(deps: {
     pool: Pool;
     access: Access;
+    capabilities?: RatingCapabilities;
     clock?: KernelClock;
 }, actor: Actor, input: RealmQuestionInput, context: {
     deadline: number;

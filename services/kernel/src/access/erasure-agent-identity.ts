@@ -1,11 +1,10 @@
 import type { Pool } from 'pg';
-import type { HistoryBarrier } from '../history/registry.ts';
 import {
   minimizeAgentIdentityRetention,
-  type AgentIdentitySourceKey,
   type AgentIdentitySourceRole,
   type AgentIdentityRetentionDependencies,
 } from './agent-verification-identity-retention.ts';
+import { type AgentIdentitySourceKey, type HistoryBarrier } from '../history/contract/index.ts';
 
 /** Adapter for the existing scalar inventory's exact native key order. Discovery is never
  * consumption, and one cleanup invocation accepts at most eight keys from one physical home.

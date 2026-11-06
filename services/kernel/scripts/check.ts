@@ -550,7 +550,7 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return result.stdout.toString().trim();
+  return String(result.stdout).trim();
 }
 
 export function capture(

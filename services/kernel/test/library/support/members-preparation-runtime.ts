@@ -11,10 +11,10 @@ import {
   type PreparationDefinition,
   type PreparationLocator,
 } from '../../../src/library/members-preparation.ts';
-import { actorOf } from '../../../src/request/access.ts';
+import { accessCheck, actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
-import { historyExecutionPort } from '../../../src/history/operational-work.ts';
+import { historyExecutionPort } from '../../../src/history/application/index.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
@@ -115,12 +115,44 @@ export async function membersPreparationRuntime() {
     const { collection } = (await created.json()) as { collection: { id: string; curatorAccountId: string } };
     expect(collection.curatorAccountId).toBe(owner.accountId);
     expect(routeOf(collection.id)).toBe(routeOf(owner.accountId));
+    const currentActor = await actor(owner);
+    expect(currentActor.kind).toBe('account');
+    const authority = await db.admin.query(
+      `SELECT a.kind, a.state, a.authn_fenced, a.minimum_authn_epoch::text, a.membership_inverse_complete,
+        (SELECT jsonb_agg(g) FROM access.resource_role_grant g
+          WHERE g.route=$1 AND g.resource_id=$3) AS grants
+       FROM access.account a WHERE a.route=$1 AND a.account_id=$2`,
+      [routeOf(owner.accountId), owner.accountId, collection.id],
+    );
+    expect(authority.rows[0]?.grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subject_id: owner.accountId, grant_role: 'library.collection.owner' }),
+      ]),
+    );
+    expect(currentActor.kind === 'account' && currentActor.scopes.includes('collection:read')).toBe(true);
+    const ownerRead = await accessCheck(
+      kernel.testAccess,
+      currentActor,
+      'collection:read',
+      { route: routeOf(collection.id)!, id: collection.id },
+      context(),
+    );
+    expect(
+      await ownerRead(db.pool),
+      JSON.stringify({
+        actor: { kind: currentActor.kind, scopes: currentActor.scopes },
+        authority: authority.rows,
+      }),
+    ).toBe(true);
     const read = await capture(
       db,
       async () => {
         const response = await send(owner, 'GET', `/v1/collections/${collection.id}/members`);
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ members: [], next: null });
+        const body = await response.json();
+        expect({ status: response.status, body }, JSON.stringify({ currentActor, authority: authority.rows })).toEqual({
+          status: 200,
+          body: { members: [], next: null },
+        });
       },
       { includeBackends: true },
     );

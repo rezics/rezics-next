@@ -10,7 +10,7 @@ import { noEffect, runCommand, type CommandEvent } from '../../src/command/comma
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
-import { HistoryRegistry } from '../../src/history/registry.ts';
+import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import {
   withSelectedHistoryOriginal,
@@ -409,7 +409,7 @@ test('source identity is immutable, unavailable delivery cannot be forged, and n
 }, 30000);
 
 test('Complete owned default product journey without invented authority', async () => {
-  const { advanceSelectedHistoryOriginal } = await import('../../src/history/work.ts');
+  const { advanceSelectedHistoryOriginal } = await import('../../src/history/adapters/work.ts');
   const account = newId(0x9d30);
   const home = partitionOf(routeOf(account)!);
   const job = randomUUID();

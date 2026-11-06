@@ -1,7 +1,7 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import type { RecordHistorySourceReference } from '../history/record-source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import read from './authored-fields-history.sql';
+import { type RecordHistorySourceReference } from '../history/contract/index.ts';
 
 /** Internal association data only: no disclosure, maintenance or completeness authority.
  * Missing native metadata returns null, including when historical custody is unknown.

@@ -2,32 +2,8 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { WorkContext } from '../work/registry.ts';
 import type { WorkClient } from '../work/client.ts';
-import {
-  withAgentIdentityHistoryUnit,
-  currentAgentIdentityHistoryUnit,
-  readAgentIdentityRetirementStage,
-  type AgentIdentityRetirementStage,
-} from '../history/agent-identity-retirement.ts';
-import {
-  identityHistoryCommand,
-  reserveIdentityHistoryWork,
-  nativeWork,
-  addNativeWork,
-  IdentityHistoryWorkUnavailable,
-  IDENTITY_HISTORY_COMMAND_CONTROL,
-} from '../history/agent-identity-inventory-work.ts';
-import {
-  AGENT_IDENTITY_HISTORY_GUARD_COST,
-  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-} from '../history/agent-identity-sdk-fence.ts';
-import type { HistoryReceivingContext } from '../history/receiving.ts';
 import type { Pool } from 'pg';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import {
-  agentIdentitySourceKey,
-  MAX_AGENT_IDENTITY_SOURCE_KEYS,
-  type AgentIdentitySourceKey,
-} from '../history/agent-identity-source.ts';
 import {
   verifyIdentitySourceConsumerCustody,
   type IdentitySourceConsumerCustody,
@@ -41,7 +17,6 @@ import {
   verifyAgentIdentityRecoveryCopyInventory,
   type PreparedAgentIdentityCopy,
 } from './shared-history-agent-identity.ts';
-import type { HistoryBarrier } from '../history/registry.ts';
 import canonicalize from 'canonicalize';
 import {
   currentCommand,
@@ -53,7 +28,6 @@ import {
   withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import * as nativeBinding from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import type {
@@ -70,6 +44,28 @@ import {
 } from './agent-verification-identity.ts';
 import select from './agent-verification-identity-technical-read.sql';
 import insert from './agent-verification-identity-technical-insert.sql';
+import {
+  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+  AGENT_IDENTITY_HISTORY_GUARD_COST,
+  addNativeWork,
+  currentAgentIdentityHistoryUnit,
+  identityHistoryCommand,
+  identityHistoryCommandControl,
+  nativeWork,
+  readAgentIdentityRetirementStage,
+  reserveIdentityHistoryWork,
+  withAgentIdentityHistoryUnit,
+} from '../history/application/index.ts';
+import {
+  ACCOUNT_ROLE_BITS,
+  type AgentIdentityRetirementStage,
+  type AgentIdentitySourceKey,
+  type HistoryBarrier,
+  type HistoryReceivingContext,
+  IdentityHistoryWorkUnavailable,
+  MAX_AGENT_IDENTITY_SOURCE_KEYS,
+  agentIdentitySourceKey,
+} from '../history/contract/index.ts';
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 // Failure bookkeeping only; all positive authority comes from durable locked native rows.
@@ -357,7 +353,6 @@ export async function verifyTechnicalSource(
   return valid;
 }
 
-export type { AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 export type AgentIdentitySourceRole = 'account_id' | 'requested_by' | 'decided_by';
 export function MAX_AGENT_IDENTITY_RETENTION_KEYS() {
   return memoizedValue(MAX_AGENT_IDENTITY_RETENTION_KEYS, () => MAX_AGENT_IDENTITY_SOURCE_KEYS);
@@ -773,12 +768,12 @@ export function minimizeAgentIdentityRetention(
     try {
       // Pool-only compatibility never allocates a frame or pretends to possess an SDK client.
       const unit = currentAgentIdentityHistoryUnit();
-      const client = deps?.client ?? unit?.client;
+      const client = deps?.client ?? (unit?.client as WorkClient | undefined);
       if (!client) {
         await reserveIdentityHistoryWork(
           pool,
           addNativeWork(
-            IDENTITY_HISTORY_COMMAND_CONTROL,
+            identityHistoryCommandControl(),
             nativeWork(4 + fixed.keys.length, 4 + fixed.keys.length, 4 + fixed.keys.length, 16384),
           ),
           { deadline },
@@ -817,7 +812,7 @@ export function minimizeAgentIdentityRetention(
           });
           staged.push({
             reference,
-            custody: stage?.consumer ?? null,
+            custody: (stage?.consumer ?? null) as IdentitySourceConsumerCustody | null,
             stage,
             copy,
             client,

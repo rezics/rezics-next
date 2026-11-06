@@ -26,7 +26,7 @@ type Command = { [K in Operation]: { operation: K; args: Parameters<ArchiveRecov
 type Input = Command & ExpectedReader & { sender?: string };
 
 // The server-function request is an HTTP boundary. Native routes validate operation operands;
-// the archive itself travels as untouched text to the existing decoder.
+// the archive itself travels as original bytes in a base64 envelope to the existing decoder.
 function validate(input: unknown): Input {
   if (!validExpectedReader(input) || !('operation' in input) || !('args' in input) || !Array.isArray(input.args))
     throw new Error('Invalid archive command');
@@ -45,6 +45,20 @@ function validate(input: unknown): Input {
     'label',
   ];
   if (!operations.includes(input.operation as Operation)) throw new Error('Invalid archive operation');
+  if (input.operation === 'upload') {
+    const archive = input.args[0];
+    if (
+      typeof archive !== 'string' &&
+      (!archive ||
+        typeof archive !== 'object' ||
+        !('base64' in archive) ||
+        typeof archive.base64 !== 'string' ||
+        archive.base64.length > Math.ceil((34 * 1024 * 1024) / 3) * 4 ||
+        archive.base64.length % 4 !== 0 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(archive.base64))
+    )
+      throw new Error('Invalid archive upload');
+  }
   if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200))
     throw new Error('Invalid archive sender');
   return input as Input;
