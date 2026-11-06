@@ -1390,6 +1390,24 @@ function slotMarkers(environment: Record<string, string>, name: string): string[
   );
 }
 
+function uploadDestinations(events: Event[]): string[] {
+  return events
+    .filter((event) => event.kind === 'rsync' && event.step === 'workspace upload')
+    .map((event) => String(event.destination).slice(0, String(event.destination).indexOf(':')));
+}
+
+function occupyOrdinarySlot(environment: Record<string, string>, name: string, index = 0): void {
+  const marker = join(environment.FAKE_DIR!, `${hostKey(name)}.slot.${index}`);
+  mkdirSync(marker);
+  writeFileSync(`${marker}.memory`, String(2.5 * 2 ** 30));
+}
+
+function freeOrdinarySlot(environment: Record<string, string>, name: string, index = 0): void {
+  const marker = join(environment.FAKE_DIR!, `${hostKey(name)}.slot.${index}`);
+  rmSync(marker, { recursive: true, force: true });
+  rmSync(`${marker}.memory`, { force: true });
+}
+
 function rewriteHosts(
   environment: Record<string, string>,
   hosts: Array<{ name: string; slots: number; fallback?: boolean }>,
@@ -6095,6 +6113,134 @@ test('an admission wait re-reads slot capacity and stays on its uploaded host un
     expect(slotMarkers(moved.env, 'b')).toEqual([]);
   } finally {
     if (movedRun.child.exitCode === null) movedRun.child.kill('SIGTERM');
+  }
+});
+
+test('a check waiting on a full upload host moves after two minutes when another performance host can start it now', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, slots: 2, ordinaryBusySlots: [0] },
+    b: { available: 16e9, slots: 2, down: true },
+  });
+  env.REMOTE_CHECK_PLACEMENT_MOVE_MS = '80';
+  env.REMOTE_CHECK_WAIT_REPEAT_MS = '5';
+  const directory = workspace();
+  const run = startRemote(env, directory, ['true']);
+  try {
+    await waitFor(() => uploadDestinations(events()).includes('ops@a.test'));
+    await waitFor(
+      () => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2,
+    );
+    rewriteHostConfig(env, 'b', { down: false });
+    const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+    await run.stdout;
+    expect(code, stderr).toBe(0);
+    expect(stderr).toMatch(/moving uploaded placement from a to b after [0-9.]+ s wait/);
+    expect(uploadDestinations(events())).toEqual(['ops@a.test', 'ops@b.test']);
+    const seen = events();
+    const firstCleanup = seen.findIndex((event) => event.kind === 'cleanup' && event.address === 'ops@a.test');
+    const runAt = seen.findIndex((event) => event.kind === 'run');
+    expect(firstCleanup).toBeGreaterThanOrEqual(0);
+    expect(runAt).toBeGreaterThan(firstCleanup);
+    expect(seen[runAt]!.address).toBe('ops@b.test');
+    expect(seen.some((event) => event.kind === 'slot' && event.granted && event.address === 'ops@b.test')).toBe(true);
+    expect(slotMarkers(env, 'a')).toEqual([`${hostKey('a')}.slot.0`]);
+    expect(slotMarkers(env, 'b')).toEqual([]);
+  } finally {
+    if (run.child.exitCode === null) run.child.kill('SIGTERM');
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a placement move happens at most once until the second host stays full for two minutes', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, slots: 2, ordinaryBusySlots: [0] },
+    b: { available: 16e9, slots: 2, down: true },
+  });
+  env.REMOTE_CHECK_PLACEMENT_MOVE_MS = '120';
+  env.REMOTE_CHECK_WAIT_REPEAT_MS = '5';
+  const directory = workspace();
+  const run = startRemote(env, directory, ['true']);
+  try {
+    await waitFor(() => uploadDestinations(events()).includes('ops@a.test'));
+    rewriteHostConfig(env, 'b', { down: false, slowUploadMs: 300 });
+    await waitFor(() => uploadDestinations(events()).includes('ops@b.test'));
+    occupyOrdinarySlot(env, 'b');
+    await waitFor(() => events().some((event) => event.kind === 'cleanup' && event.address === 'ops@a.test'));
+    freeOrdinarySlot(env, 'a');
+    await Bun.sleep(50);
+    expect(uploadDestinations(events())).toEqual(['ops@a.test', 'ops@b.test']);
+    expect(events().some((event) => event.kind === 'run')).toBe(false);
+    const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+    await run.stdout;
+    expect(code, stderr).toBe(0);
+    expect(stderr.match(/moving uploaded placement from \S+ to \S+ after [0-9.]+ s wait/g)).toHaveLength(2);
+    expect(uploadDestinations(events())).toEqual(['ops@a.test', 'ops@b.test', 'ops@a.test']);
+    expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
+  } finally {
+    if (run.child.exitCode === null) run.child.kill('SIGTERM');
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a gate or landing-priority check keeps today's ordering rules on the host it moves to", async () => {
+  for (const [label, extra, options, needle, aSlots, aBusy] of [
+    ['landing', { REMOTE_CHECK_PRIORITY: 'landing' }, [] as string[], '# REMOTE_CHECK_PRIORITY landing', 2, [0]],
+    ['gate', {}, ['--gate'], '# REMOTE_CHECK_GATE_REQUEST 1', 4, [0, 1, 2]],
+  ] as const) {
+    const { env, events } = scenario({
+      a: { available: 8e9, slots: aSlots, ordinaryBusySlots: [...aBusy] },
+      b: { available: 16e9, slots: 4, down: true },
+    });
+    env.REMOTE_CHECK_PLACEMENT_MOVE_MS = '80';
+    const directory = workspace();
+    const run = startRemote({ ...env, ...extra }, directory, ['true'], [...options]);
+    try {
+      await waitFor(() => uploadDestinations(events()).includes('ops@a.test'));
+      rewriteHostConfig(env, 'b', { down: false });
+      const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+      await run.stdout;
+      expect(code, `${label}: ${stderr}`).toBe(0);
+      expect(stderr, label).toMatch(/moving uploaded placement from a to b after [0-9.]+ s wait/);
+      const grant = events().find((event) => event.kind === 'slot' && event.granted && event.address === 'ops@b.test');
+      expect(grant, label).toBeDefined();
+      expect(String(grant!.script), label).toContain(needle);
+      expect(events().find((event) => event.kind === 'run')!.address, label).toBe('ops@b.test');
+    } finally {
+      if (run.child.exitCode === null) run.child.kill('SIGTERM');
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test('a check whose placement host has a free slot never moves', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, slots: 2, ordinaryBusySlots: [0] },
+    b: { available: 16e9, slots: 2, down: true },
+  });
+  env.REMOTE_CHECK_PLACEMENT_MOVE_MS = '200';
+  env.REMOTE_CHECK_WAIT_REPEAT_MS = '5';
+  const directory = workspace();
+  const run = startRemote(env, directory, ['true']);
+  try {
+    await waitFor(() => uploadDestinations(events()).includes('ops@a.test'));
+    await waitFor(
+      () => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2,
+    );
+    rewriteHostConfig(env, 'b', { down: false });
+    await Bun.sleep(80);
+    expect(uploadDestinations(events())).toEqual(['ops@a.test']);
+    freeOrdinarySlot(env, 'a');
+    const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+    await run.stdout;
+    expect(code, stderr).toBe(0);
+    expect(stderr).not.toContain('moving uploaded placement');
+    expect(uploadDestinations(events())).toEqual(['ops@a.test']);
+    expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
+    expect(slotMarkers(env, 'a')).toEqual([]);
+    expect(slotMarkers(env, 'b')).toEqual([]);
+  } finally {
+    if (run.child.exitCode === null) run.child.kill('SIGTERM');
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 
