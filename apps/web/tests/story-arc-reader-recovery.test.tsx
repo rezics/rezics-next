@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { act } from 'react';
-import { ui } from './story-arc-reader-view.test';
+import { ui } from './support/story-arc-reader-ui';
 import { arcAddress, arcExample, arcId, characterId } from '../src/features/catalogue/story-arc-reader/examples';
 import type { ArcAddress, ArcRead, ArcTransport } from '../src/features/catalogue/story-arc-reader/model';
 import { m } from '../src/paraglide/messages.js';
