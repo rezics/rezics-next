@@ -42,6 +42,8 @@ type ReaderFixture = {
   setCanLeave: (value: boolean) => void;
   confirmCount: () => number;
   entry: string;
+  openLanguage: (name?: RegExp | string) => Promise<HTMLElement>;
+  chooseLanguage: (name: RegExp) => Promise<void>;
 };
 
 async function withReader(run: (fixture: ReaderFixture) => Promise<void>, productionNavigation = false) {
@@ -50,7 +52,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
   const window = new Window({ url: `https://site.invalid${entry}` });
   window.confirm = (() => true) as typeof window.confirm;
   window.scrollTo = () => {};
-  window.matchMedia = ((media: string) => ({
+  const matchMedia = ((media: string) => ({
     media,
     matches: false,
     addEventListener: () => {},
@@ -58,6 +60,9 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
     addListener: () => {},
     removeListener: () => {},
   })) as typeof window.matchMedia;
+  Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: matchMedia });
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 800 });
   const globals = [
     'window',
     'document',
@@ -118,7 +123,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
   const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   const { AppearanceControls } = await import('../src/shell/appearance-controls');
   const storybook = createRequire(require.resolve('storybook/test'));
-  const { within, waitFor } = await import(storybook.resolve('@testing-library/dom'));
+  const { fireEvent, within, waitFor } = await import(storybook.resolve('@testing-library/dom'));
   const { default: userEvent } = await import(storybook.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const host = window.document.createElement('main');
@@ -251,8 +256,24 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
     confirmCount: () => confirmCount,
     entry,
   };
+  function languageOption(name: RegExp) {
+    return body.queryByRole('menuitemradio', { name }) ?? body.getByRole('radio', { name });
+  }
+  async function openLanguage(name: RegExp | string = /Language|言語/) {
+    const trigger = body.getByRole('button', { name });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+    await waitFor(() => expect(languageOption(/日本語/)).toBeTruthy());
+    return trigger;
+  }
+  async function chooseLanguage(name: RegExp) {
+    await act(async () => {
+      fireEvent.click(languageOption(name));
+    });
+  }
   try {
-    await run(fixture);
+    await run({ ...fixture, openLanguage, chooseLanguage });
   } finally {
     await act(async () => root.unmount());
     window.close();
@@ -265,14 +286,23 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>, produc
 
 test('keyboard switching keeps the reader query and fragment; staying in a dirty editor keeps its language', async () => {
   await withReader(
-    async ({ router, body, user, act, waitFor, admissions, committedLocales, setDraft, setCanLeave, confirmCount }) => {
+    async ({
+      router,
+      body,
+      user,
+      act,
+      waitFor,
+      admissions,
+      committedLocales,
+      setDraft,
+      setCanLeave,
+      confirmCount,
+      openLanguage,
+      chooseLanguage,
+    }) => {
       const button = () => body.getByRole('button', { name: /言語|Language/ });
-      const trigger = button();
-      trigger.focus();
-      await act(async () => user.keyboard('{Enter}'));
-      const japanese = await body.findByRole('menuitemradio', { name: /日本語/ });
-      japanese.focus();
-      await act(async () => user.keyboard('{Enter}'));
+      await openLanguage();
+      await chooseLanguage(/日本語/);
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/ja/subjects/reader-01'));
       expect(body.getByRole('heading', { name: 'Subject reader route' })).toBeDefined();
@@ -284,12 +314,8 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
 
       await act(async () => setDraft(true));
       setCanLeave(false);
-      const updatedTrigger = button();
-      updatedTrigger.focus();
-      await act(async () => user.keyboard('{Enter}'));
-      const traditional = await body.findByRole('menuitemradio', { name: /繁體中文/ });
-      traditional.focus();
-      await act(async () => user.keyboard('{Enter}'));
+      await openLanguage();
+      await chooseLanguage(/繁體中文/);
       await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
 
       expect(router.state.location.pathname).toBe('/ja/subjects/reader-01');
@@ -301,13 +327,10 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
 });
 
 test('production locale navigation escapes the current-locale rewrite and honors a dirty reader', async () => {
-  await withReader(async ({ window, body, user, act, waitFor, setDraft, setCanLeave, confirmCount }) => {
+  await withReader(async ({ window, act, waitFor, setDraft, setCanLeave, confirmCount, openLanguage, chooseLanguage }) => {
     const chooseJapanese = async () => {
-      body.getByRole('button', { name: 'Language: English' }).focus();
-      await act(async () => user.keyboard('{Enter}'));
-      const option = await body.findByRole('menuitemradio', { name: /日本語/ });
-      option.focus();
-      await act(async () => user.keyboard('{Enter}'));
+      await openLanguage('Language: English');
+      await chooseLanguage(/日本語/);
     };
     await act(async () => setDraft(true));
     setCanLeave(false);
@@ -324,7 +347,7 @@ test('production locale navigation escapes the current-locale rewrite and honors
 });
 
 test('navigation failure offers the current safe reader and an obsolete completion cannot replace a newer visit', async () => {
-  await withReader(async ({ router, body, user, act, waitFor, committedLocales }) => {
+  await withReader(async ({ router, body, act, waitFor, committedLocales, openLanguage, chooseLanguage }) => {
     const originalNavigate = router.navigate.bind(router);
     Object.defineProperty(router, 'navigate', {
       configurable: true,
@@ -332,11 +355,8 @@ test('navigation failure offers the current safe reader and an obsolete completi
       value: () => Promise.reject(new Error('navigation unavailable')),
     });
     const trigger = () => body.getByRole('button', { name: /Language|言語/ });
-    trigger().focus();
-    await act(async () => user.keyboard('{Enter}'));
-    const japanese = await body.findByRole('menuitemradio', { name: /日本語/ });
-    japanese.focus();
-    await act(async () => user.keyboard('{Enter}'));
+    await openLanguage();
+    await chooseLanguage(/日本語/);
     const failure = await body.findByRole('alert');
     expect(failure.textContent).toContain('日本語');
     expect(failure.querySelector('a')?.getAttribute('href')).toBe(entry);
@@ -359,24 +379,16 @@ test('navigation failure offers the current safe reader and an obsolete completi
           : originalNavigate(options as never),
     });
 
-    const enTrigger = trigger();
-    enTrigger.focus();
-    await act(async () => user.keyboard('{Enter}'));
-    const traditional = await body.findByRole('menuitemradio', { name: /繁體中文/ });
-    traditional.focus();
-    await act(async () => user.keyboard('{Enter}'));
+    await openLanguage();
+    await chooseLanguage(/繁體中文/);
     await body.findByRole('status');
 
     await act(async () => {
       await originalNavigate({ href: '/en/subjects/reader-02' });
     });
     await waitFor(() => expect(body.queryByRole('status')).toBeNull());
-    const englishTrigger = trigger();
-    englishTrigger.focus();
-    await act(async () => user.keyboard('{Enter}'));
-    const nextLanguage = await body.findByRole('menuitemradio', { name: /日本語/ });
-    nextLanguage.focus();
-    await act(async () => user.keyboard('{Enter}'));
+    await openLanguage();
+    await chooseLanguage(/日本語/);
     await waitFor(() => expect(router.state.location.pathname).toBe('/ja/subjects/reader-02'));
 
     await act(async () => resolveOld());

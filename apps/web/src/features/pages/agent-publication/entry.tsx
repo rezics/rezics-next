@@ -1,9 +1,9 @@
 import type { Related, Subject } from '../../../subject/types';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import type { PageLink } from '../shared';
+import { PublicationOverlayView } from '../publication-overlay';
 import type { PublicationDefinitions } from '../subject-metadata';
-import { agentPublicationReading } from './model';
-import { AgentPublicationView } from './view';
+import { agentOverlayReading } from './model';
 
 /** Generic SoftwareApplication and agent pages project identity links from the current read. */
 export function AgentPublicationEntry({
@@ -16,19 +16,19 @@ export function AgentPublicationEntry({
 }: {
   subject: Subject;
   related: Related;
-  definitions?: PublicationDefinitions;
+  definitions?: PublicationDefinitions | undefined;
   locale: string;
   reader?: Reader;
-  link?: PageLink;
+  link?: PageLink | undefined;
 }) {
-  if (!agentPublicationReading(subject, definitions, locale, reader)) return null;
+  const reading = agentOverlayReading(subject, definitions, locale, reader);
+  if (!reading) return null;
   return (
-    <AgentPublicationView
+    <PublicationOverlayView
+      reading={reading}
       subject={subject}
       related={related}
-      definitions={definitions}
       locale={locale}
-      reader={reader}
       {...(link ? { link } : {})}
     />
   );

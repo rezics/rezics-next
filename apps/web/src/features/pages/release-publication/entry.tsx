@@ -1,9 +1,9 @@
 import type { Related, Subject } from '../../../subject/types';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import type { PageLink } from '../shared';
+import { PublicationOverlayView } from '../publication-overlay';
 import type { PublicationDefinitions } from '../subject-metadata';
 import { releasePublicationReading } from './model';
-import { ReleasePublicationView } from './view';
 
 /** No extra read: overlay uses the current anonymous page's statements and related summaries. */
 export function ReleasePublicationEntry({
@@ -16,20 +16,19 @@ export function ReleasePublicationEntry({
 }: {
   subject: Subject;
   related: Related;
-  definitions?: PublicationDefinitions;
+  definitions?: PublicationDefinitions | undefined;
   locale: string;
   reader?: Reader;
-  link?: PageLink;
+  link?: PageLink | undefined;
 }) {
   const reading = releasePublicationReading(subject, definitions, locale, reader);
   if (!reading) return null;
   return (
-    <ReleasePublicationView
-      reading={reading}
+    <PublicationOverlayView
+      reading={{ kind: 'release', fields: reading.fields }}
       subject={subject}
       related={related}
       locale={locale}
-      reader={reader}
       {...(link ? { link } : {})}
     />
   );
