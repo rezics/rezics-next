@@ -11,6 +11,7 @@ import {
   formatConnectionRunSummary,
   formatFileConnectionResult,
   formatPostgresErrors,
+  isolatedPostgresUnixSockets,
   invokeTypecheck,
   reportCheckFailure,
   reportPostgresErrors,
@@ -152,6 +153,27 @@ test('the check database logs each error with its SQLSTATE', () => {
   expect(container).toBe('postgres-container');
   expect(prefix).toBeGreaterThan(0);
   expect(args[prefix - 1]).toBe('-c');
+});
+
+test('an isolated walk bind-mounts a unix socket directory instead of publishing a host port', () => {
+  const socketDirectory = mkdtempSync(join(tmpdir(), 'kernel-pg-socket-'));
+  try {
+    const calls: string[][] = [];
+    startPostgresContainer((args) => (calls.push(args), 'postgres-container'), { socketDirectory });
+    const args = calls[0]!;
+    expect(args).toContain('-v');
+    expect(args).toContain(`${socketDirectory}:/rezics-pg-socket:z`);
+    expect(args).toContain('PGHOST=/rezics-pg-socket');
+    expect(isolatedPostgresUnixSockets).toBe('/rezics-pg-socket,/var/run/postgresql');
+    expect(args).toContain(`unix_socket_directories=${isolatedPostgresUnixSockets}`);
+    expect(args).not.toContain('127.0.0.1::5432');
+    expect(args.some((argument) => argument.startsWith('ns:') || argument.startsWith('port='))).toBe(false);
+    expect(() => startPostgresContainer((next) => next.join(' '), { socketDirectory: 'relative-socket' })).toThrow(
+      'Disposable PostgreSQL socket directory must be an absolute path',
+    );
+  } finally {
+    rmSync(socketDirectory, { recursive: true, force: true });
+  }
 });
 
 test("a failing kernel check prints the database server's errors and fatal messages by SQLSTATE", () => {

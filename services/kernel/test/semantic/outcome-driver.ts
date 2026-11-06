@@ -10,10 +10,16 @@ import { compileCatalogue } from '@rezics/definitions/compile';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
-import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
+import {
+  bootstrapGovernance,
+  PLATFORM_GOVERNANCE_ROLE,
+  PLATFORM_RESOURCE,
+} from '../../src/access/bootstrap-governance.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -24,7 +30,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -47,7 +53,6 @@ export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number
 
 const password = 'semantic outcome registration password with enough entropy';
 const clientId = 'semantic-outcomes';
-const kernelRoot = resolve(import.meta.dir, '../..');
 
 function required<T>(value: T | null | undefined, message: string): T {
   if (value == null) throw new Error(message);
@@ -113,6 +118,8 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authAudience: string;
       authJwksUrl: string;
     };
+    /** Mounted platform.governance actions plus access:grant and gate:any. */
+    governorScopes: readonly string[];
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
     signIn(account: Account): Promise<HttpResponse>;
     authenticatedAccount(account: Account): Promise<AccountActor>;
@@ -228,6 +235,12 @@ async function startDriver(
     const kernelUrl = databaseUrl(source, kernelName);
     pool = createPool(kernelUrl);
     runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
+    const receiptKeyEnv = [...testReceiptKeys().keys]
+      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+      .join(',');
+    process.env.KERNEL_RECEIPT_KEYS = receiptKeyEnv;
+    configureTestReceiptKeys(pool);
+    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool);
     timer.mark('kernel database');
 
     const routeKey = randomBytes(32);
@@ -238,16 +251,25 @@ async function startDriver(
     if ('close' in auth) release = () => auth.close();
     const { issuer, audience, service, host } = auth;
     const authJwksUrl = `${issuer}/.well-known/jwks.json`;
+    const serviceHandler = service.handler.bind(service);
     let runtimeAuth: { issuer: string; audience: string; jwksUrl: string } | undefined;
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
       receiptKeys: testReceiptKeys(),
       pool: runtimePool,
+      requestDeadlineMs: 30_000,
       ...(options.clock ? { clock: options.clock } : {}),
       routeKey,
       tokens: sessionKeys,
       writeRate: createWriteRateLimiter({
         secret: 'semantic-outcome-write-rate-secret-with-at-least-32-bytes',
+        overrides: JSON.stringify({
+          anonymous: { write: { maximum: 1_000_000, seconds: 60 } },
+          'new-account': { write: { maximum: 1_000_000, seconds: 60 } },
+          member: { write: { maximum: 1_000_000, seconds: 60 } },
+          trusted: { write: { maximum: 1_000_000, seconds: 60 } },
+          service: { write: { maximum: 1_000_000, seconds: 60 } },
+        }),
       }),
       access(config) {
         access = createAccess({
@@ -256,13 +278,10 @@ async function startDriver(
             issuer,
             audience,
             jwksUrl: authJwksUrl,
-            ...(new URL(issuer).hostname === 'auth.native.rezics.com'
-              ? {
-                  // Auth's actual in-process public JWKS handler serves this browser-visible
-                  // native issuer while the kernel verifies the advertised issuer claim.
-                  fetch: (url: string | URL, init?: RequestInit) => service.handler(new Request(url, init)),
-                }
-              : {}),
+            // Capture the service handler before any later page wrap. Kernel
+            // Access verifies JWKS through this exact transport, matching the
+            // library outcome driver's in-process Auth fetch.
+            fetch: (url: string | URL, init?: RequestInit) => serviceHandler(new Request(url, init)),
           },
         });
         runtimeAuth = { issuer, audience, jwksUrl: authJwksUrl };
@@ -271,13 +290,22 @@ async function startDriver(
     });
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
-    const governanceScopes = [...scopes, 'gate:any'];
-    const knownScopes = new Set(governanceScopes);
+    for (const action of LIFECYCLE_ACTIONS.keys()) if (!scopes.includes(action)) scopes.push(action);
+    if (!scopes.includes('access:grant')) scopes.push('access:grant');
     // Kernel Access is lazy. Resolve it through an ordinary public read after
     // composition, retaining exactly the instance returned by access(config).
     // The empty migrated template may have no active release yet.
     await (await app.handle(new Request('http://kernel.test/v1/definitions/active'))).arrayBuffer();
     required(access, 'Kernel did not construct its native Access');
+    const compiledGovernance = resourceRoleCatalogue(access)?.roles.get(PLATFORM_GOVERNANCE_ROLE);
+    if (!compiledGovernance?.includes('access:grant') || !compiledGovernance.includes('subject:create'))
+      throw new Error(
+        `platform.governance is missing grant actions: ${(compiledGovernance ?? []).join(', ') || '(uncompiled)'}`,
+      );
+    // A full-catalogue governor JWT can drop later delegated actions while still
+    // authenticating exposure:open. Carry the compiled platform.governance set.
+    const governanceScopes = [...new Set(['access:grant', 'gate:any', ...compiledGovernance])];
+    const knownScopes = new Set([...scopes, ...governanceScopes]);
     if ('bind' in auth) {
       const bindingPool = runtimePool;
       const actions = accessActionCatalogue(actionCatalogue(app));
@@ -337,11 +365,11 @@ async function startDriver(
         },
       });
     }
-    await auth.registerClient(clientId, governanceScopes);
+    await auth.registerClient(clientId, [...knownScopes]);
     timer.mark('auth side');
 
     async function issue(email: string, scopes: readonly string[]): Promise<string> {
-      const signed = await service.handler(
+      const signed = await serviceHandler(
         new Request(`${issuer}/signin`, {
           method: 'POST',
           headers: { origin: issuer, 'content-type': 'application/json' },
@@ -353,7 +381,7 @@ async function startDriver(
         .getSetCookie()
         .map((value) => value.split(';')[0])
         .join('; ');
-      const issued = await service.handler(
+      const issued = await serviceHandler(
         new Request(`${issuer}/token`, {
           method: 'POST',
           headers: { origin: issuer, 'content-type': 'application/json', cookie },
@@ -370,7 +398,7 @@ async function startDriver(
       const original = credentials.get(account);
       if (!original) throw new Error('Sign-in requires an existing native fixture account');
       return jsonResponse(
-        await service.handler(
+        await serviceHandler(
           new Request(`${issuer}/signin`, {
             method: 'POST',
             headers: { origin: issuer, 'content-type': 'application/json' },
@@ -445,32 +473,11 @@ async function startDriver(
     ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
 
-    await setupSemantic(pool, bundledRelease);
-    await setupContent(pool);
-    await setupPresentation(pool);
-
-    const bootstrap = Bun.spawn(
-      [process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.accountId],
-      {
-        cwd: kernelRoot,
-        env: {
-          ...process.env,
-          DATABASE_URL: kernelUrl,
-          KERNEL_RECEIPT_KEYS: [...testReceiptKeys().keys]
-            .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
-            .join(','),
-        },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
-    );
-    const [bootstrapCode, bootstrapOut, bootstrapErr] = await Promise.all([
-      bootstrap.exited,
-      new Response(bootstrap.stdout).text(),
-      new Response(bootstrap.stderr).text(),
-    ]);
-    if (bootstrapCode !== 0)
-      throw new Error(`Governance bootstrap exited ${bootstrapCode}: ${bootstrapOut}${bootstrapErr}`);
+    const kernelPool = runtimePool;
+    await setupSemantic(kernelPool, bundledRelease);
+    await setupContent(kernelPool);
+    await setupPresentation(kernelPool);
+    await bootstrapGovernance(kernelPool, governor.accountId);
 
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
@@ -506,28 +513,46 @@ async function startDriver(
         `Collection exposure setup failed: ${collectionExposure.status}: ${JSON.stringify(collectionExposure.body)}`,
       );
 
+    function bearerScopes(bearer: string): string[] {
+      const payload = bearer.split('.')[1];
+      if (!payload) return [];
+      const claim = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { scope?: unknown };
+      return typeof claim.scope === 'string' ? claim.scope.split(' ').filter(Boolean) : [];
+    }
+
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId = GLOBAL_CONTEXT,
+      resourceId: string = GLOBAL_CONTEXT,
       grantor: Account = governor,
     ) {
-      const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
-      if (route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
+      const resource =
+        resourceId === PLATFORM_RESOURCE.id || resourceId === GLOBAL_CONTEXT
+          ? PLATFORM_RESOURCE
+          : { route: routeOf(resourceId), id: resourceId };
+      if (resource.route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
+      const held = bearerScopes(grantor.bearer);
+      const missing = ['access:grant', ...actions].filter((action) => !held.includes(action));
+      if (missing.length)
+        throw new Error(`Grant administration failed: 403: governor token missing scopes ${missing.join(', ')}`);
       const response = await send(
         grantor,
         'POST',
         '/v1/grants',
         {
-          resource: { route, id: resourceId },
+          resource,
           subject: { kind: 'account', id: account.accountId },
           actions,
           valid: '(,)',
         },
         { 'Idempotency-Key': key() },
       );
-      if (response.status !== 201)
-        throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
+      if (response.status !== 201) {
+        const listed = await send(grantor, 'GET', `/v1/grants?resourceId=${resource.id}`);
+        throw new Error(
+          `Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}; grant read ${listed.status}; token holds ${held.length} scopes`,
+        );
+      }
     }
 
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
@@ -547,8 +572,8 @@ async function startDriver(
       'subject:merge',
     ]);
 
-    const boundary = { pool, deadline: Date.now() + 10_000 };
-    await createSuspensionCommands({ pool, access, clock: options.clock ?? systemClock }).suspend(
+    const boundary = { pool: kernelPool, deadline: Date.now() + 10_000 };
+    await createSuspensionCommands({ pool: kernelPool, access, clock: options.clock ?? systemClock }).suspend(
       { ...boundary, actor: await access.authenticate(governor.bearer, boundary) },
       { accountId: accounts.suspended.accountId, key: randomUUID() },
     );
@@ -643,6 +668,7 @@ async function startDriver(
           authAudience: required(runtimeAuth?.audience, 'Kernel did not construct Access with the Auth audience'),
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
         },
+        governorScopes: Object.freeze([...governanceScopes]),
         person,
         signIn,
         scopeVariant,

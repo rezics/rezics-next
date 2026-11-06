@@ -1765,6 +1765,8 @@
   "subject_qualifiers": "Qualifikatoren",
   "subject_rating_control_clear": "Bewertung löschen",
   "subject_rating_control_error": "Deine Bewertung konnte nicht gespeichert werden. Der vorherige Wert wurde wiederhergestellt.",
+  "subject_rating_control_uncertain": "Das Ergebnis der Bewertung ist ungewiss. Wiederhole dieselbe Speicherung, um sie zu bestätigen.",
+  "subject_rating_control_stale": "Diese Bewertungsprüfung ist veraltet. Prüfe die aktuelle Frage und speichere erneut.",
   "subject_rating_control_label": "Deine Bewertung",
   "subject_rating_control_save": "Bewertung speichern",
   "subject_rating_control_unrated": "Noch nicht bewertet",

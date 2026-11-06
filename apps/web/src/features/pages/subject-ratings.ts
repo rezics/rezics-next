@@ -4,6 +4,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../../session/
 import { admitRatingRetryAfter, ratingRetryAt } from './rating-retry-admission';
 import { decodeOwnRatingValue } from './subject-own-rating-value';
 import { admitRatingAggregate } from './rating-population-value';
+import { classifyPersonalScoreWriteProblem, type PersonalScoreWriteResult } from '../../library/personal-score';
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
@@ -365,6 +366,51 @@ export async function readOwnRating(
   }
 }
 
+function currentRatingObservation(subjectId: string, question: RatingQuestion) {
+  return {
+    subjectId,
+    question: {
+      id: question.id,
+      revision: question.revision,
+      grain: question.grain,
+      meaning: question.meaning ?? question.label,
+      scale: question.scale,
+    },
+  };
+}
+
+function ratingWriteProblem(result: { status: number; error?: unknown }): PersonalScoreWriteResult {
+  const error = result.error;
+  const body =
+    error && typeof error === 'object' && 'value' in error
+      ? error.value
+      : error && typeof error === 'object' && 'data' in error
+        ? error.data
+        : error;
+  const record = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  return classifyPersonalScoreWriteProblem({
+    status: result.status,
+    ...(typeof record.code === 'string' ? { code: record.code } : {}),
+    ...(typeof record.detail === 'string' ? { detail: record.detail } : {}),
+  });
+}
+
+async function rereadOwnVote(
+  vote: { get: (init: { headers: { authorization: string } }) => Promise<{ status: number; data?: unknown }> },
+  authorization: string,
+  units: number | null,
+): Promise<PersonalScoreWriteResult | null> {
+  try {
+    const current = await vote.get({ headers: { authorization } });
+    if (units === null) return current.status === 404 ? 'successful' : null;
+    if (current.status !== 200) return null;
+    const value = decodeOwnRatingValue(current.data);
+    return value?.units === units ? 'successful' : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Write this reader's one vote. Each user action supplies its own idempotency key. */
 export async function writeOwnRating(
   client: KernelClient,
@@ -374,13 +420,17 @@ export async function writeOwnRating(
   idempotencyKey: string,
 ): Promise<boolean> {
   try {
-    if (units !== null) {
-      const question = await readRatingQuestion(client);
-      if (!question || !validRatingUnits(units, question.scale)) return false;
-    }
+    const question = await readRatingQuestion(client);
+    if (units !== null && (!question || !validRatingUnits(units, question.scale))) return false;
     return (
-      (await writeRatingVote(client, { subjectId: id, questionId: QUESTION, authorization, units, idempotencyKey })) ===
-      'successful'
+      (await writeRatingVote(client, {
+        subjectId: id,
+        questionId: QUESTION,
+        authorization,
+        units,
+        idempotencyKey,
+        ...(question ? { observation: currentRatingObservation(id, question) } : {}),
+      })) === 'successful'
     );
   } catch {
     return false;
@@ -407,7 +457,7 @@ export async function writeRatingVote(
       };
     };
   },
-): Promise<'successful' | 'rejected' | 'uncertain'> {
+): Promise<PersonalScoreWriteResult> {
   const vote = client.subjects({ id: input.subjectId }).ratings({ questionId: input.questionId }).vote;
   const headers = {
     authorization: input.authorization,
@@ -420,9 +470,11 @@ export async function writeRatingVote(
         ? await vote.delete(undefined, { headers })
         : await vote.put({ units: input.units }, { headers });
     if (!result.error && result.status === (input.units === null ? 204 : 200)) return 'successful';
-    return [400, 401, 403, 404, 409, 422].includes(result.status) ? 'rejected' : 'uncertain';
+    const classified = ratingWriteProblem(result);
+    if (classified !== 'uncertain') return classified;
+    return (await rereadOwnVote(vote, input.authorization, input.units)) ?? 'uncertain';
   } catch {
-    return 'uncertain';
+    return (await rereadOwnVote(vote, input.authorization, input.units)) ?? 'uncertain';
   }
 }
 
