@@ -18,6 +18,7 @@ import {
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
 const workerInclude = [...webViteWorkerSsrOptimizeDeps.include];
+const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
 
 function pluginNames(config: Awaited<ReturnType<typeof resolveWebViteConfig>>): string[] {
   return (config.plugins ?? [])
@@ -220,7 +221,6 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(environment?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
     expect(environment?.optimizeDeps?.entries).toEqual([]);
     expect(environment?.optimizeDeps?.include).toEqual(workerInclude);
-    expect(environment?.optimizeDeps?.include).toContain('use-sync-external-store/shim/with-selector.js');
     expect(environmentFor('client')).toBeUndefined();
     const resolved = worker && 'configResolved' in worker ? worker.configResolved : undefined;
     const pin =
@@ -331,6 +331,27 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
       }
     }
   }
+});
+
+test('the Worker selector dependency resolves to ESM while the client keeps the package implementation', async () => {
+  const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+  const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+  const selector = plugins.find((plugin) =>
+    plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-selector-esm',
+  ) as
+    | {
+        applyToEnvironment?: (environment: { name: string }) => boolean;
+        resolveId?: ((id: string) => unknown) | { handler: (id: string) => unknown };
+      }
+    | undefined;
+  const resolveId = typeof selector?.resolveId === 'function' ? selector.resolveId : selector?.resolveId?.handler;
+
+  expect(selector).toBeDefined();
+  expect(selector?.applyToEnvironment?.({ name: 'ssr' })).toBe(true);
+  expect(selector?.applyToEnvironment?.({ name: 'client' })).toBe(false);
+  expect(resolveId?.(workerSelectorImport)).toBe(
+    join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts'),
+  );
 });
 
 test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excludes and ESM polyfill alias', async () => {

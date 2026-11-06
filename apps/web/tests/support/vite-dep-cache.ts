@@ -27,7 +27,6 @@ export const webViteWorkerSsrOptimizeDeps = {
     'react/jsx-dev-runtime',
     'react-dom',
     '@tanstack/react-router > @tanstack/react-store',
-    'use-sync-external-store/shim/with-selector.js',
     '@inlang/paraglide-js/urlpattern-polyfill',
   ],
   exclude: [...webViteCalendarOptimizeDeps],

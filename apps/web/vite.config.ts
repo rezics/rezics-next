@@ -105,6 +105,8 @@ const urlpatternPolyfillEsm = join(urlpatternPolyfillDir, 'index.js');
 const urlpatternPolyfillDistEsm = join(urlpatternPolyfillDir, 'dist/urlpattern.js');
 const urlpatternPolyfillAlias = { find: 'urlpattern-polyfill', replacement: urlpatternPolyfillEsm } as const;
 const urlpatternPolyfillId = /urlpattern-polyfill/;
+const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
+const workerSelectorShimPath = join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts');
 
 function filePathOf(id: string): string {
   return (id.split('?')[0] ?? id).replace(/\\/g, '/');
@@ -462,6 +464,17 @@ export default defineConfig((context) => {
         },
       },
       workerDeniedDependencies(),
+      {
+        name: 'web-worker-selector-esm',
+        enforce: 'pre',
+        applyToEnvironment(environment) {
+          return environment.name !== 'client';
+        },
+        resolveId(id) {
+          if (id === workerSelectorImport || id === `${workerSelectorImport}.js`) return workerSelectorShimPath;
+          return null;
+        },
+      },
     ],
   };
 });
