@@ -331,6 +331,13 @@ test('web and auth isolated runs hold one slot for the whole command', async () 
 test('remote commands run with the lease off', async () => {
   const env = environment();
   const directory = env.REZICS_STACK_LEASE_DIR!;
+  const workspace = join(directory, 'workspace');
+  mkdirSync(workspace);
+  writeFileSync(
+    join(workspace, 'package.json'),
+    JSON.stringify({ packageManager: JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager }),
+  );
+  expect(Bun.spawnSync(['git', 'init', '-q', workspace]).exitCode).toBe(0);
   const bin = join(directory, 'bin');
   mkdirSync(bin);
   const scriptFile = join(directory, 'remote-script');
@@ -364,10 +371,14 @@ test('remote commands run with the lease off', async () => {
   );
   const run = start({ ...env, PATH: `${bin}:${env.PATH}`, KERNEL_CHECK_REMOTE: hosts }, 'remote', [
     process.execPath,
-    join(import.meta.dir, 'remote-check.ts'),
-    repository,
-    '--',
-    'true',
+    '-e',
+    `import { remoteCheck, readHosts } from ${JSON.stringify(join(import.meta.dir, 'remote-check.ts'))};
+    process.exitCode = await remoteCheck({
+      hosts: readHosts(${JSON.stringify(hosts)}),
+      workspace: ${JSON.stringify(workspace)},
+      runtimeProducer: ${JSON.stringify(repository)},
+      command: ['true'],
+    }, new AbortController().signal);`,
   ]);
   await stop(run);
   const script = readFileSync(scriptFile, 'utf8');
