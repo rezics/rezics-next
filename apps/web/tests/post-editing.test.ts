@@ -625,6 +625,18 @@ async function eventually(check: () => boolean) {
 const postSlot = (page: Page, index = 0) => page.locator('main ol[id^="thread-"] > li').nth(index);
 const inlineEditor = (slot: ReturnType<typeof postSlot>) => slot.locator('.ProseMirror[contenteditable="true"]');
 const saveEdit = (slot: ReturnType<typeof postSlot>) => slot.getByRole('button', { name: 'Save changes', exact: true });
+const moreActions = (slot: ReturnType<typeof postSlot>) => slot.getByRole('button', { name: 'More actions' });
+async function openOverflow(slot: ReturnType<typeof postSlot>) {
+  const trigger = moreActions(slot);
+  await trigger.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+  await trigger.click({ timeout: 120_000 });
+}
+async function dismissOverflow(page: Page) {
+  const menu = page.getByRole('menu');
+  if ((await menu.count()) === 0) return;
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'hidden', timeout: 10_000 });
+}
 
 // The owner can revise the first post through its menu and the reply has the same menu.
 test(
@@ -638,7 +650,7 @@ test(
     const { page, access } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      await slot.getByRole('button', { name: 'More actions' }).click();
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       await inlineEditor(slot).waitFor({ state: 'visible' });
       expect(await inlineEditor(slot).innerText()).toContain('Existing contribution');
@@ -674,12 +686,12 @@ test(
     const { page } = await open(threadPath(), false, id(91));
     try {
       for (const slot of [postSlot(page), postSlot(page, 1)]) {
-        await slot.getByRole('button', { name: 'More actions' }).click();
+        await openOverflow(slot);
         const menu = page.getByRole('menu');
         await menu.getByRole('menuitem', { name: 'Copy link' }).waitFor();
         expect(await menu.getByRole('menuitem', { name: 'Edit', exact: true }).count()).toBe(0);
         expect(await menu.getByRole('menuitem', { name: 'Delete', exact: true }).count()).toBe(0);
-        await page.keyboard.press('Escape');
+        await dismissOverflow(page);
       }
     } finally {
       await page.context().close();
@@ -701,7 +713,7 @@ test(
     const { page } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      await slot.getByRole('button', { name: 'More actions' }).click();
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       const draft = 'A draft that must remain';
       await inlineEditor(slot).fill(draft);
@@ -720,7 +732,10 @@ test(
 
       await slot.getByRole('button', { name: 'Review current version', exact: true }).click();
       const recovery = page.getByRole('alertdialog');
-      await recovery.locator('p[data-block-id="paragraph"]').filter({ hasText: 'Current version on the server' }).waitFor();
+      await recovery
+        .locator('p[data-block-id="paragraph"]')
+        .filter({ hasText: 'Current version on the server' })
+        .waitFor();
       expect(await inlineEditor(slot).innerText()).toContain(draft);
       await recovery.getByRole('button', { name: 'Keep editing', exact: true }).click();
       await inlineEditor(slot).waitFor({ state: 'visible' });
@@ -743,8 +758,8 @@ test(
     const { page } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      const trigger = slot.getByRole('button', { name: 'More actions' });
-      await trigger.click();
+      const trigger = moreActions(slot);
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       await inlineEditor(slot).fill('Discard this edit');
       await slot.getByRole('button', { name: 'Cancel edit', exact: true }).click();
@@ -779,7 +794,7 @@ test(
     const { page } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      await slot.getByRole('button', { name: 'More actions' }).click();
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
       const confirmation = page.getByRole('alertdialog');
       await confirmation.getByRole('button', { name: 'Cancel' }).waitFor();

@@ -42,7 +42,9 @@ Subject and author list query limits stay decimal-digit strings on the HTTP sche
 journey; they consume the composed reading-page rather than split thread and post lists. Conversation-row items are
 the post slots; nested presentation lists are not indexes. Journey navigation waits for DOMContentLoaded and
 hydration. Owner edit and erase use the reading-page viewer when that page was admitted for the account, otherwise
-the signed-in session subject after anonymous SSR. Inline revisions send the inherited native licence; a permanent
+the signed-in session subject after anonymous SSR. An unknown session withholds the overflow menu so a
+stranger copy/report menu cannot open in place of owner edit and delete. Inline revisions send the inherited
+native licence; a permanent
 author-erased slot shows “Removed by its author” without overflow, while a restorable deletion keeps its deleted
 tombstone and restore window. Edit discard confirms from live draft dirtiness, including capture-phase editor input, host text and a
 pending snapshot so Escape can confirm before the next paint. Revision and erase Idempotency-Key headers

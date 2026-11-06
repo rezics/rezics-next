@@ -8,8 +8,9 @@ during startup, because that compiled the Home client graph until Vite died at i
 starts skip SSR dependency discovery so the ready line is not held by the optimizer crawl. The same host answers
 the composed `reading-page` so edit, delete and edited-marker journeys see current posts. Owner edit and erase use
 the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
-anonymous SSR; the personal read still supplies reactions and review votes. Journey navigation waits for
-DOMContentLoaded and hydration, not network idle. Post slots are the thread conversation rows
+anonymous SSR; the personal read still supplies reactions and review votes. A still-unknown session does not offer
+a stranger More-actions menu, so owner edit and delete appear on the first open after the session is observed.
+Journey navigation waits for DOMContentLoaded and hydration, not network idle. Post slots are the thread conversation rows
 (`ol[id^="thread-"] > li`); nested presentation lists are not indexes. Inline-edit discard
 confirms from a capture-phase host-input flag as well as published snapshot and host text, so
 Escape can confirm before Tiptap paints. Revision and erase Idempotency-Key values stay RFC 8941

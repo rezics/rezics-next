@@ -688,6 +688,7 @@ export function ThreadReadingPost({
   counts,
   value,
   signedIn,
+  sessionKnown = true,
   returnTo,
   verification,
   onMutation,
@@ -719,6 +720,7 @@ export function ThreadReadingPost({
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
   signedIn: boolean;
+  sessionKnown?: boolean;
   returnTo: string;
   verification: VerificationConfig;
   onMutation: () => Promise<void>;
@@ -1115,6 +1117,7 @@ export function ThreadReadingPost({
           )}
           title={m.threads_untitled()}
           signedIn={signedIn}
+          overflowPending={!sessionKnown}
           plain={target.kind === 'post'}
           layout="detail"
           origin={{ key: String(lifetime.id), isCurrent: () => current() }}

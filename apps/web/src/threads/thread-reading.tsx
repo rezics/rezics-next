@@ -522,6 +522,7 @@ export function ThreadReading({
                       counts={firstPost ? (thread.reactions ?? {}) : 'reactions' in post ? (post.reactions ?? {}) : {}}
                       value={reactionKinds.find((kind) => kind === reactionValue) ?? null}
                       signedIn={commandSession === 'signed-in'}
+                      sessionKnown={commandSession === 'signed-in' || commandSession === 'signed-out'}
                       returnTo={returnTo}
                       verification={verification}
                       onMutation={onMutation}
