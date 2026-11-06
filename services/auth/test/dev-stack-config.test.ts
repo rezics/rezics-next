@@ -333,6 +333,9 @@ test('walk and start parents keep Kernel, Postgres and dump modules off the wait
   expect(source.indexOf("['services/auth/scripts/dev-stack.ts', 'setup']")).toBeLessThan(
     source.indexOf("['services/kernel/scripts/search.ts', 'up']"),
   );
+  expect(source).toContain('before the walk signal');
+  expect(source).toContain("readFile(join(root, '.temp', 'walk', task, 'stack.log')");
+  expect(source).not.toMatch(/children\.map\(async \(child\) => \{\s*await child\.exited;\s*\}\)/);
 });
 
 test('setup-written frontend bindings keep JWK JSON literal for the Vite parent', () => {

@@ -86,8 +86,8 @@ and the Auth host writes frontend bindings after assemble. The walk parent sets 
 leftover Docker teardown never throws, and each walk/seed/browser phase asks the slice to reclaim inactive file cache.
 Launch the walk itself with `bun --smol` so the parent module graph shares that heap.
 `persona` reuses the host-written `seed.env` rather than assembling a second Auth+Kernel composition; issuer forwarding
-keeps POST bodies so seed sign-in reaches native Auth. The walk `start` waiter runs under bun --smol; Playwright and
-the Kernel client are imported only after seed.
+keeps POST bodies so seed sign-in reaches native Auth. The walk `start` waiter runs under bun --smol and fails if Host or Kernel exits before the walk
+signal, reprinting the stack log; Playwright and the Kernel client are imported only after seed.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.

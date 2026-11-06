@@ -921,6 +921,44 @@ async function serveWorker() {
   }
 }
 
+/** Host and Kernel stay up until the walk parent signals; a child exit before that is a failed start. */
+async function superviseWalkStart(env: NodeJS.ProcessEnv): Promise<void> {
+  const started = walkStartProcesses(env);
+  const children = started.map(({ command, cwd }) =>
+    Bun.spawn(command, { cwd, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }),
+  );
+  let stopping = false;
+  const stop = () => {
+    stopping = true;
+    for (const child of children) child.kill('SIGTERM');
+  };
+  const signal = new Promise<void>((resolve) => {
+    const done = () => resolve();
+    process.once('SIGINT', done);
+    process.once('SIGTERM', done);
+  });
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  try {
+    await Promise.race([
+      signal,
+      ...children.map(async (child, index) => {
+        const code = await child.exited;
+        if (stopping) return;
+        throw new Error(
+          `walk: ${started[index]!.command.at(-1)} exited (${child.exitCode ?? child.signalCode ?? code}) before the walk signal`,
+        );
+      }),
+    ]);
+    process.exitCode = 0;
+  } finally {
+    stop();
+    await Promise.all(children.map((child) => child.exited));
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
+}
+
 async function start() {
   const env = {
     ...process.env,
@@ -928,34 +966,7 @@ async function start() {
     ...developmentKernelBindings(),
   };
   if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
-    const children = walkStartProcesses(env).map(({ command, cwd }) =>
-      Bun.spawn(command, { cwd, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }),
-    );
-    let stopping = false;
-    const stop = () => {
-      stopping = true;
-      for (const child of children) child.kill('SIGTERM');
-    };
-    process.once('SIGINT', stop);
-    process.once('SIGTERM', stop);
-    try {
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          const done = () => resolve();
-          process.once('SIGINT', done);
-          process.once('SIGTERM', done);
-        }),
-        ...children.map(async (child) => {
-          await child.exited;
-        }),
-      ]);
-      stop();
-      await Promise.all(children.map((child) => child.exited));
-      process.exitCode = 0;
-    } finally {
-      process.off('SIGINT', stop);
-      process.off('SIGTERM', stop);
-    }
+    await superviseWalkStart(env);
     return;
   }
   const children: ReturnType<typeof Bun.spawn>[] = [];
@@ -1265,6 +1276,14 @@ async function walk(command: string[]): Promise<number> {
         code = await current.exited;
       } catch (error) {
         failed = error;
+        if (starting) {
+          try {
+            const recorded = await readFile(join(root, '.temp', 'walk', task, 'stack.log'), 'utf8');
+            if (recorded) process.stderr.write(recorded.slice(-32_768));
+          } catch {
+            // start may have died before creating the log
+          }
+        }
       }
       if (starting) await stopSpawned(starting);
       removeWalkStack(names);
