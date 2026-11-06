@@ -53,6 +53,9 @@ export type MalScoreReview = {
         at: string | null;
     };
     admission: {
+        status: 'conditional';
+        reason: null;
+    } | {
         status: 'unavailable';
         reason: 'conditional-vote-admission-unavailable';
         missingGuard: 'question-revision-and-target-identity-and-current-vote-revision';
@@ -60,10 +63,10 @@ export type MalScoreReview = {
 };
 export type MalScoreOutcome = {
     action: 'adopt' | 'clear' | null;
-    status: 'unavailable' | 'stale' | 'skipped' | 'unsupported' | 'failed';
+    status: 'applied' | 'unavailable' | 'stale' | 'skipped' | 'unsupported' | 'failed';
     reason: string | null;
     vote: {
-        units: number;
+        units: number | null;
         revision: number;
         at: string;
     } | null;

@@ -154,7 +154,7 @@ export function classifyIdentityMappings(
     )
       return { state: 'unavailable', reason: 'bootstrap' };
     const claim = claimByHome.get(source.control_partition)?.get(source.control_group);
-    if (claim?.pending_job) {
+    if (claim && claim.pending_job !== null && claim.pending_epoch !== null) {
       const job = installedJob;
       // The actual mapping must already be installed for THIS job, with its ordinary
       // source/owner/dirty/redirect checks above intact. Old mappings cannot borrow

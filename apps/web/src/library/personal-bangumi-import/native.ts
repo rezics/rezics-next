@@ -46,8 +46,20 @@ import {
 } from './contract';
 
 type NativeResult = { data?: unknown; error?: { value?: unknown } | null; status: number };
-type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
 export type BangumiSurface = NonNullable<KernelClient['libraryImports']['bangumi']>;
+const unavailableScoreReasons = [
+  'native_vote_scope_required',
+  'target_not_selected',
+  'question_unavailable',
+  'question_revision_unsupported',
+  'question_scale_unsupported',
+  'conditional_admission_unavailable',
+  'question_observation_unavailable',
+  'identity_pending',
+  'identity_observation_unavailable',
+  'own_vote_observation_unavailable',
+  'atomic_guard_unavailable',
+] as const;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -172,19 +184,23 @@ function isScoreSource(value: unknown): value is BangumiScoreReview['source'] {
   );
 }
 
+function isInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value);
+}
+
 function isScoreQuestion(value: unknown): value is NonNullable<BangumiScoreReview['native']['question']> {
   if (
     !record(value) ||
     typeof value.id !== 'string' ||
-    !Number.isSafeInteger(value.revision) ||
+    !isInteger(value.revision) ||
     (value.meaning !== null && typeof value.meaning !== 'string') ||
     typeof value.label !== 'string' ||
     (value.grain !== 'work' && value.grain !== 'release' && value.grain !== 'episode' && value.grain !== 'character') ||
     (value.lifecycleState !== 'active' && value.lifecycleState !== 'retired') ||
     !record(value.scale) ||
-    !Number.isSafeInteger(value.scale.minimum) ||
-    !Number.isSafeInteger(value.scale.maximum) ||
-    !Number.isSafeInteger(value.scale.step)
+    !isInteger(value.scale.minimum) ||
+    !isInteger(value.scale.maximum) ||
+    !isInteger(value.scale.step)
   )
     return false;
   return value.scale.minimum <= value.scale.maximum && value.scale.step > 0;
@@ -218,12 +234,8 @@ function isScoreReview(value: unknown): value is BangumiScoreReview {
   const reviewed = admission.status === 'reviewed' && admission.reason === 'native_review_observed';
   const unavailable =
     admission.status === 'unavailable' &&
-    (admission.reason === 'native_vote_scope_required' ||
-      admission.reason === 'target_not_selected' ||
-      admission.reason === 'question_unavailable' ||
-      admission.reason === 'question_revision_unsupported' ||
-      admission.reason === 'question_scale_unsupported' ||
-      admission.reason === 'conditional_admission_unavailable');
+    typeof admission.reason === 'string' &&
+    (unavailableScoreReasons as readonly string[]).includes(admission.reason);
   if (!reviewed && !unavailable) return false;
   return true;
 }
@@ -525,7 +537,10 @@ function responseReason(result: NativeResult): string {
   return `http_${result.status}`;
 }
 
-function unavailableReadback(result: NativeResult): BangumiEntryReadback | BangumiVoteReadback {
+function unavailableReadback(result: NativeResult): {
+  status: 'stale' | 'unavailable';
+  reason: string;
+} {
   return {
     status: result.status === 409 ? 'stale' : 'unavailable',
     reason: responseReason(result),
@@ -587,10 +602,11 @@ export function kernelBangumiPort(
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
 ): BangumiImportPort {
-  const headers = (authorization: string, key?: string): NativeHeaders => ({
-    authorization,
-    ...(key ? { 'idempotency-key': quotedIdempotencyKey(key) } : {}),
-  });
+  function headers(authorization: string): { authorization: string };
+  function headers(authorization: string, key: string): { authorization: string; 'idempotency-key': string };
+  function headers(authorization: string, key?: string) {
+    return { authorization, ...(key ? { 'idempotency-key': quotedIdempotencyKey(key) } : {}) };
+  }
   async function call<T>(
     command: BangumiCommand,
     send: (bangumi: BangumiSurface, authorization: string) => Promise<NativeResult>,

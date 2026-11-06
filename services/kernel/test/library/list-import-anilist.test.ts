@@ -440,10 +440,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(datesDenied.status).toBeGreaterThanOrEqual(401);
 }, 120000);
 test('native redirect requires a deliberate review of the canonical AniList target', async () => {
-  const importer = await f.identity(
-    ['subject:read', 'library_entry:update', 'library_entry:read', 'rating:vote'],
-    0,
-  );
+  const importer = await f.identity(['subject:read', 'library_entry:update', 'library_entry:read', 'rating:vote'], 0);
   await f.grantLibraryGate(importer.actor.accountId);
   const subjects = [
     await f.createHomeSubject('game', importer, 0),

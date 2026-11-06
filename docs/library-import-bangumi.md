@@ -52,7 +52,9 @@ new review; no stored observation is synthesized or refreshed at dispatch.
 `score.native.admission = {status: "reviewed", reason: "native_review_observed"}` means complete native operands were
 observed, not that an effect was admitted. If native review redirects the Library-selected Subject, retain no vote
 guard for that selection and return identity-observation unavailable. The owner must explicitly select the canonical
-Subject and review it again before applying a score. Confirmed set/clear prepares the normalized command once with
+Subject and review it again before applying a score. The mounted Web decoder keeps those identity, observation and
+atomic-guard unavailable reasons, plus reviewed admission, as first-class native score review. Public Bangumi client
+types follow the Kernel model snapshot until the compiler `typecheck --emit-client` emitter republishes them. Confirmed set/clear prepares the normalized command once with
 the exact source, match, review, question and native guard operands. Current native authorization and exposure precede
 receipt replay; fresh native execution admits the current source row and checks all conditional fences. Typed native
 stale and unavailable reasons pass through the score outcome. A selected unperformed score makes the row stale or

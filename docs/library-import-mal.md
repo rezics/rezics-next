@@ -100,6 +100,9 @@ refreshed. Missing score consent remains resumable. A selected score without a c
 independent score. Independent effects cannot turn a selected unsuccessful vote into overall success.
 
 The consumer adapts the native flat question scale fields into the existing nested review scale.
+Public MAL client types keep conditional score admission and applied outcomes from the Kernel model snapshot until
+the compiler `typecheck --emit-client` emitter republishes them. Mutation callers send a required Idempotency-Key;
+page and apply reads do not.
 Definitive score outcomes persist independently before remaining labels or Progress; retries retain that original
 result and read current native state. A label refresh cannot erase an unresolved started vote.
 Same-home guarded effects complete through Content's writer; foreign homes remain `atomic_guard_unavailable` through
