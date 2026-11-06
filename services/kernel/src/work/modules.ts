@@ -9,7 +9,7 @@ import { registerContent } from '../content/register.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
-import { semanticWorkModule } from '../semantic/work-module.ts';
+import { createSemanticWorkModule, type SemanticIdentityParticipantComposer } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
 import { ratingWorkModule } from '../rating/work-module.ts';
 import { workflowRetentionWorkModule } from './retention.ts';
@@ -44,8 +44,10 @@ const accountsWorkModule: WorkModule = {
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
+  composeSemantic: SemanticIdentityParticipantComposer,
 ): readonly WorkModule[] {
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
+  const semanticWorkModule = createSemanticWorkModule(composeSemantic);
   return [
     accountsWorkModule,
     erasureWorkModule,

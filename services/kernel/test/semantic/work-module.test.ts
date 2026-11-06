@@ -5,7 +5,8 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { semanticWorkModule } from '../../src/semantic/work-module.ts';
+import { createSemanticWorkModule } from '../../src/semantic/work-module.ts';
+import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createRealAccess } from './real-access.ts';
@@ -51,7 +52,12 @@ const program = `
   import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
   import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
     import { createKernelWorkModules } from './src/work/modules.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
+    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(
+      createDiscoveryProducerEntry,
+      createKernelRuntimeDefaults,
+      composeSemanticIdentityParticipants,
+    );
   let pool;
   let starts = 0;
   let stops = 0;
@@ -193,7 +199,7 @@ const accounts = {
 };
 
 test('default semantic WorkModule registers and starts the existing native semantic_links projector exactly once and drains it on shutdown', async () => {
-  expect(KERNEL_WORK_MODULES.filter(({ name }) => name === 'semantic')).toEqual([semanticWorkModule]);
+  expect(KERNEL_WORK_MODULES.filter(({ name }) => name === 'semantic')).toHaveLength(1);
   const child = runtime(true);
   try {
     await child.until('semantic-failure-cleaned');
@@ -372,7 +378,7 @@ test('default Semantic composition registers its real locator and bounded local 
   const { WORK_QUEUES } = await import('../../src/work/queues.ts');
   const client = await createWorkClient(databaseUrl!, pool);
   try {
-    await semanticWorkModule.register({
+    await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
       pool,
       env: process.env,
       clock: () => new Date(),

@@ -72,7 +72,12 @@ const workerProgram = `
   import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
   import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
     import { createKernelWorkModules } from './src/work/modules.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
+    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(
+      createDiscoveryProducerEntry,
+      createKernelRuntimeDefaults,
+      composeSemanticIdentityParticipants,
+    );
   import { createOutcomeRpc } from './test/search/support/outcome-rpc.ts';
   import { createSearchRunnerSlot } from './test/search/support/runner-slot.ts';
   const slot = createSearchRunnerSlot();
