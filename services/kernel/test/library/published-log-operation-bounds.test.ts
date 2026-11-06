@@ -3,8 +3,11 @@ import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 import type { AccessWorkAccounting } from '../../src/access/work.ts';
 import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
-import { registerCommandWorkAssociation, type CommandWorkAssociation } from '../../src/command/work-context.ts';
-import { withCommandWorkAssociation } from '../../src/command/work.ts';
+import {
+  registerCommandWorkAssociation,
+  withCommandWorkAssociation,
+  type CommandWorkAssociation,
+} from '../../src/command/index.ts';
 import {
   PUBLISHED_LOG_RETENTION_PAGE_BOUND,
   PUBLISHED_LOG_RETENTION_SEGMENT_BOUND,
@@ -14,6 +17,7 @@ import {
   publishedLogRemainingMs,
   publishedLogRestoreOperationPlan,
   publishedLogRetractOperationPlan,
+  publishedLogReadPlan,
   publishedLogRetentionPageOperationPlan,
   publishedLogRetentionPurgeOperationPlan,
   publishedLogRetentionSegmentOperationPlan,
@@ -287,5 +291,15 @@ test('native interceptor skips consume while the enclosing operation reservation
     ),
   );
   expect(result).toBe('kept');
+  expect(runs).toEqual([]);
+  const plan = publishedLogReadPlan({ route: locator.route, log_id: logId });
+  const executed = await withCommandWorkAssociation(association, () =>
+    runLibraryBoundedOperation('published-log.test-execute', bound, () =>
+      withPublishedLogNativeWork(association.deadline, () =>
+        consumePublishedLogWork(plan.kind, plan.total, async () => null),
+      ),
+    ),
+  );
+  expect(executed).toBeNull();
   expect(runs).toEqual([]);
 });

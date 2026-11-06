@@ -2,19 +2,21 @@ import type { PoolClient } from 'pg';
 import type { ProgressState } from './progress.ts';
 import readLog from './published-log-read.sql';
 import {
-  executePublishedLogDelete,
-  executePublishedLogInsert,
   publishedLogReadPlan,
   publishedLogLockPlan,
   publishedLogPagePlan,
   publishedLogDeletePlan,
   publishedLogInsertPlan,
   publishedLogRestorePlan,
+} from './published-log-bounds.ts';
+import {
+  executePublishedLogDelete,
+  executePublishedLogInsert,
   executePublishedLogRestore,
   executePublishedLogRead,
   executePublishedLogLock,
   executePublishedLogPage,
-} from './published-log-bounds.ts';
+} from './published-log-native.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 export type PublishedLogRecord = NonNullable<Awaited<ReturnType<typeof readLog.run>>>;

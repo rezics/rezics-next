@@ -1,5 +1,5 @@
 import { getLocale } from '../paraglide/runtime.js';
-import { fullDateTime } from '../threads/byline';
+import { fullDateTime } from '../threads/byline-time';
 
 export function RelativeTime({ value }: { value: string }) {
   const locale = getLocale();
