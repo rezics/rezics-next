@@ -25,8 +25,8 @@ import { actionCatalogue } from '../../../src/http/request.ts';
 import { accessCheck } from '../../../src/request/access.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
-import { installIdentityGrants } from '../../support/trusted-grants.ts';
 import { assertSetupResponse } from './setup-response.ts';
+import { grantAccountActions } from './native-board-host.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
@@ -41,6 +41,14 @@ const nativeRegistrations = new WeakMap<
   NativeContentSystem,
   (input: NativeRegistration) => Promise<{ accountId: string }>
 >();
+const nativeOperators = new WeakMap<NativeContentSystem, ContentCredential>();
+
+/** Platform governance credential used only by native fixture composition. */
+export function nativeOperator(system: NativeContentSystem): ContentCredential {
+  const operator = nativeOperators.get(system);
+  if (!operator) throw new TypeError('Native content system has no governance operator');
+  return operator;
+}
 
 /** Register a test persona through the ordinary native Auth workflow. */
 export async function registerNativeContentAccount(
@@ -487,15 +495,11 @@ async function createNativeContentSystemWithOptions(
       }
       await assertSetupResponse(response, request, status);
     };
-    // Parent creation permissions only, installed on the platform parent as trusted fixture authority
-    // (not through the grant command). Product resource ownership/standing remains the responsibility
-    // of each real creation command.
+    // Ordinary grant receipts on the Global parent: the same train Space HTTP and board-create
+    // fixtures use. Whether Access admits those rows for Space/Realm creation is Access-owned.
+    const parentCreation = ['space:create', 'realm:create', 'subject:create'] as const;
     for (const actor of [author, other, moderator, suspended])
-      await installIdentityGrants(pool, PLATFORM_RESOURCE.id, actor.actor.accountId, [
-        'space:create',
-        'realm:create',
-        'subject:create',
-      ]);
+      await grantAccountActions(kernel, governance, PLATFORM_RESOURCE, actor.actor.accountId, parentCreation);
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 
     const deletion: AccountDeletionRuntime = {
@@ -560,6 +564,7 @@ async function createNativeContentSystemWithOptions(
       close,
     };
     nativeRegistrations.set(system, (input) => host!.workflows.register(input));
+    nativeOperators.set(system, governance);
     registerAccountDeletionRuntime(system, deletion);
     return system;
   } catch (error) {

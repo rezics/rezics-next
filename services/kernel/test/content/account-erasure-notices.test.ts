@@ -25,6 +25,7 @@ import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support
 import { createPersonas } from '../support/personas.ts';
 import { testKernel, testRouteKey } from '../support/test-kernel.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { installRealmMember, provisionNativeDiscussionBoard } from './support/native-board-host.ts';
 
 let db: GrowthDatabase;
 let pagePool: Pool;
@@ -98,6 +99,13 @@ async function grant(accountId: string, action: string, resourceId: string): Pro
      VALUES ($1,$2,$3,$4,'(,)',$2) ON CONFLICT DO NOTHING`,
     [routeOf(resourceId), resourceId, accountId, action],
   );
+}
+
+async function nativeBoard(title: string) {
+  return provisionNativeDiscussionBoard(kernel, people.staff, {
+    label: title,
+    origin: 'https://ordinary.api.test',
+  });
 }
 
 function mentionBody(accountIds: readonly string[]) {
@@ -303,16 +311,14 @@ test("account notice erasure deletes the account's inbox and seen marker in boun
   const route = routeOf(account.accountId)!;
   const otherRoute = routeOf(other.accountId)!;
 
-  // Build the board as ordinary native content data, then create every thread and
-  // post through the HTTP API so notice sources use real returned identities.
-  const boardRoute = 0x1234;
-  const boardId = newId(boardRoute);
-  await db.admin.query(
-    `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Account notice erasure','published',1,$2)`,
-    [boardRoute, boardId, newId(boardRoute)],
-  );
-  for (const person of [account, ...replyActors, people.staff]) await grant(person.accountId, 'board:read', boardId);
+  // Boards go through ordinary Space/Realm/board routes so thread creation sees
+  // purpose, Realm and identity. Notices still use the HTTP-returned source ids.
+  const hosted = await nativeBoard('Account notice erasure');
+  const boardId = hosted.id;
+  for (const person of [account, ...replyActors, people.staff]) {
+    await grant(person.accountId, 'board:read', boardId);
+    await installRealmMember(db.pool, hosted.realmId, person.accountId);
+  }
   await grant(account.accountId, 'thread:create', boardId);
   await grant(people.staff.accountId, 'thread:create', boardId);
 
@@ -369,18 +375,15 @@ test("account notice erasure deletes the account's inbox and seen marker in boun
   // recipient. A reply authored by the soon-to-be-erased account leaves its
   // identifier in the other recipient's inbox for the normal retention window.
   const mentionThreadIdempotencyKey = JSON.stringify(crypto.randomUUID());
-  const mentionBoardRoute = 0x2345;
-  const mentionBoardId = newId(mentionBoardRoute);
-  await db.admin.query(
-    `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Mention notice board','published',1,$4)`,
-    [mentionBoardRoute, mentionBoardId, newId(mentionBoardRoute), newId(mentionBoardRoute)],
-  );
-  for (const person of [account, other, people.staff, people.bob])
+  const mentionHosted = await nativeBoard('Mention notice board');
+  const mentionBoardId = mentionHosted.id;
+  for (const person of [account, other, people.staff, people.bob]) {
     await grant(person.accountId, 'board:read', mentionBoardId);
+    await installRealmMember(db.pool, mentionHosted.realmId, person.accountId);
+  }
   await grant(people.staff.accountId, 'thread:create', mentionBoardId);
   const otherThread = await createThread(people.staff, 'Account mention', mentionBoardId, mentionThreadIdempotencyKey);
-  expect(routeOf(otherThread.id)).not.toBe(mentionBoardRoute);
+  expect(routeOf(otherThread.id)).not.toBe(routeOf(mentionBoardId));
   for (const persona of [account, other, people.staff, people.bob]) {
     await grant(persona.accountId, 'thread:read', otherThread.id);
     await grant(persona.accountId, 'post:read', otherThread.firstPost.id);
@@ -650,15 +653,12 @@ test("a per-thread author erasure through its route leaves the author's inbox in
     });
     return value;
   };
-  const boardRoute = 0x1245;
-  const boardId = newId(boardRoute);
-  await db.admin.query(
-    `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Inbox erasure','published',1,$4)`,
-    [boardRoute, boardId, newId(boardRoute), newId(boardRoute)],
-  );
+  const hosted = await nativeBoard('Inbox erasure');
+  const boardId = hosted.id;
   await grant(author.accountId, 'board:read', boardId);
   await grant(author.accountId, 'thread:create', boardId);
+  await installRealmMember(db.pool, hosted.realmId, author.accountId);
+  await installRealmMember(db.pool, hosted.realmId, people.bob.accountId);
   const created = await call(
     '/v1/threads',
     {
