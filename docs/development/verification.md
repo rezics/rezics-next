@@ -35,6 +35,11 @@ snapshots support review by eye. The development publication is `https://storybo
 
 ## Check selection and failures
 
+Decision: product outcomes land first and are repaired after. A worker attempt returns success when its outcome is
+written and every changed workspace type-checks, even if some of its own tests fail. Its summary names each failing
+test and its first error, and the owning manager briefs those repairs as complete outcomes. Type errors always block,
+so dev compiles and boots. Payment, payout, order settlement, points and balance code also needs its tests passing.
+
 Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
 
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
