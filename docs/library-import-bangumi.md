@@ -208,3 +208,4 @@ The [label adoption contract](library-import-bangumi-labels.md) specifies instal
 `applyLabels` routes and generated methods, separate confirmation epochs, native name/capacity limits, per-item
 outcomes, source-evidence exclusions and continuation boundaries. State review and its original receipt remain
 unchanged. Web324 consumes this typed delivery in the existing complete Bangumi interface.
+Landing `list-import-bangumi-http.test.ts` pins `applyLabels` without a state command on the mounted HTTP path.
