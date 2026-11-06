@@ -13,6 +13,32 @@ failures remain required capability evidence. The prior root typecheck recorded 
 check was rerun for that earlier adoption; the full main/root gate remains unproven. Native closure still requires every
 original case and actual new persona/sign-in receipts, with no skips.
 
+## First-public journey walk
+
+[First-public scope](../scope.md) keeps Search behind its existing grants. This ledger does not open Search,
+advanced facets/scopes or rating sorts, public Collection/review/Space discovery, or saved-query authoring.
+The granted Search journeys and Search's composition consumers below are the finishing inventory.
+Web owns surrounding navigation and Semantic owns static Zone routing. Their Search seams are included here.
+
+PASS requires the complete path on dev through native HTTP and its mounted page, using real seeded identities and
+every applicable served persona. Record the full dev revision, observation time, elapsed duration and secret-free
+evidence reference. FAIL includes a path not observed because its setup or an earlier step failed; name that step
+rather than claiming the unexecuted product is defective. A passing implementation typecheck supplies no walk pass.
+The latest observed path result replaces its previous result. Existing broader native acceptance remains separate.
+
+| Journey | User-visible path and passing result | Exposure | Dev walk result | Evidence / first failure |
+| --- | --- | --- | --- | --- |
+| Mixed Search | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change. | Existing Search grant | FAIL — not yet walked on current dev | No current complete observation |
+| Refine and continue | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors. | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — not yet walked on current dev | No current complete observation |
+| Multilingual names | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order. | Existing Search grant | FAIL — not yet walked on current dev | No current complete observation |
+| Search recovery | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output. | Existing Search grant | FAIL — not yet walked on current dev | No current complete observation |
+| Configured reading | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list. | Public configured reader where the owning scope admits it | FAIL — not yet walked on current dev | No current complete observation |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading | FAIL — not yet walked on current dev | No current complete observation |
+
+Each failed path produces one complete repair of its observed cause, or joins an existing owner of that same cause.
+The next hourly walk receives landed repairs and repeats these paths on a recorded dev revision. The hourly handoff
+reports passing/6 and the slowest failing path with elapsed time and its first failing step.
+
 ## Evidence rules and common boundaries
 
 Each capability records five separate stages: **specification validated red**, **native driver registered**,
