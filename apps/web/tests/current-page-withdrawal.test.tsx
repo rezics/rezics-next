@@ -17,6 +17,7 @@ const globals = {
   Element: window.Element,
   Node: window.Node,
   MutationObserver: window.MutationObserver,
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -105,6 +106,7 @@ test('the production router boundary withdraws content, metadata and callbacks a
     path: '/subjects/$id',
     loader: () => load(),
     component: Reading,
+    errorComponent: () => <p role="alert">Native owner unavailable</p>,
     head: ({ loaderData }) => ({
       meta: [{ title: loaderData?.label }, { name: 'description', content: loaderData?.label }],
       links: [{ rel: 'canonical', href: '/subjects/one' }],

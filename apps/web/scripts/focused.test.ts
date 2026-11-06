@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runFocusedCommand } from './focused.ts';
+import { focusedTestCommands, runFocusedCommand } from './focused.ts';
 
 const leftoverRoot = mkdtempSync(join(tmpdir(), 'rezics-web-check-leftover-'));
 
@@ -57,4 +57,15 @@ test('a stale leftover journal is ignored rather than treated as a focused-check
     },
   });
   expect(result).toBe(0);
+});
+
+test('explicit test files keep CLI flags but cannot share module mocks', () => {
+  expect(focusedTestCommands(['bun', 'test', '--timeout', '10000', 'tests/one.test.ts', 'tests/two.test.tsx'])).toEqual(
+    [
+      ['bun', 'test', '--timeout', '10000', 'tests/one.test.ts'],
+      ['bun', 'test', '--timeout', '10000', 'tests/two.test.tsx'],
+    ],
+  );
+  expect(focusedTestCommands(['bun', 'test', 'tests/one.test.ts'])).toEqual([['bun', 'test', 'tests/one.test.ts']]);
+  expect(focusedTestCommands(['bun', 'run', 'typecheck'])).toEqual([['bun', 'run', 'typecheck']]);
 });

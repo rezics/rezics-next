@@ -1,3 +1,8 @@
+export {
+  decodeQuestionManagementPage,
+  decodeQuestionLabelHistory,
+  type QuestionManagementPage,
+} from './question-management';
 import { treaty, type Treaty } from '@elysia/eden';
 import type { Static } from 'typebox';
 import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';

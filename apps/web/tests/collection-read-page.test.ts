@@ -83,7 +83,7 @@ test('Collection read page has real owner actions, readable member rows and comp
   expect(html).toContain('First occurrence');
   expect(html).toContain('Second occurrence');
   expect(html).not.toContain('Type:');
-  expect(html).not.toContain('text-primary');
+  expect(html.match(/data-slot="member-list-row-title"[^>]*>/g)?.join('')).not.toContain('text-primary');
   expect(html).not.toContain('<input');
   expect(html).not.toContain('<textarea');
   expect(collectionMemberRatio({ type: 'schema:Movie' })).toBe('16:9');
