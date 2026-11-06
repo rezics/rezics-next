@@ -45,9 +45,7 @@ const recentPage = v.union([
 export type RealmBoardRecentThread = {
   id: string;
   title: string | null;
-  comments:
-    | { state: 'current'; kind: 'exact' | 'lower-bound'; value: number }
-    | { state: 'unavailable' };
+  comments: { state: 'current'; kind: 'exact' | 'lower-bound'; value: number } | { state: 'unavailable' };
 };
 
 export type RealmBoardRecent =

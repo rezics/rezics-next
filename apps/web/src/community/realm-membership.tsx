@@ -798,8 +798,7 @@ function PersonalMembership({
             ? 'pending'
             : currentRecovery && viewer
               ? viewer.state
-              : currentRefresh === 'checking' ||
-                  (!viewer && (!caller.isReady() || query.isPending || query.isFetching))
+              : currentRefresh === 'checking' || (!viewer && (!caller.isReady() || query.isPending || query.isFetching))
                 ? 'loading'
                 : !viewer || currentRefresh === 'unavailable'
                   ? 'unavailable'

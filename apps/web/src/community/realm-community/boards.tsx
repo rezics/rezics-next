@@ -32,7 +32,11 @@ function recentRegion(board: RealmBoard, boardHref: string, current: () => boole
   }
   if (!recent.threads.length) return null;
   return (
-    <ul className="space-y-1 border-s border-border ps-4" data-slot="realm-board-recent" aria-label={m.realm_board_recent()}>
+    <ul
+      className="space-y-1 border-s border-border ps-4"
+      data-slot="realm-board-recent"
+      aria-label={m.realm_board_recent()}
+    >
       {recent.threads.map((thread) => {
         const href = threadLocation(
           getLocale(),

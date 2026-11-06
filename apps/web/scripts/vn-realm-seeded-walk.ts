@@ -174,7 +174,10 @@ function selectedWorks(seed: Json): Work[] {
     const subject = (row.subject as Json | undefined)?.subject as Json | undefined;
     if (row.source !== 'vndb' || row.selection !== 'selected' || typeof row.externalId !== 'string') continue;
     if (typeof subject?.id !== 'string' || !uuid.test(subject.id)) continue;
-    if (subject.type === visualNovelType || selectedVndbWorks.includes(row.externalId as (typeof selectedVndbWorks)[number]))
+    if (
+      subject.type === visualNovelType ||
+      selectedVndbWorks.includes(row.externalId as (typeof selectedVndbWorks)[number])
+    )
       push(subject.id, row.externalId);
   }
   for (const entry of Array.isArray(seed.workLinks) ? seed.workLinks : []) {
@@ -360,7 +363,9 @@ async function walkPersonas(stack: Origins, identities: Identities, evidence: Ev
       if (response?.status() !== 200) throw new Error(`${persona} ${locale} Realm page HTTP ${response?.status()}`);
       await expect(page.locator('main')).toBeVisible();
       await expect(page.locator('[data-slot="realm-catalogue-navigation"]')).toBeVisible();
-      await expect(page.getByRole('heading', { name: /Works in this catalogue|此目錄中的作品|このカタログの作品/ })).toBeVisible({
+      await expect(
+        page.getByRole('heading', { name: /Works in this catalogue|此目錄中的作品|このカタログの作品/ }),
+      ).toBeVisible({
         timeout: 45_000,
       });
       await expect(page.locator('[data-slot="realm-community-boards"]')).toBeVisible();
@@ -374,7 +379,9 @@ async function walkPersonas(stack: Origins, identities: Identities, evidence: Ev
         membership: await page.locator('[data-slot="realm-membership"]').getAttribute('data-member-state'),
         boards: await page.locator('[data-slot="realm-board-link"]').count(),
         recent: await page.locator('[data-slot="realm-board-recent-link"]').count(),
-        worksHeading: await page.getByRole('heading', { name: /Works in this catalogue|此目錄中的作品|このカタログの作品/ }).count(),
+        worksHeading: await page
+          .getByRole('heading', { name: /Works in this catalogue|此目錄中的作品|このカタログの作品/ })
+          .count(),
       });
     };
 
@@ -530,7 +537,10 @@ if (evidence.seed.showcaseBoardRealmId && uuid.test(evidence.seed.showcaseBoardR
     realmId,
     spaceId: asId(current.spaceId, 'seeded space'),
     boardId: asId(showcaseBoard?.id, 'seeded board'),
-    threadId: asId((community?.thread as Json | undefined)?.threadId ?? (community?.thread as Json | undefined)?.id, 'seeded thread'),
+    threadId: asId(
+      (community?.thread as Json | undefined)?.threadId ?? (community?.thread as Json | undefined)?.id,
+      'seeded thread',
+    ),
     works,
   };
 } else {
@@ -543,7 +553,12 @@ const publications = await kernel(stack, 'GET', `/v1/realms/${created.realmId}/p
   query: { languages: 'en' },
 });
 evidence.native.push({
-  home: { status: 200, boards: Array.isArray((home.boards as Json | undefined)?.items) ? ((home.boards as Json).items as unknown[]).length : 0 },
+  home: {
+    status: 200,
+    boards: Array.isArray((home.boards as Json | undefined)?.items)
+      ? ((home.boards as Json).items as unknown[]).length
+      : 0,
+  },
   boards: {
     status: boards.status,
     count: Array.isArray(boards.value.items) ? (boards.value.items as unknown[]).length : 0,
