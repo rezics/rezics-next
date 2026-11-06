@@ -96,6 +96,18 @@ const importRequest = t.Object(
   },
   { additionalProperties: false },
 );
+const importRequestSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['document'],
+  properties: {
+    document: {},
+    context: { type: 'string' },
+    expected_head: {
+      anyOf: [{ type: 'integer', minimum: 1, maximum: 2147483646 }, { type: 'null' }],
+    },
+  },
+} as const satisfies OpenAPIV3.SchemaObject;
 const importPreviewResponse = t.Object(
   {
     kind: t.Union([t.Literal('release'), t.Literal('sources'), t.Literal('extension'), t.Literal('invalid')]),
@@ -652,7 +664,7 @@ export function definitionRoutes(
           requestBody: {
             required: true,
             content: {
-              'application/json': { schema: importRequest as unknown as OpenAPIV3.SchemaObject },
+              'application/json': { schema: importRequestSchema },
             },
           },
         },

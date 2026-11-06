@@ -36,6 +36,7 @@ type Route = {
   path: string;
   hooks?: {
     body?: unknown;
+    response?: unknown;
     detail?: RouteDetail;
   };
 };
@@ -130,6 +131,34 @@ function operationsFor(paths: OpenApiDocument['paths'], route: Route): [string, 
   return operation ? [[method, operation]] : [];
 }
 
+function responsesFromHooks(route: Route): Record<string, Response> {
+  const schema = route.hooks?.response;
+  if (!isRecord(schema)) return {};
+  const responses: Record<string, Response> = {};
+  for (const [status, value] of Object.entries(schema)) {
+    const openApiSchema = unwrapSchema(value as never);
+    if (!openApiSchema) continue;
+    responses[status] = {
+      description: `Response for status ${status}`,
+      content: { 'application/json': { schema: openApiSchema } },
+    };
+  }
+  return responses;
+}
+
+/** Plugin conversion can drop a mounted route; keep every operationId on the public document. */
+function ensureMountedOperation(document: OpenApiDocument, route: Route): void {
+  const method = route.method.toLowerCase();
+  if (method === 'all' || method === '*') return;
+  const path = normalizedPath(route.path);
+  if (document.paths[path]?.[method]) return;
+  const detail = route.hooks?.detail;
+  if (!isRecord(detail) || typeof detail.operationId !== 'string' || detail.hide === true) return;
+  const { responses: _responses, hide: _hide, ...rest } = detail;
+  document.paths[path] ??= {};
+  document.paths[path][method] = { ...rest, responses: responsesFromHooks(route) };
+}
+
 function overlayAuthoredResponses(operation: Operation, detail: RouteDetail | undefined) {
   const authored = detail?.responses;
   if (!isRecord(authored)) return;
@@ -169,7 +198,9 @@ function restoreJsonRequestBody(operation: Operation, route: Route): void {
     const content: Record<string, MediaType> = {};
     for (const [type, media] of Object.entries(authored.content)) {
       if (!isRecord(media)) continue;
-      content[type] = media.schema ? { ...media, schema: unwrapSchema(media.schema as never) } : media;
+      content[type] = media.schema
+        ? { ...media, schema: unwrapSchema(media.schema as never) ?? media.schema }
+        : media;
     }
     operation.requestBody = {
       ...operation.requestBody,
@@ -229,6 +260,7 @@ export function openApiDocument(app: AnyElysia): OpenApiDocument {
   };
 
   for (const route of app.routes as unknown as Route[]) {
+    ensureMountedOperation(document, route);
     for (const [method, operation] of operationsFor(document.paths, route)) {
       overlayAuthoredResponses(operation, route.hooks?.detail);
       validateSecurity(operation, method, route.path);

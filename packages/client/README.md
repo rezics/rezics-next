@@ -26,7 +26,8 @@ Decision: `POST /v1/definitions/imports` (`definitions.import`) is admitted by t
 ClientApp SharedRoutes yields to that generated method when emission includes it and otherwise
 keeps the mounted import request and the producer ImportedPreview (kind, identity, diagnostics,
 comparison, types, current, reconciliation, operations, document). Fewest tests pin that installed
-route and typed readback of those admitted fields.
+route and typed readback of those admitted fields. Runtime schemas and SQL declarations stay on
+the generated kernel client; this package does not re-declare them.
 
 Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
 Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.

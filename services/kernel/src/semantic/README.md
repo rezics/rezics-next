@@ -168,11 +168,13 @@ requirements. Ordinary provider imports do not auto-seed them.
 Decision: fewest tests pin publication, named stories and the emitted import contract
 (`test/openapi.test.ts` definitions.import, `packages/client/tests/definitions-import.test.ts`,
 and the existing closed-controls operation-map); `expansion.test.ts` remains the ten-Type and
-one-hundred-manifest measurement. Authored import requestBody uses the OpenAPIV3 SchemaObject
-cast from subject.batch_write so TypeBox TNull compiles; a finite route type keeps the client
-method when emission drops it. Finite client typing composes the producer ImportedPreview from
-Definitions publication types rather than an operations-only copy; generation remains the
-installed OpenAPI and client wire.
+one-hundred-manifest measurement. Authored import requestBody is a plain OpenAPI 3.1 schema so
+TypeBox TNull cannot drop the operation; the generator attaches any mounted operationId the
+plugin omitted. A finite route type keeps the client method when emission drops it. Finite
+client typing composes the producer ImportedPreview from Definitions publication types rather
+than an operations-only copy; generation remains the installed OpenAPI and client wire. Catalogue
+binary parameter bytes stay `byteLength` because Buffer is Uint8Array; bulk response casts stay
+type-only.
 
 ### Definition publication admission cost
 
