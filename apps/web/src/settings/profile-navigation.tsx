@@ -16,6 +16,7 @@ import { profileChanges } from './profile-data';
 import type { ProfileAvatarUpload } from './profile-avatar-upload';
 import type { ProfileEditor, ProfileEditorState } from './profile-write';
 import { useSettingsProfileReturn } from './settings-return-context';
+import { captureProfileReturn } from './settings-return';
 
 type UploadState = ReturnType<ProfileAvatarUpload['snapshot']>;
 const noUpload = { phase: 'idle', url: null } as const;
@@ -106,7 +107,7 @@ function ProfileNavigationRegistration({
     return profileReturn.register(() => {
       if (!writable || !isCurrent()) return null;
       const captured = editor.captureReturn();
-      return captured ? { ...captured, lastFocus: editor.lastFocus } : null;
+      return captured ? captureProfileReturn(captured.known, captured.draft, captured.lastFocus) : null;
     });
   }, [editor, isCurrent, profileReturn, writable]);
   useLayoutEffect(() => {
