@@ -1346,6 +1346,10 @@ cleanup, before cross-home installation. Neither an arbitrary foreign checkout n
 The retained vote writer composes this participant with Semantic's exact reviewed-identity participant. The source
 factory alone does not establish provider adoption; original provider journeys verify effects and readback.
 
+Decision: vote routes keep the published 503 `overloaded` problem for `VoteReviewUnavailableError`, with the reason as
+`detail`. The published contract does not enumerate `atomic_guard_unavailable` for vote routes, so a new problem code
+waits for a regenerated publication.
+
 #### Native vote receipt reconciliation
 
 Decision: retain only the producer-prepared native key/digest and question/target disclosure context for an

@@ -1,10 +1,6 @@
-import type { Static } from 'typebox';
+import type { KernelClient } from '@rezics/client';
 
-type NativeOwnVotesPageSchema =
-  typeof import('../../../../../services/kernel/src/rating/own-votes-schemas.ts').OwnVotesPageSchema;
-type NativeOwnVoteActionsSchema =
-  typeof import('../../../../../services/kernel/src/rating/own-votes-schemas.ts').OwnVoteActionsSchema;
-
-export type OwnVotesPage = Static<NativeOwnVotesPageSchema>;
+/** Successful page shape from the installed generated `GET /v1/me/rating-votes` operation. */
+export type OwnVotesPage = NonNullable<Awaited<ReturnType<KernelClient['me']['rating-votes']['get']>>['data']>;
 export type OwnVoteEntry = OwnVotesPage['votes'][number];
-export type OwnVoteActions = Static<NativeOwnVoteActionsSchema>;
+export type OwnVoteActions = OwnVoteEntry['actions'];
