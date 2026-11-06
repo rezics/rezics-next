@@ -172,18 +172,21 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const subject = created.body.subject.id as string;
     const publicValue = `https://example.test/retained/${randomUUID()}`;
+    const published = await f.call(owner, 'POST', `/v1/subjects/${subject}/candidates`, {
+      statement: {
+        property: { id: 'schema:url' },
+        value: { type: 'value', content: publicValue },
+        references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: publicValue } }] }],
+      },
+    });
+    expect(published.status, JSON.stringify(published.body)).toBe(201);
+    const candidates = [published.body.candidate as string];
     const privateValue = accountAgentId(owner.accountId);
-    const candidates: string[] = [];
-    for (const [property, content] of [
-      ['schema:url', publicValue],
-      ['rezics:penNameOf', privateValue],
-    ]) {
-      const result = await f.call(owner, 'POST', `/v1/subjects/${subject}/candidates`, {
-        statement: { property: { id: property }, value: { type: 'value', content } },
-      });
-      expect(result.status, JSON.stringify(result.body)).toBe(201);
-      candidates.push(result.body.candidate);
-    }
+    const privateProposal = await f.call(owner, 'POST', `/v1/subjects/${subject}/candidates`, {
+      statement: { property: { id: 'rezics:penNameOf' }, value: { type: 'value', content: privateValue } },
+    });
+    expect(privateProposal.status, JSON.stringify(privateProposal.body)).toBe(201);
+    candidates.push(privateProposal.body.candidate);
     expect(
       (
         await f.call(survivor, 'POST', `/v1/subjects/${subject}/candidates/${candidates[0]}:accept`, {

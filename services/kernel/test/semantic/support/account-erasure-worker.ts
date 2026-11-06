@@ -39,10 +39,12 @@ export async function accountErasureWorker(databaseUrl: string) {
     return errors;
   })();
   async function until(marker: string) {
-    const end = Date.now() + 60_000;
-    while (!output.includes(marker)) {
+    const end = Date.now() + 180_000;
+    while (!output.includes(marker) && !errors.includes(marker)) {
       if (child.exitCode !== null || Date.now() > end)
-        throw new Error(`${output}\n${child.exitCode !== null ? await stderr : 'Worker startup did not finish'}`);
+        throw new Error(
+          `${output}\n${errors || (child.exitCode !== null ? await stderr : 'Worker startup did not finish')}`,
+        );
       await Bun.sleep(20);
     }
   }

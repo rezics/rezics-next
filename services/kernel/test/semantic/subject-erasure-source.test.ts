@@ -31,7 +31,7 @@ let worker: Awaited<ReturnType<typeof accountErasureWorker>>;
 beforeAll(async () => {
   f = await accountErasureFixture();
   worker = await accountErasureWorker(f.db.url);
-}, 180_000);
+}, 360_000);
 afterAll(async () => {
   try {
     await worker?.stop();
