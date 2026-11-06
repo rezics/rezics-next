@@ -33,9 +33,11 @@ import { accessCheck, type Access, type AccountActor } from '../../../src/reques
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
+import { identityEpochStore } from '../../../src/semantic/identity-adapters/index.ts';
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
+import type { IdentityJobRef } from '../../../src/semantic/identity-epoch-contract.ts';
 import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-mapping.ts';
 import { subjectTarget } from '../../../src/semantic/subject.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
@@ -191,6 +193,7 @@ export async function createProfileEntryFixture(
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
     let identityHomesReady = false;
+    let partition0HasSubject = false;
     // Run the real relay for scenarios that consume Semantic link projections.
     // Direct source-reference scenarios can leave this unrelated worker asynchronous.
     async function drainSubjectLinks() {
@@ -205,10 +208,19 @@ export async function createProfileEntryFixture(
       }
       throw new Error('Native Semantic link projection did not drain');
     }
+    async function identityDirty(home: number) {
+      return (
+        await pool.query(
+          `SELECT 1 FROM semantic.identity_epoch_dirty
+            WHERE route BETWEEN $1 AND $2 AND revision>captured_revision LIMIT 1`,
+          [home * 16, home * 16 + 15],
+        )
+      ).rowCount;
+    }
     async function catchUpIdentity(home: number) {
       for (let n = 0; n < 1000; n++) {
         const progress = await stepIdentityEpochBootstrap(pool, home);
-        if (progress.state === 'caught-up') return;
+        if (progress.state === 'caught-up' && !(await identityDirty(home))) return;
       }
       throw new Error('Native identity bootstrap did not finish');
     }
@@ -465,16 +477,8 @@ export async function createProfileEntryFixture(
       expect(active?.digest).toBe(digest);
       return active!;
     }
-    async function drainIdentityMerge(jobId: string) {
-      const found = (
-        await pool.query<{ partition_no: number; epoch: string }>(
-          'SELECT partition_no, epoch::text AS epoch FROM semantic.identity_epoch_job WHERE job_id=$1',
-          [jobId],
-        )
-      ).rows[0];
-      if (!found) throw new Error('Native merge identity job was not retained');
-      await catchUpIdentity(found.partition_no);
-      const job = { jobId, epoch: BigInt(found.epoch) };
+    async function drainIdentityJob(job: IdentityJobRef, home = identityEpochStore.controlPartition) {
+      await catchUpIdentity(home);
       let admitted = false;
       for (let attempt = 0; attempt < 16; attempt++) {
         const progress = await stepIdentityEpochAdmission(pool, job);
@@ -488,11 +492,36 @@ export async function createProfileEntryFixture(
       for (let attempt = 0; attempt < 512; attempt++) {
         const progress = await stepIdentityEpochMapping(pool, job);
         if (progress.state === 'complete') {
-          await catchUpIdentity(found.partition_no);
+          await catchUpIdentity(home);
           return;
         }
       }
-      throw new Error('Native merge mapping did not finish');
+      throw new Error('Native identity mapping did not finish');
+    }
+    async function drainIdentityMerge(jobId: string) {
+      const found = (
+        await pool.query<{ partition_no: number; epoch: string }>(
+          'SELECT partition_no, epoch::text AS epoch FROM semantic.identity_epoch_job WHERE job_id=$1',
+          [jobId],
+        )
+      ).rows[0];
+      if (!found) throw new Error('Native merge identity job was not retained');
+      await drainIdentityJob({ jobId, epoch: BigInt(found.epoch) }, found.partition_no);
+    }
+    async function awaitCurrentIdentity(subjectId: string) {
+      const home = partitionOf(routeOf(subjectId)!);
+      partitions.add(home);
+      if (home === 0) partition0HasSubject = true;
+      for (let attempt = 0; attempt < 32; attempt++) {
+        await catchUpIdentity(home);
+        const mapping = await identityEpochStore.readMapping(pool, subjectId);
+        if (mapping.state === 'mapped') return;
+        if (mapping.state === 'pending') {
+          await drainIdentityMerge(mapping.job.jobId);
+          continue;
+        }
+      }
+      throw new Error('Native identity mapping did not become current');
     }
     async function admitSubjectMerge(canonical: string, selected: string) {
       for (const id of [canonical, selected]) {
@@ -531,7 +560,7 @@ export async function createProfileEntryFixture(
       const id = body.subject.id;
       partitions.add(partitionOf(routeOf(id)!));
       await drainSubjectLinks();
-      await catchUpIdentity(partitionOf(routeOf(id)!));
+      await awaitCurrentIdentity(id);
       return id;
     }
     function homeKey(accountId: string, home = partitionOf(routeOf(accountId)!)) {
@@ -567,7 +596,7 @@ export async function createProfileEntryFixture(
       expect(partitionOf(routeOf(body.subject.id)!)).toBe(home);
       partitions.add(home);
       await drainSubjectLinks();
-      await catchUpIdentity(home);
+      await awaitCurrentIdentity(body.subject.id);
       return body.subject.id;
     }
     async function inspect(accountId = owner.actor.accountId) {
