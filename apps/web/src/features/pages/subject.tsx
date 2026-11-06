@@ -49,6 +49,10 @@ import { RecipePublicationEntry } from './recipe-publication';
 import { recipePublicationReading } from './recipe-publication/model';
 import { ReleasePublicationEntry } from './release-publication';
 import { releasePublicationReading } from './release-publication/model';
+import { AgentPublicationEntry } from './agent-publication';
+import { agentPublicationReading } from './agent-publication/model';
+import { GamePublicationEntry, gamePublicationInitial } from './game-publication';
+import { gamePublicationReading } from './game-publication/model';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
@@ -1576,6 +1580,58 @@ export function SubjectPage({
                 spoiler={reader?.spoilerLevel}
                 {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
                 sessionObservation={readingAdmission ?? ''}
+                {...(page.catalogue?.state === 'released'
+                  ? {
+                      initial: gamePublicationInitial(
+                        read.subject,
+                        read.related,
+                        read.summary,
+                        page.catalogue.definitions,
+                        page.catalogue.digest,
+                        locale,
+                        reader ?? defaultReader,
+                      ),
+                    }
+                  : {})}
+              />
+            ) : null}
+            {overview &&
+            read &&
+            !page.account &&
+            !gameReaderEntry(read.subject.type, read.summary?.types) &&
+            gamePublicationReading(
+              read.subject,
+              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
+              locale,
+              reader ?? defaultReader,
+            ) ? (
+              <GamePublicationEntry
+                subject={read.subject}
+                related={read.related}
+                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+              />
+            ) : null}
+            {overview &&
+            read &&
+            !page.account &&
+            read.subject.type !== 'schema:Person' &&
+            read.subject.type !== 'schema:Organization' &&
+            agentPublicationReading(
+              read.subject,
+              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
+              locale,
+              reader ?? defaultReader,
+            ) ? (
+              <AgentPublicationEntry
+                subject={read.subject}
+                related={read.related}
+                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                locale={locale}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (

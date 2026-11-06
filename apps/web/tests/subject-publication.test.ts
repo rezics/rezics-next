@@ -6,6 +6,7 @@ import { fromPlainText } from '@rezics/document';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Stmt } from '../src/features/pages/shared';
 import type { Related, Subject } from '../src/subject/types';
+import { defaultReader } from '../src/subject/reader';
 import recorded from '../src/kernel/recorded/subject-page.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -13,6 +14,11 @@ const { RecipePublicationEntry } = await import('../src/features/pages/recipe-pu
 const { recipePublicationReading } = await import('../src/features/pages/recipe-publication/model');
 const { ReleasePublicationEntry } = await import('../src/features/pages/release-publication');
 const { releasePublicationReading } = await import('../src/features/pages/release-publication/model');
+const { GamePublicationEntry } = await import('../src/features/pages/game-publication');
+const { gamePageInitial, gamePublicationReading } = await import('../src/features/pages/game-publication/model');
+const { AgentPublicationEntry } = await import('../src/features/pages/agent-publication');
+const { agentPublicationReading } = await import('../src/features/pages/agent-publication/model');
+const { literarySelected } = await import('../src/features/catalogue/literary-reader/model');
 const {
   publicationPropertiesFor,
   publicPublicationStatements,
@@ -191,6 +197,87 @@ test('software-release overlay publishes platform, date and language from the cu
   expect(html).toContain('2025-03-04');
 });
 
+test('released Game overlay and reader seed publish platform from the current page without edition fetch', () => {
+  const subject = {
+    ...(recorded.reads.r0.body.subject as Subject),
+    type: 'schema:VideoGame',
+    labels: { en: 'Lantern Voyage' },
+    statements: {
+      'schema:gamePlatform': [statement('schema:gamePlatform', 'wikibase-item', platform)],
+    },
+  };
+  expect(publicationPropertiesFor('schema:VideoGame', definitions)).toEqual(['schema:gamePlatform']);
+  expect(gamePublicationReading(subject, definitions, 'en')?.fields.map((field) => field.property)).toEqual([
+    'schema:gamePlatform',
+  ]);
+  const html = renderToString(
+    createElement(GamePublicationEntry, {
+      subject,
+      related: { [platform]: { type: 'skos:Concept', labels: { en: 'Nintendo Switch' } } },
+      definitions,
+      locale: 'en',
+    }),
+  );
+  expect(html).toContain('data-slot="game-publication"');
+  expect(html).toContain('Nintendo Switch');
+  const initial = gamePageInitial(
+    subject,
+    { [platform]: { type: 'skos:Concept', labels: { en: 'Nintendo Switch' } } },
+    undefined,
+    definitions,
+    bundledDigest,
+    'en',
+  );
+  expect(initial?.ok).toBe(true);
+  if (!initial?.ok) throw new Error('expected a ready game publication seed');
+  expect(initial.editionsAdmitted).toBe(false);
+  expect(initial.editions).toEqual([]);
+  expect(initial.caughtUp).toBe(true);
+  expect(initial.groups.some((group) => group.fields.some((field) => field.property === 'schema:gamePlatform'))).toBe(
+    true,
+  );
+});
+
+test('automated agent overlay publishes sameAs and omits withheld identity links', () => {
+  const hidden = 'https://secret.invalid/private';
+  const subject = {
+    ...(recorded.reads.r0.body.subject as Subject),
+    type: 'schema:SoftwareApplication',
+    labels: { en: 'Lantern Reader' },
+    statements: {
+      'schema:sameAs': [
+        statement('schema:sameAs', 'url', 'https://wikidata.org/entity/Q1'),
+        statement('schema:sameAs', 'url', hidden, {
+          qualifiers: [
+            {
+              property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+              value: { type: 'value', content: { amount: '+1', unit: '1' } },
+            },
+          ],
+        }),
+      ],
+      'schema:url': [statement('schema:url', 'url', 'https://lantern.example.test/')],
+    },
+  };
+  expect(publicationPropertiesFor('schema:SoftwareApplication', definitions)).toEqual(['schema:sameAs', 'schema:url']);
+  expect(agentPublicationReading(subject, definitions, 'en')?.fields.map((field) => field.property)).toEqual([
+    'schema:sameAs',
+    'schema:url',
+  ]);
+  const html = renderToString(
+    createElement(AgentPublicationEntry, {
+      subject,
+      related: {},
+      definitions,
+      locale: 'en',
+    }),
+  );
+  expect(html).toContain('data-slot="agent-publication"');
+  expect(html).toContain('https://wikidata.org/entity/Q1');
+  expect(html).toContain('https://lantern.example.test/');
+  expect(html).not.toContain(hidden);
+});
+
 test('released Book form, word count and tag agree in JSON-LD and withheld author stays out', () => {
   const form = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e31';
   const tag = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e32';
@@ -223,6 +310,17 @@ test('released Book form, word count and tag agree in JSON-LD and withheld autho
     [hiddenAuthor]: { type: 'schema:Person', labels: { en: 'Withheld Author Sentinel' } },
   } as Related;
   page.catalogue = { state: 'released', type: 'schema:Book', digest: bundledDigest, definitions };
+  expect(publicationPropertiesFor('schema:Book', definitions)).toEqual([
+    'schema:author',
+    'schema:wordCount',
+    'wdt:P7937',
+    'schema:keywords',
+  ]);
+  expect(
+    literarySelected(page.reads.r0.body.subject as Subject, 'schema:keywords', defaultReader).map(
+      (statement) => statement.value.content,
+    ),
+  ).toEqual([tag]);
   const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin: 'https://public.example.test' })!);
   expect(json.wordCount).toBe(1_200_001);
   expect(JSON.stringify(json.additionalType)).toContain('Light novel');
