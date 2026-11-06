@@ -71,8 +71,7 @@ function catalogueClient(options: {
       if (path.endsWith('/_settings')) {
         return { status: 200, body: { [index]: { settings: { index: { uuid } } } } as T };
       }
-      const after =
-        record(_body) && record(_body.params) && Array.isArray(_body.params.after) ? _body.params.after[0] : undefined;
+      const after = (_body as { params?: { after?: readonly unknown[] } } | undefined)?.params?.after?.[0];
       const selected = typeof after === 'string' ? ids.filter((id) => id > after) : ids;
       return {
         status: 200,

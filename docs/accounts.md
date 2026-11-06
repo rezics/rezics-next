@@ -169,7 +169,8 @@ handoff. Reuse eight-locale labels; retain original phone/recovery and Settings 
 
 Settings' closed current-human viewer/navigation observations admit detail only through current membership or
 management of an active, unfenced responsibility target. Concealed targets have no destination; reconciling holds
-are coordination evidence. Optional preparation failure preserves independently readable inventory with unavailable
+are coordination evidence. Illustrative directory fixtures carry admitted navigation for current visible managed targets
+and concealed or unavailable navigation for reconciling coordination evidence. Optional preparation failure preserves independently readable inventory with unavailable
 navigation. Detail `authActions` retains authority. Content's serial publisher derives the generated envelope
 and installed callable/root from mounted Kernel; no handwritten mirrors or overrides. Until installation, directory
 identities stay unlinked. Then finish independent replacement, cursor-free restart and admitted detail/back navigation;
@@ -343,9 +344,16 @@ when present and the native operator marking for automation. Delegation does not
 
 `effective permission = actor grants ∩ current client-consented scopes ∩ principal grants (if delegated)`.
 
+Decision: native policy consumes the declared `deadlineLive` fact, while `live` fences read freshness. Grant
+acceptance uses Auth-issued assignment tokens and checks grant/revoke with the same bearer. Own-account authority
+remains explicit advice.
+
 Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
 suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
 establishes no allowed action. Consumers use supported Access preparations rather than reproduce this formula.
+Decision: resource Access retains an uncertain command with its original caller and transport across departure
+and return; only explicit retry may send it, and a later refusal cannot settle the earlier unknown outcome.
+Session replacement retires its callbacks and private observations; it never lends the replacement session to that command.
 The existing anonymous public floor remains resource/catalogue-bound and subject to applicable denials; a
 narrower token does not remove public visibility. Extraction introduces no baseline allowance or old/new allow-OR.
 
@@ -679,7 +687,8 @@ production uses the system clock, without request overrides. Grants, role assign
 use native `tstzrange` validity at T, with `WITHOUT OVERLAPS`; cleanup is not an expiry correctness barrier.
 See [permission-time.sql][permission-time], [permission-check.sql][permission-sql], [schema][schema] and
 [Evaluator time][access-time]. Decision: `permission-check.sql` returns that deadline operand as one
-`deadlineLive` column plus statement-level `live`; the policy adapter reads `live`.
+`deadlineLive` column plus statement-level `live`; the policy adapter reads `deadlineLive`, while the transport
+checks `live` independently. The native projection byte bound reserves both returned fields.
 
 Bearer credentials originate outside the kernel: `iat`, `exp` and every bearer-expiry comparison use wall time.
 Kernel-issued approvals, operator openings, registration proofs, capabilities and cursors use kernel T. An
@@ -855,3 +864,10 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 Native receiving keeps the compiled SQL `deadlineLive` projection as the Access deadline fact. The check
 fixtures invoke the current erasure producer-list function and define each Search service method once;
 these repairs align trusted producers without adding authorization rules or changing account custody.
+Native receiving uses the complete mounted catalogue, including native container actions, for grant HTTP fixtures; Auth-issued delegated tokens resolve current native assignments. Test-only resource extensions use distinct type names, and native kernel fixtures supply shared receipt keys. Source original-work admission remains unavailable until its owner publishes the complete declaration.
+
+Native deadline decisions consume the named SQL deadline operand across scalar, explicit and batch checks; statement freshness remains separate. Typed creation forwards the parent type and page evidence. Focused tests retain independent actor, principal, scope, revocation and deadline assertions; full native persona and mounted browser acceptance run after integration.
+
+Native role delegation fixtures retain the installed role and expected successful response. A rejected grant reports the actual denied action and whether the authenticated token carries its scope, so producer repairs preserve the authorization formula.
+
+Composed native grant clients register scopes from the same installed action catalogue as Access, including internal actions used by the role being delegated. Mounted HTTP actions alone do not describe that scope ceiling.

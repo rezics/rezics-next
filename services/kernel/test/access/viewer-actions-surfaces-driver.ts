@@ -12,6 +12,7 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import type { Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createPersonas } from '../support/personas.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { registerTestClient, type TestKernel } from '../support/test-kernel.ts';
 import { nativeFixture, cookies, password, issuer } from './native-account-bindings-fixture.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
@@ -87,6 +88,7 @@ export async function createViewerActionsSurfacesDriver(): Promise<NativeSurface
     await bootstrapRelease(database.pool, bundledRelease);
     auth = await nativeFixture(database.pool);
     const defaults = createKernelRuntimeDefaults({
+      receiptKeys: testReceiptKeys(),
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
       auth: {
         issuer,

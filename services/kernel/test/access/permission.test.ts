@@ -175,15 +175,30 @@ beforeEach(async () => {
 });
 
 test('actor grant, verified consented scope and principal grant independently cap the same operation', async () => {
-  expect(await run()).toBe(true);
+  async function decisions(actor: AccountActor, allowed: boolean) {
+    expect(await run(actor)).toBe(allowed);
+    expect(await (await accessExplicitCheck(access, actor, action, resource, await context(actor)))(pool)).toEqual({
+      allowed,
+      explicit: allowed,
+    });
+    const prepared = await prepareReadDecisions(access, {
+      actor,
+      context: await context(actor),
+      actions: new Set([action]),
+    });
+    expect(await prepared.decide(pool, { action, resourceType: 'subject', ids: [resource.id] })).toEqual({
+      [resource.id]: { allowed, explicit: allowed },
+    });
+  }
+  await decisions(identity(), true);
   await removeGrant(actorId);
-  expect(await run()).toBe(false);
+  await decisions(identity(), false);
   await grant();
-  expect(await run(identity({ scopes: [] }))).toBe(false);
-  expect(await run()).toBe(true);
+  await decisions(identity({ scopes: [] }), false);
+  await decisions(identity(), true);
   await removeGrant(principalId);
-  expect(await run()).toBe(false);
-  expect(await run(identity({ requestedBy: null }))).toBe(true);
+  await decisions(identity(), false);
+  await decisions(identity({ requestedBy: null }), true);
 });
 
 test('scalar, explicit and batched decisions admit 1000 inverse entries per operand and fail closed beyond coverage', async () => {

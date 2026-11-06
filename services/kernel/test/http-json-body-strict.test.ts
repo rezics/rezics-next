@@ -7,8 +7,8 @@ import { createKernel } from '../src/http/kernel.ts';
 import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
 import type { SearchService } from '../src/search/service-scope.ts';
-import { testReceiptKeys } from './support/receipt-keys.ts';
 import { Value } from 'typebox/value';
+import { testReceiptKeys } from './support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
