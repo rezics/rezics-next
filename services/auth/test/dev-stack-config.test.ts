@@ -27,6 +27,8 @@ import {
   walkSetupCommand,
   walkStackStartCommand,
   walkStartProcesses,
+  parseDevelopmentBindings,
+  walkFrontendEnvironmentPath,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -71,9 +73,9 @@ test('Auth page scope configuration carries trusted siteActions and records nati
   });
 });
 
-test('persona creator capabilities are registered separately from ordinary importer scopes', () => {
+test('persona creator capabilities are registered separately from ordinary importer scopes', async () => {
   const creator = ['collection:create', 'collection:read', 'collection:update', 'library_entry:update'];
-  expect(localShowcaseClientRegistration().scopes).toEqual(expect.arrayContaining(creator));
+  expect((await localShowcaseClientRegistration()).scopes).toEqual(expect.arrayContaining(creator));
   expect(importerScopes.some((scope) => creator.includes(scope))).toBe(false);
 });
 
@@ -314,6 +316,33 @@ test('a walk persona reuses the host-written seed.env instead of assembling a se
   expect(
     walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, 'AUTH_ORIGIN=http://127.0.0.1:20011\n'),
   ).toBeUndefined();
+});
+
+test('walk and start parents keep Kernel, Postgres and dump modules off the waiter graph', async () => {
+  const source = await Bun.file(resolve(import.meta.dir, '../scripts/dev-stack.ts')).text();
+  expect(source).not.toMatch(/^import \{[^}]*\} from 'pg';/m);
+  expect(source).not.toMatch(/^import \{[^}]*\} from 'jose';/m);
+  expect(source).not.toMatch(/^import .*showcase-community/m);
+  expect(source).not.toMatch(/^import .*showcase-personal-list/m);
+  expect(source).toContain("import type { JWK } from 'jose'");
+  expect(source).toContain("await import('pg')");
+  expect(source).toContain('walkFrontendEnvironmentPath');
+  expect(source).toContain('--max-old-space-size=512');
+});
+
+test('setup-written frontend bindings keep JWK JSON literal for the Vite parent', () => {
+  const website = JSON.stringify({ kid: 'k', kty: 'EC', crv: 'P-256', x: 'x', y: 'y' });
+  const text = developmentBindings({
+    WEBSITE_CLIENT_KEY: website,
+    WEBSITE_SCOPES: 'openid thread:create',
+    AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:1',
+  });
+  expect(parseDevelopmentBindings(text)).toEqual({
+    WEBSITE_CLIENT_KEY: website,
+    WEBSITE_SCOPES: 'openid thread:create',
+    AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:1',
+  });
+  expect(walkFrontendEnvironmentPath()).toMatch(/frontend\.env$/);
 });
 
 test('a walk start keeps Vite and the worker down through seed and runs Kernel without watch', () => {

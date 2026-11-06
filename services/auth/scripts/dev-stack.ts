@@ -3,15 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { Pool } from 'pg';
-import { exportJWK, generateKeyPair, type JWK } from 'jose';
+import type { JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
-import { migrate } from './database.ts';
-import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
-import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
-import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
-import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
@@ -117,11 +111,20 @@ export function developmentWebsiteBindings(
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   await import('reylo/register');
-  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] = await Promise.all([
+  const [
+    { createKernel },
+    { readConfig },
+    { actionCatalogue },
+    { accessActionCatalogue },
+    { Pool },
+    { mountedWebsiteConfiguration },
+  ] = await Promise.all([
     import('../../kernel/src/http/kernel.ts'),
     import('../../kernel/src/server.ts'),
     import('../../kernel/src/http/request.ts'),
     import('../../kernel/src/access/index.ts'),
+    import('pg'),
+    import('./website-composition.ts'),
   ]);
   const config = readConfig(env ?? (await kernelEnvironment()));
   const pool = new Pool({ connectionString: config.databaseUrl });
@@ -162,7 +165,16 @@ export const localClientIds = {
 } as const;
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
-export function localShowcaseClientRegistration() {
+export async function localShowcaseClientRegistration() {
+  const [
+    { DEVELOPMENT_SHOWCASE_SCOPES },
+    { developmentCollectionScopes },
+    { developmentPersonalListScopes },
+  ] = await Promise.all([
+    import('../../../scripts/datasets/showcase-community.ts'),
+    import('../../../scripts/datasets/development-showcase.ts'),
+    import('../../importer/src/showcase-personal-list.ts'),
+  ]);
   return {
     clientId: showcaseClient,
     firstParty: true,
@@ -187,6 +199,7 @@ export function developmentRegistrationPassword(keys: DevelopmentKeys): string {
 }
 
 async function privateKey(): Promise<JWK> {
+  const { exportJWK, generateKeyPair } = await import('jose');
   const pair = await generateKeyPair('ES256', { extractable: true });
   return { ...(await exportJWK(pair.privateKey)), kid: randomUUID(), alg: 'ES256', use: 'sig' };
 }
@@ -357,10 +370,37 @@ async function authDatabaseUrl() {
   return url.href;
 }
 
+/** Walk Vite parents read this instead of assembling Kernel a second time after seed. */
+export function walkFrontendEnvironmentPath(directory = state): string {
+  return resolve(directory, 'frontend.env');
+}
+
+export function parseDevelopmentBindings(text: string): Record<string, string> {
+  return Object.fromEntries(
+    text.split('\n').flatMap((line) => {
+      const match = /^([A-Z0-9_]+)='(.*)'$/.exec(line);
+      return match ? [[match[1]!, match[2]!]] : [];
+    }),
+  );
+}
+
+export async function readWalkFrontendEnvironment(
+  directory = state,
+): Promise<Record<string, string> | undefined> {
+  try {
+    const bindings = parseDevelopmentBindings(await readFile(walkFrontendEnvironmentPath(directory), 'utf8'));
+    return bindings.WEBSITE_SCOPES && bindings.AUTH_SECURITY_SCOPE_CONFIGURATION ? bindings : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
 async function setup() {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   const env = await kernelEnvironment();
   const kernelUrl = localDatabase(env.DATABASE_URL!);
+  const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: kernelUrl.href });
   try {
     // The service has its own database even though development shares one PostgreSQL server.
@@ -374,6 +414,7 @@ async function setup() {
   } finally {
     await pool.end();
   }
+  const { migrate } = await import('./database.ts');
   migrate(await authDatabaseUrl());
   const keys = await developmentKeys();
   const contentBindings = developmentContentBindings(env);
@@ -386,9 +427,12 @@ async function setup() {
     }),
   );
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
+  const website = await developmentWebsiteConfiguration(env);
+  const websiteBindings = developmentWebsiteBindings(keys, website);
+  await privateFile(resolve(root, 'apps/web/.dev.vars'), developmentBindings(websiteBindings));
   await privateFile(
-    resolve(root, 'apps/web/.dev.vars'),
-    developmentBindings(developmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env))),
+    walkFrontendEnvironmentPath(),
+    developmentBindings({ ...websiteBindings, ...developmentAuthPageBindings(website) }),
   );
 }
 
@@ -419,6 +463,10 @@ export async function assemble(options?: {
   const env = options?.env ?? (await kernelEnvironment());
   const config = readConfig(env);
   localDatabase(config.databaseUrl);
+  const [{ Pool }, { mountedWebsiteConfiguration }] = await Promise.all([
+    import('pg'),
+    import('./website-composition.ts'),
+  ]);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
   const keys = options?.keys ?? (await developmentKeys());
@@ -488,7 +536,7 @@ export async function assemble(options?: {
     firstParty: true,
     scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
   });
-  await service.internal.registerClient(localShowcaseClientRegistration());
+  await service.internal.registerClient(await localShowcaseClientRegistration());
   await host.start();
   const stop = async () => {
     try {
@@ -696,8 +744,14 @@ async function serveHost() {
 
 async function launch(action: 'pages' | 'web', args: string[]) {
   const pages = action === 'pages';
-  const website = await developmentWebsiteConfiguration();
-  const keys = await developmentKeys();
+  const walkFrontend = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
+  const persisted = walkFrontend ? await readWalkFrontendEnvironment() : undefined;
+  const website = persisted ? undefined : await developmentWebsiteConfiguration();
+  const keys = persisted ? undefined : await developmentKeys();
+  const bindings = persisted ?? {
+    ...developmentWebsiteBindings(keys!, website!),
+    ...(pages ? developmentAuthPageBindings(website!) : {}),
+  };
   const child = Bun.spawn(
     [
       ...walkBun(process.env),
@@ -717,11 +771,15 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       env: {
         ...process.env,
         AUTH_ORIGIN: origins.native,
-        ...developmentWebsiteBindings(keys, website),
-        ...(pages ? developmentAuthPageBindings(website) : {}),
+        ...bindings,
         PUBLIC_ORIGIN: origins.web,
         TURNSTILE_SITE_KEY: 'local',
         TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
+        ...(walkFrontend
+          ? {
+              NODE_OPTIONS: [process.env.NODE_OPTIONS, '--max-old-space-size=512'].filter(Boolean).join(' '),
+            }
+          : {}),
       },
       stdin: 'inherit',
       stdout: 'inherit',

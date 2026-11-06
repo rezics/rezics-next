@@ -261,6 +261,34 @@ test('a restored pinned VNDB extraction is reused without hashing the archive', 
   }
 });
 
+test('a restored extraction without a pin marker is reused and then marked', async () => {
+  const { cacheRoot, dispose } = await tempCache();
+  try {
+    const packed = `${cacheRoot}.packed.tar.zst`;
+    await packVndbArchive(packed);
+    const bytes = await readFile(packed);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const pin = { ...DEVELOPMENT_VNDB_PIN, sha256: digest };
+    const fetchImpl = Object.assign(
+      async (input: Parameters<typeof fetch>[0]) => {
+        const url = String(input);
+        if (url === VNDB_ARCHIVE_URL) return new Response(bytes);
+        throw new Error(`unexpected fetch ${url}`);
+      },
+      { preconnect() {} },
+    );
+    const first = await fetchVndbDump({ cacheRoot, fetchImpl, pin });
+    await rm(join(first.vndb, '.cross-media-dump-sha256'));
+    await writeFile(first.vndbArchive, 'not-the-verified-archive');
+    const reused = await fetchVndbDump({ cacheRoot, fetchImpl, pin });
+    expect(reused.vndb).toBe(first.vndb);
+    expect(await readFile(join(reused.vndb, '.cross-media-dump-sha256'), 'utf8')).toBe(`${digest}\n`);
+    expect(await readFile(reused.vndbArchive, 'utf8')).toBe('not-the-verified-archive');
+  } finally {
+    await dispose();
+  }
+});
+
 test('`task seed:dev` documentation distinguishes its pinned snapshot from rotating acquisition', async () => {
   const docs = await readFile(resolve(import.meta.dir, '../../docs/development/local-stack.md'), 'utf8');
   expect(docs).toContain('task seed:dev');
@@ -271,5 +299,5 @@ test('`task seed:dev` documentation distinguishes its pinned snapshot from rotat
   expect(docs).toContain(DEVELOPMENT_VNDB_PIN.timestamp);
   expect(docs).toContain('does not continue with Bangumi alone');
   expect(docs).toContain('/srv/rezics-check/datasets/dumps');
-  expect(docs).toContain('matching extracted marker');
+  expect(docs).toContain('Timestamp-verified extracted tables');
 });

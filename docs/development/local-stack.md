@@ -257,9 +257,10 @@ skips that slot.
 `persona` inside a deferred-frontend walk reuses the host-written `seed.env` instead of assembling a second Auth+Kernel
 composition in the 6 GiB slice. Issuer JWKS and seed `POST /signin/key` are forwarded onto native Auth with the original
 request, including POST bodies, until Auth pages bind. Launch the walk with `bun --smol` so the parent module graph shares that heap; database, search and setup use that
-same bun; leftover Docker teardown never throws; a restored dump extraction skips archive hashing; and each
-walk/seed/browser phase asks the slice to reclaim inactive file cache. The walk `start` waiter itself runs under bun
---smol.
+same bun; leftover Docker teardown never throws; a restored dump extraction that matches the pin timestamp skips
+archive hashing even without a marker; sequential dump reads drop-behind; walk/start waiters keep Kernel off their
+graphs; Vite reads setup-written frontend bindings; and each walk/seed/browser phase asks the slice to reclaim
+inactive file cache. The walk `start` waiter itself runs under bun --smol.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
@@ -312,7 +313,8 @@ Missing or changed pinned bytes stop the seed; it does not continue with Bangumi
 in the dump cache when the provider rotates it away. Changing the pin is an explicit source-generation change.
 Remote seeded walks copy that launcher cache onto `/srv/rezics-check/datasets/dumps` before the 6 GiB command slice
 and set `REZICS_DATASETS_DUMP_CACHE` there, so download and extract stay out of the run and a rotated public file
-cannot replace the pin. A matching extracted marker reuses those tables without hashing the archive inside the slice.
+cannot replace the pin. Timestamp-verified extracted tables reuse without hashing the archive, and the pin marker is
+written when missing. Sequential table reads drop-behind inside the slice.
 VNDB's dump metadata licence remains independent of image rights. The wrapper's returned and persisted
 `developmentShowcase.sourceSnapshots` carries the verified archive URL, filename, SHA-256 and metadata licences for
 both providers, plus VNDB's verified TIMESTAMP, even when later publication is incomplete.

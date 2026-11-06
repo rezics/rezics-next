@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { reclaimInactiveFileCache } from '../walk-stack.ts';
+import { reclaimInactiveFileCache, releaseWalkFileCache } from '../walk-memory.ts';
 
 export const CROSS_MEDIA_DUMP_CACHE_ENV = 'REZICS_DATASETS_DUMP_CACHE';
 export const DEFAULT_CROSS_MEDIA_DUMP_CACHE = '/home/edge/projects/rezics/rezics-datasets/dumps';
@@ -387,7 +387,10 @@ async function replaceDirectory(stage: string, target: string): Promise<void> {
   await rm(previous, { recursive: true, force: true });
 }
 
-/** Restored dump tables with a matching marker skip archive hashing inside the 6 GiB slice. */
+/**
+ * Restored dump tables skip archive hashing inside the 6 GiB slice when the pin marker matches, or when
+ * structure/timestamp already verify and the marker is then written from the pin digest.
+ */
 export async function reuseVerifiedDumpExtraction(
   target: string,
   digest: string,
@@ -395,12 +398,16 @@ export async function reuseVerifiedDumpExtraction(
 ): Promise<string | undefined> {
   const cachedRoot = await verify(target);
   if (!cachedRoot) return undefined;
+  const marker = join(target, MARKER);
   try {
-    if ((await readFile(join(target, MARKER), 'utf8')).trim() === digest) return cachedRoot;
+    const marked = (await readFile(marker, 'utf8')).trim();
+    if (marked === digest) return cachedRoot;
+    if (marked) return undefined;
   } catch (error) {
     if (errorCode(error) !== 'ENOENT') throw error;
   }
-  return undefined;
+  await writeFile(marker, `${digest}\n`);
+  return cachedRoot;
 }
 
 async function extractCached(
@@ -572,7 +579,7 @@ export async function fetchVndbDump(
     if (reused) {
       const manifest: VndbDumpManifest = { file, url: options.pin.url, sha256: options.pin.sha256 };
       await writeVndbManifest(vndbDumpManifestPath(cacheRoot), manifest);
-      reclaimInactiveFileCache();
+      releaseWalkFileCache(reused);
       return { cacheRoot, vndb: reused, vndbArchive: join(cacheRoot, 'downloads', file), manifest };
     }
   }

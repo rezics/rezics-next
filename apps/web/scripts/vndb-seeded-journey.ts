@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Browser, Page } from 'playwright';
-import { createKernelClient } from '@rezics/client';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
 import type { DevelopmentShowcaseReport } from '../../../scripts/datasets/cross-media-seed.ts';
-import { reclaimInactiveFileCache, walkIssuerForward } from '../../../scripts/walk-stack.ts';
+import { releaseWalkFileCache, walkIssuerForward } from '../../../scripts/walk-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/vndb-journey');
@@ -256,6 +255,7 @@ try {
   const selected = seed.readings.find((row) => row.selection === 'selected' && row.subject.subject.id === subjectId);
   assert(selected, 'Publication source must be one of the actual native readings');
   const workPath = `/en${selected.route}?${new URLSearchParams({ board: boardId })}`;
+  const { createKernelClient } = await import('@rezics/client');
   const client = createKernelClient(stack.kernel);
   const anonymous = data(
     await client.subjects({ id: subjectId }).threads.get({
@@ -276,7 +276,7 @@ try {
   );
   assert.equal(unselected.entry.state, 'not_selected');
   report.phases.push('actual-publication-and-native-entry');
-  reclaimInactiveFileCache();
+  releaseWalkFileCache();
 
   await withFrontends(async () => {
   ({ chromium } = await import('playwright'));

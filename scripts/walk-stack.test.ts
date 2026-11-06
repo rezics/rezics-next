@@ -4,8 +4,10 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
+  dropFileCache,
   publishedHostPorts,
   reclaimInactiveFileCache,
+  releaseWalkFileCache,
   walkDockerOutput,
   walkIssuerForward,
   walkParentInvocation,
@@ -71,15 +73,21 @@ test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {
   expect(walkDockerOutput({ status: null, stdout: '' })).toBe('');
   expect(walkDockerOutput({ status: 1, stdout: 'ignored' })).toBe('');
   expect(() => reclaimInactiveFileCache(1024)).not.toThrow();
+  expect(() => dropFileCache('/tmp/rezics-walk-missing-dump')).not.toThrow();
+  expect(() => releaseWalkFileCache()).not.toThrow();
 });
 
-test('the seeded walk loads Playwright and the worker only after dump import', async () => {
+test('the seeded walk loads Playwright, the worker and the Kernel client only after dump import', async () => {
   const source = await Bun.file(join(import.meta.dir, '../apps/web/scripts/vndb-seeded-journey.ts')).text();
   expect(source.includes("from 'playwright/test'")).toBe(false);
+  expect(source.includes("from '@rezics/client'")).toBe(false);
   expect(source).toContain("await import('playwright')");
   expect(source).toContain("await import('playwright/test')");
+  expect(source).toContain("await import('@rezics/client')");
   expect(source).toContain("spawn('worker')");
-  expect(source).toContain('reclaimInactiveFileCache');
+  expect(source).toContain('releaseWalkFileCache');
+  const seed = await Bun.file(join(import.meta.dir, 'datasets/cross-media-seed.ts')).text();
+  expect(seed).toContain('onDumpTableReleased: releaseWalkFileCache');
 });
 
 test('walk issuer forwarding keeps POST bodies for native Auth', async () => {
