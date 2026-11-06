@@ -31,14 +31,15 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PublishedLogBack() {
-  const href = logsReturnBackHref(getLocale());
+function PublishedLogBack({ logId, sessionSubject }: { logId: string; sessionSubject?: string | null }) {
+  const locale = getLocale();
+  const href = logsReturnBackHref(locale);
   if (!href) return null;
   return (
     <a
       href={href}
       className="inline-flex min-h-11 items-center rounded text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      onClick={(event) => logsReturnBackClick(event)}
+      onClick={(event) => logsReturnBackClick(event, logId, locale, sessionSubject ?? null)}
     >
       {m.library_logs_back()}
     </a>
@@ -110,11 +111,13 @@ export function PublishedLogPageView({
   isOwner,
   revision: loadedRevision,
   originating,
+  sessionSubject = null,
 }: {
   log: PublishedLog;
   isOwner: boolean;
   revision?: number;
   originating?: PublishedLogOrigin;
+  sessionSubject?: string | null;
 }) {
   const [page, setPage] = useState(() => publicationPage(log.id, isOwner, loadedRevision, originating));
   const committed = useRef<{
@@ -269,7 +272,7 @@ export function PublishedLogPageView({
           failure={m.library_logs_write_failed()}
           restore={restore}
         />
-        <PublishedLogBack />
+        <PublishedLogBack logId={log.id} sessionSubject={sessionSubject} />
       </article>
     );
   }
@@ -279,7 +282,7 @@ export function PublishedLogPageView({
       <header className="space-y-3">
         <PageHeading>{m.library_logs_page_heading()}</PageHeading>
         <p>{m.library_logs_description()}</p>
-        <PublishedLogBack />
+        <PublishedLogBack logId={log.id} sessionSubject={sessionSubject} />
       </header>
       <dl className="space-y-3">
         <div>

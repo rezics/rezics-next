@@ -73,7 +73,7 @@ public-account work from those producers, bind remaining original deadlines into
 `engineRequests`/`witnessKeys` on SQL leaves. Reached producers receive Access work and the original absolute
 deadline; the native interceptor skips consume inside the reserved envelope. FULL public snapshots withhold a
 changed Source. Growth checks use 64/512/4096 with a fixed selected neighbourhood; native receiving evidence stays
-integration-owned.
+integration-owned. Web Back uses history.back() only for the captured My Logs visit, log and current session.
 
 ## Finite bounds
 
