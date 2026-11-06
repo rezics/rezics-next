@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/definitions/bulk';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
@@ -29,6 +30,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
+const nativeDataType = (property: string) => bundledRelease.properties[property]!.datatype;
 
 test('selected dump candidates publish exact intent, resume retryable steps, and retain permanent refusals', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-publication-'));
@@ -68,6 +70,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     string,
     { id: string; source: BatchCommand['source'] | null; statement: BatchStatement; head: number | null }
   >();
+  const synopsisDocuments = new Map<string, { document: string; digest: string; language: string }>();
   const accepted = new Set<string>();
   const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
   const publicReadIds = new Set<string>();
@@ -77,6 +80,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   let acceptanceRefusalStatus = 503;
   let tagSpoiler = 0;
   const unavailableReviewSubjects = new Set<string>();
+  let selectedSynopsisOverride: 'changed' | 'missing' | 'unsupported' | 'unavailable' | undefined;
+  let omitSelectedSynopsisOperands = false;
   const metadata = sourceRecordMetadataFixture();
 
   const tables: CrossMediaTables = {
@@ -319,11 +324,104 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const publicClient = createPublicBulkClient({
       origin: 'https://fixture.test',
       fetch: (async (input) => {
-        const id = new URL(String(input)).pathname.split('/').at(-1)!;
+        const url = new URL(String(input));
+        const id = url.pathname.split('/').at(-1)!;
         publicReadIds.add(id);
         const value = read(id);
-        publicReads.set(id, value);
-        return Response.json(value);
+        const rawRows = value.subject.statements['schema:abstract'] ?? [];
+        const currentRows = rawRows.map((row) => {
+          const candidate = [...candidates.values()].find((entry) => entry.statement === row);
+          if (!candidate) return row;
+          const synopsis = (() => {
+            const retained = synopsisDocuments.get(candidate.id);
+            if (retained) return retained;
+            const value = candidate.statement.value;
+            if (candidate.statement.property.id !== 'schema:abstract' || value.type !== 'value')
+              throw new Error('Selected synopsis fixture must have a document value');
+            const content = value.content as { document?: unknown; language?: unknown };
+            if (typeof content.language !== 'string' || !content.document)
+              throw new Error('Selected synopsis fixture is missing its authored snapshot');
+            const current = {
+              document: randomUUID(),
+              digest: createHash('sha256').update(JSON.stringify(content.document)).digest('hex'),
+              language: content.language,
+            };
+            synopsisDocuments.set(candidate.id, current);
+            return current;
+          })();
+          const refs = Array.isArray(candidate.statement.references)
+            ? candidate.statement.references.map((reference, index) => ({
+                ...reference,
+                hash: `fixture-reference-${index}`,
+                parts: reference.parts.map((part) => ({
+                  ...part,
+                  property: {
+                    ...part.property,
+                    data_type: nativeDataType(part.property.id),
+                  },
+                })),
+              }))
+            : [];
+          return {
+            ...candidate.statement,
+            value: { type: 'value' as const, content: synopsis },
+            id: candidate.id,
+            rank:
+              adopted.get(`${id}\0schema:abstract`)?.selection.find((item) => item.candidate === candidate.id)?.rank ??
+              'normal',
+            property: { ...candidate.statement.property, data_type: 'document' },
+            qualifiers: (candidate.statement.qualifiers ?? []).map((snak) => ({
+              ...snak,
+              property: {
+                ...snak.property,
+                data_type: nativeDataType(snak.property.id),
+              },
+            })),
+            references: refs,
+          };
+        });
+        const publicSubject = {
+          ...value.subject,
+          ...(omitSelectedSynopsisOperands ? {} : { context: globalContext, release: `sha256:${'a'.repeat(64)}` }),
+          statements: { ...value.subject.statements, 'schema:abstract': currentRows },
+        };
+        const publicValue = { ...value, subject: publicSubject };
+        if (!url.searchParams.has('selectedSynopsis')) {
+          publicReads.set(id, publicValue);
+          return Response.json(publicValue);
+        }
+        let selectedSynopsis: unknown;
+        if (selectedSynopsisOverride) selectedSynopsis = { kind: selectedSynopsisOverride };
+        else {
+          const query = JSON.parse(url.searchParams.get('selectedSynopsis')!) as {
+            statement: string;
+            document: string;
+            digest: string;
+            language: string;
+          };
+          const current = currentRows.find((row) => row.id === query.statement) as Record<string, any> | undefined;
+          const content = current?.value?.content;
+          if (
+            !current ||
+            content?.document !== query.document ||
+            content?.digest !== query.digest ||
+            content?.language !== query.language
+          )
+            selectedSynopsis = { kind: 'changed' };
+          else
+            selectedSynopsis = {
+              kind: 'matched',
+              context: publicSubject.context,
+              release: publicSubject.release,
+              fact: {
+                ...current,
+                value: { type: 'somevalue' },
+              },
+            };
+        }
+        const responseValue = { ...publicValue, selectedSynopsis };
+        publicReads.set(id, responseValue);
+        return Response.json(responseValue);
       }) as typeof fetch,
     });
     let tagOptions = {
@@ -377,6 +475,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       membership.command.statement.references?.flatMap((reference) => reference.parts).map((part) => part.value),
     ).toContainEqual({ type: 'value', content: 'https://vndb.org/v2.1#/tags_vn/v2/g105/tag' });
     const membershipCandidateId = membership.candidateId!;
+    const interruptedSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
+    const interruptedSynopsisProposal = acknowledged.find((entry) => entry.candidateId === interruptedSynopsis.id)!;
     const lostAckPath = join(directory, 'lost-proposal.sqlite');
     let lostAckJournal = new ShowcaseJournal(lostAckPath);
     const remoteCandidates = new Map<string, string>();
@@ -398,34 +498,38 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         });
         if (loseFirstResponse) {
           loseFirstResponse = false;
-          throw new Error('simulated lost VNDB proposal acknowledgement');
+          throw new Error('simulated lost selected synopsis proposal acknowledgement');
         }
         return { results };
       },
     } as CrossMediaPort;
     try {
       await expect(
-        captureShowcaseCommands(remotePort, lostAckJournal).batch({ commands: [membership.command] }),
-      ).rejects.toThrow('simulated lost VNDB proposal acknowledgement');
-      expect(lostAckJournal.preparedCommands().map((entry) => entry.command)).toContainEqual(membership.command);
+        captureShowcaseCommands(remotePort, lostAckJournal).batch({
+          commands: [interruptedSynopsisProposal.command],
+        }),
+      ).rejects.toThrow('simulated lost selected synopsis proposal acknowledgement');
+      expect(lostAckJournal.preparedCommands().map((entry) => entry.command)).toContainEqual(
+        interruptedSynopsisProposal.command,
+      );
       expect(lostAckJournal.acknowledgedCommands()).toEqual([]);
       lostAckJournal.close();
       lostAckJournal = new ShowcaseJournal(lostAckPath);
       const replayResult = await captureShowcaseCommands(remotePort, lostAckJournal).batch({
-        commands: [membership.command],
+        commands: [interruptedSynopsisProposal.command],
       });
-      expect(deliveredCommands).toEqual([[membership.command], [membership.command]]);
+      expect(deliveredCommands).toEqual([[interruptedSynopsisProposal.command], [interruptedSynopsisProposal.command]]);
       expect(replayResult.results).toEqual([
         {
-          key: membership.command.key,
+          key: interruptedSynopsisProposal.command.key,
           status: 201,
-          value: { candidate: remoteCandidates.get(membership.command.key), revision: 1 },
+          value: { candidate: remoteCandidates.get(interruptedSynopsisProposal.command.key), revision: 1 },
         },
       ]);
       expect(lostAckJournal.acknowledgedCommands()).toContainEqual(
         expect.objectContaining({
-          command: membership.command,
-          candidateId: remoteCandidates.get(membership.command.key),
+          command: interruptedSynopsisProposal.command,
+          candidateId: remoteCandidates.get(interruptedSynopsisProposal.command.key),
         }),
       );
     } finally {
@@ -474,18 +578,95 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ]);
       expect(subject.statements['schema:abstract']).toEqual([candidate.statement]);
       expect(publicReadIds.has(subject.id)).toBe(true);
-      expect(publicReads.get(subject.id)?.subject?.statements?.['schema:abstract']).toEqual([candidate.statement]);
-      expect(
-        replayed.published
-          .find((record) => record.provider === 'bangumi' && record.sourceKey === candidate.source?.external_id)
-          ?.assertions.find((assertion) => assertion.candidateId === candidate.id),
-      ).toMatchObject({
+      expect(publicReads.get(subject.id)?.subject?.statements?.['schema:abstract']).toEqual([
+        expect.objectContaining({
+          id: candidate.id,
+          rank: 'normal',
+          value: { type: 'value', content: synopsisDocuments.get(candidate.id) },
+        }),
+      ]);
+      const publishedSynopsis = replayed.published
+        .find((record) => record.provider === 'bangumi' && record.sourceKey === candidate.source?.external_id)
+        ?.assertions.find((assertion) => assertion.candidateId === candidate.id);
+      expect(publishedSynopsis).toMatchObject({
+        candidateId: candidate.id,
+        property: 'schema:abstract',
+        citations: [`https://bgm.tv/subject/${candidate.source?.external_id}`],
         adoption: { head: 1, candidateId: candidate.id, rank: 'normal' },
-        readback: candidate.statement,
+        readback: {
+          id: candidate.id,
+          rank: 'normal',
+          property: { id: 'schema:abstract', data_type: 'document' },
+          value: { type: 'value', content: synopsisDocuments.get(candidate.id) },
+          references: [
+            {
+              parts: [
+                {
+                  property: { id: 'schema:url', data_type: 'url' },
+                  value: { type: 'value', content: `https://bgm.tv/subject/${candidate.source?.external_id}` },
+                },
+              ],
+            },
+          ],
+        },
       });
     }
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
     expect(tagAcceptanceCalls.length - tagAcceptanceCallsBeforeReplay).toBe(1);
+
+    omitSelectedSynopsisOperands = true;
+    const absentCurrentSlot = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(absentCurrentSlot.status).toBe('incomplete');
+    expect(absentCurrentSlot.omissions).toContainEqual({
+      provider: 'bangumi',
+      sourceKey: '101',
+      code: 'selected-synopsis-not-current',
+    });
+    expect(
+      absentCurrentSlot.published.some((record) => record.provider === 'bangumi' && record.sourceKey === '101'),
+    ).toBe(false);
+    omitSelectedSynopsisOperands = false;
+
+    for (const kind of ['changed', 'missing', 'unsupported', 'unavailable'] as const) {
+      selectedSynopsisOverride = kind;
+      const withheld = await publishShowcase({
+        plan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        ...tagOptions,
+      });
+      expect(withheld.status).toBe('incomplete');
+      expect(withheld.omissions).toContainEqual({
+        provider: 'bangumi',
+        sourceKey: '101',
+        code: 'selected-synopsis-not-current',
+      });
+    }
+    selectedSynopsisOverride = undefined;
+    const recoveredCurrentSynopsis = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(recoveredCurrentSynopsis.status).toBe('published');
+    expect(
+      recoveredCurrentSynopsis.published.some((record) => record.provider === 'bangumi' && record.sourceKey === '101'),
+    ).toBe(true);
 
     const reopenedSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
     const reopenedSubject = [...subjects.values()].find(
@@ -508,8 +689,26 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         .find((record) => record.provider === 'bangumi' && record.sourceKey === '101')
         ?.assertions.find((assertion) => assertion.candidateId === reopenedSynopsis.id),
     ).toMatchObject({
+      candidateId: reopenedSynopsis.id,
+      property: 'schema:abstract',
+      citations: ['https://bgm.tv/subject/101'],
       adoption: { head: 3, candidateId: reopenedSynopsis.id, rank: 'normal' },
-      readback: reopenedSynopsis.statement,
+      readback: {
+        id: reopenedSynopsis.id,
+        rank: 'normal',
+        property: { id: 'schema:abstract', data_type: 'document' },
+        value: { type: 'value', content: synopsisDocuments.get(reopenedSynopsis.id) },
+        references: [
+          {
+            parts: [
+              {
+                property: { id: 'schema:url', data_type: 'url' },
+                value: { type: 'value', content: 'https://bgm.tv/subject/101' },
+              },
+            ],
+          },
+        ],
+      },
     });
 
     journal.close();

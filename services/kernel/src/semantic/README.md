@@ -1903,8 +1903,10 @@ content keeps the body, licence and command's acting account. Each append emits
 `com.rezics.content.authored-field.created.v1`. Qualifier and reference documents
 share their containing candidate. Disclosure follows that candidate's visibility.
 Install hooks return replacement values and facts are written from copies, so a
-serialization retry cannot replace a request snapshot with a stored document ID.
-A failed append or later write rolls back the entire command.
+later identity-terminal drain retry cannot replace a request snapshot with a stored
+document ID. Subject create is one identity-terminal attempt: SQL serialization
+contention is unavailable rather than an executor retry. A failed append or later
+write rolls back the entire command.
 
 The append adds one exact insert per document with at most 2 MiB of canonical
 bytes; there is no history scan or cleanup command. The API and retry checks are

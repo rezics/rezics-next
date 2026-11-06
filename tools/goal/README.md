@@ -40,8 +40,9 @@ Attempt inspection only retrieves the requested data; the manager host handles o
 
 `bun tools/goal/scripts/test-timings.ts` runs this package's tests in isolated processes, at most sixteen files at
 once (`GOAL_TEST_PARALLEL` raises or lowers that). It prints wall time per file and per test, slowest first, and the
-total. Git fixtures are built once per file and cloned with `git clone --shared`. Tests that wait for time to pass use
-an injected clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
+total. Git fixtures are built once per file and cloned with `git clone --shared`. Each clone sets a local author
+identity so later commits do not depend on the host's git config. Tests that wait for time to pass use an injected
+clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
 
 Before this runner the suite took about 15 minutes or more; three files for one change took 5 to 8 minutes. After, the
 full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal test:fast` is the seconds-scale set for
@@ -740,6 +741,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.worker.sweepYieldItems`                       | `8`                                                                        | Orphan-sweep items processed before yielding the event loop.                                                                                                                                |
 | `policy.worker.retryIntentLeadMs`                     | `1000`                                                                     | Lead time within which a scheduled retry may be launched (ms).                                                                                                                              |
 | `policy.worker.toolRetryBackoffMs`                    | `[120000,600000,1800000]`                                                  | Tool-blocker retry delays by repeated fingerprint sightings (ms).                                                                                                                           |
+| `policy.worker.transportRetryBackoffMs`               | `[60000,120000,240000]`                                                    | Same-session provider transport resume delays (ms): 1, 2, then 4 minutes.                                                                                                                   |
+| `policy.worker.transportRetryLimit`                   | `6`                                                                        | Consecutive provider transport resumes on one attempt before the drop becomes a tool failure.                                                                                               |
 | `policy.worker.toolRetryWindowMs`                     | `3600000`                                                                  | Lookback for repeated tool-blocker fingerprints (ms).                                                                                                                                       |
 | `policy.worker.toolRetryEventRows`                    | `5000`                                                                     | Recent event rows inspected for tool-blocker retry counts.                                                                                                                                  |
 | `policy.worker.settlementBackoffMs`                   | `[500,1000,2000,4000,8000]`                                                | Pauses between SQLite-contended settlement writes (ms).                                                                                                                                     |
@@ -1756,6 +1759,21 @@ different allowed pool. A provider capacity refusal continues after a short paus
 
 A running worker is stalled only when none of these move for `silenceMs` (40 minutes): run-log growth, the worktree branch HEAD, newest mtime of tracked or untracked worktree files (skipping `node_modules` and `.temp`), and CPU time of the worker's process group. Grok and Cursor write their log only on exit, so log silence alone is not a stall. Check-wait time is still subtracted from idle time. Each log event records growth at once, but the HEAD, worktree walk and CPU samples run at most once per `min(silenceCheckMs, silenceMs)`, one at a time per worker, off the host event loop: git runs asynchronously and the walk and process scan yield between entries.
 
+A provider connection drop is classified from the worker's `<log>.err` stream, not from the exit code: Cursor
+`Client network socket disconnected before secure TLS connection was established`; `Connection lost, reconnecting to …`
+followed by `Agent turn stopped after repeated resume attempts made no progress` or `Connection failed repeatedly`;
+Codex `stream disconnected`; or repeated `failed to connect to Responses WebSocket` with a nonzero exit. The attempt
+stays on the same session after a 1-, 2-, then 4-minute backoff, at most six times in a row, and does not spend a
+task attempt or check-host stamp. Transport failures across tasks open one environment incident whose fingerprint is
+the transport line; its probe resumes one task, and the first probe that gets past the drop releases every held task
+at once. Adapters that cannot resume a session start a fresh process on that same attempt.
+Decision: provider connection drops stay on the current attempt and fingerprint the transport line, not the empty
+`Worker ended without a success report (exit #):` prefix.
+
+A worker that exits without a success report and with an empty or unparsed result records the last error line of
+`<log>.err` after `Worker ended without a success report (exit N):`. That generic prefix with no detail is not
+fingerprinted.
+
 Every other tool failure, including a CLI that fails before a session, a silent worker and a check-host transport
 failure, resumes the same session after a backoff by its fingerprint: the failure's first line with worktree paths,
 numbers, hashes and identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
@@ -1860,8 +1878,11 @@ such as reading the task list, still fails the sweep; store contention is only l
 Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
 leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
 signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
-descendants is still followed and its identified members are reaped during terminal cleanup. Unreadable process state
-or denied group inspection is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
+descendants is still followed and its identified members are reaped during terminal cleanup. A just-exited incarnation
+whose only remaining members are zombies of that group is already gone: signal zero can still succeed while `/proc`
+lists no live members, and settlement classifies the worker's real exit instead of holding the attempt as unconfirmed
+custody. Unreadable process state or denied group inspection, including a kernel-visible group that `/proc` omits
+entirely, is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
 notifies the manager once and retains the running attempt and its slot. A later sweep can settle it after visibility
 returns. Stop and cancellation publish terminal records only after cleanup succeeds. Each termination signal uses a
 pidfd and rechecks birth and group identity after opening it, so PID reuse between inspection and signalling cannot

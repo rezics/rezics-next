@@ -1,4 +1,5 @@
 import type { ReviewedSubjectRead } from './import-client.ts';
+import { isDeepStrictEqual } from 'node:util';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -50,6 +51,8 @@ export function selectedSynopsisQueryFromPublic(
   };
   if (
     typeof subject.id !== 'string' ||
+    !subjectId.test(subject.id) ||
+    !subjectId.test(statementId) ||
     subject.context !== GLOBAL_CONTEXT ||
     typeof subject.release !== 'string' ||
     !releaseDigest.test(subject.release)
@@ -57,7 +60,16 @@ export function selectedSynopsisQueryFromPublic(
     return;
   const rows = subject.statements?.['schema:abstract'] ?? [];
   const statement = rows.find((row) => isRecord(row) && row.id === statementId);
-  if (!isRecord(statement) || !isRecord(statement.value) || statement.value.type !== 'value') return;
+  if (
+    !isRecord(statement) ||
+    !['normal', 'preferred'].includes(String(statement.rank)) ||
+    !isRecord(statement.property) ||
+    statement.property.id !== 'schema:abstract' ||
+    statement.property.data_type !== 'document' ||
+    !isRecord(statement.value) ||
+    statement.value.type !== 'value'
+  )
+    return;
   const content = statement.value.content;
   if (
     !isRecord(content) ||
@@ -85,6 +97,80 @@ export function selectedSynopsisQueryFromPublic(
   };
 }
 
+function redactCurrentSnak(value: unknown): Record<string, unknown> | undefined {
+  if (
+    !isRecord(value) ||
+    !closed(value, ['property', 'value']) ||
+    !isRecord(value.property) ||
+    !closed(value.property, ['id', 'data_type']) ||
+    typeof value.property.id !== 'string' ||
+    typeof value.property.data_type !== 'string' ||
+    !isRecord(value.value)
+  )
+    return;
+  if (value.value.type === 'value') {
+    if (!closed(value.value, ['type', 'content']) || !Object.hasOwn(value.value, 'content')) return;
+  } else if (!['somevalue', 'novalue'].includes(String(value.value.type)) || !closed(value.value, ['type'])) return;
+  return {
+    property: value.property,
+    value:
+      value.property.data_type === 'document' || value.property.data_type === 'media'
+        ? { type: 'somevalue' }
+        : value.value,
+  };
+}
+
+/** Project the exact public statement into the same redacted shape as the native selected-slot result. */
+function currentSelectedFact(value: unknown, statementId: string): Record<string, unknown> | undefined {
+  if (
+    !isRecord(value) ||
+    value.id !== statementId ||
+    !['normal', 'preferred'].includes(String(value.rank)) ||
+    !isRecord(value.property) ||
+    !closed(value.property, ['id', 'data_type']) ||
+    value.property.id !== 'schema:abstract' ||
+    value.property.data_type !== 'document' ||
+    !isRecord(value.value) ||
+    value.value.type !== 'value' ||
+    !isRecord(value.value.content) ||
+    !Array.isArray(value.qualifiers) ||
+    !Array.isArray(value.references)
+  )
+    return;
+  const content = value.value.content;
+  if (
+    typeof content.document !== 'string' ||
+    typeof content.digest !== 'string' ||
+    typeof content.language !== 'string'
+  )
+    return;
+  if (value.qualifiers.length > 16 || value.references.length > 16) return;
+  const qualifiers = value.qualifiers.map(redactCurrentSnak);
+  if (qualifiers.some((snak) => !snak)) return;
+  const references: Record<string, unknown>[] = [];
+  for (const reference of value.references) {
+    if (
+      !isRecord(reference) ||
+      !closed(reference, ['hash', 'parts']) ||
+      typeof reference.hash !== 'string' ||
+      !Array.isArray(reference.parts) ||
+      reference.parts.length > 16
+    )
+      return;
+    const parts = reference.parts.map(redactCurrentSnak);
+    if (parts.some((snak) => !snak)) return;
+    references.push({ hash: reference.hash, parts });
+  }
+  return {
+    id: value.id,
+    rank: value.rank,
+    property: { id: value.property.id, data_type: value.property.data_type },
+    value: { type: 'somevalue' },
+    qualifiers,
+    references,
+  };
+}
+
 /** Independent current Global comparison. Document operands stay out of the closed result. */
 export function admitSelectedSynopsisSupport(
   read: ReviewedSubjectRead,
@@ -103,7 +189,12 @@ export function admitSelectedSynopsisSupport(
       return closed(value, ['kind']) ? { kind: value.kind } : { kind: 'unavailable' };
     return { kind: 'unavailable' };
   }
-  const subject = read.subject as { context?: unknown; release?: unknown };
+  const subject = read.subject as {
+    id?: unknown;
+    context?: unknown;
+    release?: unknown;
+    statements?: Record<string, unknown[]>;
+  };
   const context = value.context;
   const release = value.release;
   if (
@@ -116,7 +207,22 @@ export function admitSelectedSynopsisSupport(
     value.fact.id !== statementId
   )
     return { kind: 'unavailable' };
-  const serialized = JSON.stringify(value);
+  const current = (subject.statements?.['schema:abstract'] ?? []).find((row) =>
+    isRecord(row) ? row.id === statementId : false,
+  );
+  const expected = currentSelectedFact(current, statementId);
+  const content = isRecord(current) && isRecord(current.value) ? current.value.content : undefined;
+  if (
+    !expected ||
+    !isRecord(content) ||
+    content.document !== document.document ||
+    content.digest !== document.digest ||
+    content.language !== document.language ||
+    !closed(value.fact, ['id', 'rank', 'property', 'value', 'qualifiers', 'references']) ||
+    !isDeepStrictEqual(value.fact, expected)
+  )
+    return { kind: 'unavailable' };
+  const serialized = JSON.stringify(value.fact);
   if (serialized.includes(document.document) || serialized.includes(document.digest)) return { kind: 'unavailable' };
   if (!isRecord(value.fact.value) || value.fact.value.type !== 'somevalue') return { kind: 'unavailable' };
   return {

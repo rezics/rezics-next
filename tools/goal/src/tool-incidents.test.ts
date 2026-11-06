@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Attempt } from './types.ts';
 import type { ManagerInbox } from './contracts.ts';
+import { blockerFingerprint } from './attempt-progress.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
@@ -61,6 +62,31 @@ function seedIncident(h: ReturnType<typeof harness>, now: number, errorLine: str
     recordToolBlockerFailure(h.store, h.store.task(ref.taskId), h.store.attempt(ref), h.settings, inbox, now);
   return { refs, inbox, incident: listOpenToolIncidents(h.store)[0]! };
 }
+
+test('an empty worker-ended prefix is not fingerprinted and does not open an incident', () => {
+  const empty = 'Worker ended without a success report (exit 1): ';
+  expect(blockerFingerprint({ blocker: empty, result: empty })).toBe('');
+  expect(blockerFingerprint({ blocker: null, result: 'Worker ended without a success report (killed):' })).toBe('');
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) =>
+      incidentAttempt(task.id, number, empty),
+    );
+    expect(
+      recordToolBlockerFailure(
+        h.store,
+        h.store.task(task.id),
+        attempt,
+        h.settings,
+        new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory),
+      ),
+    ).toEqual({ incident: null, opened: false });
+    expect(listOpenToolIncidents(h.store)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
 
 test('a failed notice is recovered through the SQLite inbox without reopening the incident or probe', async () => {
   const h = harness(),

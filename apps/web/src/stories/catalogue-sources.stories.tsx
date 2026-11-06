@@ -1,84 +1,103 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import { useMemo, useState } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { useMemo, useRef, useState } from 'react';
+import { useRouter } from '@tanstack/react-router';
 import { SubjectSourcesPage } from '../features/catalogue/subject-sources-page';
 import { explainSubjectSources, readSubjectSources, type SourcesResult } from '../features/catalogue/subject-sources';
 import {
   catalogueSourcesFixture,
   citationUrl,
+  recordedSelectedSynopsisSelection,
   sourceDefinitions,
+  type CatalogueSourcesExact,
   type SourcesScenario,
 } from '../kernel/fake/catalogue-sources';
+import { RECORDED_SELECTED_SYNOPSIS_CITATION } from '../kernel/recorded/selected-synopsis';
 import { PatternStory } from './page';
 import { AppShell } from '../shell/shell';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { useSourcesRetry } from '../features/catalogue/subject-sources-retry';
+import { summaryReadingFragment } from '../features/pages/subject-visit-navigation';
 
-function SourcesStory({
+let retryAbaNavigate: ((visit: 'a' | 'b') => Promise<void>) | undefined;
+let retryAbaRelease: (() => void) | undefined;
+let retryAbaHeld = false;
+
+type SourcesStoryProps = {
+  scenario?: SourcesScenario;
+  loading?: boolean;
+  exact?: CatalogueSourcesExact;
+  retryAba?: boolean;
+};
+
+function SourcesStory(props: SourcesStoryProps) {
+  return (
+    <PatternStory path="/?retryVisit=a" visitor="Signed Out">
+      <AppShell>
+        <SourcesStoryPage {...props} />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+function SourcesStoryPage({
   scenario = 'selected-facts',
   loading = false,
   exact,
+  retryAba = false,
 }: {
   scenario?: SourcesScenario;
   loading?: boolean;
-  exact?: 'distinct' | 'empty' | 'changed';
+  exact?: CatalogueSourcesExact;
+  retryAba?: boolean;
 }) {
+  const router = useRouter();
   const locale = getLocale();
-  const fixture = useMemo(() => {
-    const fixture = catalogueSourcesFixture(scenario);
-    if (exact) {
-      const { rezics: _revision, ...recorded } = fixture.read.subject.statements['schema:isbn']![0]!;
-      fixture.read.selectedSynopsis =
-        exact === 'changed'
-          ? { kind: 'changed' }
-          : {
-              kind: 'matched',
-              context: fixture.read.subject.context,
-              release: fixture.read.subject.release,
-              fact: {
-                ...recorded,
-                property: { id: 'schema:abstract', data_type: 'document' },
-                value: { type: 'somevalue' },
-                references:
-                  exact === 'empty'
-                    ? []
-                    : [
-                        {
-                          hash: 'selected-reference',
-                          parts: [
-                            {
-                              property: { id: 'schema:url', data_type: 'url' },
-                              value: { type: 'value', content: 'https://catalogue.example.test/second-synopsis' },
-                            },
-                          ],
-                        },
-                      ],
-              },
-            };
-    }
-    return fixture;
-  }, [scenario, locale, exact]);
+  const fixture = useMemo(() => catalogueSourcesFixture(scenario, exact ? { exact } : {}), [scenario, locale, exact]);
+  const selection = exact
+    ? { ...recordedSelectedSynopsisSelection, locale, context: fixture.read.subject.context }
+    : undefined;
+  const via = selection ? `/en/subjects/${fixture.id}/work${summaryReadingFragment(selection)}` : undefined;
   const initial: SourcesResult = ['denied', 'invalid', 'conflict', 'unavailable'].includes(scenario)
     ? { kind: scenario as 'denied' | 'invalid' | 'conflict' | 'unavailable' }
     : { kind: 'ready', page: explainSubjectSources(fixture.read, locale, sourceDefinitions) };
   const [result, setResult] = useState(initial);
-  const [busy, setBusy] = useState(false);
+  const releaseRetry = useRef<(() => void) | undefined>(undefined);
+  const retry = useSourcesRetry({
+    realm: undefined,
+    reader: null,
+    locale,
+    loading,
+    reset: async () => {
+      if (retryAba) {
+        await new Promise<void>((resolve) => {
+          retryAbaHeld = true;
+          releaseRetry.current = () => {
+            retryAbaHeld = false;
+            resolve();
+          };
+        });
+      }
+      fixture.recover();
+      setResult(await readSubjectSources(fixture.client, fixture.id, locale, sourceDefinitions, false, via));
+    },
+  });
+  retryAbaNavigate = retryAba
+    ? async (visit) => {
+        await router.navigate({ to: `/?retryVisit=${visit}` } as never);
+      }
+    : undefined;
+  retryAbaRelease = retryAba ? () => releaseRetry.current?.() : undefined;
   return (
-    <PatternStory path="/" visitor="Signed Out">
-      <AppShell>
-        <SubjectSourcesPage
-          result={loading ? { kind: 'loading' } : result}
-          locale={locale}
-          busy={busy}
-          onRetry={async () => {
-            setBusy(true);
-            fixture.recover();
-            setResult(await readSubjectSources(fixture.client, fixture.id, locale, sourceDefinitions));
-            setBusy(false);
-          }}
-        />
-      </AppShell>
-    </PatternStory>
+    <SubjectSourcesPage
+      result={loading ? { kind: 'loading' } : result}
+      locale={locale}
+      busy={retry.busy}
+      headingRef={retry.headingRef}
+      onRetry={retry.onRetry}
+      {...(via ? { returnTo: via } : {})}
+    />
   );
 }
 const meta = {
@@ -86,7 +105,9 @@ const meta = {
   id: 'pages-subject-selected-sources',
   component: SourcesStory,
   parameters: { layout: 'fullscreen' },
-  render: (args) => <SourcesStory key={`${getLocale()}:${args.scenario}:${args.loading}:${args.exact}`} {...args} />,
+  render: (args) => (
+    <SourcesStory key={`${getLocale()}:${args.scenario}:${args.loading}:${args.exact}:${args.retryAba}`} {...args} />
+  ),
 } satisfies Meta<typeof SourcesStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -108,15 +129,15 @@ function fixtureId() {
 }
 export const NoCitations: Story = { args: { scenario: 'no-citations' } };
 export const ExactSynopsisCitations: Story = {
-  args: { exact: 'distinct' },
+  args: { exact: 'matched' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    expect(await canvas.findByRole('link', { name: 'https://catalogue.example.test/second-synopsis' })).toBeTruthy();
+    expect(await canvas.findByRole('link', { name: RECORDED_SELECTED_SYNOPSIS_CITATION })).toBeTruthy();
     expect(canvas.queryByRole('link', { name: citationUrl })).toBeNull();
   },
 };
 export const ExactSynopsisEmptyCitations: Story = {
-  args: { exact: 'empty' },
+  args: { exact: 'matched-empty' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     expect(await canvas.findByText(m.sources_no_citations())).toBeTruthy();
@@ -134,12 +155,40 @@ export const UnavailableRetry: Story = {
   args: { scenario: 'unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.sources_retry() }));
-    expect(await canvas.findByRole('heading', { name: m.sources_selected() })).toBeTruthy();
+    const retry = await canvas.findByRole('button', { name: m.sources_retry() });
+    retry.focus();
+    await userEvent.keyboard('{Enter}');
+    const heading = await canvas.findByRole('heading', { name: m.subject_sources() });
+    await waitFor(() => expect(canvasElement.ownerDocument.activeElement).toBe(heading));
   },
 };
 export const UnavailableRetryPhone: Story = { ...UnavailableRetry, globals: { viewport: { value: 'phone390' } } };
 export const UnavailableRetryDesktop: Story = { ...UnavailableRetry, globals: { viewport: { value: 'desktop1280' } } };
+async function retryAbaStory(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const retry = await canvas.findByRole('button', { name: m.sources_retry() });
+  retry.focus();
+  await userEvent.keyboard('{Enter}');
+  await waitFor(() => expect(retryAbaHeld).toBe(true));
+  await retryAbaNavigate?.('b');
+  await retryAbaNavigate?.('a');
+  retryAbaRelease?.();
+  await canvas.findByRole('link', { name: RECORDED_SELECTED_SYNOPSIS_CITATION });
+  await waitFor(() => {
+    const heading = canvas.getByRole('heading', { name: m.subject_sources() });
+    expect(canvasElement.ownerDocument.activeElement).not.toBe(heading);
+  });
+}
+export const UnavailableRetryABAPhone: Story = {
+  args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => retryAbaStory(canvasElement),
+};
+export const UnavailableRetryABADesktop: Story = {
+  args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => retryAbaStory(canvasElement),
+};
 
 const richTitle = '旅人の物語 — 長い道のりを越えて、ふたたび出会う人々と終わらない読書の記録';
 const qualifierUrl = 'https://catalogue.example.test/editions/original';

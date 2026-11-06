@@ -1,4 +1,8 @@
-import { selectedSynopsisQuery, selectedSynopsisResponse } from './selected-synopsis-source';
+import {
+  selectedSynopsisMatchesCurrent,
+  selectedSynopsisQuery,
+  selectedSynopsisResponse,
+} from './selected-synopsis-source';
 import { synopsisVisit } from '../pages/subject-summary-reading/visit';
 import { actionState, type ConceptViewerActions } from './source-concept-explorer';
 import type { KernelClient, SubjectRead } from '@rezics/client';
@@ -296,12 +300,13 @@ export async function readSubjectSources(
     if (current.data.subject.id !== expected) return { kind: 'unavailable' };
     if (selection) {
       const exact: unknown = current.data.selectedSynopsis;
-      if (!selectedSynopsisResponse(exact)) return { kind: 'unavailable' };
+      if (!selectedSynopsisResponse(exact, selection)) return { kind: 'unavailable' };
       if (
         exact.kind === 'matched' &&
         (exact.fact.id !== selection.candidateId ||
           exact.context !== selection.context ||
-          exact.release !== selection.subjectRelease)
+          exact.release !== selection.subjectRelease ||
+          !selectedSynopsisMatchesCurrent(current.data, selection, exact))
       )
         return { kind: 'unavailable' };
     }

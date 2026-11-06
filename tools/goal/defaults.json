@@ -225,6 +225,8 @@
       "sweepYieldItems": 8,
       "retryIntentLeadMs": 1000,
       "toolRetryBackoffMs": [120000, 600000, 1800000],
+      "transportRetryBackoffMs": [60000, 120000, 240000],
+      "transportRetryLimit": 6,
       "toolRetryWindowMs": 3600000,
       "toolRetryEventRows": 5000,
       "settlementBackoffMs": [500, 1000, 2000, 4000, 8000],

@@ -2,6 +2,7 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import {
   SELECTED_SYNOPSIS_PROPERTY,
+  selectedSynopsisMatchesCurrent,
   selectedSynopsisQuery,
   selectedSynopsisResponse,
   type SelectedSynopsisSelection,
@@ -53,8 +54,9 @@ export function inspectSelectedSynopsisVisit(
 export function inspectSelectedSynopsisRead(
   selection: SelectedSynopsisSelection,
   value: unknown,
+  current?: SubjectRead,
 ): SelectedSynopsisEditorInspection {
-  if (!selectedSynopsisResponse(value)) return { kind: 'unavailable' };
+  if (!selectedSynopsisResponse(value, selection)) return { kind: 'unavailable' };
   if (value.kind !== 'matched') return { kind: value.kind };
   if (
     value.fact.id !== selection.candidateId ||
@@ -62,6 +64,7 @@ export function inspectSelectedSynopsisRead(
     value.release !== selection.subjectRelease
   )
     return { kind: 'unavailable' };
+  if (current && !selectedSynopsisMatchesCurrent(current, selection, value)) return { kind: 'changed' };
   return { kind: 'matched', statement: value.fact.id, context: value.context, release: value.release };
 }
 
@@ -113,7 +116,7 @@ export async function readSelectedSynopsisEditor(
         status: current.status,
         data: current.data,
       };
-    const inspection = inspectSelectedSynopsisRead(admitted.selection, current.data.selectedSynopsis);
+    const inspection = inspectSelectedSynopsisRead(admitted.selection, current.data.selectedSynopsis, current.data);
     return { visit, inspection, query: admitted.query, status: current.status, data: current.data };
   } catch {
     return { visit, inspection: { kind: 'unavailable' }, query: admitted.query };
