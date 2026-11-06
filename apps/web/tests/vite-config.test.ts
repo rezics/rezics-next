@@ -25,13 +25,45 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(config.cacheDir).toBe(cacheDir);
     expect(config.server?.fs?.allow).toContain(cacheDir);
     expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
-    expect(config.ssr?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+    expect(config.optimizeDeps?.entries).toEqual(['src/routes/**/*.tsx']);
+    expect(config.ssr?.optimizeDeps).toBeUndefined();
+    const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const worker = plugins.find(
+      (plugin) =>
+        plugin !== null &&
+        typeof plugin === 'object' &&
+        'name' in plugin &&
+        plugin.name === 'web-worker-explicit-dependencies',
+    );
+    expect(worker).toBeTruthy();
+    expect(worker && 'enforce' in worker ? worker.enforce : undefined).toBe('post');
+    const environmentFor = (name: string) => {
+      if (!worker || !('configEnvironment' in worker)) return undefined;
+      const hook = worker.configEnvironment;
+      const handler = typeof hook === 'function' ? hook : hook && 'handler' in hook ? hook.handler : undefined;
+      return typeof handler === 'function' ? handler.call(undefined, name) : undefined;
+    };
+    const environment = environmentFor('ssr') as
+      | { optimizeDeps?: { noDiscovery?: boolean; holdUntilCrawlEnd?: boolean; include?: string[] } }
+      | undefined;
+    expect(environment?.optimizeDeps?.noDiscovery).toBe(true);
+    expect(environment?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+    expect(environment?.optimizeDeps?.include).toEqual([
+      'react',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom',
+      'react-dom/server',
+      '@tanstack/react-router > @tanstack/react-store',
+      '@inlang/paraglide-js/urlpattern-polyfill',
+    ]);
+    expect(environmentFor('client')).toBeUndefined();
   } finally {
     if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
     else process.env.WEB_VITE_CACHE_DIR = previous;
     await rm(cacheDir, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test('Vite serves resolved workspace dependencies while keeping files outside its roots denied', async () => {
   // This is a build-time config inspection, not a fixture runtime, so it does not allocate Worker persistence.

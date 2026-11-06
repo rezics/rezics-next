@@ -1,8 +1,14 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { hashLockfile, prepareViteDepCache, viteDepCacheReadyName, viteDepCacheRoot } from './vite-dep-cache.ts';
+import {
+  hashLockfile,
+  prepareViteDepCache,
+  viteDepCacheOptimizeCommand,
+  viteDepCacheReadyName,
+  viteDepCacheRoot,
+} from './vite-dep-cache.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-vite-dep-cache-'));
 
@@ -11,6 +17,10 @@ afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 function cacheHome(): string {
   return join(temporary, `home-${hashLockfile(String(Math.random())).slice(0, 12)}`);
 }
+
+test('the default pre-bundle is vite optimize --force, not a second HTTP server', () => {
+  expect(viteDepCacheOptimizeCommand('/app')).toEqual(['/app/node_modules/.bin/vite', 'optimize', '--force']);
+});
 
 test('a lock hash reuses one published cache and a changed lock builds its own directory', async () => {
   const home = cacheHome();
@@ -98,4 +108,26 @@ test('a concurrent waiter reuses the published cache instead of building twice',
   expect(waiting.reused).toBe(true);
   expect(waiting.directory).toBe(owner.directory);
   expect(readFileSync(join(owner.directory, 'marker'), 'utf8')).toBe('shared');
+});
+
+test('a failed build does not publish a ready cache', async () => {
+  const home = cacheHome();
+  const workspaceRoot = join(temporary, 'failed');
+  mkdirSync(workspaceRoot, { recursive: true });
+  await expect(
+    prepareViteDepCache({
+      workspaceRoot,
+      appRoot: workspaceRoot,
+      cacheHome: home,
+      lockBytes: 'lock-fail',
+      build: async () => {
+        throw new Error('optimize failed');
+      },
+    }),
+  ).rejects.toThrow('optimize failed');
+  expect(
+    existsSync(
+      join(viteDepCacheRoot({ XDG_CACHE_HOME: home }, home), hashLockfile('lock-fail'), viteDepCacheReadyName),
+    ),
+  ).toBe(false);
 });
