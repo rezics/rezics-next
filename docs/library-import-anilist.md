@@ -55,9 +55,10 @@ identity bootstrap on that partition before Rating review or merge. Native impor
 metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home
 guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on
 that home so the first scan includes it; sealing the empty question/control home first leaves later creations
-past the cursor. Native import tests recapture identity dirty after each Subject write and drain held prearm
-after mapping completes; unpublished Search/Library acknowledgements do not pin the group against later
-Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed;
+past the cursor. Native import tests recapture identity dirty after each Subject write, after link drain on
+each HTTP send once a Subject is mapped on that home, and before direct Rating apply, so Entry, Progress and
+vote writes cannot leave Mapping pending. They drain held prearm after mapping completes; unpublished
+Search/Library acknowledgements do not pin the group against later Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed;
 native import tests then publish that job so later bootstrap can recapture dirty and a later merge or vote job can start.
 Apply commits selected scores and Progress before independent state so Entry writes cannot dirty the vote or occurrence target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
 `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty

@@ -65,6 +65,7 @@ function voteFixture(voter: Awaited<ReturnType<typeof voteOwner>>) {
     tokens: f.tokens,
     commands: f.commands,
     owner: voter,
+    recapture: () => f.recaptureMappedHomes(),
     admitSubjectMerge: (canonical: string, selected: string) => f.admitSubjectMerge(canonical, selected),
     createSubject: (_vertical = 'game') => f.createHomeSubject('game', voter),
     send: (persona: string, method: string, path: string, body?: unknown) =>
@@ -726,6 +727,7 @@ test.serial('native redirect requires a deliberate review of the canonical Bangu
       status: 'unavailable',
       reason: 'identity_observation_unavailable',
     });
+    await score.recapture();
     const unavailable = await importer.apply(
       score.owner.actor,
       uploadId,
@@ -755,6 +757,7 @@ test.serial('native redirect requires a deliberate review of the canonical Bangu
       randomUUID(),
     );
     expect(reviewed.review!.score!.native.admission).toEqual({ status: 'reviewed', reason: 'native_review_observed' });
+    await score.recapture();
     const applied = await importer.apply(
       score.owner.actor,
       uploadId,
@@ -815,8 +818,10 @@ test.serial(
       const selected = [
         { ...choice(0, reviewed.review!, 'omit'), score: { action: 'set' as const, units: 0, consent: true as const } },
       ];
-      const run = () =>
-        importer.apply(score.owner.actor, uploadId, selected, new AbortController().signal, Date.now() + 120000);
+      const run = async () => {
+        await score.recapture();
+        return importer.apply(score.owner.actor, uploadId, selected, new AbortController().signal, Date.now() + 120000);
+      };
       await expect(run()).rejects.toThrow('delivery unknown');
       await expect(
         importer.review(score.owner.actor, uploadId, 0, target, { action: 'preserve' }, randomUUID()),
@@ -868,6 +873,7 @@ test.serial(
         randomUUID(),
       );
       expect(refreshed.review!.score!.native.currentVote).toMatchObject({ state: 'set', units: 7 });
+      await score.recapture();
       const cleared = await importer.apply(
         score.owner.actor,
         uploadId,
@@ -923,6 +929,7 @@ test.serial(
       const selected = [
         { ...choice(0, reviewed.review!, 'omit'), score: { action: 'set' as const, units: 0, consent: true as const } },
       ];
+      await score.recapture();
       await expect(
         interrupted.apply(score.owner.actor, uploadId, selected, new AbortController().signal, Date.now() + 120000),
       ).rejects.toThrow('Lost Bangumi score acknowledgement');
@@ -978,6 +985,7 @@ test.serial(
         votes: native,
       });
       // Recovery repeats current vote authority before it looks up or discloses the historical receipt.
+      await score.recapture();
       await expect(
         recovery.apply(
           { ...score.owner.actor, scopes: score.owner.actor.scopes.filter((scope) => scope !== 'rating:vote') },
@@ -988,6 +996,7 @@ test.serial(
         ),
       ).rejects.toBeInstanceOf(GrantDeniedError);
       const before = await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target);
+      await score.recapture();
       const result = await recovery.apply(
         score.owner.actor,
         uploadId,

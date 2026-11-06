@@ -886,6 +886,7 @@ test.serial(
       admission: { status: 'unavailable', reason: 'conditional-vote-admission-unavailable' },
     });
     expect(firstPage.rows[0]!.review!.score!.guard).toBeUndefined();
+    await native.recaptureMappedHomes();
     const unavailable = await service.apply(
       actor.actor,
       uploadId,
@@ -899,6 +900,7 @@ test.serial(
       status: 'unavailable',
       reason: 'conditional-vote-admission-unavailable',
     });
+    await native.recaptureMappedHomes();
     const canonicalVersion = randomUUID();
     await service.review(
       actor.actor,
@@ -921,6 +923,7 @@ test.serial(
     );
     const reviewed = await service.page(actor.actor, uploadId, 0, deadline);
     expect(reviewed.rows[0]!.review!.score!.guard!.subject.canonicalId).toBe(canonical);
+    await native.recaptureMappedHomes();
     const applied = await service.apply(
       actor.actor,
       uploadId,

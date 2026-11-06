@@ -509,6 +509,7 @@ test.serial(
       reason: 'identity_observation_unavailable',
     });
     expect(first.review!.score!.native.guard).toBeUndefined();
+    await f.recaptureMappedHomes();
     const unavailable = await service.apply(importer.actor, id, [
       { ordinal: 0, reviewId: first.review!.id, confirmNativeVoteEffects: true },
     ]);
@@ -516,6 +517,7 @@ test.serial(
       status: 'unavailable',
       reason: 'identity_observation_unavailable',
     });
+    await f.recaptureMappedHomes();
     const reviewed = await service.review(
       importer.actor,
       id,
@@ -530,6 +532,7 @@ test.serial(
     );
     expect(reviewed.review!.score!.native.availability).toBe('available');
     expect(reviewed.review!.score!.native.guard!.subject.canonicalId).toBe(canonical);
+    await f.recaptureMappedHomes();
     const applied = await service.apply(importer.actor, id, [
       { ordinal: 0, reviewId: reviewed.review!.id, confirmNativeVoteEffects: true },
     ]);

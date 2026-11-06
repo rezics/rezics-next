@@ -33,7 +33,7 @@ import { accessCheck, type Access, type AccountActor } from '../../../src/reques
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { identityEpochStore } from '../../../src/semantic/identity-adapters/index.ts';
+import { identityEpochStore, identityJobPartition } from '../../../src/semantic/identity-adapters/index.ts';
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
@@ -192,6 +192,7 @@ export async function createProfileEntryFixture(
     expect(access).toBeDefined();
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
+    const mappedHomes = new Set<number>();
     let identityHomesReady = false;
     // Run the real relay for scenarios that consume Semantic link projections.
     // Direct source-reference scenarios can leave this unrelated worker asynchronous.
@@ -259,21 +260,18 @@ export async function createProfileEntryFixture(
       const keyOf = (job: IdentityJobRef) => `${job.jobId}:${job.epoch.toString()}`;
       for (let n = 0; n < 1000; n++) {
         const held = await heldPrearmJobs(home);
-        const pending = held.filter((job) => !drained.has(keyOf(job)));
-        if (pending.length) {
-          for (const job of pending) {
-            await drainIdentityJob(job);
-            const remaining = (await heldPrearmJobs(home)).some(
+        for (const job of held) {
+          await drainIdentityJob(job);
+          if (
+            !(await heldPrearmJobs(home)).some(
               (heldJob) => heldJob.jobId === job.jobId && heldJob.epoch === job.epoch,
-            );
-            if (!remaining) drained.add(keyOf(job));
-          }
-          continue;
+            )
+          )
+            drained.add(keyOf(job));
         }
-        if (held.length) {
-          for (const job of held) await drainIdentityJob(job);
-          continue;
-        }
+        const remaining = await heldPrearmJobs(home);
+        const untried = remaining.filter((job) => !drained.has(keyOf(job)));
+        if (untried.length) continue;
         try {
           const progress = await stepIdentityEpochBootstrap(pool, home);
           if (progress.state === 'caught-up' && !(await identityDirty(home)) && !(await heldPrearmJobs(home)).length)
@@ -289,6 +287,9 @@ export async function createProfileEntryFixture(
         }
       }
       throw new Error('Native identity bootstrap did not finish');
+    }
+    async function recaptureMappedHomes() {
+      for (const home of mappedHomes) await catchUpIdentity(home);
     }
     const commands = createEntryCommands({ pool, access, tokens, ...options });
     const context = (actor: AccountActor) => ({ pool, actor, deadline: deadlineFor(30_000) });
@@ -349,7 +350,7 @@ export async function createProfileEntryFixture(
       // Partition 0 is the Global question/control home. Sealing it before the first
       // Subject exists leaves later creations past the bootstrap cursor with captured
       // dirty, so catch it up only after createHomeSubject/admitSubjectMerge.
-      if (identityHomesReady && home !== 0) await catchUpIdentity(home);
+      if (identityHomesReady && (home !== 0 || mappedHomes.has(0))) await catchUpIdentity(home);
       return { actor, bearer: await accountToken(claims) };
     }
     // Grant-routes and outcome-driver admit platform.governance only on a token
@@ -476,6 +477,7 @@ export async function createProfileEntryFixture(
       extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
+      await recaptureMappedHomes();
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -545,12 +547,12 @@ export async function createProfileEntryFixture(
     }
     async function drainIdentityJob(job: IdentityJobRef) {
       const saved = (
-        await pool.query<{ state: string }>(
-          'SELECT state FROM semantic.identity_epoch_job WHERE job_id=$1 ORDER BY epoch DESC LIMIT 1',
+        await pool.query<{ state: string; epoch: string }>(
+          'SELECT state, epoch::text AS epoch FROM semantic.identity_epoch_job WHERE job_id=$1 ORDER BY epoch DESC LIMIT 1',
           [job.jobId],
         )
       ).rows[0];
-      if (saved?.state !== 'published') {
+      if (saved && saved.state !== 'published') {
         let admitted = false;
         for (let attempt = 0; attempt < 16; attempt++) {
           const progress = await stepIdentityEpochAdmission(pool, job);
@@ -561,7 +563,7 @@ export async function createProfileEntryFixture(
           expect(progress.state).toBe('preparing');
         }
         expect(admitted).toBe(true);
-        if (saved?.state !== 'published') {
+        if (saved.state !== 'published') {
           let mapped = false;
           for (let attempt = 0; attempt < 512; attempt++) {
             const progress = await stepIdentityEpochMapping(pool, job);
@@ -577,33 +579,31 @@ export async function createProfileEntryFixture(
       // drop every pin for this job id — prearm, groups and control — without filtering
       // by epoch text. A bigint/text mismatch left control.pending_job held, so Progress,
       // Rating and merge then saw identity_epoch_unavailable or a pending mapping.
-      const epoch = job.epoch.toString();
+      const epoch = (saved?.epoch ?? job.epoch).toString();
+      const home = identityJobPartition(job);
       await pool.query(
         `UPDATE semantic.identity_epoch_prearm_bridge
             SET job_id=NULL, job_epoch=NULL, scope_digest=NULL, bridge_version=bridge_version+1
           WHERE job_id=$1`,
         [job.jobId],
       );
-      await pool.query(
-        `UPDATE semantic.identity_epoch_job SET state='published'
-          WHERE job_id=$1 AND state IN ('pending','preparing')`,
-        [job.jobId],
-      );
+      await pool.query(`UPDATE semantic.identity_epoch_job SET state='published' WHERE job_id=$1 AND state<>'published'`, [
+        job.jobId,
+      ]);
       await pool.query(
         `UPDATE semantic.identity_epoch_group
-            SET pending_job=NULL, pending_epoch=NULL, published_epoch=$2::bigint
+            SET pending_job=NULL, pending_epoch=NULL, published_epoch=GREATEST(published_epoch,$2::bigint)
           WHERE pending_job=$1`,
         [job.jobId, epoch],
       );
       await pool.query(
         `UPDATE semantic.identity_epoch_control
-            SET pending_job=CASE WHEN pending_job=$1 THEN NULL ELSE pending_job END,
-                pending_epoch=CASE WHEN pending_job=$1 THEN NULL ELSE pending_epoch END,
-                published_epoch=CASE WHEN pending_job=$1 THEN GREATEST(published_epoch,$2::bigint) ELSE published_epoch END,
-                prepare_job=CASE WHEN prepare_job=$1 THEN NULL ELSE prepare_job END,
-                prepare_epoch=CASE WHEN prepare_job=$1 THEN NULL ELSE prepare_epoch END
-          WHERE pending_job=$1 OR prepare_job=$1`,
-        [job.jobId, epoch],
+            SET pending_job=NULL, pending_epoch=NULL,
+                published_epoch=GREATEST(published_epoch,$2::bigint),
+                prepare_job=CASE WHEN prepare_job=$3 THEN NULL ELSE prepare_job END,
+                prepare_epoch=CASE WHEN prepare_job=$3 THEN NULL ELSE prepare_epoch END
+          WHERE partition_no=$1 AND (pending_job=$3 OR prepare_job=$3)`,
+        [home, epoch, job.jobId],
       );
     }
     async function drainIdentityMerge(jobId: string) {
@@ -619,11 +619,12 @@ export async function createProfileEntryFixture(
     async function awaitCurrentIdentity(subjectId: string) {
       const home = partitionOf(routeOf(subjectId)!);
       partitions.add(home);
+      mappedHomes.add(home);
       for (let attempt = 0; attempt < 32; attempt++) {
         await catchUpIdentity(home);
         const mapping = await identityEpochStore.readMapping(pool, subjectId);
         const held = await heldPrearmJobs(home);
-        if (mapping.state === 'mapped' && !(await identityDirty(home, subjectId)) && !held.length) return;
+        if (mapping.state === 'mapped' && !(await identityDirty(home)) && !held.length) return;
         if (mapping.state === 'pending') {
           await drainIdentityJob(mapping.job);
           continue;
@@ -768,6 +769,7 @@ export async function createProfileEntryFixture(
     const baseline = await createSubject('game');
     const accepted = await commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey());
     expect(accepted.value.entry.subjectId).toBe(baseline);
+    await awaitCurrentIdentity(baseline);
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
@@ -791,6 +793,7 @@ export async function createProfileEntryFixture(
       createHomeSubject,
       homeKey,
       catchUpIdentity,
+      recaptureMappedHomes,
       awaitCurrentIdentity,
       admitSubjectMerge,
       publish,
