@@ -4,7 +4,7 @@ import {
   bangumiGameEnvironmentReferenceKey,
   bangumiGameEnvironmentSourceHost,
   type BangumiGameEnvironmentProperty,
-} from '../../../packages/conversion/src/bangumi-game-environment.ts';
+} from '@rezics/conversion/bangumi';
 
 export { bangumiGameEnvironmentReferenceKey };
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
@@ -20,6 +20,39 @@ export type BangumiGameEnvironmentBinding = Readonly<{
   conceptId: string;
   sourceUri: string;
 }>;
+
+/** External lookup hints. Current native Concepts, provenance and disclosure are checked separately. */
+export function parseBangumiGameEnvironmentBindings(value: unknown): readonly BangumiGameEnvironmentBinding[] {
+  if (!Array.isArray(value) || value.length > BINDING_CAP)
+    throw new TypeError('Bangumi Game environment bindings require at most 24 entries');
+  const bindings: BangumiGameEnvironmentBinding[] = [];
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (row === null || typeof row !== 'object' || Array.isArray(row))
+      throw new TypeError('Invalid Bangumi Game environment binding');
+    const { kind, item, conceptId, sourceUri } = row as Record<string, unknown>;
+    if (
+      (kind !== 'platform' && kind !== 'engine') ||
+      typeof item !== 'string' ||
+      !item.isWellFormed() ||
+      !item.trim() ||
+      new TextEncoder().encode(item).byteLength > 512 ||
+      typeof conceptId !== 'string' ||
+      !uuid.test(conceptId) ||
+      typeof sourceUri !== 'string' ||
+      sourceUri.length > 2048
+    )
+      throw new TypeError('Invalid Bangumi Game environment binding');
+    const host = hostnameOf(sourceUri);
+    if (!host || !bangumiGameEnvironmentSourceHost(host))
+      throw new TypeError('Bangumi Game environment binding requires a Bangumi HTTPS source URI');
+    const key = bangumiGameEnvironmentReferenceKey(propertyOf(kind), item);
+    if (seen.has(key)) throw new TypeError('Duplicate Bangumi Game environment binding');
+    seen.add(key);
+    bindings.push({ kind, item, conceptId, sourceUri });
+  }
+  return bindings;
+}
 
 export type BangumiGameEnvironmentDiagnostic = Readonly<{
   sourceKey: string;
@@ -131,17 +164,20 @@ export async function readBangumiGameEnvironmentBindings(
 export function mergeIdentifierResolutions(parts: readonly ImportIdentifierResolution[]): ImportIdentifierResolution {
   const refs: Record<string, string> = {};
   const preserved = new Set<string>();
-  let unavailable = 0;
+  let unavailable = false;
   for (const part of parts) {
     if ('status' in part && part.status === 'unavailable') {
-      unavailable++;
+      unavailable = true;
       for (const property of part.preserveProperties) preserved.add(property);
-      continue;
-    }
-    Object.assign(refs, part);
+      Object.assign(refs, part.resolvedReferences ?? {});
+    } else Object.assign(refs, part);
   }
-  if (unavailable === parts.length && parts.length)
-    return { status: 'unavailable', preserveProperties: [...preserved] };
+  if (unavailable)
+    return {
+      status: 'unavailable',
+      preserveProperties: [...preserved],
+      ...(Object.keys(refs).length ? { resolvedReferences: refs } : {}),
+    };
   return refs;
 }
 

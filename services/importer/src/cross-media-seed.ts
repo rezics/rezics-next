@@ -132,6 +132,7 @@ import { createShowcaseBangumiGenreLookup, prepareShowcaseBangumiGenres } from '
 import type { BangumiGenrePublication } from './showcase-bangumi-genres.ts';
 import {
   createShowcaseBangumiGameEnvironmentLookup,
+  parseBangumiGameEnvironmentBindings,
   mergeIdentifierResolutions,
   type BangumiGameEnvironmentBinding,
 } from './showcase-bangumi-game-environment.ts';
@@ -3305,6 +3306,7 @@ export async function runCrossMediaSeedCli(
   const optionalFlags = [
     '--bangumi-character-bindings',
     '--bangumi-game-genre-bindings',
+    '--bangumi-game-environment-bindings',
     '--vndb-public-tag-bindings',
     '--showcase-state',
     '--vndb-credit-bindings',
@@ -3328,7 +3330,7 @@ export async function runCrossMediaSeedCli(
     process.stdout.write(
       'Usage: bun scripts/datasets/cross-media-seed.ts ' +
         requiredFlags.map((flag) => flag + ' <value>').join(' ') +
-        ' [--bangumi-character-bindings <json>] [--bangumi-game-genre-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>] [--vndb-release-state-bindings <json>]\n',
+        ' [--bangumi-character-bindings <json>] [--bangumi-game-genre-bindings <json>] [--bangumi-game-environment-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>] [--vndb-release-state-bindings <json>]\n',
     );
     return undefined;
   }
@@ -3380,6 +3382,9 @@ export async function runCrossMediaSeedCli(
   const characterBindingsPath = values.has('--bangumi-character-bindings')
     ? resolve(values.get('--bangumi-character-bindings')!)
     : undefined;
+  const gameEnvironmentBindingsPath = values.has('--bangumi-game-environment-bindings')
+    ? resolve(values.get('--bangumi-game-environment-bindings')!)
+    : undefined;
   const gameGenreBindingsPath = values.has('--bangumi-game-genre-bindings')
     ? resolve(values.get('--bangumi-game-genre-bindings')!)
     : undefined;
@@ -3413,6 +3418,7 @@ export async function runCrossMediaSeedCli(
   const seedFiles = [
     characterBindingsPath,
     gameGenreBindingsPath,
+    gameEnvironmentBindingsPath,
     tagBindingsPath,
     creditBindingsPath,
     vocabularyPath,
@@ -3435,6 +3441,12 @@ export async function runCrossMediaSeedCli(
     const bytes = await readFile(characterBindingsPath);
     ensure(bytes.byteLength <= 256 * 1024, 'Bangumi character bindings exceed the configuration limit');
     characterBindings = JSON.parse(bytes.toString('utf8')) as SourceVocabularyBindings;
+  }
+  let gameEnvironmentBindings: readonly BangumiGameEnvironmentBinding[] | undefined;
+  if (gameEnvironmentBindingsPath) {
+    const bytes = await readFile(gameEnvironmentBindingsPath);
+    ensure(bytes.byteLength <= 64 * 1024, 'Bangumi Game environment bindings exceed the configuration limit');
+    gameEnvironmentBindings = parseBangumiGameEnvironmentBindings(JSON.parse(bytes.toString('utf8')) as unknown);
   }
   let gameGenreBindings: BangumiGameGenreBindings | undefined;
   if (gameGenreBindingsPath) {
@@ -3618,6 +3630,37 @@ export async function runCrossMediaSeedCli(
       plan = await acquireBangumiPersonCareerSources(plan, { journal });
       plan = await acquireBangumiCoverSources(plan, { journal });
     }
+    const seedExtras = (references = vndbCreditReferences): CrossMediaSeedExtras => ({
+      ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
+      ...(references ? { vndbCreditReferences: references } : {}),
+      vndbCharacterProfileBindings: characterProfileBindings,
+      ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
+      ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
+      ...(gameGenreBindings ? { bangumiGameGenreBindings: gameGenreBindings } : {}),
+      ...(gameEnvironmentBindings ? { bangumiGameEnvironment: { bindings: gameEnvironmentBindings } } : {}),
+      bangumiGenrePort: importPort,
+      ...(journal && publicClient
+        ? {
+            readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+            prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
+              const prepared = await prepareBangumiCreatorCreditBindings({
+                plan,
+                result: baseResult,
+                drafts,
+                port,
+                journal,
+                review: importPort,
+                publicClient,
+                ...(priorShowcase ? { prior: priorShowcase } : {}),
+                subjectTypes: [2, 4],
+                read,
+              });
+              creditResolution = prepared;
+              return prepared;
+            },
+          }
+        : {}),
+    });
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({
       tables: input,
@@ -3629,36 +3672,7 @@ export async function runCrossMediaSeedCli(
       ...(vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length
         ? { groups: [...(vndbReleaseStateBindings?.groups ?? []), ...releaseClassificationPreparation.groups] }
         : {}),
-      extras: {
-        ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
-        ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
-        vndbCharacterProfileBindings: characterProfileBindings,
-        ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
-        ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
-        ...(gameGenreBindings ? { bangumiGameGenreBindings: gameGenreBindings } : {}),
-        bangumiGenrePort: importPort,
-        ...(journal && publicClient
-          ? {
-              readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
-              prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
-                const prepared = await prepareBangumiCreatorCreditBindings({
-                  plan,
-                  result: baseResult,
-                  drafts,
-                  port,
-                  journal,
-                  review: importPort,
-                  publicClient,
-                  ...(priorShowcase ? { prior: priorShowcase } : {}),
-                  subjectTypes: [2, 4],
-                  read,
-                });
-                creditResolution = prepared;
-                return prepared;
-              },
-            }
-          : {}),
-      },
+      extras: seedExtras(),
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
     let releaseClassificationRequirements = releaseClassificationPreparation.requirements;
@@ -3724,35 +3738,7 @@ export async function runCrossMediaSeedCli(
           bindings: releaseContext.bindings,
           destination: { origin: api },
           ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
-          extras: {
-            ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
-            ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
-            vndbCharacterProfileBindings: characterProfileBindings,
-            ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
-            ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
-            bangumiGenrePort: importPort,
-            ...(journal && publicClient
-              ? {
-                  readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
-                  prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
-                    const prepared = await prepareBangumiCreatorCreditBindings({
-                      plan,
-                      result: baseResult,
-                      drafts,
-                      port,
-                      journal,
-                      review: importPort,
-                      publicClient,
-                      ...(priorShowcase ? { prior: priorShowcase } : {}),
-                      subjectTypes: [2, 4],
-                      read,
-                    });
-                    creditResolution = prepared;
-                    return prepared;
-                  },
-                }
-              : {}),
-          },
+          extras: seedExtras(),
           ...(characterBindings === undefined ? {} : { characterBindings }),
         });
       }
@@ -4049,35 +4035,7 @@ export async function runCrossMediaSeedCli(
         bindings: releaseContext.bindings,
         destination: { origin: api },
         ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
-        extras: {
-          ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
-          ...(currentVndbCreditReferences ? { vndbCreditReferences: currentVndbCreditReferences } : {}),
-          vndbCharacterProfileBindings: characterProfileBindings,
-          ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
-          ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
-          bangumiGenrePort: importPort,
-          ...(journal && publicClient
-            ? {
-                readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
-                prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
-                  const prepared = await prepareBangumiCreatorCreditBindings({
-                    plan,
-                    result: baseResult,
-                    drafts,
-                    port,
-                    journal,
-                    review: importPort,
-                    publicClient,
-                    ...(priorShowcase ? { prior: priorShowcase } : {}),
-                    subjectTypes: [2, 4],
-                    read,
-                  });
-                  creditResolution = prepared;
-                  return prepared;
-                },
-              }
-            : {}),
-        },
+        extras: seedExtras(currentVndbCreditReferences),
         characterBindings: nextCharacterBindings,
       });
     };

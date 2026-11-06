@@ -548,3 +548,11 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     sourceMetadata,
   };
 }
+
+export {
+  bangumiGameEnvironment,
+  bangumiGameEnvironmentForeignHost,
+  bangumiGameEnvironmentReferenceKey,
+  bangumiGameEnvironmentSourceHost,
+  type BangumiGameEnvironmentProperty,
+} from './bangumi-game-environment.ts';

@@ -105,7 +105,7 @@ function port(commands: BatchCommand[]) {
 }
 
 test('Bangumi Game publication keeps only the admitted infobox date through ordinary and selected-family registrations', async () => {
-  expect(converter_revision).toBe('bangumi@15');
+  expect(converter_revision).toBe('bangumi@16');
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-game-publication-'));
   const path = join(directory, 'state.sqlite');
   const commands: BatchCommand[] = [];
