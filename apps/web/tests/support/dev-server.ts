@@ -1,7 +1,14 @@
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
-import { cleanupAll, ownBunProcess, withCleanup } from './server-custody.ts';
+import {
+  cleanupAll,
+  directChildExitCode,
+  liveProcessGroupMemberIds,
+  ownBunProcess,
+  processHasExited,
+  withCleanup,
+} from './server-custody.ts';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
@@ -79,8 +86,18 @@ export async function startDevServer(
       ready();
     }
   };
-  let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
-  let custody: ReturnType<typeof ownBunProcess>;
+  let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | undefined;
+  let custody: ReturnType<typeof ownBunProcess> | undefined;
+  const captured = () => {
+    const pid = child?.pid;
+    const members = pid === undefined ? [] : liveProcessGroupMemberIds(pid);
+    const exit = child === undefined ? undefined : (child.exitCode ?? (pid === undefined ? undefined : directChildExitCode(pid)));
+    return [
+      `$ ${command.join(' ')}`,
+      `pid=${pid ?? 'none'} exit=${exit ?? 'running'} live=${members.join(',') || 'none'}`,
+      custody?.diagnostics() || output,
+    ].join('\n');
+  };
   try {
     const childEnvironment: NodeJS.ProcessEnv = {
       ...process.env,
@@ -100,13 +117,38 @@ export async function startDevServer(
     custody = ownBunProcess(child, {
       label: 'Vite dev server',
       onOutput: keep,
+      termGraceMs: 2_000,
+      settleTimeoutMs: 5_000,
     });
   } catch (error) {
     throw new Error(
-      `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+      `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${captured()}`,
     );
   }
-  const exited = child.exited.then((code) => new Error(`dev server exited with ${code}`));
+  if (!child || !custody) throw new Error(`dev server ready failed for ${path}; child was not started\n${captured()}`);
+  const pollMs = options.pollIntervalMs ?? 25;
+  const started = child;
+  const processCustody = custody;
+  const exited = Promise.race([
+    started.exited.then((code) => new Error(`dev server exited with ${code}`)),
+    new Promise<Error>((resolve) => {
+      const tick = () => {
+        if (started.exitCode !== null) {
+          resolve(new Error(`dev server exited with ${started.exitCode}`));
+          return;
+        }
+        if (started.pid !== undefined && processHasExited(started.pid)) {
+          const code = directChildExitCode(started.pid);
+          if (code !== undefined) {
+            resolve(new Error(`dev server exited with ${code}`));
+            return;
+          }
+        }
+        setTimeout(tick, pollMs);
+      };
+      tick();
+    }),
+  ]);
   const exitFailure = exited.then((error) => {
     throw error;
   });
@@ -119,7 +161,7 @@ export async function startDevServer(
       options.signal?.removeEventListener('abort', abortServer);
       await cleanupAll([
         { label: 'dev-server browser', run: () => browser?.close(), timeoutMs: 5000 },
-        { label: 'dev-server process group', run: () => custody.close(), timeoutMs: 7000 },
+        { label: 'dev-server process group', run: () => processCustody.close(), timeoutMs: 16_000 },
       ]);
     })());
   abortServer = () => {
@@ -233,17 +275,18 @@ export async function startDevServer(
     return {
       origin,
       stop,
-      diagnostics: () => (abortCleanupError ? `${output}\nCleanup error: ${String(abortCleanupError)}` : output),
+      diagnostics: () =>
+        abortCleanupError ? `${captured()}\nCleanup error: ${String(abortCleanupError)}` : captured(),
     };
   } catch (error) {
     const elapsed = now() - phaseStart;
     const primary = new Error(
-      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${captured()}`,
       { cause: error },
     );
     await withCleanup(async () => {
       throw primary;
-    }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 8000 }]);
+    }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 18_000 }]);
     throw primary;
   }
 }

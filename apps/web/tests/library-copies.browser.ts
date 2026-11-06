@@ -349,6 +349,15 @@ const fake = Bun.serve({
         },
       });
     }
+    if (request.method === 'GET' && url.pathname === '/v1/copy-loans') {
+      return json({
+        filter: url.searchParams.get('filter') === 'history' ? 'history' : 'open',
+        boundary: { calendar: 'gregorian', zone: 'UTC', today: '2030-01-01' },
+        generation: 1,
+        items: [],
+        nextCursor: null,
+      });
+    }
     if (!copyRoute) return json(problem(404, 'not_found'), 404, true);
     const key = request.headers.get('idempotency-key');
     const writing = request.method === 'POST' || request.method === 'PATCH' || request.method === 'DELETE';

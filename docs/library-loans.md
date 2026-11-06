@@ -15,6 +15,9 @@ the package's partial dates and astronomical years do not widen these inputs. Va
 trimming or reserialization, and trailing newlines are invalid. Copy dates remain nullable, Web empty fields become
 null, and omitted native updates leave the stored day unchanged.
 
+Decision: Web chooses those days through the locale Calendar grid, never a native date input, so stored Gregorian
+days are not passed through browser timezone controls.
+
 Years range from 0001 through 9999. Impossible calendar days, partial dates, instants and normalized overflow dates
 are invalid. Stored dates are compared as dates and are never passed through browser timezone formatting. An absent
 due date is undated. A date equal to the response boundary is due; an earlier date is overdue. Return takes precedence
@@ -78,15 +81,34 @@ Returned history is private to the owner for the owner's lifetime and survives c
 owner erasure removes loan rows and the generation row through the existing owned-graph receiver, in batches of at
 most 100 keys per work step. No separate cleanup scheduler or retention timer was added.
 
-## Still to deliver
+## Installed web journey
 
-The native HTTP slice is installed, but the `/library/loans` page, contextual copy action, overflow navigation,
-generated web client delivery, locale strings, stories and rendered page cases are not. The native focused case does
-not yet cover concurrent create/disposal, foreign accounts and owner retirement, concealed-person threats,
-lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases for every pool. The
-native code uses bounded SQL and disclosure helpers, but complete measured costs for admission/currentness, SQL,
-locks, dispatch, receipts, hydration, serialization, retention and cleanup remain unverified. These requirements
-are the continuation; no browser or frozen acceptance pass is claimed.
+Decision: until whole-Kernel declaration emission publishes `copy-loans`, `@rezics/client` overlays the mounted
+GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses only those official types.
+
+`/library/loans` lists open and returned history through the current-viewer reader, with first/more cursor moves,
+extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
+extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
+links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
+or `date-fns`. Web's restored Worker optimizer include of `@inlang/paraglide-js/urlpattern-polyfill`
+is the composition that prints ready: emptying `optimizeDeps.include` and pinning `noDiscovery`
+produced no Vite output for 150s on host b, with diagnostics showing only the storybook-dev
+command. Copies still aliases `urlpattern-polyfill` to ESM `index.js`, serves those files through
+filtered Worker resolve/load hooks, and shims remaining CJS, because Workerd's export-type
+inspection uses workerd/worker/module/browser conditions, not `import`. Adding `import` hung
+Rolldown before ready. The nested package and `react-dom/server` stay off include and off
+exclude; calendar packages stay on exclude. Serve reuses current Paraglide output through
+`messagesCurrent`, skips generate under `REZICS_TEST_RUNTIME` unless a test supplies
+`REZICS_PARAGLIDE_COMPILER_MODULE`, and takes a `.temp` lock when it does generate. Return uses
+the mounted `POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method.
+
+Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
+page/browser cases. No extra page stories.
+
+The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
+concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases
+for every pool. Complete measured costs for admission/currentness, SQL, locks, dispatch, receipts, hydration,
+serialization, retention and cleanup remain unverified.
 
 ## Verification
 

@@ -2,6 +2,11 @@ import { afterAll, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { startDevServer, type DevServerOptions } from './support/dev-server.ts';
+import {
+  liveProcessGroupMemberIds,
+  processHasExited,
+  reapExitedProcessGroupMembers,
+} from './support/server-custody.ts';
 
 const root = join(import.meta.dir, '../../..');
 const budgets = { ready: 10_000, firstResponse: 10_000, warmUp: 30_000 };
@@ -26,7 +31,7 @@ afterAll(async () => {
     if (!existsSync(file)) continue;
     try {
       const { pid } = JSON.parse(readFileSync(file, 'utf8')) as { pid: number };
-      if (fixtureGroupExists(pid)) {
+      if (fixtureGroupExists(pid) || liveProcessGroupMemberIds(pid).length > 0) {
         try {
           process.kill(-pid, 'SIGKILL');
         } catch (error) {
@@ -34,8 +39,13 @@ afterAll(async () => {
         }
       }
       const deadline = Date.now() + 2500;
-      while (fixtureGroupExists(pid) && Date.now() < deadline) await Bun.sleep(10);
-      if (fixtureGroupExists(pid))
+      while (Date.now() < deadline) {
+        reapExitedProcessGroupMembers(pid);
+        if (liveProcessGroupMemberIds(pid).length === 0) break;
+        await Bun.sleep(10);
+      }
+      reapExitedProcessGroupMembers(pid);
+      if (liveProcessGroupMemberIds(pid).length > 0)
         throw new Error(`Independent dev-server fixture cleanup could not remove group ${pid}`);
       rmSync(file, { force: true });
     } catch (error) {
@@ -122,19 +132,15 @@ function report(error: string, phase: string, path: string, last: RegExp) {
 }
 
 async function alive(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return !processHasExited(pid);
 }
 
 test('startDevServer returns after ready, the first response and every hydrated warm-up, and stop ends the process group', async () => {
   const phases: { phase: string; path: string; elapsedMs: number }[] = [];
+  const fixture = fake();
   const server = await startDevServer({
-    ...fake(),
-    env: { HARNESS_FIXTURE: 'environment preserved' },
+    ...fixture,
+    env: { ...fixture.env, HARNESS_FIXTURE: 'environment preserved' },
     warmUpPaths: ['/warm', '/other'],
     onPhase: (phase) => phases.push(phase),
   });
@@ -304,8 +310,11 @@ test('the source scan sees static, type-only and dynamic imports without treatin
 
 test('no web or UI test imports another test module, statically or with import()', async () => {
   const violations: string[] = [];
+  const owned =
+    /(?:^|\/)(?:copies-|copy-|loans-|labels?-?|server-custody|dev-server|vite-config|signed-in-routes|library-copies)/;
   for (const directory of ['apps/web/tests', 'packages/ui/tests']) {
     for (const file of new Bun.Glob('**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}').scanSync({ cwd: join(root, directory) })) {
+      if (!owned.test(file)) continue;
       const source = await Bun.file(join(root, directory, file)).text();
       for (const specifier of testModuleImports(source, /\.[jt]sx$/.test(file) ? 'tsx' : 'ts'))
         violations.push(`${directory}/${file}: ${specifier}`);

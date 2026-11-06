@@ -1,4 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
+import { dlopen, FFIType, ptr } from 'bun:ffi';
 
 export type ProcessOutputStream = 'stdout' | 'stderr';
 export type BunProcessStreams = {
@@ -87,13 +89,167 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-async function waitForGroupExit(pid: number, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
+type ProcessIdentity = { state: string; ppid: number; pgrp: number };
+
+function processIdentity(pid: number): ProcessIdentity | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const closeParen = stat.lastIndexOf(')');
+    if (closeParen === -1) return undefined;
+    const rest = stat.slice(closeParen + 2).split(' ');
+    const state = rest[0];
+    const ppid = Number(rest[1]);
+    const pgrp = Number(rest[2]);
+    if (!state || !Number.isInteger(ppid) || ppid < 0 || !Number.isInteger(pgrp) || pgrp <= 0) return undefined;
+    return { state, ppid, pgrp };
+  } catch {
+    return undefined;
+  }
+}
+
+function readProcessTable(): Map<number, ProcessIdentity> {
+  const table = new Map<number, ProcessIdentity>();
+  try {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^[0-9]+$/.test(entry)) continue;
+      const pid = Number(entry);
+      const identity = processIdentity(pid);
+      if (identity) table.set(pid, identity);
+    }
+  } catch {
+    return table;
+  }
+  return table;
+}
+
+/** Group members plus descendants of the spawned leader, including children that left the group. */
+export function relatedProcessIds(rootPid: number, table = readProcessTable()): number[] {
+  const related = new Set<number>([rootPid]);
+  for (const [pid, identity] of table) if (identity.pgrp === rootPid) related.add(pid);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [pid, identity] of table) {
+      if (related.has(pid) || !related.has(identity.ppid)) continue;
+      related.add(pid);
+      grew = true;
+    }
+  }
+  return [...related];
+}
+
+const WNOHANG = 1;
+let waitpidSymbol:
+  | { waitpid(pid: number, status: number, options: number): number }
+  | undefined
+  | false;
+
+function waitpidNoHang(pid: number): number | undefined {
+  if (waitpidSymbol === false) return undefined;
+  try {
+    if (waitpidSymbol === undefined) {
+      waitpidSymbol = dlopen('libc.so.6', {
+        waitpid: {
+          args: [FFIType.i32, FFIType.pointer, FFIType.i32],
+          returns: FFIType.i32,
+        },
+      }).symbols;
+    }
+    const status = new Int32Array(1);
+    const result = waitpidSymbol.waitpid(pid, ptr(status), WNOHANG);
+    if (result <= 0) return undefined;
+    const raw = status[0] ?? 0;
+    if ((raw & 0x7f) === 0) return (raw >> 8) & 0xff;
+    return undefined;
+  } catch {
+    waitpidSymbol = false;
+    return undefined;
+  }
+}
+
+/** Reap a direct child and return its exit code when this process is the parent. */
+export function directChildExitCode(pid: number): number | undefined {
+  const identity = processIdentity(pid);
+  if (!identity || identity.ppid !== process.pid) return undefined;
+  return waitpidNoHang(pid);
+}
+
+/** Live members of a process group, excluding unreaped zombies that still answer kill(-pgid, 0). */
+export function liveProcessGroupMemberIds(pgid: number): number[] {
+  const table = readProcessTable();
+  if (table.size === 0) return processGroupExists(pgid) ? [pgid] : [];
+  return relatedProcessIds(pgid, table).filter((pid) => {
+    const identity = table.get(pid);
+    return identity !== undefined && identity.state !== 'Z';
+  });
+}
+
+function liveProcessGroup(pgid: number): boolean {
+  return liveProcessGroupMemberIds(pgid).length > 0;
+}
+
+/** Reap zombies in the group that this process adopted after the original parent exited. */
+export function reapExitedProcessGroupMembers(pgid: number): void {
+  const table = readProcessTable();
+  for (const pid of relatedProcessIds(pgid, table)) {
+    const identity = table.get(pid);
+    if (!identity || identity.state !== 'Z' || identity.ppid !== process.pid) continue;
+    waitpidNoHang(pid);
+  }
+}
+
+function groupGone(pgid: number): boolean {
+  reapExitedProcessGroupMembers(pgid);
+  // Unreaped zombies still answer kill(-pgid, 0). Settlement follows live members.
+  return !liveProcessGroup(pgid);
+}
+
+/** True when the pid is absent from /proc or is already a zombie. */
+export function processHasExited(pid: number): boolean {
+  const identity = processIdentity(pid);
+  return identity === undefined || identity.state === 'Z';
+}
+
+function observeLeaderExit(pid: number | undefined, observed: Promise<void>, pollIntervalMs: number): Promise<void> {
+  if (pid === undefined) return observed;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    void observed.then(finish, finish);
+    const tick = () => {
+      if (settled) return;
+      if (processHasExited(pid)) {
+        directChildExitCode(pid);
+        finish();
+        return;
+      }
+      setTimeout(tick, pollIntervalMs);
+    };
+    tick();
+  });
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    if (!processGroupExists(pid)) return true;
+    if (predicate()) return true;
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return false;
+    if (remaining <= 0) return predicate();
     await wait(Math.min(pollIntervalMs, remaining));
+  }
+}
+
+async function completedWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
+  if (timeoutMs <= 0) return false;
+  try {
+    await bounded(promise, timeoutMs, 'completion');
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -132,30 +288,55 @@ function makeProcessCustody(
     let groupSettled = pid === undefined;
     let childSettled = false;
     let outputIsSettled = false;
+    const owned = new Set<number>(pid === undefined ? [] : relatedProcessIds(pid));
+    const refreshOwned = () => {
+      if (pid === undefined) return;
+      for (const member of relatedProcessIds(pid)) owned.add(member);
+    };
+    const liveOwned = () => {
+      refreshOwned();
+      return [...owned].filter((member) => {
+        if (member === process.pid) return false;
+        const identity = processIdentity(member);
+        return identity !== undefined && identity.state !== 'Z';
+      });
+    };
     const signalGroup = (signal: NodeJS.Signals) => {
       if (pid === undefined) return;
+      const members = liveOwned();
       try {
         process.kill(-pid, signal);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
       }
+      for (const member of members) {
+        try {
+          process.kill(member, signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
+        }
+      }
     };
 
     if (pid !== undefined) {
+      const graceDeadline = Date.now() + termGraceMs;
       signalGroup('SIGTERM');
-      try {
-        groupSettled = await waitForGroupExit(pid, termGraceMs, pollIntervalMs);
-      } catch (error) {
-        cleanupErrors.push(error);
+      childSettled = await completedWithin(childCompletion, termGraceMs);
+      if (!childSettled) directChildExitCode(pid);
+      const remainingGrace = graceDeadline - Date.now();
+      if (remainingGrace > 0 && liveOwned().length > 0) {
+        await waitUntil(() => groupGone(pid) && liveOwned().length === 0, remainingGrace, pollIntervalMs);
       }
-      if (!groupSettled) {
+      if (liveOwned().length > 0) {
         signalGroup('SIGKILL');
-        try {
-          groupSettled = await waitForGroupExit(pid, settleTimeoutMs, pollIntervalMs);
-        } catch (error) {
-          cleanupErrors.push(error);
-        }
-        if (!groupSettled) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
+        if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
+        directChildExitCode(pid);
+        const gone = await waitUntil(() => groupGone(pid) && liveOwned().length === 0, settleTimeoutMs, pollIntervalMs);
+        if (!gone) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
+      }
+      groupSettled = groupGone(pid) && liveOwned().length === 0;
+      if (!groupSettled) {
+        cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
       }
     }
 
@@ -210,15 +391,19 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
   const outputCompletion = Promise.all([drain(streams.stdout, 'stdout'), drain(streams.stderr, 'stderr')]).then(
     () => undefined,
   );
-  const childCompletion = Promise.resolve(child.exited).then(
-    () => undefined,
-    (error) => {
-      errors.push(
-        new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
-          cause: error,
-        }),
-      );
-    },
+  const childCompletion = observeLeaderExit(
+    child.pid,
+    Promise.resolve(child.exited).then(
+      () => undefined,
+      (error) => {
+        errors.push(
+          new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
+            cause: error,
+          }),
+        );
+      },
+    ),
+    options.pollIntervalMs ?? 25,
   );
   void outputCompletion.catch(() => {});
   void childCompletion.catch(() => {});
@@ -304,9 +489,11 @@ export async function withCleanup<T>(
 
   const cleanupErrors = await collectCleanupErrors(actions, options);
   if (failed && cleanupErrors.length > 0)
-    throw new AggregateError([primary, ...cleanupErrors], 'The operation and its cleanup both failed', {
-      cause: primary,
-    });
+    throw new AggregateError(
+      [primary, ...cleanupErrors],
+      `${errorText(primary)}; The operation and its cleanup both failed`,
+      { cause: primary },
+    );
   if (failed) throw primary;
   if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, 'One or more cleanup actions failed');
   return value as T;
