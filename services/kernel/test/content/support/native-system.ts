@@ -463,19 +463,16 @@ async function createNativeContentSystemWithOptions(
       await assertSetupResponse(await kernel.handle(request), request, status);
     };
     // Parent creation permissions only. Product resource ownership/standing
-    // remains the responsibility of each real creation command.
-    for (const actor of [author, other, moderator, suspended]) {
-      await command(
-        '/v1/grants',
-        {
-          resource: PLATFORM_RESOURCE,
-          subject: { kind: 'account', id: actor.actor.accountId },
-          actions: ['space:create', 'realm:create', 'subject:create'],
-          valid: '(,)',
-        },
-        201,
-      );
-    }
+    // remains the responsibility of each real creation command. The governance
+    // grant command denies these creation actions on the Global Context, so the
+    // fixture installs the same grant rows directly, as the notification driver permits.
+    for (const actor of [author, other, moderator, suspended])
+      for (const action of ['space:create', 'realm:create', 'subject:create'])
+        await pool.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           VALUES ($1,$2,$3,$4,'(,)',$3)`,
+          [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, actor.actor.accountId, action],
+        );
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 
     const deletion: AccountDeletionRuntime = {
