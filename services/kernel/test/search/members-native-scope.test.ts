@@ -27,6 +27,7 @@ const definition = (sort: 'id' | 'ordinal', filter: FilterDocument = presence): 
   filter: admitFilter(parseFilter(filter), bundledRelease, { owner: true, saved: true }),
   sort,
   release: { digest: bundledDigest, value: bundledRelease },
+  source: { kind: 'owner' },
 });
 
 /** One finite original, explicitly settled across prepare, prefixes, evaluation and replay. */

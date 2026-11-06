@@ -214,6 +214,7 @@ export function definition(ordinal = 0): PreparationDefinition {
     filter: admitFilter(parseFilter({ type: { in: selected } }), bundledRelease),
     sort: 'id',
     release: { digest: bundledDigest, value: bundledRelease },
+    source: { kind: 'owner' },
   };
 }
 
