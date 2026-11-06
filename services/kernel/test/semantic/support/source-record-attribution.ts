@@ -9,6 +9,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import { createRealAccess } from '../real-access.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { seed, type GrowthDatabase } from '../../support/growth.ts';
 import { itemFacts } from '../../../src/semantic/item.ts';
 import { labelOrderKey } from '../../../src/semantic/link-keys.ts';
@@ -105,6 +106,8 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     writeRate: real.writeRate,
     routeKey,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(114)]]) },
+    receiptKeys: testReceiptKeys(),
+    requestDeadlineMs: 30_000,
   });
   type Persona = keyof typeof accounts;
   async function call(

@@ -190,6 +190,25 @@ nativeTest(
     await acceptRegion.waitFor({ state: 'visible' });
     await acceptRegion.getByRole('button', { name: 'Accept suggestion', exact: true }).click();
     await bobPage.getByRole('status').filter({ hasText: 'Suggestion accepted' }).waitFor({ state: 'visible' });
+    await bobPage
+      .locator('[data-candidate-item]')
+      .filter({ hasText: 'Korean' })
+      .getByRole('button', { name: 'Review suggestion', exact: true })
+      .click();
+    await bobPage.getByRole('button', { name: 'Reject suggestion', exact: true }).last().click();
+    const rejectRegion = bobPage.locator('section[aria-labelledby]').filter({ hasText: 'Confirm: Reject suggestion' });
+    await rejectRegion.waitFor({ state: 'visible' });
+    await rejectRegion.getByRole('button', { name: 'Reject suggestion', exact: true }).click();
+    await bobPage.getByRole('status').filter({ hasText: 'Suggestion rejected' }).waitFor({ state: 'visible' });
+    const publicAfterReject = (
+      await json<{ subject: Parameters<typeof publicLanguages>[0] }>(
+        await stack.kernel(`/v1/subjects/${competing.id}`),
+        200,
+        'public after reject before adopt',
+      )
+    ).subject;
+    expect(publicLanguages(publicAfterReject)).toEqual([]);
+    expect(JSON.stringify(publicAfterReject)).not.toContain(competing.korean.id);
     expect(
       publicLanguages(
         (
@@ -230,7 +249,7 @@ nativeTest(
       ).subject,
     );
     expect(publicAfter).toEqual([{ id: competing.japanese.id, rank: 'preferred', content: 'ja' }]);
-    const listed = await json<{ candidates: { id: string; decision: string | null }[] }>(
+    const listed = await json<{ candidates: { id: string; decision: string | null; rank: string | null }[] }>(
       await stack.kernel(
         `/v1/subjects/${competing.id}/candidates?property=${encodeURIComponent(language)}&context=${globalContext}&limit=20`,
         {},
@@ -240,7 +259,9 @@ nativeTest(
       'list competing candidates',
     );
     expect(listed.candidates.find((item) => item.id === competing.japanese.id)?.decision).toBe('accepted');
-    expect(listed.candidates.find((item) => item.id === competing.korean.id)?.decision ?? null).toBeNull();
+    expect(listed.candidates.find((item) => item.id === competing.japanese.id)?.rank).toBe('preferred');
+    expect(listed.candidates.find((item) => item.id === competing.korean.id)?.decision).toBe('rejected');
+    expect(listed.candidates.find((item) => item.id === competing.korean.id)?.rank).toBe('deprecated');
 
     const anonymous = await (await auth.context('anonymous')).newPage();
     anonymous.setDefaultTimeout(30_000);

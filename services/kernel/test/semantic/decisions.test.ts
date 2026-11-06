@@ -9,6 +9,7 @@ import { createRealAccess } from './real-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -50,8 +51,10 @@ const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
+  requestDeadlineMs: 30_000,
 });
 const projection = linkProjection(pool);
 async function catchUpLinks(id: string): Promise<void> {

@@ -242,6 +242,7 @@ async function startDriver(
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
       receiptKeys: testReceiptKeys(),
+      requestDeadlineMs: 30_000,
       pool: runtimePool,
       ...(options.clock ? { clock: options.clock } : {}),
       routeKey,

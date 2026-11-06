@@ -451,24 +451,23 @@ test('cited competing proposals complete through acceptance, adoption and indepe
 
   const revisions = await get(null, `/v1/subjects/${created.id}/revisions?limit=20`);
   expect(revisions.status).toBe(200);
-  const kinds = (revisions.body as { revisions: { revision: number; kind: string }[] }).revisions.map(
-    (row) => row.kind,
+  const listedRevisions = (revisions.body as { revisions: { revision: number; kind: string }[] }).revisions;
+  expect(listedRevisions.map((row) => row.kind)).toEqual(
+    expect.arrayContaining(['create', 'propose', 'accept', 'reject', 'adopt']),
   );
-  expect(kinds).toEqual(expect.arrayContaining(['record', 'candidate', 'decision', 'adoption']));
   const inspected = await inspectRevisions(created.id);
-  expect(inspected.length).toBeGreaterThanOrEqual(kinds.length);
+  expect(inspected.length).toBeGreaterThanOrEqual(listedRevisions.length);
   expect(new Set(inspected.map((row) => row.partition)).size).toBe(1);
   expect(new Set(inspected.map((row) => row.transactionId)).size).toBe(inspected.length);
-  const adoptionRevision = (revisions.body as { revisions: { revision: number; kind: string }[] }).revisions.find(
-    (row) => row.kind === 'adoption',
+  const adoptRevisions = listedRevisions.filter((row) => row.kind === 'adopt');
+  expect(adoptRevisions.length).toBeGreaterThanOrEqual(1);
+  const adoptionDetails = await Promise.all(
+    adoptRevisions.map((row) => get(null, `/v1/subjects/${created.id}/revisions/${row.revision}`)),
   );
-  expect(adoptionRevision).toBeDefined();
-  const detail = await get(null, `/v1/subjects/${created.id}/revisions/${adoptionRevision!.revision}`);
-  expect(detail.status).toBe(200);
-  expect((detail.body as { change: { kind: string; mode?: string } }).change).toMatchObject({
-    kind: 'adoption',
-    mode: 'replace',
-  });
+  for (const detail of adoptionDetails) expect(detail.status, JSON.stringify(detail.body)).toBe(200);
+  expect(
+    adoptionDetails.map((detail) => (detail.body as { change: { kind: string; mode?: string } }).change),
+  ).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'adoption', mode: 'replace' })]));
 }, 180_000);
 
 test('anonymous, outsider, delegated editor and suspended bearers keep editorial authorization at the native boundary', async () => {
