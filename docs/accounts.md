@@ -151,6 +151,8 @@ profile/verification delivery slices for Web, Accounts and Semantic, not new ide
 released identity coordinator must publish verification and exact reversal; local merge primitives or stored
 verification state alone do not establish the final public-page outcome.
 
+A handle lookup resolves only the account's current spelling from an active claim, and a fenced account exposes no biography or links on public reads.
+
 ### Managed-account detail presentation
 
 Standalone native reads have ten-second decoding deadlines with cancellation. Optional exposure gets two seconds;
