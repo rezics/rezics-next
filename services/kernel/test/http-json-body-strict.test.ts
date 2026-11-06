@@ -4,6 +4,7 @@ import { readExposure } from '../src/access/gates/catalogue.ts';
 import { strictContentSchema } from '../src/content/schemas.ts';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel } from '../src/http/kernel.ts';
+import { createApp } from '../src/http/app.ts';
 import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
 import type { SearchService } from '../src/search/service-scope.ts';
@@ -70,6 +71,38 @@ const detail = {
   'x-exposure': 'public',
   security: [{ bearerAuth: [] }, {}],
 };
+// createKernel compiles its routes at startup, so probe routes mount through its trusted module hook.
+function mountStrictRoutes(app: ReturnType<typeof createApp>): void {
+  app
+    .post('/strict', { body: schema, detail }, ({ body }) => body)
+    .post('/strict-standard', { body: strictContentSchema(schema), detail }, ({ body }) => body)
+    .guard({ body: schema }, (app) => app.post('/strict-guard', { detail }, ({ body }) => body))
+    .post(
+      '/strict-size',
+      {
+        body: schema,
+        detail,
+        parse: () => ({}),
+        transform: () => {
+          throw new ProblemError('content_too_large');
+        },
+      },
+      () => {
+        throw new Error('Unexpected handler call');
+      },
+    )
+    .post('/strict/:id', { body: schema, detail }, ({ body }) => body)
+    .post(customMethod('/strict', 'echo'), { body: schema, detail }, ({ body }) => body)
+    .post(customMethod('/strict/:id', 'echo'), { body: schema, detail }, ({ body }) => body)
+    .use(new Elysia().post('/strict-plugin', { body: schema, detail }, ({ body }) => body))
+    .group('/strict-group', (app) => app.post('/', { body: schema, detail }, ({ body }) => body))
+    .get(
+      '/strict-params/:id',
+      { params: t.Object({ id: t.Integer() }), query: t.Object({ number: t.Number() }), detail },
+      ({ params, query }) => ({ id: params.id, number: query.number }),
+    );
+}
+
 const kernel = createKernel({
   receiptKeys: testReceiptKeys(),
   pool,
@@ -84,34 +117,8 @@ const kernel = createKernel({
     },
   },
   search,
-})
-  .post('/strict', { body: schema, detail }, ({ body }) => body)
-  .post('/strict-standard', { body: strictContentSchema(schema), detail }, ({ body }) => body)
-  .guard({ body: schema }, (app) => app.post('/strict-guard', { detail }, ({ body }) => body))
-  .post(
-    '/strict-size',
-    {
-      body: schema,
-      detail,
-      parse: () => ({}),
-      transform: () => {
-        throw new ProblemError('content_too_large');
-      },
-    },
-    () => {
-      throw new Error('Unexpected handler call');
-    },
-  )
-  .post('/strict/:id', { body: schema, detail }, ({ body }) => body)
-  .post(customMethod('/strict', 'echo'), { body: schema, detail }, ({ body }) => body)
-  .post(customMethod('/strict/:id', 'echo'), { body: schema, detail }, ({ body }) => body)
-  .use(new Elysia().post('/strict-plugin', { body: schema, detail }, ({ body }) => body))
-  .group('/strict-group', (app) => app.post('/', { body: schema, detail }, ({ body }) => body))
-  .get(
-    '/strict-params/:id',
-    { params: t.Object({ id: t.Integer() }), query: t.Object({ number: t.Number() }), detail },
-    ({ params, query }) => ({ id: params.id, number: query.number }),
-  );
+  modules: [mountStrictRoutes],
+});
 
 const routes = [
   '/strict',
