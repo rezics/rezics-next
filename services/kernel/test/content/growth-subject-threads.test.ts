@@ -48,6 +48,7 @@ test('subject thread page stays within its bound as the subject thread index gro
     ]),
   });
   const dependencies = {
+    clock: () => new Date(),
     pool: db.pool,
     access,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },

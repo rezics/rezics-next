@@ -38,7 +38,7 @@ const request = () => ({
   requestId: Bun.randomUUIDv7(),
   deadline: Date.now() + 10000,
 });
-const dependencies = () => ({ pool: db.pool, access });
+const dependencies = () => ({ clock: () => new Date(), pool: db.pool, access });
 const input = (containerId: string) => ({
   containerId,
   purpose: 'post-image' as const,
@@ -188,7 +188,12 @@ test('media reserve reads a remote board on its own native anchor and releases b
   db.pool.on('acquire', acquire);
   db.pool.on('release', release);
   try {
-    const result = await reserveMedia({ pool: db.pool, access }, actor, input(thread), request());
+    const result = await reserveMedia(
+      { clock: () => new Date(), pool: db.pool, access },
+      actor,
+      input(thread),
+      request(),
+    );
     expect(peak).toBe(1);
     expect(held).toBe(0);
     for (const checkout of checkouts) {
@@ -239,7 +244,7 @@ test('media reservation prepares native Realm participation on a max-one pool wi
   const protectedRealm = await realm('protected');
   const deniedParent = await fixture('published', undefined, protectedRealm);
   const realmActor: AccountActor = { ...actor, scopes: [...actor.scopes, 'realm:read', 'realm:participate'] };
-  const realmParticipation = createRealmParticipationCheck({ pool: db.pool, access });
+  const realmParticipation = createRealmParticipationCheck({ clock: () => new Date(), pool: db.pool, access });
   await grant(protectedRealm, 'realm:participate');
 
   let active = 0;

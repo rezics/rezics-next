@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -239,7 +240,7 @@ function writeRate() {
 const context = (request: Request, deadline: number) => ({
   deadline,
   idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
-  requestId: Bun.randomUUIDv7(),
+  requestId: contentRequestId(),
 });
 async function operation<T>(work: () => Promise<T>, denied: 'not_found' | 'forbidden' = 'not_found') {
   try {

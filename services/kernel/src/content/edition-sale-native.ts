@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
-import { createAuthConsentReader, readAuthConsentConfig } from '../access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
@@ -22,13 +22,20 @@ import {
 } from './edition-store.ts';
 import { readEditionInitiator, EDITION_PUBLISH } from './edition-initiator.ts';
 
-import { mountedContentEditionConsent } from './edition-sale-consent.ts';
+/** Trusted composition builds this once from Auth configuration; absent configuration yields no reader. */
+export type ContentEditionConsentReader = CurrentConsentReader;
+export function readContentEditionConsent(
+  env: Readonly<Record<string, string | undefined>>,
+): ContentEditionConsentReader | undefined {
+  const config = readAuthConsentConfig(env);
+  return config === null ? undefined : createAuthConsentReader(config);
+}
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date; readConsent?: CurrentConsentReader }>;
 
 /** Server-only Commerce eligibility port. It never authorizes delivery to a buyer. */
 export function readContentEditionMechanicalSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: Readonly<{ deadline: number }>,
 ): Promise<ContentEditionSaleAuthority | null> {
@@ -98,9 +105,7 @@ async function prepareNativeContentEditionSale(
     )
   ).value;
   if (!publication) throw new AccessUnavailableError('overloaded');
-  const mountedConsent = mountedContentEditionConsent(deps.pool);
-  const config = mountedConsent ? null : readAuthConsentConfig(process.env);
-  const readConsent = mountedConsent ?? (config ? createAuthConsentReader(config) : null);
+  const readConsent = deps.readConsent;
   if (!readConsent) throw new AccessUnavailableError('overloaded');
   const restorer = createInitiatorRestorer({
     pool: deps.pool,
@@ -219,7 +224,7 @@ async function prepareNativeContentEditionSale(
 }
 
 export function readContentEditionSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: ReadContext,
 ): Promise<ContentEditionSaleAuthority | null> {

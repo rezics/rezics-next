@@ -132,7 +132,7 @@ export class RealmMembershipRoleError extends Error {
 export type RealmMembershipDependencies = {
   pool: Pool;
   access: Access;
-  clock?: () => Date;
+  clock: () => Date;
   /** Session key ring shared with HTTP. Authorize denies when it is absent. */
   referenceKeys?: KeyRing;
   /** Restores the initiator of a sealed workflow at every step. Without it, sealed steps fail closed. */
@@ -568,7 +568,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     )
       throw new GrantDeniedError();
     const initiator = loaded.record.initiatorAccountId;
-    const at = (config.clock ?? (() => new Date()))().toISOString();
+    const at = config.clock().toISOString();
     const realm = await withConnection(pool, (client) =>
       readOne(readRealmHead.run(client, { route: realmRouteId, id: seal.realmId, at })),
     );

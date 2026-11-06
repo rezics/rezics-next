@@ -11,6 +11,7 @@ import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticIdentityParticipants } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
+import { startContentApplication } from './composition/content.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
@@ -68,20 +69,35 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
 
 export async function startWorker(
   config: WorkerConfig,
-  modules: readonly WorkModule[] = createKernelWorkModules(
-    createDiscoveryProducerEntry,
-    createKernelRuntimeDefaults,
-    composeSemanticIdentityParticipants,
-  ),
+  modules?: readonly WorkModule[],
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   composeAccessApplication();
   composeWorkApplication();
+  const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
+  const resolvedModules =
+    modules ??
+    createKernelWorkModules(
+      createDiscoveryProducerEntry,
+      createKernelRuntimeDefaults,
+      composeSemanticIdentityParticipants,
+      {
+        fetch: content.application.ambient.fetch,
+        now: content.application.ambient.now,
+        id: content.application.ambient.id,
+      },
+    );
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
-  const pool = config.kernelPool
-    ? await config.kernelPool(config.databaseUrl)
-    : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+  let pool: pg.Pool;
+  try {
+    pool = config.kernelPool
+      ? await config.kernelPool(config.databaseUrl)
+      : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+  } catch (error) {
+    content.stop();
+    throw error;
+  }
   if (receiptKeys) configureReceiptKeys(pool, receiptKeys);
   pool.on('error', () => {});
   let client: Awaited<ReturnType<typeof createWorkClient>>;
@@ -89,6 +105,7 @@ export async function startWorker(
     client = await createWorkClient(config.databaseUrl, pool);
     bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   } catch (error) {
+    content.stop();
     await pool.end();
     throw error;
   }
@@ -112,7 +129,11 @@ export async function startWorker(
         try {
           await client.close();
         } finally {
-          await pool.end();
+          try {
+            content.stop();
+          } finally {
+            await pool.end();
+          }
         }
       }
     })());
@@ -127,7 +148,7 @@ export async function startWorker(
   process.on('SIGTERM', signal);
   try {
     starting = (async () => {
-      work = await composeWork(modules, { ...config, pool, client, env });
+      work = await composeWork(resolvedModules, { ...config, pool, client, env });
       await work.launch();
       relays = startRelays(pool, [effectsRelay(pool, work.effects)]);
     })();

@@ -47,7 +47,7 @@ async function react(
   kind: Parameters<typeof commands.setReaction>[2]['kind'],
 ): Promise<void> {
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     await f.verified(),
     { targetKind, targetId, kind },
     request(),
@@ -96,7 +96,7 @@ async function distractorTemplates() {
   ] as const) {
     const targetId = targets[targetKind];
     const result = await commands.setReaction(
-      { pool: f.db.pool, access: f.access },
+      { clock: () => new Date(), pool: f.db.pool, access: f.access },
       actor,
       { targetKind, targetId, kind },
       request(),
@@ -110,7 +110,12 @@ async function distractorTemplates() {
       identity: principalCommandIdentity(actor),
       shape: await distractorShape(targetId, result.transactionId),
     });
-    await commands.clearReaction({ pool: f.db.pool, access: f.access }, actor, { targetKind, targetId }, request());
+    await commands.clearReaction(
+      { clock: () => new Date(), pool: f.db.pool, access: f.access },
+      actor,
+      { targetKind, targetId },
+      request(),
+    );
   }
   return templates;
 }
@@ -257,7 +262,7 @@ test('the liked page reads current like and love subject reactions in subject id
   for (const [index, id] of subjects.entries()) await react('subject', id, kinds[index]!);
   await react('subject', subjects[1]!, 'laugh');
   await commands.clearReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     await f.verified(),
     { targetKind: 'subject', targetId: subjects[3]! },
     request(),
@@ -348,7 +353,7 @@ test('the liked page never returns other reaction kinds, thread or post targets,
   await react('thread', targets.thread, 'like');
   await react('post', targets.post, 'love');
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     await f.verified(f.managerId),
     { targetKind: 'subject', targetId: unlike, kind: 'love' },
     request(),

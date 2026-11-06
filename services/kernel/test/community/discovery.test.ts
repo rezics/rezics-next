@@ -214,7 +214,7 @@ test('the assigned real current-authorized journey binds its native source while
     };
     await select(imageId);
     const native = await readRealmPresentationImages(
-      { pool: fixture.db.pool, access },
+      { clock: () => new Date(), pool: fixture.db.pool, access },
       {
         realmId,
         avatarMediaId: imageId,

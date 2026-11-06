@@ -88,7 +88,7 @@ beforeAll(async () => {
       fetch: async () => Response.json({ keys: [jwk] }),
     },
   });
-  commands = createCommerceCommands({ pool, access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access });
   for (const id of [operator, seller, buyer, other, suspended])
     await pool.query(
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
@@ -246,7 +246,7 @@ test('offers are created by approved sellers and orders by any active account on
   expect(await footprint()).toEqual(before);
   expect(await commands.readOffer(o.id)).toEqual(o);
   expect(await commands.readOffer(newId(0x2200))).toBeNull();
-  const custom = createCommerceCommands({ pool, access, royaltyBasisPoints: 8500 });
+  const custom = createCommerceCommands({ clock: () => new Date(), pool, access, royaltyBasisPoints: 8500 });
   expect((await custom.createOffer(await actor(seller), body, key())).value.royaltyBasisPoints).toBe(8500);
 });
 

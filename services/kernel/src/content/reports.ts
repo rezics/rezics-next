@@ -98,7 +98,7 @@ export type ReportDependencies = Readonly<{
   pool: Pool;
   access: Access;
   routeKey: Uint8Array;
-  clock?: () => Date;
+  clock: () => Date;
   anonymousVerifier?: TurnstileVerifier;
 }>;
 /** Ephemeral admission credential. Implementations must verify it once and never persist it. */
@@ -256,7 +256,12 @@ async function discloseTarget(
     if (!(await readableSubject(dependencies, target.id, context))) throw new ReportUnavailableError();
     return facts;
   }
-  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  const readers = {
+    pool: dependencies.pool,
+    access: dependencies.access,
+    tokens: tokens(dependencies),
+    clock: dependencies.clock,
+  };
   const disclosed =
     target.kind === 'board'
       ? await readBoard(readers, target.id, context)
@@ -431,7 +436,7 @@ export async function createReport(
     ...identity,
     partition: partitionOf(home.route),
     deadline: context.deadline,
-    ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+    clock: dependencies.clock,
     receipt,
     authorization,
   };
@@ -714,7 +719,12 @@ async function targetAvailability(
     return (await readableCommunityTarget(dependencies, target, context)) ? 'available' : 'unavailable';
   if (target.kind === 'subject')
     return (await readableSubject(dependencies, target.id, context)) ? 'available' : 'unavailable';
-  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  const readers = {
+    pool: dependencies.pool,
+    access: dependencies.access,
+    tokens: tokens(dependencies),
+    clock: dependencies.clock,
+  };
   if (target.kind === 'board') {
     const { value } = await readBoard(readers, target.id, context);
     return value?.availability === 'available' && value.visibility !== 'taken_down' ? 'available' : 'unavailable';
@@ -856,7 +866,12 @@ export async function readReportTargetInspection(
   const target = report.target;
   const facts = await snapshot(dependencies, target.id, context.deadline, (client) => targetFacts(client, target));
   const notAvailable: ReportTargetInspection = { state: 'unavailable', value: null, destination: null };
-  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  const readers = {
+    pool: dependencies.pool,
+    access: dependencies.access,
+    tokens: tokens(dependencies),
+    clock: dependencies.clock,
+  };
   let reportedRevision: ReportTargetInspection = notAvailable;
   if (report.revisionId && (target.kind === 'thread' || target.kind === 'post')) {
     const metadata = await snapshot(dependencies, report.revisionId, context.deadline, (client) =>

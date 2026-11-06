@@ -8,6 +8,8 @@ import { accessCheck, type Access, type AccessClient } from '../request/access.t
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readCandidateDisclosure } from '../semantic/disclosure.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { CONTENT_DOCUMENT_BYTES } from './contract/index.ts';
+import { admitDocumentRead, deadlineElapsed } from './core/index.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
 import { tupleRoute } from './imported-contract.ts';
 import { readImportedField, readImportedFieldBounded, type ImportedFieldView } from './imported-fields.ts';
@@ -15,7 +17,13 @@ import { readAuthoredField, readAuthoredFieldBounded, type AuthoredFieldView } f
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { readFences } from './source-fences.ts';
 
-export type DocumentReadDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
+/** `now` is the wall-clock budget source supplied by the composition; deadlines are compared against it. */
+export type DocumentReadDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  routeKey: Uint8Array;
+  now: () => number;
+}>;
 type DocumentMetadata = Readonly<{
   id: string;
   subjectId: string;
@@ -143,10 +151,13 @@ export async function readDocument(
   const route = routeOf(id);
   if (
     route === null ||
-    !Number.isFinite(context.deadline) ||
-    Date.now() >= context.deadline ||
-    (maxSourceBytes !== undefined &&
-      (!Number.isSafeInteger(maxSourceBytes) || maxSourceBytes < 1 || maxSourceBytes > MAX_DOCUMENT_BYTES))
+    !admitDocumentRead({
+      route,
+      deadline: context.deadline,
+      now: dependencies.now(),
+      maxBytes: CONTENT_DOCUMENT_BYTES,
+      ...(maxSourceBytes === undefined ? {} : { maxSourceBytes }),
+    })
   )
     return null;
   const atHome = <T>(home: number, work: (client: AccessClient) => Promise<T>) =>
@@ -219,7 +230,7 @@ export async function readDocument(
       if (!disclosure?.disclosed || disclosure.security_revision !== semantic.security_revision) return null;
       return current.origin === 'import' ? viewImported(current.row) : viewAuthored(current.row);
     });
-    if (!final.value || Date.now() >= context.deadline) return null;
+    if (!final.value || deadlineElapsed(dependencies.now(), context.deadline)) return null;
     return { document: final.value, anchors: fenceAnchor ? [fenceAnchor, final.anchor] : [final.anchor] };
   } catch (error) {
     if (error instanceof GrantDeniedError || error instanceof RangeError) return null;

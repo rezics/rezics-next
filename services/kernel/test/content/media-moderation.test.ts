@@ -234,7 +234,7 @@ async function fixture(database = { pool, admin }) {
   const authenticate = (id = moderatorId, scoped = true) =>
     access.authenticate(tokens.get(`${id}:${scoped}`)!, { pool: database.pool, deadline: Date.now() + 180_000 });
   const actor = await authenticate();
-  const deps = { pool: database.pool, access, routeKey };
+  const deps = { pool: database.pool, access, routeKey, clock: () => new Date() };
   const execute = (body = input(mediaId), request = context(), identity: Actor = actor) =>
     takedownMedia(deps, identity, body, request);
   return { ...database, mediaId, actor, access, deps, execute, authenticate };

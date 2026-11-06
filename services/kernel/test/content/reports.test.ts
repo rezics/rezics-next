@@ -55,7 +55,13 @@ const context = (idempotencyKey: string = randomUUID()) => ({
   deadline: Date.now() + 30_000,
 });
 const readContext = (actor: Actor) => ({ actor, deadline: Date.now() + 30_000 });
-const deps = (pool = system.database.pool) => ({ pool, access: system.access, routeKey, anonymousVerifier: verifier });
+const deps = (pool = system.database.pool) => ({
+  clock: () => new Date(),
+  pool,
+  access: system.access,
+  routeKey,
+  anonymousVerifier: verifier,
+});
 const resource = (target: ReportTarget) => ({ route: routeOf(target.id)!, id: target.id });
 const grantRanges = new Map<string, string>();
 const grantKey = (target: ReportTarget, actorId: string, action: string) => `${target.id}:${actorId}:${action}`;
@@ -220,7 +226,7 @@ async function fixture() {
   const board: ReportTarget = { kind: 'board', id: createdBoard.id };
   const author = await accountActor(system.actors.author.bearer);
   const created = await createThread(
-    { pool: system.database.pool, access: system.access, routeKey },
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey },
     author,
     {
       boardId: board.id,
@@ -402,10 +408,15 @@ test('missing proof and malformed anonymous possession keys deny; authenticated 
   }
   await expect(createReport(deps(), { kind: 'anonymous' }, f.input, context())).rejects.toThrow();
   await expect(
-    createReport({ pool: system.database.pool, access: system.access, routeKey }, { kind: 'anonymous' }, f.input, {
-      ...context(),
-      botToken: proof(),
-    }),
+    createReport(
+      { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey },
+      { kind: 'anonymous' },
+      f.input,
+      {
+        ...context(),
+        botToken: proof(),
+      },
+    ),
   ).rejects.toThrow();
   const credential = await system.auth.issue({
     accountId: f.author.accountId,
@@ -451,7 +462,7 @@ test('invalid exact revision leaves no partial record and later revisions do not
   ).rejects.toThrow();
   const result = await createReport(deps(), f.author, f.input, context());
   await revisePost(
-    { pool: system.database.pool, access: system.access, routeKey },
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey },
     f.author,
     {
       threadId: f.created.value.threadId,

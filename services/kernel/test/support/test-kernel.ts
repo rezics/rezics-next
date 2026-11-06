@@ -136,7 +136,7 @@ export type TestKernelOptions = TestRuntimeOptions & {
   viewerActionResources?: KernelDependencies['viewerActionResources'];
   requestDeadlineMs?: number;
   workClient?: WorkClient;
-  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
+  content?: ContentRuntime & Partial<Pick<ContentBoardDependencies, 'cursorNow'>>;
   commerce?: CommerceDependencies;
   search?: KernelDependencies['search'];
   reports?: { anonymousVerifier?: NonNullable<ContentRuntime['anonymousVerifier']> };

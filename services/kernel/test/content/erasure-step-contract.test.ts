@@ -14,7 +14,7 @@ import type { Pool } from 'pg';
 
 test('uncalled erasure entry points retain exact native kernel signatures', () => {
   type Erase = (
-    deps: Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>,
+    deps: Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>,
     actor: Actor,
     input: Readonly<{ postId: string; reason: string }>,
     context: Readonly<{ deadline: number; idempotencyKey: string; requestId: string }>,

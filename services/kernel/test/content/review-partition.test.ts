@@ -37,7 +37,7 @@ test('review threads, posts, revisions and vote citations share the author parti
      VALUES ($1, $2, $3, $4, 14, 3, now(), $5)`,
     [authorRoute, actor.accountId, STANDARD_QUESTION_ID, subjectId, newId(authorRoute)],
   );
-  const dependencies = { pool: fixture.pool, access: fixture.access, routeKey };
+  const dependencies = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const created = await createThread(
     dependencies,
     actor,

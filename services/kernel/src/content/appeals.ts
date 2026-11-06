@@ -60,7 +60,7 @@ import threadPage from './page-thread-appeals.sql';
 
 const createdType = 'com.rezics.content.moderation.appeal-created.v1';
 const resolvedType = 'com.rezics.content.moderation.appeal-resolved.v1';
-export type AppealDependencies = { pool: Pool; access: Access; tokens?: KeyRing; clock?: () => Date };
+export type AppealDependencies = { pool: Pool; access: Access; tokens?: KeyRing; clock: () => Date };
 type ReadContext = { actor: Actor; deadline: number };
 const missing = () => new ProblemError('not_found');
 

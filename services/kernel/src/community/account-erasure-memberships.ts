@@ -19,7 +19,7 @@ import status from './account-erasure-memberships-status.sql';
  * that same writer. Pending results retain the locator and its page position.
  */
 export async function eraseAccountRealmOwnership(
-  deps: { pool: Pool; access: Access; clock?: () => Date },
+  deps: { pool: Pool; access: Access; clock: () => Date },
   input: Readonly<{ realmId: string; accountId: string }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<CommandOutcome<RealmErasureSuccessionResult>> {
@@ -55,7 +55,7 @@ const beginning = '00000000-0000-0000-0000-000000000000';
  * supplies that distinction. Keep the locator if this native port is unavailable.
  */
 async function qualifiesForSuccession(
-  deps: { pool: Pool; access: Access; clock?: () => Date },
+  deps: { pool: Pool; access: Access; clock: () => Date },
   input: Readonly<{ realmId: string; accountId: string }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<boolean> {
@@ -70,7 +70,7 @@ async function qualifiesForSuccession(
 }
 
 export async function eraseAccountMembershipsPage(
-  deps: { pool: Pool; access?: Access; clock?: () => Date; deadline?: number },
+  deps: { pool: Pool; access?: Access; clock: () => Date; deadline?: number },
   accountId: string,
   after: MembershipErasureCursor | null,
 ): Promise<{ next: MembershipErasureCursor | null; found: number; pending: number }> {
@@ -94,7 +94,7 @@ export async function eraseAccountMembershipsPage(
   if (!Number.isFinite(deadline)) throw new TypeError('Invalid membership erasure deadline');
   for (const key of keys) {
     if (!access) throw new Error('Membership erasure requires installed worker Access');
-    const native = { pool, access, ...(clock === undefined ? {} : { clock }) };
+    const native = { pool, access, clock };
     const input = { realmId: key.realm_id, accountId };
     if (await qualifiesForSuccession(native, input, { deadline })) {
       const result = await eraseAccountRealmOwnership(native, input, { deadline });

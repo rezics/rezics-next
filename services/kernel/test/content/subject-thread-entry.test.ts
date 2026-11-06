@@ -42,6 +42,7 @@ test('final selected Board observation withholds entry after its read authority 
     ]),
   });
   const dependencies = {
+    clock: () => new Date(),
     pool: db.pool,
     access,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },

@@ -164,7 +164,7 @@ export async function nativeAnchorFixture() {
       maxNetworkRetries: 0,
       clock: () => new Date(),
     });
-    const commands = createCommerceCommands({ pool: db.pool, access: f.access });
+    const commands = createCommerceCommands({ clock: () => new Date(), pool: db.pool, access: f.access });
     const buyer = await f.identity(['order:create', 'order:read']);
     const seller = await f.identity(['offer:create', 'offer:manage']);
     for (const group of ['selling', 'purchases'])

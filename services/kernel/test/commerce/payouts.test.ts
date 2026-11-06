@@ -196,7 +196,7 @@ function transaction(
   };
 }
 async function order(rate = 9000, unitAmountMinor = 1000, buyerAccountId = buyer) {
-  const commands = createCommerceCommands({ pool, access, royaltyBasisPoints: rate });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool, access, royaltyBasisPoints: rate });
   const offer = (
     await commands.createOffer(
       await actor(creator),
@@ -239,7 +239,10 @@ function snapshot(o: Order, transactions: StripeTransaction[], tax = 200): Check
   };
 }
 async function settle(o: Order, transactions: StripeTransaction[], tax = 200, requestKey = key()) {
-  return createCommerceCommands({ pool, access }).applyCheckoutSnapshot(snapshot(o, transactions, tax), requestKey);
+  return createCommerceCommands({ clock: () => new Date(), pool, access }).applyCheckoutSnapshot(
+    snapshot(o, transactions, tax),
+    requestKey,
+  );
 }
 async function effect(orderId: string) {
   const row = (
@@ -422,7 +425,7 @@ test('a later refund goes to its recording UTC month even when the original stat
   const refund = transaction('refund', -100);
   const updated = snapshot(o, [charge, refund]);
   updated.refunds = [{ id: 're_refund', status: 'succeeded', amountMinor: 100 }];
-  await createCommerceCommands({ pool, access }).applyCheckoutSnapshot(updated, key());
+  await createCommerceCommands({ clock: () => new Date(), pool, access }).applyCheckoutSnapshot(updated, key());
   await effect(o.id);
   const all = await statements();
   expect(all).toHaveLength(2);

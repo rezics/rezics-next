@@ -9,7 +9,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import type { ContentReadDependencies } from './reads.ts';
-import { readRealmBoard } from './boards.ts';
+import { readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import type { ModerationDirectoryPage } from './moderation-directory-schemas.ts';
 
 export type ModerationDirectoryItem = Extract<ModerationDirectoryPage, { state: 'ready' }>['items'][number];
@@ -69,7 +69,9 @@ export async function observeNativeModerationScope(
   const id = scope.kind === 'catalogue' ? GLOBAL_CONTEXT : scope.id;
   const route = routeOf(id);
   if (route === null) return null;
-  const first = scope.kind === 'board' ? await readRealmBoard(deps, id, { actor, deadline }) : null;
+  // Board cursors take the domain clock; this observer has no separate cursor operand.
+  const boards: ContentBoardDependencies = { ...deps, cursorNow: () => deps.clock().getTime() };
+  const first = scope.kind === 'board' ? await readRealmBoard(boards, id, { actor, deadline }) : null;
   if (scope.kind === 'board' && (!first?.value || first.value.availability !== 'available')) return null;
   const check = await accessCheck(
     deps.access,
@@ -99,7 +101,7 @@ export async function observeNativeModerationScope(
     };
   // Native disclosure is observed after Access foreign work. Never replace the
   // initial source witness with a newly renamed or reparented source.
-  const final = await readRealmBoard(deps, id, { actor, deadline });
+  const final = await readRealmBoard(boards, id, { actor, deadline });
   const board = final.value;
   if (
     !board ||

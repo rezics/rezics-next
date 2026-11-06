@@ -7,7 +7,7 @@ test('native Subject lists preserve readable Realm identity and withhold changed
   const world = await createReactionRelayBase();
   try {
     const pool = world.system.database.pool;
-    const deps = { pool, access: world.system.access, tokens: world.system.tokenKeys };
+    const deps = { clock: () => new Date(), pool, access: world.system.access, tokens: world.system.tokenKeys };
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 };
     const realmId = world.mainTarget.realmId;
     const path = `/v1/subjects/${world.conceptId}/threads?place=${realmId}&kind=discussion`;

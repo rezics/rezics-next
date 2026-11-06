@@ -34,6 +34,7 @@ import {
   contentWorkWorkflowId,
   subjectReactionMergeWorkflowId,
 } from './work-contract.ts';
+import { admitWorkEventEnvelope } from './core/index.ts';
 
 const authorRequested = 'com.rezics.content.author-erasure.requested.v1';
 const importRequested = 'com.rezics.content.media.import-requested.v1';
@@ -41,28 +42,17 @@ type EnqueueKind = 'image' | 'purge' | 'authorErase' | 'importFromUrl';
 type Source = { partition: number; epoch: number; position: bigint };
 
 function sourceIdentity(event: CloudEvent, objectId: string): Source {
-  const source = /^urn:rezics:log:(0|[1-9][0-9]*)\.([1-9][0-9]*)$/.exec(event.source);
-  const partition = Number(source?.[1]);
-  const epoch = Number(source?.[2]);
+  const admitted = admitWorkEventEnvelope({
+    source: event.source,
+    id: event.id,
+    sequence: event.sequence,
+    specversion: event.specversion,
+    datacontenttype: event.datacontenttype,
+  });
   const route = routeOf(objectId);
-  if (
-    !source ||
-    route === null ||
-    !Number.isInteger(partition) ||
-    partition < 0 ||
-    partition > 4095 ||
-    partition !== partitionOf(route) ||
-    !Number.isInteger(epoch) ||
-    epoch > 2147483647 ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(event.id) ||
-    !/^[0-9]{19}$/.test(event.sequence) ||
-    BigInt(event.sequence) < 1n ||
-    BigInt(event.sequence) > 9223372036854775807n ||
-    event.specversion !== '1.0' ||
-    event.datacontenttype !== 'application/json'
-  )
+  if (!admitted || route === null || admitted.partition !== partitionOf(route))
     throw new TypeError('Invalid native content work source identity');
-  return { partition, epoch, position: BigInt(event.sequence) };
+  return { partition: admitted.partition, epoch: admitted.epoch, position: admitted.position };
 }
 
 /** CloudEvent.sequence is a position, not an event index. Recover the real index

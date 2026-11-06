@@ -70,7 +70,7 @@ beforeAll(async () => {
       fetch: async () => Response.json({ keys: [jwk] }),
     },
   });
-  commands = createCommerceCommands({ pool, access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access });
   for (const id of [operator, seller, buyer, other])
     await pool.query(
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",

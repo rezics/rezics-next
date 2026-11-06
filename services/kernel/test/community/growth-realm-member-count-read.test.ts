@@ -251,10 +251,14 @@ test('Realm home member count stays a native point read across member, unrelated
 
   const runtime = communityFixtureRuntime();
   await expect(
-    readRealmHomePresentation({ pool: database.pool, access: runtime.system.access }, fixture.growth.realmId, {
-      actor: { kind: 'anonymous' },
-      deadline: Date.now() - 1,
-    }),
+    readRealmHomePresentation(
+      { clock: () => new Date(), pool: database.pool, access: runtime.system.access },
+      fixture.growth.realmId,
+      {
+        actor: { kind: 'anonymous' },
+        deadline: Date.now() - 1,
+      },
+    ),
   ).rejects.toMatchObject({ code: 'deadline_exceeded' });
 
   await database.admin.query('ALTER TABLE community.realm_member_count RENAME TO realm_member_count_hidden');

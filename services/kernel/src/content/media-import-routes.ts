@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -71,7 +72,7 @@ export function mediaImportRoutes(
       pool: dependencies.pool,
       access: dependencies.access,
       routeKey: dependencies.routeKey,
-      clock: dependencies.clock ?? (() => new Date()),
+      clock: dependencies.clock,
       fetchConfig: dependencies.fetchConfig,
     };
   }
@@ -111,7 +112,7 @@ export function mediaImportRoutes(
         const context = {
           deadline: job.deadline,
           idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
-          requestId: Bun.randomUUIDv7(),
+          requestId: contentRequestId(),
         };
         return importOperation(() =>
           admission.run('normal', job, async () => {

@@ -46,7 +46,7 @@ export async function readNativeModerationDirectory(
     throw new RangeError('Moderation directory limit must be 1 to 20');
   if (!dependencies) return nativeModerationCandidateReferencesUnavailable();
   const deps = dependencies;
-  const now = deps.clock?.() ?? new Date();
+  const now = deps.clock();
   const initial = await observeModerationDirectoryCoverage(deps.pool, context.deadline);
   if (!initial) return closed('unavailable');
   if (!initial.complete) return closed('preparing');
@@ -156,7 +156,7 @@ export async function readNativeModerationDirectory(
     scopes: items.map((row) => row.scope),
   });
   const coverage = await observeModerationDirectoryCoverage(deps.pool, context.deadline);
-  const finalNow = (deps.clock?.() ?? new Date()).getTime();
+  const finalNow = deps.clock().getTime();
   if (
     !coverage?.complete ||
     coverage.generation !== initial.generation ||

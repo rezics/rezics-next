@@ -73,6 +73,7 @@ test('native reading page keeps current reviewed work independent from exact zer
     expect(Compile(ReadingPageReviewContextSchema()).Check(substituted)).toBe(false);
 
     const dependencies = {
+      clock: () => new Date(),
       pool: f.system.database.pool,
       routeKey: f.system.routeKey,
       access: f.system.access,

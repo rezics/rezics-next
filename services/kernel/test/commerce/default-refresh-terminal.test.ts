@@ -72,7 +72,7 @@ test('the actual default worker reconciles retained refund reversals after real 
         taxCode: 'txcd_10302000',
       })
     ).offer;
-    const commands = createCommerceCommands({ pool, access: kernel.testAccess });
+    const commands = createCommerceCommands({ clock: () => new Date(), pool, access: kernel.testAccess });
     const actor = await kernel.testAccess.authenticate(people.alice.bearer, { pool, deadline: Date.now() + 10000 });
     const order = (await commands.createOrder(actor, offer.id, offer.revision, crypto.randomUUID())).value;
     const stripe = createStripePort({

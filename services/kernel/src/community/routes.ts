@@ -781,7 +781,7 @@ const SITEMAP_DESCRIPTION = (kind: 'Realms' | 'Spaces') =>
 export type CommunityRouteDependencies = {
   pool: Pool;
   routeKey: Uint8Array;
-  clock?: () => Date;
+  clock: () => Date;
   access: () => Access;
   tokens: KeyRing;
   workClient: () => Promise<WorkClient>;
@@ -963,13 +963,13 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
   const spaceDependencies = (): SpaceDependencies => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
     access: dependencies.access(),
   });
   const realmDependencies = (): RealmDependencies => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
     access: dependencies.access(),
   });
   const banDependencies = () => ({
@@ -980,16 +980,17 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
   const membershipDependencies = async (): Promise<MembershipDependencies> => ({
     pool: dependencies.pool,
     access: dependencies.access(),
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
     tokens: dependencies.tokens,
     client: await dependencies.workClient(),
   });
-  const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
+  const observedAt = () => dependencies.clock().toISOString();
   const sitemapDependencies = () => ({
     pool: dependencies.pool,
     access: dependencies.access(),
     tokens: dependencies.tokens,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
+    cursorNow: () => dependencies.clock().getTime(),
   });
 
   return app
@@ -1444,7 +1445,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                 {
                   pool: dependencies.pool,
                   access: dependencies.access(),
-                  ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+                  clock: dependencies.clock,
                 },
                 [current.realmId],
                 { actor, deadline: job.deadline },
@@ -1865,10 +1866,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
         const allowed = await admission.run('normal', job, () =>
-          createRealmParticipationCheck({ pool: dependencies.pool, access: dependencies.access() })(
-            dependencies.pool as unknown as AccessClient,
-            { realmId, actor },
-          ),
+          createRealmParticipationCheck({
+            pool: dependencies.pool,
+            access: dependencies.access(),
+            clock: dependencies.clock,
+          })(dependencies.pool as unknown as AccessClient, { realmId, actor }),
         );
         if (!allowed) {
           const readable = await admission.run('normal', job, () =>

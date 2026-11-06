@@ -152,7 +152,7 @@ test('a real source fence delivers one durable tuple obligation, without enumera
   const governance = await contentGovernanceCredential(system);
   const tuple = { source: 'example', external_id: 'public-space-avatar', field_group: 'cover' as const };
   await takedownSourceFence(
-    { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
     governance.actor,
     { ...tuple, reason: 'Private source evidence' },
     { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },
@@ -194,7 +194,7 @@ test('Space bootstrap has exact native positions, sparse bounded pages and curre
         fetch: (url: string | URL, init?: RequestInit) => f.auth.host.service.handler(new Request(url, init)),
       },
     });
-    const deps = { pool: f.db.pool, access };
+    const deps = { clock: () => new Date(), pool: f.db.pool, access };
     const source = spaceDiscoverySource(deps);
     const hydrate = (ids: string[], currentAccess = access) =>
       readSpaceDiscoverySummaries({ ...deps, access: currentAccess }, ids, {

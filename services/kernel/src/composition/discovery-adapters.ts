@@ -279,16 +279,21 @@ export type DiscoveryOwnerCompositionInput = Readonly<{
   pool: Pool;
   routeKey: Uint8Array;
   access: Access;
-  clock?: KernelClock;
+  clock: KernelClock;
   collectionSource: CollectionDiscoverySource;
   reviewSource?: ReviewDiscoverySource;
   space: SpaceDiscoveryAdapter;
 }>;
 
 export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionInput): DiscoveryOwnerAdapters {
-  const clock = config.clock ? { clock: config.clock } : {};
   const collection = createNativeCollectionDiscoveryAdapter(
-    { pool: config.pool, access: config.access, routeKey: config.routeKey, source: config.collectionSource, ...clock },
+    {
+      pool: config.pool,
+      access: config.access,
+      routeKey: config.routeKey,
+      source: config.collectionSource,
+      clock: config.clock,
+    },
     DISCOVERY_OWNER_METADATA.collection,
   );
   const review = createReviewDiscoveryAdapter(config.reviewSource);

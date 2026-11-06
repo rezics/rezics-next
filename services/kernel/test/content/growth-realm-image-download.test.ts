@@ -78,7 +78,6 @@ function realmMediaPopulation(fixture: GrowthRealmImageDownloadFixture): Populat
       const spaceRevisionId = newId(route);
       const realmId = newId(route);
       const realmRevisionId = newId(route);
-      const transactionId = newId(route);
       const media = mediaRow(route, realmId, fixture.alice.accountId);
       return {
         'community.space': [
@@ -327,7 +326,7 @@ async function summary() {
     deadline: Date.now() + 30_000,
   });
   return readRealmPresentationImages(
-    { pool: fixture.db.pool, access: fixture.kernel.testAccess },
+    { clock: () => new Date(), pool: fixture.db.pool, access: fixture.kernel.testAccess },
     { realmId: fixture.realmId, avatarMediaId: fixture.image.id, bannerMediaId: null },
     { actor, deadline: Date.now() + 30_000 },
   );

@@ -16,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const route = 0xc120;
 const subject = newId(route);
@@ -64,7 +65,11 @@ function dependencies(selected = access) {
   return {
     pool: db.pool,
     access: selected,
+    clock: () => new Date(),
+    cursorNow: () => Date.now(),
     routeKey,
+    now: () => Date.now(),
+    id: () => '01900000-0000-7000-8000-000000000001',
     tokens,
     writeRate: {
       async spend() {
@@ -132,6 +137,7 @@ async function fence(takenDown: boolean) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   // Every reference checkout must release before the next, including Access preparation.
   db.pool.options.max = 1;
   expect(partitionOf(home)).not.toBe(partitionOf(route));
@@ -188,7 +194,7 @@ beforeAll(async () => {
   );
   await fence(false);
   app = mounted();
-  root = createKernel(dependencies());
+  root = createKernel({ ...dependencies(), receiptKeys: testReceiptKeys() });
 });
 afterAll(async () => {
   await db?.close();

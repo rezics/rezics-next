@@ -59,10 +59,11 @@ test.serial(
         deadline: Date.now() + 60_000,
       });
       const dependencies = {
+        clock: () => new Date(),
         pool: world.db.pool,
         access,
         routeKey: world.routeKey,
-        realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+        realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
       };
       const request = (idempotencyKey = crypto.randomUUID()) => ({
         deadline: Date.now() + 60_000,

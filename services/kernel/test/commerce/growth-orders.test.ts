@@ -575,7 +575,7 @@ beforeAll(async () => {
       fetch: async () => Response.json({ keys: [jwk] }),
     },
   });
-  commands = createCommerceCommands({ pool: db.pool, access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool: db.pool, access });
 
   await db.admin.query(
     "INSERT INTO access.account(route, account_id, kind, state, transaction_id) VALUES ($1, $2, 'actor', 'active', $2)",

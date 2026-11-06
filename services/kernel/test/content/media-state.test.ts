@@ -45,7 +45,7 @@ const board = newId(0x9876);
 const thread = newId(route);
 const secondThread = newId(route);
 let access: Access;
-const dependencies = () => ({ pool: db.pool, access });
+const dependencies = () => ({ clock: () => new Date(), pool: db.pool, access });
 const context = () => ({
   idempotencyKey: Bun.randomUUIDv7(),
   requestId: Bun.randomUUIDv7(),

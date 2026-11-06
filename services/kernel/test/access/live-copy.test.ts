@@ -238,10 +238,11 @@ test.serial(
     await advanceCreatorSale(context, source.locator);
     expect(await rows(source.locator.orderId)).toEqual(before);
     // The real internal financial writer has a native receipt, intentionally no actor basis.
-    const update = await createCommerceCommands({ pool: db.pool, access: app.testAccess }).recordCheckout(
-      source.locator.orderId,
-      { kind: 'failed' },
-    );
+    const update = await createCommerceCommands({
+      clock: () => new Date(),
+      pool: db.pool,
+      access: app.testAccess,
+    }).recordCheckout(source.locator.orderId, { kind: 'failed' });
     if (!('position' in update)) throw new Error('Expected actual committed checkout update');
     expect(
       (
