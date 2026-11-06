@@ -347,7 +347,9 @@ async function canonicalCreators(
     }
     if (terminal) terminals.set(original, terminal);
   }
-  const mappings = await readIdentityMappings(pool, unique);
+  const mappings = [];
+  for (let offset = 0; offset < unique.length; offset += 100)
+    mappings.push(...(await readIdentityMappings(pool, unique.slice(offset, offset + 100))));
   if (mappings.some((mapping) => mapping.state === 'pending'))
     return { creators: new Map(), preparing: true, unavailable: false };
   if (mappings.some((mapping) => mapping.state === 'unavailable'))
