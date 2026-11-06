@@ -158,18 +158,22 @@ type InstalledSubjectRoutes = SharedRoutes<
 >;
 type InstalledSubjectGet = InstalledSubjectRoutes[':id']['get'];
 type InstalledMergePost = InstalledSubjectRoutes['$merge']['post'];
-// The native reviewed merge routes are released; declaration publication currently also
+// The native reviewed merge and Character document reads are released; declaration publication currently also
 // depends on unrelated Kernel modules. Keep this bounded wire seam until that output lands.
 type SubjectRoutes = Omit<InstalledSubjectRoutes, ':id' | '$merge'> & {
   ':id': Omit<InstalledSubjectRoutes[':id'], 'get'> & {
     get: Omit<InstalledSubjectGet, 'query' | 'response'> & {
       query: InstalledSubjectGet['query'] & {
         includeViewerActions?: boolean;
+        includeDocuments?: boolean;
         reviewIdentitySource?: ReviewedPersonEndpoint['source'];
         reviewIdentityExternalId?: string;
       };
       response: Omit<InstalledSubjectGet['response'], 200> & {
-        200: InstalledSubjectGet['response'][200] & { reviewedIdentity?: ReviewedPersonEndpoint | null };
+        200: InstalledSubjectGet['response'][200] & {
+          reviewedIdentity?: ReviewedPersonEndpoint | null;
+          documents?: Record<string, Routes['documents'][':id']['get']['response'][200]['document']>;
+        };
       };
     };
   };
