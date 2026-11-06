@@ -1,3 +1,4 @@
+import { open } from 'node:fs/promises';
 import {
   bangumiGameEnvironment,
   bangumiGameEnvironmentForeignHost,
@@ -52,6 +53,30 @@ export function parseBangumiGameEnvironmentBindings(value: unknown): readonly Ba
     bindings.push({ kind, item, conceptId, sourceUri });
   }
   return bindings;
+}
+
+/** Read one bounded external profile without allocating from an untrusted file size. */
+export async function readBangumiGameEnvironmentBindingsFile(
+  path: string,
+): Promise<readonly BangumiGameEnvironmentBinding[]> {
+  const file = await open(path, 'r');
+  try {
+    if (!(await file.stat()).isFile()) throw new TypeError('Bangumi Game environment bindings require a regular file');
+    const limit = 64 * 1024;
+    const bytes = Buffer.alloc(limit + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, null);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    if (offset > limit) throw new TypeError('Bangumi Game environment bindings exceed the configuration limit');
+    return parseBangumiGameEnvironmentBindings(
+      JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, offset))) as unknown,
+    );
+  } finally {
+    await file.close();
+  }
 }
 
 export type BangumiGameEnvironmentDiagnostic = Readonly<{
