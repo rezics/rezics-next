@@ -94,8 +94,10 @@ or `date-fns`. Web's Vite plugin uses `configEnvironment` and a later `configRes
 Cloudflare Worker environment cannot turn SSR discovery back on at serve time. Vite concatenates
 `optimizeDeps.include` on both the Worker environments and the root `ssr.optimizeDeps` list,
 so the pin keeps `urlpattern-polyfill` plus its ESM wrapper and excludes the calendar packages.
-Generated `paraglide/runtime.js` imports the wrapper, which re-exports CJS `urlpattern-polyfill`;
-Workerd's export-type inspection has no `module`, so that nested CJS must be prebundled to ESM.
+Generated `paraglide/runtime.js` imports the wrapper, which re-exports `urlpattern-polyfill`.
+Workerd's export-type inspection has no `import` condition, so package exports fall through to
+CJS `main` (`index.cjs`) and throw `module is not defined`; Web aliases that id to ESM `index.js`
+so the nested package is resolvable and the Worker evaluates ESM.
 `react-dom/server` stays off include and off exclude: TanStack would otherwise concatenate it
 into the optimizer and hang Rolldown before Copies prints ready, while excluding it loads CJS
 into Workerd. Vite then transforms React on the first Worker evaluation.

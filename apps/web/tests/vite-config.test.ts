@@ -150,6 +150,18 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
             for (const pkg of ['react-day-picker', 'date-fns', '@date-fns/tz'])
               assert.ok(optimizeDeps.exclude.includes(pkg), command + ':' + name + ':' + pkg);
           }
+          const aliases = [config.resolve.alias];
+          for (const [name, environment] of Object.entries(config.environments)) {
+            if (name === 'client') continue;
+            aliases.push(environment.resolve.alias);
+          }
+          for (const alias of aliases) {
+            const entries = Array.isArray(alias) ? alias : [];
+            const mapped = entries.find((entry) => entry && entry.find === 'urlpattern-polyfill');
+            assert.ok(mapped, command + ':urlpattern-polyfill alias');
+            assert.equal(String(mapped.replacement).endsWith('index.cjs'), false, command + ':esm');
+            assert.ok(String(mapped.replacement).endsWith('index.js'), command + ':' + mapped.replacement);
+          }
         }
       `,
     ],

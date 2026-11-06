@@ -1,5 +1,6 @@
 import { viteNonceMarker } from './src/security/headers.ts';
 import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -44,13 +45,36 @@ const linkedDependencyRoot = linkedDependencyAllow(
 );
 const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
 /**
- * Generated paraglide/runtime.js imports the ESM wrapper, which re-exports CJS `urlpattern-polyfill`.
- * Workerd export-type inspection has no `module` condition, so that nested CJS must be prebundled.
+ * Generated paraglide/runtime.js imports the ESM wrapper, which re-exports `urlpattern-polyfill`.
+ * Workerd export-type inspection has no `import` condition, so package exports fall through to
+ * CJS `main` (`index.cjs`) and throw `module is not defined`. Alias the id to the ESM file.
  */
+const webRequire = createRequire(import.meta.url);
+const paraglideRequire = createRequire(webRequire.resolve('@inlang/paraglide-js'));
+const urlpatternPolyfillEsm = join(dirname(paraglideRequire.resolve('urlpattern-polyfill')), 'index.js');
+const urlpatternPolyfillAlias = { find: 'urlpattern-polyfill', replacement: urlpatternPolyfillEsm } as const;
 const workerExplicitOptimizeDeps = [
   'urlpattern-polyfill',
   '@inlang/paraglide-js/urlpattern-polyfill',
 ] as const;
+
+function pinUrlpatternAlias(resolveConfig: { alias?: unknown }): void {
+  const alias = resolveConfig.alias;
+  if (Array.isArray(alias)) {
+    const next = alias.filter(
+      (entry) => !(entry && typeof entry === 'object' && 'find' in entry && entry.find === 'urlpattern-polyfill'),
+    );
+    next.unshift(urlpatternPolyfillAlias);
+    alias.length = 0;
+    alias.push(...next);
+    return;
+  }
+  if (alias && typeof alias === 'object') {
+    (alias as Record<string, string>)['urlpattern-polyfill'] = urlpatternPolyfillEsm;
+    return;
+  }
+  resolveConfig.alias = [urlpatternPolyfillAlias];
+}
 
 function pinWorkerOptimizeDeps(optimizeDeps: {
   noDiscovery?: boolean;
@@ -60,7 +84,7 @@ function pinWorkerOptimizeDeps(optimizeDeps: {
   optimizeDeps.noDiscovery = true;
   // Vite concatenates include arrays across plugins. Cloudflare sets noDiscovery false, TanStack then
   // enqueues react-dom/server, and Rolldown hangs the Worker optimizer before Copies can print ready.
-  // Prebundle the CJS polyfill itself so Workerd evaluates ESM. Leave react-dom/server off include
+  // The alias makes the nested polyfill resolvable as ESM. Leave react-dom/server off include
   // and off exclude so Vite transforms it without the hanging prebundle.
   optimizeDeps.include = [...workerExplicitOptimizeDeps];
   optimizeDeps.exclude = (optimizeDeps.exclude ?? []).filter(
@@ -150,6 +174,7 @@ export default defineConfig((context) => {
       },
     },
     html: { cspNonce: viteNonceMarker },
+    resolve: { alias: [urlpatternPolyfillAlias] },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
@@ -161,6 +186,7 @@ export default defineConfig((context) => {
       exclude: [...calendarOptimizeDeps],
     },
     ssr: {
+      resolve: { alias: [urlpatternPolyfillAlias] },
       optimizeDeps: {
         noDiscovery: true,
         include: [...workerExplicitOptimizeDeps],
@@ -204,6 +230,7 @@ export default defineConfig((context) => {
         configEnvironment(name) {
           if (name === 'client') return;
           return {
+            resolve: { alias: [urlpatternPolyfillAlias] },
             optimizeDeps: {
               noDiscovery: true,
               include: [...workerExplicitOptimizeDeps],
@@ -214,9 +241,11 @@ export default defineConfig((context) => {
         configResolved(config) {
           // TanStack concatenates react-dom/server onto the root ssr include after environment
           // hooks; Workerd still reads that list during export-type inspection.
+          pinUrlpatternAlias(config.resolve);
           if (config.ssr.optimizeDeps) pinWorkerOptimizeDeps(config.ssr.optimizeDeps);
           for (const [name, environment] of Object.entries(config.environments)) {
             if (name === 'client') continue;
+            pinUrlpatternAlias(environment.resolve);
             pinWorkerOptimizeDeps(environment.optimizeDeps);
           }
         },

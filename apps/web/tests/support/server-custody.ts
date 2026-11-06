@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
+import { dlopen, FFIType, ptr } from 'bun:ffi';
 
 export type ProcessOutputStream = 'stdout' | 'stderr';
 export type BunProcessStreams = {
@@ -88,30 +89,57 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-function processStat(pid: number): { state: string; pgrp: number } | undefined {
+type ProcessIdentity = { state: string; ppid: number; pgrp: number };
+
+function processIdentity(pid: number): ProcessIdentity | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     const closeParen = stat.lastIndexOf(')');
     if (closeParen === -1) return undefined;
     const rest = stat.slice(closeParen + 2).split(' ');
     const state = rest[0];
+    const ppid = Number(rest[1]);
     const pgrp = Number(rest[2]);
-    if (!state || !Number.isInteger(pgrp) || pgrp <= 0) return undefined;
-    return { state, pgrp };
+    if (!state || !Number.isInteger(ppid) || ppid < 0 || !Number.isInteger(pgrp) || pgrp <= 0) return undefined;
+    return { state, ppid, pgrp };
   } catch {
     return undefined;
   }
 }
 
+const WNOHANG = 1;
+let waitpidSymbol:
+  | { waitpid(pid: number, status: number, options: number): number }
+  | undefined
+  | false;
+
+function waitpidNoHang(pid: number): void {
+  if (waitpidSymbol === false) return;
+  try {
+    if (waitpidSymbol === undefined) {
+      waitpidSymbol = dlopen('libc.so.6', {
+        waitpid: {
+          args: [FFIType.i32, FFIType.pointer, FFIType.i32],
+          returns: FFIType.i32,
+        },
+      }).symbols;
+    }
+    const status = new Int32Array(1);
+    waitpidSymbol.waitpid(pid, ptr(status), WNOHANG);
+  } catch {
+    waitpidSymbol = false;
+  }
+}
+
 /** Live members of a process group, excluding unreaped zombies that still answer kill(-pgid, 0). */
-function liveProcessGroupMembers(pgid: number): number[] {
+export function liveProcessGroupMemberIds(pgid: number): number[] {
   try {
     const members: number[] = [];
     for (const entry of readdirSync('/proc')) {
       if (!/^[0-9]+$/.test(entry)) continue;
       const pid = Number(entry);
-      const stat = processStat(pid);
-      if (stat && stat.pgrp === pgid && stat.state !== 'Z') members.push(pid);
+      const identity = processIdentity(pid);
+      if (identity && identity.pgrp === pgid && identity.state !== 'Z') members.push(pid);
     }
     return members;
   } catch {
@@ -120,14 +148,32 @@ function liveProcessGroupMembers(pgid: number): number[] {
 }
 
 function liveProcessGroup(pgid: number): boolean {
-  return liveProcessGroupMembers(pgid).length > 0;
+  return liveProcessGroupMemberIds(pgid).length > 0;
 }
 
-async function waitUntil(
-  predicate: () => boolean,
-  timeoutMs: number,
-  pollIntervalMs: number,
-): Promise<boolean> {
+/** Reap zombies in the group that this process adopted after the original parent exited. */
+export function reapExitedProcessGroupMembers(pgid: number): void {
+  try {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^[0-9]+$/.test(entry)) continue;
+      const pid = Number(entry);
+      const identity = processIdentity(pid);
+      if (!identity || identity.pgrp !== pgid || identity.state !== 'Z') continue;
+      // The group leader is the spawned child; Node/Bun own that waitpid.
+      if (pid === pgid) continue;
+      if (identity.ppid === process.pid) waitpidNoHang(pid);
+    }
+  } catch {
+    // /proc unread; live-member settlement still decides the group.
+  }
+}
+
+function groupGone(pgid: number): boolean {
+  reapExitedProcessGroupMembers(pgid);
+  return !liveProcessGroup(pgid) && !processGroupExists(pgid);
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     if (predicate()) return true;
@@ -184,7 +230,7 @@ function makeProcessCustody(
     let outputIsSettled = false;
     const signalGroup = (signal: NodeJS.Signals) => {
       if (pid === undefined) return;
-      const members = liveProcessGroupMembers(pid);
+      const members = liveProcessGroupMemberIds(pid);
       try {
         process.kill(-pid, signal);
       } catch (error) {
@@ -202,28 +248,33 @@ function makeProcessCustody(
     if (pid !== undefined) {
       const graceDeadline = Date.now() + termGraceMs;
       signalGroup('SIGTERM');
-      // Reap the direct child before judging the group: an unreaped zombie leader still
-      // answers kill(-pid, 0) even when every live descendant is gone.
+      // Direct child and output settle first. kill(-pgid, 0) still succeeds for unreaped
+      // zombies, including descendants this process adopted after the parent exited.
       childSettled = await completedWithin(childCompletion, termGraceMs);
       const remainingGrace = graceDeadline - Date.now();
       if (remainingGrace > 0 && liveProcessGroup(pid)) {
         await waitUntil(() => !liveProcessGroup(pid), remainingGrace, pollIntervalMs);
       }
-      groupSettled = !liveProcessGroup(pid) && !processGroupExists(pid);
-      if (liveProcessGroup(pid) || processGroupExists(pid)) {
+      if (liveProcessGroup(pid)) {
         signalGroup('SIGKILL');
         if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
         try {
-          const gone = await waitUntil(
-            () => !liveProcessGroup(pid) && !processGroupExists(pid),
-            settleTimeoutMs,
-            pollIntervalMs,
-          );
-          groupSettled = gone;
+          const gone = await waitUntil(() => !liveProcessGroup(pid), settleTimeoutMs, pollIntervalMs);
+          if (!gone) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
         } catch (error) {
           cleanupErrors.push(error);
         }
-        if (!groupSettled) cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
+      }
+      try {
+        groupSettled = await waitUntil(() => groupGone(pid), settleTimeoutMs, pollIntervalMs);
+      } catch (error) {
+        cleanupErrors.push(error);
+        groupSettled = groupGone(pid);
+      }
+      if (!groupSettled && liveProcessGroup(pid)) {
+        cleanupErrors.push(new Error(`${label} process group ${pid} remained after SIGKILL`));
+      } else if (!liveProcessGroup(pid)) {
+        groupSettled = true;
       }
     }
 

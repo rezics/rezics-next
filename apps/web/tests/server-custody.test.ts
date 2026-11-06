@@ -2,8 +2,10 @@ import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
   cleanupAll,
+  liveProcessGroupMemberIds,
   ownBunProcess,
   ownNodeProcess,
+  reapExitedProcessGroupMembers,
   withCleanup,
   type ProcessCustody,
 } from './support/server-custody.ts';
@@ -30,15 +32,6 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-async function waitUntilGone(pid: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (!processGroupExists(pid)) return true;
-    await Bun.sleep(10);
-  }
-  return !processGroupExists(pid);
-}
-
 async function drainFixtureOutput(stream: ReadableStream<Uint8Array> | null): Promise<void> {
   if (!stream) return;
   for await (const _chunk of stream) {
@@ -48,14 +41,21 @@ async function drainFixtureOutput(stream: ReadableStream<Uint8Array> | null): Pr
 
 async function safetyCleanup(fixture: Fixture): Promise<void> {
   if (fixture.pid !== undefined) {
-    if (processGroupExists(fixture.pid)) {
+    if (processGroupExists(fixture.pid) || liveProcessGroupMemberIds(fixture.pid).length > 0) {
       try {
         process.kill(-fixture.pid, 'SIGKILL');
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
     }
-    if (!(await waitUntilGone(fixture.pid, 2500)))
+    const deadline = Date.now() + 2500;
+    while (Date.now() < deadline) {
+      reapExitedProcessGroupMembers(fixture.pid);
+      if (liveProcessGroupMemberIds(fixture.pid).length === 0 && !processGroupExists(fixture.pid)) break;
+      await Bun.sleep(10);
+    }
+    reapExitedProcessGroupMembers(fixture.pid);
+    if (liveProcessGroupMemberIds(fixture.pid).length > 0)
       throw new Error(`Independent fixture safety cleanup could not remove process group ${fixture.pid}`);
   }
   await Promise.race([
