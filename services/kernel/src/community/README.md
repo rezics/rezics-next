@@ -10,7 +10,7 @@ Two declared values, built from one `CommunityAmbient`, are the only way composi
 
 Domain clocks are required operands wherever the caller holds one: membership reads, sitemap pages, claim review and the route eligibility checks. `systemCommunityClock` in `ambient.ts` is the only production wall clock Community names. It stays the default for three callers that do not yet pass a clock: `spaceReadEligibility`, space address verification and the space discovery entry batch. Access-facing claim approval enters through `access-capabilities.ts`, a public entry that re-exports `realm-claim-approval.ts`.
 
-Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm witness revision/replay native test including stale work; no extra stories.
+Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm witness revision/replay native test including stale work; no extra stories. Official JSON-array readers bind Space witness keys; pending work keeps its provenance and reference removals use the locked witness; a revision read reports that Space's own state.
 
 ## Public Realm discovery
 

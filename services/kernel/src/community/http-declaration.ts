@@ -12,6 +12,7 @@ import type { CommunityAmbient } from './ambient.ts';
 export function createCommunityHttpDeclaration(ambient: CommunityAmbient) {
   return Object.freeze({
     name: 'community' as const,
+    ambient,
     actions: NATIVE_CONTAINER_ACTIONS,
     viewerResources: [
       ['community.realm', realmViewerActionResource],

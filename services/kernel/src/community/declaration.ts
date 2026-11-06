@@ -15,6 +15,7 @@ export { systemCommunityAmbient, type CommunityAmbient } from './ambient.ts';
 export function createCommunityDeclaration(ambient: CommunityAmbient) {
   return Object.freeze({
     name: 'community' as const,
+    ambient,
     work: createCommunityWorkModule(ambient),
     events: COMMUNITY_EVENTS,
     createMembership(dependencies: Omit<RealmMembershipDependencies, 'deadlineNow'>) {

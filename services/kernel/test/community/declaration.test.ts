@@ -8,11 +8,13 @@ test('Community declarations are values that name the module inventory without s
   const declaration = createCommunityDeclaration(ambient);
   const http = createCommunityHttpDeclaration(ambient);
   expect(declaration.name).toBe('community');
+  expect(declaration.ambient).toBe(ambient);
   expect(declaration.work.name).toBe('community');
   expect(declaration.events).toBe(COMMUNITY_EVENTS);
   expect(typeof declaration.createMembership).toBe('function');
   expect(typeof declaration.createParticipation).toBe('function');
   expect(http.name).toBe('community');
+  expect(http.ambient).toBe(ambient);
   expect(http.viewerResources.map(([resource]) => resource)).toEqual(['community.realm', 'community.space']);
   expect(http.actions).toBeDefined();
   expect(typeof http.routes).toBe('function');

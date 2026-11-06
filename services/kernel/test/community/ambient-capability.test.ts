@@ -30,6 +30,8 @@ describe('Community ambient capability', () => {
     const http = createCommunityHttpDeclaration(ambient);
 
     expect(declaration.name).toBe('community');
+    expect(declaration.ambient).toBe(ambient);
+    expect(http.ambient).toBe(ambient);
     expect(declaration.work.name).toBe('community');
     expect(Object.keys(declaration.events())).toContain('com.rezics.community.space-discovery.invalidated.v1');
     expect(http.viewerResources.map(([type]) => type)).toEqual(['community.realm', 'community.space']);
