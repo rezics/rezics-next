@@ -176,6 +176,13 @@ export type CrossMediaPort = Pick<
 > &
   Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
 
+/** Selected review and fence capability; producers take this from the contract, not publication. */
+export type ShowcaseReviewPort = Pick<
+  ReturnType<typeof createImportTransport>,
+  'readReviewedSubject' | 'reviewedCandidates' | 'acceptReviewedCandidate' | 'adoptReviewedCandidates'
+> &
+  Partial<Pick<ReturnType<typeof createImportTransport>, 'fence'>>;
+
 export type CrossMediaReading = {
   /** Original claim target; independent reads may return its canonical Subject. */
   boundSubjectId?: string;
@@ -393,6 +400,13 @@ export type ShowcaseManifest = Readonly<{
 
 export function showcaseDigest(value: unknown): string {
   return createHash('sha256').update(sourceDigest(value)).digest('hex');
+}
+
+export function showcaseSourceMatches(
+  actual: BatchCommand['source'] | null,
+  expected: BatchCommand['source'],
+): boolean {
+  return !!actual && showcaseDigest(actual) === showcaseDigest(expected);
 }
 
 const RELEASE_TITLE_CAP = 64;

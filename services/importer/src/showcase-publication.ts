@@ -7,11 +7,6 @@ import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts'
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
-import { createImportTransport } from './import-client.ts';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-} from './showcase-contract.ts';
 import type {
   CrossMediaSeedResult,
   VndbWorkRelationOutcome,
@@ -19,11 +14,15 @@ import type {
 import {
   showcaseDigest,
   showcaseLimits,
+  showcaseSourceMatches,
   showcaseVocabularyExternalId,
+  type CrossMediaPlan,
+  type CrossMediaPort,
   type ShowcaseAcknowledgement,
   type ShowcaseAssertion,
   type ShowcaseManifest,
   type ShowcaseRecord,
+  type ShowcaseReviewPort,
   type ShowcaseTagAssociation,
   type ShowcaseTagAssociationWithdrawal,
   type ShowcaseTagParentBinding,
@@ -34,7 +33,6 @@ import {
 } from './showcase-contract.ts';
 import {
   buildShowcaseManifest,
-  showcaseSourceMatches,
   showcaseStatementMatches,
   showcaseMediaContext,
 } from './showcase-manifest.ts';
@@ -66,12 +64,7 @@ import type {
   VndbTagRatingSnapshot,
 } from './showcase-vndb-tag-ratings.ts';
 
-type ImportTransport = ReturnType<typeof createImportTransport>;
-export type ShowcaseReviewPort = Pick<
-  ImportTransport,
-  'readReviewedSubject' | 'reviewedCandidates' | 'acceptReviewedCandidate' | 'adoptReviewedCandidates'
-> &
-  Partial<Pick<ImportTransport, 'fence'>>;
+export type { ShowcaseReviewPort };
 
 type JournalCommandRow = {
   command_key: string;

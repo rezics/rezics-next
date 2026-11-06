@@ -11,21 +11,17 @@ import { sourceVocabularyLimits } from '@rezics/conversion/source-vocabulary';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
 import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-} from './showcase-contract.ts';
 import type { ImporterOptions } from './importer.ts';
 import { captureShowcaseCommands, ShowcaseJournal, type ShowcasePublicationResult } from './showcase-publication.ts';
 import {
   showcaseDigest,
   showcaseLimits,
+  showcaseSourceMatches,
   showcaseVocabularyExternalId,
+  type CrossMediaPlan,
+  type CrossMediaPort,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import {
-  showcaseSourceMatches,
-} from './showcase-manifest.ts';
 import {
   creditTypeConceptUri,
   creditTypeSchemeUri,

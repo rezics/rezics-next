@@ -3,8 +3,8 @@ import { convertBangumi, converter_revision as bangumiRevision } from '@rezics/c
 import { convertVndb, converter_revision as vndbRevision } from '@rezics/conversion/vndb';
 import { convertOpenLibrary, converter_revision as openLibraryRevision } from '@rezics/conversion/open-library';
 import { convertWikidata, converter_revision as wikidataRevision } from '@rezics/conversion/wikidata';
-import type { ConversionContext } from '@rezics/conversion';
 import bangumi from '../../../specs/fixtures/imports/bangumi/subject.json';
+import type { ImportConversionContext } from '../src/import-contract.ts';
 import {
   admittedSourceAdmissions,
   bangumiSourceAdmission,
@@ -30,7 +30,7 @@ test('four-provider admissions are declared values bound without acquisition', (
     expect(registration.source).toBe(admission.identity.defaultAlias);
     expect(registration.converter_revision).toBe(admission.revision.converter_revision);
   }
-  const context: ConversionContext = { source: bangumiSourceAdmission.identity.defaultAlias };
+  const context: ImportConversionContext = { source: bangumiSourceAdmission.identity.defaultAlias };
   const bound = bindSourceRegistration(bangumiSourceAdmission);
   const input = { external_id: String(bangumi.id), record_revision: '7', record: bangumi };
   const fromRegistration = bound.convert(input, context);

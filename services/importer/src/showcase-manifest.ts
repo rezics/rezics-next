@@ -12,9 +12,25 @@ import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } fro
 import {
   showcaseDigest,
   showcaseLimits,
+  showcaseSourceMatches,
+  showcaseVocabularyExternalId,
   type CrossMediaGap,
   type CrossMediaPlan,
   type CrossMediaReading,
+  type ShowcaseAcknowledgement,
+  type ShowcaseAssertion,
+  type ShowcaseKind,
+  type ShowcaseManifest,
+  type ShowcaseMediaRecord,
+  type ShowcaseOmission,
+  type ShowcaseRecord,
+  type ShowcaseTagAssociation,
+  type ShowcaseTagAssociationWithdrawal,
+  type ShowcaseTagParentBinding,
+  type ShowcaseTagParentPublication,
+  type ShowcaseTagParentRefresh,
+  type ShowcaseVocabularyRecord,
+  type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
 import { validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -25,6 +41,7 @@ export {
   showcaseLimits,
   showcaseMediaLimit,
   showcaseDigest,
+  showcaseSourceMatches,
   showcaseVocabularyExternalId,
   type ShowcaseKind,
   type ShowcaseAcknowledgement,
@@ -1051,13 +1068,6 @@ function kindFromType(type: string): ShowcaseKind {
   if (type === 'wd:Q95074') return 'character';
   if (type === 'wd:Q20631656') return 'release';
   return 'work';
-}
-
-export function showcaseSourceMatches(
-  actual: BatchCommand['source'] | null,
-  expected: BatchCommand['source'],
-): boolean {
-  return !!actual && showcaseDigest(actual) === showcaseDigest(expected);
 }
 
 export function showcaseStatementMatches(actual: BatchStatement | null, expected: BatchStatement): boolean {
