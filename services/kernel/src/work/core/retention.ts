@@ -6,10 +6,12 @@ import {
   WORKFLOW_RETENTION_BATCH_SIZE,
   WORKFLOW_RETENTION_CASCADE_TABLES,
   WORKFLOW_RETENTION_DAY_MS,
+  WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS,
   WORKFLOW_RETENTION_DELETE_STATEMENTS,
   WORKFLOW_RETENTION_EMPTY_BATCH_STATEMENTS,
   WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES,
   WORKFLOW_RETENTION_MAX_BATCHES,
+  WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS,
   WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS,
   WORKFLOW_RETENTION_PAYLOAD_FAMILIES,
   WORKFLOW_RETENTION_SELECT_STATEMENTS,
@@ -43,6 +45,8 @@ export type WorkflowRetentionStatementKind =
 export type WorkflowRetentionBatchWork = Readonly<{
   selected: number;
   statements: number;
+  applicationStatements: number;
+  controlStatements: number;
   selectStatements: number;
   deleteStatements: number;
   payloadRows: number;
@@ -55,6 +59,8 @@ export type WorkflowRetentionSweepWork = Readonly<{
   lastBatchSize: number;
   selected: number;
   statements: number;
+  applicationStatements: number;
+  controlStatements: number;
   payloadRows: number;
   cascadeRows: number;
   deletionRows: number;
@@ -166,6 +172,16 @@ export function retentionBatchStatementCount(selected: number): number {
   return selected === 0 ? WORKFLOW_RETENTION_EMPTY_BATCH_STATEMENTS : WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS;
 }
 
+export function retentionApplicationStatementCount(selected: number): number {
+  return selected === 0
+    ? WORKFLOW_RETENTION_EMPTY_BATCH_STATEMENTS
+    : WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS;
+}
+
+export function retentionControlStatementCount(selected: number): number {
+  return selected === 0 ? 0 : WORKFLOW_RETENTION_DELETE_CONTROL_STATEMENTS;
+}
+
 export function retentionSweepStatementCount(fullBatches: number, lastBatchSize: number): number {
   return fullBatches * WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS + retentionBatchStatementCount(lastBatchSize);
 }
@@ -177,9 +193,13 @@ export function retentionBatchWork(
   const payloadRows = retentionPayloadRows(inventory);
   const cascadeRows = retentionCascadeRows(inventory);
   const deletionRows = selected === 0 ? 0 : retentionDeletionRows(inventory);
+  const applicationStatements = retentionApplicationStatementCount(selected);
+  const controlStatements = retentionControlStatementCount(selected);
   return {
     selected,
-    statements: retentionBatchStatementCount(selected),
+    statements: applicationStatements + controlStatements,
+    applicationStatements,
+    controlStatements,
     selectStatements: WORKFLOW_RETENTION_SELECT_STATEMENTS,
     deleteStatements: selected === 0 ? 0 : WORKFLOW_RETENTION_DELETE_STATEMENTS,
     payloadRows,
@@ -201,6 +221,8 @@ export function retentionSweepWork(
   let deletionRows = 0;
   let examinedRows = 0;
   let statements = 0;
+  let applicationStatements = 0;
+  let controlStatements = 0;
   for (const [index, size] of batchSizes.entries()) {
     const work = retentionBatchWork(size, inventories[index] ?? emptyInventory);
     selected += work.selected;
@@ -209,12 +231,16 @@ export function retentionSweepWork(
     deletionRows += work.deletionRows;
     examinedRows += work.examinedRows;
     statements += work.statements;
+    applicationStatements += work.applicationStatements;
+    controlStatements += work.controlStatements;
   }
   return {
     batches,
     lastBatchSize,
     selected,
     statements,
+    applicationStatements,
+    controlStatements,
     payloadRows,
     cascadeRows,
     deletionRows,
