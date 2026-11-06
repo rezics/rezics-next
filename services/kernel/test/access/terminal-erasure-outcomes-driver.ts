@@ -101,12 +101,13 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
   }
 
   async function grant(accountId: string, resource: { route: number; id: string }, actions: string[]) {
-    await json('staff', 'POST', '/v1/grants', {
-      resource,
-      subject: { kind: 'account', id: accountId },
-      actions,
-      valid: '(,)',
-    });
+    for (const action of actions)
+      await json('staff', 'POST', '/v1/grants', {
+        resource,
+        subject: { kind: 'account', id: accountId },
+        actions: [action],
+        valid: '(,)',
+      });
   }
 
   function mapValue(path: string, raw: Json): Json {
@@ -169,7 +170,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         'account_erasure',
       ])
         await json('staff', 'POST', `/v1/platform/exposure/${group}:open`);
-      await grant(people().staff.accountId, PLATFORM_RESOURCE, ['subject:create', 'offer:create', 'zone:create']);
+      await grant(people().staff.accountId, PLATFORM_RESOURCE, ['offer:create', 'zone:create']);
       await grant(aliceId, PLATFORM_RESOURCE, ['subject:create', 'offer:create', 'zone:create']);
       await grant(bobId, PLATFORM_RESOURCE, ['offer:create']);
 

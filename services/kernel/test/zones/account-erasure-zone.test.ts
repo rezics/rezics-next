@@ -45,8 +45,8 @@ async function minimize(
       { partition: partitionOf(zone.route), deadline: Date.now() + 30_000, clock: () => new Date(), basis: platform },
       async (tx) => {
         const command = currentCommand(tx);
-        return {
-          value: await minimizeAccountErasureZone(tx, {
+        return noEffect(
+          await minimizeAccountErasureZone(tx, {
             route: zone.route,
             id: zone.id,
             accountId,
@@ -54,8 +54,7 @@ async function minimize(
             transactionId: command.transactionId,
             ...options,
           }),
-          events: [],
-        };
+        );
       },
     )
   ).value;

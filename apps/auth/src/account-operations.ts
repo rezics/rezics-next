@@ -263,7 +263,8 @@ async function runDeletion(
     deletionPost('/account-operations/execute', executionBody, DELETION_EXECUTION_MAX_RESPONSE_BYTES);
   let executed = await execute();
   const uncertain = !executed.ok && executed.effectStatus !== 'not_applied';
-  if (uncertain && (!browser || browser.retryUncertain) && current()) executed = await execute();
+  if (!executed.ok && executed.code === 'unavailable' && (!browser || browser.retryUncertain) && current())
+    executed = await execute();
   if (!executed.ok)
     return uncertain || executed.effectStatus !== 'not_applied' ? { ok: false, reason: 'unknown' } : failure(executed);
   const result = parseDeletionExecutionResponse(executed.body);

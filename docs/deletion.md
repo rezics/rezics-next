@@ -37,7 +37,8 @@ synchronous. See [Content deletion](../services/kernel/src/content/README.md#del
 1. **Confirmation and T.** Account erasure is final at confirmation, with fresh authentication and the typed
    confirmation. Native execute confirmation is the account's current handle, compared after NFC and case-folding;
    Auth-page localized phrases stay a client-only gate and are not the execute field. Handleless accounts skip the
-   typed execute field. The deletion-page review carries that current handle so the page can send it. That instant, T, is both a read and write fence: private and unlisted reads, exports, counts, media
+   typed execute field. The deletion-page review carries that current handle so the page can send it. A 503
+   unavailable execute retries once while current; malformed output, timeout and proven refusal do not. That instant, T, is both a read and write fence: private and unlisted reads, exports, counts, media
    and producers reject the owner immediately. Every worker checks the fence before any effect. Authentication
    denial alone is not enough for public or unlisted routes. Imports and late webhooks can never recreate the
    account's data or benefits. The 30-day restore window applies to records deleted one by one; it never postpones
