@@ -56,6 +56,7 @@ import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigati
 import { requestLanguages } from '../kernel/languages';
 import {
   useRealmCompletionFocus,
+  isRealmMembershipCompletion,
   isRealmPublicationCompletion,
   type RealmCompletion,
   type RealmCompleted,
@@ -509,10 +510,20 @@ export function SpacePage(props: {
     binding: nativeHomeBinding(props.page),
   });
   if (source.current.page !== props.page) {
-    retired.current.add(source.current.page);
+    const previous = source.current;
+    retired.current.add(previous.page);
     source.current = {
       page: props.page,
-      revision: source.current.revision + 1,
+      revision:
+        previous.revision +
+        Number(
+          previous.state !== state ||
+            previous.subject !== subject ||
+            previous.csrfToken !== csrfToken ||
+            previous.locale !== locale ||
+            previous.route !== location.publicHref ||
+            previous.operations !== props.nativeOperations,
+        ),
       state,
       subject,
       csrfToken,
@@ -540,10 +551,31 @@ export function SpacePage(props: {
     (retired.current.has(props.page) || (lifetime && !lifetime.matchesPage(props.page)))
   )
     return null;
+  // Keep the native membership controller mounted across an admitted same-route refresh; its own acknowledgement
+  // still has to match the refreshed membership before the existing outer focus host accepts it. Preserve the
+  // admission's reader, credential and target boundary while ignoring only the per-read identifier.
+  const nativeShellLifetime = lifetime
+    ? JSON.stringify([
+        lifetime.admission.sourceId,
+        lifetime.admission.sourceNonce,
+        lifetime.admission.sessionRevision,
+        lifetime.admission.sessionState,
+        lifetime.admission.sessionSubject,
+        lifetime.admission.sessionCredentialFingerprint,
+        lifetime.admission.expectedReader,
+        lifetime.admission.credentialMode,
+        lifetime.admission.target,
+        lifetime.admission.realmId,
+        lifetime.admission.locale,
+      ])
+    : 'standalone';
+  const shellRevision = native
+    ? `native-home:${nativeShellLifetime}:${source.current.revision}`
+    : `${lifetime?.scopeKey ?? 'standalone'}:${source.current.revision}`;
   return (
     <AuthoringDepartureBoundary>
       <SpaceHome
-        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}:${source.current.revision}`}
+        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${shellRevision}`}
         {...props}
         viewer={viewer}
         signedOut={state === 'signed-out'}
@@ -674,7 +706,7 @@ function SpaceHome({
       const sourceHref = realmReadingReturn(readingReturnRef.current, locale);
       const routeHref = realmReadingReturn(initialReturn, locale);
       if (
-        !isRealmPublicationCompletion(receipt) ||
+        (!isRealmMembershipCompletion(receipt) && !isRealmPublicationCompletion(receipt)) ||
         !realm ||
         !lifetime ||
         receipt.realmId !== realm.id ||

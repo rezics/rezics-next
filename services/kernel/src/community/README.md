@@ -355,6 +355,8 @@ retain membership/publication completion and focus. Only an acknowledged command
 membership result can complete; intervening source replacement retires its completion, and unrelated membership
 reads retain an uncertain command for exact retry or discard.
 
+Decision: the initial Home and continued Board shelf map `recent` and Board visibility directly from their installed root methods; complete-empty and unavailable discussion states and all reply-count states stay distinct, while the existing current-source completion host returns eligible focus to the selected supplying shelf.
+
 ### Cost
 
 - **Touches:** Initial home reads Realm identity/Access, mints a released native time and reads one exact container
