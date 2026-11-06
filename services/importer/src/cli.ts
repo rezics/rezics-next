@@ -1369,7 +1369,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
               ? error.message
               : error instanceof DumpInputError
                 ? error.message
-                : 'Import failed safely.',
+                : error instanceof Error && error.message.startsWith('VNDB table staging failed')
+                  ? error.message
+                  : 'Import failed safely.',
       ),
       openHandles: 0,
     };

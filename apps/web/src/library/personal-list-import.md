@@ -106,7 +106,10 @@ review ID, rather than offer replacement operands. Progress and vote adoption re
 - Growth check: focused journey tests cover reopen, current refusal, native outcome restoration and exact retry;
   native owner/privacy, seeded browser and physical growth acceptance remain separate checks.
 
-Decision: reopen, library-return and generated Progress fixtures are the Web pins for this landing. Pin current
-versus non-current Library vote omission with one focused return test, and keep generated `progress: null` on the
-existing reopened state-decision fixtures; add no extra stories. Native guard and exact-self cases remain Kernel
-capability repairs.
+Decision: Web pins are reopen, lifecycle, library-return and generated Progress fixtures,
+`m1-vndb-library-return.test.tsx` and the named import-vndb stories. Pin current versus non-current Library vote
+omission with one focused return test, and keep generated `progress: null` on the existing reopened state-decision
+fixtures. The importer pin is `showcase-personal-list.test.ts` for sealed preview/review/apply/reopen/changed-reimport,
+Progress, cancel/delete and independent FULL Library. Native HTTP, coordinator and entry-metadata keep existing
+assertions. Native guard and exact-self cases remain Kernel capability repairs; native, browser and growth acceptance
+stay with controller verification.

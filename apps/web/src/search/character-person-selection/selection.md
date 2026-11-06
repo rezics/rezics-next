@@ -7,6 +7,7 @@ No work selection is required for name search. Ordered label languages, spoiler 
 Work choices use native suggestions constrained to the released concrete CreativeWork types; their actual type, date and available
 creator/relation context distinguish imported entries. Role choices use only the active release's P3831 target types,
 and are offered only when that qualifier is admitted on the mode's statement property and a work is resolved.
+Works mode has no work operand; its role choices are offered when any released Person-targeted statement admits P3831.
 A role choice is an operand, not a promise that a selected work has a matching statement. An empty result is honest.
 
 The reversible UI budget is eight selected works and one role, within the native predicate's existing bounds.

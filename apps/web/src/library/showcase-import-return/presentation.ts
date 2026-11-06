@@ -52,11 +52,13 @@ export function importLibraryRows(
   labels?: readonly ImportLibraryLabels[],
 ): ImportLibraryRow[] {
   const facts = currentViewerFacts(page);
+  const question = facts?.question ?? null;
   return page.libraryEntries.map((entry, index) => {
     const subject = subjectOf(entry.subject);
     const title = subject
       ? displayLibraryTitle(subject.label, locale)
       : { text: m.library_subject_unavailable({}, { locale: locale as Locale }), lang: undefined };
+    const occurrence = facts?.rows[index];
     return {
       key: `${index}:${entry.subjectId}:${entry.revision}`,
       entry,
@@ -65,9 +67,9 @@ export function importLibraryRows(
       ...(title.lang ? { titleLanguage: title.lang } : {}),
       state: labels?.[index]?.state ?? m.library_other({}, { locale: locale as Locale }),
       ...(labels?.[index]?.stateLanguage ? { stateLanguage: labels[index]!.stateLanguage } : {}),
-      // The native projection preserves input occurrence order, including repeated Subjects.
-      vote: facts?.rows[index]?.vote ?? null,
-      voteQuestion: facts?.question ?? null,
+      // Native occurrence order includes repeated Subjects even when votes or the question are withheld.
+      vote: occurrence?.vote ?? null,
+      voteQuestion: occurrence ? question : null,
       progress: progressView('activeProgressSession' in entry ? (entry.activeProgressSession ?? null) : null, locale),
     };
   });

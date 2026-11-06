@@ -5,14 +5,35 @@ export const queryShareSchema = v.object({
   reason: v.picklist(['ready', 'private_context', 'unsupported', 'oversized', 'unavailable']),
   document: v.nullable(
     v.object({
-      text: v.string(),
+      text: v.pipe(v.string(), v.maxLength(512)),
       filter: v.nullable(v.string()),
-      languages: v.array(v.string()),
+      languages: v.pipe(v.array(v.pipe(v.string(), v.maxLength(35))), v.maxLength(8)),
       sort: v.nullable(v.string()),
+      textField: v.optional(v.literal('credited_creator')),
+      creditQualifiers: v.optional(
+        v.pipe(
+          v.array(
+            v.object({
+              property: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+              value: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+            }),
+          ),
+          v.maxLength(4),
+        ),
+      ),
+      spoilerThreshold: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2))),
     }),
   ),
-  parameters: v.nullable(v.string()),
-  selections: v.array(v.object({ value: v.string(), language: v.string() })),
+  parameters: v.nullable(v.pipe(v.string(), v.maxLength(8192))),
+  selections: v.pipe(
+    v.array(
+      v.object({
+        value: v.pipe(v.string(), v.maxLength(256)),
+        language: v.pipe(v.string(), v.maxLength(35)),
+      }),
+    ),
+    v.maxLength(128),
+  ),
 });
 export type QueryShare = v.InferOutput<typeof queryShareSchema>;
 export const shareUnavailable = (): QueryShare => ({
@@ -31,6 +52,7 @@ export function parseQueryShare(value: unknown): QueryShare {
 }
 export function queryShareUrl(origin: string, locale: string, share: QueryShare): string | null {
   if (share.action !== 'allowed' || share.parameters === null || !share.document) return null;
-  const url = new URL(`/${encodeURIComponent(locale)}/search?${share.parameters}`, origin);
+  const path = share.document.textField === 'credited_creator' ? 'search/characters' : 'search';
+  const url = new URL(`/${encodeURIComponent(locale)}/${path}?${share.parameters}`, origin);
   return url.origin === new URL(origin).origin && new TextEncoder().encode(url.href).length <= 8192 ? url.href : null;
 }

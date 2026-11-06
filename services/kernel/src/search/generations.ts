@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { subjectSource } from '../semantic/search-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
+import { readCreditIndexSnapshot } from './credit-index.ts';
 import { withConnection } from '../database/pool.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
@@ -52,6 +53,8 @@ import {
   observedWrite,
   readSubjectCalendarMappingFormat,
   readSubjectCalendarMappingFormatForIndex,
+  readSubjectCreditMappingFormat,
+  readSubjectCreditMappingFormatForIndex,
   readSubjectIndexUuid,
   markSubjectCalendarReady,
   readSubjectSortFormat,
@@ -247,7 +250,8 @@ export async function rebuildSubjects(options: {
     const resumable =
       highest > (previous ?? 0) &&
       (await readSubjectSortFormat(options.search, options.prefix, highest)) === SUBJECT_SORT_FORMAT &&
-      (await readSubjectCalendarMappingFormat(options.search, options.prefix, highest)) === calendarFormat;
+      (await readSubjectCalendarMappingFormat(options.search, options.prefix, highest)) === calendarFormat &&
+      (await readSubjectCreditMappingFormat(options.search, options.prefix, highest)) === 1;
     const generation = resumable ? highest : highest + 1;
     if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
       throw new RebuildError('limit', generation);
@@ -257,6 +261,8 @@ export async function rebuildSubjects(options: {
       throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
     if ((await readSubjectCalendarMappingFormat(options.search, options.prefix, generation)) !== calendarFormat)
       throw new SearchUnavailableError('Search rebuild requires the requested calendar projection');
+    if ((await readSubjectCreditMappingFormat(options.search, options.prefix, generation)) !== 1)
+      throw new SearchUnavailableError('Search rebuild requires the credited-name projection');
     await options.runner.refresh();
 
     if (options.publication === 'native') {
@@ -802,10 +808,17 @@ async function reconcileDiscoveryPage(
     );
     expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, codec);
   } else {
-    const snapshot = await entry.source.read(
-      partition,
-      keys.map(({ id }) => id),
-    );
+    const snapshot =
+      codec === 'mixed-credit-v1'
+        ? await readCreditIndexSnapshot(
+            entry.source,
+            partition,
+            keys.map(({ id }) => id),
+          )
+        : await entry.source.read(
+            partition,
+            keys.map(({ id }) => id),
+          );
     validateObservation(
       snapshot,
       partition,
@@ -1406,12 +1419,15 @@ export async function nativeGenerationActions(options: {
   if (ids.length > 100) throw new RangeError('Generation reconciliation accepts at most 100 native keys');
   const listing = subjectListingSource(pool);
   if (!registry) {
-    const snapshot = await subjectSource(pool).read(partition, ids);
+    const source = subjectSource(pool);
+    const calendarFormat = await readSubjectCalendarMappingFormatForIndex(search, index);
+    const creditFormat = await readSubjectCreditMappingFormatForIndex(search, index);
+    const snapshot =
+      creditFormat === 1 ? await readCreditIndexSnapshot(source, partition, ids) : await source.read(partition, ids);
     validateObservation(snapshot, partition, ids, obligation, true);
     // The supplied native writer owns factual projection, foreign fences and rating decoration.
     // This raw native observation supplies eligibility, key identity and external versions only.
-    const calendarFormat = await readSubjectCalendarMappingFormatForIndex(search, index);
-    return documentActions(snapshot, ids, undefined, calendarFormat ?? undefined);
+    return documentActions(snapshot, ids, undefined, calendarFormat ?? undefined, creditFormat ?? undefined);
   }
   const keys = options.keys;
   if (!keys || keys.length !== ids.length) throw new TypeError('Native discovery keys are required');
@@ -1427,7 +1443,10 @@ export async function nativeGenerationActions(options: {
   } else {
     const entry = registry.entries.find((entry) => entry.owner === 'semantic');
     if (!entry || entry.owner !== 'semantic') throw new TypeError('Native Subject producer is required');
-    const observed = await entry.source.read(partition, ids);
+    const observed =
+      codec === 'mixed-credit-v1'
+        ? await readCreditIndexSnapshot(entry.source, partition, ids)
+        : await entry.source.read(partition, ids);
     validateObservation(observed, partition, ids, obligation, true);
     // A type change removes the old kind-key; native key enumeration separately supplies the new kind-key.
     const kind = new Map(keys.map((key) => [key.id, key.kind]));

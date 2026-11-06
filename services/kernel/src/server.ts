@@ -172,7 +172,9 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     void workClient.catch(() => {});
     const client = workClient;
     await client;
-    const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
+    const creditSearch = searchConfig === undefined ? undefined : createKernelCreditSearchSource(pool, config.routeKey);
+    const rated =
+      searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey, creditSearch);
     const search =
       openSearch === undefined || searchConfig === undefined || rated === undefined
         ? undefined
@@ -240,6 +242,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             search: openSearch,
             prefix: searchConfig.prefix,
             clock: defaults.clock,
+            ...(creditSearch === undefined ? {} : { creditSearch }),
           });
           const producers = createDiscoveryProducerEntry({
             pool,

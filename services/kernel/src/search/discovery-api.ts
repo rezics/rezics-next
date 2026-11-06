@@ -96,6 +96,8 @@ export type DiscoveryHit = {
   listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] };
   contexts?: CharacterPersonDiscoveryContexts;
   matchEvidence?: MatchEvidence;
+  /** Factual credited-name evidence on a credited-text hit; present only for the matched statement. */
+  creditMatch?: CreditMatchView;
 };
 export type PublicCollectionDiscoverySummary = Readonly<{
   id: string;
@@ -196,6 +198,8 @@ export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'a
   descriptions?: boolean;
   currentTextMatches?: (subject: IndexedSubject, query: TextNode) => Promise<boolean>;
   textQuery?: TextNode;
+  /** Credited-creator text verifies each candidate's engine evidence against the producer, not its names. */
+  textField?: 'credited_creator';
   spoilerThreshold?: 0 | 1 | 2;
   observeRelationRelease?: () => Promise<{
     digest: string;
@@ -211,7 +215,19 @@ export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInpu
     representation: 'discovery-v1';
     filterDocument: DiscoveryFilterDocument | undefined;
     comparator: 'mixed-public-v1';
+    /** Credited-creator text matches Persons credited on works; `text` is then the creator-name operand. */
+    textField?: 'credited_creator';
+    creditQualifiers?: readonly { property: string; value: string }[];
   }>;
+
+/** The served shape of a verified credited-name match; `targetId` is the credited Person's Subject id. */
+export type CreditMatchView = Readonly<{
+  statementId: string;
+  property: string;
+  targetId: string;
+  name: Readonly<{ language: string; value: string }>;
+  qualifiers: readonly Readonly<{ property: string; value: string }>[];
+}>;
 
 export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = DiscoveryOwnerKind> = K extends 'collection'
   ? Readonly<{

@@ -4,6 +4,7 @@ import {
   applyShowcasePersonalList,
   readShowcasePersonalLibrary,
   readShowcasePersonalList,
+  readShowcasePersonalProgress,
   reviewShowcasePersonalList,
   seedShowcasePersonalList,
 } from '../../../importer/src/showcase-personal-list.ts';
@@ -419,9 +420,12 @@ test('journalled explicit review and changed reimport survive lost delivery and 
       body: { rows: [{ ordinal: 1, reviewId: progress.value.reviewId }] },
     });
     if (progressApplied.state !== 'acknowledged') throw new Error(progressApplied.code);
-    const sessions = await json('GET', `/v1/progressSessions?subjectId=${targetId}&limit=8`);
-    expect(sessions.progressSessions).toHaveLength(1);
-    const sessionId = sessions.progressSessions[0].id;
+    const sessions = await readShowcasePersonalProgress({ client, subjectId: targetId, language: 'en' });
+    if (sessions.state !== 'current') throw new Error(sessions.code);
+    expect(sessions.value.progressSessions).toHaveLength(1);
+    const session = sessions.value.progressSessions[0];
+    if (!session) throw new Error('Progress session was not returned');
+    const sessionId = session.id;
     expect(sessionId).toBeString();
     const changed = await seedShowcasePersonalList({ ...caller, xml: xml(vn(sourceId, '<label label="Finished"/>')) });
     if (changed.state !== 'uploaded') throw new Error(changed.code);

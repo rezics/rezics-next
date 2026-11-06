@@ -115,6 +115,10 @@ export type InspectionDocument = Readonly<{
       skipped: number | null;
       invalidInputFlag: number | null;
       classified: number | null;
+      new: number | null;
+      changed: number | null;
+      unchanged: number | null;
+      vanished: number | null;
       resolved: number | null;
       expected: number | null;
       prepared: number | null;
@@ -162,6 +166,10 @@ type GenerationRow = {
   expected: unknown;
   prepared: unknown;
   skipped: unknown;
+  kind_new: unknown;
+  kind_changed: unknown;
+  kind_unchanged: unknown;
+  kind_vanished: unknown;
 };
 
 type EntryRow = {
@@ -742,16 +750,19 @@ export class InspectionStore {
     signal?: AbortSignal,
   ): NonNullable<InspectionDocument['generation']> {
     if (signal?.aborted) throw new InspectionFailure('Inspection was cancelled.', 130);
-    const hasSkipped = new Set(
+    const generationColumns = new Set(
       this.database
         .query('PRAGMA table_info(run_generations)')
         .all()
         .map((row) => (row as { name: string }).name),
-    ).has('skipped');
-    const skipped = hasSkipped ? 'skipped' : 'NULL AS skipped';
+    );
+    const skipped = generationColumns.has('skipped') ? 'skipped' : 'NULL AS skipped';
+    const kinds = generationColumns.has('kind_new')
+      ? 'kind_new,kind_changed,kind_unchanged,kind_vanished'
+      : 'NULL AS kind_new,NULL AS kind_changed,NULL AS kind_unchanged,NULL AS kind_vanished';
     const row = this.database
       .query(
-        `SELECT id,seq,status,threshold,prior,supplied,survivors,invalid,classified,resolved,expected,prepared,${skipped}
+        `SELECT id,seq,status,threshold,prior,supplied,survivors,invalid,classified,resolved,expected,prepared,${skipped},${kinds}
         FROM run_generations WHERE source=? AND id=?`,
       )
       .get(source, id) as GenerationRow | null;
@@ -777,6 +788,10 @@ export class InspectionStore {
     const skippedCount = nullableInteger(row.skipped, 'run_generations.skipped');
     const invalidInputFlag = nullableInteger(row.invalid, 'run_generations.invalid');
     const classified = nullableInteger(row.classified, 'run_generations.classified');
+    const classifiedNew = nullableInteger(row.kind_new, 'run_generations.kind_new');
+    const classifiedChanged = nullableInteger(row.kind_changed, 'run_generations.kind_changed');
+    const classifiedUnchanged = nullableInteger(row.kind_unchanged, 'run_generations.kind_unchanged');
+    const classifiedVanished = nullableInteger(row.kind_vanished, 'run_generations.kind_vanished');
     const resolved = nullableInteger(row.resolved, 'run_generations.resolved');
     const prepared = nullableInteger(row.prepared, 'run_generations.prepared');
     const expected = status === 'staging' ? null : nullableInteger(row.expected, 'run_generations.expected');
@@ -812,6 +827,10 @@ export class InspectionStore {
         skipped: skippedCount,
         invalidInputFlag,
         classified,
+        new: classifiedNew,
+        changed: classifiedChanged,
+        unchanged: classifiedUnchanged,
+        vanished: classifiedVanished,
         resolved,
         expected,
         prepared,

@@ -11,18 +11,21 @@ import { subjectSource } from '../semantic/search-source.ts';
 import type { PublicRatingSource } from './rating-source.ts';
 import { withPublicRatings } from './rating-subject-source.ts';
 import type { SubjectSource } from './source.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 
 /** One native composition for API disclosure, default indexing and generation replay. */
 export function createRatedSubjectSource(
   pool: Pool,
   routeKey: Uint8Array,
+  creditSearch?: CreditSearchSource,
 ): {
   source: SubjectSource & SubjectSourceKeyPages & { canonicalNames: SubjectCanonicalNames };
   ratings: PublicRatingSource;
 } {
   if (!(routeKey instanceof Uint8Array) || routeKey.byteLength !== 32) throw new ConfigError('KERNEL_ROUTE_KEY');
   const ratings = createPublicRatingSource(pool);
-  const native = subjectSource(pool, routeKey);
+  const semantic = subjectSource(pool, routeKey);
+  const native = creditSearch === undefined ? semantic : { ...semantic, creditSearch };
   const rated = withPublicRatings(native, ratings, {
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,

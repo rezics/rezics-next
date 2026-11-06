@@ -1,5 +1,5 @@
 import { withConnection } from '../database/pool.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/space-discovery.ts';
 import type { DiscoveryKey } from './discovery.ts';
 import type { DiscoveryProjection } from './account-discovery.ts';
@@ -15,6 +15,7 @@ import { SEARCH_IDENTITY_WRITER_CHUNK, type SearchWriterGuard } from './writer-g
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
+import { readCreditIndexSnapshot } from './credit-index.ts';
 
 export { IndexWriteError } from './write-actions.ts';
 
@@ -55,6 +56,8 @@ export function createSubjectIndexer(options: {
   consumer: string;
   /** Matches the target physical mapping; historical generations keep the year-only writer shape. */
   calendarFormat?: 1;
+  /** Matches the target's credit successor. Absent means the generation has no `credited_names` field. */
+  creditFormat?: 1;
   aroundApply?: SubjectApplyGuard;
   /** Trusted native runner composition; independent of aroundApply/privacy repair. */
   writer?: SearchWriterGuard;
@@ -210,7 +213,32 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
             );
             keys.push(...rows.map((row): DiscoveryKey => ({ owner: 'semantic', ...row })));
           }
+          // A changed Subject can be a creator: every indexed work citing it re-projects, even in another partition.
+          const elsewhere = new Map<number, DiscoveryKey[]>();
+          const dependents: DiscoveryKey[] = [];
+          if (subjects.size > 0)
+            for (const key of await projection.creditDependents({ creators: [...subjects] })) dependents.push(key);
+          // An activated release can change every credited name's release stamp. Only its own partition's relay
+          // sees the event, so each stale work is refreshed once for the whole family.
+          for (const envelope of envelopes)
+            for (const event of envelope.events)
+              if (
+                envelope.partition === partition &&
+                event.type === 'com.rezics.definitions.activated.v1' &&
+                lookupEventType(event.type)?.Check(event.data) === true &&
+                record(event.data) &&
+                typeof event.data.digest === 'string'
+              )
+                for (const key of await projection.creditDependents({ staleRelease: event.data.digest }))
+                  dependents.push(key);
+          for (const dependent of dependents) {
+            const owner = partitionOf(dependent.route);
+            if (owner === partition) keys.push(dependent);
+            else elsewhere.set(owner, [...(elsewhere.get(owner) ?? []), dependent]);
+          }
           await projection.project(partition, keys, envelopes.at(-1)?.position ?? 0n);
+          // Other partitions read their own current snapshots; this batch's obligation is not theirs.
+          for (const [other, otherKeys] of elsewhere) await projection.project(other, otherKeys, 0n);
           if (collections.size > 0 && projection.metadataProducers?.collection)
             await projection.projectOwner('collection', partition, [...collections]);
           if (spaces.size > 0 && projection.metadataProducers?.space)
@@ -274,7 +302,7 @@ async function guardedApply(
 export async function applySubjectKeys(
   options: Pick<
     Parameters<typeof createSubjectIndexer>[0],
-    'search' | 'source' | 'listing' | 'index' | 'writer' | 'calendarFormat'
+    'search' | 'source' | 'listing' | 'index' | 'writer' | 'calendarFormat' | 'creditFormat'
   >,
   partition: number,
   ids: readonly string[],
@@ -290,7 +318,11 @@ export async function applySubjectKeys(
         await options.writer.write(partition, chunk, obligation);
         continue;
       }
-      const snapshot = await options.source.read(partition, chunk);
+      // Only a credit-successor generation pays for creator projections; ordinary readers never do.
+      const snapshot =
+        options.creditFormat === 1
+          ? await readCreditIndexSnapshot(options.source, partition, chunk)
+          : await options.source.read(partition, chunk);
       const subjects = validateIndexObservation(snapshot, partition, chunk, obligation);
       const indexIds = chunk.filter((id) => {
         const subject = subjects.get(id);
@@ -300,7 +332,7 @@ export async function applySubjectKeys(
       const actions = await prepareBoundedSortKeys(
         options.search,
         options.index,
-        documentActions(snapshot, chunk, counts, options.calendarFormat),
+        documentActions(snapshot, chunk, counts, options.calendarFormat, options.creditFormat),
       );
       await writeIndexActions(options.search, options.index, actions);
     }

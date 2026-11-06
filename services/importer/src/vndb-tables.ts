@@ -7,6 +7,7 @@ import {
   admitVndbAcquisitionCheckpoint,
   admitVndbAcquisitionIdentity,
   memberPathDigest,
+  vndbStagingFailure,
   type VndbAcquisitionCheckpoint,
   type VndbAcquisitionIdentity,
   type VndbAcquisitionPhase,
@@ -473,6 +474,7 @@ export class VndbTablesStore {
     let entryCount = 0;
     let declaredBytes = 0;
     let actualBytes = 0;
+    let phase: VndbAcquisitionPhase = 'loading';
     try {
       for await (const entry of entries) {
         // Admit every raw entry before touching its body, including ignored and
@@ -523,6 +525,7 @@ export class VndbTablesStore {
         check(Number.isSafeInteger(actualBytes) && actualBytes === declaredBytes);
         if (isHeader && table) {
           check(lines === 1);
+          phase = 'spool-drain';
           let after = 0;
           for (;;) {
             const rows = this.db
@@ -543,9 +546,11 @@ export class VndbTablesStore {
             });
             if (rows.length < BATCH) break;
           }
+          phase = 'loading';
         }
       }
       check(seen.size === 6 && sourceRecords > 0);
+      phase = 'validating';
       this.validate(source, runId);
       this.db
         .query(`UPDATE vndb_table_runs SET state='ready' WHERE source=? AND run_id=? AND state='staging'`)
@@ -559,7 +564,7 @@ export class VndbTablesStore {
         .run(source, runId);
       this.cleanup(source, runId);
       if (error instanceof DumpInputError) throw error;
-      throw new Error('VNDB table staging failed');
+      throw new Error(vndbStagingFailure(phase));
     }
   }
 
@@ -839,13 +844,20 @@ export class VndbTablesStore {
       })();
     } catch (error) {
       if (interrupted(error)) throw error;
+      let phase: VndbAcquisitionPhase | 'unknown' = 'unknown';
+      try {
+        phase = this.cursorFrom(source, runId, tracking.identity).phase;
+      } catch {
+        // A failure before the first checkpoint still names the loading phase.
+        phase = 'loading';
+      }
       this.db
         .query(`UPDATE vndb_table_runs SET state='failed',source_records=0,staged_rows=0,staged_bytes=0
         WHERE source=? AND run_id=?`)
         .run(source, runId);
       this.cleanup(source, runId);
       if (error instanceof DumpInputError || error instanceof VndbAcquisitionError) throw error;
-      throw new Error('VNDB table staging failed', { cause: error });
+      throw new Error(vndbStagingFailure(phase), { cause: error });
     }
   }
 

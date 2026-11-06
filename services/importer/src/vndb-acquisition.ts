@@ -12,6 +12,11 @@ const ACQUISITION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 export type VndbAcquisitionCodec = typeof VNDB_PLAIN_CODEC | typeof VNDB_ZSTD_CODEC;
 export type VndbAcquisitionPhase = 'loading' | 'spool-drain' | 'validating';
 
+/** Public diagnostic names the durable cursor phase; it never includes archive paths or cell bytes. */
+export function vndbStagingFailure(phase: VndbAcquisitionPhase | 'unknown'): string {
+  return `VNDB table staging failed at phase ${phase}`;
+}
+
 export type VndbAcquisitionIdentity = Readonly<{
   sha256: string;
   bytes: number;

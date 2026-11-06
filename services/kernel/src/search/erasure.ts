@@ -698,11 +698,16 @@ export async function acknowledgeSearchErasure(pool: Pool, accountId: string) {
   );
 }
 
-export function registerSearchErasure(context: WorkContext, configuration?: { url: string; prefix: string }) {
+export function registerSearchErasure(
+  context: WorkContext,
+  configuration?: { url: string; prefix: string },
+  composeCreditSearch?: (pool: Pool, routeKey: Uint8Array) => import('./credit-search.ts').CreditSearchSource,
+) {
   const routeKey = context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : undefined;
   let source: SubjectErasureSource | undefined;
   const search = configuration ? createOpenSearch(configuration.url) : undefined;
-  const nativeSource = routeKey ? createRatedSubjectSource(context.pool, routeKey).source : undefined;
+  const creditSearch = routeKey ? composeCreditSearch?.(context.pool, routeKey) : undefined;
+  const nativeSource = routeKey ? createRatedSubjectSource(context.pool, routeKey, creditSearch).source : undefined;
   const listing = subjectListingSource(context.pool);
   const runtime: SearchErasureRuntime = {
     get source() {
@@ -711,7 +716,11 @@ export function registerSearchErasure(context: WorkContext, configuration?: { ur
     ...(routeKey
       ? {
           accountRegistry: () =>
-            nativeDiscoveryRegistry(context.pool, routeKey, createRatedSubjectSource(context.pool, routeKey).source),
+            nativeDiscoveryRegistry(
+              context.pool,
+              routeKey,
+              createRatedSubjectSource(context.pool, routeKey, creditSearch).source,
+            ),
         }
       : {}),
     ...(search && configuration ? { search, prefix: configuration.prefix } : {}),

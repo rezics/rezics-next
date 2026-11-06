@@ -265,6 +265,8 @@ export function CharacterPersonSelectionFields({
   onReady(ready: boolean): void;
 }) {
   const opts = options(locale);
+  // Works mode has no work operand, so its role does not wait for a selected work.
+  const worksMode = mode === 'works';
   const [worksReady, setWorksReady] = useState(false);
   const [roleReady, setRoleReady] = useState(false);
   const valuesKey = JSON.stringify(value);
@@ -279,16 +281,16 @@ export function CharacterPersonSelectionFields({
     [locale, JSON.stringify(languages), reader.identity, metadata],
   );
   const current =
-    worksReady &&
+    (worksMode || worksReady) &&
     roleReady &&
     value.works.length <= CHARACTER_PERSON_WORK_LIMIT &&
-    (!value.role || value.works.length > 0);
+    (!value.role || worksMode || value.works.length > 0);
   useEffect(() => {
     onReady(current);
   }, [current, valuesKey, onReady]);
   return (
     <div className="space-y-4 sm:col-span-2">
-      <p className="text-sm text-muted-foreground">{m.character_person_works_help({}, opts)}</p>
+      {!worksMode && <p className="text-sm text-muted-foreground">{m.character_person_works_help({}, opts)}</p>}
       {preparing || !reader.ready ? (
         <p role="status">{m.character_person_preparing({}, opts)}</p>
       ) : !metadata ? (
@@ -299,30 +301,37 @@ export function CharacterPersonSelectionFields({
           </button>
         </div>
       ) : null}
-      <Operand
-        kind="work"
-        ids={value.works}
-        targets={metadata?.workTargets ?? []}
-        context={{ ...context, workContext: true }}
-        reader={reader}
-        onSelect={(id) => onChange(editCharacterPersonSelection(value, { kind: 'work', id }))}
-        onRemove={(index) => onChange(editCharacterPersonSelection(value, { kind: 'remove-work', index }))}
-        retryMetadata={retryMetadata}
-        onReady={setWorksReady}
-      />
-      <p className="text-sm text-muted-foreground">{m.character_person_role_help({}, opts)}</p>
+      {!worksMode && (
+        <Operand
+          kind="work"
+          ids={value.works}
+          targets={metadata?.workTargets ?? []}
+          context={{ ...context, workContext: true }}
+          reader={reader}
+          onSelect={(id) => onChange(editCharacterPersonSelection(value, { kind: 'work', id }, mode))}
+          onRemove={(index) => onChange(editCharacterPersonSelection(value, { kind: 'remove-work', index }, mode))}
+          retryMetadata={retryMetadata}
+          onReady={setWorksReady}
+        />
+      )}
+      <p className="text-sm text-muted-foreground">
+        {worksMode ? m.character_person_credit_role_help({}, opts) : m.character_person_role_help({}, opts)}
+      </p>
       <Operand
         kind="role"
         ids={value.role ? [value.role] : []}
         targets={metadata?.roleTargets[mode] ?? []}
-        context={{ ...context, available: context.available && value.works.length > 0 && worksReady }}
+        context={{
+          ...context,
+          available: context.available && (worksMode || (value.works.length > 0 && worksReady)),
+        }}
         reader={reader}
-        onSelect={(id) => onChange(editCharacterPersonSelection(value, { kind: 'role', id }))}
+        onSelect={(id) => onChange(editCharacterPersonSelection(value, { kind: 'role', id }, mode))}
         onRemove={() => onChange({ ...value, role: '' })}
         retryMetadata={retryMetadata}
         onReady={setRoleReady}
       />
-      {value.works.length > 0 && metadata && metadata.roleTargets[mode].length === 0 && (
+      {(worksMode || value.works.length > 0) && metadata && metadata.roleTargets[mode].length === 0 && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.character_person_roles_unavailable({}, opts)}
         </p>

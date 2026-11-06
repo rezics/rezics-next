@@ -93,7 +93,7 @@ test('mixed calendar successor preserves precise facts and leaves old mapping an
   expect(mixedDiscoveryDocumentCodec(nextMapping.mappings)).toBe('mixed-calendar-v1');
 });
 
-test('new mixed physical generations allocate the calendar successor mapping', async () => {
+test('new mixed physical generations allocate the calendar and credit successor mapping', async () => {
   let definition: unknown;
   const index = 'test-discovery-g2';
   const search = {
@@ -108,6 +108,6 @@ test('new mixed physical generations allocate the calendar successor mapping', a
   await createDiscoveryIndex(search as never, 'test-', 2, 'incarnation-2');
   if (!definition || typeof definition !== 'object' || !('mappings' in definition))
     throw new Error('Expected a versioned mixed mapping');
-  expect(mixedDiscoveryDocumentCodec(definition.mappings)).toBe('mixed-calendar-v1');
-  expect(await readDiscoveryDocumentCodec(search as never, index)).toBe('mixed-calendar-v1');
+  expect(mixedDiscoveryDocumentCodec(definition.mappings)).toBe('mixed-credit-v1');
+  expect(await readDiscoveryDocumentCodec(search as never, index)).toBe('mixed-credit-v1');
 });

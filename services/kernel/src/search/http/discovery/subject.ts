@@ -82,6 +82,37 @@ function listPresentation() {
     ),
   );
 }
+/** Factual evidence of one verified credited-name match: the matched statement's own name and qualifiers. */
+export function CreditMatchSchema() {
+  return memoizedValue(CreditMatchSchema, () =>
+    t.Object(
+      {
+        statementId: t.String({ minLength: 1, maxLength: 256 }),
+        property: t.String({ minLength: 1, maxLength: 256 }),
+        targetId: t.String({ minLength: 1, maxLength: 256 }),
+        name: t.Object(
+          {
+            language: t.String({ minLength: 1, maxLength: 35 }),
+            value: t.String({ minLength: 1, maxLength: 256 }),
+          },
+          closed,
+        ),
+        qualifiers: t.Array(
+          t.Object(
+            {
+              property: t.String({ minLength: 1, maxLength: 256 }),
+              value: t.String({ minLength: 1, maxLength: 256 }),
+            },
+            closed,
+          ),
+          { maxItems: 4 },
+        ),
+      },
+      closed,
+    ),
+  );
+}
+
 export function SubjectHitSchema() {
   return memoizedValue(SubjectHitSchema, () =>
     t.Object(
@@ -97,6 +128,7 @@ export function SubjectHitSchema() {
         listPresentation: t.Optional(listPresentation()),
         contexts: t.Optional(characterPersonContexts()),
         workContext: t.Optional(WorkContextSchema),
+        creditMatch: t.Optional(CreditMatchSchema()),
       },
       closed,
     ),

@@ -91,11 +91,13 @@ export type IndexAction<Document extends SearchDocument = SubjectDocument> = {
 };
 export declare function documentActions(snapshot: SubjectSnapshot, ids: readonly string[], counts?: ReadonlyMap<string, number>, 
 /** Explicit successor projection; legacy physical writers retain their historical shape. */
-calendarFormat?: 1): IndexAction[];
+calendarFormat?: 1, 
+/** Explicit credit successor; only generations whose mapping carries `credited_names` receive the fields. */
+creditFormat?: 1): IndexAction[];
 /** The caller admits the native snapshot before constructing these positioned replacements/deletes. */
 export declare function accountDocumentActions(snapshot: AccountSnapshot, ids: readonly string[]): IndexAction<AccountDocument>[];
 /** Same Subject projection and native version; only the new generation's identity envelope changes. */
-export declare function discoverySubjectActions(snapshot: SubjectSnapshot, ids: readonly string[], counts?: ReadonlyMap<string, number>): IndexAction<DiscoverySubjectDocument>[];
+export declare function discoverySubjectActions(snapshot: SubjectSnapshot, ids: readonly string[], counts?: ReadonlyMap<string, number>, calendarFormat?: 1, creditFormat?: 1): IndexAction<DiscoverySubjectDocument>[];
 export declare function bulkLines<Document extends SearchDocument>(index: string, actions: readonly IndexAction<Document>[]): unknown[];
 /** Validate all returned evidence, including records that will produce deletes, before any projection I/O. */
 export declare function validateIndexObservation(snapshot: SubjectSnapshot, partition: number, ids: readonly string[], obligation: bigint, native?: boolean): Map<string, IndexedSubject>;

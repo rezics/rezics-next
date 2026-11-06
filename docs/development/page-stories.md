@@ -305,6 +305,20 @@ Decision: Library states with an existing API but no exact story export are `mis
 | apps/web/src/routes/library/following.tsx | phone menu sheet open   | member                          | apps/web/src/stories/library-following.stories.tsx#UnfollowMenuPhone   | apps/web/src/stories/library-following.stories.tsx#UnfollowMenuPhone   |
 | apps/web/src/routes/library/following.tsx | desktop menu open       | member                          | apps/web/src/stories/library-following.stories.tsx#UnfollowMenuDesktop | apps/web/src/stories/library-following.stories.tsx#UnfollowMenuDesktop |
 
+## apps/web/src/routes/library/import-vndb.tsx
+
+Named owner lifecycle states use recorded Library rows and native-shaped import pages. Browser and seeded native walks remain integration.
+
+| Route                                       | State                  | Viewer       | Desktop                                                                | Phone                                                                |
+| ------------------------------------------- | ---------------------- | ------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| apps/web/src/routes/library/import-vndb.tsx | private owner preview  | owner        | apps/web/src/stories/m1-vndb-import.stories.tsx#OwnerPreviewDesktop    | apps/web/src/stories/m1-vndb-import.stories.tsx#OwnerPreviewPhone    |
+| apps/web/src/routes/library/import-vndb.tsx | explicit score review  | owner        | apps/web/src/stories/m1-vndb-import.stories.tsx#ScoreReviewDesktop     | apps/web/src/stories/m1-vndb-import.stories.tsx#ScoreReviewPhone     |
+| apps/web/src/routes/library/import-vndb.tsx | partial result         | owner        | apps/web/src/stories/m1-vndb-import.stories.tsx#PartialResultDesktop   | apps/web/src/stories/m1-vndb-import.stories.tsx#PartialResultPhone   |
+| apps/web/src/routes/library/import-vndb.tsx | unchanged reopen       | owner        | apps/web/src/stories/m1-vndb-import.stories.tsx#UnchangedReopenDesktop | apps/web/src/stories/m1-vndb-import.stories.tsx#UnchangedReopenPhone |
+| apps/web/src/routes/library/import-vndb.tsx | changed reimport       | owner        | apps/web/src/stories/m1-vndb-import.stories.tsx#ChangedReimportDesktop | apps/web/src/stories/m1-vndb-import.stories.tsx#ChangedReimportPhone |
+| apps/web/src/routes/library/import-vndb.tsx | current Library return | owner        | apps/web/src/stories/m1-vndb-import.stories.tsx#LibraryReturnDesktop   | apps/web/src/stories/m1-vndb-import.stories.tsx#LibraryReturnPhone   |
+| apps/web/src/routes/library/import-vndb.tsx | privacy                | other member | apps/web/src/stories/m1-vndb-import.stories.tsx#OtherViewerDesktop     | apps/web/src/stories/m1-vndb-import.stories.tsx#OtherViewerPhone     |
+
 ## apps/web/src/routes/library/index.tsx
 
 | Route                                 | State                                        | Viewer                          | Desktop                                                                         | Phone                                                                           |

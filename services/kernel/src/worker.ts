@@ -7,7 +7,7 @@ import { bindExecutionContract } from './command/execution-contract.ts';
 import { historyExecutionPort } from './history/application/index.ts';
 import { workExecutionPort } from './work/selected-runtime.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
-import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
+import { createKernelCreditSearchSource, createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
@@ -83,11 +83,17 @@ export async function startWorker(
   installNativeHistory();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
-    createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults, composeSemanticDomain, {
-      fetch: content.application.ambient.fetch,
-      now: content.application.ambient.now,
-      id: content.application.ambient.id,
-    });
+    createKernelWorkModules(
+      createDiscoveryProducerEntry,
+      createKernelRuntimeDefaults,
+      composeSemanticDomain,
+      {
+        fetch: content.application.ambient.fetch,
+        now: content.application.ambient.now,
+        id: content.application.ambient.id,
+      },
+      createKernelCreditSearchSource,
+    );
   const resolvedModules =
     modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);

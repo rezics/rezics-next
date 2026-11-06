@@ -9,6 +9,7 @@ import {
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { FacetDiscoveryRequest, FacetDiscoveryScope } from './facet-discovery-contract.ts';
+import type { CreditQualifierOperand } from './credit-search-query.ts';
 import { RequestSourceLifetime } from './request-source-lifetime.ts';
 import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
@@ -73,7 +74,38 @@ function closed(input: unknown, fields: string[], pointer: string): Record<strin
 }
 
 export function validateFacets(request: FacetRequest): Facet[] {
-  const body = closed(request, ['text', 'filter', 'kinds', 'facets'], '');
+  const body = closed(request, ['text', 'textField', 'creditQualifiers', 'filter', 'kinds', 'facets'], '');
+  if (body.textField !== undefined && body.textField !== 'credited_creator') invalid('/textField', 'invalid_format');
+  if (body.textField !== undefined && (typeof body.text !== 'string' || body.text.length === 0))
+    invalid('/text', 'required');
+  if (body.creditQualifiers !== undefined && body.textField === undefined)
+    invalid('/creditQualifiers', 'invalid_format');
+  if (body.creditQualifiers !== undefined) {
+    if (!Array.isArray(body.creditQualifiers) || body.creditQualifiers.length < 1 || body.creditQualifiers.length > 4)
+      invalid('/creditQualifiers', 'out_of_range');
+    const seen = new Set<string>();
+    body.creditQualifiers.forEach((value: unknown, index: number) => {
+      const pointer = `/creditQualifiers/${index}`;
+      const qualifier = closed(value, ['property', 'value'], pointer);
+      if (
+        typeof qualifier.property !== 'string' ||
+        !qualifier.property.length ||
+        qualifier.property.length > 256 ||
+        !qualifier.property.isWellFormed()
+      )
+        invalid(`${pointer}/property`, 'invalid_format');
+      if (
+        typeof qualifier.value !== 'string' ||
+        !qualifier.value.length ||
+        qualifier.value.length > 256 ||
+        !qualifier.value.isWellFormed()
+      )
+        invalid(`${pointer}/value`, 'invalid_format');
+      const key = `${qualifier.property}\0${qualifier.value}`;
+      if (seen.has(key)) invalid(pointer, 'invalid_format');
+      seen.add(key);
+    });
+  }
   if (body.kinds !== undefined) validateFacetKinds(body.kinds, '/kinds');
   if (body.facets === undefined) invalid('/facets', 'required');
   if (!Array.isArray(body.facets)) invalid('/facets', 'invalid_type');
@@ -141,6 +173,50 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
     ...(body.languages === undefined ? {} : { languages: body.languages as string[] }),
     facets,
   };
+}
+
+const WIKIBASE_ITEM_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function admitReleasedCreditQualifiers(value: unknown, release: FilterRelease): CreditQualifierOperand[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4) invalid('/creditQualifiers', 'out_of_range');
+  const seen = new Set<string>();
+  return value.map((item: unknown, index: number) => {
+    const pointer = `/creditQualifiers/${index}`;
+    if (
+      item === null ||
+      typeof item !== 'object' ||
+      Array.isArray(item) ||
+      Object.keys(item).some((key) => key !== 'property' && key !== 'value')
+    )
+      invalid(pointer, 'invalid_format');
+    const { property, value: operand } = item as Record<string, unknown>;
+    if (typeof property !== 'string' || property.length === 0 || property.length > 256 || !property.isWellFormed())
+      invalid(`${pointer}/property`, 'invalid_format');
+    const definition = release.properties[property] as FilterRelease['properties'][string] | undefined;
+    if (!definition)
+      throw new ProblemError('unsupported_query', {
+        errors: [{ pointer: `${pointer}/property`, code: 'unsupported' }],
+      });
+    if (typeof operand !== 'string' || operand.length === 0 || operand.length > 256 || !operand.isWellFormed())
+      invalid(`${pointer}/value`, 'invalid_format');
+    if (definition.datatype === 'wikibase-item' && !WIKIBASE_ITEM_UUID.test(operand))
+      invalid(`${pointer}/value`, 'invalid_format');
+    const identity = `${property}\0${operand}`;
+    if (seen.has(identity)) invalid(pointer, 'invalid_format');
+    seen.add(identity);
+    return { property, value: operand };
+  });
+}
+
+/** Release-bound qualifier validation shared by facet request admission. */
+export function admitFacetCreditQualifiers(request: FacetRequest, release: FilterRelease) {
+  if (request.textField === undefined) {
+    if (request.creditQualifiers !== undefined) invalid('/creditQualifiers', 'invalid_format');
+    return undefined;
+  }
+  if (request.textField !== 'credited_creator') invalid('/textField', 'invalid_format');
+  if (typeof request.text !== 'string' || request.text.length === 0) invalid('/text', 'required');
+  return request.creditQualifiers === undefined ? [] : admitReleasedCreditQualifiers(request.creditQualifiers, release);
 }
 
 /** Probe admission with the same immediate type anchors, without spending the query's leaf/depth budget. */

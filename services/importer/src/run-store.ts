@@ -78,6 +78,8 @@ export type Seal = {
   diagnostic: string;
 };
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
+/** Keyset pages of durable classified kinds; inspect never scans these rows. */
+export const CLASSIFIED_KIND_PAGE = 100;
 type Source = {
   source: string;
   sequence: number;
@@ -103,6 +105,12 @@ type Generation = {
   prepared: number;
   cursor: string;
   skipped?: number;
+  kind_new?: number;
+  kind_changed?: number;
+  kind_unchanged?: number;
+  kind_vanished?: number;
+  kind_backfill_cursor?: string;
+  kind_backfill_done?: number;
   diagnostics_recorded?: number;
   diagnostic_records?: number;
   diagnostic_entries?: number;
@@ -481,6 +489,25 @@ function validateRun(run: Run) {
 function pageLimit(value: number) {
   if (!Number.isInteger(value) || value < 1 || value > 100) fail();
 }
+function isKind(value: unknown): value is Kind {
+  return value === 'new' || value === 'changed' || value === 'unchanged' || value === 'vanished';
+}
+function kindIncrements(kind: Kind): readonly [number, number, number, number] {
+  return [
+    kind === 'new' ? 1 : 0,
+    kind === 'changed' ? 1 : 0,
+    kind === 'unchanged' ? 1 : 0,
+    kind === 'vanished' ? 1 : 0,
+  ];
+}
+function countedKindTotal(row: {
+  kind_new?: number | null;
+  kind_changed?: number | null;
+  kind_unchanged?: number | null;
+  kind_vanished?: number | null;
+}): number {
+  return (row.kind_new ?? 0) + (row.kind_changed ?? 0) + (row.kind_unchanged ?? 0) + (row.kind_vanished ?? 0);
+}
 function boundedJson(value: unknown, cap = 65536, commandBodies?: string[]): string {
   // Serialize data descriptors directly so neither accessors nor toJSON can run.
   let budget = cap;
@@ -633,11 +660,21 @@ export class RunStore<Projection = BatchStatement[]> {
       create?: boolean;
       /** Open a retained file without creating tables; resume uses this after inode admission. */
       existing?: boolean;
+      /** Classified-kind recovery page; production uses 100. */
+      kindBackfillPageSize?: number;
+      /** Stop after this many recovery pages so tests can retain a partial cursor. */
+      kindBackfillMaxPages?: number;
     } = {},
   ) {
     if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
     if (options.existing !== undefined && options.existing !== true) fail();
     if (options.existing && options.create === true) fail();
+    if (options.kindBackfillPageSize !== undefined) pageLimit(options.kindBackfillPageSize);
+    if (
+      options.kindBackfillMaxPages !== undefined &&
+      (!Number.isInteger(options.kindBackfillMaxPages) || options.kindBackfillMaxPages < 1)
+    )
+      fail();
     this.projectionMode = options.projectionMode;
     const db =
       typeof path === 'string'
@@ -654,6 +691,11 @@ export class RunStore<Projection = BatchStatement[]> {
           digest TEXT NOT NULL, head_json TEXT NOT NULL,
           PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
         assertExistingRunSchema(this.database);
+        this.ensureClassifiedKindColumns();
+        this.recoverClassifiedKindCountersUntil(
+          options.kindBackfillMaxPages,
+          options.kindBackfillPageSize ?? CLASSIFIED_KIND_PAGE,
+        );
         return;
       }
       // Schema initialization happens once per connection, never in a run operation.
@@ -668,11 +710,15 @@ export class RunStore<Projection = BatchStatement[]> {
         resolved INTEGER NOT NULL DEFAULT 0, expected INTEGER NOT NULL DEFAULT 0,
         changed INTEGER NOT NULL DEFAULT 0, prepared INTEGER NOT NULL DEFAULT 0,
         cursor TEXT NOT NULL DEFAULT '', skipped INTEGER NOT NULL DEFAULT 0,
+        kind_new INTEGER NOT NULL DEFAULT 0, kind_changed INTEGER NOT NULL DEFAULT 0,
+        kind_unchanged INTEGER NOT NULL DEFAULT 0, kind_vanished INTEGER NOT NULL DEFAULT 0,
+        kind_backfill_cursor TEXT NOT NULL DEFAULT '', kind_backfill_done INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source,id)) WITHOUT ROWID`);
       // Additive migration leaves existing run journals and immutable prepared work intact.
       const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
       if (!generationColumns.some(({ name }) => name === 'skipped'))
         this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+      this.ensureClassifiedKindColumns();
       if (!generationColumns.some(({ name }) => name === 'diagnostics_recorded'))
         this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostics_recorded INTEGER NOT NULL DEFAULT 0');
       if (!generationColumns.some(({ name }) => name === 'diagnostic_records'))
@@ -800,6 +846,10 @@ export class RunStore<Projection = BatchStatement[]> {
         record_revision TEXT NOT NULL, digest TEXT NOT NULL, converter_revision TEXT NOT NULL,
         PRIMARY KEY(source, run_id, record_key)) WITHOUT ROWID`);
       this.database.exec(SOURCE_DESTINATION_DDL);
+      this.recoverClassifiedKindCountersUntil(
+        options.kindBackfillMaxPages,
+        options.kindBackfillPageSize ?? CLASSIFIED_KIND_PAGE,
+      );
     } catch (error) {
       db.close();
       throw error;
@@ -831,6 +881,114 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   private write(sql: string, ...args: SQLQueryBindings[]) {
     return this.query(sql).run(...args);
+  }
+  private ensureClassifiedKindColumns(): void {
+    const names = new Set(this.all<{ name: string }>('PRAGMA table_info(run_generations)').map(({ name }) => name));
+    if (!names.has('kind_new')) {
+      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_new INTEGER NOT NULL DEFAULT 0');
+      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_changed INTEGER NOT NULL DEFAULT 0');
+      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_unchanged INTEGER NOT NULL DEFAULT 0');
+      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_vanished INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!names.has('kind_backfill_cursor'))
+      this.database.exec("ALTER TABLE run_generations ADD COLUMN kind_backfill_cursor TEXT NOT NULL DEFAULT ''");
+    if (!names.has('kind_backfill_done'))
+      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_backfill_done INTEGER NOT NULL DEFAULT 0');
+  }
+  private recoverClassifiedKindCountersUntil(maxPages: number | undefined, pageSize: number): void {
+    let pages = 0;
+    const limit = maxPages ?? Number.POSITIVE_INFINITY;
+    while (pages < limit && this.recoverClassifiedKindCounters(pageSize) === 'more') pages++;
+  }
+  /**
+   * Rebuild stored kind_* counters from durable journal decisions. One keyset page, one
+   * generation; inspect remains a point read of the integers this writes.
+   */
+  recoverClassifiedKindCounters(pageCap = CLASSIFIED_KIND_PAGE): 'complete' | 'more' {
+    pageLimit(pageCap);
+    return this.transaction(() => {
+      const pending = this.get<{
+        source: string;
+        id: string;
+        classified: number;
+        kind_new: number;
+        kind_changed: number;
+        kind_unchanged: number;
+        kind_vanished: number;
+        kind_backfill_cursor: string;
+        kind_backfill_done: number;
+      }>(
+        `SELECT source,id,classified,kind_new,kind_changed,kind_unchanged,kind_vanished,
+          kind_backfill_cursor,kind_backfill_done
+        FROM run_generations WHERE kind_backfill_done=0 ORDER BY source,id LIMIT 1`,
+      );
+      if (!pending) return 'complete';
+      const counted = countedKindTotal(pending);
+      if (counted > pending.classified)
+        throw new Error('Malformed journal row: classified kind counters exceed classified records');
+      if (pending.classified === 0 || (counted === pending.classified && pending.kind_backfill_cursor === '')) {
+        this.write(
+          'UPDATE run_generations SET kind_backfill_done=1 WHERE source=? AND id=?',
+          pending.source,
+          pending.id,
+        );
+        return 'more';
+      }
+      if (pending.kind_backfill_cursor === '' && counted !== 0) {
+        this.write(
+          `UPDATE run_generations SET kind_new=0,kind_changed=0,kind_unchanged=0,kind_vanished=0
+          WHERE source=? AND id=? AND kind_backfill_cursor='' AND kind_backfill_done=0`,
+          pending.source,
+          pending.id,
+        );
+      }
+      const rows = this.all<{ record_key: string; kind: unknown }>(
+        `SELECT record_key,kind FROM run_entries
+        WHERE source=? AND run_id=? AND kind IS NOT NULL AND record_key>?
+        ORDER BY record_key LIMIT ?`,
+        pending.source,
+        pending.id,
+        pending.kind_backfill_cursor,
+        pageCap,
+      );
+      if (!rows.length) {
+        if (pending.kind_backfill_cursor === '')
+          throw new Error('Classified generation has no durable kind decisions to recover');
+        this.write(
+          'UPDATE run_generations SET kind_backfill_done=1 WHERE source=? AND id=?',
+          pending.source,
+          pending.id,
+        );
+        return 'more';
+      }
+      let addedNew = 0;
+      let addedChanged = 0;
+      let addedUnchanged = 0;
+      let addedVanished = 0;
+      for (const row of rows) {
+        if (!isKind(row.kind)) throw new Error('Malformed journal row: classified kind is not admitted');
+        const [nextNew, nextChanged, nextUnchanged, nextVanished] = kindIncrements(row.kind);
+        addedNew += nextNew;
+        addedChanged += nextChanged;
+        addedUnchanged += nextUnchanged;
+        addedVanished += nextVanished;
+      }
+      const done = rows.length < pageCap ? 1 : 0;
+      this.write(
+        `UPDATE run_generations SET kind_new=kind_new+?,kind_changed=kind_changed+?,
+        kind_unchanged=kind_unchanged+?,kind_vanished=kind_vanished+?,
+        kind_backfill_cursor=?,kind_backfill_done=? WHERE source=? AND id=?`,
+        addedNew,
+        addedChanged,
+        addedUnchanged,
+        addedVanished,
+        rows[rows.length - 1]!.record_key,
+        done,
+        pending.source,
+        pending.id,
+      );
+      return 'more';
+    });
   }
   private transaction<T>(fn: () => T): T {
     // Inside ImportSession.atomic the enclosing transaction owns the commit.
@@ -944,7 +1102,7 @@ export class RunStore<Projection = BatchStatement[]> {
         s?.present_count ?? 0,
       );
       this.write(
-        `INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior) VALUES(?,?,?,?,?,?,?)`,
+        `INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior,kind_backfill_done) VALUES(?,?,?,?,?,?,?,1)`,
         source,
         run.id,
         seq,
@@ -2067,14 +2225,33 @@ export class RunStore<Projection = BatchStatement[]> {
           run.id,
           key,
         );
-        this.write(
-          `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?
-          WHERE source=? AND id=?`,
-          snapshotChanged ? 1 : 0,
-          keys.length ? 1 : 0,
-          run.source,
-          run.id,
-        );
+        const cursor = g.kind_backfill_cursor ?? '';
+        const countLive = g.kind_backfill_done === 1 || (cursor !== '' && key <= cursor);
+        if (countLive) {
+          const [addNew, addChanged, addUnchanged, addVanished] = kindIncrements(e.kind);
+          this.write(
+            `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?,
+            kind_new=kind_new+?,kind_changed=kind_changed+?,kind_unchanged=kind_unchanged+?,kind_vanished=kind_vanished+?
+            WHERE source=? AND id=?`,
+            snapshotChanged ? 1 : 0,
+            keys.length ? 1 : 0,
+            addNew,
+            addChanged,
+            addUnchanged,
+            addVanished,
+            run.source,
+            run.id,
+          );
+        } else {
+          this.write(
+            `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?
+            WHERE source=? AND id=?`,
+            snapshotChanged ? 1 : 0,
+            keys.length ? 1 : 0,
+            run.source,
+            run.id,
+          );
+        }
       }
       const saved: Omission[] = JSON.parse(e.omissions_json);
       for (const omission of omissions) {

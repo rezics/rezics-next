@@ -2221,8 +2221,8 @@ publishes no searchable names. Ordinary names/descriptions keep their installed 
 [The bounded consumer](credit-search.ts) supplies `CreditSearchSource`, a minimal native adapter contract, and
 an additive successor [mapping](credit-search-mapping.ts). The installed native producer is
 `createCreditSearchSource` from `semantic/credit-search.ts`, composed as `createKernelCreditSearchSource`.
-Attaching it onto the rated subject source, plus writer, default-worker, prepared, facet, currentness and page
-integration, remain Search-owned and are not yet mounted. An absent adapter returns `unavailable`. The existing
+Search composition injects that producer into its rated Subject source; the rated decorator only forwards the
+supplied port to HTTP and default-worker consumers. An absent adapter returns `unavailable`. The existing
 three-entry work-context preview cannot implement this complete-input seam. Semantic's released `listWorkPlan`
 credit-property selection is the shared meaning; this consumer interprets no generic statements or fixed
 author-role roster.
@@ -2242,7 +2242,47 @@ An unfinished fourth page returns incomplete without a fifth read. Final project
 whole-dependency observation; one selected match adds an exact supporting-credit/name read and a final
 whole-dependency observation. Population growth outside these anchored seeks must not increase examined rows.
 Native 256/1024/4096 growth measurement, relay/rebuild invalidation, coverage publication and receiver/browser
-acceptance remain required when mounting this consumer; the focused tests exercise only this consumer contract.
+acceptance remain required for the mounted producer; the focused search tests do not replace seeded acceptance.
+
+Decision: a Subject generation with the credit mapping publishes `credit_search_complete` and nested `credited_names`
+from the index-only snapshot (`readForIndex` or the `CreditSearchSource` port). Every non-complete state publishes
+`credit_search_complete: false` with no names, so a stale creator name cannot survive a prefix. The default relay,
+identity guard, coverage projector and generation reconciler select this writer from the immutable physical mapping;
+historical generations retain their existing shape.
+
+Decision: `textField: credited_creator` admits `text` against complete credited names, with up to four
+`creditQualifiers` whose properties are released and whose item values are UUIDs. The query compiles one nested
+`credited_names` clause: the name leaves and every qualifier are evaluated in the same credit document, and the root
+requires `credit_search_complete`.
+
+Decision: the discovery family's successor (format 4, calendar and credit mapping) is allocated for new mixed
+generations; its Subject documents carry complete or explicitly incomplete credited-name cuts, read through
+`credit-index.ts` (the producer's `readForIndex` when present, otherwise one projection per visible Subject). The
+direct discovery path serves credited text on a credit-codec generation: each candidate's inner credit hits are
+nominations only, and a hit is shown when `CreditSearchSource.current` and `unchanged` confirm one exact witness of
+its complete projection, carrying a factual `creditMatch`. A changed cut restarts the window, absent evidence is
+omitted, and incomplete or unavailable producer evidence stays at readiness. Credited text is refused as not ready on
+older generations and without `discovery-v1`.
+Creator name, merge and concealment changes re-project every indexed work that cites the creator,
+in any partition; an activated release re-projects works with stale release stamps.
+
+Decision: facets and kind refinements preserve credited name text and same-credit qualifiers in generation, cursor
+and query bindings. Facet preparation evaluates the complete nested predicate in its retained PIT, then verifies the
+current producer witness before a value is returned. Kind-count requests rerun the same credited predicate as bounded
+positive lower-bound evidence; incomplete current producer evidence stays readiness. Credited works place selected
+kinds in AND leaf 0 so `kindCountLeaf` remaining-predicate counts keep the nested same-credit text; a bare kind
+filter is not an admitted count leaf. Credited share documents retain
+name, role, kind selection, languages, spoiler threshold and ordering, and reopen works mode without a cursor.
+
+The mounted Web works mode exposes kind facets, current query sharing and a return address for each opened work.
+The `CreditSearchSource` remains the producer boundary: when it is absent or cannot prove a complete current cut,
+direct results, counts and facet values fail closed. Seeded browser and native producer acceptance remain deferred.
+Decision: the fewest focused tests pin credited request/facet/share agreement, same-credit qualifiers, current
+incomplete cuts, subject-family credit writes and works-mode role selection.
+Decision: kind-count credited admission fixtures a discovery registry that lists the selected kind; text-only
+admission does not consult entries. Works mode consumes published KernelClient credit request and hit fields.
+Decision: Search consumes the Semantic producer through `createKernelCreditSearchSource` and `semantic/credit-search.ts`,
+never the Semantic barrel; writer-guard receives `creditFormat` from callers so it does not import mapping readers.
 
 ## Public document text consumer
 
