@@ -24,9 +24,10 @@ test('imported file diagnostics name the repairable field and grant-closed works
     }),
   );
   expect('document' in release).toBe(true);
-  expect(repairableDiagnostics([{ pointer: '/release/types/ex:BoardGame/labels/en', code: 'required', file: null }])[0]?.pointer).toBe(
-    '/release/types/ex:BoardGame/labels/en',
-  );
+  expect(
+    repairableDiagnostics([{ pointer: '/release/types/ex:BoardGame/labels/en', code: 'required', file: null }])[0]
+      ?.pointer,
+  ).toBe('/release/types/ex:BoardGame/labels/en');
   expect(publicationHref('en')).toBe('/en/catalogue/definitions/publish');
   expect(publicationHref('ja', 'context', '019a1b2c-3d4e-7f00-8a00-def000000001')).toContain('context=');
   expect(
@@ -34,14 +35,18 @@ test('imported file diagnostics name the repairable field and grant-closed works
       operations: { grant: 'definition_publication', admitted: false, publish: false, activate: false, build: false },
     }),
   ).toBe('closed');
-  expect(workspacePhase({ operations: grantedPublicationOperations(), preview: definitionPublicationFixture().preview })).toBe(
-    'ready',
-  );
+  expect(
+    workspacePhase({ operations: grantedPublicationOperations(), preview: definitionPublicationFixture().preview }),
+  ).toBe('ready');
 });
 
 test('workspace transport reviews, resumes uncertain delivery, reconciles a stale head and rereads the published digest', async () => {
   const uncertain = definitionPublicationFixture('uncertain');
-  const preview = await uncertain.transport.preview({ format: 'https://rezics.com/definitions/release/1', types: {}, properties: {} });
+  const preview = await uncertain.transport.preview({
+    format: 'https://rezics.com/definitions/release/1',
+    types: {},
+    properties: {},
+  });
   expect('kind' in preview && preview.identity?.digest.startsWith('sha256:')).toBe(true);
   const first = await uncertain.transport.submit({
     key: 'resume-1',

@@ -21,12 +21,15 @@ function requestObject(value: unknown): Record<string, unknown> {
 
 export function publicationAddress(value: unknown): { scope: PublicationScope; context?: string } {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-  const context = typeof input.context === 'string' && /^[0-9a-f-]{36}$/i.test(input.context) ? input.context : undefined;
+  const context =
+    typeof input.context === 'string' && /^[0-9a-f-]{36}$/i.test(input.context) ? input.context : undefined;
   return { scope: context ? 'context' : 'platform', ...(context ? { context } : {}) };
 }
 
 async function withPublisher<T>(
-  read: (native: ReturnType<typeof definitionPublicationNative>) => Promise<T | { ok: false; reason: PublicationFailure }>,
+  read: (
+    native: ReturnType<typeof definitionPublicationNative>,
+  ) => Promise<T | { ok: false; reason: PublicationFailure }>,
 ): Promise<T | { ok: false; reason: PublicationFailure }> {
   setResponseHeader('cache-control', 'private, no-store');
   try {
@@ -63,9 +66,8 @@ export const previewDefinitionPublication = createServerFn({ method: 'POST' })
       throw new Error('Invalid editorial head');
     return { ...address, document: input.document, expectedHead };
   })
-  .handler(
-    async ({ data }): Promise<PublicationPreview | { ok: false; reason: PublicationFailure }> =>
-      withPublisher((native) => native.preview(data.document, data.context, data.expectedHead ?? null)),
+  .handler(async ({ data }): Promise<PublicationPreview | { ok: false; reason: PublicationFailure }> =>
+    withPublisher((native) => native.preview(data.document, data.context, data.expectedHead ?? null)),
   );
 
 export const submitDefinitionPublication = createServerFn({ method: 'POST' })
@@ -73,11 +75,22 @@ export const submitDefinitionPublication = createServerFn({ method: 'POST' })
     const input = requestObject(value);
     if (typeof input.key !== 'string' || input.key.length < 3 || input.key.length > 1024)
       throw new Error('Invalid publication key');
-    if (input.operation !== 'publish' && input.operation !== 'activate' && input.operation !== 'build' && input.operation !== 'step')
+    if (
+      input.operation !== 'publish' &&
+      input.operation !== 'activate' &&
+      input.operation !== 'build' &&
+      input.operation !== 'step'
+    )
       throw new Error('Invalid publication operation');
     if (typeof input.path !== 'string' || input.path.length > 2048) throw new Error('Invalid publication path');
-    if (!input.body || typeof input.body !== 'object' || Array.isArray(input.body)) throw new Error('Invalid publication body');
-    return { key: input.key, operation: input.operation, path: input.path, body: input.body as Record<string, unknown> };
+    if (!input.body || typeof input.body !== 'object' || Array.isArray(input.body))
+      throw new Error('Invalid publication body');
+    return {
+      key: input.key,
+      operation: input.operation,
+      path: input.path,
+      body: input.body as Record<string, unknown>,
+    };
   })
   .handler(async ({ data }) => withPublisher((native) => native.submit(data)));
 

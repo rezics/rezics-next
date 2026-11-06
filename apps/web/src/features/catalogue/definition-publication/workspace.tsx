@@ -170,10 +170,7 @@ export function DefinitionPublicationWorkspace({
     const published = preview.document ?? document;
     const body =
       preview.kind === 'extension' ? publishBody('extension', published, context) : publishBody('release', published);
-    await run(
-      publicationCommand(scope, 'publish', newPublicationKey(), preview.identity, body, context),
-      'publish',
-    );
+    await run(publicationCommand(scope, 'publish', newPublicationKey(), preview.identity, body, context), 'publish');
   }
 
   async function onActivate(event: FormEvent) {
@@ -193,7 +190,10 @@ export function DefinitionPublicationWorkspace({
 
   async function onResume() {
     if (!uncertain) return;
-    await run(uncertain, uncertain.operation === 'activate' ? 'activate' : uncertain.operation === 'step' ? 'build' : 'publish');
+    await run(
+      uncertain,
+      uncertain.operation === 'activate' ? 'activate' : uncertain.operation === 'step' ? 'build' : 'publish',
+    );
   }
 
   async function onCreate() {
@@ -206,7 +206,8 @@ export function DefinitionPublicationWorkspace({
       return;
     }
     const read = await transport.readSubject(created.id);
-    if (read.ok) setIndependent({ digest: independent?.digest ?? preview?.identity?.digest ?? created.id, subject: read.id });
+    if (read.ok)
+      setIndependent({ digest: independent?.digest ?? preview?.identity?.digest ?? created.id, subject: read.id });
   }
 
   const diagnostics = [...localDiagnostics, ...repairableDiagnostics(preview?.diagnostics ?? [])];
@@ -219,9 +220,14 @@ export function DefinitionPublicationWorkspace({
           {m.definition_publication_title({}, o)}
         </PageHeading>
         <p className="text-muted-foreground">
-          {scope === 'context' ? m.definition_publication_extension_intro({}, o) : m.definition_publication_intro({}, o)}
+          {scope === 'context'
+            ? m.definition_publication_extension_intro({}, o)
+            : m.definition_publication_intro({}, o)}
         </p>
-        <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={definitionGuideHref(locale)}>
+        <a
+          className={buttonVariants({ variant: 'outline', className: actionClassName })}
+          href={definitionGuideHref(locale)}
+        >
           {m.definition_publication_guide({}, o)}
         </a>
       </header>
@@ -301,16 +307,36 @@ export function DefinitionPublicationWorkspace({
           {isReleaseComparison(comparison) && (
             <section className="space-y-2">
               <h2 className="text-lg font-semibold">{m.definition_publication_comparison({}, o)}</h2>
-              <ComparisonList locale={locale} label={m.definition_publication_added_types({}, o)} values={comparison.addedTypes} />
-              <ComparisonList locale={locale} label={m.definition_publication_removed_types({}, o)} values={comparison.removedTypes} />
-              <ComparisonList locale={locale} label={m.definition_publication_changed_types({}, o)} values={comparison.changedTypes} />
+              <ComparisonList
+                locale={locale}
+                label={m.definition_publication_added_types({}, o)}
+                values={comparison.addedTypes}
+              />
+              <ComparisonList
+                locale={locale}
+                label={m.definition_publication_removed_types({}, o)}
+                values={comparison.removedTypes}
+              />
+              <ComparisonList
+                locale={locale}
+                label={m.definition_publication_changed_types({}, o)}
+                values={comparison.changedTypes}
+              />
             </section>
           )}
           {isExtensionComparison(comparison) && (
             <section className="space-y-2">
               <h2 className="text-lg font-semibold">{m.definition_publication_comparison({}, o)}</h2>
-              <ComparisonList locale={locale} label={m.definition_publication_added_terms({}, o)} values={comparison.addedTerms} />
-              <ComparisonList locale={locale} label={m.definition_publication_removed_terms({}, o)} values={comparison.removedTerms} />
+              <ComparisonList
+                locale={locale}
+                label={m.definition_publication_added_terms({}, o)}
+                values={comparison.addedTerms}
+              />
+              <ComparisonList
+                locale={locale}
+                label={m.definition_publication_removed_terms({}, o)}
+                values={comparison.removedTerms}
+              />
             </section>
           )}
           {preview?.identity && operations.publish && diagnostics.length === 0 && (

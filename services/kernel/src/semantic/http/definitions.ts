@@ -86,7 +86,10 @@ const importPreviewResponse = t.Object(
   {
     kind: t.Union([t.Literal('release'), t.Literal('sources'), t.Literal('extension'), t.Literal('invalid')]),
     identity: t.Union([
-      t.Object({ digest: t.String(), version: t.Union([t.String(), t.Null()]), format: t.String() }, { additionalProperties: false }),
+      t.Object(
+        { digest: t.String(), version: t.Union([t.String(), t.Null()]), format: t.String() },
+        { additionalProperties: false },
+      ),
       t.Null(),
     ]),
     diagnostics: t.Array(diagnosticObject, { maxItems: 64 }),
@@ -97,7 +100,10 @@ const importPreviewResponse = t.Object(
       t.Object(
         {
           intended: t.String(),
-          current: t.Union([t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false }), t.Null()]),
+          current: t.Union([
+            t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false }),
+            t.Null(),
+          ]),
           stale: t.Boolean(),
         },
         { additionalProperties: false },
@@ -644,7 +650,7 @@ export function definitionRoutes(
           return await admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new DefinitionAccessDeniedError();
             return await previewImportedDocument(pool, body.document, {
-              context: body.context,
+              ...(body.context === undefined ? {} : { context: body.context }),
               expectedHead: body.expected_head ?? null,
               admitted: true,
             });

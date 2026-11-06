@@ -163,8 +163,15 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   expect((pinnedNew.body as { digest: string }).digest).toBe(previewBody.identity.digest);
   expect((active.body as { digest: string }).digest).toBe(previewBody.identity.digest);
 
-  const typeId = previewBody.comparison.addedTypes.find((id) => id.endsWith('Work')) ?? previewBody.comparison.addedTypes[0]!;
-  const created = await send(editor, 'POST', '/v1/subjects', { type: typeId, labels: { en: 'Fixture vertical work' } }, key());
+  const typeId =
+    previewBody.comparison.addedTypes.find((id) => id.endsWith('Work')) ?? previewBody.comparison.addedTypes[0]!;
+  const created = await send(
+    editor,
+    'POST',
+    '/v1/subjects',
+    { type: typeId, labels: { en: 'Fixture vertical work' } },
+    key(),
+  );
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const subjectId = (created.body as { subject: { id: string } }).subject.id;
   const read = await send(null, 'GET', `/v1/subjects/${subjectId}`);
@@ -186,7 +193,9 @@ test('platform and Context editors publish, resume, activate and use a compiled 
     terms: {
       [`${termPrefix(context)}:boardLink`]: {
         description: { en: 'Board relation' },
-        labels: Object.fromEntries(VERTICAL_LOCALES.map((locale) => [locale, locale === 'en' ? 'board link' : `board ${locale}`])),
+        labels: Object.fromEntries(
+          VERTICAL_LOCALES.map((locale) => [locale, locale === 'en' ? 'board link' : `board ${locale}`]),
+        ),
         domain: [typeId],
         targets: [typeId],
         multivalued: true,
@@ -206,7 +215,11 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   );
   expect(publishedExtension.status, JSON.stringify(publishedExtension.body)).toBe(201);
   const extensionDigestValue = (publishedExtension.body as { digest: string }).digest;
-  const extensionRead = await send(null, 'GET', `/v1/contexts/${context}/definitions/extensions/${extensionDigestValue}`);
+  const extensionRead = await send(
+    null,
+    'GET',
+    `/v1/contexts/${context}/definitions/extensions/${extensionDigestValue}`,
+  );
   expect(extensionRead.status, JSON.stringify(extensionRead.body)).toBe(200);
   expect((extensionRead.body as { digest: string }).digest).toBe(extensionDigestValue);
   const currentExtension = await send(editor, 'GET', `/v1/contexts/${context}/definitions`);

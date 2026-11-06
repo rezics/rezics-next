@@ -1126,7 +1126,10 @@ export function DefinitionGuideContent({
         <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={back}>
           {m.guide_back({}, o)}
         </a>
-        <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={publicationHref(locale)}>
+        <a
+          className={buttonVariants({ variant: 'outline', className: actionClassName })}
+          href={publicationHref(locale)}
+        >
           {m.definition_publication_title({}, o)}
         </a>
       </header>

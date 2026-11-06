@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { DefinitionPublicationWorkspace } from '../features/catalogue/definition-publication/workspace';
-import { definitionPublicationFixture, type PublicationScenario } from '../features/catalogue/definition-publication/fixtures';
+import {
+  definitionPublicationFixture,
+  type PublicationScenario,
+} from '../features/catalogue/definition-publication/fixtures';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
@@ -13,7 +16,12 @@ function PublicationStory({ scenario = 'review' }: { scenario?: PublicationScena
   return (
     <PatternStory path="/catalogue/definitions/publish" visitor={scenario === 'denied' ? 'Signed Out' : 'Signed In'}>
       <AppShell>
-        <DefinitionPublicationWorkspace locale={locale} scope="platform" initial={fixture.initial} transport={fixture.transport} />
+        <DefinitionPublicationWorkspace
+          locale={locale}
+          scope="platform"
+          initial={fixture.initial}
+          transport={fixture.transport}
+        />
       </AppShell>
     </PatternStory>
   );

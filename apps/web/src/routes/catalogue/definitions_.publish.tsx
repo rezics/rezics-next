@@ -40,7 +40,11 @@ function PublicationRoute() {
         open: (scope, context) => openDefinitionPublication({ data: { scope, ...(context ? { context } : {}) } }),
         preview: (document, context, expectedHead) =>
           previewDefinitionPublication({
-            data: { document, ...(context ? { context } : {}), ...(expectedHead === undefined ? {} : { expectedHead }) },
+            data: {
+              document,
+              ...(context ? { context } : {}),
+              ...(expectedHead === undefined ? {} : { expectedHead }),
+            },
           }),
         submit: (command) => submitDefinitionPublication({ data: command }),
         readRelease: (digest) => readDefinitionPublicationRelease({ data: digest }),

@@ -84,8 +84,14 @@ export type PublicationRead =
     };
 export type PublicationTransport = {
   open: (scope: PublicationScope, context?: string) => Promise<PublicationRead>;
-  preview: (document: unknown, context?: string, expectedHead?: number | null) => Promise<PublicationPreview | { ok: false; reason: PublicationFailure }>;
-  submit: (command: PublicationCommand) => Promise<
+  preview: (
+    document: unknown,
+    context?: string,
+    expectedHead?: number | null,
+  ) => Promise<PublicationPreview | { ok: false; reason: PublicationFailure }>;
+  submit: (
+    command: PublicationCommand,
+  ) => Promise<
     | { ok: true; status: number; result: PublicationResult }
     | { ok: false; reason: PublicationFailure; expectedHead?: number }
   >;
@@ -95,8 +101,13 @@ export type PublicationTransport = {
     digest: string,
   ) => Promise<{ ok: true; digest: string } | { ok: false; reason: PublicationFailure }>;
   readBuild: (root: string) => Promise<CatalogueBuildStatus | { ok: false; reason: PublicationFailure }>;
-  createSubject: (type: string, key: string) => Promise<{ ok: true; id: string } | { ok: false; reason: PublicationFailure }>;
-  readSubject: (id: string) => Promise<{ ok: true; id: string; type: string } | { ok: false; reason: PublicationFailure }>;
+  createSubject: (
+    type: string,
+    key: string,
+  ) => Promise<{ ok: true; id: string } | { ok: false; reason: PublicationFailure }>;
+  readSubject: (
+    id: string,
+  ) => Promise<{ ok: true; id: string; type: string } | { ok: false; reason: PublicationFailure }>;
 };
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -120,8 +131,12 @@ export function isPublicationLocale(value: unknown): value is PublicationLocale 
   return typeof value === 'string' && (PUBLICATION_LOCALES as readonly string[]).includes(value);
 }
 
-export function parseImportedText(name: string, text: string): { document: unknown } | { diagnostics: PublicationDiagnostic[] } {
-  if (text.length > publicationFileLimit) return { diagnostics: [{ pointer: '/document', code: 'out_of_range', file: name }] };
+export function parseImportedText(
+  name: string,
+  text: string,
+): { document: unknown } | { diagnostics: PublicationDiagnostic[] } {
+  if (text.length > publicationFileLimit)
+    return { diagnostics: [{ pointer: '/document', code: 'out_of_range', file: name }] };
   const trimmed = text.trim();
   if (!trimmed) return { diagnostics: [unknownImportedDocumentDiagnostic()] };
   try {
@@ -164,7 +179,8 @@ export function commandPath(
   if (operation === 'step' && identity) return `/v1/definitions/catalogues/${identity.digest}:step`;
   if (scope === 'context' && context && identity && operation === 'activate')
     return `/v1/contexts/${context}/definitions/extensions/${identity.digest}:activate`;
-  if (scope === 'context' && context && operation === 'publish') return `/v1/contexts/${context}/definitions/extensions`;
+  if (scope === 'context' && context && operation === 'publish')
+    return `/v1/contexts/${context}/definitions/extensions`;
   if (operation === 'activate' && identity) return `/v1/definitions/releases/${identity.digest}:activate`;
   return '/v1/definitions/releases';
 }
@@ -187,7 +203,9 @@ export function isReleaseComparison(value: ReleaseComparison | ExtensionComparis
   return Boolean(value && 'addedTypes' in value);
 }
 
-export function isExtensionComparison(value: ReleaseComparison | ExtensionComparison | null): value is ExtensionComparison {
+export function isExtensionComparison(
+  value: ReleaseComparison | ExtensionComparison | null,
+): value is ExtensionComparison {
   return Boolean(value && 'addedTerms' in value);
 }
 

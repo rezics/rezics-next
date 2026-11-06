@@ -1,10 +1,5 @@
 import { closedPublicationOperations, grantedPublicationOperations } from '@rezics/definitions';
-import type {
-  CatalogueBuildStatus,
-  PublicationPreview,
-  PublicationRead,
-  PublicationTransport,
-} from './model';
+import type { CatalogueBuildStatus, PublicationPreview, PublicationRead, PublicationTransport } from './model';
 
 export type PublicationScenario =
   | 'review'
@@ -62,7 +57,13 @@ export function definitionPublicationFixture(scenario: PublicationScenario = 're
   build: CatalogueBuildStatus | null;
   transport: PublicationTransport;
 } {
-  const closed: PublicationRead = { ok: true, phase: 'closed', scope: 'platform', operations: closedPublicationOperations(), current: null };
+  const closed: PublicationRead = {
+    ok: true,
+    phase: 'closed',
+    scope: 'platform',
+    operations: closedPublicationOperations(),
+    current: null,
+  };
   const ready: PublicationRead = {
     ok: true,
     phase: 'idle',
@@ -71,10 +72,15 @@ export function definitionPublicationFixture(scenario: PublicationScenario = 're
     current: { digest: previous, head: 4 },
   };
   const denied: PublicationRead = { ok: false, reason: scenario === 'denied' ? 'denied' : 'closed' };
-  const document = { format: 'https://rezics.com/definitions/release/1', types: { 'ex:BoardGame': { labels: { en: 'Board game' }, properties: [] } }, properties: {} };
+  const document = {
+    format: 'https://rezics.com/definitions/release/1',
+    types: { 'ex:BoardGame': { labels: { en: 'Board game' }, properties: [] } },
+    properties: {},
+  };
   let calls = 0;
   const transport: PublicationTransport = {
-    open: async () => (scenario === 'closed' || scenario === 'denied' ? (scenario === 'denied' ? denied : closed) : ready),
+    open: async () =>
+      scenario === 'closed' || scenario === 'denied' ? (scenario === 'denied' ? denied : closed) : ready,
     preview: async () => {
       if (scenario === 'invalid')
         return {

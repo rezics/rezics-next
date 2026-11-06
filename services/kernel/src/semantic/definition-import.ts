@@ -44,9 +44,7 @@ export async function previewImportedDocument(
   document: unknown,
   options: { context?: string; expectedHead?: number | null; admitted: boolean } = { admitted: true },
 ): Promise<ImportedPreview> {
-  const operations = options.admitted
-    ? grantedPublicationOperations()
-    : closedPublicationOperations();
+  const operations = options.admitted ? grantedPublicationOperations() : closedPublicationOperations();
   const active = await activeRelease(pool);
   const current = active ? { digest: active.digest, head: active.head } : null;
   const admitted = await admitImportedDocument(document);
@@ -106,7 +104,11 @@ export async function previewImportedDocument(
       comparison: compareExtensions(existing?.extension ?? null, admitted.extension),
       types: [],
       current: existing ? { digest: existing.digest, head: existing.head } : current,
-      reconciliation: reconcileActivation(digest, existing ? { digest: existing.digest, head: existing.head } : null, options.expectedHead ?? null),
+      reconciliation: reconcileActivation(
+        digest,
+        existing ? { digest: existing.digest, head: existing.head } : null,
+        options.expectedHead ?? null,
+      ),
       operations,
       document: admitted.extension,
     };
@@ -117,7 +119,9 @@ export async function previewImportedDocument(
     kind: admitted.kind,
     identity: releaseIdentity(digest, release),
     diagnostics: [],
-    comparison: active ? compareReleases(active.release, release) : compareReleases({ types: {}, properties: {} }, release),
+    comparison: active
+      ? compareReleases(active.release, release)
+      : compareReleases({ types: {}, properties: {} }, release),
     types: typesOf(release),
     current,
     reconciliation: reconcileActivation(digest, current, options.expectedHead ?? null),
@@ -126,7 +130,10 @@ export async function previewImportedDocument(
   };
 }
 
-export async function readPublishedRelease(pool: Pool, digest: string): Promise<{ digest: string; release: Release } | null> {
+export async function readPublishedRelease(
+  pool: Pool,
+  digest: string,
+): Promise<{ digest: string; release: Release } | null> {
   const release = await readRelease(pool, digest, { composed: false });
   return release ? { digest, release } : null;
 }

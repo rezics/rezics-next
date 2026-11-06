@@ -126,8 +126,7 @@ export function definitionPublicationNative(
           };
         }
         const active = await client.definitions.active.get({ headers });
-        if (active.status === 404)
-          return { ok: true, phase: 'idle', scope, operations, current: null };
+        if (active.status === 404) return { ok: true, phase: 'idle', scope, operations, current: null };
         if (active.status !== 200 || !record(active.data) || typeof active.data.digest !== 'string')
           return { ok: false, reason: failureOf(active) };
         return {
@@ -264,7 +263,9 @@ async function fetchCommand(
 ): Promise<KernelResult> {
   if (command.operation === 'publish' && command.path.includes('/extensions')) {
     const context = command.path.split('/')[3];
-    return imports.contexts({ id: context! }).definitions.extensions.post(command.body as { extension: unknown }, { headers });
+    return imports
+      .contexts({ id: context! })
+      .definitions.extensions.post(command.body as { extension: unknown }, { headers });
   }
   if (command.operation === 'activate' && command.path.includes('/extensions/')) {
     const parts = command.path.split('/');

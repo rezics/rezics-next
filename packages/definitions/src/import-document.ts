@@ -43,12 +43,22 @@ function sourceDiagnostics(value: unknown): PublicationDiagnostic[] {
     if (files.length > 256) diagnostics.push({ pointer: '/sources/schemas', code: 'out_of_range', file: null });
     for (const file of files.slice(0, 256)) {
       const text = value.schemas[file];
-      if (typeof text !== 'string') diagnostics.push({ pointer: `/sources/schemas/${file.replace(/~/g, '~0').replace(/\//g, '~1')}`, code: 'invalid_type', file });
+      if (typeof text !== 'string')
+        diagnostics.push({
+          pointer: `/sources/schemas/${file.replace(/~/g, '~0').replace(/\//g, '~1')}`,
+          code: 'invalid_type',
+          file,
+        });
       else if (utf8Bytes(text) > 256 * 1024)
-        diagnostics.push({ pointer: `/sources/schemas/${file.replace(/~/g, '~0').replace(/\//g, '~1')}`, code: 'out_of_range', file });
+        diagnostics.push({
+          pointer: `/sources/schemas/${file.replace(/~/g, '~0').replace(/\//g, '~1')}`,
+          code: 'out_of_range',
+          file,
+        });
     }
   }
-  if (!record(value.presentation)) diagnostics.push({ pointer: '/sources/presentation', code: 'invalid_type', file: null });
+  if (!record(value.presentation))
+    diagnostics.push({ pointer: '/sources/presentation', code: 'invalid_type', file: null });
   else {
     const files = Object.keys(value.presentation);
     if (files.length > 256) diagnostics.push({ pointer: '/sources/presentation', code: 'out_of_range', file: null });

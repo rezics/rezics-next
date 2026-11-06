@@ -50,7 +50,8 @@ const strings = (left: readonly string[], right: readonly string[]) => {
   if (left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
 };
-const sorted = (values: Iterable<string>) => [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+const sorted = (values: Iterable<string>) =>
+  [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
 const ownKeys = (value: unknown) => (record(value) ? Object.keys(value) : []);
 const pointer = (base: string, key: string) => `${base}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`;
 
@@ -81,7 +82,9 @@ export function unknownImportedDocumentDiagnostic(): PublicationDiagnostic {
 function typeShape(definition: unknown) {
   if (!record(definition)) return null;
   return {
-    properties: Array.isArray(definition.properties) ? definition.properties.filter((id) => typeof id === 'string') : [],
+    properties: Array.isArray(definition.properties)
+      ? definition.properties.filter((id) => typeof id === 'string')
+      : [],
     bases: Array.isArray(definition.bases) ? definition.bases.filter((id) => typeof id === 'string') : [],
     facets: Array.isArray(definition.facets) ? definition.facets.filter((id) => typeof id === 'string') : [],
   };
@@ -133,24 +136,29 @@ function collectionDelta(
 }
 
 /** Semantic identifiers only; localized labels never count as a definition change. */
-export function compareReleases(current: Pick<Release, 'types' | 'properties'>, next: Pick<Release, 'types' | 'properties'>): ReleaseComparison {
+export function compareReleases(
+  current: Pick<Release, 'types' | 'properties'>,
+  next: Pick<Release, 'types' | 'properties'>,
+): ReleaseComparison {
   const types = collectionDelta(current.types, next.types, (left, right) => {
     const a = typeShape(left);
     const b = typeShape(right);
-    return Boolean(a && b && strings(a.properties, b.properties) && strings(a.bases, b.bases) && strings(a.facets, b.facets));
+    return Boolean(
+      a && b && strings(a.properties, b.properties) && strings(a.bases, b.bases) && strings(a.facets, b.facets),
+    );
   });
   const properties = collectionDelta(current.properties, next.properties, (left, right) => {
     const a = propertyShape(left);
     const b = propertyShape(right);
     return Boolean(
       a &&
-        b &&
-        a.datatype === b.datatype &&
-        a.multivalued === b.multivalued &&
-        a.disclosure === b.disclosure &&
-        strings(a.targets, b.targets) &&
-        strings(a.units, b.units) &&
-        strings(a.qualifiers, b.qualifiers),
+      b &&
+      a.datatype === b.datatype &&
+      a.multivalued === b.multivalued &&
+      a.disclosure === b.disclosure &&
+      strings(a.targets, b.targets) &&
+      strings(a.units, b.units) &&
+      strings(a.qualifiers, b.qualifiers),
     );
   });
   return {
@@ -171,19 +179,23 @@ export function compareExtensions(current: { terms?: unknown } | null, next: { t
     const y = termShape(b);
     return Boolean(
       x &&
-        y &&
-        x.multivalued === y.multivalued &&
-        x.group === y.group &&
-        x.inverse === y.inverse &&
-        x.symmetric === y.symmetric &&
-        strings(x.domain, y.domain) &&
-        strings(x.targets, y.targets),
+      y &&
+      x.multivalued === y.multivalued &&
+      x.group === y.group &&
+      x.inverse === y.inverse &&
+      x.symmetric === y.symmetric &&
+      strings(x.domain, y.domain) &&
+      strings(x.targets, y.targets),
     );
   });
   return { addedTerms: delta.added, removedTerms: delta.removed, changedTerms: delta.changed };
 }
 
-export function reconcileActivation(intended: string, current: EditorialHead | null, expectedHead: number | null): ActivationReconciliation {
+export function reconcileActivation(
+  intended: string,
+  current: EditorialHead | null,
+  expectedHead: number | null,
+): ActivationReconciliation {
   return {
     intended,
     current,
@@ -195,7 +207,9 @@ export function closedPublicationOperations(): PublicationOperations {
   return { grant: PUBLICATION_GRANT, admitted: false, publish: false, activate: false, build: false };
 }
 
-export function grantedPublicationOperations(actions: readonly string[] = ['publish', 'activate', 'build']): PublicationOperations {
+export function grantedPublicationOperations(
+  actions: readonly string[] = ['publish', 'activate', 'build'],
+): PublicationOperations {
   const allowed = new Set(actions);
   return {
     grant: PUBLICATION_GRANT,
@@ -246,7 +260,9 @@ export function mapExtensionViolations(
   violations: readonly { pointer: string; code: string }[],
 ): PublicationDiagnostic[] {
   return violations.slice(0, 64).map((violation) => ({
-    pointer: violation.pointer.startsWith('/') ? `/extension${violation.pointer}` : pointer('/extension', violation.pointer),
+    pointer: violation.pointer.startsWith('/')
+      ? `/extension${violation.pointer}`
+      : pointer('/extension', violation.pointer),
     code: violation.code,
     file: null,
   }));
