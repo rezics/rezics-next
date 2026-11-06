@@ -143,7 +143,7 @@ function Responsibilities({
   cursors,
   navigation,
 }: {
-  page: Inventory['responsibilities'];
+  page: Inventory['responsibilities'] | NonNullable<Detail['responsibilities']>;
   cursors: Cursors;
   navigation?: WindowNavigation | undefined;
 }) {

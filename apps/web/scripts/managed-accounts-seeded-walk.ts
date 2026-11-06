@@ -196,7 +196,7 @@ async function auth(
   return send(`${stack.native}${path}`, {
     method: 'POST',
     origin: stack.issuer,
-    cookie: session?.cookie,
+    ...(session?.cookie === undefined ? {} : { cookie: session.cookie }),
     body,
     timeout,
   });

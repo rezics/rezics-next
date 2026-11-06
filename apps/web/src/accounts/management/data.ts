@@ -4,9 +4,9 @@ import type { ManagementDetail } from '../../settings/managed-account-detail-rea
 import type { ManagedAuthNavigation } from '../../settings/managed-account-actions-read';
 import { readWithin } from './read-deadline';
 
-// Additive native response fields use the existing HTTP response seam until serial client publication.
+// Additive native authActions stay on the load result only long enough to project authNavigation.
 export type Inventory = ManagedAccountsPage;
-export type Detail = ManagementDetail & { authActions?: unknown };
+export type Detail = ManagementDetail;
 export type Identity = Inventory['account'];
 export type PageFailure = { state: 'denied' | 'unavailable' | 'preparing' | 'missing' | 'signed-out' };
 export type Page<T> =
@@ -18,6 +18,7 @@ export type Page<T> =
       authNavigation?: ManagedAuthNavigation;
     }
   | PageFailure;
+export type DetailLoad = PageFailure | { state: 'ready'; value: Detail; authActions?: unknown };
 export type Cursors = { organizationsCursor?: string; operatorsCursor?: string; membersCursor?: string };
 
 export function readCursors(value: Record<string, unknown>): Cursors {
@@ -72,7 +73,7 @@ export async function loadDetail(
   accountId: string,
   cursors: Cursors,
   signal?: AbortSignal,
-) {
+): Promise<DetailLoad> {
   try {
     const result = await readWithin(
       (signal) =>
@@ -87,9 +88,14 @@ export async function loadDetail(
       signal,
       10_000,
     );
-    return result.error || !result.data
-      ? failure(result.status, result.error?.value)
-      : { state: 'ready' as const, value: result.data as Detail };
+    if (result.error || !result.data) return failure(result.status, result.error?.value);
+    const data = result.data as ManagementDetail & { authActions?: unknown };
+    const { authActions, ...value } = data;
+    return {
+      state: 'ready' as const,
+      value,
+      ...(authActions === undefined ? {} : { authActions }),
+    };
   } catch {
     return { state: 'unavailable' as const };
   }
