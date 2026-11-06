@@ -1,9 +1,4 @@
 import type { Fixtures, KernelRecording } from './fake.ts';
-import * as libraryContinue from './fake/library-continue.ts';
-import * as qualifiedRelations from './fake/qualified-relations.ts';
-import * as reviewConflicts from './fake/review-conflicts.ts';
-import * as threadMediaReuse from './fake/thread-media-reuse.ts';
-import * as libraryLabelAssignments from './fake/library-label-assignments.ts';
 import { storySubjects } from './story-subjects';
 
 type RouteContext = {
@@ -49,26 +44,67 @@ function jsonModule<Value>(loaded: Value): Value {
   return value && typeof value === 'object' ? value : loaded;
 }
 
-/** Bun's counterpart to Vite's eager glob imports. Dynamic import loads async fake route modules. */
-async function bunFiles<Value>(pattern: string): Promise<Record<string, Value>> {
-  const files = [...new Bun.Glob(pattern).scanSync({ cwd: import.meta.dir })].sort();
-  return Object.fromEntries(
-    await Promise.all(
-      files.map(async (file) => [file, (await import(`${import.meta.dir}/${file}`)) as Value] as const),
-    ),
+/** True when a specifier is absent, including a kernel-only sandbox that does not copy sibling app files. */
+function isUnresolvedModule(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return /Cannot find module|Failed to resolve import|Failed to fetch dynamically imported module|ERR_MODULE_NOT_FOUND/i.test(
+    text,
   );
 }
+
+async function loadResolved<Value>(
+  entries: Iterable<readonly [string, () => Promise<Value>]>,
+): Promise<Record<string, Value>> {
+  return Object.fromEntries(
+    (
+      await Promise.all(
+        [...entries].map(async ([file, load]) => {
+          try {
+            return [[file, await load()] as const];
+          } catch (error) {
+            if (isUnresolvedModule(error)) return [];
+            throw error;
+          }
+        }),
+      )
+    ).flat(),
+  );
+}
+
+/** Bun's counterpart to Vite's glob imports. Relative `import()` loads async modules and shares the static graph. */
+async function bunFiles<Value>(pattern: string): Promise<Record<string, Value>> {
+  const files = [...new Bun.Glob(pattern).scanSync({ cwd: import.meta.dir })].sort();
+  return loadResolved(files.map((file) => [file, () => import(`./${file}`) as Promise<Value>] as const));
+}
+
+async function optionalRoute(load: () => Promise<RouteModule>): Promise<RouteModule> {
+  try {
+    return await load();
+  } catch (error) {
+    if (isUnresolvedModule(error)) return {};
+    throw error;
+  }
+}
+
+type OrderedRouteModules = {
+  libraryContinue: RouteModule;
+  qualifiedRelations: RouteModule;
+  reviewConflicts: RouteModule;
+  threadMediaReuse: RouteModule;
+  libraryLabelAssignments: RouteModule;
+};
 
 function assemble(
   modules: Record<string, RouteModule>,
   recordings: Record<string, KernelRecording>,
   fixtures: Record<string, FixtureFile>,
+  orderedRoutes: OrderedRouteModules,
 ): Discovered {
   // Includes fake/view-continuation.ts: subject view owner pages and their refusal fixture.
   return {
     routes: [
-      ...threadMediaReuse.routes,
-      ...qualifiedRelations.routes,
+      ...(orderedRoutes.threadMediaReuse.routes ?? []),
+      ...(orderedRoutes.qualifiedRelations.routes ?? []),
       ...ordered({
         ...Object.fromEntries(
           Object.entries(modules).filter(
@@ -79,9 +115,9 @@ function assemble(
               !file.endsWith('/library-label-assignments.ts'),
           ),
         ),
-        './fake/library-continue.ts': libraryContinue,
-        './fake/review-conflicts.ts': reviewConflicts,
-        './fake/library-label-assignments.ts': libraryLabelAssignments,
+        './fake/library-continue.ts': orderedRoutes.libraryContinue,
+        './fake/review-conflicts.ts': orderedRoutes.reviewConflicts,
+        './fake/library-label-assignments.ts': orderedRoutes.libraryLabelAssignments,
       }).flatMap(([, module]) => module.routes ?? []),
     ],
     recordings: Object.fromEntries(
@@ -115,21 +151,36 @@ function assemble(
   };
 }
 
+async function loadOrderedRoutes(): Promise<OrderedRouteModules> {
+  const [libraryContinue, qualifiedRelations, reviewConflicts, threadMediaReuse, libraryLabelAssignments] =
+    await Promise.all([
+      optionalRoute(() => import('./fake/library-continue.ts')),
+      optionalRoute(() => import('./fake/qualified-relations.ts')),
+      optionalRoute(() => import('./fake/review-conflicts.ts')),
+      optionalRoute(() => import('./fake/thread-media-reuse.ts')),
+      optionalRoute(() => import('./fake/library-label-assignments.ts')),
+    ]);
+  return { libraryContinue, qualifiedRelations, reviewConflicts, threadMediaReuse, libraryLabelAssignments };
+}
+
 async function loadDiscovered(): Promise<Discovered> {
   // Vite expands these literal calls at build time. Its browser/Worker runtimes do not expose Bun.
   if (typeof Bun !== 'undefined' && typeof import.meta.glob !== 'function') {
-    const [modules, recordings, fixtures] = await Promise.all([
+    const [modules, recordings, fixtures, orderedRoutes] = await Promise.all([
       bunFiles<RouteModule>('fake/*.ts'),
       bunFiles<KernelRecording>('recorded/*.json'),
       bunFiles<FixtureFile>('fixtures/*.json'),
+      loadOrderedRoutes(),
     ]);
-    return assemble(modules, recordings, fixtures);
+    return assemble(modules, recordings, fixtures, orderedRoutes);
   }
-  return assemble(
-    import.meta.glob<RouteModule>('./fake/*.ts', { eager: true }),
-    import.meta.glob<KernelRecording>('./recorded/*.json', { eager: true, import: 'default' }),
-    import.meta.glob<FixtureFile>('./fixtures/*.json', { eager: true, import: 'default' }),
-  );
+  const [modules, recordings, fixtures, orderedRoutes] = await Promise.all([
+    loadResolved(Object.entries(import.meta.glob<RouteModule>('./fake/*.ts'))),
+    loadResolved(Object.entries(import.meta.glob<KernelRecording>('./recorded/*.json', { import: 'default' }))),
+    loadResolved(Object.entries(import.meta.glob<FixtureFile>('./fixtures/*.json', { import: 'default' }))),
+    loadOrderedRoutes(),
+  ]);
+  return assemble(modules, recordings, fixtures, orderedRoutes);
 }
 
 async function discover(): Promise<Discovered> {
