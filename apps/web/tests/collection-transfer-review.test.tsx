@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
+  collectionTransferDestinationRead,
+  collectionTransferMatchedSource,
   collectionTransferReadback,
   collectionTransferReceipt,
   collectionTransferReceiptUpdate,
@@ -85,4 +87,26 @@ test('receipt reread keeps a successful side and does not invent ready from one 
       { id: 'dest', revision: 6 },
     ),
   ).toEqual({ ...receipt, sourceRevision: 9, destinationRevision: 6, state: 'ready' });
+});
+
+test('confirmation readback requires a ready source page and a matching destination header', async () => {
+  expect(collectionTransferMatchedSource('source', { id: 'source', memberState: 'unavailable' })).toBeUndefined();
+  expect(collectionTransferMatchedSource('source', { id: 'source', revision: 9 })).toEqual({
+    id: 'source',
+    revision: 9,
+  });
+  expect(
+    await collectionTransferDestinationRead(
+      'dest',
+      Promise.resolve({ id: 'other', revision: 2 }),
+      async () => ({ members: [] }),
+    ),
+  ).toBeUndefined();
+  expect(
+    await collectionTransferDestinationRead(
+      'dest',
+      Promise.resolve({ id: 'dest', revision: 6 }),
+      async () => ({ members: [] }),
+    ),
+  ).toEqual({ id: 'dest', revision: 6 });
 });
