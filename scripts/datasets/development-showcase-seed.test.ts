@@ -8,6 +8,7 @@ import { ShowcaseJournal } from '../../services/importer/src/showcase-publicatio
 import { runDevelopmentSeed } from './cross-media-seed.ts';
 import {
   createDevelopmentShowcaseRequest,
+  developmentCollectionFailure,
   seedDevelopmentShowcase,
   type ShowcaseRequest,
 } from './development-showcase.ts';
@@ -145,7 +146,7 @@ function fixture() {
       path.endsWith('/members') ? { members: members.get(id), next: null } : { collection: collections.get(id) },
     );
   };
-  return { request, sent, collections, subjects, result: { readings, workLinks: [] } };
+  return { request, sent, collections, subjects, result: { readings, workLinks: [], vndbWorkRelations: [] } };
 }
 
 test('composes exact source roots and current native kinds; reopening reuses Collections and occurrences', async () => {
@@ -185,6 +186,11 @@ test('composes exact source roots and current native kinds; reopening reuses Col
     });
     expect(creatorReads).toBe(6);
     expect(unavailable.collections.every((row) => row.status === 'unavailable')).toBe(true);
+    expect(developmentCollectionFailure(unavailable.collections)).toEqual({
+      state: 'unavailable',
+      operation: 'collections.ranked.read-creator',
+      code: 'http-503',
+    });
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
@@ -228,7 +234,7 @@ test('unknown delivery replays exact pending bytes/key; permanent refusal stays 
       journal,
       accountId: owner,
       selection,
-      result: { readings: [], workLinks: [] },
+      result: { readings: [], workLinks: [], vndbWorkRelations: [] },
     });
     expect(missing.sources.every((row) => row.status === 'missing-source')).toBe(true);
     const wrongIdentity = await seedDevelopmentShowcase({

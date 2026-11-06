@@ -76,6 +76,18 @@ type JournalActionRow = {
   error_code: string | null;
   result_id: string | null;
 };
+export type ShowcaseActionDecision = Readonly<{
+  decision: 'explicit-422-key' | 'changed-body';
+  refusal: string;
+  priorIdempotencyKey: string;
+  idempotencyKey: string;
+}>;
+type ShowcaseActionDecisionRow = {
+  decision: ShowcaseActionDecision['decision'];
+  refusal: string;
+  prior_idempotency_key: string;
+  idempotency_key: string;
+};
 
 function json(value: unknown): string {
   return JSON.stringify(value);
@@ -148,6 +160,16 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         state TEXT NOT NULL CHECK (state IN ('prepared','acknowledged','refused')),
         error_code TEXT
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_action_decision (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action_key TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('explicit-422-key','changed-body')),
+        refusal TEXT NOT NULL,
+        prior_idempotency_key TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS showcase_action_decision_action
+        ON showcase_action_decision(action_key,id);
     `);
     // Native fixture creates need their acknowledged UUID alongside the sealed action.
     const actionColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_action)').all();
@@ -274,11 +296,24 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         (prior.body_digest !== bodyDigest ||
           (prior.error_code === 'review-http-422' && prior.idempotency_key !== idempotencyKey))
       ) {
-        this.#db
-          .query(
-            "UPDATE showcase_action SET body_digest=?,body_json=?,idempotency_key=?,state='prepared',error_code=NULL WHERE action_key=?",
-          )
-          .run(bodyDigest, bodyJson, idempotencyKey, actionKey);
+        // Replacing a refused action is a separate decision: it names the refusal it supersedes and
+        // is written with the state change, so the original refusal stays inspectable after replay.
+        const decision =
+          prior.error_code === 'review-http-422' && prior.idempotency_key !== idempotencyKey
+            ? 'explicit-422-key'
+            : 'changed-body';
+        this.#db.transaction(() => {
+          this.#db
+            .query(
+              'INSERT INTO showcase_action_decision(action_key,decision,refusal,prior_idempotency_key,idempotency_key) VALUES(?,?,?,?,?)',
+            )
+            .run(actionKey, decision, prior.error_code!, prior.idempotency_key, idempotencyKey);
+          this.#db
+            .query(
+              "UPDATE showcase_action SET body_digest=?,body_json=?,idempotency_key=?,state='prepared',error_code=NULL WHERE action_key=?",
+            )
+            .run(bodyDigest, bodyJson, idempotencyKey, actionKey);
+        })();
         return body;
       }
       // A timed-out action is retried with the original sealed body and key even if
@@ -300,6 +335,21 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       this.#db.query<JournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?').get(actionKey) ??
       null
     );
+  }
+
+  /** Recorded replacements of refused actions, oldest first; each names the refusal it superseded. */
+  actionDecisions(actionKey: string): ShowcaseActionDecision[] {
+    return this.#db
+      .query<ShowcaseActionDecisionRow, [string]>(
+        'SELECT decision,refusal,prior_idempotency_key,idempotency_key FROM showcase_action_decision WHERE action_key=? ORDER BY id',
+      )
+      .all(actionKey)
+      .map((row) => ({
+        decision: row.decision,
+        refusal: row.refusal,
+        priorIdempotencyKey: row.prior_idempotency_key,
+        idempotencyKey: row.idempotency_key,
+      }));
   }
 
   acknowledgeAction(actionKey: string, resultId?: string): void {
@@ -956,6 +1006,27 @@ async function currentFactsFence(
   const current = await review.fence({ source, externalId, fieldGroup: 'facts' });
   if (current.fenced) return 'fenced';
   return current.securityRevision === null ? 'open' : 'unavailable';
+}
+
+const coverVariantFormats: ReadonlySet<unknown> = new Set(['avif', 'webp']);
+
+/** Independent read of served derivatives: the public subject's cover summary must name this exact media and
+ * list only admitted formats at non-decreasing widths. A missing or foreign summary withholds the image. */
+export function publicCoverVariantsCurrent(read: ReviewedSubjectRead, mediaId: string): boolean {
+  const summary: unknown = Reflect.get(read, 'summary');
+  const cover: unknown = typeof summary === 'object' && summary !== null ? Reflect.get(summary, 'cover') : null;
+  if (typeof cover !== 'object' || cover === null || Reflect.get(cover, 'media') !== mediaId) return false;
+  const variants: unknown = Reflect.get(cover, 'variants');
+  if (!Array.isArray(variants) || variants.length === 0) return false;
+  let previous = 1;
+  for (const variant of variants as unknown[]) {
+    if (typeof variant !== 'object' || variant === null) return false;
+    const format: unknown = Reflect.get(variant, 'format');
+    const width: unknown = Reflect.get(variant, 'width');
+    if (!coverVariantFormats.has(format) || !Number.isSafeInteger(width) || (width as number) < previous) return false;
+    previous = width as number;
+  }
+  return true;
 }
 
 async function currentCoverOutcomes(
@@ -2907,7 +2978,10 @@ export async function publishShowcase(input: {
     if (imageAssertion) {
       cover = admittedCoverMedia(input.plan, finalMediaOutcomes, record, imageAssertion);
       const state = cover ? await currentCoverFence(input.review, cover) : 'unavailable';
-      if (state === 'open') imagePublishable = true;
+      if (state === 'open' && cover && !publicCoverVariantsCurrent(read, cover.mediaId ?? '')) {
+        // Processed media is not yet served: the image stays withheld and recoverable on the next run.
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-variant-unavailable' });
+      } else if (state === 'open') imagePublishable = true;
       else {
         const index = finalMediaOutcomes.findIndex(
           (outcome) => outcome.sourceAlias === record.sourceAlias && outcome.externalId === record.sourceKey,

@@ -17,6 +17,7 @@ import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
+  publicCoverVariantsCurrent,
   publishShowcase,
   ShowcaseJournal,
   type ShowcaseReviewPort,
@@ -807,6 +808,14 @@ test('explicit 422 replaces a collided review receipt; unknown delivery keeps th
       state: 'prepared',
       error_code: null,
     });
+    expect(journal.actionDecisions(action)).toEqual([
+      {
+        decision: 'explicit-422-key',
+        refusal: 'review-http-422',
+        priorIdempotencyKey: 'sealed-key',
+        idempotencyKey: 'replacement-key',
+      },
+    ]);
 
     journal.refuseAction(action, 'review-http-409');
     expect(journal.prepareAction(action, body, 'ignored-key')).toEqual(body);
@@ -815,7 +824,48 @@ test('explicit 422 replaces a collided review receipt; unknown delivery keeps th
       state: 'refused',
       error_code: 'review-http-409',
     });
+    expect(journal.actionDecisions(action)).toHaveLength(1);
+    expect(journal.prepareAction(action, { ...body, expected_head: 2 }, 'changed-key')).toEqual({
+      ...body,
+      expected_head: 2,
+    });
+    expect(journal.actionDecisions(action).at(-1)).toEqual({
+      decision: 'changed-body',
+      refusal: 'review-http-409',
+      priorIdempotencyKey: 'replacement-key',
+      idempotencyKey: 'changed-key',
+    });
   } finally {
     journal.close();
   }
+});
+
+test('a public cover is current only when its summary names the exact selected media with admitted variants', () => {
+  const mediaId = randomUUID();
+  const read = (cover: unknown) => ({ subject: { id: randomUUID() }, summary: { cover } }) as ReviewedSubjectRead;
+  const variants = [
+    { format: 'avif', width: 320 },
+    { format: 'webp', width: 320 },
+    { format: 'webp', width: 640 },
+  ];
+  expect(publicCoverVariantsCurrent(read({ media: mediaId, width: 1200, height: 1800, variants }), mediaId)).toBe(true);
+  expect(publicCoverVariantsCurrent(read(null), mediaId)).toBe(false);
+  expect(publicCoverVariantsCurrent({ subject: { id: randomUUID() } } as ReviewedSubjectRead, mediaId)).toBe(false);
+  expect(publicCoverVariantsCurrent(read({ media: randomUUID(), variants }), mediaId)).toBe(false);
+  expect(publicCoverVariantsCurrent(read({ media: mediaId, variants: [] }), mediaId)).toBe(false);
+  expect(
+    publicCoverVariantsCurrent(read({ media: mediaId, variants: [{ format: 'jpeg', width: 320 }] }), mediaId),
+  ).toBe(false);
+  expect(
+    publicCoverVariantsCurrent(
+      read({
+        media: mediaId,
+        variants: [
+          { format: 'webp', width: 640 },
+          { format: 'webp', width: 320 },
+        ],
+      }),
+      mediaId,
+    ),
+  ).toBe(false);
 });
