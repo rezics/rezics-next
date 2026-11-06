@@ -17,8 +17,9 @@ import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
-  publicCoverVariantsCurrent,
   publishShowcase,
+  servedCoverVariants,
+  servedVariantDecisionCurrent,
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
@@ -840,32 +841,37 @@ test('explicit 422 replaces a collided review receipt; unknown delivery keeps th
   }
 });
 
-test('a public cover is current only when its summary names the exact selected media with admitted variants', () => {
+test('a served cover is named by its public summary in normalized order, and each decision must match its own type', () => {
   const mediaId = randomUUID();
   const read = (cover: unknown) => ({ subject: { id: randomUUID() }, summary: { cover } }) as ReviewedSubjectRead;
-  const variants = [
+  const unordered = [
+    { format: 'webp', width: 640 },
+    { format: 'webp', width: 320 },
+    { format: 'avif', width: 320 },
+  ];
+  expect(
+    servedCoverVariants(read({ media: mediaId, width: 1200, height: 1800, variants: unordered }), mediaId),
+  ).toEqual([
     { format: 'avif', width: 320 },
     { format: 'webp', width: 320 },
     { format: 'webp', width: 640 },
-  ];
-  expect(publicCoverVariantsCurrent(read({ media: mediaId, width: 1200, height: 1800, variants }), mediaId)).toBe(true);
-  expect(publicCoverVariantsCurrent(read(null), mediaId)).toBe(false);
-  expect(publicCoverVariantsCurrent({ subject: { id: randomUUID() } } as ReviewedSubjectRead, mediaId)).toBe(false);
-  expect(publicCoverVariantsCurrent(read({ media: randomUUID(), variants }), mediaId)).toBe(false);
-  expect(publicCoverVariantsCurrent(read({ media: mediaId, variants: [] }), mediaId)).toBe(false);
+  ]);
+  expect(servedCoverVariants(read(null), mediaId)).toBeUndefined();
+  expect(servedCoverVariants({ subject: { id: randomUUID() } } as ReviewedSubjectRead, mediaId)).toBeUndefined();
+  expect(servedCoverVariants(read({ media: randomUUID(), variants: unordered }), mediaId)).toBeUndefined();
+  expect(servedCoverVariants(read({ media: mediaId, variants: [] }), mediaId)).toBeUndefined();
   expect(
-    publicCoverVariantsCurrent(read({ media: mediaId, variants: [{ format: 'jpeg', width: 320 }] }), mediaId),
-  ).toBe(false);
-  expect(
-    publicCoverVariantsCurrent(
-      read({
-        media: mediaId,
-        variants: [
-          { format: 'webp', width: 640 },
-          { format: 'webp', width: 320 },
-        ],
-      }),
-      mediaId,
-    ),
-  ).toBe(false);
+    servedCoverVariants(read({ media: mediaId, variants: [{ format: 'jpeg', width: 320 }] }), mediaId),
+  ).toBeUndefined();
+  const decision = {
+    allowed: true,
+    key: 'media/served-avif-320',
+    sha256: 'a'.repeat(64),
+    mediaType: 'image/avif',
+    byteCount: 1024,
+    publicCache: false,
+    cacheControl: 'private, no-cache',
+  } as const;
+  expect(servedVariantDecisionCurrent(decision, { format: 'avif', width: 320 })).toBe(true);
+  expect(servedVariantDecisionCurrent(decision, { format: 'webp', width: 320 })).toBe(false);
 });

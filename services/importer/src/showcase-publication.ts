@@ -6,7 +6,9 @@ import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { ReviewedSubjectRead } from './import-client.ts';
+import { Type, type Static } from 'typebox';
+import { Check } from 'typebox/schema';
+import { ImportTransportError, type MediaVariantDecision, type ReviewedSubjectRead } from './import-client.ts';
 import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
   showcaseDigest,
@@ -1008,25 +1010,57 @@ async function currentFactsFence(
   return current.securityRevision === null ? 'open' : 'unavailable';
 }
 
-const coverVariantFormats: ReadonlySet<unknown> = new Set(['avif', 'webp']);
+/** The served-variant fields of the cover summary a public Subject read carries; Content owns the full shape. */
+const ServedCoverSummary = Type.Object({
+  media: Type.String({ format: 'uuid' }),
+  variants: Type.Array(
+    Type.Object({
+      format: Type.Union([Type.Literal('avif'), Type.Literal('webp')]),
+      width: Type.Integer({ minimum: 1, maximum: 2560 }),
+    }),
+    { minItems: 1 },
+  ),
+});
+export type CoverVariant = Static<typeof ServedCoverSummary>['variants'][number];
+type ServedVariantReview = {
+  authorizeMediaVariant?: (mediaId: string, variant: string) => Promise<MediaVariantDecision>;
+};
 
-/** Independent read of served derivatives: the public subject's cover summary must name this exact media and
- * list only admitted formats at non-decreasing widths. A missing or foreign summary withholds the image. */
-export function publicCoverVariantsCurrent(read: ReviewedSubjectRead, mediaId: string): boolean {
+/** The derivatives the public Subject summary names for this exact media, in width then format order. */
+export function servedCoverVariants(read: ReviewedSubjectRead, mediaId: string): readonly CoverVariant[] | undefined {
   const summary: unknown = Reflect.get(read, 'summary');
-  const cover: unknown = typeof summary === 'object' && summary !== null ? Reflect.get(summary, 'cover') : null;
-  if (typeof cover !== 'object' || cover === null || Reflect.get(cover, 'media') !== mediaId) return false;
-  const variants: unknown = Reflect.get(cover, 'variants');
-  if (!Array.isArray(variants) || variants.length === 0) return false;
-  let previous = 1;
-  for (const variant of variants as unknown[]) {
-    if (typeof variant !== 'object' || variant === null) return false;
-    const format: unknown = Reflect.get(variant, 'format');
-    const width: unknown = Reflect.get(variant, 'width');
-    if (!coverVariantFormats.has(format) || !Number.isSafeInteger(width) || (width as number) < previous) return false;
-    previous = width as number;
+  const cover: unknown = typeof summary === 'object' && summary !== null ? Reflect.get(summary, 'cover') : undefined;
+  if (!Check(ServedCoverSummary, cover) || cover.media !== mediaId) return undefined;
+  return [...cover.variants].sort((left, right) => left.width - right.width || left.format.localeCompare(right.format));
+}
+
+/** A Kernel decision is current for a derivative when it names that derivative's own image type and bytes. */
+export function servedVariantDecisionCurrent(decision: MediaVariantDecision, variant: CoverVariant): boolean {
+  return decision.allowed && decision.mediaType === `image/${variant.format}` && decision.byteCount >= 1;
+}
+
+/** Independent served-variant read: one decision per admitted format at its smallest width, so two requests at most. */
+async function servedCoverCurrent(
+  review: ServedVariantReview,
+  read: ReviewedSubjectRead,
+  mediaId: string,
+): Promise<boolean> {
+  const variants = servedCoverVariants(read, mediaId);
+  const authorize = review.authorizeMediaVariant;
+  if (!variants || !authorize) return false;
+  const smallest = new Map<CoverVariant['format'], CoverVariant>();
+  for (const variant of variants) if (!smallest.has(variant.format)) smallest.set(variant.format, variant);
+  try {
+    for (const variant of smallest.values()) {
+      const decision = await authorize(mediaId, `${variant.format}-${variant.width}`);
+      if (!servedVariantDecisionCurrent(decision, variant)) return false;
+    }
+    return true;
+  } catch (error) {
+    // A refused or unavailable served read withholds only the image; other failures are programming errors.
+    if (error instanceof ImportTransportError) return false;
+    throw error;
   }
-  return true;
 }
 
 async function currentCoverOutcomes(
@@ -1558,7 +1592,7 @@ export async function publishShowcase(input: {
   result: CrossMediaSeedResult;
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   journal: ShowcaseJournal;
-  review: ShowcaseReviewPort;
+  review: ShowcaseReviewPort & ServedVariantReview;
   publicClient: PublicBulkClient;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
   tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
@@ -2978,11 +3012,12 @@ export async function publishShowcase(input: {
     if (imageAssertion) {
       cover = admittedCoverMedia(input.plan, finalMediaOutcomes, record, imageAssertion);
       const state = cover ? await currentCoverFence(input.review, cover) : 'unavailable';
-      if (state === 'open' && cover && !publicCoverVariantsCurrent(read, cover.mediaId ?? '')) {
-        // Processed media is not yet served: the image stays withheld and recoverable on the next run.
-        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-variant-unavailable' });
-      } else if (state === 'open') imagePublishable = true;
-      else {
+      if (state === 'open' && cover) {
+        // Served derivatives are read independently; without them only the image is withheld, not the record.
+        if (await servedCoverCurrent(input.review, read, cover.mediaId ?? '')) imagePublishable = true;
+        else
+          omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-variant-unavailable' });
+      } else {
         const index = finalMediaOutcomes.findIndex(
           (outcome) => outcome.sourceAlias === record.sourceAlias && outcome.externalId === record.sourceKey,
         );
