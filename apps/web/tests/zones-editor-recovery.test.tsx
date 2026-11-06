@@ -351,6 +351,30 @@ test('correction preserves a conflict and cannot focus a removed page or a repla
   });
 });
 
+test('lifecycle conflict keeps the independent draft against the newly read head', async () => {
+  const fixture = zoneEditorFixture();
+  const initial = structuredClone(fixture.initial);
+  if (initial.resource.kind === 'ready') {
+    initial.resource.value.zone.deletedAt = '2026-11-06T00:00:00.000Z';
+    initial.resource.value.zone.restoreUntil = '2026-12-06T00:00:00.000Z';
+  }
+  const transport: Transport = {
+    ...fixture.transport,
+    lifecycle: async () => ({ kind: 'failure', status: 412, code: 'precondition_failed' }),
+  };
+  const session = new ZoneEditorSession(transport, initial);
+  const draft = structuredClone(session.snapshot().draft!);
+  draft.configuration.labels.en = 'Independent draft';
+  session.edit(draft);
+  const retained = session.snapshot().draft;
+  fixture.externalChange();
+  await session.changeLifecycle('restore');
+  expect(session.snapshot().draft).toBe(retained);
+  expect(session.dirty()).toBe(true);
+  expect(session.snapshot().conflict?.resource.kind).toBe('ready');
+  expect(session.snapshot().saved?.configuration.labels.en).not.toBe('Independent draft');
+});
+
 test('removing a page before mounted correction focus never selects another page at its former index', async () => {
   const fixture = zoneEditorFixture();
   const session = new ZoneEditorSession(fixture.transport, fixture.initial);

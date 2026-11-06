@@ -7,12 +7,15 @@ test('the catalogue Zone lifecycle client hides, restores and refuses a second o
       return {
         async delete(_body, options) {
           expect(options.headers.authorization).toBe('Bearer owner');
-          return { status: 200, data: { zone: { revision: '2' } } };
+          return {
+            status: 200,
+            data: { zone: { revision: '2', deletedAt: '2026-11-06T00:00:00.000Z', restoreUntil: '2026-12-06T00:00:00.000Z' } },
+          };
         },
         $restore: {
           async post(_body, options) {
             return options.headers.authorization === 'Bearer owner'
-              ? { status: 200, data: { zone: { revision: '3' } } }
+              ? { status: 200, data: { zone: { revision: '3', deletedAt: null, restoreUntil: null } } }
               : { status: 403, data: null };
           },
         },
@@ -28,11 +31,19 @@ test('the catalogue Zone lifecycle client hides, restores and refuses a second o
     ok: true,
     operation: 'delete',
     revision: '2',
+    deletedAt: '2026-11-06T00:00:00.000Z',
+    restoreUntil: '2026-12-06T00:00:00.000Z',
   });
   expect(
     await changeZoneLifecycle(client, 'Bearer other', { ...address, revision: '2', operation: 'restore' }),
   ).toEqual({ ok: false, reason: 'denied' });
   expect(
     await changeZoneLifecycle(client, 'Bearer owner', { ...address, revision: '2', operation: 'restore' }),
-  ).toEqual({ ok: true, operation: 'restore', revision: '3' });
+  ).toEqual({
+    ok: true,
+    operation: 'restore',
+    revision: '3',
+    deletedAt: null,
+    restoreUntil: null,
+  });
 });

@@ -50,12 +50,18 @@ test('owner delete and restore complete through keyboard use on narrow and wide 
             onDelete: () => {
               seen.push('delete');
               deleted = true;
-              last = { ok: true, operation: 'delete', revision: '2' };
+              last = {
+                ok: true,
+                operation: 'delete',
+                revision: '2',
+                deletedAt: '2026-11-06T00:00:00.000Z',
+                restoreUntil: '2026-12-06T00:00:00.000Z',
+              };
             },
             onRestore: () => {
               seen.push('restore');
               deleted = false;
-              last = { ok: true, operation: 'restore', revision: '3' };
+              last = { ok: true, operation: 'restore', revision: '3', deletedAt: null, restoreUntil: null };
             },
           }),
         ),
