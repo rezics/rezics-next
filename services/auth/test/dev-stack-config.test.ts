@@ -24,6 +24,7 @@ import {
   importerScopes,
   walkBun,
   walkHostPersonaAccount,
+  walkSetupCommand,
   walkStackStartCommand,
   walkStartProcesses,
 } from '../scripts/dev-stack.ts';
@@ -336,6 +337,12 @@ test('a walk start keeps Vite and the worker down through seed and runs Kernel w
   expect(walk.some((row) => row.command.includes('pages') || row.command.includes('web'))).toBe(false);
   expect(walk.some((row) => row.command.includes('worker') || row.command.includes('src/worker.ts'))).toBe(false);
   expect(walk.some((row) => row.command.includes('dev'))).toBe(false);
+  expect(walkSetupCommand({ REZICS_WALK_SMOL: '1' }, ['services/kernel/scripts/database.ts', 'up'])).toEqual([
+    process.execPath,
+    '--smol',
+    'services/kernel/scripts/database.ts',
+    'up',
+  ]);
 });
 
 test('an authorized password rotation retains the original registration input', async () => {

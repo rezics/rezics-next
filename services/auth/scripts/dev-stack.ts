@@ -16,6 +16,8 @@ import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
+  reclaimInactiveFileCache,
+  walkDockerOutput,
   walkPortAllocated,
   walkReadyUrls,
   walkStackEnvironment,
@@ -741,6 +743,10 @@ export function walkBun(env: NodeJS.ProcessEnv = process.env): string[] {
   return env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
 }
 
+export function walkSetupCommand(env: NodeJS.ProcessEnv, script: readonly string[]): string[] {
+  return [...walkBun(env), ...script];
+}
+
 /** Walk host already wrote seed.env; a second Auth+Kernel assemble would share the 6 GiB slice. */
 export function walkHostPersonaAccount(
   env: NodeJS.ProcessEnv | Record<string, string | undefined>,
@@ -835,18 +841,16 @@ async function start() {
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
-function dockerOutput(args: string[]): string {
-  const result = spawnSync('docker', args, { encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${result.stderr.trim()}`);
-  return result.stdout.trim();
+function dockerCleanup(args: string[]): string {
+  return walkDockerOutput(spawnSync('docker', args, { encoding: 'utf8' }));
 }
 
-/** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
+/** Removes the task's containers and volumes that exist; a killed Docker cannot hide the walk failure. */
 function removeWalkStack(names: WalkNames): void {
   for (const container of [names.database, names.search])
-    if (dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) dockerOutput(['rm', '-f', '-v', container]);
+    if (dockerCleanup(['ps', '-aq', '--filter', `name=^${container}$`])) dockerCleanup(['rm', '-f', '-v', container]);
   for (const volume of [names.database, names.search])
-    if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
+    if (dockerCleanup(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerCleanup(['volume', 'rm', volume]);
 }
 
 /** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
@@ -880,7 +884,7 @@ async function runWalkSetup(
   env: Record<string, string>,
   onSpawn: (child: ReturnType<typeof Bun.spawn>) => void,
 ): Promise<void> {
-  const child = Bun.spawn([process.execPath, ...script], {
+  const child = Bun.spawn(walkSetupCommand(env, script), {
     cwd: root,
     env,
     stdin: 'ignore',
@@ -906,6 +910,8 @@ async function walk(command: string[]): Promise<number> {
   if (!task || !walkStackRequired(process.env))
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
+  process.env.REZICS_WALK_SMOL = '1';
+  reclaimInactiveFileCache();
   const names = walkStackNames(task);
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;

@@ -62,7 +62,7 @@ observations remain in their readings and the composer obtains its own current a
 into sign-in or return addresses.
 
 The seeded participation walk runs with
-`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/vndb-seeded-journey.ts`.
+`bun --smol services/auth/scripts/dev-stack.ts walk -- bun --smol apps/web/scripts/vndb-seeded-journey.ts`.
 It consumes the wrapper's published Subject/Board pair, follows actual author links, reads durable native effects
 independently, and records the exact profile occurrence return. The walk owns its stack through the existing runner.
 
@@ -76,6 +76,10 @@ session is a second browser.
 Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
 The walk restores the launcher's pinned dump cache onto `/srv/rezics-check/datasets/dumps` before the run slice so
 seed neither downloads a rotated VNDB file nor extracts archives inside the 6 GiB memory cap.
+A restored extraction with a matching marker is reused without hashing the archive. The walk parent sets
+`REZICS_WALK_SMOL` so database/search/setup use bun --smol, leftover Docker teardown never throws, and each
+walk/seed/browser phase asks the slice to reclaim inactive file cache. Launch the walk itself with `bun --smol`
+so the parent module graph shares that heap.
 `persona` reuses the host-written `seed.env` rather than assembling a second Auth+Kernel composition; issuer forwarding
 keeps POST bodies so seed sign-in reaches native Auth. The walk `start` waiter runs under bun --smol; Playwright is
 imported only after seed.

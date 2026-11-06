@@ -5,6 +5,7 @@
  * its task's container and volume names, so stacks cannot collide with each other or with a developer's stack.
  */
 import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
 import { walkStackDirectory } from './stack-run.ts';
@@ -125,6 +126,34 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     REZICS_WALK_DEFER_FRONTENDS: '1',
     MALLOC_ARENA_MAX: '2',
   };
+}
+
+/** Four GiB is enough to drop bun-install and dump-archive pages without waiting on admission reclaim. */
+const WALK_RECLAIM_BYTES = 4 * 1024 * 1024 * 1024;
+
+/** Asks this run's cgroup to drop inactive file pages; missing or unwritable memory.reclaim is ignored. */
+export function reclaimInactiveFileCache(bytes = WALK_RECLAIM_BYTES): void {
+  try {
+    const path = /^0::(.*)$/m.exec(readFileSync('/proc/self/cgroup', 'utf8'))?.[1];
+    if (!path) return;
+    writeFileSync(`/sys/fs/cgroup${path}/memory.reclaim`, `${bytes}\n`);
+  } catch {
+    /* The walk continues when the slice cannot reclaim file cache. */
+  }
+}
+
+/** Re-exec the walk parent under bun --smol once, so its module graph shares the 6 GiB slice. */
+export function walkParentInvocation(env: NodeJS.ProcessEnv, argv: readonly string[]): string[] | undefined {
+  if (env.REZICS_WALK_SMOL === '1' || argv[1] === '--smol' || argv.length < 2) return undefined;
+  return [argv[0]!, '--smol', ...argv.slice(1)];
+}
+
+/** Docker teardown returns empty output on failure so a killed daemon cannot hide the walk error. */
+export function walkDockerOutput(result: {
+  status: number | null;
+  stdout?: string | null;
+}): string {
+  return result.status === 0 ? (result.stdout ?? '').trim() : '';
 }
 
 /** Forward one issuer-origin request onto native Auth, including POST bodies used by seed sign-in. */

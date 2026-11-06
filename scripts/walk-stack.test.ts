@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   publishedHostPorts,
+  reclaimInactiveFileCache,
+  walkDockerOutput,
   walkIssuerForward,
+  walkParentInvocation,
   walkPortAllocated,
   walkReadyUrls,
   walkStackEnvironment,
@@ -52,12 +55,31 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   );
 });
 
+test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {
+  expect(
+    walkParentInvocation({}, ['/pinned/bun', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true']),
+  ).toEqual(['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true']);
+  expect(
+    walkParentInvocation({ REZICS_WALK_SMOL: '1' }, [
+      '/pinned/bun',
+      'services/auth/scripts/dev-stack.ts',
+      'walk',
+    ]),
+  ).toBeUndefined();
+  expect(walkParentInvocation({}, ['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk'])).toBeUndefined();
+  expect(walkDockerOutput({ status: 0, stdout: 'abc\n' })).toBe('abc');
+  expect(walkDockerOutput({ status: null, stdout: '' })).toBe('');
+  expect(walkDockerOutput({ status: 1, stdout: 'ignored' })).toBe('');
+  expect(() => reclaimInactiveFileCache(1024)).not.toThrow();
+});
+
 test('the seeded walk loads Playwright and the worker only after dump import', async () => {
   const source = await Bun.file(join(import.meta.dir, '../apps/web/scripts/vndb-seeded-journey.ts')).text();
   expect(source.includes("from 'playwright/test'")).toBe(false);
   expect(source).toContain("await import('playwright')");
   expect(source).toContain("await import('playwright/test')");
   expect(source).toContain("spawn('worker')");
+  expect(source).toContain('reclaimInactiveFileCache');
 });
 
 test('walk issuer forwarding keeps POST bodies for native Auth', async () => {

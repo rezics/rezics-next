@@ -6,7 +6,7 @@ import type { Browser, Page } from 'playwright';
 import { createKernelClient } from '@rezics/client';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
 import type { DevelopmentShowcaseReport } from '../../../scripts/datasets/cross-media-seed.ts';
-import { walkIssuerForward } from '../../../scripts/walk-stack.ts';
+import { reclaimInactiveFileCache, walkIssuerForward } from '../../../scripts/walk-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/vndb-journey');
@@ -276,6 +276,7 @@ try {
   );
   assert.equal(unselected.entry.state, 'not_selected');
   report.phases.push('actual-publication-and-native-entry');
+  reclaimInactiveFileCache();
 
   await withFrontends(async () => {
   ({ chromium } = await import('playwright'));

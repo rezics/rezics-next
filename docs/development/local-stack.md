@@ -214,7 +214,7 @@ plane passes that list to the worker as `GOAL_ACCEPTANCE_REQUIRES`. Every other 
 containers, and its checks keep the remote placement in [scripts/README.md](../../scripts/README.md#check-hosts).
 
 ```sh
-bun services/auth/scripts/dev-stack.ts walk -- <command...>
+bun --smol services/auth/scripts/dev-stack.ts walk -- <command...>
 ```
 
 `walk` runs in this order:
@@ -256,7 +256,10 @@ this task's leftover containers are removed before admission, and a Docker bind 
 skips that slot.
 `persona` inside a deferred-frontend walk reuses the host-written `seed.env` instead of assembling a second Auth+Kernel
 composition in the 6 GiB slice. Issuer JWKS and seed `POST /signin/key` are forwarded onto native Auth with the original
-request, including POST bodies, until Auth pages bind. The walk `start` waiter itself runs under bun --smol.
+request, including POST bodies, until Auth pages bind. Launch the walk with `bun --smol` so the parent module graph shares that heap; database, search and setup use that
+same bun; leftover Docker teardown never throws; a restored dump extraction skips archive hashing; and each
+walk/seed/browser phase asks the slice to reclaim inactive file cache. The walk `start` waiter itself runs under bun
+--smol.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
@@ -266,7 +269,7 @@ remain separate acceptance outcomes.
 ## Seeded journey walks
 
 One area outcome shares one admitted current-revision stack session and one supported seed result. Start that session
-with `bun services/auth/scripts/dev-stack.ts walk -- <command...>`. The slot lock is the admission: the environment
+with `bun --smol services/auth/scripts/dev-stack.ts walk -- <command...>`. The slot lock is the admission: the environment
 names the slot, and the command inherits that stack's container names, loopback ports and origins. Obtain the
 controller-owned stack, browser and persona handles, then record the source revision, completed `result.json` and
 actual native identities. Missing credentials, private exports or required seeded roles are setup inputs for the
@@ -309,7 +312,7 @@ Missing or changed pinned bytes stop the seed; it does not continue with Bangumi
 in the dump cache when the provider rotates it away. Changing the pin is an explicit source-generation change.
 Remote seeded walks copy that launcher cache onto `/srv/rezics-check/datasets/dumps` before the 6 GiB command slice
 and set `REZICS_DATASETS_DUMP_CACHE` there, so download and extract stay out of the run and a rotated public file
-cannot replace the pin.
+cannot replace the pin. A matching extracted marker reuses those tables without hashing the archive inside the slice.
 VNDB's dump metadata licence remains independent of image rights. The wrapper's returned and persisted
 `developmentShowcase.sourceSnapshots` carries the verified archive URL, filename, SHA-256 and metadata licences for
 both providers, plus VNDB's verified TIMESTAMP, even when later publication is incomplete.
