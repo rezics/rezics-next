@@ -469,7 +469,11 @@ export function MemberList({
               : m.subject_section_failed({}, options)}
         </p>
       ) : (
-        !failed && !restart && unique.size === 0 && <p>{m.subject_relation_empty_page({}, options)}</p>
+        !failed &&
+        !restart &&
+        unique.size === 0 && (
+          <p role="status">{cursor ? m.public_read_sparse({}, options) : m.public_read_empty({}, options)}</p>
+        )
       )}
       {restart && <p role="alert">{m.member_window_cycle({}, options)}</p>}
       <p
@@ -484,7 +488,7 @@ export function MemberList({
           : waiting
             ? m.search_recovery_wait({}, options)
             : failed?.status === 202
-              ? m.collection_filter_preparing({}, options)
+              ? m.public_read_preparing({}, options)
               : completion
                 ? completion.exhausted
                   ? m.subject_relation_completed_end({ label: title, count: completion.added }, options)

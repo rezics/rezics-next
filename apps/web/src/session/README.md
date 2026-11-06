@@ -40,7 +40,7 @@ and independent credential fencing for original uncertain commands; phone and de
 Subject community/reaction revisions and personal response epochs also retire in-stack; their existing adapters
 publish React notifications through this same observer without changing specialist admission or command custody.
 
-Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed.
+Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed. An indeterminate private route offers explicit session retry and safe sign-in with that same bounded path. Neither action admits a private loader until a current signed-in observation succeeds.
 
 ## Public module entry
 

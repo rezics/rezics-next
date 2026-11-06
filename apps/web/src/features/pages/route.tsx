@@ -18,14 +18,15 @@ export type RoutePageData = {
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
   document: RouteDocument;
-  reads: Record<string, { status: number; body: JsonValue }>;
+  reads: Record<string, { status: number; body: JsonValue; headers?: Record<string, string> }>;
 };
 
 export type RoutePageLoad =
   | { kind: 'missing' }
   | { kind: 'page'; page: RoutePageData }
-  | { kind: 'rejected'; status: number; code: string }
-  | { kind: 'unavailable'; status?: number; code: string };
+  | { kind: 'preparing'; status: number; code: string; retryAfter?: string }
+  | { kind: 'rejected'; status: number; code: string; retryAfter?: string }
+  | { kind: 'unavailable'; status?: number; code: string; retryAfter?: string };
 
 export function routePageJsonLd(
   page: RoutePageData,
@@ -60,9 +61,12 @@ export async function loadRoutePage(client: KernelClient, route: string, locale?
     const page = result.data as Omit<RoutePageData, 'route'>;
     return { kind: 'page', page: { ...page, route } };
   }
-  const code = problemCode(result.error?.value);
-  if (result.status >= 500) return { kind: 'unavailable', status: result.status, code };
-  if (result.status >= 400) return { kind: 'rejected', status: result.status, code };
+  const code = problemCode(result.error?.value ?? result.data);
+  const hint = new Headers(result.headers).get('retry-after');
+  const failure = { status: result.status, code, ...(hint ? { retryAfter: hint } : {}) };
+  if (result.status === 202 || code === 'presentation_not_ready') return { kind: 'preparing', ...failure };
+  if (result.status >= 500) return { kind: 'unavailable', ...failure };
+  if (result.status >= 400) return { kind: 'rejected', ...failure };
   throw new Error(`Unexpected pages.read response: ${result.status}`);
 }
 

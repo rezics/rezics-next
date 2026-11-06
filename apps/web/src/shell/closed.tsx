@@ -7,7 +7,8 @@ import { routeRetry } from './error-state';
 import { RouteState } from './route-state';
 import { browserObservation } from '../session/observation';
 import { sessionQuery } from '../session/query';
-import { isDependencyUnavailableError, isSessionUnavailableError } from '../session/unavailable';
+import { isDependencyUnavailableError, isSessionUnavailableError, isPreparingReadError } from '../session/unavailable';
+import { SessionUnavailablePrompt } from '../session/private-page';
 import { DependencyUnavailablePage } from './dependency-recovery/page';
 import { recoveryOwnerIsCurrent, type RecoveryOwner } from './dependency-recovery/retry-owner';
 
@@ -99,6 +100,27 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
     retryFailed,
     ...(recovery ? { recovery } : {}),
   };
+  if (
+    error &&
+    typeof error === 'object' &&
+    'name' in error &&
+    error.name === 'PageReadError' &&
+    'status' in error &&
+    (error.status === 401 || error.status === 403)
+  )
+    return (
+      <RouteState kind="error" heading={m.public_read_denied()} message={m.public_read_denied()} {...retryProps} />
+    );
+  if (isSessionUnavailableError(error)) return <SessionUnavailablePrompt {...retryProps} />;
+  if (isPreparingReadError(error))
+    return (
+      <RouteState
+        kind="unavailable"
+        heading={m.public_read_preparing()}
+        message={m.collection_filter_preparing()}
+        {...retryProps}
+      />
+    );
   return isDependencyUnavailableError(error) ? (
     <DependencyUnavailablePage {...retryProps} />
   ) : (

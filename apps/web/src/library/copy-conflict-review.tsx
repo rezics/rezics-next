@@ -23,21 +23,7 @@ export function adoptCopyConflictDraft(
     if (local.draft[key] !== baseline.draft[key]) draft[key] = local.draft[key];
   }
   const kind = local.kind !== baseline.kind ? local.kind : (incoming.kind ?? '');
-  const stored = (value: string) => (value === '' ? null : value);
-  return {
-    copy: {
-      ...incoming,
-      status: draft.status,
-      location: stored(draft.location),
-      source: stored(draft.source),
-      acquiredOn: stored(draft.acquiredOn),
-      disposedOn: stored(draft.disposedOn),
-      note: stored(draft.note),
-      kind: kind || incoming.kind,
-    },
-    draft,
-    kind,
-  };
+  return { copy: incoming, draft, kind };
 }
 
 export type ConflictReview =

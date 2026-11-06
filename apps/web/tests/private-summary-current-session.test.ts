@@ -1,10 +1,12 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { nativeContinueSource } from '../src/library/continue-adapter';
-import { CONTINUE_LIMIT, loadContinue, loadContinueState } from '../src/library/continue-read';
-import { followCountsSearch, loadPrivateFollowCounts } from '../src/library/private-follow-counts';
 import type { SessionEnv } from '../src/session/client';
-import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../src/session/request';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { nativeContinueSource } = await import('../src/library/continue-adapter');
+const { CONTINUE_LIMIT, loadContinue, loadContinueState } = await import('../src/library/continue-read');
+const { followCountsSearch, loadPrivateFollowCounts } = await import('../src/library/private-follow-counts');
+const { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } = await import('../src/session/request');
 
 const target = { targetType: 'collection' as const, targetId: '0192f3a0-6c1e-7b2a-9d4e-000000000021' };
 const viewer = { subject: 'current-reader', csrfToken: 'A'.repeat(22) };
@@ -32,7 +34,6 @@ function session() {
 }
 
 // Only session storage and HTTP transport are fixtures; Request preparation and generated callers are real.
-// Authored for controller integration and intentionally UNRUN in this source-only attempt.
 describe('Continue and private follow counts discard refused current-session context before native reads and retain bounded honest healthy results', () => {
   test('actual absence overrides cached credentials, subject and CSRF before source or native reads', async () => {
     const { current, env, request } = session();
@@ -49,6 +50,7 @@ describe('Continue and private follow counts discard refused current-session con
     for (const input of [{}, target, { targetId: target.targetId }])
       expect(await loadPrivateFollowCounts(client, request, env, input)).toEqual({
         viewer: null,
+        locale: 'en',
         context: followCountsSearch(input),
         outgoing: { state: 'signed-out' },
         target: null,
@@ -65,13 +67,15 @@ describe('Continue and private follow counts discard refused current-session con
     await expect(loadContinue(client, request, env)).rejects.toMatchObject({ state: 'unavailable' });
     expect(await loadPrivateFollowCounts(client, request, env, target)).toEqual({
       viewer: null,
+      locale: 'en',
       context: target,
-      outgoing: { state: 'unavailable', status: 502, code: 'dependency_unavailable' },
+      outgoing: { state: 'unavailable', status: 502, code: 'session_unavailable' },
       target: null,
     });
     const explicit = new Request('https://site.test/en/library', { headers: { authorization: 'Bearer explicit' } });
     expect(await loadPrivateFollowCounts(client, explicit, env, target)).toEqual({
       viewer: null,
+      locale: 'en',
       context: target,
       outgoing: { state: 'signed-out' },
       target: null,
@@ -162,6 +166,7 @@ describe('Continue and private follow counts discard refused current-session con
     });
     expect(await loadPrivateFollowCounts(client, request, env, target)).toEqual({
       viewer,
+      locale: 'en',
       context: target,
       outgoing: { state: 'ready', count: 0 },
       target: { state: 'ready', count: 8 },
@@ -188,6 +193,7 @@ describe('Continue and private follow counts discard refused current-session con
     ).toBe(true);
     expect(await loadPrivateFollowCounts(null, request, env, target)).toEqual({
       viewer,
+      locale: 'en',
       context: target,
       outgoing: { state: 'unavailable' },
       target: null,

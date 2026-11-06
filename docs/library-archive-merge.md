@@ -4,7 +4,7 @@ Collection archive recovery is owned by [Native Library archive Collection recov
 The installed v1 export and its producer-side guarantees remain owned by [Library export](library-export.md).
 
 The [installed personal export](library-export.md) produces a completed local `{manifest,records}` file.
-Its V1, V2 and V3 manifest, section order and encoded-record limits are shared by the producer and archive decoder;
+Its V1, V2, V3 and V4 manifest, section order and encoded-record limits are shared by the producer and archive decoder;
 there is no second archive schema. Export coverage and its integration evidence status remain unchanged. V2/V3
 personal fact recovery is specified in
 [Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md).
@@ -17,17 +17,18 @@ private consumer is `POST /v1/libraryArchiveMerges`, owner status `GET /:id`, in
 evidence pruning `POST /:id/prune`. These methods do not change the producer's export interface or claim Web UI
 completion.
 
-Decision: accept completed V1, V2 and V3 artifacts with their exact installed manifests within 34 MiB and depth 32;
+Decision: accept completed V1, V2, V3 and V4 artifacts with their exact installed manifests within 34 MiB and depth 32;
 preserve the V1/V2 inventories, reject duplicate rows and exact stored label names, and keep expired capture timestamps
 as evidence rather than treating them as permission or file expiry.
-V3 keeps the exact V2 section order and adds journal assessment; V4's appended provider sections are refused as a whole
-until their consumer coverage is explicitly installed.
+V3 keeps the exact V2 section order and adds journal assessment. V4 keeps its original 21-section manifest and
+provider rows as unsupported evidence. Native validation checks the complete artifact before any supported-fact
+selection; Web never repairs missing totals or converts an external file to an older version.
 
 Decision: retain one seven-day archive per account; cap preview/result pages and review/apply batches at 100/20;
 replay uncertain effects with journaled native request keys and prune expired evidence in 100-row pages.
 
 Validation requires the producer's final manifest, all version-declared installed sections in producer order, the
-global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. V2/V3 section totals
+global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. V2/V3/V4 section totals
 are verified against the records. A missing final manifest, missing section declaration or absent assignment label
 parent is incomplete, never explicitly empty.
 Malformed envelopes, unsupported formats/versions, inconsistent counts, duplicate JSON keys, invalid Unicode,
@@ -41,12 +42,12 @@ computed count, `present` or `empty` capture, and one of these treatments:
 
 | Sections                                                                     | Treatment                                                       |
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| entries, labels, assignments, annotations, journals                          | `requires-explicit-mapping`; validation admits no native effect |
+| entries, labels, assignments, annotations, journals, provenance              | `requires-explicit-mapping`; validation admits no native effect |
 | sessions, units, history, holdings, collections, collectionPins, occurrences | `retained-unsupported`                                          |
-| bangumiUploads, bangumiEvidence, malImports, malEvidence, provenance         | `retained-unsupported`                                          |
+| bangumiUploads, bangumiEvidence, malImports, malEvidence, V4 provider sections         | `retained-unsupported`                                          |
 
 Excluded trash, Commerce/financial evidence, publication output and unavailable sources remain the producer's
-explicit omissions. V2 provenance remains evidence only; it cannot grant visibility or become an annotation.
+explicit omissions. Source observations require their native admit/correct review; their privacy never grants publication or becomes an annotation.
 Unsupported records retain inert evidence; their payloads receive structural/identity checks, not a claim of native
 semantic admission.
 
@@ -84,8 +85,7 @@ A refresh cannot change an applying/acknowledged item. Those items keep their or
 accepted receipts can be retried after cancellation, while expiry/pruning never undoes native effects.
 
 The route producer declares the revised `KernelClient.libraryArchiveMerges` upload, preview, review and apply contract. Upload's declared body is
-`string | {manifest: Record<string,unknown>, records: Record<string,unknown>[]}`. Original JSON text is sent unchanged;
-ingress still preserves raw bytes and the
+`string | Blob | {manifest: Record<string,unknown>, records: Record<string,unknown>[]}`. Original file bytes travel in a base64 Web envelope and a JSON Blob; ingress preserves them and the
 strict bounded decoder alone admits the artifact. Web's canonical archive consumer retains the existing
 `/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
 a handwritten client, proxy cast or alternate upload route.

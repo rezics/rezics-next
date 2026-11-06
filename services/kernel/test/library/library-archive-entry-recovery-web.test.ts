@@ -39,11 +39,6 @@ beforeAll(async () => {
   const created = await f.send('owner', 'POST', '/v1/libraryExports');
   expect(created.status).toBe(200);
   const { exportId } = await created.json();
-  // Use the existing native producer's retained supported capture, rather than inventing an artifact.
-  await f.pool.query(
-    'UPDATE library.library_export SET format_version=3 WHERE route=$1 AND account_id=$2 AND export_id=$3',
-    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, exportId],
-  );
   const status = await (await f.send('owner', 'GET', `/v1/libraryExports/${exportId}`)).json();
   const records: Record<string, unknown>[] = [];
   let manifest: Record<string, unknown> | null = null;
@@ -56,6 +51,7 @@ beforeAll(async () => {
     cursor = page.next;
   }
   expect(manifest).not.toBeNull();
+  expect(manifest!.version).toBe(4);
   artifact = { manifest: manifest!, records };
 }, 120_000);
 afterAll(async () => {
@@ -64,16 +60,17 @@ afterAll(async () => {
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
 function receiver(owner: Identity, loseAck = false) {
-  const calls: { path: string; body: string; bytes: number }[] = [];
+  const calls: { path: string; body: string; bytes: number; bodyBase64: string }[] = [];
   let dropped = false;
   const client = createKernelClient('http://kernel.test', {
     fetch: Object.assign(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init);
         const path = new URL(request.url).pathname;
+        const bodyBase64 = Buffer.from(await request.clone().arrayBuffer()).toString('base64');
         const response = await f.handle(request.clone());
         const body = await request.text();
-        calls.push({ path, body, bytes: (await response.clone().arrayBuffer()).byteLength });
+        calls.push({ path, body, bodyBase64, bytes: (await response.clone().arrayBuffer()).byteLength });
         if (loseAck && !dropped && path.endsWith('/apply') && response.status === 200) {
           dropped = true;
           const { uploadId, applied } = await response.clone().json();
@@ -104,7 +101,7 @@ function receiver(owner: Identity, loseAck = false) {
   const journey = new ArchiveEntryRecoveryJourney(port, () => binding, Date.now() + 300_000);
   return { journey, port, calls };
 }
-const file = () => new File([JSON.stringify(artifact, null, 2)], 'completed-v3.json', { type: 'application/json' });
+const file = () => new File([JSON.stringify(artifact, null, 2)], 'completed-v4.json', { type: 'application/json' });
 
 test('Native producer file passes mounted receiving selection, preserved Entry, label creation, assignment and current reads', async () => {
   const owner = await f.identity(scopes);
@@ -217,7 +214,8 @@ test('Native file boundary preserves malformed, unsupported, count and cross-own
   try {
     for (const text of [
       '{broken',
-      JSON.stringify({ ...artifact, manifest: { ...artifact.manifest, version: 4 } }),
+      JSON.stringify({ ...artifact, manifest: { ...artifact.manifest, sectionTotals: undefined } }),
+      JSON.stringify({ ...artifact, manifest: { ...artifact.manifest, version: 5 } }),
       JSON.stringify({ ...artifact, manifest: { ...artifact.manifest, rows: Number(artifact.manifest.rows) + 1 } }),
     ]) {
       const reply = await port.upload(text, entryKey());
@@ -237,6 +235,36 @@ test('Native file boundary preserves malformed, unsupported, count and cross-own
     } finally {
       foreign.journey.retire();
     }
+  } finally {
+    journey.retire();
+  }
+}, 120_000);
+
+test('mounted file upload preserves invalid UTF-8 for native rejection and original-intent replay', async () => {
+  const owner = await f.identity(scopes);
+  const { journey, calls } = receiver(owner);
+  const prefix = new TextEncoder().encode(JSON.stringify(artifact).replace('planned', 'MARKER'));
+  const index = Buffer.from(prefix).indexOf('MARKER');
+  expect(index).toBeGreaterThan(0);
+  prefix[index] = 0xff;
+  try {
+    await journey.upload(new File([prefix], 'invalid-utf8.json'));
+    expect(journey.snapshot().state?.upload).toBeNull();
+    expect(journey.snapshot().notice).toBe('400:invalid_request');
+    journey.restart();
+    await journey.adoptOriginal();
+    const uploads = calls.filter((call) => call.path === '/v1/libraryArchiveMerges');
+    expect(uploads).toHaveLength(2);
+    expect(uploads.map((call) => call.bodyBase64)).toEqual([
+      Buffer.from(prefix).toString('base64'),
+      Buffer.from(prefix).toString('base64'),
+    ]);
+    expect(journey.snapshot().notice).toBe('400:invalid_request');
+    const live = await f.pool.query(
+      'SELECT count(*)::int AS count FROM library.library_archive_merge_upload WHERE route=$1 AND account_id=$2',
+      [routeOf(owner.actor.accountId), owner.actor.accountId],
+    );
+    expect(live.rows[0].count).toBe(0);
   } finally {
     journey.retire();
   }

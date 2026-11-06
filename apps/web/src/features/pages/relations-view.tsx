@@ -121,7 +121,9 @@ export function RelationsView({
       ) : items.length === 0 ? (
         <Empty className="border" role="status" data-state="empty">
           <EmptyHeader>
-            <EmptyTitle className="text-base font-normal">{m.subject_relation_empty_page({}, options)}</EmptyTitle>
+            <EmptyTitle className="text-base font-normal">
+              {next ? m.public_read_sparse({}, options) : m.subject_relation_empty_page({}, options)}
+            </EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (

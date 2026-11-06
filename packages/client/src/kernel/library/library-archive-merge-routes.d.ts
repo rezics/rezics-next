@@ -6802,7 +6802,7 @@ export declare function libraryArchiveMergeRoutes(app: ReturnType<typeof definit
     v1: {
         libraryArchiveMerges: {
             post: {
-                body: string | {
+                body: string | Blob | {
                     manifest: Record<string, unknown>;
                     records: Record<string, unknown>[];
                 };

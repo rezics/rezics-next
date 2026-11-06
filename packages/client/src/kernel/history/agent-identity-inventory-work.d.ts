@@ -3,7 +3,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { HistoryReceivingContext } from './receiving.ts';
 import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 export declare function unpricedIdentityHistoryWork(term: string, amount: NativeStepWork): NativeStepWork;
 /** Accounts SQL does not enumerate Library candidates, run Semantic's identity
  * metadata sweeps, or expand Library witnesses. Those three axes are proven zero

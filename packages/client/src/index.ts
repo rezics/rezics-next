@@ -1,3 +1,8 @@
+export {
+  decodeQuestionManagementPage,
+  decodeQuestionLabelHistory,
+  type QuestionManagementPage,
+} from './question-management';
 import { treaty, type Treaty } from '@elysia/eden';
 import type { Static } from 'typebox';
 import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';
@@ -297,12 +302,10 @@ export type {
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
 
-export type {
-  SubjectIdentityOperation,
-  SubjectIdentityOperationAdmission,
-  SubjectIdentityOperationRead,
-  SubjectIdentityOperationRoutes,
-} from './kernel/semantic/http/identity-operations.d.ts';
+export type SubjectIdentityOperationRoutes = Routes['subjectIdentityOperations'];
+export type SubjectIdentityOperationRead = SubjectIdentityOperationRoutes[':id']['get']['response'][200];
+export type SubjectIdentityOperation = SubjectIdentityOperationRead['operation'];
+export type SubjectIdentityOperationAdmission = SubjectRoutes['$merge']['post']['response'][202];
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
 export type OwnVoteEntry = OwnVotesPage['votes'][number];

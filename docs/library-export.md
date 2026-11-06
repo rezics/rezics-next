@@ -63,11 +63,11 @@ Return uses locale-aware `/library` with no shelf or filter operands.
 Version 1 is the fixed historical coverage set below and never implies annotation, provenance or journal coverage.
 New captures use version 4. Stored version 1, 2 and 3 captures keep their original sections, record shapes, manifest
 fields and byte accounting; their cursor epochs remain 1, 2 and 3. Version 2, 3 and 4 cursors carry per-section counters.
-Unsupported versions and cursor shapes are refused. The existing archive consumer accepts V1, V2 and V3 manifests; its
+Unsupported versions and cursor shapes are refused. The archive consumer accepts original V1, V2, V3 and V4 manifests; its
 supported annotation, journal and assessment operations are specified in
 [Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md). V3 keeps
-the exact V2 section order and adds the declared assessment object; V4 provider sections remain unsupported for
-archive recovery.
+the exact V2 section order and adds the declared assessment object; V4 provider sections remain unsupported evidence in
+archive recovery; they are retained and counted rather than omitted before native validation.
 
 ## Version matrix and section additions
 

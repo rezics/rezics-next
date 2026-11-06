@@ -57,9 +57,15 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
     return { kind: 'ok', value: result.data! };
   }
   return {
-    upload(text: string, key: string, signal?: AbortSignal) {
-      const headers = { authorization, 'idempotency-key': JSON.stringify(key) };
-      return receive(() => client.libraryArchiveMerges.post(text, { ...options(signal), headers }));
+    upload(archive: string | { base64: string }, key: string, signal?: AbortSignal) {
+      const body =
+        typeof archive === 'string'
+          ? archive
+          : new Blob([Uint8Array.from(atob(archive.base64), (character) => character.charCodeAt(0))], {
+              type: 'application/json',
+            });
+      const headers = { authorization, 'idempotency-key': JSON.stringify(key), 'content-type': 'application/json' };
+      return receive(() => client.libraryArchiveMerges.post(body, { ...options(signal), headers }));
     },
     status(id: string, signal?: AbortSignal) {
       return receive(() => client.libraryArchiveMerges({ id }).get(options(signal)));

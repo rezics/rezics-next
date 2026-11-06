@@ -296,7 +296,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { identifier: { value: '17' } } });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { dates: { started: { precision: 'year' } } } });
-  expect(() => decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })))).toThrow();
+  expect(
+    decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records }))).manifest.version,
+  ).toBe(4);
   const archiveRecords = records.filter((record) =>
     exportSections.includes(record.section as (typeof exportSections)[number]),
   );
@@ -311,7 +313,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
     rows: archiveRecords.length,
     recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
   };
-  const v2Records = records.filter((record) => exportSectionsV2.includes(record.section));
+  const v2Records = records.filter((record) =>
+    exportSectionsV2.includes(record.section as (typeof exportSectionsV2)[number]),
+  );
   const v2Manifest = {
     ...libraryExportManifest({
       export_id: id,
