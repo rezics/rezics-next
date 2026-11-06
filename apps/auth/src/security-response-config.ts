@@ -60,6 +60,18 @@ export const serverSecurityInventoryResponseByteBudget = createServerOnlyFn(asyn
 type SecurityResponseReader<T> = (response: Response, signal: AbortSignal) => Promise<T>;
 type SecurityIssuerRequestStart = () => void;
 
+/**
+ * The Auth origin that may read the issuer for this caller, or null to refuse. Browsers send Origin on POST but not
+ * on same-origin or typed GET navigations, so those identify the caller by fetch metadata instead.
+ */
+export function securityIssuerCallerOrigin(headers: Headers, origin: string, issuer: string): string | null {
+  const declared = headers.get('origin');
+  const site = headers.get('sec-fetch-site');
+  if (site === 'cross-site') return null;
+  if (declared === null) return site === 'same-origin' || site === 'none' ? origin : null;
+  return declared === origin || declared === issuer ? declared : null;
+}
+
 function raceAbort<T>(signal: AbortSignal, promise: Promise<T>): Promise<T> {
   let onAbort: () => void = () => {};
   const aborted = new Promise<never>((_, reject) => {
@@ -84,11 +96,8 @@ export const readSecurityIssuerResponse = createServerOnlyFn(
     const origin = new URL(request.url).origin;
     const issuer = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
     const signal = request.signal;
-    if (
-      (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer) ||
-      request.headers.get('sec-fetch-site') === 'cross-site'
-    )
-      return read(new Response(null, { status: 403 }), signal);
+    const callerOrigin = securityIssuerCallerOrigin(request.headers, origin, issuer);
+    if (callerOrigin === null) return read(new Response(null, { status: 403 }), signal);
 
     // The originating privateAuthRead signal bounds headers, body consumption and delivery.
     signal.throwIfAborted();
@@ -101,7 +110,7 @@ export const readSecurityIssuerResponse = createServerOnlyFn(
         headers: {
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           Accept: 'application/json',
-          Origin: request.headers.get('origin')!,
+          Origin: callerOrigin,
           Cookie: request.headers.get('cookie') ?? '',
         },
         redirect: 'manual',

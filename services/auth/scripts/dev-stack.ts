@@ -61,17 +61,6 @@ export const origins = {
   audience: 'https://api.rezics.test',
 };
 
-/** Every process in an isolated stack uses the same issuer identity, including its port. */
-export function developmentKernelBindings(selected: Pick<typeof origins, 'issuer' | 'audience' | 'kernel'> = origins) {
-  return {
-    AUTH_ISSUER: selected.issuer,
-    AUTH_AUDIENCE: selected.audience,
-    AUTH_JWKS_URL: `${selected.issuer}/.well-known/jwks.json`,
-    KERNEL_HOSTNAME: '127.0.0.1',
-    KERNEL_PORT: String(localPort(selected.kernel)),
-  };
-}
-
 export function authSecurityScopeConfiguration(siteActions?: Iterable<string>): string {
   return siteActions === undefined ? 'native-no-catalogue' : `catalogue:${securityScopeLimit(siteActions)}`;
 }
@@ -373,13 +362,7 @@ async function setup() {
   const keys = await developmentKeys();
   const contentBindings = developmentContentBindings(env);
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
-  await privateFile(
-    kernelEnvFile,
-    updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), {
-      ...contentBindings,
-      ...developmentKernelBindings(),
-    }),
-  );
+  await privateFile(kernelEnvFile, updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), contentBindings));
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),
@@ -738,7 +721,8 @@ async function start() {
   const env = {
     ...process.env,
     ...(await kernelEnvironment()),
-    ...developmentKernelBindings(),
+    KERNEL_HOSTNAME: '127.0.0.1',
+    KERNEL_PORT: String(localPort(origins.kernel)),
   };
   const children = [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
@@ -781,18 +765,33 @@ function removeWalkStack(names: WalkNames): void {
     if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
 }
 
-/** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
+/**
+ * Resolves when every URL answers below 500; fails when the stack exits first or the deadline passes. A probe waits up
+ * to 30 seconds: a freshly started dev server compiles its first response under host load, and the former 2-second
+ * bound failed every probe on a loaded check host. Progress is printed every 30 seconds with each URL's last outcome.
+ */
 async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
-  const answers = (url: string) =>
-    fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-      (response) => response.status < 500,
-      () => false,
-    );
-  const deadline = Date.now() + 600_000;
-  while (!(await Promise.all(urls.map(answers))).every(Boolean)) {
+  const answer = async (url: string): Promise<string> => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      return response.status < 500 ? 'ready' : `status ${response.status}`;
+    } catch (error) {
+      return error instanceof Error ? error.name : 'unreachable';
+    }
+  };
+  const deadline = Date.now() + 1_200_000;
+  let reported = 0;
+  for (;;) {
+    const results = await Promise.all(urls.map(answer));
+    const summary = urls.map((url, index) => `${url} ${results[index]}`).join('; ');
+    if (results.every((result) => result === 'ready')) return;
     if (starting.exitCode !== null || starting.signalCode !== null)
       throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
-    if (Date.now() > deadline) throw new Error('walk: the local stack was not ready after ten minutes');
+    if (Date.now() > deadline) throw new Error(`walk: the local stack was not ready after twenty minutes: ${summary}`);
+    if (Date.now() - reported >= 30_000) {
+      reported = Date.now();
+      console.error(`walk: waiting for the local stack: ${summary}`);
+    }
     await Bun.sleep(500);
   }
 }

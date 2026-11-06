@@ -56,3 +56,7 @@ registry owns response epochs and rating write arbitration, and releases its lis
 its last page observer leaves. Session incarnation comparison and session cache observation belong exclusively
 to `browserObservation`. Equal successful replacement retires a personal query even when its account and token
 are unchanged. Ratings inventory, Library naming adapters and catalogue readers use this public entry.
+
+Decision: security and credential effects stay on the served Auth security page, entered through Web’s existing
+account menu. The personal driver follows that link and the native step-up return; it does not invent a Web security
+route. Media acceptance uses the same browser cookies and CSRF token as production BFF requests.
