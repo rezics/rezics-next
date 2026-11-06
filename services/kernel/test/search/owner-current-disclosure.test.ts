@@ -41,10 +41,7 @@ function collectionCard(title: string, revision: number): PublicCollectionDiscov
     outputGeneration: 'generation-1',
   };
 }
-function collection(
-  title: string,
-  revision: string,
-): DiscoveryOwnerMetadataSummary<'collection'> {
+function collection(title: string, revision: string): DiscoveryOwnerMetadataSummary<'collection'> {
   return {
     id,
     title,

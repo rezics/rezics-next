@@ -46,10 +46,17 @@ test('a public-to-private change during paused indexing excludes the stale posit
 test('facet consumers reuse the same disclosed identities as the hit page', () => {
   const first = hit('schema:Book', 1);
   const second = hit('schema:Book', 2);
-  const page = selectCurrentPredicatePage([first, second, first], new Map([[first, first], [second, second]]), {
-    limit: 2,
-    exhausted: true,
-  });
+  const page = selectCurrentPredicatePage(
+    [first, second, first],
+    new Map([
+      [first, first],
+      [second, second],
+    ]),
+    {
+      limit: 2,
+      exhausted: true,
+    },
+  );
   expect(currentPredicateFacetHits(page)).toBe(page.hits);
   expect(page.dropped).toBe(1);
   expect([...page.witnesses.get('schema:Book')!]).toEqual([first.key.id, second.key.id]);

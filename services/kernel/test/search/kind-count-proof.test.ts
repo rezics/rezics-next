@@ -75,7 +75,8 @@ test('kind directory projection keeps current witnesses on the initial page only
     value: 2,
     exact: false,
   });
-  expect(
-    projectKindDirectoryCounts(registry, entries, proof({ continuation: true }))[0]!.count,
-  ).toEqual({ kind: book, unavailable: true });
+  expect(projectKindDirectoryCounts(registry, entries, proof({ continuation: true }))[0]!.count).toEqual({
+    kind: book,
+    unavailable: true,
+  });
 });
