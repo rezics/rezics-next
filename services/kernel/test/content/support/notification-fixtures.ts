@@ -357,8 +357,11 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     await system.clock.setCommandTime(fixture.now);
     await system.clock.setCursorVerificationTime(fixture.now);
     await bootstrapRelease(system.database.pool, bundledRelease, () => new Date(fixture.now));
-    await installGrant(system, GLOBAL_CONTEXT, author.id, ['subject:read']);
-    await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, ['space:create', 'realm:create', 'subject:create']);
+    // Space, Realm and subject creation authority sits on the Global Context parent (the platform root
+    // anchor). Every persona that creates a Space, including the public-board author, holds it there.
+    const parentCreation = ['space:create', 'realm:create', 'subject:create'];
+    await installGrant(system, GLOBAL_CONTEXT, author.id, ['subject:read', ...parentCreation]);
+    await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, parentCreation);
 
     const [publicBoard, protectedBoard] = await Promise.all([
       createBoard(system, author, 'public', 'public'),
