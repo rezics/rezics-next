@@ -338,6 +338,10 @@ Readiness probes TCP before a remaining-window first-compile fetch. Walk `start`
 children, so a host registration timeout or worker database blip cannot tear down a ready Web.
 Retry-After waits preserve identical server and initial hydration markup even when the deadline expires in transit;
 the mounted clock enables manual retry without dispatching a request.
+Decision: this increment's accepted cells are native CJK title/alias projection with locale-independent alias
+languages, review-producer readiness omission, Web alias-locale fallback and Retry-After hydration, and walk
+slot/cgroup/first-compile regressions. The seeded multilingual native/API/browser matrix stays unaccepted: local Web
+never listened on 20010 within 20 minutes. Shared host placement/headroom remains with the supermanager.
 **Released fixtures:** original Chinese/Kana/Latin cases, real Semantic source keys/routeKey, source chunks256 EACH
 including tails, exact source snapshot versions, checkpoints and actual physical indices.
 
