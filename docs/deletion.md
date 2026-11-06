@@ -285,3 +285,6 @@ There is no kernel-to-Auth maintenance RPC, kernel Auth credential or final-ACK
 dependency cycle. Enqueue, local cleanup alone, storage, missing configuration and
 an undelivered specification are not shared-history proof. The global participant
 set and Search's undelivered cleanup remain unchanged.
+
+Decision: platform inverse removal records erasure_source_commit and identity_epoch_native_commit in the
+same home/T; capture_erasure_source_removal accepts those besides editorial write_basis. No fabricated basis.

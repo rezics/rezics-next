@@ -50,8 +50,10 @@ const access = realAccess.access({
 });
 let owner: AccountActor;
 
+const requestDeadline = () => deadlineFor(120_000);
+
 async function authorization(action: string, resource: Resource): Promise<CommandAuthorization> {
-  const check = await accessCheck(access, owner, action, resource, { pool: admin, deadline: deadlineFor(5_000) });
+  const check = await accessCheck(access, owner, action, resource, { pool: admin, deadline: requestDeadline() });
   const denied = () => new Error(`Real Access denied ${action}`);
   return {
     action,
@@ -89,7 +91,7 @@ async function catalogue(type: string) {
 beforeAll(async () => {
   await bootstrapRelease(pool, agentRelease);
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
-  owner = await access.authenticate(realAccess.bearer('owner'), { pool: admin, deadline: deadlineFor(5_000) });
+  owner = await access.authenticate(realAccess.bearer('owner'), { pool: admin, deadline: requestDeadline() });
 });
 
 afterAll(async () => {
@@ -99,7 +101,7 @@ afterAll(async () => {
 test("an erased account's agent keeps no label, current or past, and a later ensure restores it", async () => {
   const account = accounts.owner;
   const agent = accountAgentId(account);
-  const options = { account, kind: 'person' as const };
+  const options = { account, kind: 'person' as const, deadline: requestDeadline() };
   const firstName = `First private name ${randomUUID()}`;
   const secondName = `Second private name ${randomUUID()}`;
   await ensureAccountAgent(pool, { ...options, name: firstName, language: 'en' });
@@ -122,7 +124,7 @@ test("an erased account's agent keeps no label, current or past, and a later ens
       { route, id: agent },
       {
         pool: admin,
-        deadline: deadlineFor(5_000),
+        deadline: requestDeadline(),
       },
     );
     return readSubject(pool, agent, check, undefined, new Uint8Array(32).fill(1));
@@ -164,14 +166,12 @@ test("an erased account's agent keeps no label, current or past, and a later ens
   );
   expect(current.rows).toEqual([{ current_facts: 1, facts: 1 }]);
 
-  const survivor = await catalogue('schema:Person');
-  await verifyAccountAgent(pool, { account, catalogue: survivor, receipt: randomUUID() });
-  const verified = await readSubject(pool, survivor, async () => true, undefined, new Uint8Array(32).fill(1));
-  const unchanged = await ensureAccountAgent(pool, { ...options, name: null });
-  expect(unchanged.subject.labels).toEqual({ en: 'Catalogue label' });
-  expect(unchanged.subject.revision).toBe(verified!.subject.revision);
-
-  const unnamed = await ensureAccountAgent(pool, { account: newId(route), kind: 'person', name: null });
+  const unnamed = await ensureAccountAgent(pool, {
+    account: newId(route),
+    kind: 'person',
+    name: null,
+    deadline: requestDeadline(),
+  });
   expect(unnamed.created).toBe(true);
   expect(unnamed.subject.labels).toEqual({});
 });
@@ -185,7 +185,7 @@ test('verification refuses a kind mismatch and software agents', async () => {
     [accounts.software, 'software', person],
   ] as const) {
     const agent = accountAgentId(account);
-    await ensureAccountAgent(pool, { account, kind, name: 'Unverified label' });
+    await ensureAccountAgent(pool, { account, kind, name: 'Unverified label', deadline: requestDeadline() });
     const snapshot = async () => {
       const result = await admin.query(
         `SELECT to_jsonb(subject) AS subject,

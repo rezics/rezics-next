@@ -809,6 +809,16 @@ BEGIN
  SELECT b.transaction_id INTO native_tx FROM core.partition p JOIN editorial.write_basis b
  ON b.partition_no=p.partition_no AND b.position=p.position
  WHERE p.partition_no=native_home AND b.xmin::text=pg_current_xact_id()::text;
+ IF native_tx IS NULL THEN
+  SELECT n.transaction_id INTO native_tx FROM core.partition p JOIN semantic.identity_epoch_native_commit n
+  ON n.partition_no=p.partition_no AND n.position=p.position
+  WHERE p.partition_no=native_home AND n.xmin::text=pg_current_xact_id()::text;
+ END IF;
+ IF native_tx IS NULL THEN
+  SELECT c.transaction_id INTO native_tx FROM core.partition p JOIN semantic.erasure_source_commit c
+  ON c.partition_no=p.partition_no AND c.position=p.position
+  WHERE p.partition_no=native_home AND c.xmin::text=pg_current_xact_id()::text;
+ END IF;
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN OLD; END IF;
  IF native_tx IS NULL THEN RAISE EXCEPTION 'Semantic source removal requires native command custody' USING ERRCODE='23514'; END IF;
  INSERT INTO semantic.erasure_source_commit(partition_no,transaction_id,epoch,position)
@@ -6054,7 +6064,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text]))))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text])) OR (purpose = 'identity-platform-native-inverse-removal'::text)))
 );
 
 

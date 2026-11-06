@@ -1,7 +1,7 @@
 import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts';
 import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion/index.ts';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, noEffect, runCommand, type LegacyCommandOptions } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import { liveCoverage, purgeIntent, retainCoveredPayload, withPurgeIntent } from './cleanup-intent.ts';
 import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-store.ts';
@@ -22,8 +22,19 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
     throw new RangeError('Zone purge page limit is 1 through 100');
   if (cursor !== null && cursor !== 'payload' && cursor !== 'grants') return { next: null };
   const deadline = Date.now() + 20_000;
-  const options: LegacyCommandOptions = { partition: partitionOf(route), deadline, clock };
-  const outcome = await runCommand(pool, options, async (tx, command) => {
+  const outcome = await runCommand(
+    pool,
+    {
+      partition: partitionOf(route),
+      deadline,
+      clock,
+      basis: {
+        actorAccountId: '00000000-0000-8000-8000-000000000001',
+        clientId: 'internal-zone-purge',
+        requestedBy: null,
+      },
+    },
+    async (tx, command) => {
     const row = await lockZoneHead(tx, route, zoneId);
     if (!row || row.state === 'purged') return noEffect({ next: null });
     if (row.held) return noEffect({ next: null });
@@ -75,6 +86,7 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
         },
       ],
     };
-  });
+  },
+  );
   return outcome.value;
 }
