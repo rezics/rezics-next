@@ -395,3 +395,42 @@ test('Members status exposes native preparation, unavailable admission and faile
   expect(markup('preparing', true)).toContain('disabled=""');
   expect(markup('preparing')).not.toContain('disabled=""');
 });
+
+test('Collection header outages retain native status and delay across the server result boundary', async () => {
+  const { captureCollectionRead, admitCollectionRead } =
+    await import('../src/library/collection-public-reading/failure');
+  const { routeFailure } = await import('../src/shell/error-state');
+  let status = 503;
+  let calls = 0;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      calls++;
+      return Response.json(
+        { code: status === 503 ? 'dependency_unavailable' : 'not_found' },
+        { status, headers: { 'retry-after': '9' } },
+      );
+    },
+  });
+  const read = () =>
+    loadEditableCollectionPage(client, new Request(`https://site.test/fr/collections/${id}`), {}, { id }, 'anonymous');
+  const result = JSON.parse(JSON.stringify(await captureCollectionRead(read)));
+  expect(result).toEqual({
+    kind: 'collection-read-failed',
+    failure: { status: 503, code: 'dependency_unavailable', retryAfter: '9' },
+  });
+  let error: unknown;
+  try {
+    admitCollectionRead(result);
+  } catch (failure) {
+    error = failure;
+  }
+  expect(routeFailure([{ status: 'error', error }], 500)).toMatchObject({
+    status: 503,
+    unavailable: true,
+    retryAfter: '9',
+  });
+  expect(calls).toBe(1);
+  status = 404;
+  await expect(captureCollectionRead(read)).rejects.toMatchObject({ isNotFound: true });
+  expect(calls).toBe(2);
+});

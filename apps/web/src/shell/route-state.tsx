@@ -22,6 +22,7 @@ export function RouteState({
   retryDisabled = false,
   retryHref,
   returnHref,
+  signInHref,
   locale: suppliedLocale,
 }: {
   kind?: RouteStateKind;
@@ -31,6 +32,7 @@ export function RouteState({
   onRetry?: (() => void) | undefined;
   retryHref?: string;
   returnHref?: string;
+  signInHref?: string;
   retrying?: boolean | undefined;
   retryFailed?: boolean;
   recovery?: ReactNode;
@@ -115,6 +117,16 @@ export function RouteState({
                 />
                 {retrying ? m.status_retrying({}, { locale }) : m.status_retry({}, { locale })}
               </Button>
+            ) : null}
+            {signInHref ? (
+              <a
+                data-slot="button"
+                data-session-sign-in=""
+                className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), routeStateControl)}
+                href={signInHref}
+              >
+                {m.account_sign_in({}, { locale })}
+              </a>
             ) : null}
             {returnHref ? (
               <a

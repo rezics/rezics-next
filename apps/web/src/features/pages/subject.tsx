@@ -1,3 +1,5 @@
+import { PageReadError, pageReadError } from './page-read-failure';
+export { PageReadError, pageReadError } from './page-read-failure';
 import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
@@ -216,32 +218,6 @@ function placesType(content: readonly unknown[], type: string): boolean {
   );
 }
 
-export class PageReadError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly retryAfter?: string,
-  ) {
-    super(message);
-  }
-}
-
-function retryAfterHeader(headers: unknown): string | undefined {
-  if (headers == null) return;
-  try {
-    const value = new Headers(headers as HeadersInit).get('retry-after');
-    return value?.trim() ? value : undefined;
-  } catch {
-    return;
-  }
-}
-
-function problemError(value: unknown, status: number, headers?: unknown): Error {
-  const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
-  const retryAfter = retryAfterHeader(headers);
-  return retryAfter ? new PageReadError(code, status, retryAfter) : new PageReadError(code, status);
-}
-
 /** The context the page's reads are planned in. */
 export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation'>) {
   return {
@@ -307,17 +283,24 @@ export async function loadSubjectPage(
 ): Promise<SubjectPageLoad> {
   assertSubjectPageReadActive(options.signal);
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
-  const result = await client.pages.$read.post(
-    {
-      target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
-      ...(options.continuation ? { continuation: options.continuation } : {}),
-      languages: requestLanguages(locale),
-    },
-    {
-      fetch: { redirect: 'manual', ...(options.signal ? { signal: options.signal } : {}) },
-      ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
-    },
-  );
+  let result: Awaited<ReturnType<typeof client.pages.$read.post>>;
+  try {
+    result = await client.pages.$read.post(
+      {
+        target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
+        ...(options.continuation ? { continuation: options.continuation } : {}),
+        languages: requestLanguages(locale),
+      },
+      {
+        fetch: { redirect: 'manual', ...(options.signal ? { signal: options.signal } : {}) },
+        ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
+      },
+    );
+  } catch (error) {
+    assertSubjectPageReadActive(options.signal);
+    if (error instanceof TypeError) throw new PageReadError('dependency_unavailable', 503, '1');
+    throw error;
+  }
   assertSubjectPageReadActive(options.signal);
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 308) {
@@ -380,7 +363,7 @@ export async function loadSubjectPage(
       },
     };
   }
-  throw problemError(result.error?.value, result.status, result.headers);
+  throw pageReadError(result.error?.value ?? result.data, result.status, result.headers);
 }
 
 /** The properties the page's inverse reads follow, for the definitions that label them. */

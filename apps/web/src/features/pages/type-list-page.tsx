@@ -1,3 +1,4 @@
+import { nativePageMessage } from './page-read-state';
 import { useContext, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnonymousSessionContext, sessionQuery, useSession } from '../../session/query';
@@ -284,7 +285,11 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     <div className="mx-auto max-w-5xl space-y-3" aria-busy={!unavailable}>
       <p ref={focus.statusRef} role="status" tabIndex={-1}>
         {unavailable
-          ? m.configured_list_recovery_unavailable({}, messages)
+          ? queryResult?.kind === 'unavailable' &&
+            isCurrentRequest(queryResult.admission.request) &&
+            queryResult.status !== undefined
+            ? nativePageMessage(queryResult, locale)
+            : m.configured_list_recovery_unavailable({}, messages)
           : m.configured_list_recovery_pending({}, messages)}
       </p>
       {unavailable ? (

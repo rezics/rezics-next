@@ -4,6 +4,8 @@ import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, profileDigest, templateViews, type PresentationProfile } from '@rezics/composition';
 import { createPool } from '../../src/database/pool.ts';
+import { createApp } from '../../src/http/app.ts';
+import { pageRoutes } from '../../src/presentation/http/pages.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
@@ -167,6 +169,78 @@ test('a subject page resolves its type template and runs its reads in one round 
   expect(withoutRequestId(answer.body.reads.r1.body)).toEqual(withoutRequestId(links.body));
 });
 
+test('cold native links retain eventual success and explicit recovery admits the current terminal read', async () => {
+  const created = await call('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Cold reading' } }, true);
+  expect(created.response.status).toBe(201);
+  const id: string = created.body.subject.id;
+  setupSubjects.add(id);
+  setupHomes.add(partitionOf(routeOf(id)!));
+  const cold = await read({ subject: id });
+  expect(cold.response.status).toBe(200);
+  expect(cold.body.reads.r0.status).toBe(200);
+  expect(cold.body.reads.r1.status).toBe(200);
+  expect(cold.body.reads.r1.body.freshness.caught_up).toBe(false);
+  expect(cold.body.reads.r1.body.links).toEqual([]);
+  expect(cold.body.reads.r1.body.next).toBeNull();
+  await projectSetup();
+  const ready = await read({ subject: id });
+  expect(ready.response.status).toBe(200);
+  expect(ready.body.reads.r1).toMatchObject({
+    status: 200,
+    body: { links: [], next: null, freshness: { caught_up: true } },
+  });
+  expect(ready.body.reads.r1.headers).toBeUndefined();
+});
+
+test('served page readers retain native owner outage status and delay and retry the original read', async () => {
+  const id = await create('schema:Book', 'Recovered reading');
+  const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) };
+  let unavailable = true;
+  const nativeRequests: string[] = [];
+  // Inject only the failing owner transport. Profile, routing, access and the admitted recovery use real owners.
+  const app = pageRoutes(createApp({ pool, access: realAccess.access, tokens, writeRate: realAccess.writeRate }), {
+    pool,
+    routeKey: new Uint8Array(32).fill(7),
+    access: realAccess.access,
+    tokens,
+    dispatch: async (request) => {
+      nativeRequests.push(new URL(request.url).pathname);
+      if (unavailable)
+        return Response.json(
+          { code: 'dependency_unavailable', status: 503 },
+          {
+            status: 503,
+            headers: { 'retry-after': '7', 'set-cookie': 'owner-private=secret', 'x-owner-private': 'secret' },
+          },
+        );
+      return kernel.handle(request);
+    },
+  }).compile();
+  const request = () =>
+    app.handle(
+      new Request('http://kernel.test/v1/pages:read', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { subject: id }, languages: ['fr'] }),
+      }),
+    );
+  const failed = await request();
+  expect(failed.status).toBe(503);
+  expect(failed.headers.get('retry-after')).toBe('7');
+  expect(failed.headers.get('cache-control')).toBe('private, no-store');
+  expect(failed.headers.get('set-cookie')).toBeNull();
+  expect(failed.headers.get('x-owner-private')).toBeNull();
+  expect(await failed.json()).toMatchObject({ code: 'dependency_unavailable' });
+  unavailable = false;
+  nativeRequests.length = 0;
+  const recovered = await request();
+  expect(recovered.status).toBe(200);
+  expect(recovered.headers.get('retry-after')).toBeNull();
+  expect(await recovered.json()).toMatchObject({ subject: id, reads: { r0: { status: 200 }, r1: { status: 200 } } });
+  expect(nativeRequests).toContain(`/v1/subjects/${id}`);
+  expect(nativeRequests.every((path) => !path.includes('cursor='))).toBe(true);
+});
+
 test('a subject without a type template falls back through its structural bases', async () => {
   const id = await create(base.type, 'Based');
   const answer = await read({ subject: id });
@@ -241,7 +315,7 @@ test('the kernel contract documents the page read', () => {
     'x-action': 'presentation:read',
     security: [{ bearerAuth: [] }, {}],
   });
-  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '308', '400', '401', '404', '503']);
+  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '202', '308', '400', '401', '403', '404', '503']);
 });
 
 test('native subject redirect, credentials and aggregate observations retain standalone authority', async () => {

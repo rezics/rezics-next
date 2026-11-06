@@ -53,6 +53,8 @@ export type TypeListQueryResult =
       kind: 'unavailable';
       admission: { request: TypeListReadRequest };
       retryAt?: number;
+      status?: number;
+      code?: string;
     };
 
 type TypeListQueryLifetime = { isCurrent: () => boolean };
@@ -195,8 +197,11 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         });
     }
     if (result.status !== 200 || !result.data) {
+      const problem: unknown = result.error?.value ?? result.data;
       return {
         kind: 'unavailable',
+        status: result.status,
+        ...(isRecord(problem) && typeof problem.code === 'string' ? { code: problem.code } : {}),
         admission: { request: admissionRequest },
         ...configuredListRetryAdmission(result.status, result.response?.headers),
       };
@@ -215,6 +220,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         {
           status: read.status,
           body: read.body,
+          ...(read.headers ? { headers: read.headers } : {}),
           ...configuredListRetryAdmission(read.status, read.headers, now),
         },
       ]),

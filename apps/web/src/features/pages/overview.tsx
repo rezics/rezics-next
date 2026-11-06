@@ -2,6 +2,7 @@ import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
+import { PageReadState } from './page-read-state';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
 import { composedCommunityRegion } from './subject-community';
@@ -94,7 +95,13 @@ export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
 export type Section =
-  | { ok: false; status?: number | undefined; retryAfter?: string | undefined; retryAt?: number | undefined }
+  | {
+      ok: false;
+      status?: number | undefined;
+      code?: string | undefined;
+      retryAfter?: string | undefined;
+      retryAt?: number | undefined;
+    }
   | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
 
 /** The page representation a continuation must retain while extending one native stream. */
@@ -373,7 +380,9 @@ export function Failed({
   titleLang?: string | undefined;
   locale: string;
 }) {
-  const options = { locale: locale as never };
+  const value = useContext(OverviewContext);
+  const section = value?.sections.get(id);
+  const failure = section && !section.ok ? section : {};
   return (
     <section
       id={id}
@@ -385,18 +394,7 @@ export function Failed({
       <h2 id={`${id}-title`} lang={titleLang} className={sectionTitleClass}>
         {title}
       </h2>
-      <p id={`${id}-status`} role="status" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
-        {m.subject_section_failed({}, options)}
-      </p>
-      <a
-        data-slot="retry"
-        href=""
-        role="link"
-        aria-describedby={`${id}-title ${id}-status`}
-        className={sectionActionClass}
-      >
-        {m.subject_section_retry({}, options)}
-      </a>
+      <PageReadState key={JSON.stringify(failure)} failure={failure} locale={locale} describedBy={`${id}-title`} />
     </section>
   );
 }

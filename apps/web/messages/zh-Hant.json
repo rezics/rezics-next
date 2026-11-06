@@ -11286,5 +11286,9 @@
   "library_archive_recovery_restart_original": "使用原始封存檔",
   "library_archive_entry_open_library": "開啟書庫",
   "library_archive_progress_open_session": "開啟目前的 Session",
-  "library_archive_progress_restart": "用原始封存檔再開始一次復原"
+  "library_archive_progress_restart": "用原始封存檔再開始一次復原",
+  "public_read_preparing": "正在準備此檢視",
+  "public_read_sparse": "此頁沒有可顯示的項目。請繼續讀取下一頁。",
+  "public_read_denied": "你無權存取此內容。",
+  "public_read_empty": "此清單為空"
 }

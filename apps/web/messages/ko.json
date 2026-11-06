@@ -11172,5 +11172,9 @@
   "library_archive_recovery_restart_original": "원래 아카이브 사용",
   "library_archive_entry_open_library": "라이브러리 열기",
   "library_archive_progress_open_session": "현재 Session 열기",
-  "library_archive_progress_restart": "원래 아카이브로 복구를 다시 시작"
+  "library_archive_progress_restart": "원래 아카이브로 복구를 다시 시작",
+  "public_read_preparing": "이 보기를 준비하고 있습니다",
+  "public_read_sparse": "이 페이지에 표시할 항목이 없습니다. 다음 페이지를 읽어 보세요.",
+  "public_read_denied": "이 내용을 볼 권한이 없습니다.",
+  "public_read_empty": "이 목록은 비어 있습니다"
 }

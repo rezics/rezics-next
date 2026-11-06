@@ -45,7 +45,15 @@ export function isDependencyUnavailableError(error: unknown): boolean {
     seen.add(value);
     if (
       ('name' in value && value.name === 'SessionUnavailableError') ||
-      ('code' in value && (value.code === SESSION_UNAVAILABLE_CODE || value.code === DEPENDENCY_UNAVAILABLE_CODE))
+      ('code' in value &&
+        (value.code === SESSION_UNAVAILABLE_CODE ||
+          value.code === DEPENDENCY_UNAVAILABLE_CODE ||
+          value.code === 'presentation_not_ready')) ||
+      ('name' in value &&
+        (value.name === 'PageReadError' || value.name === 'CollectionReadError') &&
+        'status' in value &&
+        typeof value.status === 'number' &&
+        (value.status === 202 || value.status >= 500))
     )
       return true;
     pending.push(
@@ -99,4 +107,22 @@ export function isSessionUnavailableError(error: unknown): boolean {
   }
 
   return false;
+}
+
+/** Only an explicit native preparation outcome gets preparation copy. */
+export function isPreparingReadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { code?: unknown; status?: unknown; problem?: { code?: unknown; status?: unknown } };
+  return (
+    value.code === 'presentation_not_ready' ||
+    value.status === 202 ||
+    value.problem?.code === 'presentation_not_ready' ||
+    value.problem?.status === 202
+  );
+}
+
+/** Sign-in can recover an indeterminate reader without replaying private URL operands. */
+export function sessionRecoverySignInHref(pathname: string): string {
+  const path = safeRecoveryReturn(pathname, 'https://rezics.invalid');
+  return '/auth/sign-in' + (path ? `?return_to=${encodeURIComponent(path)}` : '');
 }

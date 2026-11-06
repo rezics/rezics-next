@@ -1,3 +1,4 @@
+import { PageReadState } from './page-read-state';
 import { m } from '../../paraglide/messages.js';
 import { PageData } from './data';
 import type { RoutePageLoad } from './route';
@@ -14,7 +15,8 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
     page?.document.content.flatMap((node) =>
       isRecord(node) && node.type === 'TypeList' && isRecord(node.props) ? [node.props] : [],
     ) ?? [];
-  const failure = result?.kind === 'rejected' || result?.kind === 'unavailable' ? result : undefined;
+  const failure =
+    result?.kind === 'rejected' || result?.kind === 'unavailable' || result?.kind === 'preparing' ? result : undefined;
   return (
     <section aria-labelledby="home-catalogue" className="min-w-0 space-y-6">
       <h2 id="home-catalogue" className="text-2xl font-semibold">
@@ -37,21 +39,16 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
         </PageData>
       ) : (
         <div
-          role={failure ? 'alert' : 'status'}
+          role={failure?.kind === 'preparing' ? 'status' : failure ? 'alert' : 'status'}
           data-home-catalogue-state={result?.kind ?? 'missing'}
           data-response-status={failure?.status ?? ''}
           data-response-code={failure?.code ?? ''}
           className="space-y-2"
         >
-          <p>
-            {result?.kind === 'unavailable'
-              ? m.catalogue_result_read_unavailable({}, o)
-              : m.subject_section_failed({}, o)}
-          </p>
           {failure ? (
-            <a href={`/${locale}`} className="text-primary underline underline-offset-4">
-              {m.catalogue_retry_loading_result({}, o)}
-            </a>
+            <PageReadState key={JSON.stringify(failure)} failure={failure} locale={locale} href={`/${locale}`} />
+          ) : result?.kind === 'missing' ? (
+            <p>{m.not_found_heading({}, o)}</p>
           ) : null}
         </div>
       )}

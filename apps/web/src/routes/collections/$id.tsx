@@ -79,7 +79,10 @@ export const Route = createFileRoute('/collections/$id')({
     filters: search.filters,
   }),
   loader: ({ params, deps, context }) => {
-    return context.queryClient.ensureQueryData(collectionPageQuery(params.id, deps.cursor, 'anonymous', deps.filters));
+    return context.queryClient.fetchQuery({
+      ...collectionPageQuery(params.id, deps.cursor, 'anonymous', deps.filters),
+      staleTime: 0,
+    });
   },
   head: ({ loaderData, match }) => {
     if (!loaderData)

@@ -11172,5 +11172,9 @@
   "library_archive_recovery_restart_original": "Usar el archivo original",
   "library_archive_entry_open_library": "Abrir la biblioteca",
   "library_archive_progress_open_session": "Abrir la Session actual",
-  "library_archive_progress_restart": "Empezar otra recuperación con el archivo original"
+  "library_archive_progress_restart": "Empezar otra recuperación con el archivo original",
+  "public_read_preparing": "Preparando esta vista",
+  "public_read_sparse": "No hay entradas visibles en esta página. Continúa a la página siguiente.",
+  "public_read_denied": "No tienes acceso a este contenido.",
+  "public_read_empty": "Esta lista está vacía"
 }
