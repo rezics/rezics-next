@@ -8,6 +8,11 @@ Library and Collections stay visible as unavailable destinations while session o
 
 Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges.
 
+Decision: locale selection uses router-managed document navigation, preserving the current page, query and fragment
+in browser history and honoring leave-page blockers. The destination rereads native data and renders translated UI;
+supplied names and source text keep their original language. The focused locale regression covers the production
+rewrite/provider as well as the injected reader lifetime; seeded native/browser acceptance remains required.
+
 ## Phone navigation clearance
 
 `PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes only its own phone

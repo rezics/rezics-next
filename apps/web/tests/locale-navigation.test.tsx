@@ -44,7 +44,7 @@ type ReaderFixture = {
   entry: string;
 };
 
-async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
+async function withReader(run: (fixture: ReaderFixture) => Promise<void>, productionNavigation = false) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: `https://site.invalid${entry}` });
@@ -115,6 +115,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   } = await import('@tanstack/react-router');
   const { deriveLocaleDestinations } = await import('../src/shell/locale-navigation/routing');
   const { LocaleNavigationProvider } = await import('../src/shell/locale-navigation/context');
+  const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   const { AppearanceControls } = await import('../src/shell/appearance-controls');
   const storybook = createRequire(require.resolve('storybook/test'));
   const { within, waitFor } = await import(storybook.resolve('@testing-library/dom'));
@@ -175,17 +176,23 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   }
 
   const rootRoute = createRootRoute({
-    component: () => (
-      <LocaleHarness>
-        <AppearanceControls />
-        <Outlet />
-      </LocaleHarness>
-    ),
+    component: () =>
+      productionNavigation ? (
+        <LocaleNavigationProvider>
+          <AppearanceControls />
+          <Outlet />
+        </LocaleNavigationProvider>
+      ) : (
+        <LocaleHarness>
+          <AppearanceControls />
+          <Outlet />
+        </LocaleHarness>
+      ),
   });
-  const subjectRoutes = localeCodes.map((locale) =>
+  const subjectRoutes = (productionNavigation ? [''] : localeCodes).map((locale) =>
     createRoute({
       getParentRoute: () => rootRoute,
-      path: `/${locale}/subjects/$id`,
+      path: locale ? `/${locale}/subjects/$id` : '/subjects/$id',
       loader: () => {
         admissions.push(locale);
       },
@@ -195,11 +202,21 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   const router = createRouter({
     routeTree: rootRoute.addChildren(subjectRoutes),
     history: createMemoryHistory({ initialEntries: [entry] }),
+    ...(productionNavigation
+      ? {
+          rewrite: {
+            input: ({ url }: { url: URL }) => deLocalizeUrl(url).href,
+            output: ({ url }: { url: URL }) => localizeUrl(url).href,
+          },
+        }
+      : {}),
   });
   const root = createRoot(host);
   await act(async () => {
     await router.load();
-    expect(router.state.location.pathname).toBe('/en/subjects/reader-01');
+    expect(router.state.location.pathname).toBe(
+      productionNavigation ? '/subjects/reader-01' : '/en/subjects/reader-01',
+    );
     expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
     expect(router.state.location.hash).toBe('chapter-4');
     expect(router.state.matches.length).toBeGreaterThan(1);
@@ -281,6 +298,29 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
       expect(body.queryByRole('alert')).toBeNull();
     },
   );
+});
+
+test('production locale navigation escapes the current-locale rewrite and honors a dirty reader', async () => {
+  await withReader(async ({ window, body, user, act, waitFor, setDraft, setCanLeave, confirmCount }) => {
+    const chooseJapanese = async () => {
+      body.getByRole('button', { name: 'Language: English' }).focus();
+      await act(async () => user.keyboard('{Enter}'));
+      const option = await body.findByRole('menuitemradio', { name: /日本語/ });
+      option.focus();
+      await act(async () => user.keyboard('{Enter}'));
+    };
+    await act(async () => setDraft(true));
+    setCanLeave(false);
+    await chooseJapanese();
+    await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
+    expect(window.location.href).toBe(`https://site.invalid${entry}`);
+
+    setCanLeave(true);
+    await chooseJapanese();
+    await waitFor(() => expect(window.location.pathname).toBe('/ja/subjects/reader-01'));
+    expect(window.location.search).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
+    expect(window.location.hash).toBe('#chapter-4');
+  }, true);
 });
 
 test('navigation failure offers the current safe reader and an obsolete completion cannot replace a newer visit', async () => {

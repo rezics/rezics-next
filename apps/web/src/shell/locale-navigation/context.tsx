@@ -62,6 +62,8 @@ function RouterLocaleNavigationProvider({ children }: { children: ReactNode }) {
   const readCurrentLocation = useCallback(() => routeLocation(router.state as unknown as RouterSnapshot), [router]);
   const navigate = useCallback(
     async (href: string) => {
+      // SPA rewrites would strip the requested locale and restore the current one.
+      // Document navigation retains the public URL and the router's leave-page blockers.
       await router.navigate({ href, reloadDocument: true });
       return readCurrentLocation();
     },

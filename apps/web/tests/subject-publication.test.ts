@@ -1,22 +1,25 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
-import { RecipePublicationEntry } from '../src/features/pages/recipe-publication';
-import { recipePublicationReading } from '../src/features/pages/recipe-publication/model';
-import { ReleasePublicationEntry } from '../src/features/pages/release-publication';
-import { releasePublicationReading } from '../src/features/pages/release-publication/model';
-import {
+import type { SubjectPageData } from '../src/features/pages/subject';
+import type { Stmt } from '../src/features/pages/shared';
+import type { Related, Subject } from '../src/subject/types';
+import recorded from '../src/kernel/recorded/subject-page.json';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { RecipePublicationEntry } = await import('../src/features/pages/recipe-publication');
+const { recipePublicationReading } = await import('../src/features/pages/recipe-publication/model');
+const { ReleasePublicationEntry } = await import('../src/features/pages/release-publication');
+const { releasePublicationReading } = await import('../src/features/pages/release-publication/model');
+const {
   publicationPropertiesFor,
   publicPublicationStatements,
   relatedSameAs,
   subjectPublicationFields,
-} from '../src/features/pages/subject-metadata';
-import { subjectPageJsonLd, type SubjectPageData } from '../src/features/pages/subject';
-import type { Stmt } from '../src/features/pages/shared';
-import type { Related, Subject } from '../src/subject/types';
-import recorded from '../src/kernel/recorded/subject-page.json';
+} = await import('../src/features/pages/subject-metadata');
+const { subjectPageJsonLd } = await import('../src/features/pages/subject');
 
 const diet = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11';
 const platform = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e21';
@@ -235,4 +238,40 @@ test('configured public origin is the only host in sharing metadata and JSON-LD'
   expect(json.url.startsWith(`${origin}/`)).toBe(true);
   expect(json.url).not.toContain('untrusted-host.invalid');
   expect(json.image === undefined || JSON.stringify(json.image).includes(origin)).toBe(true);
+});
+
+test('Person, Organization and automated agent JSON-LD publish sameAs and omit withheld links', () => {
+  const origin = 'https://public.example.test';
+  const hidden = 'https://secret.invalid/private';
+  for (const [type, schemaType] of [
+    ['schema:Person', 'Person'],
+    ['schema:Organization', 'Organization'],
+    ['schema:SoftwareApplication', 'SoftwareApplication'],
+  ] as const) {
+    const page = structuredClone(recorded) as SubjectPageData;
+    page.reads.r0.body.subject = {
+      ...(recorded.reads.r0.body.subject as Subject),
+      type,
+      labels: { en: 'Lantern Agent' },
+      descriptions: { en: 'A public catalogue agent.' },
+      statements: {
+        'schema:sameAs': [
+          statement('schema:sameAs', 'url', 'https://wikidata.org/entity/Q1'),
+          statement('schema:sameAs', 'url', hidden, {
+            qualifiers: [
+              {
+                property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+                value: { type: 'value', content: { amount: '+1', unit: '1' } },
+              },
+            ],
+          }),
+        ],
+      },
+    };
+    page.catalogue = { state: 'released', type, digest: bundledDigest, definitions };
+    const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin, schemaOrgType: `https://schema.org/${schemaType}` })!);
+    expect(json['@type']).toBe(schemaType);
+    expect(json.sameAs).toBe('https://wikidata.org/entity/Q1');
+    expect(JSON.stringify(json)).not.toContain(hidden);
+  }
 });
