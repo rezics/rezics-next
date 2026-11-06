@@ -14,7 +14,7 @@ const COMPACT_KIND: Record<ModuleKind, string> = {
   'composition root': 'r',
   'UI/transport library': 'u',
 };
-export const MAX_MODULE_MAP_CHARACTERS = 12_000;
+export const MAX_MODULE_MAP_CHARACTERS = 6_800;
 
 function compactModuleId(id: string): string {
   return id.replace(/^kernel-/, 'k').replace(/^web-/, 'w');
