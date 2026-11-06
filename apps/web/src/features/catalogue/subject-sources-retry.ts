@@ -134,11 +134,12 @@ export function useSourcesRetry({
     retry.intent = intent;
     retry.pending = true;
     emit();
-    // Reset is the error-boundary branch; invalidate also rereads failed loaders.
+    // Keep the error presentation mounted while its replacement loads. Resetting first can
+    // render the failed match again and finish the retry before its loader has settled.
     void (async () => {
       try {
-        reset?.();
         await router.invalidate({ sync: true });
+        reset?.();
       } finally {
         retry.pending = false;
         if (!retry.listeners.size) retire();
