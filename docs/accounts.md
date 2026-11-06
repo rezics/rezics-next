@@ -242,7 +242,8 @@ the 6 GiB check memory cap. Catalogue seed is not part of this journey: these ac
 catalogue identities. Auth HTTP for the walk uses native Auth. `REZICS_WALK_DEFER_FRONTENDS=1` keeps Vite, OpenSearch,
 the Kernel worker and a second Kernel process off until native HTTP finishes. Kernel HTTP is served from the Auth host
 that already assembled it. Issuer then Web start only for mounted pages. Kernel on a full walk slot runs `start` rather
-than `--watch`. A single Chromium process covers desktop, phone, zh-Hant, ja, light and dark.
+than `--watch`. A single Chromium process covers desktop, phone, zh-Hant, ja, light and dark. The walk inlines the
+public Auth page-operation and management client identities because Web cannot depend on auth-contract.
 
 ## 3. Credentials, sessions and tokens
 

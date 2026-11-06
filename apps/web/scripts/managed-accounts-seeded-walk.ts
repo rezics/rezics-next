@@ -11,12 +11,18 @@
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import {
-  AUTH_MANAGEMENT_CLIENT_ID,
-  AUTH_MANAGEMENT_SCOPES,
-  AUTH_PAGE_OPERATION_CLIENT_ID,
-  AUTH_PAGE_OPERATION_SCOPES,
-} from '@rezics/auth-contract';
+
+/** Public first-party identities from packages/auth-contract. Web cannot depend on that package. */
+const AUTH_PAGE_OPERATION_CLIENT_ID = 'rezics-auth-account-operations';
+const AUTH_PAGE_OPERATION_SCOPES = { organization: ['organization:create'] as const };
+const AUTH_MANAGEMENT_CLIENT_ID = 'rezics-auth-account-management';
+const AUTH_MANAGEMENT_SCOPES = {
+  rename: ['account:update'] as const,
+  membership: ['organization:membership'] as const,
+  transfer: ['account:manage'] as const,
+  'transfer-acceptance': ['account:manage'] as const,
+  opening: ['account:manage'] as const,
+};
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/accounts');
@@ -265,7 +271,14 @@ async function operate(
   extra: Json = {},
 ): Promise<{ status: number; value: Json }> {
   const operationKey = crypto.randomUUID();
-  const body = { operationKey, operation, accountId: session.accountId, ...extra };
+  // Organization create is the page-operations client without accountId. Sending
+  // accountId selects the management caller matcher, which rejects that kind.
+  const body = {
+    operationKey,
+    operation,
+    ...(operation.kind === 'organization' ? {} : { accountId: session.accountId }),
+    ...extra,
+  };
   const approval = await auth(stack, '/account-operations/approve', session, body);
   if (approval.status !== 200) return approval;
   if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return approval;
