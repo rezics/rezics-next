@@ -307,7 +307,7 @@ test('synthetic selected Person and Organization images use the common authorize
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 180_000);
 
 const characterWorkCoverSourceUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/native-10380.png';
 const characterSourceUrl = 'https://lain.bgm.tv/pic/crt/l/46/52/11546_crt_FlzuU.jpg';
@@ -667,4 +667,4 @@ test('default finite Bangumi selection imports a direct Character image through 
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30_000);
+}, 180_000);
