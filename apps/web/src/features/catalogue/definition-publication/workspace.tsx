@@ -4,7 +4,6 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { cn } from '@rezics/ui/utils';
 import { useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { m } from '../../../paraglide/messages.js';
-import { PageHeading } from '../../../shell/page-heading';
 import { definitionGuideHref } from '../definition-guide';
 import { diagnosticField } from './model';
 import {
@@ -229,9 +228,13 @@ export function DefinitionPublicationWorkspace({
   return (
     <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-3">
-        <PageHeading ref={heading} tabIndex={-1} className={recoveryClassName}>
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className={cn('text-4xl font-semibold tracking-tight text-balance', recoveryClassName)}
+        >
           {m.definition_publication_title({}, o)}
-        </PageHeading>
+        </h1>
         <p className="text-muted-foreground">
           {scope === 'context'
             ? m.definition_publication_extension_intro({}, o)

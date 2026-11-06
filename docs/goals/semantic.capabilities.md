@@ -79,6 +79,8 @@ Released fixture: Actual bundled release plus a separately compiled board-game e
 
 Scenarios and binding: Existing original semantic outcomes; TO-FREEZE vertical-release and expansion-10-and-100. Fixture admission titles are listed below.
 
+Decision: imported-document inspection stays off the release barrel; the author workspace uses the existing definition-guide session port and web-semantic public entries.
+
 Stages: Declared: yes. Partial bound/exposed: original semantic extension API; launch release and expansion composition remain open. API-passed: unrecorded; promoted: no.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):

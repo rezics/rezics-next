@@ -22,7 +22,7 @@ review projects the current native rank separately so deprecated assertions rema
 editable operands. Current and proposed assertions remain independent, with an explicit absent baseline.
 Review is a projection of the caller's captured draft: it neither prepares commands nor renews caller authority.
 
-Decision: fewest tests pin user-visible publication behaviour and named-state stories only; the grant-controlled workspace is `/catalogue/definitions/publish`. Stories cover only review, build continuation, reconciliation and completed publication. Kernel `expansion.test.ts` remains the ten-Type and one-hundred-manifest measurement. The route imports the workspace through web-semantic public entries; web-app exposes session, shell and exposure used by that grant-controlled page.
+Decision: fewest tests pin user-visible publication behaviour and named-state stories only; the grant-controlled workspace is `/catalogue/definitions/publish`. Stories cover only review, build continuation, reconciliation and completed publication. Kernel `expansion.test.ts` remains the ten-Type and one-hundred-manifest measurement. The route imports workspace/actions public entries; session uses the existing definition-guide actions port; imported-document inspection stays off the release barrel.
 
 Recipe creation and correction also consume `StatementSummary` unchanged for ordinary assertions. Recipe keeps
 its field meaning, exact term/row return and authored-document presentation local: the validated `DocumentBody`,

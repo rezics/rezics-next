@@ -12,6 +12,7 @@ import {
   type CatalogueSourceInput,
   type ImportedCatalogueDocument,
 } from './import-document.ts';
+import { mapReleaseViolations } from './publication-workspace.ts';
 import {
   DATA_TYPES,
   RELEASE_FORMAT,
@@ -1142,7 +1143,13 @@ export async function compileCatalogue(input: {
 /** Compile or admit one imported catalogue document. Source compilation stays native. */
 export async function admitImportedDocument(value: unknown): Promise<ImportedCatalogueDocument> {
   const inspected = inspectImportedDocument(value);
-  if (inspected.kind !== 'sources') return inspected;
+  if (inspected.kind === 'invalid' || inspected.kind === 'extension') return inspected;
+  if (inspected.kind === 'release') {
+    const admission = mapReleaseViolations(validateRelease(inspected.release));
+    if (admission.length) return { kind: 'invalid', diagnostics: admission };
+    const limits = releaseDiagnostics(inspected.release);
+    return limits.length ? { kind: 'invalid', diagnostics: limits } : inspected;
+  }
   try {
     const release = await compileCatalogue(inspected.sources);
     const diagnostics = releaseDiagnostics(release);

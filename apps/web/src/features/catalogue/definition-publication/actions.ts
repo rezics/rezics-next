@@ -1,9 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../../../kernel/client';
-import type { SessionEnv } from '../../../session/client';
-import { prepareSession, viewerCredential } from '../../../session/request';
+import { withCatalogueSession } from '../definition-guide-actions';
 import { definitionPublicationNative } from './native';
 import {
   isPublicationDigest,
@@ -32,17 +28,9 @@ async function withPublisher<T>(
     native: ReturnType<typeof definitionPublicationNative>,
   ) => Promise<T | { ok: false; reason: PublicationFailure }>,
 ): Promise<T | { ok: false; reason: PublicationFailure }> {
-  setResponseHeader('cache-control', 'private, no-store');
-  try {
-    const request = getRequest();
-    const stale = await prepareSession(request, env as Partial<SessionEnv>);
-    if (stale) return { ok: false, reason: 'denied' };
-    const authorization = viewerCredential(request);
-    if (!authorization) return { ok: false, reason: 'signed-out' };
-    return await read(definitionPublicationNative(kernelClient(), { authorization }));
-  } catch {
-    return { ok: false, reason: 'unavailable' };
-  }
+  return withCatalogueSession(({ client, authorization }) =>
+    read(definitionPublicationNative(client, { authorization })),
+  );
 }
 
 export const openDefinitionPublication = createServerFn({ method: 'GET' })

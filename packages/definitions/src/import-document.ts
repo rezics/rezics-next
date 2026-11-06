@@ -1,9 +1,9 @@
 import type { Extension } from './extension.ts';
-import { EXTENSION_DOCUMENT_FORMAT } from './publication-workspace.ts';
-import { publicationLimits, validateRelease } from './index.ts';
+import { publicationLimits } from './publication-construction.ts';
 import { RELEASE_LIMITS, type Release } from './portable.ts';
 import {
   classifyImportedDocument,
+  EXTENSION_DOCUMENT_FORMAT,
   mapReleaseViolations,
   unknownImportedDocumentDiagnostic,
   type PublicationDiagnostic,
@@ -96,8 +96,6 @@ export function catalogueErrorDiagnostics(error: {
 }
 
 export function releaseDiagnostics(release: unknown): PublicationDiagnostic[] {
-  const admission = validateRelease(release);
-  if (admission.length) return mapReleaseViolations(admission);
   return mapReleaseViolations(publicationLimits(release));
 }
 
@@ -105,7 +103,7 @@ function compactJsonBytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
 
-/** Classify and validate one imported document without compiling sources. */
+/** Classify and bound-check one imported document without compiling sources or the release barrel. */
 export function inspectImportedDocument(value: unknown): InspectedImportedDocument {
   if (value === undefined || value === null) {
     return { kind: 'invalid', diagnostics: [unknownImportedDocumentDiagnostic()] };

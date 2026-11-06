@@ -80,6 +80,22 @@ export function guideTypeRequest(value: unknown): { typeId: string; locale: Guid
   return { typeId: input.typeId, locale: locale(input.locale) };
 }
 
+export async function withCatalogueSession<T>(
+  read: (input: { client: ReturnType<typeof kernelClient>; authorization: string }) => Promise<T>,
+): Promise<T | { ok: false; reason: 'denied' | 'signed-out' | 'unavailable' }> {
+  setResponseHeader('cache-control', 'private, no-store');
+  try {
+    const request = getRequest();
+    const stale = await prepareSession(request, env as Partial<SessionEnv>);
+    if (stale) return { ok: false, reason: 'denied' };
+    const authorization = viewerCredential(request);
+    if (!authorization) return { ok: false, reason: 'signed-out' };
+    return await read({ client: kernelClient(), authorization });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
 async function withGuideReader<T extends { ok: boolean }>(
   selectedLocale: GuideLocale,
   read: (options: { client: ReturnType<typeof kernelClient>; headers: Record<string, string> }) => Promise<T>,
@@ -124,3 +140,19 @@ export const readDefinitionGuideType = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<GuideTypeRead> =>
     withGuideReader(data.locale, ({ client, headers }) => readGuideType(client, data.typeId, data.locale, headers)),
   );
+
+export async function withCatalogueSession<T>(
+  read: (input: { client: ReturnType<typeof kernelClient>; authorization: string }) => Promise<T>,
+): Promise<T | { ok: false; reason: 'denied' | 'signed-out' | 'unavailable' }> {
+  setResponseHeader('cache-control', 'private, no-store');
+  try {
+    const request = getRequest();
+    const stale = await prepareSession(request, env as Partial<SessionEnv>);
+    if (stale) return { ok: false, reason: 'denied' };
+    const authorization = viewerCredential(request);
+    if (!authorization) return { ok: false, reason: 'signed-out' };
+    return await read({ client: kernelClient(), authorization });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}

@@ -15,7 +15,8 @@ root or bundled entry. Browser publication callers use the ordinary Definitions 
 so the native validator retains its isolated checker and exact analysis limits.
 Portable publication workspace helpers (`classifyImportedDocument`, `compareReleases`,
 `compareExtensions`, `reconcileActivation` and imported-file diagnostics) live on both root and
-browser entries. Source compilation and extension validation stay native.
+browser entries. Imported-document inspection uses that pure contract plus publication limits; it
+does not import the release barrel. Source compilation and extension validation stay native.
 
 ## Semantic language selection
 

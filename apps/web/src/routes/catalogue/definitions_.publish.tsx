@@ -12,17 +12,12 @@ import {
   submitDefinitionPublication,
 } from '../../features/catalogue/definition-publication/actions';
 import { getLocale } from '../../paraglide/runtime.js';
-import { m } from '../../paraglide/messages.js';
-import { pageHead } from '../../shell/head';
-import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/catalogue/definitions_/publish')({
   staticData: { publicCache: false },
   validateSearch: publicationAddress,
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => openDefinitionPublication({ data: deps }),
-  head: ({ match }) =>
-    pageHead({ title: m.definition_publication_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: PublicationRoute,
 });
 
