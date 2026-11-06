@@ -6,6 +6,7 @@ import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { registerEventTypes } from '../../src/events/catalogue.ts';
 import { problemResponse } from '../../src/http/problem.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -16,6 +17,7 @@ const eventType = 'com.rezics.fixture.access-contention.v1';
 registerEventTypes({ [eventType]: Type.Object({ attempt: Type.Integer() }, { additionalProperties: false }) });
 
 beforeAll(async () => {
+  configureTestReceiptKeys(pool);
   await pool.query('CREATE TABLE public.access_contention_effect (id uuid PRIMARY KEY)');
   await pool.query('CREATE TABLE public.access_contention_lock (id uuid PRIMARY KEY, value integer NOT NULL)');
 });

@@ -22,7 +22,9 @@ source; restore and rename lock the exact parent rather than scanning the owner 
 remain the oracles; this landing adds no parallel Label suite.
 Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
 through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
-`platform.governance` is the first holder. No test-only grant rows.
+`platform.governance` is the first holder. No test-only grant rows. Subject writes load Semantic's installed
+source-set module through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays
+unavailable. Direct `createKernel` / `runCommand` tests bind the dedicated receipt ring rather than seeding grants.
 
 ## Collection operation costs
 

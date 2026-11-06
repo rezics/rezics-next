@@ -24,6 +24,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { readBatch, EVENT_TYPES } from '../../src/events/log.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
@@ -170,6 +171,10 @@ function fixtureAccess(entries: ReturnType<typeof actionCatalogue> = catalogue) 
   });
 }
 
+function mountedCatalogue() {
+  return actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys() }));
+}
+
 beforeAll(async () => {
   authDatabase = `bootstrap_auth_${process.pid}`;
   const authUrl = new URL(url);
@@ -229,9 +234,7 @@ beforeAll(async () => {
     scopes: [
       ...new Set([
         ...actions,
-        ...[...actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) })).keys()].filter(
-          (scope) => scope !== 'media:complete',
-        ),
+        ...[...mountedCatalogue().keys()].filter((scope) => scope !== 'media:complete'),
         'gate:any',
       ]),
     ],
@@ -316,7 +319,7 @@ test('exact root CLI installs one durable normal Global role and one registered 
 });
 
 test('Auth-issued scopes and installed formula govern delegation, revocation and unrelated resources', async () => {
-  const semanticActions = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const semanticActions = mountedCatalogue();
   const semantic = fixtureAccess(semanticActions);
   const semanticContext = await context(person, actions, semantic);
   expect(
@@ -432,7 +435,7 @@ test('reserved governance expansion intersects mounted actions while arbitrary r
   });
   expect(resolved.roles.get(PLATFORM_GOVERNANCE_ROLE)).toEqual(['subject:create']);
   expect(resolved.roles.has('custom.invalid')).toBe(false);
-  const semantic = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const semantic = mountedCatalogue();
   const governance = resolveResourceRoles(semantic).roles.get(PLATFORM_GOVERNANCE_ROLE);
   expect(semantic.has('media:import_from_url')).toBe(true);
   expect(semantic.has('gate:any')).toBe(false);
@@ -636,7 +639,7 @@ test('local showcase uses one native identity grant, authoritative validity and 
   ).toEqual([{ authoritative: true }]);
   await bootstrapLocalShowcaseBoardCreation(pool, person);
   expect(await showcaseSnapshot()).toEqual(installed);
-  const mounted = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const mounted = mountedCatalogue();
   const using = fixtureAccess(mounted);
   // Self-renunciation uses the existing native grant command and a genuine Auth-issued actor.
   const ctx = await context(
