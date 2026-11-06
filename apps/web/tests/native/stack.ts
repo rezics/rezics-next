@@ -721,6 +721,7 @@ async function startStack(): Promise<
     let analysisUrl: string;
     if (socketHost?.startsWith('/')) {
       reportStackProgress('Native web stack startup: proxying SQL analysis through loopback');
+      // Child process: Reylo's sqlModuleSync blocks this host in Atomics.wait.
       postgresSocketProxy = await listenOwnedPostgresSocketProxy(socketHost);
       analysisUrl = isolatedReyloPostgresUrl(postgresSocketProxy.port, analysisDatabase);
     } else {

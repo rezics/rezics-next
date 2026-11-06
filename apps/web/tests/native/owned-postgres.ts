@@ -1,6 +1,8 @@
+import { fork, type ChildProcess } from 'node:child_process';
 import { readFileSync, readlinkSync } from 'node:fs';
 import { connect as connectUnix, createServer, type Socket } from 'node:net';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type NativeOwnedPostgresIsolation = {
   pid: number;
@@ -36,7 +38,7 @@ export function isolatedReyloPostgresUrl(port: number, database: string): string
   return `postgres://rezics:rezics@127.0.0.1:${port}/${database}?sslmode=disable`;
 }
 
-export async function listenOwnedPostgresSocketProxy(socketDirectory: string): Promise<OwnedPostgresSocketProxy> {
+function listenOwnedPostgresSocketProxyInProcess(socketDirectory: string): Promise<OwnedPostgresSocketProxy> {
   if (!socketDirectory.startsWith('/') || /[,\s]/.test(socketDirectory))
     throw new Error('PostgreSQL socket proxy requires an absolute socket directory');
   const socketPath = join(socketDirectory, '.s.PGSQL.5432');
@@ -58,27 +60,78 @@ export async function listenOwnedPostgresSocketProxy(socketDirectory: string): P
     client.pipe(upstream);
     upstream.pipe(client);
   });
-  await new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => {
       server.off('error', reject);
-      resolve();
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('PostgreSQL socket proxy did not bind a TCP port'));
+        return;
+      }
+      resolve({
+        port: address.port,
+        close: () =>
+          new Promise((closeResolve, closeReject) => {
+            for (const socket of sockets) socket.destroy();
+            sockets.clear();
+            server.close((error) => (error ? closeReject(error) : closeResolve()));
+          }),
+      });
     });
   });
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    server.close();
-    throw new Error('PostgreSQL socket proxy did not bind a TCP port');
+}
+
+/**
+ * Reylo analyses SQL on a worker while the stack host is blocked in `Atomics.wait`.
+ * The proxy therefore runs in its own process so accept/pipe can complete.
+ */
+export async function listenOwnedPostgresSocketProxy(socketDirectory: string): Promise<OwnedPostgresSocketProxy> {
+  if (!socketDirectory.startsWith('/') || /[,\s]/.test(socketDirectory))
+    throw new Error('PostgreSQL socket proxy requires an absolute socket directory');
+  const child: ChildProcess = fork(fileURLToPath(import.meta.url), [socketDirectory], {
+    execPath: process.execPath,
+    execArgv: [],
+    stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+  });
+  if (!child.pid) throw new Error('PostgreSQL socket proxy did not start');
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  try {
+    const port = await new Promise<number>((resolve, reject) => {
+      const fail = (error: Error) => {
+        child.off('message', onMessage);
+        reject(error);
+      };
+      const onMessage = (message: { port?: unknown }) => {
+        if (typeof message.port === 'number' && Number.isInteger(message.port) && message.port > 0) {
+          child.off('message', onMessage);
+          resolve(message.port);
+        }
+      };
+      child.once('error', (error) => fail(error));
+      child.once('exit', (code, signal) =>
+        fail(new Error(`PostgreSQL socket proxy exited ${code ?? signal} before binding`)),
+      );
+      child.on('message', onMessage);
+    });
+    return {
+      port,
+      close: () =>
+        (async () => {
+          if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+          const stopped = await Promise.race([exited.then(() => true), Bun.sleep(2_000).then(() => false)]);
+          if (!stopped && child.exitCode === null && child.signalCode === null) {
+            child.kill('SIGKILL');
+            await Promise.race([exited, Bun.sleep(1_000)]);
+          }
+        })(),
+    };
+  } catch (error) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await Promise.race([exited, Bun.sleep(1_000)]);
+    throw error;
   }
-  return {
-    port: address.port,
-    close: () =>
-      new Promise((resolve, reject) => {
-        for (const socket of sockets) socket.destroy();
-        sockets.clear();
-        server.close((error) => (error ? reject(error) : resolve()));
-      }),
-  };
 }
 
 export function networkInterfaceNames(source = '/proc/net/dev'): string[] {
@@ -108,4 +161,16 @@ export function ownedPostgresIsolated(): boolean {
   } catch {
     return false;
   }
+}
+
+if (import.meta.main) {
+  const directory = process.argv[2];
+  if (!directory) throw new Error('PostgreSQL socket proxy requires an absolute socket directory');
+  const proxy = await listenOwnedPostgresSocketProxyInProcess(directory);
+  process.send?.({ port: proxy.port });
+  const stop = () => {
+    void proxy.close().finally(() => process.exit(0));
+  };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
 }

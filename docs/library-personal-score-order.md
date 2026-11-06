@@ -128,5 +128,7 @@ read PID 1's netns. Docker cannot join that netns, and a host-published port nev
 The server also listens on `/var/run/postgresql` so the image entrypoint's init `psql` (which clears `PGHOST`) can
 finish. Auth host identity uses that absolute `host` socket directory as the database identity; a TCP `host` or
 `hostaddr` override remains refused. Reylo SQL analysis cannot use that libpq `host` query: postgres.js dials the URL
-hostname, so isolated walks proxy analysis over loopback TCP onto the same unix socket. Acceptance remains the existing
-native host walk; unit tests pin socket isolation, the dual listen path and the Reylo loopback proxy.
+hostname, so isolated walks proxy analysis over loopback TCP onto the same unix socket. The proxy runs in its own
+process because Reylo's `sqlModuleSync` blocks the stack host in `Atomics.wait` while a worker describes statements.
+Acceptance remains the existing native host walk; unit tests pin socket isolation, the dual listen path, the Reylo
+loopback proxy and a blocked-host analysis probe.

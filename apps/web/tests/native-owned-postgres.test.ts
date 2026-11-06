@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -56,6 +57,60 @@ test('Reylo analysis on an isolated socket uses loopback TCP instead of libpq ho
   );
   expect(() => isolatedReyloPostgresUrl(0, 'native_web_analysis_abc')).toThrow('TCP port');
   expect(() => isolatedReyloPostgresUrl(54329, 'native-web;drop')).toThrow('Unsafe analysis database name');
+});
+
+test('Reylo-style sync analysis reaches postgres while the stack host is blocked', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'native-pg-proxy-sync-'));
+  const socketPath = join(directory, '.s.PGSQL.5432');
+  const fake = spawn(
+    process.execPath,
+    [
+      '-e',
+      `import { createServer } from 'node:net';
+const listener = createServer((socket) => {
+  socket.on('data', (chunk) => socket.write(chunk));
+});
+listener.listen(${JSON.stringify(socketPath)}, () => process.stdout.write('ready\\n'));`,
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const fail = (error: Error) => reject(error);
+      fake.once('error', fail);
+      fake.once('exit', (code, signal) => fail(new Error(`Fake PostgreSQL exited ${code ?? signal}`)));
+      fake.stdout?.once('data', (chunk: Buffer) => {
+        if (chunk.toString().includes('ready')) resolve();
+        else fail(new Error(`Fake PostgreSQL started with ${chunk}`));
+      });
+    });
+    const proxy = await listenOwnedPostgresSocketProxy(directory);
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          '-e',
+          `import { connect } from 'node:net';
+const socket = connect({ port: ${proxy.port}, host: '127.0.0.1' });
+const reply = await new Promise((resolve, reject) => {
+  socket.once('error', reject);
+  socket.once('data', (chunk) => resolve(chunk.toString()));
+  socket.write('from-tcp');
+});
+await new Promise((resolve) => socket.end(resolve));
+process.stdout.write(reply);`,
+        ],
+        { encoding: 'utf8', timeout: 8_000 },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toBe('from-tcp');
+    } finally {
+      await proxy.close();
+    }
+  } finally {
+    fake.kill('SIGTERM');
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('a loopback proxy reaches a unix-socket PostgreSQL listener', async () => {
