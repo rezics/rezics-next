@@ -35,9 +35,8 @@ installManagedModuleMocks();
 beforeAll(install);
 const { failure, issuerPage, loadDetail, loadInventory, readCursors } = await import('../src/accounts/management/data');
 const { AccountManagementPage } = await import('../src/accounts/management/pages');
-const { inventoryExample, detailExample, organization, human, automation } = await import(
-  '../src/accounts/management/story-api'
-);
+const { inventoryExample, detailExample, organization, human, automation } =
+  await import('../src/accounts/management/story-api');
 const { getLocale, locales, setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 const { isSignedInPath } = await import('../src/session/guard');

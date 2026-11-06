@@ -28,7 +28,8 @@ let AnonymousSessionContext: (typeof import('../src/session/query'))['AnonymousS
 beforeAll(async () => {
   installMocks();
   ({ ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail'));
-  ({ ManagedAccountReader, detailFailure, loadManagedAccountDetail, managedAccountTarget, managedAccountsBackHref } = await import('../src/settings/managed-account-detail-read'));
+  ({ ManagedAccountReader, detailFailure, loadManagedAccountDetail, managedAccountTarget, managedAccountsBackHref } =
+    await import('../src/settings/managed-account-detail-read'));
   ({ m } = await import('../src/paraglide/messages.js'));
   ({ AnonymousSessionContext } = await import('../src/session/query'));
 });

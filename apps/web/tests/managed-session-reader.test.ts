@@ -97,7 +97,8 @@ const installMocks = () => installManagedModuleMocks();
 installMocks();
 beforeAll(installMocks);
 const originalKernel = { ...(await import('../src/kernel/client')) };
-const installKernelMock = () => mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => native }));
+const installKernelMock = () =>
+  mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => native }));
 installKernelMock();
 beforeAll(() => {
   installMocks();

@@ -449,7 +449,10 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       const region = feed(view.host, label);
       const sibling = feed(view.host, siblingLabel);
       // A sibling read retires link admission across feeds; the retained rows keep their identities and text.
-      const rows = [...region.querySelectorAll('li')].map((row) => [row.dataset.managedKey, row.querySelector('h4')?.textContent]);
+      const rows = [...region.querySelectorAll('li')].map((row) => [
+        row.dataset.managedKey,
+        row.querySelector('h4')?.textContent,
+      ]);
       await settle(() => button(region, m.settings_managed_load_more()).click());
       await settle(() => source.replies[1]!.resolve(managedAccountsFailure(400, { code: 'invalid_cursor' })));
       await settle(() => button(sibling, m.settings_managed_load_more()).click());
@@ -457,7 +460,9 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       expect(source.calls[3]).toEqual({});
       expect(button(region, m.settings_retry()).disabled).toBe(true);
       expect(button(region, m.settings_managed_restart_list()).disabled).toBe(true);
-      expect([...region.querySelectorAll('li')].map((row) => [row.dataset.managedKey, row.querySelector('h4')?.textContent])).toEqual(rows);
+      expect(
+        [...region.querySelectorAll('li')].map((row) => [row.dataset.managedKey, row.querySelector('h4')?.textContent]),
+      ).toEqual(rows);
       await settle(() =>
         source.replies[3]!.resolve(managedAccountsFailure(429, { code: 'rate_limited' }, { 'Retry-After': '1' })),
       );
