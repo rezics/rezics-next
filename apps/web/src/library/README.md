@@ -329,8 +329,9 @@ notice. Unavailable, denied, preparing, signed-out and invalid-address states do
 Decision: list recovery uses the collection GET; point read/write always call `follows({ targetId })`. FULL pages
 withhold a changed Source (`target: null`) while keeping the own edge. Return from a target restores the original
 list cursor, kind and row from this visit's history state with the current session; the destination URL never carries
-the private cursor. Command replay resends the original credential, idempotency key and body. Fewest tests: one typed
-transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
+the private cursor. Command replay resends the original credential, idempotency key and body. Presentation maps only
+native summaries that carry `id` and `type` through `subjectOf`; actor, organization and deleted-account targets stay
+unlabeled. Fewest tests: one typed transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
 Decision: a published snapshot is independently readable after later private session edits. Owner retract confirmation,
 publish open, session-log paging and Undo use 44px (`min-h-11`) targets with visible keyboard focus; confirmation
 receives focus. Exact Undo restores the original snapshot, not the current private session. Ordinary 720-hour

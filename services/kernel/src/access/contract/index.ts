@@ -67,6 +67,7 @@ export type {
   KindAudienceLocator,
   KindAudiencePlan,
   LockedRealmClaim,
+  NativeErasureCoordinatorPort,
   OriginalWorkPort,
   QualifyAvatarInput,
   RealmAdministrationPort,

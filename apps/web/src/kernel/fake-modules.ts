@@ -1,9 +1,4 @@
 import type { Fixtures, KernelRecording } from './fake.ts';
-import * as libraryContinue from './fake/library-continue.ts';
-import * as qualifiedRelations from './fake/qualified-relations.ts';
-import * as reviewConflicts from './fake/review-conflicts.ts';
-import * as threadMediaReuse from './fake/thread-media-reuse.ts';
-import * as libraryLabelAssignments from './fake/library-label-assignments.ts';
 import { storySubjects } from './story-subjects';
 
 type RouteContext = {
@@ -35,41 +30,107 @@ type Discovered = {
 };
 
 let discovered: Discovered | undefined;
+let discovering: Promise<Discovered> | undefined;
 const recordingOverrides = new WeakMap<Record<string, KernelRecording>, Record<string, KernelRecording>>();
 
 function ordered<Value>(files: Record<string, Value>): [string, Value][] {
   return Object.entries(files).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 }
 
-/** Bun's synchronous counterpart to Vite's eager glob imports. Runs only in an unbundled Bun process. */
-function bunFiles<Value>(pattern: string): Record<string, Value> {
+/** Bun `import` of JSON may add a synthetic default; Vite glob already imports default. */
+function jsonModule<Value>(loaded: Value): Value {
+  if (!loaded || typeof loaded !== 'object' || !('default' in loaded)) return loaded;
+  const value = (loaded as { default: Value }).default;
+  return value && typeof value === 'object' ? value : loaded;
+}
+
+function relativeSpecifiers(source: string): string[] {
+  const specifiers: string[] = [];
+  for (const match of source.matchAll(/(?:from\s+|import\(\s*)['"]([^'"]+)['"]/g)) {
+    const specifier = match[1];
+    if (specifier?.startsWith('.')) specifiers.push(specifier);
+  }
+  return specifiers;
+}
+
+function takeRoute(modules: Record<string, RouteModule>, suffix: string): RouteModule {
+  const entry = Object.entries(modules).find(([file]) => file.endsWith(suffix));
+  return entry?.[1] ?? {};
+}
+
+/**
+ * Copied-tree support: keep a globbed file when it exists and every relative specifier in its
+ * copied-tree graph resolves. Sibling app files are not walked; selected-module import failures
+ * still propagate.
+ */
+async function availableCopiedFiles(files: string[]): Promise<string[]> {
+  const root = import.meta.dir;
+  const prefix = root.endsWith('/') ? root : `${root}/`;
+  const known = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  const moduleAvailable = async (specifier: string, importerDir: string): Promise<boolean> => {
+    if (!specifier.startsWith('.')) return true;
+    let resolved: string;
+    try {
+      resolved = Bun.resolveSync(specifier, importerDir);
+    } catch {
+      return false;
+    }
+    const path = resolved.split('?')[0]!;
+    if (path !== root && !path.startsWith(prefix)) return true;
+    const remembered = known.get(path);
+    if (remembered !== undefined) return remembered;
+    if (visiting.has(path)) return true;
+    visiting.add(path);
+    try {
+      if (!/\.(?:[cm]?[jt]sx?)$/.test(path)) {
+        known.set(path, true);
+        return true;
+      }
+      const source = await Bun.file(path).text();
+      const dir = path.replace(/[/\\][^/\\]+$/, '') || path;
+      for (const inner of relativeSpecifiers(source)) {
+        if (!(await moduleAvailable(inner, dir))) {
+          known.set(path, false);
+          return false;
+        }
+      }
+      known.set(path, true);
+      return true;
+    } finally {
+      visiting.delete(path);
+    }
+  };
+  const selected: string[] = [];
+  for (const file of files) {
+    if (await moduleAvailable(`./${file}`, root)) selected.push(file);
+  }
+  return selected;
+}
+
+/** Bun's counterpart to Vite's eager glob imports. Relative `import()` loads the selected inventory in order. */
+async function bunFiles<Value>(pattern: string): Promise<Record<string, Value>> {
+  const files = await availableCopiedFiles([...new Bun.Glob(pattern).scanSync({ cwd: import.meta.dir })].sort());
   return Object.fromEntries(
-    [...new Bun.Glob(pattern).scanSync({ cwd: import.meta.dir })]
-      .sort()
-      .map((file) => [file, require(`${import.meta.dir}/${file}`) as Value]),
+    await Promise.all(files.map(async (file) => [file, (await import(`./${file}`)) as Value] as const)),
   );
 }
 
-function discover(): Discovered {
-  if (discovered) return discovered;
-  let modules: Record<string, RouteModule>;
-  let recordings: Record<string, KernelRecording>;
-  let fixtures: Record<string, FixtureFile>;
-  // Vite expands these literal calls at build time. Its browser/Worker runtimes do not expose Bun.
-  if (typeof Bun !== 'undefined' && typeof import.meta.glob !== 'function') {
-    modules = bunFiles('fake/*.ts');
-    recordings = bunFiles('recorded/*.json');
-    fixtures = bunFiles('fixtures/*.json');
-  } else {
-    modules = import.meta.glob<RouteModule>('./fake/*.ts', { eager: true });
-    recordings = import.meta.glob<KernelRecording>('./recorded/*.json', { eager: true, import: 'default' });
-    fixtures = import.meta.glob<FixtureFile>('./fixtures/*.json', { eager: true, import: 'default' });
-  }
+function assemble(
+  modules: Record<string, RouteModule>,
+  recordings: Record<string, KernelRecording>,
+  fixtures: Record<string, FixtureFile>,
+): Discovered {
+  const threadMediaReuse = takeRoute(modules, '/thread-media-reuse.ts');
+  const qualifiedRelations = takeRoute(modules, '/qualified-relations.ts');
+  const libraryContinue = takeRoute(modules, '/library-continue.ts');
+  const reviewConflicts = takeRoute(modules, '/review-conflicts.ts');
+  const libraryLabelAssignments = takeRoute(modules, '/library-label-assignments.ts');
   // Includes fake/view-continuation.ts: subject view owner pages and their refusal fixture.
-  discovered = {
+  return {
     routes: [
-      ...threadMediaReuse.routes,
-      ...qualifiedRelations.routes,
+      ...(threadMediaReuse.routes ?? []),
+      ...(qualifiedRelations.routes ?? []),
       ...ordered({
         ...Object.fromEntries(
           Object.entries(modules).filter(
@@ -86,10 +147,10 @@ function discover(): Discovered {
       }).flatMap(([, module]) => module.routes ?? []),
     ],
     recordings: Object.fromEntries(
-      ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), recording]),
+      ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), jsonModule(recording)]),
     ),
     fixtures: [
-      ...ordered(fixtures).map(([, fixture]) => fixture),
+      ...ordered(fixtures).map(([, fixture]) => jsonModule(fixture)),
       {
         subjects: storySubjects.map((subject) => ({
           id: subject.id,
@@ -114,16 +175,47 @@ function discover(): Discovered {
       },
     ],
   };
-  return discovered;
 }
 
-export function discoveredRecordings(): Record<string, KernelRecording> {
-  return discover().recordings;
+async function loadDiscovered(): Promise<Discovered> {
+  // Vite expands these literal calls at build time. Prefer Bun's inventory in an unbundled Bun process.
+  if (typeof Bun !== 'undefined') {
+    const [modules, recordings, fixtures] = await Promise.all([
+      bunFiles<RouteModule>('fake/*.ts'),
+      bunFiles<KernelRecording>('recorded/*.json'),
+      bunFiles<FixtureFile>('fixtures/*.json'),
+    ]);
+    return assemble(modules, recordings, fixtures);
+  }
+  return assemble(
+    import.meta.glob<RouteModule>('./fake/*.ts', { eager: true }),
+    import.meta.glob<KernelRecording>('./recorded/*.json', { eager: true, import: 'default' }),
+    import.meta.glob<FixtureFile>('./fixtures/*.json', { eager: true, import: 'default' }),
+  );
+}
+
+async function discover(): Promise<Discovered> {
+  if (discovered) return discovered;
+  discovering ??= loadDiscovered().then(
+    (value) => {
+      discovered = value;
+      return value;
+    },
+    (error: unknown) => {
+      discovering = undefined;
+      throw error;
+    },
+  );
+  return discovering;
+}
+
+export async function discoveredRecordings(): Promise<Record<string, KernelRecording>> {
+  return (await discover()).recordings;
 }
 
 /** Append file contributions after the caller's fixtures and default demo cast, without mutating either. */
-export function mergeFakeFixtures(fixtures: Fixtures): Fixtures {
-  const files = discover().fixtures;
+export async function mergeFakeFixtures(fixtures: Fixtures): Promise<Fixtures> {
+  const files = (await discover()).fixtures;
   const subjects = new Map<string, Fixtures['subjects'][number]>();
   for (const subject of [...fixtures.subjects, ...files.flatMap((file) => file.subjects ?? [])])
     subjects.set(subject.id, subject);
@@ -141,7 +233,7 @@ export async function answerFakeRoute(
   given?: Record<string, KernelRecording>,
   fixtures?: Fixtures,
 ): Promise<KernelRecording | undefined> {
-  const registered = discover();
+  const registered = await discover();
   let recordings = registered.recordings;
   if (given) {
     let combined = recordingOverrides.get(given);

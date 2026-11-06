@@ -194,7 +194,7 @@ function requestedRecording(name: string, request: Request, recordings: Record<s
 }
 
 /** Keys of a recording that describe the request it answers; the rest is the response body. */
-const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle', 'headers']);
+const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle', 'headers', 'default']);
 
 function recordedResponse(recording: KernelRecording): Response {
   const recordedHeaders = new Headers({
@@ -657,7 +657,7 @@ export function createRecordedKernelFetch(recordings: Record<string, KernelRecor
     const request = new Request(input, init);
     const exposure = exposureResponse(request);
     if (exposure) return exposure;
-    const available = { ...discoveredRecordings(), ...recordings };
+    const available = { ...(await discoveredRecordings()), ...recordings };
     const moduleRecording = await answerFakeRoute('story', request, available);
     if (moduleRecording) return recordedResponse(moduleRecording);
     const recording = await selectRecording(request, new URL(request.url).pathname, available);
@@ -1156,7 +1156,7 @@ export function createFakeKernelFetch(given: Fixtures, observe?: (call: FakeKern
       };
   const moduleFixtures = mergeFakeFixtures(fixtures);
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const fixtures = moduleFixtures;
+    const fixtures = await moduleFixtures;
     const request = new Request(input, init);
     const exposure = exposureResponse(request, given.admitted);
     if (exposure) return exposure;

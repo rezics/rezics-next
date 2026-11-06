@@ -44,7 +44,12 @@ function declarationOf(value: unknown): AccessWorkDeclaration | null {
 }
 
 /** Native Access ports. Composition roots bind these; applications never import this module. */
-export function createNativeAccessPorts(): AccessApplicationPorts {
+export function createNativeAccessPorts(
+  acknowledgeErasure: (
+    deps: { pool: Pool },
+    input: { accountId: string; participant: 'access'; outcome: 'erased' },
+  ) => Promise<unknown>,
+): AccessApplicationPorts {
   const identity: IdentitySemanticPort = {
     accountAgentId: (accountId) => accountAgentId(accountId),
     async readOriginalAccountAgentIdentity(pool, input) {
@@ -160,6 +165,11 @@ export function createNativeAccessPorts(): AccessApplicationPorts {
       async observeAccountErasureSearch(pool, input) {
         const observation = await observeAccountErasureSearch(asPool(pool), input as never, Date.now() + 60_000);
         return { observed: !('gap' in observation) };
+      },
+    },
+    nativeErasure: {
+      acknowledgeCompletion(pool, accountId) {
+        return acknowledgeErasure({ pool: asPool(pool) }, { accountId, participant: 'access', outcome: 'erased' });
       },
     },
     clock: () => new Date(),

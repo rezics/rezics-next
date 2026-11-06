@@ -10,6 +10,8 @@ import {
   type WatchManagementIO,
   type WatchRead,
 } from '../src/settings/watch-native';
+import { closedProfileEditing } from '../src/settings/editable-profile-source';
+import type { ObservedProfile, ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor } from '../src/settings/profile-write';
 import { captureProfileReturn } from '../src/settings/settings-return';
 import { editableProfile, profileValues } from './factories/profile';
@@ -17,6 +19,10 @@ import { editableProfile, profileValues } from './factories/profile';
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'alice-token' };
 const viewer = { state: 'current' as const, accountId: 'alice' };
 const actions = { remove: 'available' as const };
+
+function observed(values: ProfileValues): ObservedProfile {
+  return { ...values, editing: closedProfileEditing({ id: values.accountId, kind: values.kind }) };
+}
 
 function managed(
   row: Omit<ManagedWatch, 'command' | 'remove'> & Partial<Pick<ManagedWatch, 'command' | 'remove'>>,
@@ -71,14 +77,14 @@ function setup(io: WatchManagementIO) {
 }
 
 test('Profile save, unsaved draft, both Watch kinds, withheld target, original removal and return restore the draft', async () => {
-  const known = profileValues(editableProfile({ displayName: 'Saved name', bio: 'Saved notes' }));
-  let current = known;
+  const saved = profileValues(editableProfile({ displayName: 'Saved name', bio: 'Saved notes' }));
+  let current = profileValues(editableProfile());
   const reads: string[] = [];
   const writes: object[] = [];
   const editor = new ProfileEditor({
     read: async () => {
       reads.push(current.accountId);
-      return current;
+      return observed(current);
     },
     save: async (attempt) => {
       writes.push(attempt.patch);
@@ -87,11 +93,11 @@ test('Profile save, unsaved draft, both Watch kinds, withheld target, original r
     },
   });
   await editor.reload();
-  editor.edit({ displayName: 'Saved name', biography: 'Saved notes' });
+  editor.edit({ displayName: saved.displayName, biography: saved.biography });
   await editor.submit('profile');
   expect(editor.snapshot().phase).toBe('saved');
   expect(writes).toEqual([{ displayName: 'Saved name', biography: 'Saved notes' }]);
-  expect(reads).toEqual([known.accountId, known.accountId]);
+  expect(reads).toEqual([saved.accountId, saved.accountId]);
 
   editor.edit({ biography: 'Later unsaved notes' });
   editor.lastFocus = 'biography';
@@ -129,7 +135,15 @@ test('Profile save, unsaved draft, both Watch kinds, withheld target, original r
     expectedRevision: 5,
     credential: identity.csrfToken,
   });
-  boardRows = [managed({ ...withheldBoard, revision: 9 })];
+  boardRows = [
+    managed({
+      subscriptionId: withheldBoard.subscriptionId,
+      kind: 'board',
+      revision: 9,
+      createdAt: withheldBoard.createdAt,
+      target: null,
+    }),
+  ];
   await controller.refresh();
   expect(controller.snapshot().rows[0]?.revision).toBe(9);
   expect(controller.snapshot().command).toBe(original);
@@ -138,7 +152,7 @@ test('Profile save, unsaved draft, both Watch kinds, withheld target, original r
   expect(controller.snapshot()).toMatchObject({ write: 'removed_current', command: null });
 
   current = { ...current, displayName: 'Native later name' };
-  editor.receive(current);
+  editor.receive(observed(current));
   editor.restoreReturn(snapshot!);
   expect(editor.snapshot().draft?.displayName).toBe('Native later name');
   expect(editor.snapshot().draft?.biography).toBe('Later unsaved notes');
@@ -188,8 +202,12 @@ test('keyboard return restores only the exact current Watch; a missing row is mi
 });
 
 test('available, denied and unavailable Watch admission stay distinct; session replacement retires callbacks', async () => {
+  const deniedThread = { ...thread, remove: 'denied' as const };
   for (const read of [
-    { kind: 'page' as const, page: { viewer, actions: { remove: 'denied' as const }, watches: [thread], next: null } },
+    {
+      kind: 'page' as const,
+      page: { viewer, actions: { remove: 'denied' as const }, watches: [deniedThread], next: null },
+    },
     { kind: 'denied' as const, problem: { status: 403, code: 'forbidden' } },
     { kind: 'unavailable' as const, problem: { status: 503, code: 'dependency_unavailable' } },
   ]) {
@@ -199,8 +217,12 @@ test('available, denied and unavailable Watch admission stay distinct; session r
     });
     await controller.first();
     if (read.kind === 'page') {
-      expect(controller.snapshot()).toMatchObject({ read: 'ready', actions: { remove: 'denied' }, rows: [thread] });
-      await controller.stop(thread.subscriptionId);
+      expect(controller.snapshot()).toMatchObject({
+        read: 'ready',
+        actions: { remove: 'denied' },
+        rows: [deniedThread],
+      });
+      await controller.stop(deniedThread.subscriptionId);
       expect(controller.snapshot().command).toBeNull();
     } else expect(controller.snapshot().read).toBe(read.kind);
   }

@@ -99,6 +99,9 @@ function fakePorts(overrides: Partial<AccessApplicationPorts> = {}): AccessAppli
         return declaration;
       },
     },
+    nativeErasure: {
+      async acknowledgeCompletion() {},
+    },
     ...overrides,
   };
 }

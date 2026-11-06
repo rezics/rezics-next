@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { settingsCommandKeyHeader } from '../src/settings/command-headers';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
 import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
@@ -158,7 +158,7 @@ test('profile HTTP serialization preserves the semantic key and original patch o
       const sent = calls[attempt - 1]!;
       expect(sent.method).toBe('PATCH');
       expect(sent.url).toBe(`/v1/accounts/${before.accountId}`);
-      expect(idempotencyKeyOf(sent.key)).toBe(idempotencyKey);
+      expect(sent.key).toBe(settingsCommandKeyHeader(idempotencyKey));
       expect(sent.body).toEqual({ biography: '  Original e\u0301\nwords  ' });
       expect({ before, after, idempotencyKey }).toEqual(original);
     }
@@ -336,14 +336,14 @@ test('profile and activity failure controls honor native delay/date headers whil
         createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
       );
       const controls = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
-      for (const label of [
-        scope === 'views' ? m.settings_public_activity_retry() : m.settings_profile_retry_save(),
-        m.settings_profile_reload_current(),
-      ]) {
-        const matching = controls.filter((control) => control[2]?.includes(label));
-        expect(matching).toHaveLength(label === m.settings_profile_reload_current() ? 2 : 1);
-        for (const control of matching) expect(/\sdisabled(?:=|\s|$)/.test(control[1] ?? '')).toBe(!!waiting);
-      }
+      const retryLabel = scope === 'views' ? m.settings_public_activity_retry() : m.settings_profile_retry_save();
+      const reloadLabel = m.settings_profile_reload_current();
+      const retry = controls.filter((control) => control[2]?.includes(retryLabel));
+      const reload = controls.filter((control) => control[2]?.includes(reloadLabel));
+      expect(retry).toHaveLength(1);
+      expect(reload).toHaveLength(2);
+      for (const control of retry) expect(/(?:^|\s)disabled(?:=|\s|$)/.test(control[1] ?? '')).toBe(!!waiting);
+      for (const control of reload) expect(/(?:^|\s)disabled(?:=|\s|$)/.test(control[1] ?? '')).toBe(false);
       expect(html.includes(m.settings_retry_wait())).toBe(!!waiting);
       const review = controls.find((control) => control[2]?.includes(m.settings_profile_review_draft()));
       expect(review).toBeDefined();
@@ -389,7 +389,7 @@ test('a thrown native save remains unknown and replays the immutable original wh
   expect(editor.snapshot().phase).toBe('uncertain');
   expect(editor.snapshot().draft?.biography).toBe('Later words');
   expect(editor.snapshot().failure?.retryAfter).toBeUndefined();
-  editor.unavailable(new EditableProfileReadError(503, { status: 503, retryAfter: '90' }));
+  editor.unavailable(new EditableProfileReadError(503, { status: 503, retryAfter: '0' }));
   await editor.reload();
   expect(editor.snapshot().failure).toEqual({ status: 403, message: '' });
   expect(editor.snapshot().readAuthority).toBe('denied');

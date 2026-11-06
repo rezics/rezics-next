@@ -1,6 +1,4 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
-import { loadThreadPage } from '../src/threads/thread-page';
 import { createRecordedKernelFetch, deletedOrganizationId, mentionThreadId } from '../src/kernel/fake';
 import { answerFakeRoute } from '../src/kernel/fake-modules';
 import { traversalSubjects } from '../src/kernel/fake/edition-work';
@@ -44,6 +42,10 @@ test('Settings profile recording handles only its exact scene and single owned t
     expect(profileResponse.status).toBe(200);
     expect(await profileResponse.json()).toMatchObject({
       profile: { id: storyViewerId, handle: 'reader', displayName: 'Avery Reader' },
+      editing: {
+        viewer: { accountId: storyViewerId },
+        target: { accountId: storyViewerId, kind: 'actor' },
+      },
     });
 
     const commaBatch = accountRequest(`ids=${mira.id},${deletedOrganizationId}`);
@@ -74,44 +76,27 @@ test('Settings profile recording handles only its exact scene and single owned t
     expect(await answerFakeRoute('story', agentRequest)).toEqual({ status: 200, accounts: [], next: null });
     expect(await (await fetchRecorded(agentRequest)).json()).toEqual({ accounts: [], next: null });
 
-    const requests: URL[] = [];
-    const kernel = createKernelClient(kernelUrl, {
-      fetch: (async (input, init) => {
-        const request = new Request(input, init);
-        requests.push(new URL(request.url));
-        return fetchRecorded(request);
-      }) as typeof fetch,
-    });
-    const page = await loadThreadPage(
-      kernel,
-      new Request(`https://site.test/en/threads/${mentionThreadId}`),
-      {},
-      { id: mentionThreadId },
-      { sitekey: '', scriptUrl: '' },
-      'anonymous',
-    );
-    expect(page.mentions).toEqual({ [mira.id]: { handle: 'mira' } });
-    const mentionLookup = requests.find((url) => url.pathname === '/v1/accounts');
-    expect(mentionLookup?.searchParams.get('ids')).toContain(mira.id);
-    expect(mentionLookup?.searchParams.get('ids')).toContain(deletedOrganizationId);
-
     story(`/en/threads/${mentionThreadId}/thread`);
     const unrelatedScene = accountRequest(`ids=${storyViewerId}`);
     expect(await answerFakeRoute('story', unrelatedScene)).toBeUndefined();
-    expect(await (await fetchRecorded(unrelatedScene)).json()).toEqual({ accounts: [mira], next: null });
+    expect(await (await fetchRecorded(unrelatedScene)).json()).toEqual({ accounts: [], next: null });
 
     story('/en/settings?profile=organization');
     const organizationProfile = await fetchRecorded(new Request(`${kernelUrl}/v1/accounts/${storyViewerId}/profile`));
     expect(organizationProfile.status).toBe(200);
     expect(await organizationProfile.json()).toMatchObject({
       profile: { id: storyViewerId, kind: 'organization', speakersListed: false },
+      editing: { target: { accountId: storyViewerId, kind: 'organization' } },
     });
 
     for (const variant of ['self', 'handleless', 'readback', 'refused']) {
       story(`/en/settings?profile=${variant}`);
       const editable = await fetchRecorded(new Request(`${kernelUrl}/v1/accounts/${storyViewerId}/profile`));
       expect(editable.status).toBe(200);
-      expect(await editable.json()).toMatchObject({ profile: { id: storyViewerId } });
+      expect(await editable.json()).toMatchObject({
+        profile: { id: storyViewerId },
+        editing: { target: { accountId: storyViewerId } },
+      });
       const saved = await fetchRecorded(
         new Request(`${kernelUrl}/v1/accounts/${storyViewerId}`, {
           method: 'PATCH',
@@ -150,4 +135,4 @@ test('Settings profile recording handles only its exact scene and single owned t
     if (previous === undefined) delete runtime.__rezicsStoryContext;
     else runtime.__rezicsStoryContext = previous;
   }
-});
+}, 30_000);

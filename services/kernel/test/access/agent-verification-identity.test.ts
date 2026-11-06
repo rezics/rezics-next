@@ -104,6 +104,9 @@ function ports(store: Partial<IdentityRecoveryStorePort> = {}): AccessApplicatio
         return null;
       },
     },
+    nativeErasure: {
+      async acknowledgeCompletion() {},
+    },
   };
 }
 
