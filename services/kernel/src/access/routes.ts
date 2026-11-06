@@ -688,7 +688,23 @@ function denied(error: unknown): never {
   // PostgreSQL rejects invalid temporal values/identities and conflicting grants.
   // Neither those failures nor native formula denials disclose stored grant state.
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
-  if (error instanceof GrantDeniedError || /^(?:22|23)/.test(code)) throw new ProblemError('forbidden');
+  if (error instanceof GrantDeniedError || /^(?:22|23)/.test(code)) {
+    const detail = (error ?? {}) as Record<string, unknown>;
+    console.error(
+      '[diag] grant denied',
+      JSON.stringify({
+        name: error instanceof Error ? error.name : typeof error,
+        message: error instanceof Error ? error.message : String(error),
+        code,
+        detail: detail.detail,
+        constraint: detail.constraint,
+        table: detail.table,
+        where: detail.where,
+        cause: String((detail.cause as Error | undefined)?.message ?? ''),
+      }),
+    );
+    throw new ProblemError('forbidden');
+  }
   throw error;
 }
 function verificationDenied(error: unknown): never {
