@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { reapContainersAsync } from './containers.ts';
+import { readTerminalTaskOwners, sweepAbandonedResources } from './attempt-resources.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
@@ -341,19 +342,28 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error('backlog run failed to start:', error);
       }
     };
-    // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
+    // Ended-attempt resources and opted-in stale containers are reaped every five minutes.
     let reapedAt = 0;
     let reaping: Promise<unknown> | undefined;
     const reap = () => {
       if (reaping || Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
       reapedAt = Date.now();
-      // Docker runs in the background: a slow daemon must not hold the manager socket or the scheduler.
-      reaping = reapContainersAsync(
-        runtime.db,
-        runtime.stateDirectory,
-        Date.now(),
-        runtime.managerServices.policy?.containers,
-      )
+      // Docker and task projection run after a yield: a slow daemon must not hold the manager socket.
+      reaping = Promise.resolve()
+        .then(async () => {
+          await sweepAbandonedResources({
+            tasks: readTerminalTaskOwners(runtime.db),
+            stateDirectory: runtime.stateDirectory,
+            containers: policy.containers,
+            graceMs: 1000,
+          });
+          await reapContainersAsync(
+            runtime.db,
+            runtime.stateDirectory,
+            Date.now(),
+            runtime.managerServices.policy?.containers,
+          );
+        })
         .catch((error) => console.error(error))
         .finally(() => {
           reaping = undefined;

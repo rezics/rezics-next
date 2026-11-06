@@ -6,9 +6,10 @@ import { readFileSync } from 'node:fs';
 import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
 import { agentAdapter } from './agents.ts';
 import { evidenceBundle } from './evidence.ts';
-import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
+import { terminateProcessGroup } from './process.ts';
 import { releaseWorkerTemporaryDirectory, type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
+import { reapAttemptResources } from './attempt-resources.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
@@ -116,7 +117,15 @@ export async function settle(
           pendingChecks?.length ? pendingChecks : currentAttempt.checks,
         )
       : undefined;
-    if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt, policy.containers);
+    if (!proofTask && !pendingChecks?.length) {
+      removeAttemptContainers(ref.taskId, ref.attempt, policy.containers);
+      await reapAttemptResources({
+        taskId: ref.taskId,
+        stateDirectory: tasks.settings.stateDirectory,
+        reapProcesses: false,
+        containers: policy.containers,
+      });
+    }
     store.assertCurrent(ref);
     await terminateProcessGroup(
       store.attempt(ref).process,
@@ -125,12 +134,14 @@ export async function settle(
     );
     if (!proofTask && !pendingChecks?.length) {
       if (!store.task(ref.taskId).workspace)
-        await stopProcessesUnder(
-          store.task(ref.taskId).worktree,
-          tasks.settings.terminationGraceMs,
-          undefined,
-          tasks.settings.policy?.process,
-        );
+        await reapAttemptResources({
+          taskId: ref.taskId,
+          stateDirectory: tasks.settings.stateDirectory,
+          worktree: store.task(ref.taskId).worktree,
+          reapDocker: false,
+          graceMs: tasks.settings.terminationGraceMs,
+          containers: policy.containers,
+        });
     }
     // A check still pending may be running in this directory, so it outlives this settlement.
     if (!pendingChecks?.length) releaseWorkerTemporaryDirectory(ref.taskId);
