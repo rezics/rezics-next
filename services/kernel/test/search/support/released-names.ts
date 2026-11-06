@@ -17,14 +17,15 @@ export const RELEASED_DECOY_ID = '018f0000-0000-7000-8000-00a00000000a';
 export function releasedNameStatements(
   names: readonly (readonly [string, string, string])[] = RELEASED_NAME_STATEMENTS,
 ): IndexedStatement[] {
-  return names.map(
-    ([property, language, text]) =>
-      normalizeSourceStatement(
-        property,
-        { value: { type: 'value', content: { language, text } } },
-        bundledRelease.properties,
-      )!,
-  );
+  return names.map(([property, language, text]) => {
+    const statement = normalizeSourceStatement(
+      property,
+      { value: { type: 'value', content: { language, text } } },
+      bundledRelease.properties,
+    );
+    if (statement === null) throw new TypeError(`Bundled release is missing ${property} name text`);
+    return statement;
+  });
 }
 
 export function releasedMultilingualSubject(patch: Partial<IndexedSubject> = {}): IndexedSubject {

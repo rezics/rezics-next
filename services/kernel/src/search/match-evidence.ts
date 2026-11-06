@@ -260,7 +260,7 @@ export function projectMatchEvidence(
       const fragment = parseFragment(rawFragment);
       if (!fragment) return { state: 'unavailable' };
       // Scan bounded native fields; only matching identities allocate memory. A
-      // later accepted alias remains attributable even after the first 32 names.
+      // later accepted alias remains attributable within the scan-byte budget.
       const identities = new Map<string, CandidateSource>();
       let scanned = 0;
       for (const source of currentSources(subject)) {
