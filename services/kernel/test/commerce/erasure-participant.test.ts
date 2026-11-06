@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { decodeJwt } from 'jose';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
+import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
@@ -19,8 +21,10 @@ import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import type { Access } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -36,11 +40,13 @@ import {
   prepareNativeRetainedOrder,
 } from './support/order-retention-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
-import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
+import { HIGH_RATE_OVERRIDES } from '../content/support/disclosure-fixtures.ts';
 import {
   createNativeContentSystemWithWriteRateOverrides,
   type NativeContentSystem,
 } from '../content/support/native-system.ts';
+
+const GLOBAL = { route: 0, id: GLOBAL_CONTEXT };
 
 async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolean, ms = 90_000): Promise<T> {
   const deadline = Date.now() + ms;
@@ -58,6 +64,8 @@ describe('native genuine-order retention', () => {
   const urls = { successUrl: 'https://example.test/success', cancelUrl: 'https://example.test/cancel' };
   let native: NativeContentSystem;
   let kernel: ReturnType<typeof createKernel>;
+  let access!: Access;
+  let grants: ReturnType<typeof createGrantCommands>;
   let pool: NativeContentSystem['database']['pool'];
   let databaseUrl: string;
   let client: Awaited<ReturnType<typeof createWorkClient>>;
@@ -94,25 +102,17 @@ describe('native genuine-order retention', () => {
     if (!response.ok) throw new Error(`${path}: ${response.status} ${JSON.stringify(value)}`);
     return value;
   }
-  async function grant(subjectId: string, resource: { route: number; id: string }, actions: string[]) {
-    const response = await native.kernel.handle(
-      new Request('http://kernel.test/v1/grants', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${governance.bearer}`,
-          'content-type': 'application/json',
-          'idempotency-key': JSON.stringify(crypto.randomUUID()),
-        },
-        body: JSON.stringify({
-          resource,
-          subject: { kind: 'account', id: subjectId },
-          actions,
-          valid: '(,)',
-        }),
-      }),
+  async function grantAccess(subjectId: string, resource: { route: number; id: string }, actions: string[]) {
+    await grants.create(
+      { pool, actor: governance.actor, deadline: deadlineFor(90_000) },
+      {
+        resource,
+        subject: { kind: 'account', id: subjectId },
+        actions,
+        valid: '(,)',
+        key: crypto.randomUUID(),
+      },
     );
-    if (response.status !== 201)
-      throw new Error(`grant ${actions.join(',')}: ${response.status} ${await response.text()}`);
   }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
@@ -233,12 +233,25 @@ describe('native genuine-order retention', () => {
       clock: () => new Date(),
     });
     const consent = createCurrentConsentReader({ database: native.database.authPool });
+    const token = decodeJwt(native.actors.author.bearer);
+    const issuer = token.iss;
+    const audience = typeof token.aud === 'string' ? token.aud : token.aud?.[0];
+    if (!issuer || !audience) throw new Error('Native Content Auth issuer and audience are missing from the bearer');
     kernel = createKernel({
       pool,
       routeKey: native.routeKey,
       tokens: native.tokenKeys,
       receiptKeys: testReceiptKeys(),
-      access: native.access,
+      access: (config) =>
+        (access = createAccess({
+          ...config,
+          auth: {
+            issuer,
+            audience,
+            jwksUrl: `${issuer}/.well-known/jwks.json`,
+            fetch: (input, init) => native.nativeAuth.handler(new Request(input, init)),
+          },
+        })),
       writeRate: createWriteRateLimiter({
         secret: 'commerce-erasure-native-secret-32-bytes',
         overrides: HIGH_RATE_OVERRIDES,
@@ -254,12 +267,13 @@ describe('native genuine-order retention', () => {
     buyer = { accountId: native.actors.other.actor.accountId, bearer: native.actors.other.bearer };
     unused = await accountDeletionRuntime(native).person();
     await bootstrapLocalShowcaseBoardCreation(pool, governance.actor.accountId);
-    await grant(seller.accountId, PLATFORM_RESOURCE, ['board:create']);
-    await grant(seller.accountId, PLATFORM_RESOURCE, ['offer:create']);
     for (const group of ['personal_library', 'purchases', 'selling'])
       await accepted(governance, `/v1/platform/exposure/${group}:open`, {});
+    if (!access) throw new Error('Composed Access was not resolved from the mounted catalogue');
+    grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
+    await grantAccess(seller.accountId, GLOBAL, ['subject:create', 'board:create', 'offer:create']);
     const editions = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
-      return native.kernel.handle(
+      return kernel.handle(
         new Request(`http://kernel.test${path}`, {
           method,
           headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
@@ -272,7 +286,7 @@ describe('native genuine-order retention', () => {
       subjectTitle: 'Native erasure source',
       body: 'Exact native content edition bytes',
     });
-    commands = createCommerceCommands({ pool, access: native.access });
+    commands = createCommerceCommands({ pool, access });
     await startCommerceWorker();
   }, 360_000);
 
@@ -312,9 +326,9 @@ describe('native genuine-order retention', () => {
         taxCode: 'txcd_10302000',
       })
     ).offer as { id: string; revision: number };
-    await seedGovernanceAuthority(pool, routeOf(offer.id)!, offer.id, governance.actor.accountId, ['order:create']);
-    await grant(buyer.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
-    const typedBuyer = await native.access.authenticate(buyer.bearer, { pool, deadline: Date.now() + 90_000 });
+    await grantAccess(governance.actor.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
+    await grantAccess(buyer.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
+    const typedBuyer = await access.authenticate(buyer.bearer, { pool, deadline: Date.now() + 90_000 });
     const first = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
       .order as { id: string };
     const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;

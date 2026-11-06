@@ -155,9 +155,12 @@ retained Checkout record, not a whole-account disposition.
 Genuine purchase targets are published Content editions on Content's isolated native system. Access grants
 `board:create`/`offer:create` as account subjects on Global through the ordinary grant command after the governance
 account holds `board:create` via the native local-showcase bootstrap. Buyer `order:create` uses the same grant command
-after the governance account holds that action on the offer. The Score Auth-handler capture (`nativeAuth.handler`)
-authenticates that same Content kernel for grants and publication. Commerce HTTP uses a composed kernel on the same
-Access and database. Shared-database board-read current-role projection repair stays with Accounts.
+after the governance account holds that action on the offer. Grants, publication and Commerce HTTP share one composed
+kernel. That kernel compiles Access from its complete mounted catalogue and authenticates through the Score
+Auth-handler capture (`nativeAuth.handler`). Diagnostic7 showed a published board, current `content.board.owner`,
+board/subject read scopes and ownerActions, with `boardAllowed=false` and `boardRead=null`: actor/account/grant
+subject matched, while compiled role/resource/current-actor operands and the board projection still disagree at
+Access's current-role seam. Shared-database board-read current-role projection repair stays with Accounts.
 `prepareNativeRetainedOrder` is the Accounts terminal-graph export.
 
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using
