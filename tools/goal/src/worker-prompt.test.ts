@@ -1,12 +1,20 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import {
+  MODULE_MAP_POINTER,
+  MODULE_MAP_TRUNCATION,
+  formatModuleMap,
+  loadManifest,
+  modulesForBriefPaths,
+} from '../../../scripts/architecture-map.ts';
 import { launchCommand, workerCheckProtocol, workerPrompt } from './launch.ts';
 import { defaultPolicy } from './policy.ts';
 import { renderCheckProtocol, renderManagerOpening, renderWorkerPrompt } from './prompts.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
-import type { Attempt, Task } from './types.ts';
+import type { Attempt, Brief, Task } from './types.ts';
 import type { LaunchContext } from './launch-context.ts';
 import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
 import type { ProofReservation } from './verification.ts';
@@ -15,6 +23,33 @@ import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { loadSettings } from './config.ts';
+
+const REPOSITORY_ROOT = resolve(import.meta.dir, '../../..');
+const MAP_MAIN = '/repo/main';
+
+function mapTask(paths: string[], extra: Partial<Brief> = {}): Task {
+  return {
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    brief: {
+      markdown: 'Do the thing.',
+      kind: 'implementation',
+      paths,
+      acceptance: { command: ['bun', 'test'], tests: ['x'] },
+      ...extra,
+    },
+  } as unknown as Task;
+}
+
+function mapRows(prompt: string): string[] {
+  const start = prompt.indexOf('row module|kind|public entries|allowed dependencies');
+  const pointer = prompt.indexOf(MODULE_MAP_POINTER, start);
+  return prompt
+    .slice(start, pointer === -1 ? undefined : pointer)
+    .split('\n')
+    .slice(1)
+    .filter(Boolean);
+}
 
 test('the worker prompt names the main checkout as read-only and asks for paths inside the worktree', () => {
   const task = {
@@ -886,4 +921,101 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
     db.close();
     directory.close();
   }
+});
+
+test("a worker prompt carries only the modules that own the brief's paths and those they may depend on", () => {
+  const manifest = loadManifest(REPOSITORY_ROOT);
+  const kernelPaths = ['services/kernel/src/search/query.ts'];
+  const kernel = renderWorkerPrompt({ task: mapTask(kernelPaths), mainCheckout: MAP_MAIN }).prompt;
+  const selected = modulesForBriefPaths(manifest, kernelPaths);
+  const expected = formatModuleMap(manifest, kernelPaths);
+  expect(kernel).toContain(expected);
+  expect(selected.map((module) => module.id)).toContain('kernel-search');
+  expect(selected.map((module) => module.id).sort()).toEqual(
+    ['kernel-search', ...manifest.modules.find((module) => module.id === 'kernel-search')!.allowedDependencies].sort(),
+  );
+  expect(kernel).toContain(MODULE_MAP_POINTER);
+  expect(kernel).not.toContain(MODULE_MAP_TRUNCATION);
+  expect(mapRows(kernel).some((row) => row.startsWith('wapp|') || row.startsWith('wsearch|'))).toBe(false);
+  expect(mapRows(kernel).some((row) => row.startsWith('auth-pages|'))).toBe(false);
+
+  const nested = renderWorkerPrompt({
+    task: mapTask(['services/kernel/src/access/contract/bounds.ts']),
+    mainCheckout: MAP_MAIN,
+  }).prompt;
+  expect(mapRows(nested).some((row) => row.startsWith('kaccess-contract|'))).toBe(true);
+  expect(mapRows(nested).some((row) => row.startsWith('kaccess|'))).toBe(false);
+  expect(mapRows(nested).some((row) => row.startsWith('wsearch|'))).toBe(false);
+});
+
+test('golden worker prompts stay within the worker role budget and do not truncate a map that fits', () => {
+  const proofRun: ProofReservation = {
+    status: 'bound',
+    binding: {
+      version: 1,
+      reservationToken: 'token',
+      checkId: '11111111-1111-4111-8111-111111111111',
+      goal: 'web',
+      taskId: 'task',
+      attempt: 1,
+      sourceCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      argv: ['bun', 'test'],
+      cwd: '/work/t',
+    },
+  };
+  const rendered = [
+    renderWorkerPrompt({ task: mapTask(['src/a.ts']), mainCheckout: MAP_MAIN }),
+    renderWorkerPrompt({
+      task: mapTask(['apps/web/src/stories/card.stories.tsx'], { kind: 'interface', markdown: 'Polish the card.' }),
+      mainCheckout: MAP_MAIN,
+    }),
+    renderWorkerPrompt({
+      task: mapTask(['docs/research/x.md'], { kind: 'research', markdown: 'Survey the sources.' }),
+      mainCheckout: MAP_MAIN,
+    }),
+    renderWorkerPrompt({
+      task: mapTask([], { kind: 'verification', markdown: 'Read-only original journey.' }),
+      mainCheckout: MAP_MAIN,
+      proofRun,
+    }),
+    renderWorkerPrompt({ task: mapTask(['services/kernel/src/search/query.ts']), mainCheckout: MAP_MAIN }),
+    renderWorkerPrompt({ task: mapTask(['apps/web/src/search/search.tsx']), mainCheckout: MAP_MAIN }),
+  ];
+  const kernelMap = formatModuleMap(loadManifest(REPOSITORY_ROOT), ['services/kernel/src/search/query.ts']);
+  for (const item of rendered) {
+    const roleBudget = item.prompt.includes('This is a research task')
+      ? defaultPolicy.prompt.researchRoleBytes
+      : defaultPolicy.prompt.workerRoleBytes;
+    expect(item.roleBytes).toBeLessThanOrEqual(roleBudget);
+    expect(item.prompt).toContain(MODULE_MAP_POINTER);
+    expect(item.prompt).not.toContain(MODULE_MAP_TRUNCATION);
+  }
+  const kernelPrompt = rendered[4]!.prompt;
+  for (const row of kernelMap.split('\n').slice(1, -1)) expect(kernelPrompt).toContain(row);
+});
+
+test('the map is computed from scripts/architecture-map.ts without loading oxc-parser', () => {
+  const mapSource = readFileSync(join(REPOSITORY_ROOT, 'scripts/architecture-map.ts'), 'utf8');
+  const promptSource = readFileSync(join(REPOSITORY_ROOT, 'tools/goal/src/prompts.ts'), 'utf8');
+  expect(mapSource).not.toMatch(/['"]oxc-parser['"]/);
+  expect(mapSource).toMatch(/import type \{[^}]+\} from ['"]\.\/architecture\.ts['"]/);
+  expect(mapSource).not.toMatch(/^import (?!type ).*from ['"]\.\/architecture\.ts['"]/m);
+  expect(promptSource).toContain("from '../../../scripts/architecture-map.ts'");
+  expect(promptSource).not.toContain("from '../../../scripts/architecture.ts'");
+  const result = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `import { formatModuleMap, loadManifest } from ${JSON.stringify(join(REPOSITORY_ROOT, 'scripts/architecture-map.ts'))};
+       const map = formatModuleMap(loadManifest(${JSON.stringify(REPOSITORY_ROOT)}), ['services/kernel/src/search/query.ts']);
+       if (!map.includes('ksearch|')) throw new Error('missing ksearch');
+       if (/^wsearch\\|/m.test(map)) throw new Error('web row');
+       console.log('ok');`,
+    ],
+    { encoding: 'utf8', cwd: REPOSITORY_ROOT },
+  );
+  expect(result.stderr).toBe('');
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('ok');
 });

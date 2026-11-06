@@ -20,6 +20,6 @@ Finish with a JSON object: status, summary, blocker (null or kind/detail), check
 
 ## Architecture module map
 
-The generated rows give each module's kind, public entries, and allowed dependencies. Use only a declared public entry for a cross-module import; depend only on a module listed in that module's final field. The map follows.
+The generated rows give each module's kind, public entries, and allowed dependencies for the modules this task's paths belong to and the modules those may import from. Use only a declared public entry for a cross-module import; depend only on a module listed in that module's final field. The map follows.
 
 {{task.moduleMap}}

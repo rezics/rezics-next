@@ -311,7 +311,7 @@ function promptView(input: WorkerPromptInput): PromptView {
     ? ordinaryProofCommand(brief.acceptance.command).invocation.map(shellQuote).join(' ')
     : '';
   const moduleRoot = existsSync(join(mainCheckout, 'docs/architecture/modules.json')) ? mainCheckout : promptSourceRoot;
-  const moduleMap = formatModuleMap(loadManifest(moduleRoot));
+  const moduleMap = formatModuleMap(loadManifest(moduleRoot), task.brief.paths ?? []);
   const localRun = runner
     ? `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`
     : `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`;
