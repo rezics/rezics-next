@@ -44,6 +44,8 @@ existing `access.account` profile. Point actions without one exact target type r
 `Resource` carries that operand. Global Context point checks also keep that SQL evaluator: Global predates ordinary
 resource initialization and is the home of `platform.governance`. Unique-type inference there would send grantor
 must-hold through the core while the role grants already satisfy the formula. Pages and batches may still name a type.
+Role revocation of `platform.governance` authorizes the Access instance's expanded role actions, including internal
+actions `createAccess` merges, so the grantor presents those client scopes rather than the whole route catalogue.
 
 `services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
 `ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Point/page checks and

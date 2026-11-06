@@ -331,7 +331,7 @@ test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries 
       const assignments = libraryRelation(cost, 'label_assignment');
       const entries = libraryRelation(cost, 'entry');
       const sessions = libraryRelation(cost, 'progress_session');
-      expect(labels?.nodes).toBeGreaterThanOrEqual(2);
+      expect(labels?.nodes).toBe(34); // 32 existing subject observations + one parent for each label page.
       expect(labels?.sequentialScans).toBe(0);
       expect(assignments?.sequentialScans).toBe(0);
       expect(entries?.sequentialScans).toBe(0);

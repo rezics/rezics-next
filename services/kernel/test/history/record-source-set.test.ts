@@ -257,7 +257,10 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   expect(found).toBe(true);
   await command(async (tx) => {
     expect(await producer.verifySemanticRecordSourceSet(tx, locator!, snapshot!.digest)).toBe(true);
-    expect(await producer.verifySemanticRecordSourceSet(tx, locator!, `${snapshot!.digest}changed`)).toBe(false);
+    const mismatch = snapshot!.digest.replace(/[0-9a-f]$/, (nibble) => (nibble === '0' ? '1' : '0'));
+    expect(mismatch).toHaveLength(64);
+    expect(mismatch).not.toBe(snapshot!.digest);
+    expect(await producer.verifySemanticRecordSourceSet(tx, locator!, mismatch)).toBe(false);
     await declareCommandHistory(tx, kind, scope(person));
     return noEffect(null);
   });
