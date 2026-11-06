@@ -10,6 +10,9 @@ capability. `kernel-history-adapters` implements that capability with native Pos
 and Access, Semantic, Search, Zones and Work owner bindings.
 
 Foreign Kernel modules import the declared History application and contract entries. Zones and Semantic account-agents take `ACCOUNT_ROLE_BITS` and `declareCommandHistory` from those entries, not retired `history/contracts.ts` or `history/record.ts` paths. Access keeps compatibility
+Foreign Kernel modules import the declared History application and contract entries. Zones purge and resource
+commands are such consumers: they import the records facade and contract vocabulary, and `kernel-zones` records
+those application and contract modules as allowed adapter-to-application/contract dependencies. Access keeps compatibility
 re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. Native adapters
 import owner facade leaves (`application/composition.ts`, `identity.ts`, `records.ts`, `receiving.ts`, `shared.ts`,
 `operational.ts`) rather than the application barrel, so sibling cycles stay on those public entries. The composition root in
