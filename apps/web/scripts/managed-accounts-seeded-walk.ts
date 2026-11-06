@@ -186,13 +186,7 @@ async function kernel(
   });
 }
 
-async function auth(
-  stack: Origins,
-  path: string,
-  session: Session | undefined,
-  body: unknown,
-  timeout = 5_000,
-) {
+async function auth(stack: Origins, path: string, session: Session | undefined, body: unknown, timeout = 5_000) {
   return send(`${stack.native}${path}`, {
     method: 'POST',
     origin: stack.issuer,
@@ -545,8 +539,7 @@ const opened = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:
   bearer: website.bearer,
   body: {},
 });
-if (![200, 409].includes(opened.status))
-  evidence.defects.push(`organizations exposure open HTTP ${opened.status}`);
+if (![200, 409].includes(opened.status)) evidence.defects.push(`organizations exposure open HTTP ${opened.status}`);
 
 const operations = await developerSignIn(AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.organization);
 const orgHandle = handle('org');
@@ -626,10 +619,7 @@ if (rosterPage.status === 200) {
   if (leave !== 'unavailable') evidence.defects.push(`sole-owner leave advice ${String(leave)}`);
   const ownerRow = items.find((row) => (row as Json).accountId === developer.accountId) as Json | undefined;
   const ownerActions = ownerRow?.actions as Json | undefined;
-  if (
-    ownerActions &&
-    (ownerActions.changeRole !== 'last-owner' || ownerActions.remove !== 'last-owner')
-  )
+  if (ownerActions && (ownerActions.changeRole !== 'last-owner' || ownerActions.remove !== 'last-owner'))
     evidence.defects.push('sole-owner row omitted last-owner advice');
   if (JSON.stringify(rosterPage.value).includes('account:read'))
     evidence.defects.push('membership roster mentioned account:read');
@@ -652,8 +642,7 @@ else {
       reservation: Boolean(membership?.reservationId),
     },
   });
-  if (typeof membership?.reservationId !== 'string')
-    evidence.defects.push('selected member omitted reservation');
+  if (typeof membership?.reservationId !== 'string') evidence.defects.push('selected member omitted reservation');
   else {
     const promoted = await operate(stack, membershipSession, {
       kind: 'membership',
@@ -694,8 +683,7 @@ const manageGrant = await kernel(stack, 'POST', '/v1/grants', {
     valid: '(,)',
   },
 });
-if (![201, 409].includes(manageGrant.status))
-  evidence.native.push({ delegatedGrant: manageGrant.status });
+if (![201, 409].includes(manageGrant.status)) evidence.native.push({ delegatedGrant: manageGrant.status });
 note('delegated-manage');
 
 const management = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.transfer);
@@ -727,8 +715,7 @@ async function createSoftware(operatorAccountId: string, softwareHandle: string,
   });
 }
 const humanSoftwareDraft = await createSoftware(developer.accountId, humanSoftwareHandle, 'human software');
-if (humanSoftwareDraft.status !== 200)
-  evidence.defects.push(`human software create HTTP ${humanSoftwareDraft.status}`);
+if (humanSoftwareDraft.status !== 200) evidence.defects.push(`human software create HTTP ${humanSoftwareDraft.status}`);
 const humanSoftwareId =
   humanSoftwareDraft.status === 200 ? asId(humanSoftwareDraft.value.accountId, 'human software') : '';
 const orgSoftwareDraft = await createSoftware(organizationId, orgSoftwareHandle, 'organization software');
@@ -761,8 +748,7 @@ const organizationCredential = await credentialEffect(stack, management, organiz
   kind: 'password',
   password: softwarePassword,
 });
-if (organizationCredential.status === 200)
-  evidence.defects.push('organization accepted a sign-in credential');
+if (organizationCredential.status === 200) evidence.defects.push('organization accepted a sign-in credential');
 evidence.native.push({ organizationCredential: organizationCredential.status });
 
 if (humanSoftwareId) {
@@ -920,7 +906,8 @@ if (currentHandle) {
     );
     const formerRow = Array.isArray(former.accounts) ? (former.accounts[0] as Json | undefined) : undefined;
     const nextRow = Array.isArray(next.accounts) ? (next.accounts[0] as Json | undefined) : undefined;
-    if (nextRow?.id !== developer.accountId) evidence.defects.push('renamed handle did not resolve to the same account');
+    if (nextRow?.id !== developer.accountId)
+      evidence.defects.push('renamed handle did not resolve to the same account');
     if (formerRow && formerRow.id !== developer.accountId && formerRow.movedTo !== renameHandle)
       evidence.defects.push('former handle did not forward to the renamed account');
     evidence.native.push({
@@ -939,7 +926,8 @@ requireStatus(detail, 'organization management', 200);
 const members = (detail.value.members as Json | undefined)?.items;
 if (!Array.isArray(members) || members.length !== 20)
   evidence.defects.push(`organization management roster length ${Array.isArray(members) ? members.length : 'missing'}`);
-if (!(detail.value.members as Json | undefined)?.next) evidence.defects.push('organization management omitted roster next');
+if (!(detail.value.members as Json | undefined)?.next)
+  evidence.defects.push('organization management omitted roster next');
 if (JSON.stringify(detail.value).includes('account:read'))
   evidence.defects.push('management detail mentioned account:read');
 evidence.native.push({
@@ -1052,7 +1040,11 @@ try {
       theme,
       path: new URL(page.url()).pathname,
       status: response?.status() ?? 0,
-      title: await page.locator('h1').first().textContent().catch(() => null),
+      title: await page
+        .locator('h1')
+        .first()
+        .textContent()
+        .catch(() => null),
     });
     return response;
   };
@@ -1067,7 +1059,11 @@ try {
     persona: 'organization-owner',
     path: '/organizations/new',
     status: orgCreate?.status() ?? 0,
-    heading: await page.locator('h1').first().textContent().catch(() => null),
+    heading: await page
+      .locator('h1')
+      .first()
+      .textContent()
+      .catch(() => null),
   });
   const subject = orgSoftwareId || humanSoftwareId;
   if (subject) {
@@ -1076,7 +1072,11 @@ try {
       persona: 'organization-owner',
       path: '/operators/transfer',
       status: transfer?.status() ?? 0,
-      heading: await page.locator('h1').first().textContent().catch(() => null),
+      heading: await page
+        .locator('h1')
+        .first()
+        .textContent()
+        .catch(() => null),
     });
     const confirm = page.getByRole('button', { name: /confirm|execute|transfer/i }).first();
     if (await confirm.isVisible({ timeout: 3_000 }).catch(() => false))
@@ -1105,7 +1105,10 @@ try {
     persona: 'organization-owner',
     path: '/organizations/members',
     status: membersPage?.status() ?? 0,
-    rows: await page.locator('li, [data-slot="membership-row"]').count().catch(() => 0),
+    rows: await page
+      .locator('li, [data-slot="membership-row"]')
+      .count()
+      .catch(() => 0),
   });
   const firstRow = page.locator('li a, [data-slot="membership-row"] a, li button').first();
   if (await firstRow.count()) await firstRow.click().catch(() => {});
@@ -1123,7 +1126,11 @@ try {
   for (const locale of ['zh-Hant', 'ja'] as const)
     await capture(page, 'organization-owner', locale, 1280, 'light', '/accounts');
   await capture(page, 'organization-owner', 'en', 1280, 'light', `/organizations/${organizationId}`);
-  const heading = await page.locator('h1, [data-slot="page-heading"]').first().textContent().catch(() => '');
+  const heading = await page
+    .locator('h1, [data-slot="page-heading"]')
+    .first()
+    .textContent()
+    .catch(() => '');
   if (heading?.includes('account:read')) evidence.defects.push('mounted management heading mentioned account:read');
   note('owner-web-management');
 
@@ -1135,7 +1142,14 @@ try {
     await context.clearCookies();
     await page.goto('about:blank');
     await signInWebsitePage(page, stack, person.email, password);
-    await capture(page, persona, 'en', persona === 'outsider' ? 390 : 1280, 'light', `/organizations/${organizationId}`);
+    await capture(
+      page,
+      persona,
+      'en',
+      persona === 'outsider' ? 390 : 1280,
+      'light',
+      `/organizations/${organizationId}`,
+    );
   }
   note('persona-web');
 
