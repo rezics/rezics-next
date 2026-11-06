@@ -1,10 +1,19 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import {
+  composedZoneAlicePrivateFake as composedAlice,
+  composedZoneCollectionFake as composedCollection,
+  composedZoneEditorFake as composedEditor,
+  composedZoneEmptyFake as composedEmpty,
+  composedZoneMembersFake as composedMembers,
+  composedZonePrivateMountFake as composedPrivate,
+  composedZoneSparseFake as composedSparse,
+  composedZoneWithheldFake as composedWithheld,
   staticZoneGuideFake as staticGuide,
   staticZoneHomeFake as staticHome,
   staticZoneOwnerFake as staticOwnerHome,
 } from '../../zones/static-fakes';
+import recordedSubject from '../recorded/subject.json';
 import subjectPage from '../recorded/zone-subject-page.json';
 import subjectReactions from '../recorded/subject-reactions.json';
 
@@ -17,14 +26,37 @@ const alternateZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
 const recoveringZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e07';
 const revokedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
+const recordedSubjectId = recordedSubject.subject.id;
 const staticZoneId = staticHome.zone.id;
 const staticOwnerZoneId = staticOwnerHome.zone.id;
+const composedZoneId = composedMembers.zone.id;
+const composedPrivateZoneId = composedPrivate.zone.id;
+const composedSparseZoneId = composedSparse.zone.id;
+const composedEmptyZoneId = composedEmpty.zone.id;
+const composedCollectionZoneId = composedCollection.zone.id;
+const composedWithheldZoneId = composedWithheld.zone.id;
+const composedAliceZoneId = composedAlice.zone.id;
+const composedEditorZoneId = composedEditor.zone.id;
 const recoveringReads = new Map<string, number>();
 
 type ZoneTarget = { route: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function admittedZoneSubject(home: KernelRecording, subject: string): boolean {
+  if (subject === subjectId) return true;
+  if (!isRecord(home.reads)) return false;
+  return Object.values(home.reads).some((read) => {
+    if (!isRecord(read) || !isRecord(read.body)) return false;
+    const subjects = read.body.subjects;
+    const members = read.body.members;
+    return (
+      (Array.isArray(subjects) && subjects.some((row) => isRecord(row) && row.id === subject)) ||
+      (Array.isArray(members) && members.some((row) => isRecord(row) && row.subjectId === subject))
+    );
+  });
 }
 
 function homeDocument() {
@@ -48,7 +80,29 @@ function homeDocument() {
           links: [{ href: `/subjects/${subjectId}/kokoro`, label: { en: 'Kokoro', 'zh-Hans': '心' } }],
         },
       },
+      {
+        type: 'TypeList',
+        props: {
+          id: 'books',
+          title: { en: 'Books', 'zh-Hans': '书籍' },
+          types: ['schema:Book'],
+          sort: 'name',
+          limit: 12,
+        },
+      },
     ],
+  };
+}
+
+function typeListReads(id: string, labels: Record<string, string>) {
+  return {
+    r0: {
+      status: 200,
+      body: {
+        subjects: [{ id, type: 'schema:Book', labels, summary: null }],
+        next: null,
+      },
+    },
   };
 }
 
@@ -81,7 +135,7 @@ function zoneResponse(id: string, target: ZoneTarget): KernelRecording {
     profile: 'sha256:zone-story',
     template: { scope: 'route', key: route || null },
     document: route === 'guide' ? guideDocument() : homeDocument(),
-    reads: {},
+    reads: route === 'guide' ? {} : typeListReads(subjectId, { en: 'Kokoro', 'zh-Hans': '心' }),
     zone: {
       id,
       revision: '1',
@@ -117,6 +171,7 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   if (id === unavailableZoneId) return problem(503, { 'cache-control': 'no-store', 'retry-after': '1' });
 
   const url = new URL(request.url);
+  const cursor = url.searchParams.get('cursor');
   let body: unknown;
   try {
     body = await request.json();
@@ -125,7 +180,46 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   }
   const target = isRecord(body) ? body.target : undefined;
   if (!isRecord(target)) return { status: 400, code: 'invalid_request' };
+  if (typeof target.subject === 'string') {
+    if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details')
+      return problem(404, { 'cache-control': 'no-store' });
+    const requestedLanguages = isRecord(body) ? body.languages : undefined;
+    const home = await response(
+      new Request(request.url, {
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify({
+          target: { route: '' },
+          ...(Array.isArray(requestedLanguages) ? { languages: requestedLanguages } : {}),
+        }),
+      }),
+      match,
+    );
+    if (!home || home.status !== 200 || !('zone' in home) || !admittedZoneSubject(home, target.subject))
+      return problem(404, { 'cache-control': 'no-store' });
+    return {
+      ...subjectPage,
+      status: 200,
+      subject: target.subject,
+      views: ['overview', 'details'],
+      zone: home.zone,
+    };
+  }
   if (typeof target.route !== 'string') return problem(404, { 'cache-control': 'no-store' });
+  const actor = request.headers.get('authorization');
+  if (actor === 'Bearer suspended')
+    return {
+      status: 401,
+      type: 'https://rezics.com/problems/invalid_credentials',
+      title: 'Unauthorized',
+      code: 'invalid_credentials',
+      headers: { 'www-authenticate': 'Bearer error="invalid_token"', 'cache-control': 'no-store' },
+    };
+  if (
+    actor === 'Bearer banned' &&
+    (id === composedPrivateZoneId || id === composedAliceZoneId || id === staticOwnerZoneId)
+  )
+    return problem(404, { 'cache-control': 'no-store' });
   if (id === staticOwnerZoneId)
     return request.headers.has('authorization') && target.route === ''
       ? { status: 200, ...staticOwnerHome }
@@ -134,7 +228,31 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     const recording = target.route === '' ? staticHome : target.route === 'guide' ? staticGuide : undefined;
     return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
   }
-  const cursor = url.searchParams.get('cursor');
+  if (id === composedZoneId) {
+    if (target.route !== '') return problem(404, { 'cache-control': 'no-store' });
+    if (cursor === 'stale-source') return { status: 409, code: 'stale_cursor' };
+    return { status: 200, ...composedMembers };
+  }
+  if (id === composedPrivateZoneId)
+    return (actor === 'Bearer owner' || actor === 'Bearer alice') && target.route === ''
+      ? { status: 200, ...composedPrivate }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedAliceZoneId)
+    return actor === 'Bearer alice' && target.route === ''
+      ? { status: 200, ...composedAlice }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedEditorZoneId)
+    return (actor === 'Bearer editor' || actor === 'Bearer alice' || actor === null) && target.route === ''
+      ? { status: 200, ...composedEditor }
+      : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedWithheldZoneId)
+    return target.route === '' ? { status: 200, ...composedWithheld } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedSparseZoneId)
+    return target.route === '' ? { status: 200, ...composedSparse } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedEmptyZoneId)
+    return target.route === '' ? { status: 200, ...composedEmpty } : problem(404, { 'cache-control': 'no-store' });
+  if (id === composedCollectionZoneId)
+    return target.route === '' ? { status: 200, ...composedCollection } : problem(404, { 'cache-control': 'no-store' });
   if (id === recoveringZoneId) {
     const count = recoveringReads.get(id) ?? 0;
     recoveringReads.set(id, count + 1);
@@ -175,13 +293,29 @@ async function subjectPageResponse(request: Request): Promise<KernelRecording | 
     return undefined;
   }
   if (!isRecord(target)) return undefined;
-  if (target.subject !== subjectId) return undefined;
+  if (target.subject !== subjectId && target.subject !== recordedSubjectId) return undefined;
   if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details') return undefined;
   return {
     ...subjectPage,
     status: 200,
-    subject: subjectId,
+    subject: target.subject,
     views: ['overview', 'details'],
+  };
+}
+
+async function subjectsResponse(request: Request, match: RegExpExecArray | null): Promise<KernelRecording | undefined> {
+  const id = match?.[1] ? decodeURIComponent(match[1]) : undefined;
+  if (!id) return undefined;
+  if (id === hiddenZoneId) return problem(404, { 'cache-control': 'no-store' });
+  if (id === unavailableZoneId) return problem(503, { 'cache-control': 'no-store', 'retry-after': '1' });
+  if (id === staticOwnerZoneId && !request.headers.has('authorization'))
+    return problem(404, { 'cache-control': 'no-store' });
+  const listed = id === staticZoneId ? recordedSubjectId : subjectId;
+  const labels = id === staticZoneId ? recordedSubject.subject.labels : { en: 'Kokoro', 'zh-Hans': '心' };
+  return {
+    status: 200,
+    subjects: [{ id: listed, type: 'schema:Book', labels, summary: null }],
+    next: null,
   };
 }
 
@@ -201,7 +335,14 @@ const subjectPageRoute: FakeRoute = {
 const subjectReactionsRoute: FakeRoute = {
   method: 'GET',
   path: /^\/v1\/subjects\/([^/]+)\/reactions$/,
-  story: ({ match }) => (match?.[1] === subjectId ? subjectReactions : undefined),
+  story: ({ match }) => (match?.[1] === subjectId || match?.[1] === recordedSubjectId ? subjectReactions : undefined),
 };
 
-export const routes = [route, subjectPageRoute, subjectReactionsRoute];
+const subjectsRoute: FakeRoute = {
+  method: 'GET',
+  path: /^\/v1\/zones\/([^/]+)\/subjects$/,
+  story: ({ request, match }) => subjectsResponse(request, match),
+  fixture: ({ request, match }) => subjectsResponse(request, match),
+};
+
+export const routes = [route, subjectsRoute, subjectPageRoute, subjectReactionsRoute];

@@ -1,6 +1,6 @@
 # Zones
 
-Decision: This owner edit adopts the Zone cleanup and default-profile Subject GET contracts, consolidates the linked Identity/importer and synopsis Sources owners, and records design only; required native delivery remains pending.
+Decision: Ordinary `createKernel` binds the native Content cover/tuple lifecycle so Zone page reads work without identity participants; composed Semantic domain adapters from origin/dev are received in this outcome. GET `/v1/zones/:id/subjects` is mounted with the default list-cursor profile. A stale or expired GET continuation is `409 stale_cursor` and never a silent restart; the Zone reader restarts that token once under current authority. TypeList on a Zone route stays on that route and opens Zone subject destinations; related composition links may leave the Zone. A TypeList full page is selected by the `list` query identity on that same localized route; its continuation cursor never promotes a sibling list. Collection members 200/202 keep the Collection `strict()` JSON producer, return preparing separately, and copy readonly members into a mutable page so Elysia keeps JSON typing. TypeList membership, observed keys and the subject list live in the Zone page runtime; the Zone reader TypeList lives in the shared page TypeList module so Search does not import Zones and routed Zone files add no new public-entry edges. Generated OpenAPI/client publication remains a promotion output. Focused tests pin destinations, TypeList staying on the Zone, concurrent editor reapply, stale-cursor restart and the installed GET subjects client; native six-surface, growth, persona and served browser acceptance stay deferred.
 
 A Zone is an owner-controlled routed site over saved catalogue scopes and mounted Collections. It uses the
 one catalogue, the one Collection model and the common composition renderer. It is neither a Realm nor a
@@ -56,6 +56,20 @@ ordinary related-subject links may leave the Zone. There are no custom domains o
 Decision: Zone Subject visits keep their localized Zone URL and render only after the current native `readPage`
 admits the exact subject and view; Global Subject paths remain canonical metadata destinations, and visible facts
 continue to come from the admitted Zone page.
+Decision: Routed Zone lists project native `readPage` slots onto the common TypeList/Members renderer, continue on
+the Zone URL, and keep Search TypeList on Global configured pages. Canonical Subject readers carry a bounded Zone
+visit return. Session, upload and download use the existing personal BFF driver on each request.
+Decision: The routed list, same-tab return and personal BFF session/media slices land with scoped tests only; the mounted served return and native page proof stay pending their own acceptance.
+Decision: Zone composition reaches Search page, visit-return and slot-admission helpers through existing public entries and the already-imported Zone reader files, not new manifest public entries.
+Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
+Decision: Web Zone page-request, owned-resource and configuration types live beside that shell; editor and reader share them instead of kernel `contract.ts`.
+Decision: Zone session/media binding prepares the current personal session on every served Zone BFF request and
+reuses the existing `/media` driver for upload intent, completion and download authorization; SessionMedia keeps
+those handlers, and PageStates keeps shared TypeList composition.
+Decision: A served Zone read retires in-flight continuation through the existing callback identity when the Zone
+revision or target changes; it does not keep another visit's cursor.
+Decision: Typed Zone page receiving withholds owner, mount and configuration keys from read bodies; subject
+`collections` and sourced `sources` reads stay, because those names are catalogue slots rather than Zone metadata.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured
@@ -184,24 +198,24 @@ invalid targets or reserved configured routes fail with 400 `invalid_request` an
 errors. Shared validation violations map `limit` to `out_of_range`, and the remaining composition violations
 to `invalid_format`, prefixed with `/configuration`. Unknown envelope fields use `unknown_field`.
 
-| Method and native path                          | Body and success                                                | Authority                                                                 |
-| ----------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `POST /v1/zones`                                | `CreateZone` → 201 `ZoneResponse`, Location `/v1/zones/{id}`    | `zone:create` on Global Context; authenticated                            |
-| `GET /v1/zones?limit=&cursor=&deleted=`         | 200 `ZoneList`                                                  | caller's own Zones only; authenticated `zone:read` per returned resource  |
-| `GET /v1/zones/{id}`                            | 200 `ZoneMetadataResponse`                                      | `zone:read`, public exposure                                              |
-| `GET /v1/zones/{id}/configuration`              | 200 `ConfigurationResponse`                                     | `zone:configure` or current owner-role `zone:read`; authenticated         |
-| `PUT /v1/zones/{id}/configuration`              | `ConfigureZone` → 200 `ZoneResponse`                            | `zone:configure`; authenticated                                           |
-| `POST /v1/zones/{id}:publish`                   | `PublishZone` → 200 `ZoneResponse`                              | `zone:publish`; authenticated                                             |
-| `POST /v1/zones/{id}:readPage`                  | `PageRequest` → 200 `ZonePageResponse`                          | `zone:read`, public exposure                                              |
-| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | adopted: 200 `{subjects,next}`, 202 `{next}`, or dependency 503 | `zone:read`, anonymous floor and current source Access; route not mounted |
-| `GET /v1/zones/{id}/collections?limit=&cursor=` | 200 `{collections,next}`                                        | `zone:read`, current source Access                                        |
-| `DELETE /v1/zones/{id}`                         | no body → 200 `ZoneResponse`                                    | `zone:delete`; authenticated                                              |
-| `POST /v1/zones/{id}:restore`                   | `{}` → 200 `ZoneResponse`                                       | current owner role and `zone:restore`; authenticated                      |
-| `POST /v1/zones/{id}:takedown`                  | `Takedown` → 200 `ZoneResponse`                                 | `moderation:takedown`; authenticated                                      |
-| `POST /v1/zones/{id}:releaseTakedown`           | `ReleaseTakedown` → 200 `ZoneResponse`                          | `moderation:takedown`; authenticated                                      |
-| `POST /v1/platform/zones/{id}:purge`            | `Purge` → 200 `{id,state:'purge_pending'}`                      | `zone:purge` on existing Platform resource                                |
-| `POST /v1/platform/zones/{id}:hold`             | `{reason:string}` → 200 `{id,held:true}`                        | `zone:purge` on Platform                                                  |
-| `POST /v1/platform/zones/{id}:releaseHold`      | `{}` → 200 `{id,held:false}`                                    | `zone:purge` on Platform                                                  |
+| Method and native path                          | Body and success                                             | Authority                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `POST /v1/zones`                                | `CreateZone` → 201 `ZoneResponse`, Location `/v1/zones/{id}` | `zone:create` on Global Context; authenticated                           |
+| `GET /v1/zones?limit=&cursor=&deleted=`         | 200 `ZoneList`                                               | caller's own Zones only; authenticated `zone:read` per returned resource |
+| `GET /v1/zones/{id}`                            | 200 `ZoneMetadataResponse`                                   | `zone:read`, public exposure                                             |
+| `GET /v1/zones/{id}/configuration`              | 200 `ConfigurationResponse`                                  | `zone:configure` or current owner-role `zone:read`; authenticated        |
+| `PUT /v1/zones/{id}/configuration`              | `ConfigureZone` → 200 `ZoneResponse`                         | `zone:configure`; authenticated                                          |
+| `POST /v1/zones/{id}:publish`                   | `PublishZone` → 200 `ZoneResponse`                           | `zone:publish`; authenticated                                            |
+| `POST /v1/zones/{id}:readPage`                  | `PageRequest` → 200 `ZonePageResponse`                       | `zone:read`, public exposure                                             |
+| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | 200 `{subjects,next}`, 202 `{next}`, or dependency 503       | `zone:read`, anonymous floor and current source Access                   |
+| `GET /v1/zones/{id}/collections?limit=&cursor=` | 200 `{collections,next}`                                     | `zone:read`, current source Access                                       |
+| `DELETE /v1/zones/{id}`                         | no body → 200 `ZoneResponse`                                 | `zone:delete`; authenticated                                             |
+| `POST /v1/zones/{id}:restore`                   | `{}` → 200 `ZoneResponse`                                    | current owner role and `zone:restore`; authenticated                     |
+| `POST /v1/zones/{id}:takedown`                  | `Takedown` → 200 `ZoneResponse`                              | `moderation:takedown`; authenticated                                     |
+| `POST /v1/zones/{id}:releaseTakedown`           | `ReleaseTakedown` → 200 `ZoneResponse`                       | `moderation:takedown`; authenticated                                     |
+| `POST /v1/platform/zones/{id}:purge`            | `Purge` → 200 `{id,state:'purge_pending'}`                   | `zone:purge` on existing Platform resource                               |
+| `POST /v1/platform/zones/{id}:hold`             | `{reason:string}` → 200 `{id,held:true}`                     | `zone:purge` on Platform                                                 |
+| `POST /v1/platform/zones/{id}:releaseHold`      | `{}` → 200 `{id,held:false}`                                 | `zone:purge` on Platform                                                 |
 
 Decision: `GET /v1/zones/{id}/collections` walks the current configured mount order, omits only native
 `not_found` Collection reads, and returns the Collection owner's existing safe resource projection. Its default
@@ -256,7 +270,7 @@ implement scans or an unreviewed query engine to fill this dependency. Refer als
 ## Configuration, publication and Access
 
 The resource base mounts create, metadata, owned listing, configuration, publish, delete and restore.
-The mounted readPage runtime composes static documents and native source union/current-membership providers. The Subject GET is an adopted route design, not a mounted route; its native sparse preparation, replay, generated client and growth proof remain pending. Ordered Scope readiness and destructive lifecycle delivery are described in the [runtime inventory](../services/kernel/src/zones/README.md).
+The mounted readPage runtime composes static documents and native source union/current-membership providers. `GET /v1/zones/:id/subjects` lists the canonical union with the default cursor profile, retained preparation, predecessor replay and `409 stale_cursor` for incompatible tokens. Ordered Scope readiness and destructive lifecycle delivery are described in the [runtime inventory](../services/kernel/src/zones/README.md).
 The code-first `Zone*Schema` exports in `src/zones/contract.ts` define the resource envelopes.
 
 Creation authorizes the parent before touching the new partition. Allocate a routed Zone ID and copy the

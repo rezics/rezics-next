@@ -11,7 +11,6 @@ import {
   appearanceRoleSchemeUri,
   characterTraitConceptUri,
   characterTraitSchemeUri,
-  importVndbCharacterTraits,
 } from '../../../importer/src/vndb-character-traits.ts';
 import {
   planCrossMediaSeed,
@@ -33,6 +32,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbCharacterTraits } from '../../../importer/src/selected-import.ts';
 
 const authored = {
   source: 'authored-showcase-vocabulary',

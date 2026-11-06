@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, PublicFigureRead, RatingQuestionRead } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { admitRatingRetryAfter, ratingRetryAt } from './rating-retry-admission';
@@ -38,11 +38,8 @@ export function providerStatisticLabel(source: string): string {
   if (source === 'bangumi') return 'Bangumi';
   return source;
 }
-type SubjectRoutes = ReturnType<KernelClient['subjects']>;
-export type RatingQuestion = NonNullable<
-  Awaited<ReturnType<ReturnType<KernelClient['rating-questions']>['get']>>['data']
->;
-export type PublicFigure = NonNullable<Awaited<ReturnType<SubjectRoutes['figure']['get']>>['data']>['figure'];
+export type RatingQuestion = RatingQuestionRead;
+export type PublicFigure = PublicFigureRead;
 export type Ratings = {
   question: RatingQuestion;
   figure: PublicFigure;
@@ -409,17 +406,24 @@ export async function writeRatingVote(
   },
 ): Promise<'successful' | 'rejected' | 'uncertain'> {
   const vote = client.subjects({ id: input.subjectId }).ratings({ questionId: input.questionId }).vote;
+  // The kernel reads Idempotency-Key as a structured-field string, so the UUID travels quoted.
   const headers = {
     authorization: input.authorization,
-    'idempotency-key': input.idempotencyKey,
+    'idempotency-key': JSON.stringify(input.idempotencyKey),
     ...(input.observation ? { 'x-rating-observation': JSON.stringify(input.observation) } : {}),
-  };
+  } as { 'idempotency-key': string; 'x-rating-observation'?: string };
   try {
     const result =
       input.units === null
         ? await vote.delete(undefined, { headers })
         : await vote.put({ units: input.units }, { headers });
     if (!result.error && result.status === (input.units === null ? 204 : 200)) return 'successful';
+    const problem =
+      result.error && typeof result.error === 'object' && 'code' in result.error
+        ? String((result.error as { code: unknown }).code)
+        : null;
+    // 503 atomic_guard_unavailable is retryable; keep the original command for an exact replay.
+    if (problem === 'atomic_guard_unavailable' || result.status >= 500) return 'uncertain';
     return [400, 401, 403, 404, 409, 422].includes(result.status) ? 'rejected' : 'uncertain';
   } catch {
     return 'uncertain';

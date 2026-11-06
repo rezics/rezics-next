@@ -1,13 +1,9 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
-import { convertBangumi } from '@rezics/conversion/bangumi';
-import {
-  selectBangumiBookProfile,
-  type BangumiBookGrain,
-} from '../../../packages/conversion/src/bangumi-book-profile.ts';
+import { convertBangumi, selectBangumiBookProfile, type BangumiBookGrain } from '@rezics/conversion/bangumi';
 import { bangumiRecordUrl, isFamilyRelationTerm, mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import {
   bangumiStaffDraft,
   type BangumiCreatorCreditDraft,
@@ -17,15 +13,14 @@ import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
   crossMediaAliases,
   emptyCrossMediaPlan,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaSeedResult,
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
-} from './cross-media-seed.ts';
+} from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import {
@@ -839,6 +834,8 @@ async function rereadBookCreatorBindings(input: {
 
 /** Default book adapter: documented families, ordinary conversion, then the shared seed/credit/graph path. */
 export async function importShowcaseBooks(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -917,7 +914,7 @@ export async function importShowcaseBooks(input: {
       : showcase
         ? showcase.publicClient.readSubject(subjectId)
         : input.port.readReviewedSubject(subjectId);
-  const seeded = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+  const seeded = await input.seed(plan, input.path, input.port, input.destination, {
     providers: ['bangumi'],
     entitiesFirst: true,
     mediaDeadlineMs: 120_000,

@@ -9,8 +9,8 @@ import {
   vndbReleaseMediumCodes,
   vndbReleaseMediumTaxonomy,
   vndbReleasePlatformTaxonomy,
-} from '../../../packages/conversion/src/support.ts';
-import type { CrossMediaGap, CrossMediaTables } from './cross-media-seed.ts';
+} from '@rezics/conversion/support';
+import { type CrossMediaGap, type CrossMediaTables } from './showcase-contract.ts';
 
 type Row = Record<string, unknown>;
 export type VndbReleaseAssociation = Readonly<{ code: string; path: string }>;

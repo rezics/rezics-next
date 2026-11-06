@@ -56,7 +56,7 @@ import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
 import { assertSamePageContext } from './context-subject';
 import { contextHref } from './context-navigation';
-import { withSubjectVisitReturn } from './subject-visit-navigation';
+import { withSubjectVisitReturn, zoneVisitReturn } from './subject-visit-navigation';
 import { PageStreamHeadingContext, ViewHeadingActions } from './view-heading';
 import { useLocation } from '@tanstack/react-router';
 export { ViewHeading, ViewHeadingActions } from './view-heading';
@@ -477,7 +477,9 @@ export function SubjectFrame({
           href={returnTo}
           className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
         >
-          {m.recording_reader_return({}, { locale: locale as never })}
+          {zoneVisitReturn(returnTo, locale)
+            ? m.zone_return({}, { locale: locale as never })
+            : m.recording_reader_return({}, { locale: locale as never })}
         </a>
       ) : null}
     </div>

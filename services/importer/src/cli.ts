@@ -13,7 +13,8 @@ import {
   type BangumiGameGenreBindings,
 } from './showcase-bangumi-game-genres.ts';
 import { createMediaResolver } from './media-resolver.ts';
-import { createSelectedFamilySourceRegistration, createSourceRegistration } from './source-registry.ts';
+import { admittedSourceAdmissions } from './registration-contract.ts';
+import { bindSourceRegistration, createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, observeDumpRetention } from './dumps-bytes.ts';
 import { DEFAULT_VNDB_ARCHIVE_BYTES, DEFAULT_VNDB_ARCHIVE_ENTRIES, type VndbTablesStore } from './vndb-tables.ts';
 import {
@@ -699,7 +700,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     registration =
       config.source === 'bangumi' && sourceAlias === 'bangumi_cross_media'
         ? createSelectedFamilySourceRegistration('bangumi', sourceAlias)
-        : createSourceRegistration(config.source, { source: sourceAlias });
+        : bindSourceRegistration(admittedSourceAdmissions[config.source], { source: sourceAlias });
     admitDumpCompression(config.source, config.compression);
     if (config.compression === 'zstd') {
       zstdExecutable = await resolveZstdExecutable(config.zstdExecutable);

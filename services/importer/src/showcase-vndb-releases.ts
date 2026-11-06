@@ -18,7 +18,7 @@ import {
   vndbReleaseMediumSchemeUri,
   vndbReleasePlatformConceptUri,
   vndbReleasePlatformSchemeUri,
-} from '../../../packages/conversion/src/support.ts';
+} from '@rezics/conversion/support';
 import type { ImporterOptions } from './importer.ts';
 import type { ImportConversion } from './import-contract.ts';
 import {
@@ -26,18 +26,15 @@ import {
   showcaseLimits,
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
-} from './showcase-manifest.ts';
+} from './showcase-contract.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
-  planCrossMediaSeed,
-  seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaPlan,
   type CrossMediaPort,
-  type CrossMediaSeedExtras,
-  type CrossMediaSeedResult,
   type CrossMediaTables,
-} from './cross-media-seed.ts';
+} from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedExtras, CrossMediaSeedResult } from './cross-media-seed.ts';
 import {
   planVndbReleasePlatforms,
   vndbReleaseAssociationReleaseCap,
@@ -938,6 +935,8 @@ function readingIdentity(row: CrossMediaSeedResult['readings'][number]): Showcas
 
 /** Default selected-family caller: family plan, then the release adapter, then the ordinary seed. */
 export async function seedShowcaseVndbReleases(input: {
+  seed: typeof seedCrossMedia;
+
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -947,9 +946,9 @@ export async function seedShowcaseVndbReleases(input: {
   destination?: { origin: string };
   extras?: CrossMediaSeedExtras;
   characterBindings?: SourceVocabularyBindings;
-  plan?: CrossMediaPlan;
+  plan: CrossMediaPlan;
 }): Promise<ShowcaseVndbReleaseResult> {
-  const plan = input.plan ?? (await planCrossMediaSeed(input.tables));
+  const plan = input.plan;
   const catalogueSubjects = input.catalogueSubjects ?? input.extras?.episodeCatalogueSubjects;
   const prepared = await prepareShowcaseVndbReleases({
     tables: input.tables,
@@ -974,7 +973,7 @@ export async function seedShowcaseVndbReleases(input: {
       input.extras?.onConversionOutput?.(output);
     },
   };
-  const result = await seedCrossMedia(
+  const result = await input.seed(
     prepared.plan,
     input.path,
     input.port,

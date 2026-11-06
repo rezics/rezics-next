@@ -133,12 +133,18 @@ export async function reserve(request: Request, env: MediaEnv): Promise<Response
   const credential = viewerCredential(request);
   const media =
     'realmId' in input
-      ? await reserveRealmMedia(client, credential, input.realmId, {
-          purpose: input.purpose,
-          mediaType: input.mediaType,
-          byteCount: input.byteCount,
-          ...('sha256' in input ? { sha256: input.sha256 } : {}),
-        })
+      ? await reserveRealmMedia(
+          client,
+          credential,
+          input.realmId,
+          {
+            purpose: input.purpose,
+            mediaType: input.mediaType,
+            byteCount: input.byteCount,
+            ...('sha256' in input ? { sha256: input.sha256 } : {}),
+          },
+          key,
+        )
       : await reserveMedia(client, credential, input, key);
   return Response.json(publicMedia(media), {
     status: 201,

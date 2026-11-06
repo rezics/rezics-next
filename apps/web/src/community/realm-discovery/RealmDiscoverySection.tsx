@@ -131,7 +131,7 @@ export function RealmDiscoverySection({
                 ? m.realm_discovery_closed({}, options)
                 : m.realm_discovery_unavailable({}, options)}
           </p>
-          {state.kind === 'unavailable' && onRetry ? (
+          {(state.kind === 'unavailable' || state.kind === 'restart') && onRetry ? (
             <Button variant="outline" className="min-h-11" onClick={onRetry}>
               {retryLabel}
             </Button>

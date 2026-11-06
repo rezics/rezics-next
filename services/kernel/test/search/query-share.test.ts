@@ -84,6 +84,9 @@ const search: SearchService = {
   async releaseGroups() {
     throw new Error('grouped release search is not used by this fixture');
   },
+  savedCatalogueMembers: async () => {
+    throw new Error('saved membership is not used by this fixture');
+  },
   async search(_principal, _request, _now, _release, context) {
     executions++;
     const page = { subjects: [], next: null, as_of: new Date().toISOString() };
@@ -95,9 +98,6 @@ const search: SearchService = {
   },
   async suggest() {
     return { subjects: [], as_of: new Date().toISOString() };
-  },
-  async savedCatalogueMembers() {
-    throw new Error('saved catalogue members is not used by this fixture');
   },
 };
 const app = createKernel({ pool, access, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys(), search });

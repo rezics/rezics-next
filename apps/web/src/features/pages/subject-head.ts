@@ -9,9 +9,9 @@ import { pageHead, type PagePaths } from '../../shell/head';
 import { shareCardImage } from '../../shell/share-card';
 import type { ShareCardProjection } from '../../media/share-card';
 import { subjectBody, subjectDisplayLabel, subjectPageJsonLd, type SubjectPageData } from './subject';
-import { bestRank, isRecord, pageText, spoilerLevel, type Stmt } from './shared';
+import { bestRank, pageText, spoilerLevel, type Stmt } from './shared';
 import { chosenSummary } from './overview';
-import { publicDocumentText } from './jsonld';
+import { publicDocumentText, timePresentation } from './jsonld';
 
 type SubjectHeadContext = {
   origin: string;
@@ -56,18 +56,11 @@ function releaseYear(
     const chosen = bestRank(eligible.filter((statement) => spoilerLevel(statement) === 0));
     for (const statement of chosen) {
       if (statement.property.data_type !== 'time') continue;
-      const content = statement.value.type === 'value' ? statement.value.content : undefined;
-      if (
-        !isRecord(content) ||
-        typeof content.time !== 'string' ||
-        typeof content.precision !== 'number' ||
-        !Number.isInteger(content.precision) ||
-        content.precision < 9
-      )
-        continue;
-      const match = /^([+-]?)(\d{4,})-/.exec(content.time);
+      const presented = timePresentation(statement.value, locale);
+      if (presented.state !== 'supported' || !presented.structuredDate) continue;
+      const match = /^\+?(\d{4,})/.exec(presented.structuredDate);
       if (!match) continue;
-      const year = Number(`${match[1]}${match[2]}`);
+      const year = Number(match[1]);
       const date = new Date(0);
       date.setUTCFullYear(year, 0, 1);
       if (!Number.isFinite(date.getTime())) continue;

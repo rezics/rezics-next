@@ -1,7 +1,9 @@
 import { pickText } from '@rezics/composition';
 import type { ComponentType, ReactNode } from 'react';
-import type { Summary } from '../../subject/types';
+import type { Related, Subject, Summary } from '../../subject/types';
 import { SPOILER_PROPERTY } from './values';
+
+export type { Related, Subject, Summary };
 
 export type LinkProps = {
   href: string;

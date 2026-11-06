@@ -1,11 +1,12 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h, type ComponentProps, type ReactNode } from 'react';
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router';
 import type { SourceFact, SourcesPageData } from '../src/features/catalogue/subject-sources';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-// UNRUN under MINIMAL. DOM/focus assertions are neither browser geometry nor native acceptance.
+// DOM/focus assertions supplement the native browser journey.
 async function mounted(
   run: (readers: { hosts: HTMLElement[]; render: (index: number, node: ReactNode) => Promise<void> }) => Promise<void>,
 ) {
@@ -45,12 +46,24 @@ async function mounted(
     return host;
   });
   const roots = hosts.map((host) => createRoot(host));
+  const routers = hosts.map(() =>
+    createRouter({
+      routeTree: createRootRoute(),
+      history: createMemoryHistory({ initialEntries: ['/en'] }),
+    }),
+  );
   try {
     await run({
       hosts,
       render: async (index, node) => {
         await act(async () =>
-          roots[index]!.render(h(ConnectedStory, { storyId: `subject-sources-detail-${index}` }, node)),
+          roots[index]!.render(
+            h(
+              RouterContextProvider,
+              { router: routers[index]! },
+              h(ConnectedStory, { storyId: `subject-sources-detail-${index}` }, node),
+            ),
+          ),
         );
       },
     });

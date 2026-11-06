@@ -53,8 +53,13 @@ once, beside `assignmentValid`, and statement-level `live`; `policy-core.ts` map
 `row.deadlineLive`. A second identical alias fails SQL analysis. The adapter evaluates every target at the same native
 snapshot and uses the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
-excludes that floor and resource-role grants. A core decision reached through registered Global authority still
+excludes that floor and resource-role grants; own-account grants remain explicit advice. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
+
+The typed native projection passes SQL `deadlineLive` to the core without structural casts.
+Its byte bound also includes the independent transport `live` field returned by SQL; that field does not replace the policy deadline operand.
+Scalar and batched consumers use that same projection; SQL `live` independently checks read freshness.
+The native work bound includes both projected fields.
 
 The exact type operand is deliberately not guessed for point `Resource` checks. Resource-role registrations bind
 `access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; that point action keeps the existing
@@ -2112,6 +2117,7 @@ no-candidate. No separate snapshot or mutable transaction-id surrogate is provid
 ### Generic / parent creation authorization
 
 - Touches: `resource-authorization.ts` prepares actor/principal inverses and matched group proofs, validates the trusted authority existence/revision, then runs one Access formula at attempt T on one authority connection, released before target checkout. Fresh proof on every retry; authorization precedes replay. `parent-creation.ts` additionally binds the exact child UUID/partition and unique INSERT provenance, single-use initialization and manifest guard. Reads are the P/Q keys plus exact owning-module validation keys; no writes during authorization.
+- Typed parent: a parent anchor that declares its own `resourceType` (the Global platform root declares `semantic.context`) is authorized as that resource type through the page path. The child action's declared type never selects the parent's profile, so a direct Global grant for `space:create` or `realm:create` authorizes creation under the Global parent.
 - Bound: `P+Q` plus shared command admission and the authority validation seek per attempt: measured constant rows/statements and logarithmic blocks in S at fixed J/output, with permission work at most linear in capped J and V. Target changes add their own indexed writes; creation adds an exact provenance seek per declared child. No ACL/history enumeration or held connection across anchors.
 - Growth check: `test/access/growth-resource-authorization.test.ts`: composed stable tuple and creation commands at three scales
 

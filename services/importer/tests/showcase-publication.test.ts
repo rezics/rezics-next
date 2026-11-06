@@ -14,7 +14,7 @@ import {
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -22,8 +22,9 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { prepareShowcaseTags } from '../src/showcase-tags.ts';
-import { seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
+
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 
@@ -669,7 +670,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       aliases: crossMediaAliases,
       journal,
       review: { ...review, readReviewedSubject: async (id) => canonicalRead(await review.readReviewedSubject(id)) },
-      publicClient: { readSubject: async (id) => canonicalRead(await publicClient.readSubject(id)) },
+      publicClient: {
+        readSubject: async (id) => canonicalRead(await publicClient.readSubject(id)),
+        readSelectedSynopsis: async (id, query, signal) =>
+          canonicalRead(await publicClient.readSelectedSynopsis(id, query, signal)),
+      },
       ...tagOptions,
     });
     const canonicalWork = canonical.published.find((record) => record.subjectId === workId);

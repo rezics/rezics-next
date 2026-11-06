@@ -486,7 +486,8 @@
         "services/kernel/src/search/catalogue-publication.ts",
         "services/kernel/src/search/identity-epoch-participant.ts",
         "services/kernel/src/search/opensearch.ts",
-        "services/kernel/src/search/access-capabilities.ts"
+        "services/kernel/src/search/access-capabilities.ts",
+        "services/kernel/src/search/credit-search.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -522,7 +523,8 @@
         "services/kernel/src/semantic/work-module.ts",
         "services/kernel/src/semantic/access-capabilities.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",
-        "services/kernel/src/semantic/adapters/index.ts"
+        "services/kernel/src/semantic/adapters/index.ts",
+        "services/kernel/src/semantic/credit-search.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -861,6 +863,7 @@
         "apps/web/src/search/search-window/index.ts",
         "apps/web/src/search/release-window.ts",
         "apps/web/src/search/language-preferences.tsx",
+        "apps/web/src/search/condition-weight.tsx",
         "apps/web/src/features/pages/agent-reader-read/index.ts",
         "apps/web/src/features/pages/showcase-work/index.ts"
       ],
@@ -891,7 +894,10 @@
       "kind": "UI/transport library",
       "owner": "accounts",
       "paths": ["apps/web/src/accounts/**", "apps/web/src/account-verification/**"],
-      "publicEntries": [],
+      "publicEntries": [
+        "apps/web/src/accounts/resource-access/data.ts",
+        "apps/web/src/accounts/resource-access/visits.ts"
+      ],
       "allowedDependencies": [
         "client",
         "composition",
@@ -936,7 +942,8 @@
       "publicEntries": [
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
-        "apps/web/src/media/cover-src.ts"
+        "apps/web/src/media/cover-src.ts",
+        "apps/web/src/threads/post-command-lifetime.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -971,7 +978,10 @@
         "apps/web/src/features/contexts/**",
         "apps/web/src/zones/**"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "apps/web/src/features/catalogue/definition-publication/actions.ts",
+        "apps/web/src/features/catalogue/definition-publication/workspace.tsx"
+      ],
       "allowedDependencies": [
         "client",
         "composition",
@@ -1128,6 +1138,7 @@
       "paths": ["packages/conversion/src/**"],
       "publicEntries": [
         "@rezics/conversion",
+        "@rezics/conversion/support",
         "@rezics/conversion/bangumi",
         "@rezics/conversion/bangumi-vocabulary",
         "@rezics/conversion/vndb",

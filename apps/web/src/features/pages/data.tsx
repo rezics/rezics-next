@@ -65,6 +65,7 @@ import {
   type Stmt,
 } from './shared';
 import { DocumentValue, LanguageTag, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
+import type { PublicationOverlayReading } from './subject-metadata';
 
 type CoreMessages = {
   unknown: string;
@@ -319,6 +320,49 @@ export function CandidateValue({
       frame: {},
       labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
     }) ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>
+  );
+}
+
+export function PublicationOverlayView({
+  reading,
+  subject,
+  related,
+  documents,
+  locale,
+  link,
+}: {
+  reading: PublicationOverlayReading;
+  subject: Subject;
+  related: Related;
+  documents?: unknown;
+  locale: string;
+  link?: PageLink | undefined;
+}) {
+  return (
+    <section data-slot={`${reading.kind}-publication`} className="min-w-0 space-y-4">
+      <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+        {reading.fields.map((field) => (
+          <div key={field.property} className="min-w-0 space-y-1" data-property={field.property}>
+            <dt lang={field.label.lang || undefined} className="text-sm font-medium">
+              {field.label.text}
+            </dt>
+            <dd className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+              {field.statements.map((statement) => (
+                <CandidateValue
+                  key={statement.id}
+                  snak={statement}
+                  related={related}
+                  locale={locale}
+                  subject={subject.id}
+                  {...(documents !== undefined ? { documents } : {})}
+                  {...(link ? { link } : {})}
+                />
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -829,6 +873,8 @@ export function PageData({
   releaseDigest,
   propertyLabels,
   listTarget,
+  listHref,
+  memberHref,
   fullList,
   listCursor,
   realm,
@@ -866,6 +912,8 @@ export function PageData({
   releaseDigest?: string;
   propertyLabels?: Record<string, { labels?: Record<string, string> }> | undefined;
   listTarget?: TypeListTarget | undefined;
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  memberHref?: (subject: { id: string; label: string }) => string;
   fullList?: string | undefined;
   listCursor?: string | undefined;
   realm?: string | undefined;
@@ -1059,6 +1107,8 @@ export function PageData({
       : {}),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),
     ...(ratio ? { frameRatio: ratio } : {}),
+    ...(listHref ? { listHref } : {}),
+    ...(memberHref ? { memberHref } : {}),
   };
   return (
     <SubjectArtworkBoundary
@@ -1082,6 +1132,8 @@ export function PageData({
             ...(listTarget ? { target: listTarget } : {}),
             ...(fullList ? { full: fullList } : {}),
             ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+            ...(listHref ? { listHref } : {}),
+            ...(memberHref ? { memberHref } : {}),
           }}
         >
           <PageContext.Provider

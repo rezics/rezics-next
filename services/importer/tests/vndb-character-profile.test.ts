@@ -19,9 +19,10 @@ import {
   readVndbCharacterProfileBindings,
   vndbCharacterBloodTypeConceptUri,
 } from '../src/vndb-character-profile.ts';
-import { seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
+
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 const charsHeader =
   'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription';

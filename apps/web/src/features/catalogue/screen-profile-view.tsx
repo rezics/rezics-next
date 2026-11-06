@@ -424,7 +424,7 @@ function ScreenProfileLive({
         ])}
         id={id}
         context={context}
-        realm={realm}
+        {...(realm ? { realm } : {})}
         locale={locale}
         session={session}
         transport={transport}
@@ -442,7 +442,7 @@ function ScreenProfileLive({
         revision={`${id}:${context}:${admitted?.public?.subject.release ?? visit?.definition ?? ''}:${readingRevision}`}
         reload={reload}
         intro={intro}
-        returnHref={returnAddress}
+        {...(returnAddress ? { returnHref: returnAddress } : {})}
         {...(currentInspection ? { inspection: currentInspection } : {})}
         inspectionRetired={retiredInspection}
         readingChanged={readingChanged}
@@ -784,16 +784,16 @@ function ScreenCorrection({
   reload: () => void;
   intro: React.ReactNode;
   observe: (next: EditorRead) => void;
-  returnHref?: string;
-  inspection?: ScreenCurrentOccurrence;
+  returnHref?: string | undefined;
+  inspection?: ScreenCurrentOccurrence | undefined;
   inspectionRetired: boolean;
   readingChanged: boolean;
-  currentVisit?: ScreenCurrentVisit;
+  currentVisit?: ScreenCurrentVisit | undefined;
   focusRequested: boolean;
   visitIdentity: string;
-  classificationHandoffToken?: string;
-  handoffReader?: string;
-  handoffReaderLive?: () => boolean;
+  classificationHandoffToken?: string | undefined;
+  handoffReader?: string | undefined;
+  handoffReaderLive?: (() => boolean) | undefined;
 }) {
   const o = { locale: locale as never };
   const current = useMemo(

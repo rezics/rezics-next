@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { importVndbReleaseFidelity, readVndbReleaseBindings } from '../../../importer/src/vndb-release-fidelity.ts';
+import { readVndbReleaseBindings } from '../../../importer/src/vndb-release-fidelity.ts';
 import { CrossMediaDumpFiles, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbReleaseFidelity } from '../../../importer/src/selected-import.ts';
 
 const context = GLOBAL_CONTEXT;
 type Candidate = {

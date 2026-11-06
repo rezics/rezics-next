@@ -1,9 +1,15 @@
-import type { CrossMediaPlan, CrossMediaReading, CrossMediaSelection } from './cross-media-seed.ts';
+import {
+  type CrossMediaPlan,
+  type CrossMediaReading,
+  type CrossMediaSelection,
+  type ShowcaseAcknowledgement,
+  type ShowcaseAssertion,
+  type ShowcaseOmission,
+  type ShowcaseReviewPort,
+} from './showcase-contract.ts';
 import { graphEdgeKey, type GraphEdgeEvidence } from './cross-media-bindings.ts';
-import type { ShowcaseAcknowledgement, ShowcaseAssertion, ShowcaseOmission } from './showcase-manifest.ts';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
-import type { ShowcaseReviewPort } from './showcase-publication.ts';
 
 /** Exact additional members observed in the pinned Archive, not a title-based franchise expansion. */
 export const showcaseFranchiseMembers = Object.freeze({

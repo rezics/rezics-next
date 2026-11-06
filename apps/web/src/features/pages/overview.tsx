@@ -166,6 +166,10 @@ export type OverviewValue = {
   relationDirections?: ReleasedRelationDirectionResult[];
   /** Every `RelationGroups` node of the page in document order; the first one renders all of them by group. */
   relationNodes: { id: string; props: Record<string, unknown> }[];
+  /** Zone lists continue on the Zone reader; Search TypeList keeps `{ route }` targets. */
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  /** Zone member rows keep the localized Zone Subject URL. */
+  memberHref?: (subject: { id: string; label: string }) => string;
 };
 
 export const OverviewContext = createContext<OverviewValue | null>(null);
@@ -189,6 +193,8 @@ type SubjectRead = { subject: Subject; related: Related; documents?: unknown; su
 export type Item = {
   id: string;
   label: ReturnType<typeof pageText>;
+  /** When set, list cards keep this destination instead of the global subject URL. */
+  href?: string;
   summary?: SubjectSummary;
   type?: string;
   /** Qualifier text such as a role or the credited name. */

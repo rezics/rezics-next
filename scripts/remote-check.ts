@@ -795,7 +795,9 @@ const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
-const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 5_000;
+// Fresh SSH setup to the check hosts takes 4 to 7 s (key exchange and auth over a 0.3 s round trip); a 5 s probe failed
+// 109 checks in 90 minutes on 2026-11-06 with exit 75 before any command ran.
+const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 20_000;
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;

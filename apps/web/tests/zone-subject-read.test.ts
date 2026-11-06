@@ -79,3 +79,42 @@ test('malformed continuation cursors from the native response are not retained',
   const outcome = await readZonePage(client as never, zoneId, { target: { route: '' } });
   expect(outcome).toEqual({ kind: 'error' });
 });
+
+test('a stale continuation restarts under current authority without the expired cursor', async () => {
+  const sent: string[] = [];
+  const page = {
+    profile: 'sha256:zone',
+    template: { scope: 'route', key: '' },
+    document: { root: { props: {} }, content: [] },
+    reads: {},
+    zone: {
+      id: zoneId,
+      revision: '1',
+      labels: { en: 'Field Notes' },
+      visibility: 'public',
+      appearance: {},
+      navigation: [],
+    },
+  };
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      sent.push(`${url.pathname}${url.search}`);
+      if (url.searchParams.has('cursor'))
+        return Response.json(
+          {
+            code: 'stale_cursor',
+            status: 409,
+            title: 'Stale Cursor',
+            type: 'https://rezics.com/problems/stale_cursor',
+          },
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        );
+      return Response.json(page);
+    }) as typeof fetch,
+  });
+
+  const outcome = await readZonePage(client as never, zoneId, { target: { route: '' } }, { cursor: 'expired-token' });
+  expect(sent).toEqual([`/v1/zones/${zoneId}:readPage?cursor=expired-token`, `/v1/zones/${zoneId}:readPage`]);
+  expect(outcome).toEqual({ kind: 'page', page });
+});

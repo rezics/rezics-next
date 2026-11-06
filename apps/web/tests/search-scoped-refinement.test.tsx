@@ -94,6 +94,7 @@ describe('scoped Search refinement', () => {
     for (const [status, code, expected] of [
       [503, 'coverage_withheld', 'withheld'],
       [503, 'index_not_ready', 'preparing'],
+      [503, 'semantic_not_ready', 'preparing'],
       [400, 'invalid_request', 'invalid'],
       [409, 'search_restart_required', 'restart'],
     ] as const) {

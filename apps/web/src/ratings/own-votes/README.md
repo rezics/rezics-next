@@ -5,11 +5,11 @@
 summary is opened through the localized Subject route; the native `subjectHref` is never used as a browser URL.
 Public figures, source statistics and Library membership do not come from this inventory.
 
-The route reads the installed native page through a server-only adapter validated by the producer's
-`OwnVotesPageSchema`. At this base the generated `@rezics/client` has no own-votes operation or types. The adapter
-uses the installed `/v1/me/rating-votes` operation and producer schema; vote PUT, DELETE and exact original-key
-readback continue through the generated typed client. The producer owns identity resolution, question lifecycle,
-suppression, write admission and readback. Do not broaden the Subject assessment writer.
+The route reads the installed native page through the generated `@rezics/client` operation
+`me['rating-votes'].get`, and its page and row types come from that operation's published response. A server-only
+closed validator in `response.ts` still admits each page before use. Vote PUT, DELETE and exact original-key readback
+use the same typed client. The producer owns identity resolution, question lifecycle, suppression, write admission and
+readback. Do not broaden the Subject assessment writer.
 
 The page renders at most twenty original keys in native question/Subject order and keeps the opaque cursor byte for
 byte. An empty page with a continuation remains a continuation. It does not accumulate pages, refill after clear,
@@ -65,14 +65,29 @@ Decision: during an eligible My ratings visit, retain up to eight admitted prede
   - Native indexed raw-page and cold summary/account/Realm costs belong to Content's producer acceptance. Native
     256/1024/4096 growth is not asserted by this frontend.
 
-Decision: until Content publishes the own-votes route in `@rezics/client`, Web uses a server-only adapter with a
-Workers-safe response validator shaped by the root-derived client contract; the outer envelope is additive while
-entries and action advice remain closed. Vote commands and readback use the existing typed client. This removes the
-runtime Kernel schema import from the Web module graph without adding a second native schema meaning.
+Decision: vote PUT and DELETE send the command's Idempotency-Key as a quoted structured-field string, the form the Kernel
+parses. Subject rating writes do the same, so a bare UUID is never sent as a command key.
+
+Decision: HTTP 503 `atomic_guard_unavailable` is retryable. Own-votes and the shared rating control keep the original
+intent for exact replay and do not treat that answer as a local reject. Same-logical-home reviewed writes still
+commit; foreign-home provider votes stay deferred.
+
+Decision: the seeded ratings walk is the fewest check that pins the served Subject and My ratings journey; native
+vote, aggregate and figure suites stay the producer. It runs on a local walk stack after the Worker can load
+denied config dependencies, so the pages actually start. Each walk retires leftover seed journals because the
+stack database is new; the journey `bun test` runs from `apps/web` so root preloads cannot send it to check hosts.
+
+Decision: own-votes tests that stub `kernel/client` keep the real `kernelClient` export, so a shared `bun test`
+process can still load Subject ratings and mixed personal actions.
+
+Decision: the installed generated own-votes operation is the only read seam. Web types re-export the published
+`OwnVotesPage` and `OwnVoteEntry` from `@rezics/client`, so no Kernel schema import remains in the Web module graph.
+Tests use those types. The Workers-safe validator stays because the outer envelope is additive while entries and action
+advice remain closed; it adds no second native schema meaning.
 
 The installed producer exports `createOwnVotesReader(deps).page(actor, { cursor? }, deadline)` and the register DTOs
 and schemas. Its source examples in `services/kernel/test/rating/own-votes-page.test.ts` cover populated zero,
 concealed continuation, identical-cursor dependency retry, fenced read-only advice and revoked access. Those cases
-inform the typed Web states; they are not native execution evidence or published response recordings. The generated
-own-votes client operation and mounted response recordings remain Content's seam. Connected stories exercise the
+inform the typed Web states; they are not native execution evidence or published response recordings. Mounted response
+recordings remain Content's seam. Connected stories exercise the
 existing workspace boundary; they do not substitute for generated publication or native acceptance.

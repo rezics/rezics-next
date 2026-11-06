@@ -142,6 +142,17 @@ test('missing, denied, malformed and foreign native capability cannot enable ren
   expect(signedOut).not.toContain('/account/rename');
 });
 
+test('admitted rename and security destinations stay current after a verification visit under the same viewer', () => {
+  const context = { accountId, handle: 'alice', available: true };
+  const html = render(context);
+  expect(html).toContain('href="https://auth.example.test/account/rename"');
+  expect(html).toContain('href="https://auth.example.test/security"');
+  expect(html).toContain('href="https://auth.example.test/account/delete"');
+  expect(html).toContain('@alice');
+  expect(html).not.toContain(m.settings_verification_heading());
+  expect(html).not.toContain('/v1/accounts/');
+});
+
 test('rename navigation allowlists the configured issuer route without callbacks or authority', () => {
   expect(accountRenameHref(securityHref)).toBe('https://auth.example.test/account/rename');
   for (const input of [

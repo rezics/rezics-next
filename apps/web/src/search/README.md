@@ -117,6 +117,9 @@ released unit roster has no related unit-label projection, so other unavailable 
 display message and control title. A declared `*` remains a marker, not a physical unit.
 The current quantity matcher requires exact unit identity and applies present `gte` and `lte` bounds inclusively;
 omitting either endpoint leaves that side open. Display labels do not convert values or change admission.
+Decision: Catalogue tagged-works mounts Search's public weight control, which uses this numeric grammar and unit
+text; native kind labels there use composition pickText over Search kind metadata, not Search results chrome.
+The mounted list receives recorded native hits and kind chips; admission type maps are only a pre-page fallback.
 
 Property changes preserve values only when released datatypes and value definitions match, ranges only when both
 definitions support the selected unit, and statement qualifiers only when both properties allow the same released
@@ -165,7 +168,14 @@ Search URLs use the existing filter grammar's
 single resource leaf for scope; display labels never enter native authority. The ID is the only operand sent to
 `POST /v1/subjects:search` with `representation: "discovery-v1"`. Result, kind and facet reads keep the same filter;
 refinement carries that filter through its existing request bridge. Removing scope removes its one leaf, retains
-sibling predicates, clears the cursor and begins a fresh traversal. GET scope is authored intent, not access proof.
+sibling predicates, clears the cursor and facet fields, and begins a fresh traversal. Changing to a different
+resource identity does the same: prior `f.*` values and the hit cursor cannot travel into the new predicate.
+Header GET and Filters submit follow that retirement. GET scope is authored intent, not access proof.
+Search, typeahead and facet refusals consume the same native families, including `503 semantic_not_ready` as
+preparing. Retry keyboard focus binds to the executed request, reader, locale, checkpoint and native page
+observation. Realm catalogue More replaces at most 20 rows; failed continuations keep the admitted window; a native
+409 restarts the first page. Decision: focused adapter tests pin this journey through installed Kernel clients;
+named stories stay unchanged; seeded browser cells wait for stack releases.
 The route keeps public Search anonymous and server-prefetched. Resource membership and a selected `ratingPopulation`
 use a browser-owned personal query instead: the route does not prefetch or dehydrate those responses. The browser's
 reader string is only a cache identity hint. Each protected Search, kind and facet server function calls

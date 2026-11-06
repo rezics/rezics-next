@@ -119,23 +119,27 @@ export function useSourcesRetry({
       // Invalidation rereads this address; only navigation leaves the retry's visit.
       if (fromLocation?.href !== toLocation.href) retire();
     });
+    // A later pointer press is deliberate departure; its body focus must not pull focus back to the heading.
     document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', cancelFocus, true);
     document.addEventListener('keydown', tabbed, true);
     document.defaultView?.addEventListener('blur', cancelFocus);
     intent.dispose = () => {
       leave();
       document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', cancelFocus, true);
       document.removeEventListener('keydown', tabbed, true);
       document.defaultView?.removeEventListener('blur', cancelFocus);
     };
     retry.intent = intent;
     retry.pending = true;
     emit();
-    // Reset is the error-boundary branch; invalidate also rereads failed loaders.
+    // Reset the error boundary after its replacement has loaded, so resetting cannot
+    // render the failed match again before invalidation has started.
     void (async () => {
       try {
-        reset?.();
         await router.invalidate({ sync: true });
+        reset?.();
       } finally {
         retry.pending = false;
         if (!retry.listeners.size) retire();

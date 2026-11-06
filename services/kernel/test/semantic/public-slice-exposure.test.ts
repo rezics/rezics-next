@@ -216,6 +216,7 @@ test('native platform grants expose real development commands while preserving r
   const gated = [
     'definitions.publish',
     'definitions.activate',
+    'definitions.import',
     'definitions.publish_extension',
     'definitions.activate_extension',
     'subject.merge',

@@ -206,15 +206,16 @@ export async function submitNotificationForm(request: Request): Promise<Response
   if (recovery.length) {
     const mode = recovery[0] as 'retry' | 'review' | 'confirmed';
     const confirmedVersion = mode === 'confirmed' ? Number(receipts[0]) : undefined;
+    const confirmed = confirmedVersion === undefined ? {} : { confirmedVersion };
     const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
-    if (!page.signedIn) return recoveryPage(request, token, change, mode, { confirmedVersion, status: 403 });
+    if (!page.signedIn) return recoveryPage(request, token, change, mode, { ...confirmed, status: 403 });
     if (
       !('preferences' in page) ||
       !page.page ||
       !page.notifications ||
       page.preferences.version < (confirmedVersion ?? change.expectedVersion)
     )
-      return recoveryPage(request, token, change, mode, { confirmedVersion });
+      return recoveryPage(request, token, change, mode, confirmed);
     if (mode === 'confirmed') return redirect(false);
     const admitted = notificationOriginalAllowed(change, page.page);
     // An unresolved retry never borrows a new version or key from a current read.

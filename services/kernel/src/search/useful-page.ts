@@ -1,7 +1,31 @@
 import type { SearchSortValue } from './cursor.ts';
+import { selectCurrentPredicatePage, type CurrentPredicateHit } from './current-predicate.ts';
 import type { HitResult, SearchHit } from './query.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import type { PublicFilterConsumerRefill, PublicFilterConsumerWindow } from './public-filter-consumer-contract.ts';
+
+type DisclosedHit<T> = CurrentPredicateHit & Readonly<{ value: T }>;
+
+function disclosedHits<T>(
+  accepted: ReadonlyMap<SearchHit, T>,
+  canonicalId: (value: T) => string,
+): Map<SearchHit, DisclosedHit<T>> {
+  const disclosed = new Map<SearchHit, DisclosedHit<T>>();
+  for (const [hit, value] of accepted) {
+    disclosed.set(hit, {
+      key: { owner: 'semantic', kind: 'subject', id: canonicalId(value) },
+      value,
+    });
+  }
+  return disclosed;
+}
+
+function frontierOf(hit: SearchHit): SearchFrontier {
+  return {
+    after: [...hit.sort],
+    ...(hit.ratingPhase === undefined ? {} : { ratingPhase: hit.ratingPhase }),
+  };
+}
 
 export type SearchFrontier = Readonly<{
   after?: readonly SearchSortValue[];
@@ -59,21 +83,13 @@ export async function collectUsefulPage<T>(options: {
     candidates += page.hits.length;
     // Charge and check the entire read, including unused lookahead and duplicates.
     const accepted = await options.check(page.hits);
-    for (const hit of page.hits) {
-      const value = accepted.get(hit);
-      const id = value === undefined ? undefined : options.canonicalId(value);
-      const useful = id !== undefined && !emitted.has(id);
-      // Preserve the last CONSUMED tuple, rather than advancing past unused lookahead.
-      if (values.length === limit && useful) break;
-      frontier = {
-        after: [...hit.sort],
-        ...(hit.ratingPhase === undefined ? {} : { ratingPhase: hit.ratingPhase }),
-      };
-      if (useful && value !== undefined) {
-        emitted.add(id);
-        values.push(value);
-      }
-    }
+    const selected = selectCurrentPredicatePage(page.hits, disclosedHits(accepted, options.canonicalId), {
+      limit: limit - values.length,
+      exhausted: false,
+      seen: emitted,
+    });
+    for (let index = 0; index < selected.consumed; index++) frontier = frontierOf(page.hits[index]!);
+    values.push(...selected.hits.map((hit) => hit.value));
     if (values.length === limit) return finish('filled');
   }
   // Partial work is internal. It must never become an advancing public success.
@@ -164,24 +180,18 @@ export async function collectRetainedUsefulPage<T>(options: {
     candidates += window.examined;
     // Revalidation and accounting include every returned candidate, including unused suffix.
     const accepted = await options.check(page.hits);
-    let consumed = window.examined;
-    for (let index = 0; index < page.hits.length; index++) {
-      const hit = page.hits[index]!;
-      const value = accepted.get(hit);
-      if (value === undefined) continue;
-      const id = options.canonicalId(value);
-      if (emitted.has(id)) continue;
-      emitted.add(id);
-      values.push(value);
-      frontier = {
-        after: [...hit.sort],
-        ...(hit.ratingPhase === undefined ? {} : { ratingPhase: hit.ratingPhase }),
-      };
-      if (values.length === limit) {
-        consumed = window.positions[index]! + 1;
-        break;
-      }
-    }
+    const disclosed = disclosedHits(accepted, options.canonicalId);
+    const selected = selectCurrentPredicatePage(page.hits, disclosed, {
+      limit: limit - values.length,
+      exhausted: window.exhausted,
+      seen: emitted,
+    });
+    values.push(...selected.hits.map((hit) => hit.value));
+    if (selected.consumed > 0) frontier = frontierOf(page.hits[selected.consumed - 1]!);
+    const consumed =
+      selected.consumed === 0 || selected.consumed === page.hits.length
+        ? window.examined
+        : window.positions[selected.consumed - 1]! + 1;
     continuation = { execution: page.execution, consumed };
     await options.consume?.(continuation);
     if (consumed === window.examined && window.exhausted) return finish('exhausted');

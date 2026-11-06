@@ -10,6 +10,11 @@ closed behind `search` platform grants. Advanced filters/scopes, facets and rati
 `search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
 deferred; this closed slice does not complete the Search Goal.
 
+Decision: Search, suggest and facet HTTP problems share one typed family (`invalid`, `invalid-cursor`, `session`,
+`closed`, `denied`, `restart`, `index-not-ready`, `source-not-ready`, `unavailable`, `ready`) before a reader
+publishes ready. `503 semantic_not_ready` is source preparation, never an empty success. Generation or identity
+change restarts the executed request. Suggest `503` documents `semantic_not_ready` with the other unavailable codes.
+
 Decision: native identity receiving refuses a missing or incomplete Source directory definition with typed unavailable;
 a complete unchanged retained definition must reach the native reader. Immutable projection meaning alone cannot
 substitute for the Source binding, capture and dependency keys.
@@ -1682,6 +1687,14 @@ Three rounds share `min(600, 6s+3)` raw candidates; sparse direct output advance
 When `kindCountLeaf` is designated, kind metadata performs a separate bounded disjunctive candidate pass and
 revalidates current disclosure before exposing distinct positive witnesses as `N+`; zero and exact counts require
 separate proof and are not inferred from the candidate prefix. Source census and page length are never query counts.
+Tagged-work requests (`tagged-work-plan.ts`) keep that designated kind as a direct top-level AND leaf, compile the
+remaining catalogue predicate (`tagged-work-query.ts`) and prove kind chips from those current rows (`type-facet.ts`).
+Capture overflow includes statement and same-statement qualifier properties. Name and id execute directly through a
+bounded disclosed-candidate walk; spending the scan bound without a filled page or certified exhaustion is finite
+preparation. Rating sort is finite preparation until mixed rating seek is installed. Web Concept type labels read Search
+kind metadata rather than substituting admission maps. Catalogue mounts Search's public weight control for the shared
+numeric grammar. Released Book word/form/weight identities come from Definitions; Concept UUIDs and crossed
+platform/language tuples stay Semantic fixture handles.
 
 `DiscoveryConsumerCaptureInput`, `DiscoveryEngineHit` and `DiscoveryConsumerQuery` live in `discovery.ts`;
 `public-filter-consumer-contract.ts` adds `captureDiscovery`/`queryDiscovery`, optional refill and required windows
@@ -2197,10 +2210,13 @@ Decision: credited-name coverage is all-or-readiness per work; an incomplete cre
 publishes no searchable names. Ordinary names/descriptions keep their installed meaning.
 
 [The bounded consumer](credit-search.ts) supplies `CreditSearchSource`, a minimal native adapter contract, and
-an additive successor [mapping](credit-search-mapping.ts). These are not yet mounted in the native projection,
-query, transport or Web controls. An absent adapter returns `unavailable`. The existing three-entry work-context
-preview cannot implement this complete-input seam. Semantic's released `listWorkPlan` credit-property selection
-is the shared meaning; this consumer interprets no generic statements or fixed author-role roster.
+an additive successor [mapping](credit-search-mapping.ts). The installed native producer is
+`createCreditSearchSource` from `semantic/credit-search.ts`, composed as `createKernelCreditSearchSource`.
+Attaching it onto the rated subject source, plus writer, default-worker, prepared, facet, currentness and page
+integration, remain Search-owned and are not yet mounted. An absent adapter returns `unavailable`. The existing
+three-entry work-context preview cannot implement this complete-input seam. Semantic's released `listWorkPlan`
+credit-property selection is the shared meaning; this consumer interprets no generic statements or fixed
+author-role roster.
 
 The adapter must seek complete selected outgoing credits and public creator labels/aliases, preserve each
 statement's exact target and qualifiers, and bind its observation to the work and every creator dependency.

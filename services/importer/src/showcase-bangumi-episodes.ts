@@ -8,8 +8,13 @@ import {
   episodeVocabularyAdmission,
   readEpisodeTypeBindings,
 } from './bangumi-episode-fidelity.ts';
-import type { CrossMediaGap, CrossMediaMember, CrossMediaTables, Franchise } from './cross-media-seed.ts';
-import type { CrossMediaPort } from './cross-media-seed.ts';
+import {
+  type CrossMediaGap,
+  type CrossMediaMember,
+  type CrossMediaTables,
+  type Franchise,
+} from './showcase-contract.ts';
+import { type CrossMediaPort } from './showcase-contract.ts';
 import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 import type { Owner } from './record-bindings.ts';
 import type { ImportConversion } from './import-contract.ts';

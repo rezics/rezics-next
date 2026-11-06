@@ -3,6 +3,8 @@ import { candidateContext } from '../../../subject/candidates';
 import { validatePageRealm } from '../../pages/view-cursor';
 import type { ReleaseOccurrence } from './reading/state';
 
+export { zoneVisitReturn } from '../../../zones/visit';
+
 export const RELEASE_RETURN_BYTES = 8192;
 export const RELEASE_ENTRY_BYTES = 8192;
 const prefix = '#release-reading?';

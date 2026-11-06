@@ -35,6 +35,8 @@ export async function readOriginalOwnVote(
 
 export function commandOutcome(status: number, error: unknown): 'acknowledged' | 'rejected' | 'uncertain' {
   if (status === 200 || status === 204) return 'acknowledged';
-  if (status === 0 || status >= 500 || error instanceof TypeError) return 'uncertain';
+  const code = error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : null;
+  if (status === 0 || status >= 500 || code === 'atomic_guard_unavailable' || error instanceof TypeError)
+    return 'uncertain';
   return 'rejected';
 }

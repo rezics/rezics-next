@@ -13,17 +13,14 @@ import {
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import { vndbTagsRatingMetric } from '../../../../packages/conversion/src/vndb-vocabulary.ts';
-import {
-  importVndbPublicTags,
-  parseAuthoredVndbCopy,
-  readVndbPublicTagBindings,
-} from '../../../importer/src/vndb-public-tags.ts';
+import { parseAuthoredVndbCopy, readVndbPublicTagBindings } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { importVndbPublicTags } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');

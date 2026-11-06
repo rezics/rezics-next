@@ -86,6 +86,28 @@ test('a new file replaces an uncertain reservation and cannot be overwritten by 
   expect(commands[0]?.presentation).toEqual({ ...configured.presentation, bannerMediaId: image.id });
 });
 
+test('an uncertain reservation retries the caller key and file, repeating the same reservation command', async () => {
+  const keys: string[] = [];
+  const uploaded: File[] = [];
+  const original = file();
+  const { control } = boundary({
+    upload: async (_realm, _slot, attempted, _signal, key) => {
+      keys.push(key);
+      uploaded.push(attempted);
+      if (keys.length === 1) throw Object.assign(new Error('reservation unavailable'), { reason: 'unavailable' });
+      return { id: image.id };
+    },
+  });
+  await control.upload('avatar', original);
+  expect(control.getSnapshot().pendingUpload).toEqual({ slot: 'avatar', mediaId: null });
+  await control.upload('avatar');
+  expect(keys).toHaveLength(2);
+  expect(keys[1]).toBe(keys[0]);
+  expect(uploaded[1]).toBe(original);
+  expect(control.getSnapshot().pendingUpload).toBeNull();
+  expect(control.getSnapshot().draft?.avatar).toEqual({ state: 'available', value: image });
+});
+
 test('a changed revision retires uploads and stale saves while recovery replays the exact operation', async () => {
   const upload = deferred<{ id: string }>();
   const saved = deferred<RealmAppearanceResult>();

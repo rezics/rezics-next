@@ -2,8 +2,12 @@ import { expect, expectTypeOf, test } from 'bun:test';
 import {
   createKernelClient,
   zoneCollections,
+  zoneReadPage,
+  zoneSubjects,
+  type KernelClient,
   type ZoneCollectionsPage,
   type ZoneCollectionsQuery,
+  type ZoneSubjectListPage,
 } from '../src/index.ts';
 
 const ORIGIN = 'https://kernel.test';
@@ -83,4 +87,32 @@ test('native Zone refusals remain errors and an invalid bearer is sent without a
   expect(result.status).toBe(401);
   expect(result.data).toBeNull();
   expect(result.error).toMatchObject({ status: 401, value: refused });
+});
+
+test('the installed Zone namespace receives native page composition and subject-list envelopes', async () => {
+  const sent: Request[] = [];
+  const page: ZoneSubjectListPage = {
+    subjects: [{ id: COLLECTION_ID, type: 'schema:Book', labels: { en: 'Listed' }, summary: null }],
+    next: null,
+  };
+  const client = createKernelClient(ORIGIN, {
+    fetch: (async (input, init) => {
+      sent.push(new Request(input, init));
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes(':readPage')) return response(202, { next: 'opaque-progress' });
+      return response(200, page);
+    }) as typeof fetch,
+  });
+  const listed = await zoneSubjects(client, ZONE_ID).get({ query: { limit: '20' } });
+  const prepared = await zoneReadPage(client, ZONE_ID).post({ target: { route: '' } });
+  expect(sent.map(({ url, method }) => [url, method])).toEqual([
+    [`${ORIGIN}/v1/zones/${ZONE_ID}/subjects?limit=20`, 'GET'],
+    [`${ORIGIN}/v1/zones/${ZONE_ID}:readPage`, 'POST'],
+  ]);
+  expect(listed.status).toBe(200);
+  expect(listed.data).toEqual(page);
+  expect(prepared.status).toBe(202);
+  expect(prepared.data).toEqual({ next: 'opaque-progress' });
+  expectTypeOf<ReturnType<KernelClient['zones']>['subjects']['get']>().not.toBeNever();
+  expectTypeOf<ZoneSubjectListPage['subjects'][number]['id']>().toEqualTypeOf<string>();
 });

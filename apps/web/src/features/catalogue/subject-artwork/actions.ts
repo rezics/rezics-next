@@ -1,6 +1,28 @@
 import { createServerFn } from '@tanstack/react-start';
+import { kernelClient } from '../../../kernel/client';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
+import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
 import { canonicalMediaId, artworkResponseBudget, readSubjectArtwork, type ArtworkResult } from './read';
+
+async function readArtworkPage(data: {
+  id: string;
+  locale: string;
+  expectedReader: string | null;
+}): Promise<ArtworkResult> {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  await prepareSession(request, env);
+  if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'unavailable' };
+  const budget = artworkResponseBudget();
+  const authorization = viewerCredential(request) ?? undefined;
+  return readSubjectArtwork(
+    kernelClient(data.locale, authorization, budget.decorate),
+    data.id,
+    authorization,
+    budget.reason,
+  );
+}
 
 /** Anonymous-capable metadata read. The expected reader partitions a visit; it grants no media authority. */
 export const loadSubjectArtwork = createServerFn({ method: 'POST', strict: false })
@@ -15,22 +37,4 @@ export const loadSubjectArtwork = createServerFn({ method: 'POST', strict: false
       throw new Error('Invalid artwork reading');
     return { id: input.id, locale: input.locale, expectedReader: input.expectedReader };
   })
-  .handler(async ({ data }): Promise<ArtworkResult> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { prepareSession, sessionSubject, viewerCredential }, { kernelClient }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../../../session/request'),
-      import('../../../kernel/client'),
-    ]);
-    const request = getRequest();
-    await prepareSession(request, env);
-    if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'unavailable' };
-    const budget = artworkResponseBudget();
-    const authorization = viewerCredential(request) ?? undefined;
-    return readSubjectArtwork(
-      kernelClient(data.locale, authorization, budget.decorate),
-      data.id,
-      authorization,
-      budget.reason,
-    );
-  });
+  .handler(({ data }): Promise<ArtworkResult> => readArtworkPage(data));

@@ -3,7 +3,27 @@ import { securityResponseByteBudgets, securityScopeLimit } from '@rezics/auth-co
 import {
   parseSecurityResponseConfiguration,
   securityInventoryResponseByteBudget,
+  securityIssuerCallerOrigin,
 } from '../src/security-response-config';
+
+test('issuer reads admit only the Auth origin, its issuer, or a same-origin navigation without Origin', () => {
+  const origin = 'http://127.0.0.1:4200';
+  const web = 'http://127.0.0.1:3000';
+  const headers = (entries: Record<string, string>) => new Headers(entries);
+  const cases: [Record<string, string>, string | null][] = [
+    [{ origin, 'sec-fetch-site': 'same-origin' }, origin],
+    [{ origin: 'http://localhost:4200', 'sec-fetch-site': 'same-origin' }, null],
+    [{ origin: web, 'sec-fetch-site': 'same-site' }, null],
+    [{ 'sec-fetch-site': 'none' }, origin],
+    [{ 'sec-fetch-site': 'same-origin' }, origin],
+    [{ 'sec-fetch-site': 'cross-site' }, null],
+    [{ origin: web, 'sec-fetch-site': 'cross-site' }, null],
+    [{}, null],
+  ];
+  for (const [entries, expected] of cases)
+    expect(securityIssuerCallerOrigin(headers(entries), origin, origin)).toBe(expected);
+  expect(securityIssuerCallerOrigin(headers({ origin: web }), origin, web)).toBe(web);
+});
 
 test('selected inventory and session budgets share the trusted native catalogue configuration', () => {
   for (const count of [3, 4, 512, 1203]) {

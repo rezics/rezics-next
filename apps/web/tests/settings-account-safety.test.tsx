@@ -343,6 +343,61 @@ test('old-viewer late completion cannot restore a link or unlock an old form', a
   });
 });
 
+test('same-viewer return after an Auth destination keeps current native links and retires the previous episode', async () => {
+  await withAccountSafetyDom(async (host) => {
+    const root = createRoot(host);
+    const available = {
+      accountId,
+      handle: 'alice',
+      available: true as const,
+      href: renameHref,
+    };
+    await act(async () =>
+      root.render(
+        <AccountSafetyCard
+          state="signed-in"
+          csrfToken="fresh"
+          securityHref="https://auth.test/security"
+          onReload={() => {}}
+          renameAccount={available}
+          renameRead={{ loading: false, reload() {} }}
+        />,
+      ),
+    );
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeTruthy();
+    expect(host.querySelector('a[href="https://auth.test/security"]')).toBeTruthy();
+    await act(async () =>
+      root.render(
+        <AccountSafetyCard
+          state="signed-in"
+          csrfToken="fresh"
+          securityHref="https://auth.test/security"
+          isCurrent={() => false}
+          onReload={() => {}}
+          renameAccount={available}
+          renameRead={{ loading: false, reload() {} }}
+        />,
+      ),
+    );
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
+    await act(async () =>
+      root.render(
+        <AccountSafetyCard
+          state="signed-in"
+          csrfToken="fresh"
+          securityHref="https://auth.test/security"
+          onReload={() => {}}
+          renameAccount={available}
+          renameRead={{ loading: false, reload() {} }}
+        />,
+      ),
+    );
+    expect(host.querySelectorAll(`a[href="${renameHref}"]`)).toHaveLength(1);
+    expect(host.querySelector('a[href="https://auth.test/security"]')).toBeTruthy();
+    await act(async () => root.unmount());
+  });
+});
+
 test('deliberate current recovery renders the native available destination once or the honest unavailable outcome', async () => {
   await withAccountSafetyDom(async (host) => {
     const root = createRoot(host);

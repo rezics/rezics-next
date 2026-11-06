@@ -426,6 +426,50 @@ const commandDraft = {
   idempotencyKey: '00000000-0000-4000-8000-000000000001',
 };
 
+test('sequential visits replace one snapshot and ignore late callbacks as unrelated request history grows', async () => {
+  const history = Array.from({ length: 10 }, (_, index) =>
+    requestRecord(`history-${index}`, `2026-10-30T08:00:${String(index).padStart(2, '0')}.000Z`, `History ${index}`),
+  );
+  let visit = 0;
+  let finish!: (value: VerificationSnapshot) => void;
+  const controller = new VerificationRecovery('alice', {
+    read: async () => {
+      visit++;
+      if (visit === 2)
+        return new Promise<VerificationSnapshot>((resolve) => {
+          finish = resolve;
+        });
+      return {
+        ...empty,
+        verificationRequest: history[visit - 1] ?? null,
+        viewerActions:
+          visit === 1
+            ? [{ action: 'account:update', operations: ['account.request_verification'] }]
+            : [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+      };
+    },
+    request: noCommand,
+    withdraw: noCommand,
+  });
+  try {
+    await controller.reload();
+    expect(controller.snapshot().current?.verificationRequest?.id).toBe('history-0');
+    const late = controller.reload();
+    const retired = controller.snapshot();
+    controller.deactivate();
+    finish({
+      ...empty,
+      verificationRequest: history[9]!,
+      viewerActions: [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+    });
+    await late;
+    expect(controller.snapshot()).toBe(retired);
+    expect(visit).toBe(2);
+  } finally {
+    controller.deactivate();
+  }
+});
+
 test('setup, transport and body faults return the private current-read and command envelopes without leaking the cause', async () => {
   const leaked = 'Unexpected native read';
   const previous = setupFault;

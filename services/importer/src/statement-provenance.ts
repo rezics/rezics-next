@@ -1,4 +1,4 @@
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest } from '@rezics/conversion/support';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 
 /** Native read metadata is not part of a submitted statement's semantic provenance. */

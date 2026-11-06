@@ -21,6 +21,8 @@ export const automation = {
   displayName: 'Atlas Indexer',
 };
 const reservationId = '01a1a000-0000-7000-8000-000000000104';
+const admitted = { state: 'admitted' as const };
+const concealed = { state: 'concealed' as const };
 type Mode =
   | 'populated'
   | 'empty'
@@ -38,15 +40,21 @@ export function selectManagementStory(next: Mode) {
 export function inventoryExample(): Inventory {
   return {
     account: human,
-    organizations: { state: 'ready', items: [{ account: organization, role: 'owner' }], next: null },
+    viewer: { state: 'current', account: human },
+    organizations: {
+      state: 'ready',
+      items: [{ account: organization, role: 'owner', navigation: admitted }],
+      next: null,
+    },
     responsibilities: {
       items: [
-        { account: automation, accountId: automation.id, reservationId, state: 'current' },
+        { account: automation, accountId: automation.id, reservationId, state: 'current', navigation: admitted },
         {
           account: null,
           accountId: '01a1a000-0000-7000-8000-000000000105',
           reservationId: '01a1a000-0000-7000-8000-000000000106',
           state: 'reconciling',
+          navigation: concealed,
         },
       ],
       next: null,
@@ -96,6 +104,7 @@ export const routes: FakeRoute[] = [
                 'The International Association for Carefully Maintained Independent Bibliographic Archives and Editorial Collections',
             },
             role: 'owner',
+            navigation: admitted,
           },
         ];
         value.organizations.next = 'illustrative-organization-continuation';

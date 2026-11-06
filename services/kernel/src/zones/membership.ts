@@ -44,6 +44,9 @@ export const zoneDigest = (value: unknown) =>
 export const zoneUnavailable = (): never => {
   throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
 };
+export const zoneCursorFailure = (reason: 'expired' | 'invalid' | 'stale'): never => {
+  throw new ProblemError(reason === 'invalid' ? 'invalid_cursor' : 'stale_cursor');
+};
 export type ZoneSources = {
   scopes: readonly string[];
   mounts: readonly string[];

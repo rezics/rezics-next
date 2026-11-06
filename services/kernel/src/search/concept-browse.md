@@ -211,7 +211,10 @@ dispatch. It introduces no lifecycle, public cursor, retained permission or clos
 
 ## Native Boolean concept conditions
 
-Decision: the mounted M1 Concept page keeps its catalogue work-type control count-free; public result totals and
+Decision: Path 7 tagged-work discovery binds one designated work-kind AND leaf, the remaining catalogue predicate and name or id order for direct native execution. Descendant closures use retained concept membership. Rating order is finite preparation until mixed rating seek is installed. Kind chips prove current remaining-predicate membership as N+ and never infer zero; property facets and public totals stay count-free. Web type labels prefer Search kind metadata over admission maps. Catalogue mounts Search's public weight control for the same-statement quantity grammar.
+Decision: Path 7 unit outcomes consume released meaning IDs (`schema:wordCount`, `wdt:P7937`, unit `1`, source-tag weight/metric/spoiler) from Definitions. Light-novel and harem Concept UUIDs remain Semantic `classification()` handles; crossed platform/language tuples remain the Semantic `platform` prerequisite. Character and page facts never substitute words. Seeded browser proof of the mounted Concept list stays unaccepted until stack releases land.
+
+Decision: the mounted M1 Concept page keeps its catalogue work-type control count-free except for that designated kind leaf; public result totals and
 catalogue property facets remain count-free on this route under the Search count contract.
 
 Decision: one Boolean concept attempt shares its native window and raw-row allowance across deduplicated leaves and revalidates every visited witness after all leaves' membership work.

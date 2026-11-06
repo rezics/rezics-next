@@ -229,7 +229,7 @@ export async function readMusicContext(
         links = page.data.relations
           .filter((row) => row.statement.property.id === stream.id)
           .slice(0, MUSIC_CONTEXT_PAGE_CAP)
-          .map((row, index) => {
+          .map((row, index): MusicContextLink => {
             const summary = row.summary;
             if (!summary?.id) {
               return {
@@ -249,6 +249,8 @@ export async function readMusicContext(
                 : undefined;
             const roleVisible =
               !!role && (role.value.type !== 'value' || roleField?.datatype !== 'wikibase-item' || !!roleTarget);
+            const dateTime = date ? timePresentation(date.value, locale) : undefined;
+            const roleKind = roleTarget ? musicContextKind(release, roleTarget.type) : 'unsupported';
             const targetKind = summary.type ? musicContextKind(release, summary.type) : 'unsupported';
             return {
               id: summary.id,
@@ -257,12 +259,12 @@ export async function readMusicContext(
               property: stream.id,
               position: index + 1,
               ...(typeof row.statement.id === 'string' ? { occurrence: row.statement.id } : {}),
-              ...(date && dateField
+              ...(dateTime && dateField
                 ? {
                     date: {
                       property: dateField.id,
                       label: dateField.label,
-                      time: timePresentation(date.value, locale),
+                      time: dateTime,
                     },
                   }
                 : {}),
@@ -276,9 +278,7 @@ export async function readMusicContext(
                             target: {
                               id: roleTarget.id,
                               label: roleTarget.label?.value ?? '',
-                              ...(musicContextKind(release, roleTarget.type) !== 'unsupported'
-                                ? { targetKind: musicContextKind(release, roleTarget.type) }
-                                : {}),
+                              ...(roleKind !== 'unsupported' ? { targetKind: roleKind } : {}),
                             },
                           }
                         : {}),

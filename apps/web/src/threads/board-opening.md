@@ -13,9 +13,6 @@ reaction state, current conversation comment evidence or an explicit unavailable
 Missing reaction count keys stay missing; zero and unavailable remain distinct. A current comment witness carries an
 exact or lower-bound count; Web preserves that operand and does not derive totals from loaded rows. Pin, watch and
 slow-mode commands retain their existing owners.
-reaction state, request-bound exact/lower-bound conversation comments or unavailable comments, and reply/react/share advice. Missing count keys stay missing;
-zero and unavailable remain distinct. Only a current cohort witness supplies a comment count; unavailable witnesses supply no total. Pin, watch and slow-mode
-commands retain their existing owners.
 
 The source query admits `new`, `active` and `hot`, with a cursor of at most 4,096 characters. Content selects at most
 five initial pins and twenty ordinary candidates in native order. Continuation advances the ordinary source, keeps
@@ -92,6 +89,13 @@ verification remain in its owner. Pin, watch, and slow-mode commands remain with
 membership labels, and successful reads do not grant contribution or moderation authority.
 
 ## Evidence boundary
+
+Decision: accept the Board-to-thread reading journey only after anonymous and ordinary signed-up members traverse
+the supported development seed's real Work or Realm, Board, thread and supplied reply continuation in the running
+pages. Compare rendered documents and attachments with native reads, follow disclosed author/context/Subject links
+and return, and retry the exact supplied cursor once when needed. The seeded walk is
+`apps/web/tests/thread-board-reading.walk.ts`; a focused receiver regression supports repairs
+but does not replace that journey; unavailable browser or stack custody leaves the journey unaccepted.
 
 The source schema and mounted route establish the producer implementation. The generated client and Web reader are
 now bound to that route, but fixtures and type assertions do not establish native authority, revocation, hydration

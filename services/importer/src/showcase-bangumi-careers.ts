@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
 import { projectBangumiPersonName } from '@rezics/conversion/cross-media-entities';
-import { safeSourceUrl, sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { safeSourceUrl, sourceDigest } from '@rezics/conversion/support';
 import { createBoundedPublicGet, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
-import type { CrossMediaPlan } from './cross-media-seed.ts';
+import { type CrossMediaPlan } from './showcase-contract.ts';
 import type { BangumiPersonCareerSource } from './showcase-media.ts';
 
 const origin = 'https://api.bgm.tv';

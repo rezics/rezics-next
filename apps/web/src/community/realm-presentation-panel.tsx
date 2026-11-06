@@ -29,8 +29,8 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
       select: (data) => resolveRealmAppearanceChoice({ data }),
       prepareRules: (targetRealm, cursor, signal) =>
         readRealmRulesAuthoring({ data: { realmId: targetRealm, ...(cursor ? { cursor } : {}) }, signal }),
-      upload: (targetRealm, slot, file, signal) =>
-        uploadRealmImage(targetRealm, slot === 'avatar' ? 'realm-icon' : 'realm-banner', file, signal),
+      upload: (targetRealm, slot, file, signal, key) =>
+        uploadRealmImage(targetRealm, slot === 'avatar' ? 'realm-icon' : 'realm-banner', file, signal, key),
       resume: resumeRealmImageUpload,
     }),
     [csrfToken],

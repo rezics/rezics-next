@@ -37,6 +37,9 @@ physically removed during publication, outside render. Raw cache subscriptions r
 epochs and command retirement. React-facing session, exposure, workspace admission, response provenance and Inbox
 subscriptions publish after the current stack and ignore released listeners. Inbox retains its account viewer epoch
 and independent credential fencing for original uncertain commands; phone and desktop share its existing count query.
+Decision: native Inbox notices may nest thread, post and decision ids under `target`; the received host coverage
+flattens those onto the notice so current-session identity assertions keep matching. Performance retains the Inbox
+writer.
 Subject community/reaction revisions and personal response epochs also retire in-stack; their existing adapters
 publish React notifications through this same observer without changing specialist admission or command custody.
 
@@ -56,3 +59,20 @@ registry owns response epochs and rating write arbitration, and releases its lis
 its last page observer leaves. Session incarnation comparison and session cache observation belong exclusively
 to `browserObservation`. Equal successful replacement retires a personal query even when its account and token
 are unchanged. Ratings inventory, Library naming adapters and catalogue readers use this public entry.
+
+Decision: public catalogue inspect and credit inspection read the prepared session cache through
+`cachedBrowserSession`, which never starts a session fetch. An absent cache is unknown, a replaced successful entry
+is the next read, and malformed or signed-out data never admits a subject. `tests/session-browser-cache.test.ts`
+pins those states; the credit-inspection test covers the same cache through the mounted page.
+
+Decision: security and credential effects stay on the served Auth security page, entered through Web’s existing
+account menu. The personal driver follows that link and the native step-up return; it does not invent a Web security
+route. Media acceptance uses the same browser cookies and CSRF token as production BFF requests.
+
+Decision: the account-entry walk is `apps/auth/tests/sign-in-walk.test.ts`, run on a walk stack with
+`REZICS_SIGN_IN_WALK=1 bun services/auth/scripts/dev-stack.ts walk -- bun test apps/auth/tests/sign-in-walk.test.ts`.
+The journey stays unaccepted until a real walk passes.
+
+Decision: delegated agent and principal media acceptance waits for Accounts' native delegated-client and assignment
+fixture binding. The operator session is never used as a delegated proof; Alice, Bob, anonymous, revoked and suspended
+cases bind the personal driver now.

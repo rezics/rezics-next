@@ -134,7 +134,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     const body = new ReadableStream<Uint8Array>(
       {
         async pull(stream) {
-          let item: ReadableStreamReadResult<Uint8Array>;
+          let item: Awaited<ReturnType<typeof reader.read>>;
           try {
             item = await reader.read();
           } catch (error) {

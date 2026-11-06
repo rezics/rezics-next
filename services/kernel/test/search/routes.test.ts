@@ -96,9 +96,6 @@ process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
   .join(',');
 let failure: ProblemError | null = null;
 const service: SearchService = {
-  async savedCatalogueMembers() {
-    throw new Error('Unexpected saved catalogue members call');
-  },
   async search(principal, request, _now, _active, context) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
@@ -130,6 +127,9 @@ const service: SearchService = {
     const page = { subjects: [result], as_of: asOf };
     await read?.complete(page);
     return page;
+  },
+  savedCatalogueMembers: async () => {
+    throw new Error('Unexpected saved catalogue members call');
   },
   async releaseGroups(principal, request) {
     calls.push(['releaseGroups', principal, request]);

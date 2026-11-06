@@ -1,4 +1,5 @@
 import { useAccessDraft } from './departure';
+import type { AccessDraftStore } from './draft';
 import { recipientRequest } from './request';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -55,7 +56,7 @@ export function IdentityDetails({ entries }: { entries: ReadonlyArray<readonly [
   );
 }
 
-function label(identity: Identity | undefined) {
+export function identityLabel(identity: Identity | undefined) {
   if (identity?.state === 'deleted') return m.access_deleted_account();
   if (identity?.state !== 'active') return m.access_unknown_account();
   return identity.displayName
@@ -65,11 +66,19 @@ function label(identity: Identity | undefined) {
       : m.access_unknown_account();
 }
 
+export function resourceName(page: AccessSnapshot): string {
+  const identity = page.identities.find((item) => item.id === page.resource.id);
+  return identity?.state === 'active' && (identity.displayName || identity.handle)
+    ? identityLabel(identity)
+    : resourceLabel(page.resource.type);
+}
+
 type TransferSelection = Omit<OwnerTransfer, 'key' | 'kind'>;
 type TransferFormProps = {
   page: AccessSnapshot;
   grant: Grant;
   io: AccessIO;
+  drafts?: AccessDraftStore;
   onConfirm(input: TransferSelection): void;
   onCancel(): void;
 };
@@ -101,8 +110,12 @@ function OwnerTransferReview({
   onConfirm,
   onCancel,
   fromAccountId,
+  drafts,
 }: TransferFormProps & { fromAccountId: string }) {
-  const [handle, setHandle] = useState('');
+  const [handle, setHandle] = useState(() => drafts?.readTransfer(page, grant)?.handle ?? '');
+  useLayoutEffect(() => {
+    drafts?.rememberTransfer(page, grant, { handle });
+  }, [drafts, page, grant, handle]);
   const [recipient, setRecipient] = useState<Identity | null>(null);
   const [finding, setFinding] = useState(false);
   const [error, setError] = useState(false);
@@ -127,13 +140,15 @@ function OwnerTransferReview({
       requestAbort.current?.abort();
     },
   );
-  const source = label(page.identities.find((item) => item.id === fromAccountId));
-  const target = recipient ? label(recipient) : '';
+  const source = identityLabel(page.identities.find((item) => item.id === fromAccountId));
+  const target = recipient ? identityLabel(recipient) : '';
   const facts: Review['facts'] = [
-    [m.access_resource(), resourceLabel(page.resource.type)],
+    [m.access_resource(), resourceName(page)],
     [m.access_identity_resource_id(), page.resource.id],
     [m.access_identity_type(), page.resource.type],
     [m.access_identity_route(), page.resource.route],
+    [m.access_identity_acting_id(), page.authority.accountId],
+    ...(page.authority.principalId ? [[m.access_identity_principal_id(), page.authority.principalId] as const] : []),
     [m.access_identity_from_id(), fromAccountId],
     ...(recipient ? [[m.access_identity_to_id(), recipient.id] as const] : []),
     [m.access_identity_valid(), grant.valid],
@@ -173,7 +188,7 @@ function OwnerTransferReview({
         {m.access_transfer_owner()}
       </h2>
       <p className="break-words [overflow-wrap:anywhere]">{m.access_transfer_source({ name: source })}</p>
-      <p className="font-medium">{resourceLabel(page.resource.type)}</p>
+      <p className="break-words font-medium [overflow-wrap:anywhere]">{resourceName(page)}</p>
       <p className="text-sm text-muted-foreground">{m.access_transfer_responsibility()}</p>
       <Field>
         <FieldLabel htmlFor="owner-transfer-handle">{m.access_handle()}</FieldLabel>

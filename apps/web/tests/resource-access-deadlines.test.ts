@@ -7,7 +7,7 @@ import {
   type AccessState,
   type Change,
 } from '../src/accounts/resource-access/data';
-import { transferOwner, type OwnerTransfer } from '../src/accounts/resource-access/owner-transfer';
+import { transferOwner, type OwnerTransfer } from '../src/accounts/resource-access/owner-transfer.ts';
 import { AccessRecovery } from '../src/accounts/resource-access/recovery';
 import { reviewRequest, recipientRequest } from '../src/accounts/resource-access/request';
 import { snapshot, managerId, readerId, resourceId } from '../src/stories/pages/accounts-resource-access/fixtures';

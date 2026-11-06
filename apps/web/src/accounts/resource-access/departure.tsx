@@ -10,11 +10,13 @@ const DraftContext = createContext<(draft: Draft) => () => void>(() => () => {})
 export function AccessDeparture({
   children,
   unresolved,
+  retainedDraft = false,
   retire,
   abandon,
 }: {
   children: (move: (destination: () => void, options?: AccessDepartureOptions) => void) => ReactNode;
   unresolved: boolean;
+  retainedDraft?: boolean;
   retire(): void;
   abandon(): void;
 }) {
@@ -32,9 +34,9 @@ export function AccessDeparture({
     };
   }, []);
   const departure = useAuthoringDeparture(
-    () => unresolved || !!draft.current?.changed,
+    () => unresolved || retainedDraft || !!draft.current?.changed,
     unresolved,
-    `${unresolved}:${signature}`,
+    `${unresolved}:${retainedDraft}:${signature}`,
     () => {
       draft.current?.retire();
       const pending = destination.current;
