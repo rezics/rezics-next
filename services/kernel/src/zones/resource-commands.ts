@@ -12,6 +12,7 @@ import {
   runCommand,
   type CommandAuthorization,
   type CommandAttempt,
+  type CommandOutcome,
   type AuthoritativeTime,
   currentCommand,
 } from '../command/command.ts';
@@ -399,6 +400,22 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
   async function platform(
     actor: Actor,
     id: string,
+    operation: 'hold' | 'release_hold',
+    input: ZoneHoldInput | Record<string, never>,
+    key: string,
+    deadline: number,
+  ): Promise<CommandOutcome<{ id: string; held: boolean }>>;
+  async function platform(
+    actor: Actor,
+    id: string,
+    operation: 'purge',
+    input: ZonePurgeInput,
+    key: string,
+    deadline: number,
+  ): Promise<CommandOutcome<{ id: string; state: 'purge_pending' }>>;
+  async function platform(
+    actor: Actor,
+    id: string,
     operation: ZonePlatformMutation,
     input: ZoneHoldInput | ZonePurgeInput | Record<string, never>,
     key: string,
@@ -418,7 +435,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
       },
       context: { pool, deadline, partition: partitionOf(resource.route) },
     });
-    const kind = operation === 'release_hold' ? 'zone.release_hold' : `zone.${operation}`;
+    const kind = operation === 'hold' ? 'zone.hold' : operation === 'release_hold' ? 'zone.release_hold' : 'zone.purge';
     try {
       return await runCommand(
         pool,
@@ -460,19 +477,10 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
           const updated = await compareAndSetZone(tx, row, next, { at, transactionId: command.transactionId });
           if (!updated) throw new ProblemError('precondition_failed');
           const event =
-            operation === 'hold'
-              ? 'held'
-              : operation === 'release_hold'
-                ? 'hold_released'
-                : 'purge_pending';
+            operation === 'hold' ? 'held' : operation === 'release_hold' ? 'hold_released' : 'purge_pending';
           return {
-            value:
-              operation === 'purge'
-                ? { id, state: 'purge_pending' as const }
-                : { id, held: operation === 'hold' },
-            events: [
-              { type: `com.rezics.zone.${event}.v1`, subject: id, data: { id, revision: updated.revision } },
-            ],
+            value: operation === 'purge' ? { id, state: 'purge_pending' as const } : { id, held: operation === 'hold' },
+            events: [{ type: `com.rezics.zone.${event}.v1`, subject: id, data: { id, revision: updated.revision } }],
           };
         },
       );

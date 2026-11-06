@@ -1,3 +1,5 @@
+import type { Json } from 'reylo';
+import { jsonParameter } from '../database/json.ts';
 import type { ZoneHead } from './resource-store.ts';
 
 /** Non-pointer withholding key. Live takedown filters never match it. */
@@ -17,15 +19,13 @@ export function purgeIntent(row: ZoneHead): PurgeIntent | null {
   return { branch, ...(typeof order === 'string' ? { order } : {}) };
 }
 
-export function withPurgeIntent(row: ZoneHead, intent: PurgeIntent | null): Record<string, unknown> {
+export function withPurgeIntent(row: ZoneHead, intent: PurgeIntent | null): Json {
   const next = record(row.withholding) ? { ...row.withholding } : {};
   if (intent) next[PURGE_INTENT] = intent;
   else delete next[PURGE_INTENT];
-  return next;
+  return jsonParameter(next);
 }
 
 export function liveCoverage(row: ZoneHead): string[] {
-  return Object.keys(record(row.withholding) ? row.withholding : {}).filter(
-    (key) => key === '' || key.startsWith('/'),
-  );
+  return Object.keys(record(row.withholding) ? row.withholding : {}).filter((key) => key === '' || key.startsWith('/'));
 }
