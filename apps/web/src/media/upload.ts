@@ -189,7 +189,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
       },
     );
 
-    let writing: Promise<R2Object | null>;
+    let writing: Promise<unknown>;
     try {
       writeBegan = true;
       writing = Promise.resolve(

@@ -2902,6 +2902,16 @@ Cost per operation:
 
 ## Media claims
 
+Decision: the supported local site reads the native worker's file store through a private loopback object port,
+using the existing uploader-bound site writer and current download admission. Its focused transport acceptance
+checks external credentials, keys, byte limits, ranges and deletion of the exact failed original; the native media
+outcomes retain lifecycle, claim, disclosure, collection and growth acceptance.
+The site's explicit local origin and secret bindings replace its development R2 binding together; otherwise
+Worker configuration retains R2. This ensures native processing and browser transport address the same store.
+Native receiving keeps parent/Board statement getters, one-client routing assertions and committed linked
+fixtures. The mounted website scope probe follows the installed Progress action `progress_session:update`
+while retaining media completion and post creation assertions.
+
 Post-image download and document media presentation inherit the permanent
 `claimed_item_id` post's current disclosure chain, including its reservation
 container, board and Realm. A claim must still belong to that container's chain;

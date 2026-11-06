@@ -1,6 +1,6 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { spawnSync } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -106,6 +106,18 @@ export function developmentWebsiteBindings(
     ...(website.WEBSITE_CONFIGURATION_FILE ? { WEBSITE_CONFIGURATION_FILE: website.WEBSITE_CONFIGURATION_FILE } : {}),
     SITE_ORIGINS: origins.web,
     KERNEL_ORIGIN: origins.kernel,
+  };
+}
+
+/** A purpose-bound server credential connects the site to the same local objects used by native workers. */
+export function developmentMediaBindings(
+  env: Readonly<Record<string, string | undefined>>,
+  keys: Pick<DevelopmentKeys, 'secret'>,
+): Readonly<Record<string, string>> {
+  if (env.CONTENT_LOCAL_MEDIA_ROOT === undefined) return {};
+  return {
+    LOCAL_MEDIA_ORIGIN: origins.native,
+    LOCAL_MEDIA_TOKEN: createHmac('sha256', keys.secret).update('local-content-media-transport').digest('hex'),
   };
 }
 
@@ -383,7 +395,10 @@ async function setup() {
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),
-    developmentBindings(developmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env))),
+    developmentBindings({
+      ...developmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env)),
+      ...developmentMediaBindings({ ...env, ...contentBindings }, keys),
+    }),
   );
 }
 
@@ -665,11 +680,16 @@ async function serveHost() {
     await composition.stop();
     throw error;
   }
+  const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
+  const media = mediaBindings.LOCAL_MEDIA_TOKEN
+    ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
+    : undefined;
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: localPort(origins.native),
     fetch: async (request) => {
       if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
+      if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
       if (new URL(request.url).pathname === '/local-turnstile.js')
         return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
       return composition.host.handler(issuerRequest(request));
@@ -713,6 +733,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
         ...process.env,
         AUTH_ORIGIN: origins.native,
         ...developmentWebsiteBindings(keys, website),
+        ...developmentMediaBindings(await kernelEnvironment(), keys),
         ...(pages ? developmentAuthPageBindings(website) : {}),
         PUBLIC_ORIGIN: origins.web,
         TURNSTILE_SITE_KEY: 'local',

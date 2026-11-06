@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import type { MediaStorage } from './media-storage.ts';
 
-const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+const REPOSITORY_ROOT = resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
 const LOCAL_STACK_ROOT = resolve(REPOSITORY_ROOT, '.temp/local-stack');
 export const LOCAL_MEDIA_ROOT = resolve(LOCAL_STACK_ROOT, 'content-media');
 export const LOCAL_MEDIA_MAX_OBJECT_BYTES = 20 * 1024 * 1024;
@@ -154,6 +154,14 @@ export class LocalMediaStorage implements MediaStorage {
         if (file) await file.close();
         if (!published) await rm(temporary, { force: true });
       }
+    });
+  }
+
+  delete(key: string): Promise<void> {
+    const { mediaId, variant } = parsedKey(key);
+    return this.#exclusive(async () => {
+      const directory = await checkMediaDirectory(mediaId, false);
+      if (directory !== null) await rm(resolve(directory, variant), { force: true });
     });
   }
 
