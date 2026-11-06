@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { KernelClock } from '../../../src/clock.ts';
+import { configureReceiptKeys, readReceiptKeyRing } from '../../../src/command/receipt-key.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 
 type WorkerMessage = { id: string; ok: boolean; error?: string };
 type WorkerRequest = { id: string; command: string; consumer: string; partitions: number[]; at: string };
@@ -17,6 +19,7 @@ export async function createNotificationEffectHost(
   const child = Bun.spawn([process.execPath, import.meta.filename], {
     env: {
       ...process.env,
+      ...workerTestEnv(),
       NOTIFICATION_EFFECT_DATABASE_URL: databaseUrl,
       NOTIFICATION_EFFECT_EXECUTOR: `notification-${randomUUID()}`,
       NOTIFICATION_EFFECT_WORKER: '1',
@@ -175,11 +178,13 @@ async function runWorker(): Promise<void> {
     import('../../../src/composition/history.ts'),
   ]);
   // This child is a plain bun process, not `bun test`, so bunfig test preloads
-  // do not install History. Enqueue and effect.run both call isIdentityOriginalEffect.
+  // do not install History or bind receipt keys. Enqueue and effect.run both call
+  // isIdentityOriginalEffect; command consumers fall back to KERNEL_RECEIPT_KEYS.
   installNativeHistory();
   const databaseUrl = process.env.NOTIFICATION_EFFECT_DATABASE_URL;
   if (!databaseUrl) throw new Error('NOTIFICATION_EFFECT_DATABASE_URL is required');
   const pool = new Pool({ connectionString: databaseUrl, max: 12 });
+  configureReceiptKeys(pool, readReceiptKeyRing());
   const workClient = await createWorkClient(databaseUrl, pool);
   let effectTime = new Date();
   const access = createContentWorkAccess(() => new Date(effectTime), pool);

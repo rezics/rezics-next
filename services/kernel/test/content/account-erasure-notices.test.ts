@@ -23,6 +23,7 @@ import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createPersonas } from '../support/personas.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { testKernel, testRouteKey } from '../support/test-kernel.ts';
 import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -50,6 +51,7 @@ beforeAll(async () => {
   auth = await nativeFixture(db.pool);
   const service = auth.host.service;
   workPool = db.openPool({ max: 10 });
+  configureTestReceiptKeys(workPool);
   client = await createWorkClient(db.url, workPool);
   kernel = testKernel({
     pool: db.pool,
@@ -99,7 +101,7 @@ async function startContentWork(options: { relays?: boolean } = {}) {
         },
       },
     ],
-    { databaseUrl: db.url, pool: workPool, client },
+    { databaseUrl: db.url, pool: workPool, client, receiptKeys: testReceiptKeys() },
   );
   await work.launch();
   if (options.relays ?? true) {

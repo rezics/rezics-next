@@ -3160,7 +3160,7 @@ another account do not bypass this equality check. An operator-opened session ac
 that account's settings; the operator's own bearer cannot change them directly. Responses are private and not cached.
 Content notice fixtures keep Global creation on ordinary grant receipts; `thread:read` is not a Global-reach action
 and Content owner roles omit `access:grant`, so those resource rows use the existing `seedGovernanceAuthority` setup.
-Account-erasure fixtures drive optional notice effects from `post.published`.
+Account-erasure fixtures drive optional notice effects from `post.published` and bind the test receipt ring onto the work pool that launches those effects. Isolated notification effect hosts inherit `workerTestEnv` and configure `KERNEL_RECEIPT_KEYS` on their own pool; bun test preloads do not apply to that child.
 
 PATCH uses the structured-field `Idempotency-Key` header, the shared write-rate stage (one write unit), and `runCommand`.
 A changed value increments the version once. Unchanged values preserve the version and write no preference row;

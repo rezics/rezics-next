@@ -57,7 +57,8 @@ Decision: `adapters/record-source-set-native.ts` lazy-loads Semantic's public `r
 treats the landed owner as absent and fails every native subject write. Semantic `beginSemanticRecordSourceSet`
 declares the command set; a History consumer that declares again is a repeated declaration. Begin also registers
 the seal-guard callback, so those commands cannot return `noEffect`; the History consumer test emits the same
-outbox event as Semantic's owner test.
+outbox event as Semantic's owner test, and the sealed copies keep `command-receipt/v1`, `durable-work/v1` and
+`outbox-event/v1`.
 
 ## Zone receipts, outbox events and current closure boundary
 

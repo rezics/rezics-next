@@ -228,7 +228,11 @@ test('History consumes the actual Semantic one-set building seal locator revisio
      WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`,
     recordSourceSetStorageKey(locator),
   );
-  expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual(['command-receipt/v1', 'durable-work/v1']);
+  expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual([
+    'command-receipt/v1',
+    'durable-work/v1',
+    'outbox-event/v1',
+  ]);
   for (const copy of copies.rows) {
     expect(copy.original_transaction).toBe(result.transactionId);
     expect(BigInt(copy.original_position)).toBe(result.position);
