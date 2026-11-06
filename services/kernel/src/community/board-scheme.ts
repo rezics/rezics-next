@@ -26,6 +26,7 @@ import { realmPresentation } from './presentation.ts';
 import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';
 import moveHead from './board-scheme-head.sql';
+import type { CommunityAmbient } from './ambient.ts';
 
 type RealmRow = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 function record(row: RealmRow): Realm {
@@ -48,7 +49,7 @@ function record(row: RealmRow): Realm {
 }
 
 export async function setBoardScheme(
-  deps: RealmDependencies,
+  deps: RealmDependencies & CommunityAmbient,
   actor: Actor,
   input: Readonly<{ realmId: string; schemeId: string; expectedHead: string }>,
   context: RealmContext,
@@ -75,7 +76,7 @@ export async function setBoardScheme(
         permissionEvidenceDeadline(primary) ?? -Infinity,
         permissionEvidenceDeadline(evidence) ?? -Infinity,
       );
-      if (Date.now() >= deadline) throw new GrantDeniedError();
+      if (deps.deadlineNow() >= deadline) throw new GrantDeniedError();
       const valid = await within(deadline, () =>
         withReadTransaction(deps.pool, async (client) => {
           const bounded = deadlineClient(client, deadline);
@@ -90,7 +91,7 @@ export async function setBoardScheme(
           return identity !== null;
         }),
       );
-      if (!valid || Date.now() >= deadline) throw new GrantDeniedError();
+      if (!valid || deps.deadlineNow() >= deadline) throw new GrantDeniedError();
       checked.set(attempt.time, deadline);
       return primary;
     },
@@ -102,7 +103,7 @@ export async function setBoardScheme(
     anchor: {
       resource: { route, id: body.realmId },
       async validate(client, time) {
-        if (Date.now() >= (checked.get(time) ?? -Infinity)) return false;
+        if (deps.deadlineNow() >= (checked.get(time) ?? -Infinity)) return false;
         const row = await read.run(client, { route, id: body.realmId, at: authoritativeTimeValue(time) });
         if (!row) return false;
         current.set(time, record(row));
@@ -132,7 +133,7 @@ export async function setBoardScheme(
           {
             ...authorization,
             async authorize(tx, attempt, proof) {
-              if (Date.now() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+              if (deps.deadlineNow() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
               return authorization.authorize(tx, attempt, proof);
             },
           },

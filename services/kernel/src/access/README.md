@@ -44,7 +44,10 @@ existing `access.account` profile. Point actions without one exact target type r
 `Resource` carries that operand.
 
 `services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
-`ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Point/page checks and
+`ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Action resource types that
+did not resolve for the mounted subset are dropped before compilation, so a focused Access catalogue cannot name
+an unknown type. Point type inference uses the complete declaration before that subset, so two declared types with
+one resolved type stay non-unique; a page still supplies its exact type. Point/page checks and
 `prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
 `permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
 validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
@@ -253,7 +256,7 @@ Every access event type has a schema in `events.ts`, and the catalogue test prov
 
 ## Registries
 
-Command admission, the approval identity bridge, the durable identity bridge, platform gate checks and resource roles are registered on one Access object. Every lookup goes through `accessRoot`. `deriveAccess` therefore keeps the root's registration, through any number of further derived adapters. Copying methods onto a new object does not: that object is its own root and has no registration.
+Command admission, the approval identity bridge, the durable identity bridge, platform gate checks and resource roles are registered on one Access object. Every lookup goes through `accessRoot`. `deriveAccess` therefore keeps the root's registration, through any number of further derived adapters. Copying methods onto a new object does not: that object is its own root and has no registration. `deriveAccess` also copies the installed prepare/authorize page, explicit and Kind-audience ports onto the adapter so parent page authorization still reaches the root evaluator.
 
 A command whose Access has no command admission is refused. A missing approval or durable identity bridge refuses the identity. A missing platform gate check denies the gate. A missing resource-role catalogue leaves the type unresolved. `createAccess` installs each registration, so an Access from that factory keeps admission, both identity bridges, platform gate checks and resource roles.
 

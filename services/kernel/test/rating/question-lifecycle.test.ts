@@ -241,6 +241,7 @@ test('Realm curators retire and restore without changing question meaning or pri
       deadline: Date.now() + 30_000,
     });
     const source = createRealmRankSource({
+      deadlineNow: () => Date.now(),
       pool: system.database.pool,
       access: system.access,
       tokens: system.tokenKeys,

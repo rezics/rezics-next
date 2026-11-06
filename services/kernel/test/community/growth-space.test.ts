@@ -139,8 +139,13 @@ afterAll(async () => {
   await f?.close();
   await db?.close();
 });
-const deps = () => ({ clock: () => new Date(), pool: db.pool, access: f.access, routeKey });
-
+const deps = () => ({
+  clock: () => new Date(),
+  pool: db.pool,
+  access: f.access,
+  routeKey,
+  deadlineNow: () => Date.now(),
+});
 function carriedRealmRows(route: number, spaceId: string, creator: string) {
   const realmId = newId(route);
   const revisions = Array.from({ length: revisionsPerSpace }, () => newId(route));

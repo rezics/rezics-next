@@ -74,13 +74,18 @@ export function configureReceiptKeys(pool: Pool, ring: KeyRing): void {
   }
 }
 
-export function receiptKeysFor(source: object): KeyRing {
+/** Receipt keys already bound to a command pool or checkout, if composition configured them. */
+export function configuredReceiptKeys(source: object): KeyRing | undefined {
   // Access deadline wrappers inherit their underlying client; transaction wrappers are explicitly bound.
   for (let current: object | null = source; current; current = Object.getPrototypeOf(current)) {
     const ring = rings.get(current);
     if (ring) return ring;
   }
-  return readReceiptKeyRing();
+  return undefined;
+}
+
+export function receiptKeysFor(source: object): KeyRing {
+  return configuredReceiptKeys(source) ?? readReceiptKeyRing();
 }
 
 export function bindReceiptKeys(target: object, ring: KeyRing): void {

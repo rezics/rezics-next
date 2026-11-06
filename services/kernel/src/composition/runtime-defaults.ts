@@ -4,6 +4,7 @@ import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-r
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
 import { composeAccessApplication } from './access.ts';
+import { composeCommunityApplication } from './community.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
 import { installNativeHistory } from './history.ts';
@@ -23,6 +24,8 @@ export type KernelRuntimeDefaults = {
   writeRate: WriteRateLimiter;
   rateAttribution: WriteRateStageOptions;
   clock: () => Date;
+  /** Real wall time for request deadlines. Composition supplies it; modules never read a global clock. */
+  deadlineNow: () => number;
   access: AccessFactory;
   auth?: AuthenticationConfig;
 };
@@ -34,6 +37,7 @@ export type KernelRuntimeOverrides = {
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
   clock?: () => Date;
+  deadlineNow?: () => number;
   auth?: AuthenticationConfig;
 };
 
@@ -68,11 +72,14 @@ export function createKernelCreditSearchSource(pool: Pool, routeKey: Uint8Array)
   return createCreditSearchSource(pool, routeKey);
 }
 
+const systemDeadlineNow = (): number => Date.now();
+
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
+  composeCommunityApplication();
   installNativeHistory();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   composeLibraryDomain();
@@ -98,6 +105,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     writeRate,
     rateAttribution,
     clock: overrides.clock ?? systemClock,
+    deadlineNow: overrides.deadlineNow ?? systemDeadlineNow,
     access,
     ...(auth === undefined ? {} : { auth }),
   };
