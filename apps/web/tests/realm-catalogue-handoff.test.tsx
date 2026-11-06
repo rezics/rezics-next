@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { realmCatalogueReturnHref, realmCatalogueSubjectHref } from '../src/search/realm-catalogue-handoff';
+import { SearchSort } from '../src/search/sort';
 import { ResultRow } from '../src/search/results';
 import { realmCatalogueSearchLoaderDeps } from '../src/search/search-params';
 import { realmSearchRequest } from '../src/search/search-request';
@@ -135,6 +136,23 @@ test('Realm catalogue return rejects global, cross-locale, private, and oversize
   expect(realmCatalogueReturnHref(scopedVisit.replace('/en/search', '/ja/search'), 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&reader=private`, 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&layout=${'x'.repeat(2048)}`, 'en')).toBeUndefined();
+});
+
+test('sort submission stays on the Realm visit and keeps the independent shelf cursor', () => {
+  const html = renderToStaticMarkup(
+    createElement(SearchSort, {
+      sort: 'relevance',
+      locale: 'en',
+      query: 'Mira',
+      facets: { 'schema:genre': ['mystery'] },
+      formAction: `/en/realms/${realm}?node=boards&cursor=shelf`,
+    }),
+  );
+  expect(html).toContain(`action="/en/realms/${realm}"`);
+  expect(html).toContain('name="node"');
+  expect(html).toContain('value="boards"');
+  expect(html).toContain('name="cursor"');
+  expect(html).toContain('value="shelf"');
 });
 
 test('canonical Space returns retain the Realm predicate and independent shelf/works cursors', () => {

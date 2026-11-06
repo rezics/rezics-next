@@ -320,7 +320,8 @@
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
       "publicEntries": [
         "services/kernel/src/community/index.ts",
-        "services/kernel/src/community/access-capabilities.ts"
+        "services/kernel/src/community/access-capabilities.ts",
+        "services/kernel/src/community/space-discovery.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -819,7 +820,11 @@
         "apps/web/src/moderation/**",
         "apps/web/src/media/**"
       ],
-      "publicEntries": ["apps/web/src/community/realm-catalogue-entry.ts", "apps/web/src/media/cover-src.ts"],
+      "publicEntries": [
+        "apps/web/src/community/realm-catalogue-entry.ts",
+        "apps/web/src/community/realm-reading-return.ts",
+        "apps/web/src/media/cover-src.ts"
+      ],
       "allowedDependencies": [
         "client",
         "composition",

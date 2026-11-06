@@ -556,4 +556,6 @@ When a reader corrects or removes malformed shared-search filter input, clear `c
 
 Decision: the default discovery relay dispatches native events to their owning producer before routing UUID
 identities. Unrelated handle events have handle-string subjects and do not invalidate Search documents; Space
-invalidation keeps its native event resolver instead of passing through Subject UUID routing.
+invalidation keeps its native event resolver instead of passing through Subject UUID routing. Search consumes
+that resolver through Community's public Space-discovery entry and retains only Spaces whose routed identity
+belongs to the current relay partition.
