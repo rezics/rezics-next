@@ -95,7 +95,7 @@ test("every workspace's typecheck runs and the run passes when all pass", async 
     expect(existsSync(join(root, 'tools/goal/ran'))).toBe(false);
     const text = output.text();
     for (const name of ['@fixture/app', '@fixture/kernel', '@fixture/filter']) {
-      expect(text).toMatch(new RegExp(`Workspace ${name} finished in \\d+\\.\\d{2}s`));
+      expect(text).toMatch(new RegExp(`Workspace ${name} finished \\d+\\.\\d{2}s`));
     }
     expect(text).not.toContain('@fixture/tools');
     expect(text).not.toContain('@fixture/nested');
@@ -130,7 +130,7 @@ test('a failing workspace fails the run and its output is printed under its name
     expect(diagnostic).toBeGreaterThan(failing);
     expect(text.indexOf('  Type X is not assignable')).toBeGreaterThan(diagnostic);
     expect(text).not.toContain('passing workspace output');
-    expect(text).toMatch(/Workspace @fixture\/failing finished in \d+\.\d{2}s/);
+    expect(text).toMatch(/Workspace @fixture\/failing type-errors after \d+\.\d{2}s/);
   } finally {
     remove();
   }
@@ -162,7 +162,7 @@ test('a workspace without a typecheck script falls back to tsc on its tsconfig',
       '-p',
       'tsconfig.json',
     ]);
-    expect(output.text()).toMatch(/Workspace @fixture\/plain finished in \d+\.\d{2}s/);
+    expect(output.text()).toMatch(/Workspace @fixture\/plain finished \d+\.\d{2}s/);
     expect(output.text()).toContain('node_modules/.bin/tsc --noEmit -p tsconfig.json');
   } finally {
     remove();
@@ -202,7 +202,7 @@ await Bun.write('database-url', url);
 
     const code = await typecheck({
       root,
-      env: {},
+      env: { PATH: process.env.PATH ?? '' },
       recognize: () => ({
         outcome: 'admitted',
         runId: 'fixture',
