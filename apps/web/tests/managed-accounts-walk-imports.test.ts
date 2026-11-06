@@ -18,3 +18,17 @@ test('the seeded walk mints website Kernel bearers through login then OAuth, nev
   expect(source).toContain("grant_type: 'authorization_code'");
   expect(source).toContain("signIn(stack, person, 'login', [], secret)");
 });
+
+test('native web stack loads Commerce and Work only after DATABASE_URL setup', () => {
+  const source = readFileSync(resolve(import.meta.dir, './native/stack.ts'), 'utf8');
+  expect(source).not.toMatch(/^import \{ createCommerceWork/m);
+  expect(source).not.toMatch(/^import \{ readCommerceConfig/m);
+  expect(source).not.toMatch(/^import \{ createStripePort/m);
+  expect(source).not.toMatch(/^import \{ createWorkClient/m);
+  expect(source).toContain("import('../../../../services/kernel/src/commerce/enqueue.ts')");
+  expect(source).toContain("import('../../../../services/kernel/src/work/client.ts')");
+  const databaseUrlIndex = source.indexOf('process.env.DATABASE_URL = databaseUrl');
+  const commerceImportIndex = source.indexOf("import('../../../../services/kernel/src/commerce/enqueue.ts')");
+  expect(databaseUrlIndex).toBeGreaterThan(-1);
+  expect(commerceImportIndex).toBeGreaterThan(databaseUrlIndex);
+});
