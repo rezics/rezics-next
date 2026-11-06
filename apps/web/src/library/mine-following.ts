@@ -48,7 +48,13 @@ export type MineFollowingPage = {
 /** Subject and collection/space summaries have `type`; account and deleted-account targets do not. */
 function followSubject(target: RawFollow['target']): LibrarySubject | null {
   if (!target || !('id' in target) || !('type' in target)) return null;
-  return subjectOf(target);
+  return subjectOf({
+    id: target.id,
+    type: target.type,
+    ...('types' in target ? { types: target.types } : {}),
+    label: 'label' in target ? target.label : null,
+    ...('cover' in target ? { cover: target.cover } : {}),
+  });
 }
 
 function present(follow: RawFollow): MineFollow {

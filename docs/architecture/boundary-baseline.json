@@ -574,11 +574,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/access/approved-identity.ts",
-          "edge": "value import \"../command/read-receipt.sql\" #1 => services/kernel/src/command/read-receipt.sql"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/access/authenticate.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
         },
@@ -591,11 +586,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/automated-operator-source.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/durable-identity.ts",
-          "edge": "value import \"../command/read-receipt.sql\" #1 => services/kernel/src/command/read-receipt.sql"
         },
         {
           "rule": "rule 2",
@@ -759,11 +749,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/access/kind-audience-original.ts",
-          "edge": "value import \"../command/work-context.ts\" #1 => services/kernel/src/command/work-context.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/access/kind-audience.ts",
           "edge": "type import \"../library/collection-kind-input.ts\" #1 => services/kernel/src/library/collection-kind-input.ts"
         },
@@ -886,11 +871,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/realm-ownership.ts",
           "edge": "value import \"../community/realm-continuity.ts\" #1 => services/kernel/src/community/realm-continuity.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/registration-proof.ts",
-          "edge": "value import \"../command/read-receipt.sql\" #1 => services/kernel/src/command/read-receipt.sql"
         },
         {
           "rule": "rule 2",
@@ -2911,11 +2891,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/community/eligibility-access-work.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/community/following-space-targets.ts",
           "edge": "type import \"../library/following-space-contract.ts\" #1 => services/kernel/src/library/following-space-contract.ts"
         },
@@ -2986,11 +2961,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/community/membership-access-work.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/community/membership.ts",
           "edge": "type import \"../access/lifecycle.ts\" #1 => services/kernel/src/access/lifecycle.ts"
         },
@@ -3003,11 +2973,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/membership.ts",
           "edge": "type import \"../access/permission.ts\" #1 => services/kernel/src/access/permission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/membership.ts",
-          "edge": "type import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
         {
           "rule": "rule 2",
@@ -4498,11 +4463,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/cover-prepared-access-work.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/decision-page.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
         },
@@ -4984,11 +4944,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/media-download.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/media-download.ts",
           "edge": "value import \"../community/realm-read.sql\" #1 => services/kernel/src/community/realm-read.sql"
         },
         {
@@ -5015,11 +4970,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/media-eligibility-access-work.ts",
           "edge": "type import \"../access/eligibility.ts\" #1 => services/kernel/src/access/eligibility.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/media-eligibility-access-work.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
         {
           "rule": "rule 2",
@@ -5458,11 +5408,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/read-eligibility-access-work.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/reading-page.ts",
           "edge": "type import \"../access/viewer-actions.ts\" #1 => services/kernel/src/access/viewer-actions.ts"
         },
@@ -5589,17 +5534,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/realm-subject-disclosure-work.ts",
-          "edge": "type import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/realm-subject-disclosure-work.ts",
           "edge": "type import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/realm-subject-disclosure.ts",
-          "edge": "type import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
         {
           "rule": "rule 2",
@@ -9244,11 +9179,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/preparation-native-reader.ts",
-          "edge": "value import \"../command/read-receipt.sql\" #1 => services/kernel/src/command/read-receipt.sql"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/preparation-source.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
         },
@@ -9636,11 +9566,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/type-preparation.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/type-preparation.ts",
-          "edge": "value import \"../command/read-receipt.sql\" #1 => services/kernel/src/command/read-receipt.sql"
         },
         {
           "rule": "rule 2",
@@ -11615,16 +11540,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/command/work-context.ts",
-          "edge": "type import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/command/work.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/command/work.ts",
           "edge": "value import \"../library/collection-source-work.ts\" #1 => services/kernel/src/library/collection-source-work.ts"
         },
@@ -12042,11 +11957,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/request/access.ts",
           "edge": "type import \"../access/resource-roles.ts\" #1 => services/kernel/src/access/resource-roles.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/request/access.ts",
-          "edge": "type import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
         {
           "rule": "rule 2",
@@ -15474,11 +15384,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/definition-catalogue.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/definition-catalogue.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
         },
         {
@@ -15500,11 +15405,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/eligibility.ts",
           "edge": "value import \"../access/eligibility.ts\" #1 => services/kernel/src/access/eligibility.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/eligibility.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
         {
           "rule": "rule 2",
@@ -16429,11 +16329,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/scope-leaf-evidence.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/scope-leaf-evidence.ts",
           "edge": "value import \"../content/source-fences.ts\" #1 => services/kernel/src/content/source-fences.ts"
         },
         {
@@ -16455,11 +16350,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/scope-leaf-selection.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/scope-leaf-selection.ts",
-          "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
         {
           "rule": "rule 2",

@@ -46,6 +46,7 @@ import {
   withFollowCommandWork,
 } from './follow-operation-bounds.ts';
 import { consumeLabelCommandAttempt, withLabelCommandAttempt } from './label-operation-bounds.ts';
+import { withPublishedLogNativeWork } from './published-log-native.ts';
 
 export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
@@ -181,10 +182,7 @@ function publishedLogCommandExecution(
 ): LibraryCommandExecutionBinding | undefined {
   if (bind) return bind;
   if (!kind.startsWith('published_log.')) return;
-  return async (dispatch) => {
-    const { withPublishedLogNativeWork } = await import('./published-log-native.ts');
-    return withPublishedLogNativeWork(deadline, dispatch);
-  };
+  return (dispatch) => withPublishedLogNativeWork(deadline, dispatch);
 }
 
 export function runLibraryCommand<T>(
