@@ -37,6 +37,7 @@ type Statement = Subject['statements'][string][number];
 
 function citation(subject: number): Statement['references'][number] {
   return {
+    hash: `bgm.tv/subject/${subject}`,
     parts: [
       {
         property: { id: 'schema:url', data_type: 'url' },
