@@ -70,7 +70,7 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
         plugin.name === 'worker-denied-dependencies',
     );
     expect(denied).toBeTruthy();
-    expect(denied && 'enforce' in denied ? denied.enforce : undefined).toBe('post');
+    expect(denied && 'enforce' in denied ? denied.enforce : undefined).toBe('pre');
     mkdirSync(join(cacheDir, 'deps_ssr'), { recursive: true });
     const metadataPath = join(cacheDir, 'deps_ssr', '_metadata.json');
     writeFileSync(
