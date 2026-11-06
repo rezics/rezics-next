@@ -244,7 +244,11 @@ beforeAll(async () => {
         [title, seller.accountId],
       );
       const actor = await kernel.testAccess.authenticate(seller.bearer, { pool, deadline: Date.now() + 30_000 });
-      const resource = { route: routeOf(conceptId)!, id: conceptId, eligibility: subjectReadEligibility({ route: routeOf(conceptId)!, id: conceptId }) };
+      const resource = {
+        route: routeOf(conceptId)!,
+        id: conceptId,
+        eligibility: subjectReadEligibility({ route: routeOf(conceptId)!, id: conceptId }),
+      };
       const subjectAllowed = await (
         await accessCheck(kernel.testAccess, actor, 'subject:read', resource, { pool, deadline: Date.now() + 30_000 })
       )(pool);
