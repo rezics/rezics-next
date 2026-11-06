@@ -113,7 +113,10 @@ export async function createCollectionPresentationFixture() {
         actions,
         valid: '(,)',
       });
-      expect(response.status).toBe(201);
+      if (response.status !== 201)
+        throw new Error(
+          `Collection fixture grant ${actions.join(',')}: HTTP ${response.status}: ${await response.text()}`,
+        );
     };
     await grant(owner.accountId, ['subject:create', 'offer:create']);
     async function refresh() {
