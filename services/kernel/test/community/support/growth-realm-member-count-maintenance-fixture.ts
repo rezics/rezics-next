@@ -43,6 +43,7 @@ export async function openMemberCountFixture() {
     realmRoleReader: (client, input) => roleReader(client, input),
   });
   const membership = createRealmMembership({
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     access: production.access,
     referenceKeys: tokens,

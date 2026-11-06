@@ -36,7 +36,7 @@ async function fixture() {
     resourceRoles: f.config.resourceRoles!,
     realmRoleReader: (client, input) => realmReader!(client, input),
   });
-  realmReader = createRealmMembership({ pool, access }).roleReader;
+  realmReader = createRealmMembership({ deadlineNow: () => Date.now(), pool, access }).roleReader;
   await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [page.route, ids[0]]);
   async function grant(subject = f.actorId, role = '', kind = 'identity', roleGrant = false) {
     const table = roleGrant ? 'resource_role_grant' : 'resource_grant';

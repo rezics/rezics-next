@@ -61,7 +61,11 @@ beforeAll(async () => {
   deletion = accountDeletionRuntime(system);
   member = await deletion.person();
   production = await createProductionAccess({ actions: [...system.actions.keys()] });
-  membership = createRealmMembership({ pool: system.database.pool, access: production.access });
+  membership = createRealmMembership({
+    deadlineNow: () => Date.now(),
+    pool: system.database.pool,
+    access: production.access,
+  });
   const changeMembership = async (realmId: string, account: Account, join: boolean) => {
     const response = await driver.request({
       actor: join ? fixture.owner : account,

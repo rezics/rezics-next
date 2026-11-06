@@ -111,7 +111,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   let roleReader: AccessRealmRoleReader = async () => null;
   access = admittedAccess({ actions, realmRoleReader: (client, input) => roleReader(client, input) });
-  realmRoleReader = createRealmMembership({ pool: db.pool, access }).roleReader;
+  realmRoleReader = createRealmMembership({ deadlineNow: () => Date.now(), pool: db.pool, access }).roleReader;
   roleReader = realmRoleReader;
 });
 afterAll(async () => db?.close());

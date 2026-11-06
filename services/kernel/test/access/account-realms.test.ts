@@ -17,7 +17,7 @@ const access: Access = admittedAccess({
   actions,
   realmRoleReader: (client, input) => realmRoleReader(client, input),
 });
-const membership = createRealmMembership({ pool, access });
+const membership = createRealmMembership({ deadlineNow: () => Date.now(), pool, access });
 realmRoleReader = membership.roleReader;
 
 afterAll(async () => pool.end());

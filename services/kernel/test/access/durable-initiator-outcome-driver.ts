@@ -2303,6 +2303,7 @@ export async function runWorker() {
   const publicResources = new WeakMap<Attempt, Map<string, Resource>>();
   const restoredActors = new WeakMap<Attempt, Map<string, AccountActor>>();
   realmMembership = createRealmMembership({
+    deadlineNow: () => Date.now(),
     pool,
     access,
     referenceKeys: membershipConfig.referenceKeys,

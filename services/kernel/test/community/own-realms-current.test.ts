@@ -189,7 +189,7 @@ test('current native identity and presentation follow membership completion and 
     },
   });
   await expect(
-    createRealmViewerObservation({ pool: system.database.pool, access })({
+    createRealmViewerObservation({ pool: system.database.pool, access, deadlineNow: () => Date.now() })({
       actor,
       realmId: realm.realmId,
       deadline,
