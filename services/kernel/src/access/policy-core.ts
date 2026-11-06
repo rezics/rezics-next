@@ -55,8 +55,14 @@ export type NativePermissionProjection = Readonly<{
   explicitGlobalPrincipalAuthenticatedBenefitGrant: boolean | null;
 }>;
 
+/** SQL permission row, including the former `live` alias when `deadlineLive` is omitted. */
+export type NativePermissionDecisionRow = Omit<NativePermissionProjection, 'deadlineLive'> & {
+  readonly deadlineLive?: boolean | null;
+  readonly live?: boolean | null;
+};
+
 function subject(
-  row: NativePermissionProjection,
+  row: NativePermissionDecisionRow,
   prefix:
     | 'actor'
     | 'principal'
@@ -156,7 +162,7 @@ export function decideNativePermission(
     floor: boolean;
     mode: PolicyMode;
   }>,
-  row: NativePermissionProjection,
+  row: NativePermissionDecisionRow,
 ): PolicyDecision {
   const explicit = input.mode === 'explicit';
   const actor = subject(row, explicit ? 'explicitActor' : 'actor');
@@ -166,10 +172,7 @@ export function decideNativePermission(
   const facts: PolicyFacts = {
     standing: true,
     assignment: row.assignmentValid,
-    deadlineLive:
-      row.deadlineLive !== undefined
-        ? row.deadlineLive
-        : ((row as NativePermissionProjection & { live?: boolean | null }).live ?? null),
+    deadlineLive: row.deadlineLive !== undefined ? row.deadlineLive : (row.live ?? null),
     scope: input.scope,
     localDenial: explicit ? row.explicitLocalDenied : row.localDenied,
     publicFloor: explicit ? false : input.floor,

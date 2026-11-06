@@ -182,7 +182,7 @@ test('a direct Context action grant allows accept without a resource role', () =
     decideNativePermission(compiled, request, {
       ...withoutDeadline,
       live: true,
-    } as NativePermissionProjection).decision,
+    }).decision,
   ).toBe('allow');
   expect(
     decideNativePermission(compiled, request, projection({ actorActionGrant: true, deadlineLive: null })).decision,
