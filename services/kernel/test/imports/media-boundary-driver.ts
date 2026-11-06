@@ -32,6 +32,7 @@ import { effectWorkflowId } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { signalBoundaryGroup, stopBoundaryProcess } from './media-process-lifetime.ts';
 
 // SQL compilation depends on the unchanged migrated schema, not on a fixture's
 // accounts or rows. Retain only the real compiler's output between isolated
@@ -60,6 +61,9 @@ async function sqlLoader() {
 import compiler from ${JSON.stringify(import.meta.resolve('reylo/jest'))};
 const path = ${JSON.stringify(cache)};
 const compiled = new Map(readFileSync(path, 'utf8').split('\\n').filter(Boolean).map((line) => JSON.parse(line)));
+// Work adapters load native SQL modules through require(). An async onLoad
+// makes those modules async, which Bun cannot require(). Keep compilation
+// and append-only cache persistence synchronous.
 Bun.plugin({ name: 'native-reylo-cache', setup(build) {
   build.onLoad({ filter: /\\.sql$/ }, ({ path: file }) => {
     const source = readFileSync(file, 'utf8');
@@ -130,6 +134,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
           stdin: 'pipe',
           stdout: 'pipe',
           stderr: 'pipe',
+          detached: true,
         },
       );
     } catch (error) {
@@ -137,9 +142,8 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
       throw error;
     }
   })();
-  // The parent owns process lifetime through its RPC streams. Detaching the
-  // process handle lets Bun close stdin on test-file exit, which the fixture
-  // host uses to tear down its identity and worker databases.
+  // Each runtime owns a process group, including its compiler children. The
+  // stdin lifetime also cancels initialization if the test process exits.
   child.unref();
   let output = '';
   let errorOutput = '';
@@ -173,16 +177,16 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
       }),
     ]);
   } catch (error) {
-    child.kill();
-    const timer = setTimeout(() => child.kill('SIGKILL'), 10_000);
     try {
-      await child.exited;
+      await stopBoundaryProcess(child);
       await reading;
+      await errors;
     } finally {
-      clearTimeout(timer);
       await sql.close();
     }
-    throw error;
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${output}\n${errorOutput}`, {
+      cause: error,
+    });
   } finally {
     clearTimeout(startupTimer);
   }
@@ -206,15 +210,13 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
     close: () =>
       (closing ??= (async () => {
         try {
-          await call('close');
+          await call('close', undefined, AbortSignal.timeout(5_000));
         } finally {
-          const timer = setTimeout(() => child.kill('SIGKILL'), 10_000);
           try {
-            await child.exited;
+            await stopBoundaryProcess(child);
             await reading;
-            if (child.exitCode !== 0) throw new Error(await errors);
+            await errors;
           } finally {
-            clearTimeout(timer);
             await sql.close();
           }
         }
@@ -1095,11 +1097,20 @@ async function workerHost(): Promise<RpcHost> {
 if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) {
   let host: RpcHost | undefined;
   const initialized = Promise.withResolvers<RpcHost | undefined>();
-  const parentClosed = async () => {
-    const owner = await initialized.promise;
-    await owner?.close();
-    process.exit(0);
-  };
+  let stopping: Promise<void> | undefined;
+  const parentClosed = () =>
+    (stopping ??= (async () => {
+      // This deadline starts before awaiting initialization. A failed DBOS
+      // bootstrap may own pools while never returning a closable host.
+      const timer = setTimeout(() => signalBoundaryGroup(process.pid, 'SIGKILL'), 5_000);
+      try {
+        const owner = await initialized.promise;
+        await owner?.close();
+        process.exit(0);
+      } finally {
+        clearTimeout(timer);
+      }
+    })());
   void new Response(Bun.stdin.stream()).text().then(parentClosed);
   process.once('SIGTERM', () => {
     void parentClosed();
@@ -1110,6 +1121,7 @@ if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) 
   try {
     host = process.argv.includes('--media-worker') ? await workerHost() : await applicationHost();
     initialized.resolve(host);
+    if (stopping) await stopping;
     const owner = host;
     const server = Bun.serve({
       hostname: '127.0.0.1',
@@ -1134,7 +1146,13 @@ if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) 
   } catch (error) {
     initialized.resolve(host);
     console.error(error);
-    await host?.close();
-    process.exitCode = 1;
+    // Do not keep failed initialization alive through open SDK pools.
+    const timer = setTimeout(() => signalBoundaryGroup(process.pid, 'SIGKILL'), 5_000);
+    try {
+      await host?.close();
+    } finally {
+      clearTimeout(timer);
+      process.exit(1);
+    }
   }
 }
