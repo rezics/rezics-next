@@ -27,6 +27,7 @@ new selection mints a new key.
 
 Native readers, permission checks, media reservation, upload completion, derivative summaries and server commands
 remain the authorities for visibility and persisted appearance. Focused checks pin key forwarding at the media
-handler and the appearance retry; keep those plus the existing session-cache, Board-image identity and native
+handler and the appearance retry; caller-lifetime checks type the delivered rules link rather than removed Post ID
+fields. Keep those plus the existing session-cache, Board-image identity and native
 attachment cases. Add no page stories for this source landing. The storybook site walk stays with the complete
 Auth06 and Community07 acceptance.

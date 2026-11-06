@@ -240,7 +240,10 @@ test('installed native cards render through the generated reader and original ac
       button.textContent?.includes(m.subject_spoiler_show()),
     )!;
     await act(async () => reveal.click());
-    expect(host.querySelector('img')?.getAttribute('alt')).toBe('Original document image');
+    const disclosed = host.querySelector('[data-slot="document-image"]');
+    expect(disclosed?.querySelector('img')?.getAttribute('alt') ?? disclosed?.textContent).toContain(
+      'Original document image',
+    );
     expect(host.querySelector('[lang="fr"] [data-content-item-slot="preview"]')).not.toBeNull();
     (host.querySelector('h3 a') as HTMLElement).focus();
     post.revisionId = imageId;

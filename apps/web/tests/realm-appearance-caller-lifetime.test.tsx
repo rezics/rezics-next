@@ -63,6 +63,8 @@ const nextHead = id(31);
 const otherPost = id(41);
 const imageId = id(42);
 const revisionId = id(43);
+const rulesLink = `/posts/${imageId}/revisions/${revisionId}`;
+const otherRulesLink = `/posts/${otherPost}/revisions/${revisionId}`;
 const viewer = (subject = reader, csrfToken: string | null = 'csrf-one') => ({
   state: 'signed-in' as const,
   subject,
@@ -332,11 +334,11 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     await mountPanel();
     const view = within(host);
     await user.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    const postInput = view.getByRole('textbox', { name: m.realm_appearance_post_id() });
-    await user.type(postInput, imageId);
+    const postInput = view.getByRole('textbox', { name: m.realm_appearance_rules_link() });
+    await user.type(postInput, rulesLink);
     await rerenderPanel();
-    expect((within(host).getByRole('textbox', { name: m.realm_appearance_post_id() }) as HTMLInputElement).value).toBe(
-      imageId,
+    expect((within(host).getByRole('textbox', { name: m.realm_appearance_rules_link() }) as HTMLInputElement).value).toBe(
+      rulesLink,
     );
 
     const oldWrite = deferred<RealmAppearanceResult>();
@@ -379,8 +381,8 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
   test('readiness loss and away/back cache updates retire the caller before stale callbacks can send', async () => {
     await mountPanel();
     await user.click(within(host).getByRole('button', { name: m.realm_appearance_select_rules() }));
-    const queuedSelection = within(host).getByRole('textbox', { name: m.realm_appearance_post_id() });
-    await user.type(queuedSelection, imageId);
+    const queuedSelection = within(host).getByRole('textbox', { name: m.realm_appearance_rules_link() });
+    await user.type(queuedSelection, rulesLink);
     await updateSession({ state: 'signed-out', subject: reader, csrfToken: null });
     expect(within(host).queryByRole('region', { name: m.realm_appearance_heading() })).toBeNull();
     expect(calls.changes).toHaveLength(0);
@@ -452,13 +454,12 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     await mountSettings(adapter);
     const view = within(host);
     await user.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await user.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await user.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
 
-    const post = view.getByRole('textbox', { name: m.realm_appearance_post_id() });
+    const post = view.getByRole('textbox', { name: m.realm_appearance_rules_link() });
     await user.clear(post);
-    await user.type(post, otherPost);
+    await user.type(post, otherRulesLink);
     await user.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     expect(requests).toHaveLength(2);
     requests[0]!.response.resolve(explicitRules(imageId, revisionId, 'Obsolete input result'));
@@ -469,13 +470,11 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
 
     await user.click(view.getByRole('button', { name: m.editor_cancel() }));
     await user.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await user.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await user.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     await user.click(view.getByRole('button', { name: m.editor_cancel() }));
     await user.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await user.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await user.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     expect(requests).toHaveLength(4);
     requests[2]!.response.resolve({ kind: 'unavailable' });
@@ -486,13 +485,12 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
 
     await user.click(view.getByRole('button', { name: m.editor_cancel() }));
     await user.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await user.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await user.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     const oldHeadResponse = requests[4]!.response;
     settingsInitial = ready(snapshotFor(appearanceRealmId, nextHead));
     await paint(<SettingsHarness />);
-    expect(within(host).queryByRole('textbox', { name: m.realm_appearance_post_id() })).toBeNull();
+    expect(within(host).queryByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeNull();
     oldHeadResponse.resolve(explicitRules(imageId, revisionId, 'Old head result'));
     await act(async () => tick());
     expect(within(host).queryByText('Old head result')).toBeNull();
@@ -516,9 +514,9 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     await mountSettings(adapter);
     const view = within(host);
     await user.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await user.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await user.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await user.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
+    await view.findByText(`Rules ${imageId}`);
     await user.click(view.getByRole('button', { name: m.realm_appearance_use_selection() }));
 
     await user.click(view.getByRole('button', { name: m.realm_appearance_save() }));
