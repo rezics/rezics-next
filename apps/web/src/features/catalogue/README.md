@@ -49,3 +49,5 @@ assertions remain unchanged; one graph test pins the over-budget return behaviou
 
 The exported catalogue session port is server-only: publication handlers retain request/session preparation and
 private response headers without admitting Cloudflare or server response APIs into the shared route client bundle.
+Contribution lifecycle actions import only the server APIs used by their handlers; an unused server import must
+not pull those APIs into the common Subject route client graph.
