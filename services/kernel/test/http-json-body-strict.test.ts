@@ -61,6 +61,9 @@ const search: SearchService = {
   async savedCatalogueMembers() {
     throw new Error('Unexpected saved catalogue members call');
   },
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
 };
 const schema = t.Object({ integer: t.Integer(), number: t.Number(), boolean: t.Boolean(), string: t.String() });
 const valid = { integer: 2, number: 2.5, boolean: true, string: 'two' };

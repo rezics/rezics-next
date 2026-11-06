@@ -130,6 +130,11 @@ test('management read uses every current owner action and refuses a foreign acco
     'DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4',
     [f.resource.route, f.resource.id, f.actor, withheld],
   );
+  await f.reader.query(
+    `DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3
+      AND grant_role='community.realm.owner'`,
+    [f.resource.route, f.resource.id, f.actor],
+  );
   const page = await read();
   expect(page.roles.find((role) => role.id === 'community.realm.owner')?.delegable).toBe(false);
   expect(page.grants.find((grant) => grant.role === 'community.realm.owner')?.manageable).toBe(false);

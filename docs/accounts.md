@@ -419,6 +419,10 @@ Realm participation can be public without membership. Direct owner/moderator res
 roles; creating a Realm does not create an owner membership. The
 [Realms/Spaces report](research/accounts-design-realms-spaces.md) supports retaining the current public self-join
 and direct manager-add model. There is no implicit invitation, recipient approval or request-to-join feature.
+Decision: retain the installed Realm member/self-leave and protected-ban cleanup writers; manage direct
+owner/moderator roles and tester gate grants through ordinary resource grants. Space following remains separate
+from Realm membership. Unsupported roster removal and membership-role revision advice stays unavailable rather
+than introducing a second membership or grant engine.
 
 Ban and membership publication retain current authorization. At commit, a protected ban hides ordinary member
 reads and denies self-join and manager-add before native membership removal settles. Protected bans override
@@ -456,8 +460,10 @@ remaining native succession seam is durable continuation from Community's erasur
 candidate pages to the verified Realm writer transaction, preserving the immutable erasure obligation and
 frontier across retries; the cleanup discovery cursor is not that candidate-work checkpoint.
 The [Access ownership contract](../services/kernel/src/access/README.md#native-realm-ownership) records the exact
-source fields and missing admission boundary. An approved platform claim application
-authority also remains unselected. Direct-owner inclusion in own-Realm discovery and Realm/Space delete/restore
+source fields and admission boundary. Platform claim approval uses the exact direct Global
+`realm:approve_claim` authority, native owner grant and Community's same-transaction opaque orphan/request source.
+The installed approval route and its advertised action share that Global anchor; source denial maps at the native
+Access boundary, and successful replays return the stored decision after current authorization. Direct-owner inclusion in own-Realm discovery and Realm/Space delete/restore
 authority remain separate owner decisions, with Semantic for Context obligations. No new permission or
 `globalReach` is implied; section 4's closed governance set remains unchanged.
 
@@ -665,7 +671,8 @@ One trusted [kernel clock][clock] supplies authoritative T for command attempts 
 production uses the system clock, without request overrides. Grants, role assignments, memberships and denials
 use native `tstzrange` validity at T, with `WITHOUT OVERLAPS`; cleanup is not an expiry correctness barrier.
 See [permission-time.sql][permission-time], [permission-check.sql][permission-sql], [schema][schema] and
-[Evaluator time][access-time].
+[Evaluator time][access-time]. Decision: `permission-check.sql` returns that deadline operand as one
+`deadlineLive` column plus statement-level `live`; the policy adapter reads `live`.
 
 Bearer credentials originate outside the kernel: `iat`, `exp` and every bearer-expiry comparison use wall time.
 Kernel-issued approvals, operator openings, registration proofs, capabilities and cursors use kernel T. An

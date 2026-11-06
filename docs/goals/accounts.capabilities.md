@@ -94,12 +94,21 @@ recovery. Auth response and page transport suites pin fixed RP receiving, exact 
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/gates/platform-gates-outcome.test.ts`.
 
-**Worker repair evidence:** Focused Web operation/lifetime regressions passed (4 tests), including a new explicit
-review after a recorded operation; local Auth binding regressions passed (16 tests), including deployment scope
-artifact preservation. Both workspace typechecks reached compilation after compiler-Docker startup retries and
-reported retained-source errors in Web community/catalogue pages and Kernel library/search/semantic dependencies.
-These worker checks do not accept the seeded persona/API/browser cycle or the original native suite; those remain
-for integration verification.
+**Native evidence:** Installed declaration, gate/admission, ordinary grant/revoke and generated discovery suites
+retain their original assertions. Global grant review additionally receives the native prepared Context owner,
+its authoritative T and mounted gate delegation advice. The native composition regression in
+`services/kernel/test/access/realm-claim.test.ts` covers fixed Global approval metadata, source denial mapping,
+opaque source custody, atomic rollback, HTTP replay and ordinary Global gate grant/revoke readback.
+A later Realm on an already-committed Space copies discovery-reference tuples into remove-work without binding
+`producer_epoch` to the INSERT target. Architecture repair of Access/application boundaries keeps these tests
+and adds no stories. Live grant authorization uses Community's public eligibility entry; no extra grant-read stories.
+
+**Mounted evidence:** The session-bound operator page retains immutable open/close review and retry and links to
+the existing ordinary Global grant screen. `apps/web/tests/platform-exposure.test.ts` covers that navigation and
+withheld mutation advice with authored transport fixtures. These are not recorded native API/browser evidence.
+
+**Promoted evidence:** Seeded persona exposure cycling, original native acceptance, recorded responses and mounted
+desktop/phone review remain integration verification; no promoted execution is established by source presence.
 
 ## agent-identity
 
@@ -221,6 +230,18 @@ acceptance remain deferred to integration; this consumer check does not establis
 **Frozen scenarios:** Existing: “a banned Realm member loses join and participate while unrelated reads keep their own answers” (`specs/viewer-actions-outcomes.test.ts`; native binding: `services/kernel/test/access/viewer-actions-outcomes.test.ts`). `specs/ban-precedence-outcomes.test.ts` (native binding: `services/kernel/test/access/ban-precedence-outcomes.test.ts`) covers direct, organization and delegated independent read grants, public-read comparison, unban restoration, concealed ban state and ordinary not_found/forbidden refusals. Integrated community coverage in `services/kernel/test/community/ban-protected-http.test.ts` includes “a protected ban hides ordinary member reads and denies both admissions before native removal settles”. With no independent read grant, it pauses the real worker after settled membership, commits the ban, proves membership remains present, checks concealed Realm/Board/thread/post/publication/list reads and Space discovery, and denies both self-join and manager-add without writes before cleanup. It resumes bounded durable cleanup and verifies persisted membership and membership-follow removal. Unban alone restores neither state nor protected reads; explicit readmission restores membership, follow and reads. Independent-grant and public-read controls remain separate scenarios. Source coverage does not establish acceptance of the seeded native and mounted-page journey; that acceptance remains assigned to the verifier.
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/ban-precedence-outcomes.test.ts test/access/viewer-actions-outcomes.test.ts test/community/ban-protected-http.test.ts`.
+
+**Native evidence:** The existing ban-precedence, viewer-actions and held-cleanup HTTP scenarios remain the native
+acceptance boundary. Protected-ban fences, membership/follow cleanup and explicit readmission use their installed
+writers. The owner-defined Realm model has member/self-leave, direct manager-add and separate ordinary resource
+roles; unsupported roster removal or membership-role revision remains unavailable. Space follow is not membership.
+
+**Mounted evidence:** Existing membership and ban controls consume their own native advice and retain immutable
+uncertain intent. Operator tester grants reuse ordinary Global resource access. Consumer fixtures do not establish
+held native cleanup, persisted-row readback or recorded desktop/phone execution.
+
+**Promoted evidence:** Native deployment/readback and mounted persona journeys remain integration verification.
+No new promotion claim follows from the receiving repairs or authored regressions.
 
 ## notification-preferences
 
