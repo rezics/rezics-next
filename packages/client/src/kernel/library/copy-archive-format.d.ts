@@ -47,12 +47,19 @@ type CopyArchiveManifestBase = {
     rows: number;
     recordBytes: number;
 };
-/** V3 has the V2 inventory; its journal assessment is unsupported evidence here. */
+/** Original manifests and all section totals remain evidence, including unsupported provider rows. */
 export type CopyArchiveManifest = CopyArchiveManifestBase & ({
     version: 1;
 } | {
     version: 2;
     coverage: 'private-library-owner-facts-v2';
+    sectionTotals: Record<string, {
+        rows: number;
+        recordBytes: number;
+    }>;
+} | {
+    version: 4;
+    coverage: 'private-library-owner-facts-v4';
     sectionTotals: Record<string, {
         rows: number;
         recordBytes: number;

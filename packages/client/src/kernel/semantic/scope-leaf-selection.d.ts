@@ -5,7 +5,7 @@ import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { AccessWorkAccounting, type AccessWork } from '../access/work.ts';
 import { type OperationalTransaction } from '../command/operational.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 export declare const sourceObject: (value: unknown) => value is Record<string, unknown>;
 export declare function selectedRank(value: unknown): 'normal' | 'preferred' | null;
 /** The Global adoption rank, never the proposal body's rank. Shared with SubjectSource. */
@@ -139,10 +139,10 @@ export declare class LeafNativeWork {
         operation: string | null;
         release: string | null;
         body_bytes: number;
-        body: unknown | null;
+        body: import("reylo").Json;
         revision: number | null;
         source_bytes: number;
-        source: unknown;
+        source: import("reylo").Json;
     } | null>;
     concealed(client: PoolClient, route: number, subject: string, witness: string): Promise<boolean>;
     release(pool: Pool, digest: string, names: readonly string[]): Promise<Release['properties']>;
