@@ -1539,11 +1539,12 @@ for (const transition of ['route', 'id', 'search', 'locale', 'unmount'] as const
             if (transition === 'search')
               await settle(() => void visit.router.navigate({ to: start, search: { marker: 'replacement' } }));
             else if (transition === 'id' && surface === 'editor')
-              await settle(() =>
-                void visit.router.navigate({
-                  to: '/my/zones/$id/edit',
-                  params: { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e71' },
-                }),
+              await settle(
+                () =>
+                  void visit.router.navigate({
+                    to: '/my/zones/$id/edit',
+                    params: { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e71' },
+                  }),
               );
             else await settle(() => void visit.router.navigate({ to: '/elsewhere' }));
           } finally {
@@ -1846,11 +1847,12 @@ for (const transition of ['route', 'search', 'locale', 'unmount'] as const) {
               visit.client.setQueryData(['locale-rerender'], 'ja');
             });
           else if (transition === 'search')
-            await settle(() =>
-              void visit.router.navigate({
-                to: visit.router.state.location.pathname,
-                search: { marker: 'replacement' },
-              }),
+            await settle(
+              () =>
+                void visit.router.navigate({
+                  to: visit.router.state.location.pathname,
+                  search: { marker: 'replacement' },
+                }),
             );
           else await settle(() => void visit.router.navigate({ to: '/elsewhere' }));
           const discard = [...visit.host.querySelectorAll('button')].find(

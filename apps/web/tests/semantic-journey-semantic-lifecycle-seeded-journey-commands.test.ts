@@ -9,7 +9,9 @@ test('the catalogue Zone lifecycle client hides, restores and refuses a second o
           expect(options.headers.authorization).toBe('Bearer owner');
           return {
             status: 200,
-            data: { zone: { revision: '2', deletedAt: '2026-11-06T00:00:00.000Z', restoreUntil: '2026-12-06T00:00:00.000Z' } },
+            data: {
+              zone: { revision: '2', deletedAt: '2026-11-06T00:00:00.000Z', restoreUntil: '2026-12-06T00:00:00.000Z' },
+            },
           };
         },
         $restore: {

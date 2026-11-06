@@ -127,12 +127,16 @@ export const writeLifecycle = createServerFn({ method: 'POST', strict: false })
       if (!prepared) return denied;
       return observed(
         lifecycleResult(
-          await changeZoneLifecycle(kernelClient(data.locale) as unknown as ZoneLifecycleClient, prepared.authorization, {
-            id: data.id,
-            revision: data.revision,
-            key: data.key,
-            operation: data.operation,
-          }),
+          await changeZoneLifecycle(
+            kernelClient(data.locale) as unknown as ZoneLifecycleClient,
+            prepared.authorization,
+            {
+              id: data.id,
+              revision: data.revision,
+              key: data.key,
+              operation: data.operation,
+            },
+          ),
         ),
         prepared.ownerObservation,
       );
