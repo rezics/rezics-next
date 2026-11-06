@@ -196,16 +196,7 @@ function ReviewValues({ draft, receivedLabel }: { draft: Draft; receivedLabel: s
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
       <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
         <ReceivedValue
-          entry={
-            draft.basis
-              ? {
-                  subjectId: draft.basis.subjectId,
-                  state: draft.basis.state,
-                  revision: draft.basis.revision,
-                  incarnationId: draft.basis.incarnationId ?? null,
-                }
-              : null
-          }
+          entry={draft.basis ? { subjectId: draft.basis.subjectId } : null}
           label={receivedLabel}
         />
       </dd>

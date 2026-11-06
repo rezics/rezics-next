@@ -84,7 +84,7 @@ shows at most three newest admitted ordinary threads per Board in one receiver, 
 exact/lower-bound/unavailable reply counts and empty/unavailable state, and uses existing Realm-return and
 shelf-cursor navigation slots. Connected visit, membership, publication and space-page lifetime tests are the
 fewest that pin that journey, once-only completion and disposal; no extra stories.
-Space-page lifetime keeps a closed space-actions mock because loading the actual module left the public hydrate empty.
+Space-page lifetime and membership-focus tests keep a closed space-actions mock because loading the actual module left the public hydrate empty and exhausted the check host. Web typecheck excludes scripts that import Kernel or Auth source so workers-types cannot type those services.
 
 Personas: anonymous, creator, manager, moderator, Realm member, banned member and outsider, including a banned
 member with an independent read grant. Fixtures: the bound community suite's native Space/Realm fixtures and the

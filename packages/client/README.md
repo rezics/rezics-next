@@ -51,4 +51,5 @@ literal widening is not a second public type.
 
 Decision: installed declarations resolve SQL modules through `.sql.d.ts`, not `.sql` specifiers, so a consumer
 Reylo mapper cannot load Kernel SQL sources. Diary page types are the installed `DiaryPage` / `DiaryOccurrence`
-exports; Web must not import Kernel source for them.
+exports; Web must not import Kernel source for them. Web typecheck also excludes scripts that import Kernel or
+Auth source, so Cloudflare workers-types cannot type those services.
