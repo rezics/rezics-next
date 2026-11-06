@@ -1958,6 +1958,7 @@
   "thread_review_cite_vote": "Citar mi voto actual ({score}/10)",
   "thread_review_details_heading": "Detalles de la reseña",
   "thread_review_details_selected_subject": "Reseña de: {title}",
+  "thread_review_citation_absent": "No se citó ninguna puntuación para esta publicación.",
   "thread_review_details_citation_help": "Opcional. La puntuación citada se conserva aunque cambies tu voto más adelante.",
   "thread_review_duplicate": "Ya tienes una reseña activa de este tema en este tablero.",
   "thread_review_existing": "Abrir la reseña existente",

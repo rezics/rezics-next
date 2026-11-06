@@ -43,6 +43,7 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   matchMedia: window.matchMedia.bind(window),
   createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -216,7 +217,7 @@ const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanst
 const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
-const { renderToStaticMarkup } = await import('react-dom/server');
+const { renderToString } = await import('react-dom/server');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { sessionQuery } = await import('../src/session/query');
 const { Route } = await import('../src/routes/threads/$id_.$slug');
@@ -280,6 +281,7 @@ async function mountRoute({
   window.document.body.append(host);
   let root = createRoot(host);
   let operation: Promise<unknown> = router.load();
+  void operation.catch(() => undefined);
   const tree = (provider = client) => (
     <QueryClientProvider client={provider}>
       {strict ? (
@@ -316,7 +318,8 @@ async function mountRoute({
   };
   const dispose = async () => {
     await act(async () => root.unmount());
-    router.dispose();
+    const close = (router as { dispose?: () => void }).dispose;
+    close?.();
     client.clear();
     host.remove();
   };
@@ -467,6 +470,9 @@ test('the actual route keeps the healthy anonymous page through SSR and a differ
     history: createMemoryHistory({ initialEntries: [`/threads/${threadId}/${slug}`] }),
   });
   const operation = router.load();
+  void operation.catch(() => undefined);
+  await Promise.resolve();
+  await Promise.resolve();
   expect(pageReads).toHaveLength(1);
   expect(pageReads[0]!.data).toEqual({ id: threadId, expectedSlug: slug, credentialMode: 'anonymous' });
   pageReads[0]!.work.resolve(pageFor(threadId, { privateRead: false, body: 'Public anonymous page body' }));
@@ -477,7 +483,7 @@ test('the actual route keeps the healthy anonymous page through SSR and a differ
   canonical.href = `https://site.test/en/threads/${threadId}/${slug}`;
   window.document.head.append(canonical);
   const host = window.document.createElement('main') as unknown as HTMLElement;
-  host.innerHTML = renderToStaticMarkup(
+  host.innerHTML = renderToString(
     <QueryClientProvider client={serverClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
@@ -492,13 +498,14 @@ test('the actual route keeps the healthy anonymous page through SSR and a differ
       <QueryClientProvider client={browserClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
+      { onRecoverableError() {} },
     );
     await Promise.resolve();
   });
   expect(host.textContent).toContain('Public anonymous page body');
   expect(pageReads).toHaveLength(1);
   await act(async () => root!.unmount());
-  router.dispose();
+  (router as { dispose?: () => void }).dispose?.();
   serverClient.clear();
   browserClient.clear();
   canonical.remove();
@@ -527,13 +534,16 @@ test('a private server result is redacted on both sides of hydration when browse
     history: createMemoryHistory({ initialEntries: [`/threads/${threadId}/${slug}`] }),
   });
   const operation = router.load();
+  void operation.catch(() => undefined);
+  await Promise.resolve();
+  await Promise.resolve();
   expect(pageReads).toHaveLength(1);
   await act(async () => {
     pageReads[0]!.work.resolve(pageFor(threadId, { privateRead: true }));
     await operation;
   });
   const host = window.document.createElement('main') as unknown as HTMLElement;
-  host.innerHTML = renderToStaticMarkup(
+  host.innerHTML = renderToString(
     <QueryClientProvider client={serverClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
@@ -551,13 +561,14 @@ test('a private server result is redacted on both sides of hydration when browse
       <QueryClientProvider client={browserClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
+      { onRecoverableError() {} },
     );
     await Promise.resolve();
   });
   expectPrivatePageHidden(host);
   expect(pageReads).toHaveLength(1);
   await act(async () => root!.unmount());
-  router.dispose();
+  (router as { dispose?: () => void }).dispose?.();
   serverClient.clear();
   browserClient.clear();
   host.remove();
@@ -990,7 +1001,7 @@ test('session, query, route, locale and mounted connection retirement reject pen
         expect(pageReads).toHaveLength(4);
         await page.settlePage(3, pageFor(threadId, { privateRead: true, body: 'Returned route body' }));
       } else if (retirement === 'locale') {
-        setLocale('zh-TW', { reload: false });
+        setLocale('zh-Hant', { reload: false });
         await page.rerender();
         setLocale('en', { reload: false });
         await page.rerender();
@@ -1117,7 +1128,7 @@ test('the actual same-client loader discards private data when locale changes wi
     expect(originalQuery?.state.data).toBeDefined();
 
     await act(async () => {
-      setLocale('zh-TW', { reload: false });
+      setLocale('zh-Hant', { reload: false });
       reload = page.router.invalidate();
       page.setOperation(reload);
       await Promise.resolve();
@@ -1763,7 +1774,7 @@ test('cursor and locale changes retire the original mounted route before its old
     await page.settlePersonal(2, personalFor(nextThreadId, id(41)));
     expect(page.host.textContent).toContain('Page after id and slug transition');
 
-    setLocale('zh-TW', { reload: false });
+    setLocale('zh-Hant', { reload: false });
     await page.rerender();
     expectPrivatePageHidden(page.host);
     setLocale('en', { reload: false });
@@ -1882,13 +1893,16 @@ test('a stale slug read cannot remember a title or perform its 301 after the ses
     history: createMemoryHistory({ initialEntries: [`/threads/${threadId}`] }),
   });
   const operation = router.load();
+  void operation.catch(() => undefined);
+  await Promise.resolve();
+  await Promise.resolve();
   expect(slugReads).toHaveLength(1);
   await act(async () => client.setQueryData(sessionQuery.queryKey, signedIn('replacement-csrf')));
   slugReads[0]!.work.resolve({ id: threadId, title: 'Changed while queued' });
   await operation.catch(() => undefined);
   expect(router.state.location.pathname).toBe(`/threads/${threadId}`);
   expect(rememberedThreadSlug(threadId)).toBeUndefined();
-  router.dispose();
+  (router as { dispose?: () => void }).dispose?.();
   client.clear();
 });
 

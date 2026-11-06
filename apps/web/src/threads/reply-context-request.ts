@@ -21,6 +21,7 @@ export async function replyToThreadRequest(
       },
       { headers },
     );
+    if (result.response === undefined) return { ok: false, reason: 'unavailable' };
     if (result.error) {
       const failure = refusal(result.status, result.headers, result.error.value);
       if (failure.reason === 'media-unavailable') {

@@ -1958,6 +1958,7 @@
   "thread_review_cite_vote": "Citer mon vote actuel ({score}/10)",
   "thread_review_details_heading": "Détails de la critique",
   "thread_review_details_selected_subject": "Critique de : {title}",
+  "thread_review_citation_absent": "Aucune note n’a été citée pour ce message.",
   "thread_review_details_citation_help": "Facultatif. La note citée est conservée même si vous modifiez votre vote par la suite.",
   "thread_review_duplicate": "Vous avez déjà publié un avis actif sur ce sujet dans ce forum.",
   "thread_review_existing": "Ouvrir votre avis existant",

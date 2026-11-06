@@ -658,3 +658,5 @@ Accounts admits identities.
 - **Growth check:** `thread-page-reading.test.ts` and `seeded-content-reading.test.ts` verify all four installed
   projections, Board generation/advice, original-page return, optional-source behavior and absence of second
   media/account reads. Native, installed, seeded browser and physical growth acceptance remain separately owned.
+  Source-shape thread-page checks follow current owners: Byline holds the edited comparison and wraps long names,
+  TopBar the sticky header, Share stays in the post action bar, and FeedActionBar supplies Reply.
