@@ -45,7 +45,7 @@ binds the native capability in `composition/history.ts`. Server and worker insta
 `composition/preload.ts` hook supplies the same native composition to test/command preloads. Work compatibility
 facades route receiving and durable-locator recording through History's application entry and import registry,
 selected-work and locator vocabulary from its contract entry. Access `shared-history` compatibility re-exports the same
-application facades. The adapters add no query or extra statement; existing
+application facades. Native adapters import owner facade leaves rather than the application barrel. The adapters add no query or extra statement; existing
 producer declarations still own the admitted cost. Test choice: use the focused causal History regressions for
 application/native composition, prepaid identity, identity-history recording, Zone receiving, record purge, agent
 verification reversal and receipt-key cutover, plus `scripts/architecture.test.ts`; avoid a duplicate synthetic suite.

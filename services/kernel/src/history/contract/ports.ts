@@ -40,8 +40,13 @@ import type {
   SelectedLocator,
   SelectedOutcome,
 } from './operational-types.ts';
-import type { HistoryArtifact, HistoryBarrier, HistoryProducerFamily, HistoryReadiness } from './registry.ts';
-import { HistoryRegistry } from './registry.ts';
+import type {
+  HistoryArtifact,
+  HistoryBarrier,
+  HistoryProducerFamily,
+  HistoryReadiness,
+  HistoryRegistry,
+} from './registry.ts';
 import type {
   HistoryCallback,
   HistoryHandle,

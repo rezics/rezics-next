@@ -28,16 +28,16 @@ import {
   guardSelectedHistoryOriginalTransaction,
 } from '../../access/identity-original-admission.ts';
 import {
-  commandHistoryKind,
   currentAgentIdentityHistoryUnit,
   identityHistoryAccountsLocalWork,
   identityHistoryCommand,
   lockRecordedAgentIdentityHistory,
   readAgentIdentityRecoveryArtifactInTransaction,
-  recordHistoryReceivingProof,
   reserveIdentityHistoryWork,
   withAgentIdentityHistoryUnit,
-} from '../application/index.ts';
+} from '../application/identity.ts';
+import { recordHistoryReceivingProof } from '../application/receiving.ts';
+import { commandHistoryKind } from '../application/records.ts';
 import {
   type AgentIdentityRecoveryArtifactInspection,
   type HistoryArtifactType,

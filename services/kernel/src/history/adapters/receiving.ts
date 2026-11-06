@@ -26,7 +26,6 @@ import {
   AGENT_IDENTITY_HISTORY_GUARD_COST,
   addNativeWork,
   assertAgentIdentityHistoryUnit,
-  commandHistoryKind,
   currentAgentIdentityHistoryUnit,
   lockAgentIdentityReceivingArtifact,
   lockRecordedAgentIdentityHistory,
@@ -34,7 +33,8 @@ import {
   reserveIdentityHistoryWork,
   resolveAgentIdentitySDKWork,
   verifyAgentIdentityRecoveryArtifactReadiness,
-} from '../application/index.ts';
+} from '../application/identity.ts';
+import { commandHistoryKind } from '../application/records.ts';
 import {
   ACCOUNT_ROLE_BITS,
   HISTORY_PRODUCER_FAMILIES,

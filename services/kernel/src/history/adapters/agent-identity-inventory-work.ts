@@ -7,7 +7,8 @@ import type { IdentitySourceConsumerMaintenanceContext } from '../../semantic/id
 import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../../command/dispatch-lifetime.ts';
 import type { IdentityUnit } from './agent-identity-retirement.ts';
-import { historyComposition, withPrepaidAgentIdentityHistoryUnit } from '../application/index.ts';
+import { historyComposition } from '../application/composition.ts';
+import { withPrepaidAgentIdentityHistoryUnit } from '../application/identity.ts';
 import { type HistoryReceivingContext, IdentityHistoryWorkUnavailable } from '../contract/index.ts';
 const prepaidOf = (unit: { readonly prepaid?: unknown }) => unit.prepaid as NonNullable<IdentityUnit['prepaid']>;
 

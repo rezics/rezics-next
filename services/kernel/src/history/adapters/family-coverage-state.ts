@@ -1,7 +1,7 @@
 import type { CommandTransaction } from '../../command/command.ts';
 import { CommandUnavailableError } from '../../command/command.ts';
 import { partitionOf } from '../../route/route.ts';
-import { lockHistoryBarrier } from '../application/index.ts';
+import { lockHistoryBarrier } from '../application/receiving.ts';
 import { type HistoryBarrier, type HistoryProducerFamily } from '../contract/index.ts';
 
 export type NativeFamilyCoverage = Readonly<{

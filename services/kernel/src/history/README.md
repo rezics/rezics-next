@@ -10,7 +10,9 @@ capability. `kernel-history-adapters` implements that capability with native Pos
 and Access, Semantic, Search, Zones and Work owner bindings.
 
 Foreign Kernel modules import the declared History application and contract entries. Access keeps compatibility
-re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. The composition root in
+re-exports at `access/shared-history.ts` and `access/shared-history-work.ts` that resolve to those facades. Native adapters
+import owner facade leaves (`application/composition.ts`, `identity.ts`, `records.ts`, `receiving.ts`, `shared.ts`,
+`operational.ts`) rather than the application barrel, so sibling cycles stay on those public entries. The composition root in
 `composition/history.ts` binds every capability method to its native adapter. Server and worker startup, and the shared
 runtime defaults in `composition/runtime-defaults.ts`, install that composition before use; `composition/preload.ts`
 exposes the same binding through an explicit preload hook used by

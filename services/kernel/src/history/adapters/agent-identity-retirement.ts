@@ -33,24 +33,22 @@ import {
   nativeReceivingContext,
 } from './handles.ts';
 import type { AgentIdentitySDKWorkMapping } from './agent-identity-work.ts';
+import { historyComposition } from '../application/composition.ts';
 import {
-  historyComposition,
-  historyDeadline,
   identityHistoryAccountsLocalWork,
   identityHistoryCommand,
   identityHistoryConnection,
-  lockHistoryBarrier,
   lockRecordedAgentIdentityHistory,
   nativeWork,
   readAgentIdentityReceivingArtifact,
   readAgentIdentitySDKFence,
   readAgentIdentitySDKReceivingBinding,
-  readHistoryReceivingReceipt,
   reserveIdentityHistoryWork,
   resolveAgentIdentitySDKWork,
   retireAgentIdentitySDKWork,
   unpricedIdentityHistoryWork,
-} from '../application/index.ts';
+} from '../application/identity.ts';
+import { historyDeadline, lockHistoryBarrier, readHistoryReceivingReceipt } from '../application/receiving.ts';
 import {
   AGENT_IDENTITY_SDK_RETIREMENT,
   type AgentIdentityOriginal,

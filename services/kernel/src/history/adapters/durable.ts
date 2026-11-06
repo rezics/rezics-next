@@ -34,11 +34,10 @@ import { nativeWriterState } from './handles.ts';
 import type { IdentityUnit } from './agent-identity-retirement.ts';
 import {
   currentAgentIdentityHistoryUnit,
-  historyDeadline,
-  lockHistoryBarrier,
   lockRecordedAgentIdentityHistory,
   resolveAgentIdentitySDKWork,
-} from '../application/index.ts';
+} from '../application/identity.ts';
+import { historyDeadline, lockHistoryBarrier } from '../application/receiving.ts';
 import {
   AGENT_IDENTITY_SDK_RETIREMENT,
   type AgentIdentityWorkSource,

@@ -15,27 +15,29 @@ import type { originalAccountIdentitySource } from '../../access/agent-verificat
 import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
 import { nativePool } from './handles.ts';
 import type { AgentIdentityCommandDeclaration } from './agent-identity-source.ts';
+import { historyComposition } from '../application/composition.ts';
 import {
   AGENT_IDENTITY_HISTORY_ABSENCE_COST,
   AGENT_IDENTITY_HISTORY_GUARD_COST,
   addNativeWork,
   commandAgentIdentitySource,
-  commandHistoryKind,
   currentAgentIdentityHistoryUnit,
-  historyComposition,
-  historyDeadline,
-  historyReceivingGap,
   identityHistoryAccountsLocalWork,
   identityHistoryConnection,
   lockRecordedAgentIdentityHistory,
   nativeWork,
   readAgentIdentitySDKRetirementGap,
-  readHistoryReceivingReceipt,
   reserveIdentityHistoryWork,
   unpricedIdentityHistoryWork,
+} from '../application/identity.ts';
+import {
+  historyDeadline,
+  historyReceivingGap,
+  readHistoryReceivingReceipt,
   verifyCurrentHistoryReceiving,
   verifyHistoryReceivingReceipt,
-} from '../application/index.ts';
+} from '../application/receiving.ts';
+import { commandHistoryKind } from '../application/records.ts';
 import {
   type AgentIdentityInventoryProof,
   type AgentIdentityInventoryVerification,

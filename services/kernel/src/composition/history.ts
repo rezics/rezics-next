@@ -106,11 +106,7 @@ import {
   withAgentIdentityHistoryUnit,
   withPrepaidAgentIdentityHistoryUnit,
 } from '../history/adapters/index.ts';
-import {
-  identityHistoryAccountsLocalWork,
-  identityHistoryCommandControl,
-  installHistoryComposition,
-} from '../history/application/index.ts';
+import { installHistoryComposition } from '../history/application/index.ts';
 import { type HistoryComposition } from '../history/contract/index.ts';
 
 /** The composed implementation, bound by name. Every member has exactly one native adapter. */

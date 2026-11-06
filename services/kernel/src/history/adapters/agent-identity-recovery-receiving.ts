@@ -5,7 +5,10 @@ import {
   verifyAccountErasureSearchObservation,
   type AccountErasureSearchObservation,
 } from '../../search/account-erasure-source.ts';
-import { readAgentIdentityRecoveryArtifactInTransaction, reserveIdentityHistoryWork } from '../application/index.ts';
+import {
+  readAgentIdentityRecoveryArtifactInTransaction,
+  reserveIdentityHistoryWork,
+} from '../application/identity.ts';
 import {
   type AgentIdentityRecoveryArtifactReadiness,
   type HistoryArtifact,

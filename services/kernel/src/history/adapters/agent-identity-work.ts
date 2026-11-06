@@ -15,14 +15,14 @@ import { receiveMappedHistoryWork, type ScopedWorkRequest } from '../../work/his
 import {
   agentIdentityRetirementReadiness,
   assertAgentIdentitySourceHandoff,
-  guardHistoryAccounts,
   readAgentIdentityRetirementStage,
   readAgentIdentitySDKFence,
   readAgentIdentitySDKReceivingBinding,
   readAgentIdentitySourceHandoff,
   retireAgentIdentitySDKWork,
   verifyAgentIdentityRetirementStage,
-} from '../application/index.ts';
+} from '../application/identity.ts';
+import { guardHistoryAccounts } from '../application/records.ts';
 import {
   AGENT_IDENTITY_WORK_OWNER,
   type AgentIdentityApprovalCopy,

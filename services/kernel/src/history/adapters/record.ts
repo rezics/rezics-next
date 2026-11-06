@@ -12,7 +12,7 @@ import {
   recordRecordHistoryCopy,
   releaseCommandRecordSources,
 } from './record-source.ts';
-import { commandAgentIdentitySource } from '../application/index.ts';
+import { commandAgentIdentitySource } from '../application/identity.ts';
 import {
   ACCOUNT_ROLE_BITS,
   type AccountReference,

@@ -14,10 +14,8 @@ import {
   operationalWorkDeadlineClient,
   assertOperationalWorkOriginal,
 } from './operational-work-budget.ts';
-import {
-  commandHistoryIdentityAccounts,
-  receiveOperationalWorkDestination as receiveOperationalHistoryWork,
-} from '../application/index.ts';
+import { receiveOperationalWorkDestination as receiveOperationalHistoryWork } from '../application/operational.ts';
+import { commandHistoryIdentityAccounts } from '../application/records.ts';
 import {
   type CommittedOperationalWork,
   type HistoryScope,

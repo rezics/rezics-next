@@ -23,21 +23,20 @@ import { partitionOf } from '../../route/route.ts';
 import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
 import { nativeWriterState } from './handles.ts';
 import type { AgentIdentitySDKWorkMapping } from './agent-identity-work.ts';
+import { historyComposition } from '../application/composition.ts';
 import {
   addNativeWork,
   assertAgentIdentityHistoryUnit,
   currentAgentIdentityHistoryUnit,
-  historyComposition,
-  historyDeadline,
   identityHistoryAccountsLocalWork,
   identityHistoryCommand,
-  lockHistoryBarrier,
   nativeWork,
   reserveIdentityHistoryWork,
   resolveAgentIdentitySDKWork,
   unpricedIdentityHistoryWork,
   verifyAgentIdentityRetirementStage,
-} from '../application/index.ts';
+} from '../application/identity.ts';
+import { historyDeadline, lockHistoryBarrier } from '../application/receiving.ts';
 import {
   type AgentIdentityHistoryAuthority,
   type AgentIdentityHistoryReadiness,

@@ -4,8 +4,11 @@ import { sharedHistoryWorkModule as accessSharedHistoryWorkModule } from '../../
 import { historyComposition, installHistoryComposition } from '../../src/history/application/composition.ts';
 import {
   admitSharedHistory,
+  declareCommandHistory,
+  identityHistoryCommand,
   localSharedHistoryWorkModule,
   recordHistoryReceivingProof,
+  registerPositionedOperationalHistoryWork,
 } from '../../src/history/application/index.ts';
 import type { HistoryComposition } from '../../src/history/contract/ports.ts';
 
@@ -41,7 +44,17 @@ test('application facades delegate to whichever composition is installed', async
       0,
       {} as never,
     );
-    expect(calls).toEqual(['recordHistoryReceivingProof']);
+    await declareCommandHistory({} as never, 'access.account.preferences' as never, {} as never);
+    await admitSharedHistory({} as never, '00000000-0000-7000-8000-000000000000', 'job');
+    await identityHistoryCommand({} as never, {} as never, async () => undefined);
+    await registerPositionedOperationalHistoryWork({} as never, {} as never, {} as never);
+    expect(calls).toEqual([
+      'recordHistoryReceivingProof',
+      'declareCommandHistory',
+      'admitSharedHistory',
+      'identityHistoryCommand',
+      'registerPositionedOperationalHistoryWork',
+    ]);
   } finally {
     if (previous) installHistoryComposition(previous);
   }

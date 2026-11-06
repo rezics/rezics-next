@@ -4,7 +4,8 @@ import { withConnection } from '../../database/pool.ts';
 import { partitionOf } from '../../route/route.ts';
 import { sealHistoryAccount } from './gates.ts';
 import { recordHistoryFamilyArtifactWatch } from './receiving.ts';
-import { commandHistoryKind, lockHistoryBarrier } from '../application/index.ts';
+import { lockHistoryBarrier } from '../application/receiving.ts';
+import { commandHistoryKind } from '../application/records.ts';
 import {
   type HistoryArtifactType,
   type HistoryBarrier,

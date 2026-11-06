@@ -5,7 +5,7 @@ import type { CommandTransaction } from '../../command/command.ts';
 import { sealHistoryAccount } from './gates.ts';
 import minimize from './receipt.sql';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
-import { commandHistoryKind } from '../application/index.ts';
+import { commandHistoryKind } from '../application/records.ts';
 import {
   type HistoryBarrier,
   type HistoryReceivingContext,

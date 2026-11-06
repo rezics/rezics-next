@@ -7,15 +7,16 @@ import { partitionOf, routeOf } from '../../route/route.ts';
 import { withConnection } from '../../database/pool.ts';
 import { nativePool } from './handles.ts';
 import {
+  declareAgentIdentityInventory,
+  readAgentIdentityInventoryInTransaction,
+  releaseAgentIdentityInventory,
+} from '../application/identity.ts';
+import { historyDeadline, readHistoryReceivingReceipt } from '../application/receiving.ts';
+import {
   commandHistoryIdentityAccounts,
   commandHistoryKind,
-  declareAgentIdentityInventory,
   guardHistoryAccounts,
-  historyDeadline,
-  readAgentIdentityInventoryInTransaction,
-  readHistoryReceivingReceipt,
-  releaseAgentIdentityInventory,
-} from '../application/index.ts';
+} from '../application/records.ts';
 import {
   ACCOUNT_ROLE_BITS,
   type AccountReference,

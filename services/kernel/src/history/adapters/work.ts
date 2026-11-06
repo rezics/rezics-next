@@ -12,7 +12,7 @@ import { withSelectedHistoryOriginal } from '../../access/identity-original-admi
 import {
   advanceSharedHistory,
   localSharedHistoryWorkModule as localHistoryWorkModule,
-} from '../application/index.ts';
+} from '../application/shared.ts';
 import { HistoryRegistry, type SharedHistoryResult } from '../contract/index.ts';
 
 /** Preserve the delivered local minimizers and add the independent selected-family aggregate. */
