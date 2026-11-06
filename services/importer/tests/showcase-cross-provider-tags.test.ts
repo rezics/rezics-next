@@ -369,7 +369,14 @@ test('parent publication consumes accepted and rejected candidate-page verdicts 
   const binding = { ...resolved!, childId, parentId, schemeId };
   const command = showcaseTagParentCommand(binding);
   const value = (content: string) => [{ value: { type: 'value' as const, content } }];
-  const subjects = new Map([
+  type FixtureSubject = {
+    subject: {
+      id: string;
+      type: string;
+      statements: Record<string, unknown>;
+    };
+  };
+  const subjects = new Map<string, FixtureSubject>([
     [
       schemeId,
       {
@@ -435,11 +442,16 @@ test('parent publication consumes accepted and rejected candidate-page verdicts 
               statement: command.statement,
               head: 1,
               decision,
+              retracted: null,
+              retraction: null,
+              release: null,
+              revision: 1,
+              rank: 'normal',
             },
           ],
           next: null,
           adoption: null,
-        };
+        } as unknown as Awaited<ReturnType<ShowcaseReviewPort['reviewedCandidates']>>;
       },
       async acceptReviewedCandidate(_id, acceptedId) {
         acceptCalls.push(acceptedId);

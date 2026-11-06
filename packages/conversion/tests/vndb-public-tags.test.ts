@@ -143,7 +143,9 @@ test('a reviewed parent proposal cites the exact tags_parents row and both bound
   expect(command.statement.qualifiers).toBeUndefined();
   expect(command.rights).toBeUndefined();
   expect(
-    command.statement.references?.flatMap((reference) => reference.parts.map((part) => part.value.content)),
+    command.statement.references?.flatMap((reference) =>
+      reference.parts.flatMap((part) => (part.value.type === 'value' ? [part.value.content] : [])),
+    ),
   ).toEqual([
     'https://vndb.org/g311#/tags_parents/g311/g12',
     vndbPublicTagConceptUri('cont', 'g311'),
