@@ -424,13 +424,6 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     if (bootstrapEvents.rows.length !== 1) throw new Error('Missing unique bootstrap event in committed range');
     const bootstrapPosition = String(bootstrapEvents.rows[0]!.position);
     await options.afterStage?.('bootstrap');
-    // Test-only first holder of the import actions this fixture delegates; `/v1/grants` then grants them onward.
-    for (const action of new Set([...importerScopes, ...statisticScopes]))
-      await database.admin.query(
-        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-         VALUES ($1::integer,$2::uuid,$3::uuid,$4::text,'(,)',$3::uuid)`,
-        [GLOBAL.route, GLOBAL.id, human.accountId, action],
-      );
     const managementHeaders = await login(human.email, managementClient, managementScopes);
     // Access tokens live 300 s, so the bearer is replaced by `renewManagement` between steps.
     let management = await token(human.accountId, managementHeaders);

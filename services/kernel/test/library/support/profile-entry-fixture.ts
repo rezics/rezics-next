@@ -269,22 +269,6 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    // Test-only first holders: under the current grant contract a grantor must hold each action it delegates, and no
-    // command path can give the steward these Global actions before it holds them. Later grants use the owner commands.
-    for (const action of [
-      'access:grant',
-      'definitions:publish',
-      'definitions:activate',
-      'subject:create',
-      'statement:propose',
-      'subject:batch_write',
-    ])
-      await pool.query(
-        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-         VALUES ($1::integer,$2::uuid,$3::uuid,$4::text,'(,)',$3::uuid)
-         ON CONFLICT DO NOTHING`,
-        [global.route, global.id, steward.actor.accountId, action],
-      );
     const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
     const grant = (resource: Resource, subject: string, actions: string[]) =>
       grants.create(context(steward.actor), {
