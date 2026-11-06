@@ -898,6 +898,170 @@ function assertTaskDeletionsAbsent(
   }
 }
 
+const markdownDuplicateDetail = 'union introduced a duplicate heading, table row or paragraph';
+const markdownTableSeparator = /^\|[\s:|-]+\|$/;
+
+function markdownLineBlocks(text: string): string[] {
+  const atoms: string[] = [];
+  const lines = text.split(/\r?\n/);
+  let fence: string | undefined;
+  let paragraph: string[] = [];
+  const flush = () => {
+    if (!paragraph.length) return;
+    atoms.push(`paragraph:${paragraph.join('\n')}`);
+    paragraph = [];
+  };
+  for (const line of lines) {
+    if (fence) {
+      paragraph.push(line);
+      if (line.startsWith(fence)) {
+        fence = undefined;
+        flush();
+      }
+      continue;
+    }
+    const opener = line.match(/^(`{3,}|~{3,})/);
+    if (opener) {
+      flush();
+      fence = opener[1];
+      paragraph.push(line);
+      continue;
+    }
+    if (/^#{1,6} /.test(line)) {
+      flush();
+      atoms.push(`heading:${line}`);
+      continue;
+    }
+    if (line.startsWith('|')) {
+      flush();
+      if (!markdownTableSeparator.test(line.trim())) atoms.push(`table-row:${line}`);
+      continue;
+    }
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    paragraph.push(line);
+  }
+  flush();
+  return atoms;
+}
+
+function markdownBlockCounts(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const atom of markdownLineBlocks(text)) counts.set(atom, (counts.get(atom) ?? 0) + 1);
+  return counts;
+}
+
+/** A heading, table row or paragraph appears twice in the result when neither side had it twice. */
+function markdownIntroducesNewDuplicates(result: string, left: string, right: string): boolean {
+  const leftCounts = markdownBlockCounts(left);
+  const rightCounts = markdownBlockCounts(right);
+  for (const [atom, count] of markdownBlockCounts(result)) {
+    if (count < 2) continue;
+    if ((leftCounts.get(atom) ?? 0) < 2 && (rightCounts.get(atom) ?? 0) < 2) return true;
+  }
+  return false;
+}
+
+/** Union kept extra copies of a block that is rarer on dev than on the shared base. */
+function markdownRestoredCollapsedBlocks(union: string, base: string, dev: string): boolean {
+  const baseCounts = markdownBlockCounts(base);
+  const devCounts = markdownBlockCounts(dev);
+  for (const [atom, count] of markdownBlockCounts(union)) {
+    const onDev = devCounts.get(atom) ?? 0;
+    if ((baseCounts.get(atom) ?? 0) > onDev && count > onDev) return true;
+  }
+  return false;
+}
+
+function markdownLines(text: string): string[] {
+  if (!text) return [];
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+function lineCounts(lines: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const line of lines) counts.set(line, (counts.get(line) ?? 0) + 1);
+  return counts;
+}
+
+function lastLineIndex(lines: readonly string[], line: string): number {
+  for (let index = lines.length - 1; index >= 0; index--) if (lines[index] === line) return index;
+  return -1;
+}
+
+/**
+ * Keep the integration side of a rewritten Markdown block and splice in lines the task added against the base.
+ * Blank lines are spacing, not additions: the ordinary formatter restores heading separators.
+ */
+function applyMarkdownTaskAdditions(dev: string, base: string, task: string): string {
+  const devLines = markdownLines(dev);
+  const baseLines = markdownLines(base);
+  const taskLines = markdownLines(task);
+  const baseCounts = lineCounts(baseLines);
+  const added: { line: string; taskIndex: number }[] = [];
+  const seen = new Map<string, number>();
+  for (let taskIndex = 0; taskIndex < taskLines.length; taskIndex++) {
+    const line = taskLines[taskIndex]!;
+    if (!line) continue;
+    const n = (seen.get(line) ?? 0) + 1;
+    seen.set(line, n);
+    if (n > (baseCounts.get(line) ?? 0)) added.push({ line, taskIndex });
+  }
+  const devCounts = lineCounts(devLines);
+  const needed: { line: string; taskIndex: number }[] = [];
+  const placed = new Map<string, number>();
+  for (const item of added) {
+    const n = (placed.get(item.line) ?? 0) + 1;
+    placed.set(item.line, n);
+    if (n > (devCounts.get(item.line) ?? 0)) needed.push(item);
+  }
+  if (!needed.length) return dev;
+  const result = [...devLines];
+  let lastInsert = -1;
+  let lastLine = '';
+  for (const { line, taskIndex } of needed) {
+    let insertAt = -1;
+    let usedAnchor = '';
+    for (let index = taskIndex - 1; index >= 0; index--) {
+      const anchor = taskLines[index]!;
+      if (!anchor) continue;
+      const pos = lastLineIndex(result, anchor);
+      if (pos !== -1) {
+        insertAt = pos + 1;
+        usedAnchor = anchor;
+        break;
+      }
+    }
+    if (insertAt < 0) {
+      for (let index = taskIndex + 1; index < taskLines.length; index++) {
+        const anchor = taskLines[index]!;
+        if (!anchor) continue;
+        const pos = result.indexOf(anchor);
+        if (pos !== -1) {
+          insertAt = pos;
+          usedAnchor = anchor;
+          break;
+        }
+      }
+    }
+    if (insertAt < 0) insertAt = result.length;
+    if (usedAnchor === lastLine && lastInsert >= 0) insertAt = lastInsert + 1;
+    result.splice(insertAt, 0, line);
+    lastInsert = insertAt;
+    lastLine = line;
+  }
+  const ending = dev.endsWith('\n') || task.endsWith('\n') ? '\n' : '';
+  return `${result.join('\n')}${ending}`;
+}
+
+function finishMarkdownUnion(text: string): string {
+  return text.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+}
+
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
   return frozen
     .filter((file) => {
@@ -1022,11 +1186,22 @@ function resolveMechanicalConflictsDetailed(
         // Treat that expected conflict status as a successful resolution; higher statuses indicate a tool error.
         if (merged.status === null || merged.status > 1) return { ok: false };
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
-        text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
-        if (markdown === 'union')
-          assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text, mergePolicy);
-        if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
-          throw new WorkerConflictError(file);
+        text = finishMarkdownUnion(merged.stdout);
+        if (markdown === 'union') {
+          const task = stages[taskStage - 1]!;
+          const dev = stages[taskStage === 2 ? 2 : 1]!;
+          // Blind union concatenates rewritten copies. The 2026-11-06 README and importer-table landings
+          // reintroduced blocks dev had already collapsed; keep the integration block and the task's added lines.
+          if (markdownIntroducesNewDuplicates(text, ours!, theirs!))
+            throw new WorkerConflictError(file, markdownDuplicateDetail);
+          if (markdownRestoredCollapsedBlocks(text, base!, dev)) {
+            text = finishMarkdownUnion(applyMarkdownTaskAdditions(dev, base!, task));
+            if (markdownIntroducesNewDuplicates(text, ours!, theirs!))
+              throw new WorkerConflictError(file, markdownDuplicateDetail);
+          }
+          assertTaskDeletionsAbsent(cwd, file, base!, task, text, mergePolicy);
+          if (text === ours && theirs !== ours && theirs !== base) throw new WorkerConflictError(file);
+        }
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
