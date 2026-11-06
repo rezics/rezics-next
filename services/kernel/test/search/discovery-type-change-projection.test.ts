@@ -173,11 +173,13 @@ test('replay of a Subject changing between released Types deletes its old kind a
     return body.hits.hits.find((row) => row._id === documentId);
   }
   try {
-    await admin.query(
-      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete,display_name,discovery_revision)
-       VALUES ($1,$2,'actor','active',$2,true,$3,$4)`,
-      [route, id, account.displayName, String(account.revision)],
+    const nativeAccount = await admin.query<{ revision: string }>(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete,display_name)
+       VALUES ($1,$2,'actor','active',$2,true,$3)
+       RETURNING discovery_revision::text AS revision`,
+      [route, id, account.displayName],
     );
+    account.revision = BigInt(nativeAccount.rows[0]!.revision);
     const baseline = await append([{ type: 'com.rezics.fixture.created.v1', subject: 'walk-b-374d19', data: {} }]);
     expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: baseline });
     await projection.project(partition, [personKey]);
