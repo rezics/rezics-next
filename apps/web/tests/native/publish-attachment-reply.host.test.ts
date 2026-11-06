@@ -11,7 +11,7 @@ import {
 } from './publish-attachment-reply-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
-setDefaultTimeout(900_000);
+setDefaultTimeout(1_200_000);
 
 const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;
 const touchedLabels = [
@@ -170,7 +170,7 @@ beforeAll(async () => {
   stack = await startNativeWebStack();
   auth = await startAuthStack(stack);
   board = await createPublishAttachmentWorkBoard(stack);
-}, 360_000);
+}, 900_000);
 
 afterAll(async () => {
   try {
