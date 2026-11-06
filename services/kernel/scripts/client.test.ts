@@ -1,9 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
-import { clientDeclarationCacheDirectory, clientDeclarations } from './client.ts';
+import { clientDeclarationCacheDirectory, clientDeclarations, runtimeClosure } from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -188,4 +189,29 @@ test('KernelClient accepts order reconciliation headers and types the queued res
   >;
   const response: QueuedResponse = { orderId: 'order-id', reconciliation: 'queued' };
   expect(response.reconciliation).toBe('queued');
+});
+
+test('the installed package ships the question-management schemas as byte copies of their Kernel source', () => {
+  const sourceRoot = resolve(repository, 'services/kernel/src');
+  const packageRoot = resolve(repository, 'packages/client/src/kernel');
+  const closure = runtimeClosure();
+  expect([...closure.keys()]).toEqual([
+    'memoized.ts',
+    'rating/question-management-schemas.ts',
+    'rating/vote-response-schemas.ts',
+  ]);
+  for (const [key, content] of closure) {
+    expect(content).toBe(readFileSync(resolve(sourceRoot, key), 'utf8'));
+    expect(readFileSync(resolve(packageRoot, key), 'utf8')).toBe(content);
+  }
+});
+
+test('the runtime closure refuses an import the installed package cannot provide', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'runtime-closure-'));
+  try {
+    writeFileSync(resolve(directory, 'entry.ts'), "import { z } from 'zod';\nexport const schema = z;\n");
+    expect(() => runtimeClosure(['entry.ts'], directory)).toThrow('imports zod');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
