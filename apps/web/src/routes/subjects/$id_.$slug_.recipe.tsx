@@ -28,10 +28,8 @@ const canonicalRecipe = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const intent = parseRecipeVisit(data.search, data.locale, data.id);
     if (!intent.valid) return { id: data.id, intent };
-    const [{ kernelClient }, { loadContextSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../features/pages/context-subject'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadContextSubject } = await import('../../features/pages/context-subject');
     const canonical = await loadContextSubject(kernelClient(data.locale), data.id, data.locale, {
       realm: intent.visit.realm,
     });

@@ -23,10 +23,8 @@ export const readIdentifierOrigin = createServerFn({ method: 'POST', strict: fal
   .handler(async ({ data }): Promise<IdentifierEvidenceRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     if (data.visit.origin?.kind === 'unsupported') return { kind: 'unsupported' };
-    const [{ loadSubjectPage, PageReadError }, { subjectKernelClient }] = await Promise.all([
-      import('../pages/subject'),
-      import('../pages/subject-queries'),
-    ]);
+    const { loadSubjectPage, PageReadError } = await import('../pages/subject');
+    const { subjectKernelClient } = await import('../pages/subject-queries');
     try {
       const realm = data.visit.origin?.realm;
       const { client, authorization } = await subjectKernelClient(data.locale, realm, data.expectedReader);

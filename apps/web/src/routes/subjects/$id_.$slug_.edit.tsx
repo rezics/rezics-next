@@ -69,10 +69,8 @@ const canonicalEditor = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadSubject } = await import('../../subject/load-subject');
     const canonical = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
     // The subject editor keeps the canonical subject id even when reading uses an account address.

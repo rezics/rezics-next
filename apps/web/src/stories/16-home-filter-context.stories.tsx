@@ -96,7 +96,7 @@ function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; 
               ? { status: 'preparing' }
               : currentState.current === 'denied'
                 ? { status: 'denied' }
-                : { status: 'ready', kinds: homeKindStoryPage(cursor) }
+                : { status: 'ready', kinds: homeKindStoryPage(cursor), asOf: page.asOf }
           }
           readSpace={async () =>
             currentState.current === 'denied' ? { status: 'denied' } : { status: 'ready', space }

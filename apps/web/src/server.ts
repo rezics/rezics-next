@@ -417,11 +417,9 @@ async function fetchRequest(request: Request): Promise<Response> {
     return problemResponse(problem(403, 'forbidden', 'Forbidden'));
   if (url.pathname === '/library/entry') {
     try {
-      const [{ libraryEntryFormResponse }, { kernelClient }, { default: stylesheet }] = await Promise.all([
-        import('./library/entry-form'),
-        import('./kernel/client'),
-        import('./styles.css?url'),
-      ]);
+      const { libraryEntryFormResponse } = await import('./library/entry-form');
+      const { kernelClient } = await import('./kernel/client');
+      const { default: stylesheet } = await import('./styles.css?url');
       return documentResponse(request, await libraryEntryFormResponse(request, sessionEnv, kernelClient(), stylesheet));
     } catch (error) {
       return documentResponse(request, problemResponse(error));

@@ -59,7 +59,7 @@ test('ensureQueryData retained errored data cannot authorize a personal loader',
     await expect(queryClient.ensureQueryData(sessionQuery)).resolves.toEqual(signedIn);
     expect(queryClient.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
     await expect(requireSignedIn({ context: { queryClient }, location: location() })).rejects.toThrow(
-      'Session unavailable',
+      'session_unavailable',
     );
   } finally {
     queryClient.clear();
@@ -111,7 +111,7 @@ test('unavailable and malformed observations fail closed with the existing unava
     for (const observation of malformedObservations) {
       queryClient.setQueryData(sessionQuery.queryKey, observation);
       await expect(requireSignedIn({ context: { queryClient }, location: location() })).rejects.toThrow(
-        'Session unavailable',
+        'session_unavailable',
       );
     }
   } finally {
@@ -119,13 +119,13 @@ test('unavailable and malformed observations fail closed with the existing unava
   }
 });
 
-test('private destination guards retain an explicit unresolved session state', async () => {
+test('private destination guards throw the native unavailable outcome before a private loader runs', async () => {
   const queryClient = client();
   try {
     queryClient.setQueryData(sessionQuery.queryKey, { state: 'unavailable', subject: null, csrfToken: null });
-    await expect(requirePrivatePageAccess({ context: { queryClient }, location: location() })).resolves.toEqual({
-      state: 'unavailable',
-      signInHref: `/auth/sign-in?return_to=${encodeURIComponent('/fr/settings?from=account')}`,
+    await expect(requirePrivatePageAccess({ context: { queryClient }, location: location() })).rejects.toMatchObject({
+      status: 503,
+      code: 'session_unavailable',
     });
   } finally {
     queryClient.clear();

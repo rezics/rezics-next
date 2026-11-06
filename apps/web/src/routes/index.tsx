@@ -21,7 +21,7 @@ import { pageHead } from '../shell/head';
 
 export const Route = createFileRoute('/')({
   staticData: { publicCache: true },
-  loader: ({ context }) => context.queryClient.ensureQueryData(homePageQuery(getLocale())),
+  loader: ({ context }) => context.queryClient.fetchQuery({ ...homePageQuery(getLocale()), staleTime: 0 }),
   head: ({ loaderData }) => {
     const locale = getLocale();
     if (!loaderData) return { meta: [{ title: 'REZICS' }] };

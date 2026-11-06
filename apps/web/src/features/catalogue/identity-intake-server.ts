@@ -41,13 +41,11 @@ export type IdentityIntakeRuntime = {
 };
 
 async function defaultRuntime(): Promise<IdentityIntakeRuntime> {
-  const [session, csrf, directory, search, kernel] = await Promise.all([
-    import('../../session/request'),
-    import('../../session/csrf'),
-    import('./type-directory-client'),
-    import('../../search/suggestions'),
-    import('../../kernel/client'),
-  ]);
+  const session = await import('../../session/request');
+  const csrf = await import('../../session/csrf');
+  const directory = await import('./type-directory-client');
+  const search = await import('../../search/suggestions');
+  const kernel = await import('../../kernel/client');
   return {
     prepareSession: session.prepareSession,
     carriesSession: csrf.carriesSession,

@@ -32,7 +32,7 @@ function recoveryPage(
   token: string,
   change: NotificationChange,
   mode: 'retry' | 'review' | 'confirmed',
-  context: { current?: PreferencePage; confirmedVersion?: number; status?: number } = {},
+  context: { current?: PreferencePage; confirmedVersion?: number | undefined; status?: number } = {},
 ): Response {
   const fields: Record<string, string> = {
     csrf_token: token,

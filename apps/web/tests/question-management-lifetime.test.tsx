@@ -402,6 +402,7 @@ test('the selected question heading receives focus only for a current selection 
     };
     await act(async () => view.setFocusTicket({ id: 1, questionId, focusEpoch: 0, afterRead: 1 }));
     expect(focusCalls).toBe(1);
+    expect(reads).toHaveLength(1);
     expect(window.document.activeElement?.id).toBe('realm-question-selected-heading');
   } finally {
     await view.cleanup();

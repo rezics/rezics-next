@@ -1,20 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { MyRealmsPageView } from '../community/my-realms-page';
-import { formatMyRealmsInventory, type MyRealmsNativePage } from '../community/my-realms-native';
 import recording from '../kernel/recorded/my-realms.json';
 import { m } from '../paraglide/messages.js';
 
-// These stories use only installed native inventory; they do not establish expanded native admission.
-const inventory: MyRealmsNativePage = {
-  items: recording.items.map(({ realmId, name }) => ({ realmId, name, role: 'member' })),
-  next: null,
-};
+// These stories use only installed native inventory labels; they do not establish expanded native admission.
+const realms = recording.items.map(({ realmId, name }) => ({ realmId, name }));
 const meta = {
   title: 'Pages/Community/My Realms Current Entry',
   component: MyRealmsPageView,
   parameters: { layout: 'padded' },
-  args: { page: { signedIn: true, ...formatMyRealmsInventory(inventory) } },
+  args: { page: { signedIn: true, realms, next: null } },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: m.realms_heading() })).toBeVisible();
@@ -35,13 +31,11 @@ export const LongInventory: Story = {
   args: {
     page: {
       signedIn: true,
-      ...formatMyRealmsInventory({
-        ...inventory,
-        items: inventory.items.map((item) => ({
-          ...item,
-          name: `${item.name} ${'Readers across languages 共讀社群 '.repeat(12)}`,
-        })),
-      }),
+      realms: realms.map((realm) => ({
+        ...realm,
+        name: `${realm.name} ${'Readers across languages 共讀社群 '.repeat(12)}`,
+      })),
+      next: null,
     },
   },
   globals: { viewport: { value: 'desktop1280' } },

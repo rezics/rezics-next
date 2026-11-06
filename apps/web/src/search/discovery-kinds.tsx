@@ -308,7 +308,11 @@ export function DiscoveryKinds({
                 <code className="ms-6 block break-all text-xs text-muted-foreground">{kind.id}</code>
                 {description.text && (
                   <p className="ms-6 max-w-prose text-xs text-muted-foreground">
-                    <DefinitionMeaning text={description.text} language={description.lang} locale={locale} />
+                    <DefinitionMeaning
+                      text={description.text}
+                      language={description.lang ?? undefined}
+                      locale={locale}
+                    />
                   </p>
                 )}
               </li>

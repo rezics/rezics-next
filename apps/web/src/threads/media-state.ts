@@ -44,11 +44,9 @@ export const checkDraftMediaStates = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('Cache-Control', 'private, no-store');
-    const [{ env }, { prepareSession, viewerCredential }, { kernelClient }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../session/request'),
-      import('../kernel/client'),
-    ]);
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, viewerCredential } = await import('../session/request');
+    const { kernelClient } = await import('../kernel/client');
     const request = getRequest();
     await prepareSession(request, env);
     const authorization = viewerCredential(request);

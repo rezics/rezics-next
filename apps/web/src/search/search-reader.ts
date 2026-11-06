@@ -9,7 +9,8 @@ export type ScopedSearchReader = Readonly<{
 
 /** Prepare the current cookie-backed reader once; callers use its credential and subject together. */
 export async function readScopedSearchReader(request: Request): Promise<ScopedSearchReader | undefined> {
-  const [{ env }, session] = await Promise.all([import('cloudflare:workers'), import('../session/request')]);
+  const { env } = await import('cloudflare:workers');
+  const session = await import('../session/request');
   const { setResponseHeader } = await import('@tanstack/react-start/server');
   setResponseHeader('Cache-Control', 'private, no-store');
   await session.prepareSession(request, env as Partial<SessionEnv>);

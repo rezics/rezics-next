@@ -21,6 +21,7 @@ import {
   type MalScoreReviewInput,
   type MalVoteReadResult,
 } from './contract';
+import { MAL_STANDARD_QUESTION_ID, MAL_STANDARD_QUESTION_REVISION } from './contract';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import { kernelMalPort } from './native';
 
@@ -73,6 +74,9 @@ function reviewScore(value: unknown): MalScoreReviewInput {
   const questionId = requireId(value.questionId);
   const questionRevision = value.questionRevision;
   if (typeof questionRevision !== 'number' || !Number.isSafeInteger(questionRevision) || questionRevision < 1)
+    throw new Error('Invalid MAL import');
+  // The kernel accepts reviews only for the standard question; other identities never reach it.
+  if (questionId !== MAL_STANDARD_QUESTION_ID || questionRevision !== MAL_STANDARD_QUESTION_REVISION)
     throw new Error('Invalid MAL import');
   if (value.action === 'clear') return { action: 'clear', questionId, questionRevision };
   if (value.action !== 'adopt' || !('units' in value)) throw new Error('Invalid MAL import');
@@ -219,7 +223,7 @@ export const applyMalImport = createServerFn({ method: 'POST' })
         !Array.isArray(item.fields) ||
         item.fields.length > MAL_FIELD_CAP ||
         new Set(item.fields).size !== item.fields.length ||
-        item.fields.some((field) => field !== 'status' && field !== 'tags' && field !== 'score')
+        item.fields.some((field: unknown) => field !== 'status' && field !== 'tags' && field !== 'score')
       )
         throw new Error('Invalid MAL import');
       return { row: item.row, version: item.version, fields: item.fields as string[] };

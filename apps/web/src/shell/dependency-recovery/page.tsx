@@ -6,6 +6,7 @@ export function DependencyUnavailablePage({
   locale = getLocale(),
   retryHref,
   returnHref,
+  signInHref,
   commandMayHaveCompleted = false,
   onRetry,
   retrying = false,
@@ -16,6 +17,7 @@ export function DependencyUnavailablePage({
   locale?: Locale;
   retryHref?: string;
   returnHref?: string;
+  signInHref?: string;
   commandMayHaveCompleted?: boolean;
   onRetry?: (() => void) | undefined;
   retrying?: boolean;
@@ -34,6 +36,7 @@ export function DependencyUnavailablePage({
       }
       {...(retryHref ? { retryHref } : {})}
       {...(returnHref ? { returnHref } : {})}
+      {...(signInHref ? { signInHref } : {})}
       onRetry={onRetry}
       retrying={retrying}
       retryFailed={retryFailed}

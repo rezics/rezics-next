@@ -98,7 +98,7 @@ export async function readRelease(): Promise<Release> {
         !isRecord(value.properties)
       )
         throw new Error('Definitions release is invalid');
-      return { digest, release: value };
+      return { digest, release: { ...value, types: value.types, properties: value.properties } };
     });
     const value = envelope.release;
     const types = Object.fromEntries(

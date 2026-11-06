@@ -53,10 +53,8 @@ const readEditorPage = createServerFn({ method: 'GET', strict: false })
         visit,
         routePath: relationEditPath(data.id, data.slug, data.locale),
       };
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadSubject } = await import('../../subject/load-subject');
     const client = kernelClient(data.locale);
     const [canonical, page] = await Promise.all([
       loadSubject(client, data.id, data.locale as never),

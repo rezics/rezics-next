@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { slug } from '@rezics/definitions/slug';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { createFakeKernelFetch } = await import('../src/kernel/fake.ts');
 import fixtures from '../src/kernel/fixtures.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -77,6 +78,8 @@ function site(): Promise<string> {
       'WORKER_INSPECTOR_PORT',
     ])
       delete env[name];
+    // The anonymous fixture never signs in, but Wrangler requires the declared secret binding.
+    env.WEBSITE_CLIENT_KEY = 'unused-by-anonymous-subject-fixture';
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,

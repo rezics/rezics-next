@@ -33,7 +33,8 @@ import {
 
 type NativeResult = {
   data?: unknown;
-  error?: { value?: unknown };
+  /** Treaty success responses carry `error: null`. */
+  error?: { value?: unknown } | null;
   status: number;
 };
 
@@ -202,10 +203,8 @@ export function kernelMalPort(
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
 ): MalImportPort {
-  const headers = (authorization: string, key?: string) => ({
-    authorization,
-    ...(key ? { 'idempotency-key': key } : {}),
-  });
+  const headers = (authorization: string) => ({ authorization });
+  const keyedHeaders = (authorization: string, key: string) => ({ authorization, 'idempotency-key': key });
   async function call<T>(
     command: MalCommand,
     send: (mal: MalSurface, authorization: string) => Promise<NativeResult>,
@@ -271,7 +270,7 @@ export function kernelMalPort(
       const result = await call(
         command,
         (mal, authorization) => {
-          return mal.$preview.post({ xml: command.xml }, { headers: headers(authorization, command.key) });
+          return mal.$preview.post({ xml: command.xml }, { headers: keyedHeaders(authorization, command.key) });
         },
         (data) => {
           const id = idOf(data);
@@ -296,7 +295,7 @@ export function kernelMalPort(
       const result = await call(
         command,
         (mal, authorization) =>
-          mal({ id: command.id }).review.post(command.input, { headers: headers(authorization, command.key) }),
+          mal({ id: command.id }).review.post(command.input, { headers: keyedHeaders(authorization, command.key) }),
         (data) => {
           const id = idOf(data);
           return id ? ({ kind: 'reviewed', id } as const) : undefined;
@@ -318,7 +317,7 @@ export function kernelMalPort(
       const result = await call(
         command,
         (mal, authorization) =>
-          mal({ id: command.id }).cancel.post({}, { headers: headers(authorization, command.key) }),
+          mal({ id: command.id }).cancel.post({}, { headers: keyedHeaders(authorization, command.key) }),
         (data) => {
           const id = idOf(data);
           return id ? ({ kind: 'done', id } as const) : undefined;
@@ -330,7 +329,7 @@ export function kernelMalPort(
       const result = await call(
         command,
         (mal, authorization) =>
-          mal({ id: command.id }).delete(undefined, { headers: headers(authorization, command.key) }),
+          mal({ id: command.id }).delete(undefined, { headers: keyedHeaders(authorization, command.key) }),
         (data) => {
           const id = idOf(data);
           return id ? ({ kind: 'done', id } as const) : undefined;

@@ -9,7 +9,7 @@ import {
   readQuestionManagementHistory,
 } from './actions';
 import { QuestionManagementWindows, QuestionWindow } from './window-navigation';
-import { OwnVotesDeparture } from '../own-votes/departure';
+import { OwnVotesDeparture, type OwnVotesDepartureControl } from '../own-votes/departure';
 import {
   captureQuestionManagementIntent,
   questionManagementIntentMatchesPage,
@@ -850,7 +850,7 @@ export function QuestionManagementPage({
   }
   const windows = retainedWindows ?? localWindows.current!;
   const historyCursor = windows.history.requested;
-  const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
+  const confirmMovement = useRef<OwnVotesDepartureControl | null>(null);
   const movementPending = useRef(false);
   const cancelDirectoryMovement = useRef<(() => void) | null>(null);
   const [navigationBusy, setNavigationBusy] = useState(false);
@@ -1049,7 +1049,7 @@ export function QuestionManagementPage({
       controller.abort();
       candidate.controllers.delete(controller);
     };
-  }, [address, initial, locale, owner, retry, sessionCurrent]);
+  }, [address?.selectedQuestionId, address?.cursor, initial, locale, owner, retry, sessionCurrent]);
 
   useEffect(() => {
     if (
@@ -1108,7 +1108,7 @@ export function QuestionManagementPage({
     setNavigationBusy(true);
     focusMovement('history', keyboard);
     try {
-      const leave = await confirmMovement.current!();
+      const leave = await confirmMovement.current!.confirm();
       if (!leave || !isVisitCurrent(candidate)) {
         windows.focus = null;
         return;
@@ -1422,7 +1422,10 @@ export function QuestionManagementPage({
         dirty={dirty && !postAcknowledgementRead}
         locked={Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')}
         isCurrent={() => sessionCurrent === true && initial.state === 'preparing' && isVisitCurrent()}
-        onLeave={() => retireQuestionVisit(owner)}
+        onLeave={() => {
+          setDirty(false);
+          setInspectionKey((value) => value + 1);
+        }}
       />
     </>
   );

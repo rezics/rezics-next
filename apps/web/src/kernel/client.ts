@@ -98,10 +98,8 @@ export function kernelClient(
         headers,
         fetch: pageFetch(
           decorateFetch((async (input, init) => {
-            const [{ createFakeKernelFetch }, { default: fixtures }] = await Promise.all([
-              import('./fake.ts'),
-              import('./fixtures.json'),
-            ]);
+            const { createFakeKernelFetch } = await import('./fake.ts');
+            const { default: fixtures } = await import('./fixtures.json');
             return createFakeKernelFetch(fixtures as unknown as Parameters<typeof createFakeKernelFetch>[0])(
               input,
               init,

@@ -37,6 +37,7 @@ function Journey() {
         pending={pending}
         initialKey="0192f3a0-6c1e-7b2a-9d4e-000000000001"
         containerId={parent.threadId}
+        credentialMode="session"
         onPendingChange={setPending}
         onCancel={() => select(null)}
         onSubmit={write}

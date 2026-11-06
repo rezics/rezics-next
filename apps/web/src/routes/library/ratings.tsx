@@ -1,5 +1,5 @@
 import { createFileRoute, useRouterState } from '@tanstack/react-router';
-import { readOwnVotesForViewer } from '../../ratings/own-votes/actions';
+import { readOwnVotesForViewer, type OwnVotesRead } from '../../ratings/own-votes/actions';
 import { CurrentViewerOwnVotesPage } from '../../ratings/own-votes/page';
 import { ownVotesCursor } from '../../ratings/own-votes/inventory';
 import { m } from '../../paraglide/messages.js';
@@ -31,7 +31,7 @@ function OwnRatingsRoute() {
   const invalid = search.invalidCursor === true || !address.valid;
   return (
     <CurrentViewerOwnVotesPage
-      initial={initial}
+      initial={initial as OwnVotesRead}
       cursor={invalid ? null : address.cursor}
       invalidAddress={invalid}
       responseVersion={responseVersion}

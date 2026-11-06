@@ -77,11 +77,13 @@ test('the local source seam reads the paired frontier and admits a closed retire
 
 test('the management source stays on the generated Client transport and never loads Kernel SQL', async () => {
   const source = await Bun.file(new URL('../src/ratings/question-management/native.ts', import.meta.url)).text();
-  const contract = await Bun.file(new URL('../src/ratings/question-management/contract.ts', import.meta.url)).text();
+  const decoders = await Bun.file(
+    new URL('../../../packages/client/src/question-management.ts', import.meta.url),
+  ).text();
   expect(source.includes('services/kernel')).toBe(false);
   expect(source.includes('.sql')).toBe(false);
-  expect(contract.includes('services/kernel')).toBe(false);
-  expect(contract.includes('.sql')).toBe(false);
+  expect(decoders.includes('services/kernel')).toBe(false);
+  expect(decoders.includes('.sql')).toBe(false);
 });
 
 test('unknown fields, a mismatched selection and oversized response bodies stay unavailable', async () => {

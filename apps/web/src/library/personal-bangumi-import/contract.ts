@@ -1,15 +1,4 @@
-import type {
-  KernelClient,
-  BangumiChoice as KernelBangumiChoice,
-  BangumiOutcome as KernelBangumiOutcome,
-  BangumiReview as KernelBangumiReview,
-  BangumiScoreChoice as KernelBangumiScoreChoice,
-  BangumiScoreCurrentVote,
-  BangumiScoreOutcome as KernelBangumiScoreOutcome,
-  BangumiScoreReview as KernelBangumiScoreReview,
-  BangumiScoreSelection,
-  PersonalEntrySourceAdmission,
-} from '@rezics/client';
+import type { KernelClient, PersonalEntrySourceAdmission } from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 
@@ -17,22 +6,42 @@ type GeneratedBangumi = NonNullable<KernelClient['libraryImports']['bangumi']>;
 type GeneratedBangumiUpload = ReturnType<GeneratedBangumi>;
 type GeneratedBangumiRow = ReturnType<GeneratedBangumiUpload['rows']>;
 type GeneratedBangumiTagCall = ReturnType<GeneratedBangumiRow['tags']['get']>;
+type GeneratedBangumiReviewCall = GeneratedBangumiUpload['$review']['post'];
+type GeneratedBangumiApplyCall = GeneratedBangumiUpload['$apply']['post'];
 type GeneratedBangumiReviewLabelsCall = GeneratedBangumiUpload['$reviewLabels']['post'];
 type GeneratedBangumiApplyLabelsCall = GeneratedBangumiUpload['$applyLabels']['post'];
 type GeneratedLibraryLabels = NonNullable<
   Awaited<ReturnType<KernelClient['libraryLabels']['get']>>['data']
 >['labels'][number];
 
-export type BangumiTagPage = NonNullable<Awaited<GeneratedBangumiTagCall>['data']>;
-export type BangumiLabelReviewBody = Parameters<GeneratedBangumiReviewLabelsCall>[0];
-export type BangumiLabelMapping = BangumiLabelReviewBody['mappings'][number];
-export type BangumiLabelState = NonNullable<
+// The installed client does not re-export its Bangumi model, so these names are derived from the mounted routes.
+type GeneratedBangumiTagPage = NonNullable<Awaited<GeneratedBangumiTagCall>['data']>;
+type GeneratedBangumiReviewBody = Parameters<GeneratedBangumiReviewCall>[0];
+type GeneratedBangumiApplyBody = Parameters<GeneratedBangumiApplyCall>[0];
+type GeneratedBangumiReviewResponse = NonNullable<Awaited<ReturnType<GeneratedBangumiReviewCall>>['data']>;
+type GeneratedBangumiApplyResponse = NonNullable<Awaited<ReturnType<GeneratedBangumiApplyCall>>['data']>;
+type GeneratedBangumiLabelState = NonNullable<
   NonNullable<Awaited<ReturnType<GeneratedBangumiReviewLabelsCall>>['data']>['labels']
 >;
+export type BangumiScoreSelection = NonNullable<GeneratedBangumiReviewBody['score']>;
+export type BangumiChoice = GeneratedBangumiApplyBody['rows'][number];
+export type BangumiOutcome = GeneratedBangumiApplyResponse['outcomes'][number];
+export type BangumiLabelReviewBody = Parameters<GeneratedBangumiReviewLabelsCall>[0];
+export type BangumiLabelMapping = BangumiLabelReviewBody['mappings'][number];
+/** Label source values are JSON: the native reader validates them before they reach the web. */
+export type BangumiLabelItem = Omit<GeneratedBangumiLabelState['review']['items'][number], 'source'> & {
+  source: BangumiJson;
+};
+export type BangumiLabelReview = Omit<GeneratedBangumiLabelState['review'], 'items'> & { items: BangumiLabelItem[] };
+export type BangumiLabelState = Omit<GeneratedBangumiLabelState, 'review'> & { review: BangumiLabelReview };
 export type BangumiLabelApplyData = NonNullable<Awaited<ReturnType<GeneratedBangumiApplyLabelsCall>>['data']>;
 export type BangumiLabelOutcome = BangumiLabelState['outcomes'][number];
-export type BangumiLabelReview = BangumiLabelState['review'];
-export type BangumiLabelItem = BangumiLabelReview['items'][number];
+/** Tag values are JSON: the native reader validates them before they reach the web. */
+export type BangumiTag = Omit<GeneratedBangumiTagPage['tags'][number], 'value'> & { value: BangumiJson };
+export type BangumiTagPage = Omit<GeneratedBangumiTagPage, 'tags' | 'labels'> & {
+  tags: BangumiTag[];
+  labels: BangumiLabelState | null;
+};
 export type BangumiLabelOption = Pick<GeneratedLibraryLabels, 'id' | 'name' | 'revision'>;
 export type BangumiLabelAssignment = { id: string; labelId: string; name: string; revision: number };
 export type BangumiCredentialCustody = Readonly<{ viewer: string; csrfToken: string; credential: string }>;
@@ -68,7 +77,7 @@ export type BangumiMedium = (typeof BANGUMI_MEDIA)[keyof typeof BANGUMI_MEDIA];
 export type BangumiStateRole = (typeof BANGUMI_ROLES)[keyof typeof BANGUMI_ROLES];
 export type BangumiMatch = 'matched' | 'already_matched' | 'ambiguous' | 'unmatched' | 'unavailable' | 'chosen';
 export type BangumiApplyState = 'preserve' | 'replace' | 'omit';
-export type BangumiOutcomeStatus = KernelBangumiOutcome['status'];
+export type BangumiOutcomeStatus = BangumiOutcome['status'];
 export type BangumiFieldMeaning = 'known' | 'unknown' | 'invalid';
 
 export type BangumiJson = string | number | boolean | null | BangumiJson[] | { readonly [key: string]: BangumiJson };
@@ -85,6 +94,9 @@ export type BangumiEvidence = {
   medium: string;
   stateRole: string | null;
 };
+type KernelBangumiReview = NonNullable<GeneratedBangumiReviewResponse['review']>;
+type KernelBangumiScoreReview = NonNullable<KernelBangumiReview['score']>;
+export type BangumiScoreCurrentVote = NonNullable<KernelBangumiScoreReview['native']['currentVote']>;
 export type BangumiGuard = NonNullable<KernelBangumiReview['guard']>;
 export type BangumiCurrent = NonNullable<KernelBangumiReview['current']>;
 type KernelScoreAdmission = KernelBangumiScoreReview['native']['admission'];
@@ -93,10 +105,8 @@ export type BangumiScoreReview = Omit<KernelBangumiScoreReview, 'native'> & {
   native: Omit<KernelBangumiScoreReview['native'], 'admission'> & { admission: BangumiScoreAdmission };
 };
 export type BangumiReview = Omit<KernelBangumiReview, 'score'> & { score?: BangumiScoreReview };
-export type BangumiScoreChoice = KernelBangumiScoreChoice;
-export type BangumiScoreOutcome = KernelBangumiScoreOutcome;
-export type BangumiChoice = KernelBangumiChoice;
-export type BangumiOutcome = KernelBangumiOutcome;
+export type BangumiScoreChoice = NonNullable<BangumiChoice['score']>;
+export type BangumiScoreOutcome = NonNullable<BangumiOutcome['score']>;
 export type BangumiRow = {
   ordinal: number;
   evidence: BangumiEvidence;
