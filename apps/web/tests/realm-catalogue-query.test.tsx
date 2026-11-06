@@ -5,7 +5,7 @@ import type { SearchPageData } from '../src/search/search';
 import type { SpacePageData } from '../src/community/space';
 import { realmCataloguePageSearch } from '../src/community/realm-catalogue-entry';
 import { realmCatalogueSearchLoaderDeps } from '../src/search/search-params';
-import { realmCatalogueWindow } from '../src/community/realm-catalogue-window';
+import { realmCatalogueWindow } from '../src/search/realm-catalogue-window';
 import { searchRecoveryFromResponse, searchUnavailablePage } from '../src/search/search-recovery';
 
 const realm = '11111111-1111-4111-8111-111111111111';

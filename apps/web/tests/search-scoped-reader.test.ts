@@ -3,7 +3,7 @@ let principal: string | undefined;
 let credential: string | null = null;
 let unavailable = false;
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('@tanstack/react-start/server', () => ({ setResponseHeader() {} }));
+mock.module('@tanstack/react-start/server', () => ({ getRequest: () => new Request('http://127.0.0.1/'), setResponseHeader() {} }));
 mock.module('../src/session/request', () => ({
   prepareSession: async () => {
     if (unavailable) throw new Error('session unavailable');
