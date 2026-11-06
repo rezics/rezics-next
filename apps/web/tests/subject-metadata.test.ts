@@ -104,7 +104,12 @@ test('the recorded native page joins its visible creators and editions without a
   const json = JSON.parse(result.scripts[0]!.children);
   const creatorLabel = recorded.reads.r0.body.related[creator].labels.en;
   const creatorPath = subjectHref({ id: creator, label: creatorLabel }, 'en').href;
-  expect(html).toContain(`href="${creatorPath}"`);
+  const creatorVisit = new URL(creatorPath, origin);
+  creatorVisit.searchParams.set(
+    'via',
+    `${subjectHref({ id, label: recorded.reads.r0.body.subject.labels.en }, 'en').href}#literary-reader`,
+  );
+  expect(html).toContain(`href="${creatorVisit.pathname}${creatorVisit.search}"`);
   expect(json.author).toEqual({
     '@id': `https://rezics.com/id/${creator}`,
     '@type': 'Person',
