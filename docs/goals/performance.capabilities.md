@@ -116,10 +116,11 @@ hidden/denied/suspended/empty controls. Bound derivation is
 **Test choice:** Fewest tests: one HTTP/native helper per admitted public cell covering first/deep/empty together,
 sparse and unrelated-history growth as independent axes, one composed 16-read page, one alias/duplicate, one resume,
 one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites. Isolated Auth's
-Access pool binds the parent Kernel receipt ring before public registration; the composed world settles growth admin
-independently of the driver-owned runtime pool and keeps the original setup error.
+fork installs the ordinary History composition and product event catalogue (bun test preloads do not apply there),
+binds the parent Kernel receipt ring to its Access pool, reports the original Access error on the child stream, and
+settles acquired fixture resources on setup failure as well as completion.
 
-**Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access receipt
+**Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access/History
 composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`
 remain frozen on Commerce's unadopted completion/history and owner-query/libraryOperations contracts.
 Privacy-reduction served-share grows hidden unrelated subjects and checks a nondecreasing served share for the

@@ -3,7 +3,9 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { configureReceiptKeys } from '../../src/command/receipt-key.ts';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { initializeEventTypes } from '../../src/events/catalogue.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createOutcomeRpc } from '../search/support/outcome-rpc.ts';
 import { sharedAuth, closeOwnedSemanticAuth, type OwnedResourceObserver, type SharedAuth } from './outcome-auth.ts';
@@ -50,6 +52,35 @@ async function settleIndependently(
   if (cause) throw cause;
   if (errors.length === 1) throw errors[0];
   if (errors.length) throw new AggregateError(errors, message);
+}
+
+function withIsolatedOutput(error: unknown, output: string): never {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  if (!output.trim() || failure.message.includes(output)) throw failure;
+  throw new Error(`${failure.message}\nIsolated Auth output: ${output}`, { cause: failure });
+}
+
+function reportOriginal<T extends object>(ports: T): T {
+  return new Proxy(ports, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        try {
+          const result = Reflect.apply(value, target, args);
+          return result && typeof result === 'object' && 'then' in result
+            ? Promise.resolve(result).catch((error: unknown) => {
+                console.error(error);
+                throw error;
+              })
+            : result;
+        } catch (error) {
+          console.error(error);
+          throw error;
+        }
+      };
+    },
+  });
 }
 
 /** Only Auth crosses IPC. Kernel HTTP, Search and the supplied pools stay in the caller's capture context. */
@@ -145,10 +176,14 @@ export async function isolatedOutcomeAuth(
       service: { handler: (request: Request) => fetch(request) },
       host: {
         workflows: {
-          register: (input: Registration) => rpc.request<{ accountId: string }>('register', input),
+          register: (input: Registration) =>
+            rpc
+              .request<{ accountId: string }>('register', input)
+              .catch((error: unknown) => withIsolatedOutput(error, output)),
         },
       },
-      registerClient: (clientId: string, scopes: string[]) => rpc.request<void>('client', { clientId, scopes }),
+      registerClient: (clientId: string, scopes: string[]) =>
+        rpc.request<void>('client', { clientId, scopes }).catch((error: unknown) => withIsolatedOutput(error, output)),
       close,
     };
   } catch (error) {
@@ -159,6 +194,10 @@ export async function isolatedOutcomeAuth(
 
 if (import.meta.main) {
   if (!process.send) throw new Error('Isolated Auth requires private IPC');
+  // bun test preloads do not apply to this fork. Access commands need the same
+  // History composition and product event catalogue as server, worker and tests.
+  installNativeHistoryPreload();
+  initializeEventTypes();
   let auth: SharedAuth | undefined;
   let seed: ReturnType<typeof createPool> | undefined;
   let release: (() => void) | undefined;
@@ -217,12 +256,14 @@ if (import.meta.main) {
                 ...registration,
                 verifyPendingIdentity: registration.verifyNativePendingIdentity,
               }),
-              access: createRegistrationPorts({
-                pool: seed,
-                authPool: auth.database,
-                routeKey: Buffer.from(input.routeKey, 'base64url'),
-                referenceKeys,
-              }).ports,
+              access: reportOriginal(
+                createRegistrationPorts({
+                  pool: seed,
+                  authPool: auth.database,
+                  routeKey: Buffer.from(input.routeKey, 'base64url'),
+                  referenceKeys,
+                }).ports,
+              ),
             });
             return { issuer: auth.issuer, audience: auth.audience };
           })());
