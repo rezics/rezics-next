@@ -9,10 +9,8 @@ import {
   type CollectionAliasProgress,
   type PreparedCollectionSource,
   type CollectionSourceEvidence,
-  type WorkAllowance,
-  type WorkReceipt,
-  type WorkDimensions,
 } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { CollectionSourceLedger } from '../library/collection-source-work.ts';
 import {
   readCanonicalSourceState,
