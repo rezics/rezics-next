@@ -254,3 +254,33 @@ test('a just-exited group that lingers as zombies of that incarnation is already
     await terminateProcessGroup(identity, 20);
   }
 });
+test('terminateProcessGroup waits until a memberless kernel group becomes absent', async () => {
+  const identity = { pid: 2_000_000_001, group: 2_000_000_001, start: '0', boot: 'fixture-boot' };
+  let visible = 3;
+  const kill = process.kill.bind(process);
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid === -identity.group && signal === 0) {
+      if (visible-- > 0) return true;
+      throw Object.assign(new Error('No such process'), { code: 'ESRCH' });
+    }
+    return kill(pid, signal);
+  });
+  try {
+    await terminateProcessGroup(identity, 200);
+  } finally {
+    killSpy.mockRestore();
+  }
+});
+test('terminateProcessGroup refuses a kernel-visible group with no inspectable incarnation after the grace', async () => {
+  const identity = { pid: 2_000_000_002, group: 2_000_000_002, start: '0', boot: 'fixture-boot' };
+  const kill = process.kill.bind(process);
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid === -identity.group && signal === 0) return true;
+    return kill(pid, signal);
+  });
+  try {
+    await expect(terminateProcessGroup(identity, 80)).rejects.toThrow('visibility unknown');
+  } finally {
+    killSpy.mockRestore();
+  }
+});
