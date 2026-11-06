@@ -90,9 +90,10 @@ GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses o
 extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
 extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
 links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
-or `date-fns`. Web's Vite SSR optimizer disables discovery after the Cloudflare Worker environment
-merge, which would otherwise turn discovery back on, and excludes those packages, so Copies and
-other signed-in routes can print ready without prebundling them. Return uses the mounted
+or `date-fns`. Web's Vite plugin uses `configEnvironment` (not the root `config` hook) so the
+Cloudflare Worker environment cannot turn SSR discovery back on at serve time, and excludes those
+packages from client and Worker optimizeDeps, so Copies and other signed-in routes can print ready
+without prebundling them. Return uses the mounted
 `POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
