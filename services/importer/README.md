@@ -41,6 +41,14 @@ The selected bridge is Bangumi `person:1916` and VNDB `s224` (Jun Maeda), suppor
 
 The development seed uses the private VNDB list preview through the authenticated generated Kernel client and common journal. Missing private input is unavailable; report only the actual upload UUID and row count, never export contents or inferred activity. Selected Bangumi synopsis uses its exact source record and document snapshot, `und` language, CC-BY-SA-3.0 attribution and ShareAlike obligations. It stays private until the matching candidate is accepted and selected for Global; independently reread the subject, candidate, rights, citation, public statement and authored document. The retained doctor case uses original Bangumi bindings/citations, an adopted synopsis, and an unadopted private control for anonymous and member readers; repeat runs preserve that control and add no source facts.
 
+The personal caller also exposes explicit generated review/apply methods with stable intent IDs and the existing
+private journal. Retry sends the original operands even if a form changes, and a deadline resumes the same selection.
+Current preview and FULL Library reads always go to their native owners; journal acknowledgements supply no current
+facts. [Personal VNDB import](../../docs/library-import-vndb.md) owns matching, consent, privacy and native admission.
+Each invocation adds one addressed native request, bounded by the existing eight-row page/action limits; each command
+adds one exact intent key containing its bounded original body. The journal retains private command operands under its
+existing private-run retention and cleanup policy, independently of the native upload's 24-hour lifetime.
+
 Creator/voice candidates retain exact source relationships, Person identity, role qualifiers and citations. VNDB credited spelling comes from the exact `staff_alias` selected by `aid`; relationship notes remain source provenance and never become P1932 names. Source weights, votes and ranks are not native votes, confidence, acceptance, adoption or publication. Ordinary imports only propose; selected showcase runs reuse the same converter, publisher, resolver and journal. Facts fences apply to unchanged and cached records too. `task seed:dev` reports complete only after shared publication is current and published. Its report retains source keys, Subject IDs, candidate IDs, Global head/rank and exact statement readbacks. The [capability acceptance](../../docs/goals/imports.capabilities.md) owns the full native, browser and independent-page scenarios.
 
 ### Cross-media work graph

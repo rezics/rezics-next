@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { seedShowcasePersonalList } from '../../../importer/src/showcase-personal-list.ts';
+import {
+  applyShowcasePersonalList,
+  readShowcasePersonalLibrary,
+  readShowcasePersonalList,
+  reviewShowcasePersonalList,
+  seedShowcasePersonalList,
+} from '../../../importer/src/showcase-personal-list.ts';
 import { ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -312,6 +318,127 @@ test('a changed export updates the same matched Library entry and current readba
   expect(afterChanged.sessions).toEqual(before.sessions);
   await json('DELETE', `${base}/${firstUpload.uploadId}`);
   await json('DELETE', `${base}/${changedUpload.uploadId}`);
+}, 120000);
+test('journalled explicit review and changed reimport survive lost delivery and independently return the same Entry and Progress', async () => {
+  const targetId = await f.createSubject('game');
+  const sourceId = 'v999999999991';
+  const journal = new ShowcaseJournal(':memory:');
+  let loseApply = true;
+  const requests: string[] = [];
+  const client = createKernelClient('http://kernel.test', {
+    headers: { authorization: `Bearer ${f.owner.bearer}` },
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const response = await f.handle(request.clone());
+      if (new URL(request.url).pathname.endsWith(':apply')) {
+        requests.push(await request.text());
+        if (loseApply) {
+          loseApply = false;
+          throw new TypeError('lost acknowledgement after native commit');
+        }
+      }
+      return response;
+    }) as typeof fetch,
+  });
+  const caller = {
+    client,
+    journal,
+    identity: { origin: 'http://kernel.test', actor: f.owner.actor, credential: { keyId: 'private-list-owner' } },
+  };
+  try {
+    const first = await seedShowcasePersonalList({
+      ...caller,
+      xml: xml(
+        vn(sourceId, '<notes>Do not publish this private export</notes>'),
+        `<length-votes>${vn(sourceId, '<minutes>0</minutes>')}</length-votes>`,
+      ),
+    });
+    if (first.state !== 'uploaded') throw new Error(first.code);
+    expect(first.rows).toBe(2);
+    const preview = await readShowcasePersonalList({ client, uploadId: first.uploadId });
+    if (preview.state !== 'current') throw new Error(preview.code);
+    expect(preview.value.rows[0].match.status).toBe('unmatched');
+    expect((await f.send('owner', 'GET', `/v1/libraryEntries/${targetId}`)).status).toBe(404);
+    const state = await reviewShowcasePersonalList({
+      ...caller,
+      intentId: 'first-state',
+      uploadId: first.uploadId,
+      body: { ordinal: 0, action: 'state', targetId, state: 'playing', replace: false },
+    });
+    if (state.state !== 'acknowledged' || !('reviewId' in state.value))
+      throw new Error('State review was not acknowledged');
+    const selection = { rows: [{ ordinal: 0, reviewId: state.value.reviewId }] };
+    const command = { ...caller, intentId: 'first-apply', uploadId: first.uploadId, body: selection };
+    expect((await applyShowcasePersonalList(command)).state).toBe('unknown-delivery');
+    const installed = await f.commands.readEntry(f.owner.actor, targetId);
+    expect(installed.state).toBe('playing');
+    expect((await applyShowcasePersonalList({ ...command, body: { rows: [] } })).state).toBe('acknowledged');
+    expect(requests[1]).toBe(requests[0]);
+    expect(await f.commands.readEntry(f.owner.actor, targetId)).toEqual(installed);
+    const progress = await reviewShowcasePersonalList({
+      ...caller,
+      intentId: 'first-progress',
+      uploadId: first.uploadId,
+      body: {
+        ordinal: 1,
+        action: 'progress',
+        targetId,
+        progress: {
+          occurrence: { kind: 'start', primaryUnit: 'minute' },
+          measures: [{ field: 'minutes', action: 'adopt' }],
+        },
+      },
+    });
+    if (progress.state !== 'acknowledged' || !('reviewId' in progress.value))
+      throw new Error('Progress review was not acknowledged');
+    const progressApplied = await applyShowcasePersonalList({
+      ...caller,
+      intentId: 'first-progress-apply',
+      uploadId: first.uploadId,
+      body: { rows: [{ ordinal: 1, reviewId: progress.value.reviewId }] },
+    });
+    if (progressApplied.state !== 'acknowledged') throw new Error(progressApplied.code);
+    const progressOutcome = progressApplied.value.outcomes[0];
+    const sessionId =
+      progressOutcome && 'progress' in progressOutcome ? progressOutcome.progress?.readback?.sessionId : undefined;
+    expect(sessionId).toBeString();
+    const changed = await seedShowcasePersonalList({ ...caller, xml: xml(vn(sourceId, '<label label="Finished"/>')) });
+    if (changed.state !== 'uploaded') throw new Error(changed.code);
+    const replacement = await reviewShowcasePersonalList({
+      ...caller,
+      intentId: 'changed-state',
+      uploadId: changed.uploadId,
+      body: { ordinal: 0, action: 'state', targetId, state: 'completed', replace: true },
+    });
+    if (replacement.state !== 'acknowledged' || !('reviewId' in replacement.value))
+      throw new Error('Replacement review was not acknowledged');
+    expect(replacement.value).toMatchObject({
+      baseline: { incarnationId: installed.incarnationId, revision: installed.revision },
+    });
+    const replaced = await applyShowcasePersonalList({
+      ...caller,
+      intentId: 'changed-apply',
+      uploadId: changed.uploadId,
+      body: { rows: [{ ordinal: 0, reviewId: replacement.value.reviewId }] },
+    });
+    expect(replaced.state).toBe('acknowledged');
+    const current = await readShowcasePersonalLibrary({ client });
+    if (current.state !== 'current') throw new Error(current.code);
+    expect(current.value.libraryEntries.find((entry) => entry.subjectId === targetId)).toMatchObject({
+      state: 'completed',
+      incarnationId: installed.incarnationId,
+      activeProgressSession: { id: sessionId, amount: '0', unit: 'minute' },
+    });
+    expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('0');
+    expect((await f.send('other', 'GET', `${base}/${first.uploadId}`)).status).toBe(404);
+    const publicRead = await f.send('anonymous', 'GET', `/v1/subjects/${targetId}`);
+    expect(publicRead.status).toBe(200);
+    expect(await publicRead.text()).not.toContain('Do not publish this private export');
+    await json('DELETE', `${base}/${first.uploadId}`);
+    await json('DELETE', `${base}/${changed.uploadId}`);
+  } finally {
+    journal.close();
+  }
 }, 120000);
 test('reviewed conflicts preserve facts, revision and release guards reject stale choices, cancellation stops remaining rows', async () => {
   const target = await f.createSubject('game');

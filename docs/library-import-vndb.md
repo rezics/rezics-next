@@ -10,6 +10,13 @@ through the generated VNDB preview method, seals the exact body and idempotency 
 and returns the actual native upload UUID and row count. The existing review/apply API composes each native owner;
 no second importer or Library vote writer is introduced.
 
+Decision: explicit importer review and confirmation use stable intent IDs in the common private journal. Reopening
+replays the original upload address, review body/key and selected state/Progress or score review IDs under the same
+account, client, credential and origin. A changed form cannot replace pending operands. A deadline leaves the original
+selection resumable; an acknowledgement describes command outcomes only. A separate fresh eight-row FULL Library
+read supplies actual current Entry, Progress and counted-vote values. The development persona requests the existing
+Library, Progress and vote scopes for these explicit choices; source scores never confer consent.
+
 Decision: the mounted Web caller carries state, explicit minute occurrences and deliberate native vote units
 through the same retained review/apply commands. Native units zero and clear stay distinct. The official client uses
 a typed compatibility binding for these already mounted additions until whole-Kernel declaration emission succeeds;
