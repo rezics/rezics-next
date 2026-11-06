@@ -898,7 +898,7 @@ export function walkStackStartCommand(env: NodeJS.ProcessEnv = process.env): str
 
 /** Durable work shares the 6 GiB slice with dump import unless the journey starts it after seed. */
 async function serveWorker() {
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
@@ -965,7 +965,7 @@ async function superviseWalkStart(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 async function start() {
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),

@@ -21,7 +21,6 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { newId } from '../../src/route/route.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 
 const url = process.env.DATABASE_URL;
