@@ -16,6 +16,7 @@ const otherForm = id(13);
 const fantasy = id(14);
 const otherTag = id(15);
 const scheme = id(16);
+const child = id(21);
 
 const quantity = (property: string, amount: number, unit = '1'): IndexedStatement => ({
   property,
@@ -83,6 +84,7 @@ const books = [
       { property: 'rezics:sourceTagWeight', value: '5', facet: { kind: 'quantity', amount: 5, unit: '1' } },
     ]),
   ]),
+  subject('B-child', 8, 'schema:Book', [item('schema:genre', child)]),
 ];
 
 const names = (rows: readonly IndexedSubject[]) =>
@@ -166,14 +168,12 @@ test('descendant membership expands exact tags through the retained concept cut'
       concept: { scheme, includeChildren: true },
     },
   };
-  const child = id(21);
-  const descendant = subject('B-child', 8, 'schema:Book', [item('schema:genre', child)]);
-  const withoutCut = currentTaggedWorkSubjects([...books, descendant], remaining);
+  const withoutCut = currentTaggedWorkSubjects(books, remaining);
   expect(withoutCut).toEqual([]);
-  const withCut = currentTaggedWorkSubjects([...books, descendant], remaining, [
+  const withCut = currentTaggedWorkSubjects(books, remaining, [
     { property: 'schema:genre', scheme, concept: fantasy, values: new Set([child]) },
   ]);
-  expect(names(withCut).sort()).toEqual(['B-child', 'B-edge', 'B-long', 'B-movie', 'B-split']);
+  expect(names(withCut)).toEqual(['B-child', 'B-edge', 'B-long', 'B-movie', 'B-split']);
 });
 
 test('id order continues the remaining form/tag page after the first current row', () => {
