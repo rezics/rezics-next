@@ -20,7 +20,6 @@ import { actionCatalogue } from '../../../src/http/request.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
 import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
@@ -61,7 +60,8 @@ if (import.meta.main) {
       offset = Math.max(offset, message.advanceTo - realNow());
   });
   const workerEnv = workerTestEnv(process.env);
-  const worker = await startWorker(readWorkerConfig(workerEnv), KERNEL_WORK_MODULES, workerEnv);
+  // Live default composition supplies Content ambient; an eager module list bypasses those operands.
+  const worker = await startWorker(readWorkerConfig(workerEnv), undefined, workerEnv);
   // This executor only drains commerce. A deadline jump must not run the host's content crons.
   for (const schedule of await DBOS.listSchedules()) await DBOS.deleteSchedule(schedule.scheduleName);
   // Shorten scheduling latency while preserving the production queues' concurrency policies.
