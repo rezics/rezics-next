@@ -616,7 +616,7 @@ type CandidateRead = {
   source: BatchCommand['source'] | null;
   statement: BatchStatement;
   head: number | null;
-  decision?: 'accept' | 'reject' | 'abstain' | null;
+  decision?: 'accepted' | 'rejected' | 'abstained' | null;
 };
 type CandidatePage = {
   candidates: CandidateRead[];
@@ -1931,8 +1931,8 @@ export async function publishShowcase(input: {
       }
     }
     const candidate = validated.get(assertion.candidateId)!;
-    if (candidate.decision === 'accept') continue;
-    if (candidate.decision === 'reject') {
+    if (candidate.decision === 'accepted') continue;
+    if (candidate.decision === 'rejected') {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
       stoppedSubjects.add(id);
       continue;
@@ -2180,7 +2180,7 @@ export async function publishShowcase(input: {
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'vocabulary-binding-not-current' });
       continue;
     }
-    if (candidate.decision === 'reject') {
+    if (candidate.decision === 'rejected') {
       setParentOutcome(binding, 'withheld', edge.assertion.candidateId, 'parent candidate is rejected');
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'candidate-currently-rejected' });
       continue;
@@ -2431,8 +2431,8 @@ export async function publishShowcase(input: {
     const association = tagAssociationFor(record, assertion, manifest.tagAssociations ?? []);
     if (!association || withheldParentTags.has(association.tagId)) continue;
     const candidate = validated.get(assertion.candidateId)!;
-    if (candidate.decision === 'accept') continue;
-    if (candidate.decision === 'reject') {
+    if (candidate.decision === 'accepted') continue;
+    if (candidate.decision === 'rejected') {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
       continue;
     }

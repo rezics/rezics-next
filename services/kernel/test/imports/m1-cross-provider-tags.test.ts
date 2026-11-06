@@ -57,7 +57,7 @@ async function acceptAndAdopt(
       mode: 'replace',
       expected_head: page.adoption?.head ?? null,
       selection: page.candidates
-        .filter((candidate) => !candidate.retracted && candidate.decision === 'accept')
+        .filter((candidate) => !candidate.retracted && candidate.decision === 'accepted')
         .map((candidate) => ({ candidate: candidate.id, rank: 'normal' as const })),
     });
     expect(adopted.status).toBe(200);

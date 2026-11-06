@@ -260,12 +260,17 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       async reviewedCandidates(id, query) {
         expect(query.context).toBe(globalContext);
         return {
-          candidates: [...candidates.values()].filter(
-            (candidate) =>
-              (candidate.source?.external_id === subjects.get(id)?.sourceExternalId &&
-                candidate.statement.property.id === query.property) ||
-              (candidate.id === unrelatedId && id === workId && query.property === 'schema:name'),
-          ),
+          candidates: [...candidates.values()]
+            .filter(
+              (candidate) =>
+                (candidate.source?.external_id === subjects.get(id)?.sourceExternalId &&
+                  candidate.statement.property.id === query.property) ||
+                (candidate.id === unrelatedId && id === workId && query.property === 'schema:name'),
+            )
+            .map((candidate) => ({
+              ...candidate,
+              decision: accepted.has(candidate.id) ? 'accepted' : null,
+            })),
           next: null,
           adoption: adopted.get(`${id}\0${query.property}`) ?? null,
         } as never;
