@@ -146,6 +146,13 @@ try {
   evidence.conversions = first.conversions;
   evidence.gaps = first.gaps;
   assert.deepEqual(first.selected.series, ['499', '2815']);
+  // A BookSeries admits publisher but not author or illustrator; those source credits stay exact gaps.
+  assert(
+    first.creditGaps.some(
+      (gap: any) => gap.path === '/subject-persons/2815/1466/position' && gap.reason === 'property_not_admitted',
+    ),
+    'Kara author must stay an exact property_not_admitted gap',
+  );
   for (const key of ['26', '5329', '10862']) assert(first.selected.volumes.includes(key));
   for (const key of ['person:1466', 'person:1467', 'person:128', '233'])
     assert(first.identities[key], `Missing ${key}`);
@@ -173,8 +180,6 @@ try {
   for (const [key, property, target] of [
     ['5329', 'wdt:P179', '2815'],
     ['10862', 'wdt:P179', '2815'],
-    ['2815', 'schema:author', 'person:1466'],
-    ['2815', 'schema:illustrator', 'person:1467'],
     ['2815', 'schema:publisher', 'person:128'],
   ])
     assert(

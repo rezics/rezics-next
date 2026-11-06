@@ -252,8 +252,13 @@ test('pinned light-novel families publish a native graph with separate acceptanc
       (await publicClient.readSubject(first.identities[key]!.id)).subject as unknown as ReadSubject;
     const series = await read('2815');
     expect(series.type).toBe('schema:BookSeries');
-    expect(contentsOf(series, 'schema:author')).toContain(first.identities['person:1466']!.id);
-    expect(contentsOf(series, 'schema:illustrator')).toContain(first.identities['person:1467']!.id);
+    // A BookSeries admits publisher but not author or illustrator; those credits stay exact gaps.
+    expect(first.creditGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: '/subject-persons/2815/1466/position', reason: 'property_not_admitted' }),
+        expect.objectContaining({ path: '/subject-persons/2815/1467/position', reason: 'property_not_admitted' }),
+      ]),
+    );
     expect(contentsOf(series, 'schema:publisher')).toContain(first.identities['person:128']!.id);
     // Bangumi archive aliases stay exact und names beside the admitted zh name.
     expect(contentsOf(series, 'schema:name')).toContainEqual({ language: 'und', text: 'THE GARDEN OF SINNERS' });
