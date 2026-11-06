@@ -6,7 +6,7 @@ SELECT position::text AS position,
        data,
        recorded_at::text AS time
 FROM core.outbox
-WHERE subject = $1::uuid
+WHERE subject = $1::text
   AND type IN (
     'com.rezics.rating.vote.changed.v1',
     'com.rezics.rating.identity-repair.page.v1',
