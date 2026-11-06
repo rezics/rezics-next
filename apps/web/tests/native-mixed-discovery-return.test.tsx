@@ -1,24 +1,24 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KernelClient } from '@rezics/client';
 import { ContentItem } from '@rezics/ui/content-item';
-import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
-import { createHomeSpaceSelection, type HomeSpaceResult } from '../src/features/pages/home-feed-spaces';
-import {
+import type { HomeSpaceResult } from '../src/features/pages/home-feed-spaces';
+import type { FeedInput, FeedItem, FeedPage, HomeFeedResult } from '../src/features/pages/home-feed-read';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
+const { createHomeSpaceSelection } = await import('../src/features/pages/home-feed-spaces');
+const { discoveryCollectionCard } = await import('../src/kernel/fake/discovery-collection-card');
+const {
   createHomeFeedWindow,
   HOME_FEED_LIMIT,
   homeFeedHistoryState,
   homeFeedNavigationDescriptor,
   readHomeFeedPage,
   readHomeFeedNavigationDescriptor,
-  type FeedInput,
-  type FeedItem,
-  type FeedPage,
-  type HomeFeedResult,
-} from '../src/features/pages/home-feed-read';
-import { locales, setLocale } from '../src/paraglide/runtime.js';
-import { m } from '../src/paraglide/messages.js';
+} = await import('../src/features/pages/home-feed-read');
+const { locales, setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
 
 const location = { origin: 'https://example.test', pathname: '/en/' };
 const selection: FeedInput = {
@@ -53,7 +53,12 @@ function mixedRows(): FeedItem[] {
     source: 'discovery',
     key: { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: null,
-    summary: { id: collectionId, title: 'Reading shelf', description: 'Short novels.' },
+    summary: {
+      id: collectionId,
+      title: 'Reading shelf',
+      description: 'Short novels.',
+      card: discoveryCollectionCard({ id: collectionId, title: 'Reading shelf', description: 'Short novels.' }),
+    },
     destination: { kind: 'collection', id: collectionId, title: 'Reading shelf' },
   };
   const review: FeedItem = {
@@ -120,7 +125,8 @@ test('native Collection, review and Space cards keep their supplied context and 
   expect(collection).toContain('Reading shelf');
   expect(collection).toContain('Short novels.');
   expect(collection).toContain('/en/collections/01a1a000-0000-7000-8000-000000000821');
-  expect(collection).not.toContain('members');
+  expect(collection).not.toContain('data-collection-member-id');
+  expect(collection).toContain(m.discovery_collection_preview_unavailable({}, { locale: 'en' }));
   expect(review).toContain('Review');
   expect(review).toContain('A careful reread');
   expect(review).toContain('Current Reader');
@@ -132,7 +138,7 @@ test('native Collection, review and Space cards keep their supplied context and 
   expect(space).toContain('A quiet reading room.');
   expect(space).toContain('Atlas Realm');
   expect(space).toContain('/en/spaces/quiet-room');
-  expect(space).not.toContain('/realms/');
+  expect(space).toContain('/en/realms/01a1a000-0000-7000-8000-000000000826');
   const result = renderToStaticMarkup(
     <HomeFeed
       result={{

@@ -9,6 +9,9 @@ import {
   homeWorkLibraryRow,
   isValidProjection,
   sameHomeWorkLibraryScope,
+  homeWorkLibraryFeedProjection,
+  type HomeNativePersonalPage,
+  type HomeWorkLibraryLease,
   type HomeWorkLibraryProjection,
   type HomeWorkLibraryScope,
 } from './contract';
@@ -21,17 +24,30 @@ const readerNothing = () => undefined;
 
 export function HomeWorkLibraryProvider({
   expectedScope,
-  projection,
+  projection: explicitProjection,
+  personal,
+  feedLease,
   signedIn,
   enabled,
   children,
 }: {
   expectedScope: HomeWorkLibraryScope;
   projection?: HomeWorkLibraryProjection;
+  /** The installed feed page's personal facts, admitted only under this window's lease. */
+  personal?: HomeNativePersonalPage;
+  feedLease?: HomeWorkLibraryLease;
   signedIn: boolean;
   enabled: boolean;
   children: ReactNode;
 }) {
+  const derivedProjection = useMemo(
+    () =>
+      personal && feedLease && expectedScope.reader
+        ? homeWorkLibraryFeedProjection({ native: personal, scope: expectedScope, lease: feedLease })
+        : undefined,
+    [personal, feedLease, expectedScope],
+  );
+  const projection = explicitProjection ?? derivedProjection;
   const hydrated = useSyncExternalStore(
     subscribeNothing,
     () => true,

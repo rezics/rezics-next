@@ -17,14 +17,17 @@ Following Collection activity retains its existing meaning and does not establis
 The installed `FeedItemSchema` admits public discovery Subject, Account, Collection, review and Space rows,
 plus Following thread, post and Collection rows. Web consumes the generated union through its existing
 ContentItem adapter and canonical locale-aware owner destinations. Public owner cards show supplied description
-text, explicit empty descriptions, unavailable descriptions and unavailable curator/carrier presentation. A Space's
-disclosed Realm title remains carrier context; following is neither Realm membership nor an access grant.
+text, explicit empty descriptions and unavailable descriptions. A Collection card shows its installed curator, owner
+presentation and preview states; a Space shows its disclosed carrier or an unavailable carrier. A Space's disclosed
+Realm title remains carrier context; following is neither Realm membership nor an access grant.
 
-Decision: Home public-owner cards keep exact owner navigation usable while missing curator/presentation and bounded private follow admission remain explicitly unavailable, without per-card enrichment.
+Decision: Home public-owner cards keep exact owner navigation usable. Collection curator, presentation, cover and
+preview come only from the installed card, and bounded private follow admission remains explicitly unavailable; no
+card is enriched.
 
 The native Collection summary carries `id`, `title`, nullable `description` and Search's complete closed `card`,
 including admitted curator, cover, presentation and preview completeness; Home shares its schema through Search's
-public schema-only entry. Installed Web receiving must consume the official publication. Space adds
+public schema-only entry. Web receives it from the installed client. Space adds
 `address`, optional `summary` and optional nullable `realm: {id,title}`. These fields do not distinguish withheld
 context from dependency failure. Web does not label either an empty value or an absent field as withheld.
 Collection card context retains its native available/unavailable curator and available/empty/withheld/unavailable
@@ -595,8 +598,14 @@ receiving tests do not establish native lifecycle, growth or full experience acc
 Authenticated Home adds optional `viewerPersonalActions` with the exact native
 `ViewerPersonalActionsPage` shape. `FeedViewerPersonalActionsSchema` extends the native
 facts schema with the mounted action state and is reachable through `FeedPageSchema` and
-`feed_item.list` OpenAPI. The complete-input publisher emits declarations and the installed
-client's existing `FeedPage` root alias; Web retains its existing receiver and writers.
+`feed_item.list` OpenAPI. The installed client carries it on `FeedPage`. Web maps that one page into the Home
+work-library seam by original occurrence and Subject, keeps it only for the feed window that delivered it, and retires
+it on replacement, sign-out or reader change. Missing or unavailable native facts stay unavailable; writers remain
+with their existing owners.
+
+Thread, post and review rows receive `summary.reactionAdvice`. A current `allowed` list enables exactly those kinds,
+`[]` denies every write, and `sign_in` or `unavailable` keep their native meaning. Absent advice stays unavailable and
+never falls back to counts or viewer slots.
 
 Decision: Home attaches one native page result keyed by original occurrence IDs, and
 withholds changed source occurrences without refill, retaining their original retry frontier.

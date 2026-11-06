@@ -75,21 +75,26 @@ client. It retains the supplied title, canonical destination, cover/avatar, lang
 attributes, Continue progress, and separate resume link. Discovery Collections use the Commerce owner identity and
 open `/collections/{id}`; reviews keep their Content thread identity and current admitted work/citation; replies keep
 their exact post identity and may show a disclosed immediate parent; Spaces
-keep the exact admitted identity and address, and link a supplied Realm carrier by its native id. Collection curator
-and cover data,
-and review ratings, stay absent until their bounded public owner summaries supply them. The adapter performs no
+keep the exact admitted identity and address, and link a supplied Realm carrier by its native id. Discovery Collection
+curator, owner presentation, cover and preview come from the installed card; review ratings stay absent until a
+public summary supplies them. The adapter performs no
 reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
 Collections and Content thread/post summaries keep their existing native identities and actions.
 
 Decision: On a Space card, missing Realm facts stay unavailable, explicit null says no Realm is attached, and a
 supplied Realm identity remains linked when its title is null or empty; null and empty titles stay distinct.
 
+Decision: a Collection card shows the installed curator (linked only through a same-application `/@handle`), its
+owner presentation, its cover with the cover's own credit, and up to three preview members. Each member link carries
+its occurrence in the return address. Empty, withheld and unavailable previews keep distinct copy. Following Collection
+rows carry no card and keep only the unavailable curator line.
+
 Home discussion and review cards also consume the selected thread's `conversationActivity` summary. A current
 public cohort shows its admitted reply count and original last-contribution time; lower-bound counts retain a
 visible `+` and an accessible lower-bound label. Withheld activity shows no count or time and keeps retry on the
 exact conversation destination. The page adapter does not read replies or infer activity from loaded cards.
-Until the complete-input publisher emits the installed DTO, the Web activity parser accepts the native response as
-an unknown value and fails closed on missing or malformed fields.
+The Web activity parser reads the installed `conversationActivity` value as unknown and fails closed on missing or
+malformed fields.
 
 Decision: Home uses current native review target and question/vote revisions. Reply cards show only the exact
 immediate parent and its disclosed author, language and spoiler fields. Absent, withheld or unavailable context does
@@ -262,7 +267,7 @@ old identity, preview, image and destination. Reader/session/source retirement s
 
 ### Native handoffs
 
-Decision: signed-in Home Thread/Post reactions require native per-row action advice; targets, counts and viewer selection do not grant permission, and Home does not read permissions per card.
+Decision: signed-in Home Thread/Post reactions require native per-row action advice; targets, counts and viewer selection do not grant permission, and Home does not read permissions per card. The installed `reactionAdvice` on thread, post and review rows supplies that advice with the page; the receiver's type fails if a republication drops it.
 
 - Content supplies author and excerpt on its installed thread/post summary. The current FeedAuthor has no deletion
   discriminator: web cannot distinguish deleted from unknown when no identity is delivered.

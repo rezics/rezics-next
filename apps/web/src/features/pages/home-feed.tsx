@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
@@ -7,7 +7,11 @@ import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-em
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
 import { HomeWorkLibraryProvider } from '../feed/home-work-library/view';
-import type { HomeWorkLibraryProjection, HomeWorkLibraryScope } from '../feed/home-work-library/contract';
+import type {
+  HomeWorkLibraryLease,
+  HomeWorkLibraryProjection,
+  HomeWorkLibraryScope,
+} from '../feed/home-work-library/contract';
 import { HomeReactionRecovery, useHomeReactionRecovery } from '../feed/home-reaction-currentness-recovery';
 import { homeFeedDestination } from './home-feed-destination';
 import { useHomeReactionCurrentness } from '../feed/home-reaction-currentness';
@@ -445,6 +449,15 @@ export function HomeFeedConsumer({
   const spaceSnapshot = useSyncExternalStore(spaces.subscribe, spaces.snapshot, spaces.snapshot);
   const kinds = useSyncExternalStore(choices.subscribe, choices.snapshot, choices.snapshot);
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
+  // Each window snapshot is one source lifetime: replacing, clearing or reloading it retires its personal facts.
+  const feedLease = useMemo<HomeWorkLibraryLease>(
+    () => ({
+      isCurrent: () => window.snapshot() === snapshot,
+      snapshot: () => (window.snapshot() === snapshot ? 1 : 0),
+      subscribe: (listener) => window.subscribe(listener),
+    }),
+    [window, snapshot],
+  );
   useEffect(
     () => () => {
       choices.retire();
@@ -675,12 +688,16 @@ export function HomeFeedConsumer({
     locale,
     route: '/',
   };
+  // The installed page supplies personal facts for its own rows; the provider maps them under this window's lease.
+  const personal = snapshot.result.state === 'ready' ? snapshot.result.page.viewerPersonalActions : undefined;
   return (
     <HomeWorkLibraryProvider
       expectedScope={homeWorkLibraryScope}
       signedIn={signedIn}
       enabled
       {...(homeWorkLibrary ? { projection: homeWorkLibrary } : {})}
+      {...(personal ? { personal } : {})}
+      feedLease={feedLease}
     >
       <HomeFeed
         result={snapshot.result}

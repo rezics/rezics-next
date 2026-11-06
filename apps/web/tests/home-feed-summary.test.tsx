@@ -1,14 +1,16 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ContentItem } from '@rezics/ui/content-item';
-import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
-import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
-import { exactRevisionHref } from '../src/threads/exact-revision-href';
-import { threadLocation } from '../src/threads/thread-href';
-import { locales, setLocale } from '../src/paraglide/runtime.js';
-import { m } from '../src/paraglide/messages.js';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
+const { homeFeedDestination } = await import('../src/features/pages/home-feed-destination');
+const { discoveryCollectionCard } = await import('../src/kernel/fake/discovery-collection-card');
+const { exactRevisionHref } = await import('../src/threads/exact-revision-href');
+const { threadLocation } = await import('../src/threads/thread-href');
+const { locales, setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
 
 function row(kind: 'thread' | 'post', identity = true): FeedItem {
   const id = '12345678-1234-1234-1234-123456789abc';
@@ -87,7 +89,19 @@ function collectionRow(source: 'following' | 'discovery' = 'following'): FeedIte
         ? { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId }
         : { owner: 'library', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: '2026-11-03T00:00:00Z',
-    summary: { id: collectionId, title: 'Books I come back to', description: 'Short novels.' },
+    summary:
+      source === 'discovery'
+        ? {
+            id: collectionId,
+            title: 'Books I come back to',
+            description: 'Short novels.',
+            card: discoveryCollectionCard({
+              id: collectionId,
+              title: 'Books I come back to',
+              description: 'Short novels.',
+            }),
+          }
+        : { id: collectionId, title: 'Books I come back to', description: 'Short novels.' },
     destination: { kind: 'collection', id: collectionId, title: 'Books I come back to' },
   };
 }
@@ -201,7 +215,8 @@ test('Collection, review and Space rows keep native identity and omit missing en
   expect(html[2]).toContain('Home Reading Room');
   expect(html[2]).toContain('Atlas');
   expect(html[2]).toContain('A quiet room.');
-  expect(html[2]).not.toContain('/realms/');
+  // A supplied Realm stays linked by its native id.
+  expect(html[2]).toContain('href="/en/realms/01a1a000-0000-7000-8000-000000000812"');
   expect(collection.visual).toBeUndefined();
   expect(review.visual).toBeUndefined();
   expect(space.visual).toBeUndefined();

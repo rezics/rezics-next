@@ -136,6 +136,21 @@ export function FeedCardVisual({
         />
       </div>
     );
+  } else if ('card' in summary) {
+    // The installed Collection card supplies its own cover and owner-chosen presentation; nothing is looked up.
+    const cover = summary.card.cover;
+    const kind = summary.card.presentationKindSource === 'owner' ? summary.card.presentationKind : null;
+    visual = (
+      <div className="w-20 sm:w-24" data-collection-cover-source={summary.card.coverSource}>
+        <Cover
+          subject={{ id: summary.id, title, types: kind ? [kind] : [] }}
+          cover={cover ? { ...cover, variants: [...cover.variants] } : null}
+          size="fill"
+          src={coverSrc}
+          decorative
+        />
+      </div>
+    );
   } else return undefined;
   return href ? (
     <a href={href} aria-label={m.home_card_open({ title }, options)} className={feedCardLinkClassName}>
@@ -164,71 +179,93 @@ export function FeedCardPreview({ item }: { item: FeedItem }) {
   ) : null;
 }
 
+/** The reviewed Subject is a secondary destination; its label keeps the supplied language. */
+function ReviewedSubjectLink({
+  id,
+  title,
+  language,
+  locale,
+}: {
+  id: string;
+  title: string | null;
+  language?: string | null | undefined;
+  locale: string;
+}) {
+  const options = { locale: locale as Locale };
+  const label = title || m.subject_value_unlabelled({}, options);
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
+      <span>{m.home_card_review_subject({}, options)}</span>
+      <a
+        href={subjectHref({ id, label }, locale).href}
+        className={feedCardLinkClassName}
+        {...(language ? { lang: language } : {})}
+      >
+        <bdi>{label}</bdi>
+      </a>
+    </span>
+  );
+}
+
 /** Review Subjects are secondary destinations; Realm names are unlinked Space carrier context. */
 export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
   if ('kind' in summary && summary.kind === 'review') {
     const context = 'reviewContext' in summary ? summary.reviewContext : undefined;
-    if (context) {
-      const target = context.target;
-      const citation = context.citation;
-      return (
+    if (!context) {
+      // Search's public review summary supplies its reviewed Subject directly; Home does not fetch it.
+      const subject = 'subject' in summary ? summary.subject : null;
+      return subject ? (
         <div className="flex min-w-0 flex-col gap-1" data-feed-card-review-context>
-          {target.state === 'available' ? (
-            <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
-              <span>{m.home_card_review_subject({}, options)}</span>
-              <a
-                href={
-                  subjectHref(
-                    {
-                      id: target.subject.id,
-                      label: target.subject.label?.value || m.subject_value_unlabelled({}, options),
-                    },
-                    locale,
-                  ).href
-                }
-                className={feedCardLinkClassName}
-                {...(target.subject.label?.language ? { lang: target.subject.label.language } : {})}
-              >
-                <bdi>{target.subject.label?.value || m.subject_value_unlabelled({}, options)}</bdi>
-              </a>
-            </span>
-          ) : null}
-          {citation.state === 'available' ? (
-            <span
-              className="min-w-0 [overflow-wrap:anywhere]"
-              data-feed-review-citation
-              data-question-id={citation.question.id}
-              data-question-revision={citation.question.revision}
-              data-vote-revision={citation.voteRevision}
-              data-units={citation.units}
-            >
-              <bdi>{citation.question.label}</bdi>
-              <span> · </span>
-              {m.thread_provenance_vote(
-                {
-                  units: new Intl.NumberFormat(locale).format(citation.units),
-                  questionId: citation.question.id,
-                  revision: new Intl.NumberFormat(locale).format(citation.voteRevision),
-                },
-                options,
-              )}
-              <span> · </span>
-              {m.rating_question_revision(
-                { revision: new Intl.NumberFormat(locale).format(citation.question.revision) },
-                options,
-              )}
-            </span>
-          ) : citation.state === 'absent' ? (
-            <span data-feed-review-citation="absent">{m.library_my_ratings_review_missing({}, options)}</span>
-          ) : (
-            <span data-feed-review-citation="withheld">{m.post_history_score_concealed({}, options)}</span>
-          )}
+          <ReviewedSubjectLink id={subject.id} title={subject.title} locale={locale} />
         </div>
-      );
+      ) : null;
     }
-    return null;
+    const target = context.target;
+    const citation = context.citation;
+    return (
+      <div className="flex min-w-0 flex-col gap-1" data-feed-card-review-context>
+        {target.state === 'available' ? (
+          <ReviewedSubjectLink
+            id={target.subject.id}
+            title={target.subject.label?.value ?? null}
+            language={target.subject.label?.language}
+            locale={locale}
+          />
+        ) : null}
+        {citation.state === 'available' ? (
+          <span
+            className="min-w-0 [overflow-wrap:anywhere]"
+            data-feed-review-citation
+            data-question-id={citation.question.id}
+            data-question-revision={citation.question.revision}
+            data-vote-revision={citation.voteRevision}
+            data-units={citation.units}
+          >
+            <bdi>{citation.question.label}</bdi>
+            <span> · </span>
+            {m.thread_provenance_vote(
+              {
+                units: new Intl.NumberFormat(locale).format(citation.units),
+                questionId: citation.question.id,
+                revision: new Intl.NumberFormat(locale).format(citation.voteRevision),
+              },
+              options,
+            )}
+            <span> · </span>
+            {m.rating_question_revision(
+              { revision: new Intl.NumberFormat(locale).format(citation.question.revision) },
+              options,
+            )}
+          </span>
+        ) : citation.state === 'absent' ? (
+          <span data-feed-review-citation="absent">{m.library_my_ratings_review_missing({}, options)}</span>
+        ) : (
+          <span data-feed-review-citation="withheld">{m.post_history_score_concealed({}, options)}</span>
+        )}
+      </div>
+    );
   }
   if (item.destination.kind === 'space' && 'realm' in summary && summary.realm?.title) {
     return (
