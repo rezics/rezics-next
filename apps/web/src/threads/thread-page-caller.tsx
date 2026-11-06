@@ -424,9 +424,14 @@ export class ThreadPageCaller {
       const refreshEvent = this.observeRefreshQueryEvent(event);
       const ownedResult = this.observeOwnedPageResultEvent(event);
       const currentKeyEvent = matchingKey(event.query.queryKey, this.queryKey);
-      if (isRetiringQueryEvent(event) && (refreshEvent.external || (!refreshEvent.owned && !ownedResult))) {
-        if (currentKeyEvent) this.externalQueryMutation = event;
-        if (refreshEvent.external || currentKeyEvent) this.retire();
+      const boundToPage = this.queryStarted || this.queryState !== undefined;
+      if (
+        isRetiringQueryEvent(event) &&
+        (refreshEvent.external || (!refreshEvent.owned && !ownedResult)) &&
+        (refreshEvent.external || boundToPage)
+      ) {
+        if (currentKeyEvent && boundToPage) this.externalQueryMutation = event;
+        if (refreshEvent.external || (currentKeyEvent && boundToPage)) this.retire();
       }
       this.check();
       const personalChanged = !this.retired && this.observePersonalCache();
@@ -582,6 +587,11 @@ export class ThreadPageCaller {
     return this.retired;
   }
 
+  /** Route identity left this mounted reader; notify so private disclosure hides before the successor read finishes. */
+  retireMounted() {
+    this.retire(true);
+  }
+
   private abandonRetiredPage(cancelQuery: object | undefined, pageKey: QueryKey | undefined) {
     const liveStamp = pageKey ? this.source.queryStamp(pageKey) : undefined;
     try {
@@ -601,7 +611,7 @@ export class ThreadPageCaller {
     } catch {
       /* Cancellation is the expected interruption; it must not escape a cache notification. */
     }
-    if (pageKey && (!liveStamp || ownsPageQuery(liveStamp.query, this)))
+    if (pageKey && liveStamp && ownsPageQuery(liveStamp.query, this))
       this.client.removeQueries({ queryKey: pageKey, exact: true });
   }
 
@@ -728,8 +738,10 @@ export class ThreadPageCaller {
       if (!this.ownsBoundaryEvent(boundary, event)) continue;
       owned = true;
       if (boundary.continuation?.active) ownedContinuations.add(boundary.continuation);
-      if (matchingKey(event.query.queryKey, this.queryKey))
+      if (matchingKey(event.query.queryKey, this.queryKey)) {
         this.queryState = this.source.queryStamp(this.queryKey) ?? null;
+        if (this.queryStarted) this.queryStartTerminalRevision = this.source.queryTerminalRevision(this.queryKey);
+      }
     }
     for (const continuation of this.refreshContinuations) {
       if (!continuation.active || !isThreadPageFor(event.query.queryKey, continuation.identity.id)) continue;
@@ -1487,7 +1499,7 @@ export async function runThreadPageQuery<T extends { queryKey: QueryKey }, TResu
     caller.finishQuery(query.queryKey, result, before, beforeTerminalRevision);
     return result;
   } catch (error) {
-    caller.failQuery();
+    if (!caller.isRetired()) caller.failQuery();
     throw error;
   }
 }

@@ -36,7 +36,7 @@ import {
 } from 'react';
 import { QueryClientContext, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { m } from '../../paraglide/messages.js';
-import { getLocale } from '../../paraglide/runtime.js';
+import { deLocalizeUrl, getLocale } from '../../paraglide/runtime.js';
 import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
 import {
@@ -318,22 +318,24 @@ export function ThreadPage() {
       (session !== 'signed-in' || activePage.viewerId !== subject));
   const page = activePage;
   const personalOptions = useMemo(() => threadPersonalQuery(id, cursor, postIds), [id, cursor, postIds]);
-  const personalAttempt = useMemo(
-    () =>
-      caller && !caller.isRetired() && caller.isConnectedCurrent()
-        ? caller.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds]))
-        : undefined,
-    [
-      caller,
-      personalOptions.queryKey,
-      id,
-      cursor,
-      postIds,
-      caller?.sessionRevision,
-      caller?.connectionTicket,
-      caller?.personalRevision,
-    ],
-  );
+  const personalAttempt = useMemo(() => {
+    if (!caller || caller.isRetired()) return undefined;
+    try {
+      return caller.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds]));
+    } catch (error) {
+      if (error instanceof ThreadPageCallerRetired) return undefined;
+      throw error;
+    }
+  }, [
+    caller,
+    personalOptions.queryKey,
+    id,
+    cursor,
+    postIds,
+    caller?.sessionRevision,
+    caller?.connectionTicket,
+    caller?.personalRevision,
+  ]);
   const personalAdmitted = !!caller && !caller.isRetired();
   const personalQuery = useQuery({
     ...personalOptions,
@@ -399,7 +401,7 @@ export function ThreadPage() {
         toLocation.pathname === router.state.location.pathname &&
         JSON.stringify(toLocation.search) === JSON.stringify(router.state.location.search);
       const localeChanged = getLocale() !== callerRef.current?.admission.identity.locale;
-      if (!samePlace || localeChanged) callerRef.current?.retireFromRouteChange();
+      if (!samePlace || localeChanged) callerRef.current?.retireMounted();
     });
     return () => {
       unsubscribe();
@@ -549,10 +551,13 @@ export function ThreadPage() {
       if (!publicationCurrent()) throw new Error('Thread reader changed');
       rememberThreadSlug(updated.thread.id, updated.thread.title);
       if (!publicationCurrent()) throw new Error('Thread reader changed');
-      const destinationLocation = new URL(destination, window.location.origin);
-      if (destinationLocation.pathname !== location.pathname) {
+      const destinationLocation = deLocalizeUrl(new URL(destination, window.location.origin));
+      const currentLocation = deLocalizeUrl(new URL(location.pathname + location.search, window.location.origin));
+      if (destinationLocation.pathname !== currentLocation.pathname) {
         operation.navigationPath = destinationLocation.pathname;
-        await router.navigate({ to: destination });
+        await router.navigate({
+          to: `${destinationLocation.pathname}${destinationLocation.search}${destinationLocation.hash}`,
+        });
         if (
           !operation.navigationAuthorized ||
           routeRevision.current !== routeTicket ||
@@ -575,8 +580,13 @@ export function ThreadPage() {
     }
   }
 
+  useLayoutEffect(() => {
+    if (getLocale() === activeAdmission.identity.locale) return;
+    callerRef.current?.retireMounted();
+    currentRead.current.operation?.retire();
+  }, [locale, activeAdmission.identity.locale]);
   return (
-    <AuthoringDepartureProvider>
+    <AuthoringDepartureProvider sessionBound="subject">
       {currentPageUnavailable ? (
         <div role="alert" className="mx-auto max-w-3xl space-y-3 p-4">
           <p>{m.thread_post_unavailable()}</p>

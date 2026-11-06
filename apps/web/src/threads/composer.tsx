@@ -665,8 +665,9 @@ function PostComposerContent<T, Context = undefined>({
     submittingRef.current,
     replyIntent.current.unresolved,
   ]);
+  const departureHeld = lifetime.current() || replyIntent.current.unresolved || submittingRef.current;
   const departure = useAuthoringDeparture(
-    lifetime.current() &&
+    departureHeld &&
       (title !== '' ||
         JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
         JSON.stringify(submissionContext) !== initialSubmissionContext.current ||
@@ -675,7 +676,7 @@ function PostComposerContent<T, Context = undefined>({
         submittingRef.current ||
         replyIntent.current.unresolved ||
         uncertainChanged),
-    lifetime.current() && (submittingRef.current || replyIntent.current.unresolved),
+    replyIntent.current.unresolved || (lifetime.current() && submittingRef.current),
     departureSignature,
     undefined,
     () => lifetime.retire(),

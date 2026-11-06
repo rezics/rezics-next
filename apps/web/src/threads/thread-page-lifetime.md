@@ -106,5 +106,6 @@ the safe runtime behavior, but does not claim that private SSR and private hydra
   do not add native requests, per-row work, polling or authentication. Lifetime tests wait for the actual page and
   personal request spies rather than a fixed number of microtasks. Decision: owned page publication keeps the Query
   stamp; external session/cache retirement cancels and removes asynchronously so cancellation cannot escape the
-  cache notification; StrictMode remount reuses the same connection generation. The connected regressions authored
-  for this implementation remain UNRUN until the deferred acceptance pass.
+  cache notification; a delayed cancel or remove leaves a newer live caller and its query object untouched;
+  StrictMode remount reuses the same connection generation. Refresh navigation compares the de-localized thread path
+  so a locale prefix does not leave the current page.

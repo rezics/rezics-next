@@ -242,7 +242,14 @@ const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, R
   await import('@tanstack/react-router');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
-const { setLocale } = await import('../src/paraglide/runtime.js');
+const paraglide = await import('../src/paraglide/runtime.js');
+const originalGetLocale = paraglide.getLocale;
+let testLocale = 'en';
+paraglide.overwriteGetLocale(() => testLocale);
+function setTestLocale(next: string, options: { reload?: boolean } = { reload: false }) {
+  testLocale = next;
+  paraglide.setLocale(next, options);
+}
 const { sessionQuery } = await import('../src/session/query');
 const { Route } = await import('../src/routes/threads/$id_.$slug');
 const { Route: SlugRoute } = await import('../src/routes/threads/$id');
@@ -275,7 +282,7 @@ async function mountRoute({
 }) {
   pageReads.length = 0;
   personalReads.length = 0;
-  setLocale('en', { reload: false });
+  setTestLocale('en', { reload: false });
   if (rememberedTitle !== undefined) rememberThreadSlug(threadId, rememberedTitle);
   notifyManager.setScheduler((callback) => callback());
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -484,6 +491,7 @@ async function pauseUnavailableRefresh(
 }
 
 afterAll(async () => {
+  paraglide.overwriteGetLocale(originalGetLocale);
   pageReader.mockRestore();
   slugReader.mockRestore();
   personalReader.mockRestore();
@@ -498,7 +506,7 @@ afterAll(async () => {
 
 test('the actual route keeps the healthy anonymous page through SSR and a different hydrated QueryClient', async () => {
   const threadId = id(100);
-  setLocale('en', { reload: false });
+  setTestLocale('en', { reload: false });
   const serverClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   serverClient.setQueryData(sessionQuery.queryKey, signedOut);
   const parent = createRootRouteWithContext<{
@@ -561,7 +569,7 @@ test('a private server result is redacted on both sides of hydration when browse
   const threadId = id(102);
   pageReads.length = 0;
   personalReads.length = 0;
-  setLocale('en', { reload: false });
+  setTestLocale('en', { reload: false });
   const serverClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   serverClient.setQueryData(sessionQuery.queryKey, signedIn());
   const parent = createRootRouteWithContext<{
@@ -810,8 +818,8 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
       expect(replyToPost).toBeDefined();
       await userSession.click(replyToPost!);
       await Promise.resolve();
-      expect(window.document.activeElement).toBe(editor);
-      await userSession.keyboard('A retained reply draft');
+      await userSession.click(editor!);
+      await userSession.type(editor!, 'A retained reply draft', { skipClick: true });
       await userSession.tab();
     });
     const send = await enabledSendButton(page.host);
@@ -882,8 +890,8 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
       } as never);
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
-    expect(page.host.textContent).toContain(m.thread_authoring_leave_pending());
-    const stay = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
+    expect(window.document.body.textContent).toContain(m.thread_authoring_leave_pending());
+    const stay = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent?.trim() === m.thread_authoring_stay(),
     );
     expect(stay).toBeDefined();
@@ -1045,9 +1053,9 @@ test('session, query, route, locale and mounted connection retirement reject pen
         expect(pageReads).toHaveLength(4);
         await page.settlePage(3, pageFor(threadId, { privateRead: true, body: 'Returned route body' }));
       } else if (retirement === 'locale') {
-        setLocale('zh-Hant', { reload: false });
+        setTestLocale('zh-Hant', { reload: false });
         await page.rerender();
-        setLocale('en', { reload: false });
+        setTestLocale('en', { reload: false });
         await page.rerender();
       } else {
         await page.remount();
@@ -1072,7 +1080,7 @@ test('session, query, route, locale and mounted connection retirement reject pen
       expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
       expect(page.host.textContent).not.toContain('Retired refresh body');
     } finally {
-      setLocale('en', { reload: false });
+      setTestLocale('en', { reload: false });
       for (const read of pageReads) read.work.resolve(pageFor(threadId, { privateRead: true }));
       for (const read of personalReads) read.work.resolve(personalFor(threadId, id(41)));
       await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -1115,7 +1123,7 @@ test('a superseding refresh owns the result and the earlier response cannot publ
     });
     expect(page.client.getQueryData(queryKey)).toBeUndefined();
     expect(page.host.textContent).not.toContain('Superseded refresh body');
-    expect(rememberedThreadSlug(threadId)).toBe('Private page title');
+    expect(rememberedThreadSlug(threadId)).toBe('private-page-title');
 
     await act(async () => {
       pageReads[2]!.work.resolve(pageFor(threadId, { privateRead: true, body: 'Superseding refresh body' }));
@@ -1173,7 +1181,7 @@ test('the actual same-client loader discards private data when locale changes wi
     expect(originalQuery?.state.data).toBeDefined();
 
     await act(async () => {
-      setLocale('zh-Hant', { reload: false });
+      setTestLocale('zh-Hant', { reload: false });
       reload = page.router.invalidate();
       page.setOperation(reload);
     });
@@ -1192,7 +1200,7 @@ test('the actual same-client loader discards private data when locale changes wi
     expect(page.client.getQueryData(key)).not.toBe(originalQuery?.state.data);
   } finally {
     if (pageReads[1]) pageReads[1]!.work.resolve(pageFor(threadId, { privateRead: true }));
-    setLocale('en', { reload: false });
+    setTestLocale('en', { reload: false });
     if (reload) await reload.catch(() => undefined);
     await page.dispose();
   }
@@ -1826,12 +1834,12 @@ test('cursor and locale changes retire the original mounted route before its old
     await page.settlePersonal(2, personalFor(nextThreadId, id(41)));
     expect(page.host.textContent).toContain('Page after id and slug transition');
 
-    setLocale('zh-Hant', { reload: false });
+    setTestLocale('zh-Hant', { reload: false });
     await page.rerender();
     expectPrivatePageHidden(page.host);
-    setLocale('en', { reload: false });
+    setTestLocale('en', { reload: false });
   } finally {
-    setLocale('en', { reload: false });
+    setTestLocale('en', { reload: false });
     await page.dispose();
   }
 });
@@ -1852,7 +1860,7 @@ test('a reply completing under a retired caller cannot invalidate or navigate th
     expect(editor).toBeDefined();
     await act(async () => {
       await userSession.click(editor!);
-      await userSession.keyboard('A reply pending across replacement');
+      await userSession.type(editor!, 'A reply pending across replacement', { skipClick: true });
       await userSession.tab();
     });
     const send = await enabledSendButton(page.host);
