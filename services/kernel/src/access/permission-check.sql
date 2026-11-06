@@ -197,7 +197,8 @@ SELECT local.resource_id::text AS "resourceId",
        explicit_global.principal_own_account_grant AS "explicitGlobalPrincipalOwnAccountGrant",
        explicit_global.principal_authenticated_benefit_grant AS "explicitGlobalPrincipalAuthenticatedBenefitGrant",
        (SELECT at::text FROM authority) AS at,
-       ((SELECT observed_at FROM authority) < i.deadline) AS live
+       ((SELECT observed_at FROM authority) < i.deadline) AS live,
+       local.deadline_live AS "deadlineLive"
 FROM decisions local CROSS JOIN input i
 LEFT JOIN decisions global ON i.include_global AND global.route = 0
   AND global.resource_id = '00000000-0000-8000-8000-000000000000'::uuid AND NOT global.explicit AND NOT global.public
