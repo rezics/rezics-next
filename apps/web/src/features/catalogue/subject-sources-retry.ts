@@ -47,13 +47,11 @@ export function useSourcesRetry({
   reader,
   locale,
   loading,
-  reset,
 }: {
   realm: string | undefined;
   reader: string | null;
   locale: string;
   loading: boolean;
-  reset?: () => void;
 }) {
   const router = useRouter();
   const { href, busy } = useRouterState({ select: (state) => ({ href: state.location.href, busy: state.isLoading }) });
@@ -133,11 +131,10 @@ export function useSourcesRetry({
     retry.intent = intent;
     retry.pending = true;
     emit();
-    // Reset is the error-boundary branch; invalidate also rereads failed loaders.
+    // A new route match resets its error boundary after the current loader finishes.
     void (async () => {
       try {
         startingRetry = true;
-        reset?.();
         const reading = router.invalidate({ sync: true });
         startingRetry = false;
         await reading;

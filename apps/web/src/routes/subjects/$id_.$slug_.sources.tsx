@@ -113,20 +113,18 @@ function SourcesRoute() {
   );
 }
 
-function SourcesError({ reset }: { reset: () => void }) {
+function SourcesError() {
   const via = Route.useSearch().via;
-  return <SourcesPresentation result={{ kind: 'unavailable' }} reset={reset} {...(via ? { returnTo: via } : {})} />;
+  return <SourcesPresentation result={{ kind: 'unavailable' }} {...(via ? { returnTo: via } : {})} />;
 }
 
 function SourcesPresentation({
   result,
   reader = null,
-  reset,
   returnTo,
 }: {
   result: SourcesResult | { kind: 'loading' };
   reader?: string | null;
-  reset?: () => void;
   returnTo?: string;
 }) {
   const search = Route.useSearch();
@@ -157,7 +155,6 @@ function SourcesPresentation({
     reader,
     locale,
     loading: result.kind === 'loading',
-    ...(reset ? { reset } : {}),
   });
   return (
     <SubjectSourcesPage
