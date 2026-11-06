@@ -21,6 +21,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import {
   devProductBrief,
   assertBriefDispatchable,
+  assertEnvironmentWalkAdmission,
+  ENVIRONMENT_WALK_STATES,
   parseBrief,
   protectedRiskAreasForBrief,
   readRiskOwnership,
@@ -444,7 +446,11 @@ export class WorkerTasks {
     if (excludingTask) known.delete(excludingTask);
     for (const dependency of brief.after)
       if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
+    this.assertEnvironmentWalkAdmission(brief, excludingTask);
     return { brief, taskClass };
+  }
+  private assertEnvironmentWalkAdmission(brief: Brief, excludingTask?: string): void {
+    assertEnvironmentWalkAdmission(brief, this.store.tasksInStates(ENVIRONMENT_WALK_STATES), excludingTask);
   }
   private assertLocalAcceptanceCustody(task: Task, nextBrief: Brief): void {
     if (nextBrief.acceptance.placement !== 'local' || task.currentAttempt === 0) return;
@@ -556,6 +562,7 @@ export class WorkerTasks {
       this.settings.policy?.leases,
     );
     try {
+      this.assertEnvironmentWalkAdmission(submittedBrief);
       const module = webModule(submittedBrief, this.settings);
       if (module) {
         const controller = new WorkspaceController(this.settings, this.store);
