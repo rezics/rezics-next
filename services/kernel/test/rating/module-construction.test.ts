@@ -244,6 +244,13 @@ test('classification commands and projector use supplied execution without chang
     },
   });
   const associationId = target.statements['schema:gender']![0]!.id;
+  for (const action of [
+    'classification_ballot:set',
+    'classification_ballot:read_own',
+    'classification_ballot:read_aggregate',
+  ]) {
+    await access.grant({ route: routeOf(target.id)!, id: target.id }, 'voter', action);
+  }
   const ballots = application().classifications;
   const first = await ballots.set(
     actor,
