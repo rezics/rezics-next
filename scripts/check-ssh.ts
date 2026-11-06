@@ -318,10 +318,9 @@ export async function acquireHostControl(
   let recovered = await removeDeadControlSocket(host, root);
   let lastDetail = 'control probe failed';
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (attempt === 1) {
-      recovered = true;
-      await masterControl(host, root, 'exit', 1_000);
-    }
+    // A failed probe does not make the master dead: a busy master times out too, and `-O exit` would cut every run
+    // multiplexed through it. Only a socket whose listener refused is removed before the retry.
+    if (attempt === 1) recovered = (await removeDeadControlSocket(host, root)) || recovered;
     const child = Bun.spawn(
       sshControlArgv(host, root, undefined, `# REMOTE_CHECK_CONTROL_PROBE\nprintf '${CONTROL_OK}\\n'`),
       { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },

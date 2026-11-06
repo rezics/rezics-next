@@ -322,3 +322,59 @@ exit 0
     process.env.PATH = previousPath;
   }
 });
+
+test('a failed probe against a live master never stops that master, since -O exit would cut every run multiplexed through it', async () => {
+  const directory = fixture();
+  const control = join(directory, 'ssh-control');
+  const socketPath = sshControlOptions(host('a'), control)
+    .find((option) => option.startsWith('ControlPath='))!
+    .slice('ControlPath='.length);
+  // A live master keeps its listener; the fake ssh answers `-O check` for it.
+  const master = Bun.spawn([
+    process.execPath,
+    '-e',
+    `Bun.listen({ unix: ${JSON.stringify(socketPath)}, socket: { data() {} } }); setInterval(() => {}, 1000);`,
+  ]);
+  try {
+    for (let waited = 0; !existsSync(socketPath) && waited < 100; waited++) await Bun.sleep(20);
+    const log = join(directory, 'ssh.log');
+    const count = join(directory, 'probes');
+    writeFileSync(log, '');
+    writeFileSync(count, '0');
+    const bin = writeFakeSsh(
+      directory,
+      `#!/bin/sh
+printf '%s\\n' "$*" >> "$SSH_LOG"
+case " $* " in
+  *" check "*) echo "Master running (pid=1)" >&2; exit 0 ;;
+  *" exit "*) echo "Exit request sent." >&2; exit 0 ;;
+esac
+case "$*" in
+  *REMOTE_CHECK_CONTROL_PROBE*)
+    n=$(cat "$SSH_COUNT"); n=$((n + 1)); echo "$n" > "$SSH_COUNT"
+    if [ "$n" -eq 1 ]; then echo "kex_exchange_identification: read: Connection reset by peer" >&2; exit 255; fi
+    echo REMOTE_CHECK_CONTROL_OK; exit 0 ;;
+esac
+exit 2
+`,
+    );
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ''}`;
+    process.env.SSH_LOG = log;
+    process.env.SSH_COUNT = count;
+    try {
+      const lease = await acquireHostControl(host('a'), control);
+      fixtures.push(lease.directory);
+      expect(readFileSync(count, 'utf8').trim()).toBe('2');
+      expect(readFileSync(log, 'utf8')).not.toContain('-O exit');
+      releaseHostControl(lease);
+    } finally {
+      delete process.env.SSH_LOG;
+      delete process.env.SSH_COUNT;
+      process.env.PATH = previousPath;
+    }
+  } finally {
+    master.kill();
+    await master.exited;
+  }
+});
