@@ -30,6 +30,7 @@ import {
   type Cost,
 } from '../support/growth.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
+import '../support/native-history-composition.ts';
 import { createBody } from '../zones/resource-fixture.ts';
 import { unrelatedSemanticPopulation } from './planner-graph-fixtures.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
@@ -258,7 +259,7 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
       `SELECT DISTINCT r.route/16 AS partition_no,r.recorded_transaction_id AS transaction_id
        FROM semantic.candidate c JOIN semantic.revision r USING(route,subject_id,revision)
        WHERE c.route=$1 AND c.subject_id=$2 AND c.candidate_id=ANY($3::uuid[])
-       UNION SELECT route/16,recorded_transaction_id FROM zones.zone WHERE zone_id=ANY($4::uuid[])`,
+       UNION SELECT route/16,transaction_id FROM zones.zone WHERE zone_id=ANY($4::uuid[])`,
       [routeOf(subject), subject, candidates, zones],
     );
     expect(originals.rows.length).toBeGreaterThanOrEqual(4);

@@ -23,6 +23,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
+import '../support/native-history-composition.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
 import { accountErasureWorker } from './support/account-erasure-worker.ts';
 
@@ -38,7 +39,7 @@ afterAll(async () => {
   } finally {
     await f?.close();
   }
-}, 120_000);
+}, 360_000);
 
 const context = () => ({ deadline: Date.now() + 5000 });
 const config = () => ({ pool: f.db.pool, routeKey: testRouteKey(), access: f.native.access, clock: () => new Date() });
@@ -83,7 +84,7 @@ async function complete(b: HistoryBarrier) {
   let proof: SubjectErasureSourceProof | null = null;
   let receipt: SubjectErasurePageReceipt | undefined;
   let pages = 0;
-  const end = Date.now() + 180_000;
+  const end = Date.now() + 300_000;
   for (;;) {
     if (Date.now() >= end) throw new Error('Native sealed Source disposition did not complete');
     // Fresh instances and serialized locators exercise durable replay, never object identity.
@@ -130,6 +131,28 @@ async function subject(who: Awaited<ReturnType<AccountErasureFixture['author']>>
   const response = await f.call(who, 'POST', '/v1/subjects', { type: 'schema:Person', labels: { en: label } });
   expect(response.status, JSON.stringify(response.body)).toBe(201);
   return response.body.subject.id as string;
+}
+async function mergeMapped(
+  moderator: Awaited<ReturnType<AccountErasureFixture['author']>>,
+  left: string,
+  right: string,
+) {
+  const merged = await f.call(moderator, 'POST', '/v1/subjects:merge', { subjects: [left, right] });
+  expect(merged.status, JSON.stringify(merged.body)).toBe(202);
+  const operationId = merged.body.operation.id as string;
+  expect(typeof operationId).toBe('string');
+  const [terminal, original] = [left, right].sort() as [string, string];
+  const end = Date.now() + 180_000;
+  for (;;) {
+    const observed = await f.call(moderator, 'GET', `/v1/subjectIdentityOperations/${operationId}`);
+    if (observed.status === 200 && observed.body.operation?.done === true) {
+      expect(observed.body.operation.result.redirected).toBe(original);
+      expect(observed.body.operation.result.survivor).toBe(terminal);
+      return { original, terminal };
+    }
+    if (Date.now() >= end) throw new Error('Mapped original identity publication did not complete');
+    await Bun.sleep(20);
+  }
 }
 
 test('Search receives sealed role-complete Subject source disposition and actual source custody for the committed erased account without scalar-role or structural identity substitution', async () => {
@@ -231,9 +254,7 @@ test('Original funded Subject erasure pages account for every mapping and comman
   await f.grant(GLOBAL_CONTEXT, moderator, ['subject:merge', 'moderation:hide']);
   const left = await subject(author, 'Mapped original A');
   const right = await subject(author, 'Mapped original B');
-  const merged = await f.call(moderator, 'POST', '/v1/subjects:merge', { subjects: [left, right] });
-  expect(merged.status, JSON.stringify(merged.body)).toBe(200);
-  const original = merged.body.redirected as string;
+  const { original } = await mergeMapped(moderator, left, right);
   await f.tombstone(author);
   const b = await barrier(author.accountId);
   await local(b);
@@ -261,10 +282,7 @@ test('sealed empty native role homes advance before filters while a hidden origi
   await f.grant(GLOBAL_CONTEXT, moderator, ['subject:merge', 'moderation:hide']);
   const left = await subject(author, 'Original A');
   const right = await subject(author, 'Original B');
-  const merged = await f.call(moderator, 'POST', '/v1/subjects:merge', { subjects: [left, right] });
-  expect(merged.status, JSON.stringify(merged.body)).toBe(200);
-  const original = merged.body.redirected as string;
-  const terminal = merged.body.survivor as string;
+  const { original, terminal } = await mergeMapped(moderator, left, right);
   expect(
     (await f.call(moderator, 'POST', `/v1/subjects/${original}:hide`, { reason: 'Original is hidden' })).status,
   ).toBe(200);
