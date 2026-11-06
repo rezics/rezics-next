@@ -834,7 +834,7 @@ async function workerHost(): Promise<RpcHost> {
   console.error('MEDIA_STARTUP opening worker database');
   const database = await openGrowthDatabase();
   const observer = await observeMediaPool(database.pool);
-  const client = await createWorkClient(database.url, database.openPool());
+  const client = await createWorkClient(database.url, database.pool);
   const originalFetch = globalThis.fetch;
   const endpoint = new URL(process.env.MEDIA_EXTERNAL_ENDPOINT!);
   const names: string[] = [];
