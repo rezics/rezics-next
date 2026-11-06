@@ -169,8 +169,10 @@ export type ReviewedPersonPublication =
   | Readonly<{ state: 'pending' | 'unconfirmed'; operation: string }>
   | Readonly<{ state: 'withheld'; reason: string }>;
 
-const MERGE_POLLS = 30;
+/** A native job may take minutes under load; the journal keeps its admitted operation for a later run. */
+const MERGE_POLLS = 120;
 const MERGE_POLL_MS = 1_000;
+const MERGE_READ_ATTEMPTS = 10;
 
 /** Version-8 UUID shape derived from the sealed body, so every replay presents the same idempotency key. */
 function mergeKey(digest: string): string {
@@ -264,13 +266,18 @@ export async function publishReviewedPersonMerge(input: {
     revision < 1
   )
     throw new TypeError('Invalid native Person publication');
-  const reads = await Promise.all(input.pair.map((source) => input.readPublic(source.boundSubjectId)));
-  const identities = input.pair.flatMap((source, index) => {
-    const observed = observePersonIdentity(source.identity, reads[index]!);
-    return observed.state === 'current' && observed.currentSubjectId === survivor
-      ? [{ boundSubjectId: source.boundSubjectId, identity: source.identity, currentSubjectId: survivor }]
-      : [];
-  });
-  if (identities.length !== input.pair.length) return { state: 'unconfirmed', operation };
-  return { state: 'published', operation, survivor, redirected, revision, identities };
+  // The completed operation is final; a public read may still lag behind its visibility, so re-read briefly.
+  for (let attempt = 0; attempt < MERGE_READ_ATTEMPTS; attempt += 1) {
+    const reads = await Promise.all(input.pair.map((source) => input.readPublic(source.boundSubjectId)));
+    const identities = input.pair.flatMap((source, index) => {
+      const observed = observePersonIdentity(source.identity, reads[index]!);
+      return observed.state === 'current' && observed.currentSubjectId === survivor
+        ? [{ boundSubjectId: source.boundSubjectId, identity: source.identity, currentSubjectId: survivor }]
+        : [];
+    });
+    if (identities.length === input.pair.length)
+      return { state: 'published', operation, survivor, redirected, revision, identities };
+    if (attempt + 1 < MERGE_READ_ATTEMPTS) await pause(MERGE_POLL_MS);
+  }
+  return { state: 'unconfirmed', operation };
 }

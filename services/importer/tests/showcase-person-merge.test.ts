@@ -154,7 +154,7 @@ test('a reviewed pair merges once, observes the native job and reads both identi
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 60_000);
 
 test('unknown delivery replays the exact sealed body and key, while a definite refusal stays terminal', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'person-merge-replay-'));
@@ -192,7 +192,7 @@ test('unknown delivery replays the exact sealed body and key, while a definite r
     refusedJournal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 60_000);
 
 test('a pending native job resumes from its admitted operation, and disagreeing reads are never published', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'person-merge-pending-'));
@@ -224,7 +224,7 @@ test('a pending native job resumes from its admitted operation, and disagreeing 
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 60_000);
 
 test('an original without a coherent reviewed identity withholds the merge before any effect', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'person-merge-withheld-'));
@@ -245,4 +245,4 @@ test('an original without a coherent reviewed identity withholds the merge befor
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 60_000);

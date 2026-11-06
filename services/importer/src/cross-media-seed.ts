@@ -4443,7 +4443,13 @@ export async function runCrossMediaSeedCli(
     const report = {
       ...publicCombinedResult,
       ...(persona ? { persona } : {}),
-      ...(personMerge ? { personMerge } : {}),
+      ...(personMerge
+        ? {
+            personMerge,
+            // A pending, unconfirmed or withheld merge is a resumable gap; the next run replays its journal.
+            ...(personMerge.state === 'published' ? {} : { status: 'imported-with-gaps' as const }),
+          }
+        : {}),
       facts: {
         works: Object.fromEntries(result.facts.works),
         releases: Object.fromEntries(result.facts.releases),
@@ -4496,7 +4502,7 @@ export async function runCrossMediaSeedCli(
             '\n',
     );
     ensure(
-      (!showcase || showcase.status === 'published') && (!personMerge || personMerge.state === 'published'),
+      !showcase || showcase.status === 'published',
       'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
     );
     return report;
