@@ -194,7 +194,7 @@ test('Space bootstrap has exact native positions, sparse bounded pages and curre
         fetch: (url: string | URL, init?: RequestInit) => f.auth.host.service.handler(new Request(url, init)),
       },
     });
-    const deps = { pool: f.db.pool, access };
+    const deps = { pool: f.db.pool, access, deadlineNow: () => Date.now() };
     const source = spaceDiscoverySource(deps);
     const hydrate = (ids: string[], currentAccess = access) =>
       readSpaceDiscoverySummaries({ ...deps, access: currentAccess }, ids, {

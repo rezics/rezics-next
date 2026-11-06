@@ -149,7 +149,7 @@ test('the assigned real current-authorized journey binds its native source while
     // Existing fixture discussion starts are real native source records. Read the
     // next complete day without changing their original qualification or counts.
     const clock = () => new Date(Math.floor(Date.now() / 86_400_000) * 86_400_000 + 86_400_000);
-    while (await projectRealmDiscovery(fixture.db.pool, realmId, { clock })) {
+    while (await projectRealmDiscovery(fixture.db.pool, realmId, { clock, deadlineNow: () => Date.now() })) {
       /* existing bounded committed-source steps */
     }
     const nativeKernel = testKernel({ pool: fixture.db.pool, auth, clock });

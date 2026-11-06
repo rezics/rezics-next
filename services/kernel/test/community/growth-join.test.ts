@@ -11,7 +11,9 @@ import {
   readMembershipInitiator,
   type MembershipOperationFacts,
 } from '../../src/community/membership.ts';
-import { communityWorkModule } from '../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createKernel } from '../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';

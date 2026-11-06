@@ -2,7 +2,9 @@ import { strict as assert } from 'node:assert';
 import { createInitiatorRestorer } from '../../../src/access/durable-initiator.ts';
 import { createAccountsWorkModule } from '../../../src/access/membership-work.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../../src/community/membership.ts';
-import { communityWorkModule } from '../../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { newId, partitionOf } from '../../../src/route/route.ts';
