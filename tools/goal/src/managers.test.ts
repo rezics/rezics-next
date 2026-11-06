@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, type ManagerSpec } from './managers.ts';
+import { ManagerSessions, resolveGoalManager, type ManagerSpec } from './managers.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -907,6 +907,132 @@ test('pause falls back to resume then interrupt when the active turn is gone', a
       'turn/interrupt',
     ]);
     expect(s.managers.get(manager.id).status).toBe('paused');
+  } finally {
+    await s.close();
+  }
+});
+
+test('manager assign moves a Goal onto another running manager without restarting its tasks', async () => {
+  const s = await setup();
+  try {
+    mkdirSync(join(s.path, 'docs', 'goals'), { recursive: true });
+    mkdirSync(join(s.path, '.temp', 'goal', 'refactor'), { recursive: true });
+    mkdirSync(join(s.path, '.temp', 'goal', 'commerce'), { recursive: true });
+    writeFileSync(join(s.path, 'docs', 'goals', 'refactor.md'), 'Refactor goal brief\n');
+    writeFileSync(join(s.path, 'docs', 'goals', 'commerce.md'), 'Commerce goal brief\n');
+    writeFileSync(join(s.path, '.temp', 'goal', 'refactor', 'CONTINUATION.md'), 'Refactor continuation\n');
+    writeFileSync(join(s.path, '.temp', 'goal', 'commerce', 'CONTINUATION.md'), 'Commerce continuation\n');
+    const source = await s.managers.start(s.spec);
+    const dest = await s.managers.start({ ...s.spec, id: 'other', goal: 'commerce', objective: 'Finish commerce' });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: dest.threadId, turn: { id: dest.activeTurnId, status: 'completed' } },
+    });
+    s.db.exec(
+      `CREATE TABLE worker_tasks (id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, current_attempt INTEGER NOT NULL, body TEXT NOT NULL);
+       CREATE TABLE worker_attempts (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
+       CREATE TABLE landing_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT NOT NULL, attempt INTEGER NOT NULL, request TEXT NOT NULL, outcome TEXT, delivered INTEGER NOT NULL DEFAULT 0, candidate TEXT);`,
+    );
+    const handle = { pid: 4242, start: '100', boot: 'boot', group: 4242 };
+    s.db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
+      'running-task',
+      1,
+      1,
+      JSON.stringify({
+        id: 'running-task',
+        currentAttempt: 1,
+        state: 'running',
+        worktree: '/trees/running-task',
+        brief: { goal: 'refactor', manager: source.id },
+      }),
+    );
+    s.db
+      .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)')
+      .run(
+        'running-task',
+        1,
+        JSON.stringify({ taskId: 'running-task', attempt: 1, state: 'running', process: handle }),
+      );
+    s.db
+      .query('INSERT INTO landing_queue(task, attempt, request) VALUES (?, ?, ?)')
+      .run(
+        'running-task',
+        1,
+        JSON.stringify({ taskId: 'running-task', attempt: 1, managerLanding: { managerId: source.id } }),
+      );
+    s.inbox.deliver({
+      managerId: source.id,
+      kind: 'instruction',
+      goalId: 'refactor',
+      summary: 'Repair the refactor journey',
+    });
+    const moved = await s.managers.assign('refactor', dest.id);
+    await s.managers.flush();
+    expect(moved).toEqual({ goal: 'refactor', from: source.id, to: dest.id, goals: ['commerce', 'refactor'] });
+    expect(s.managers.get(source.id).status).toBe('paused');
+    expect(s.removed).toContain(source.id);
+    expect(s.managers.get(dest.id)).toMatchObject({
+      status: 'running',
+      threadId: dest.threadId,
+      goals: ['commerce', 'refactor'],
+    });
+    expect(s.inbox.pending(source.id)).toHaveLength(0);
+    expect(s.inbox.pending(dest.id).map((entry) => entry.event.summary)).toEqual([
+      'Repair the refactor journey',
+      "You now own Goals commerce, refactor. Read each Goal's brief and continuation.",
+    ]);
+    const task = JSON.parse(
+      (s.db.query('SELECT body FROM worker_tasks WHERE id = ?').get('running-task') as { body: string }).body,
+    );
+    const attempt = JSON.parse(
+      (s.db.query('SELECT body FROM worker_attempts WHERE task_id = ?').get('running-task') as { body: string }).body,
+    );
+    expect(task).toMatchObject({ state: 'running', brief: { goal: 'refactor', manager: dest.id } });
+    expect(attempt.process).toEqual(handle);
+    expect(resolveGoalManager(s.db, 'refactor', 'refactor')).toBe(dest.id);
+    expect(
+      JSON.parse(
+        (s.db.query('SELECT request FROM landing_queue WHERE task = ?').get('running-task') as { request: string })
+          .request,
+      ).managerLanding.managerId,
+    ).toBe(dest.id);
+    const wake = s
+      .requests()
+      .filter((request) => request.method === 'turn/start' && request.params.threadId === dest.threadId);
+    expect(wake.at(-1)?.params.input[0].text).toContain('Refactor goal brief');
+    expect(wake.at(-1)?.params.input[0].text).toContain('Refactor continuation');
+    expect(wake.at(-1)?.params.input[0].text).toContain('Commerce goal brief');
+    expect(wake.at(-1)?.params.input[0].text).toContain('Commerce continuation');
+    expect(
+      s.managers
+        .list()
+        .map((state) => ({ id: state.id, status: state.status, goals: 'goals' in state ? state.goals : [] })),
+    ).toEqual(
+      expect.arrayContaining([
+        { id: dest.id, status: 'running', goals: ['commerce', 'refactor'] },
+        { id: source.id, status: 'paused', goals: [] },
+      ]),
+    );
+  } finally {
+    await s.close();
+  }
+});
+
+test('assigning a Goal to its own manager or to a manager that is not running is refused', async () => {
+  const s = await setup();
+  try {
+    const source = await s.managers.start(s.spec);
+    await expect(s.managers.assign('refactor', source.id)).rejects.toThrow(
+      'Goal refactor is already owned by manager manager',
+    );
+    const dest = await s.managers.start({ ...s.spec, id: 'other', goal: 'commerce' });
+    await s.managers.stop(dest.id);
+    await expect(s.managers.assign('refactor', dest.id)).rejects.toThrow(
+      'Manager other is not a running managed manager',
+    );
+    await expect(s.managers.assign('refactor', 'missing')).rejects.toThrow(
+      'Manager missing is not a running managed manager',
+    );
   } finally {
     await s.close();
   }

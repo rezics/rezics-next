@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
+import { ownedGoals, resolveGoalManager } from './manager-ownership.ts';
 import { classifyTask } from './routing.ts';
 import type { Brief, PriorityGrant, Task, TaskClass } from './types.ts';
 
@@ -13,6 +14,7 @@ type ManagerSession = {
   threadId?: unknown;
   supermanager?: unknown;
   goal?: unknown;
+  goals?: unknown;
 };
 
 function hasManagerSessions(db: Database): boolean {
@@ -77,19 +79,16 @@ export function backlogManagerActor(db: Database, managerId: string): Authentica
   return env ? authenticatedManager(db, env) : undefined;
 }
 
-function sessionGoal(state: ManagerSession | undefined): string | undefined {
-  return typeof state?.goal === 'string' && state.goal.length ? state.goal : undefined;
-}
-
 /**
- * The manager named in a brief may submit backlog dispatch only when that manager's live session owns the Goal
- * directory, or when the manager id is the directory name and the session claims no other Goal.
+ * The manager named in a brief may submit backlog dispatch only when a live session owns that Goal, or when the
+ * manager id is the directory name and the session claims no other Goal.
  */
 export function confirmedBacklogOwner(db: Database, goal: string, manager: string): AuthenticatedManager | undefined {
-  const actor = backlogManagerActor(db, manager);
+  const ownerId = resolveGoalManager(db, goal, manager);
+  const actor = backlogManagerActor(db, ownerId);
   if (!actor) return undefined;
-  const owned = sessionGoal(managerSession(db, manager));
-  if (owned ? owned !== goal : manager !== goal) return undefined;
+  const owned = ownedGoals(managerSession(db, ownerId));
+  if (owned.length ? !owned.includes(goal) : ownerId !== goal) return undefined;
   return actor;
 }
 

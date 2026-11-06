@@ -12,7 +12,7 @@ import {
   recordManagerCommand,
 } from './manager-command-context.ts';
 import { createHourlyReportScheduler, serveManagers, singleFlight, startOrphanRecoveryTimer } from './manager-host.ts';
-import { recordManagerDecision } from './managers.ts';
+import { readManagerOwnership, recordManagerDecision } from './managers.ts';
 import { MergeTrain } from './merge-train.ts';
 import { git } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
@@ -241,6 +241,19 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   }
   if (command === '_manager-host') {
     await serveManagers(runtime);
+    return 0;
+  }
+  if (command === 'manager' && subcommand === 'status') {
+    if (id || flags.length) throw new Error('usage: manager status');
+    console.log(JSON.stringify(readManagerOwnership(runtime.db), null, 2));
+    return 0;
+  }
+  if (command === 'manager' && subcommand === 'assign') {
+    const to = flags[0];
+    if (!id || !to || flags.length !== 1) throw new Error('usage: manager assign <goal> <manager>');
+    await ensureHost(runtime);
+    await recordManagerCommand(runtime);
+    console.log(JSON.stringify(await requestHost({ command: 'assign', goal: id, manager: to })));
     return 0;
   }
   if (command === 'manager' && subcommand === 'register-supermanager') {

@@ -66,10 +66,12 @@ export type HostRequest = {
     | 'turn-start'
     | 'turn-end'
     | 'outgoing-message'
-    | 'register-supermanager';
+    | 'register-supermanager'
+    | 'assign';
   manager?: string;
   spec?: ManagerSpec;
   recipient?: string;
   summary?: string;
   sessionId?: string;
+  goal?: string;
 };

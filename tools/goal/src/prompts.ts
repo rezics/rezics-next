@@ -573,10 +573,27 @@ export function renderCheckProtocol(
   return loadCondition(promptDirectory, check, view, policy).text;
 }
 
+/** Each owned Goal's definition and continuation, in that order, when the files exist. */
+export function readGoalDocuments(cwd: string, goals: readonly string[]): string[] {
+  const texts: string[] = [];
+  for (const goal of goals) {
+    for (const path of [
+      join(cwd, 'docs', 'goals', `${goal}.md`),
+      join(cwd, '.temp', 'goal', goal, 'CONTINUATION.md'),
+    ]) {
+      if (!existsSync(path)) continue;
+      const text = readFileSync(path, 'utf8').trim();
+      if (text) texts.push(text);
+    }
+  }
+  return texts;
+}
+
 export function renderManagerOpening(input: {
   spec: {
     id: string;
     goal: string;
+    goals?: string[];
     brief: string;
     cwd: string;
     engine: 'codex' | 'claude';
@@ -591,10 +608,11 @@ export function renderManagerOpening(input: {
   const policy = input.policy ?? defaultPolicy;
   const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
   const roleFile = readTemplate(join(directory, 'manager.md'));
-  const continuationPath = join('.temp', 'goal', input.spec.id, 'CONTINUATION.md');
+  const goals = input.spec.goals?.length ? input.spec.goals : [input.spec.goal];
+  const continuationPath = goals.map((goal) => join('.temp', 'goal', goal, 'CONTINUATION.md')).join(', ');
   const view: PromptView = {
     id: input.spec.id,
-    goal: input.spec.goal,
+    goal: goals.join(', '),
     backlogPath: input.backlogPath,
     command: input.command,
     continuationRef: input.continuationFile ? `the continuation ${input.continuationFile}` : 'continuation',
@@ -608,9 +626,11 @@ export function renderManagerOpening(input: {
         : `When no decision is pending, run ${input.command} inbox wait ${input.spec.id} in the background and end the turn.`,
   };
   const roleText = collapse(fillTemplate(roleFile.text, view, policy));
-  const goalPath = join(input.spec.cwd, 'docs', 'goals', `${input.spec.goal}.md`);
-  const goalText = existsSync(goalPath) ? readFileSync(goalPath, 'utf8').trim() : '';
-  const prompt = collapse([roleText, goalText, input.spec.brief, input.continuationText].filter(Boolean).join('\n\n'));
+  const prompt = collapse(
+    [roleText, ...readGoalDocuments(input.spec.cwd, goals), input.spec.brief, input.continuationText]
+      .filter(Boolean)
+      .join('\n\n'),
+  );
   const roleBytes = bytes(roleText);
   const openingBytes = bytes(prompt);
   const layers = { role: roleBytes, opening: openingBytes };

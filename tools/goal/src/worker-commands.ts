@@ -16,6 +16,7 @@ import type { Attempt, AttemptRecord, Effort, Settings, Task, TaskState, Tokens 
 import { devVerificationState } from './dev-verifier.ts';
 import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
+import { readManagerOwnership } from './manager-ownership.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { submitOwnerDecision } from './owner-decisions.ts';
 import { projectToolIncidentStatus } from './tool-incidents.ts';
@@ -254,11 +255,13 @@ export async function runWorkerCommand(
       const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs, live, parked).map((pool) =>
         pool.maxConcurrent === undefined ? { ...pool, waiting: allowanceWaiting[pool.name] ?? 0 } : pool,
       );
+      const managers = readManagerOwnership(store.db);
       print(
         JSON.stringify(
           arg
             ? {
                 ...selectedTasks[0]!,
+                managers,
                 toolIncidents: incidentProjection.toolIncidents,
                 trains,
                 pools,
@@ -273,6 +276,7 @@ export async function runWorkerCommand(
                   settings.integrationBranch,
                   cohort,
                 ),
+                managers,
                 toolIncidents: incidentProjection.toolIncidents,
                 trains,
                 pools,

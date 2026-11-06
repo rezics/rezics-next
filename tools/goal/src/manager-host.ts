@@ -201,6 +201,10 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
               throw new Error('Incomplete outgoing manager message');
             result = await managers.outgoingMessage(request.manager, request.recipient, request.summary);
             break;
+          case 'assign':
+            if (!request.goal || !request.manager) throw new Error('Missing Goal or manager for assign');
+            result = await managers.assign(request.goal, request.manager);
+            break;
           default:
             throw new Error('Unknown manager host command');
         }
