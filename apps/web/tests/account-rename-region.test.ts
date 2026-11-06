@@ -209,6 +209,31 @@ test('account safety honors HTTP-date waits exactly and never invents a wait for
   }
 });
 
+test('returning under the same viewer rereads current destinations without retaining a prior verification visit', async () => {
+  const ready: AccountRenameResult = {
+    context: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
+  };
+  const calls: string[] = [];
+  const region = new AccountRenameRegion(async () => {
+    calls.push('rename');
+    return ready;
+  }, accountId);
+  const leave = region.mount();
+  try {
+    await region.reload();
+    expect(region.snapshot().context).toEqual(ready.context);
+    await region.reload();
+    expect(calls).toEqual(['rename', 'rename']);
+    expect(region.snapshot().context).toEqual(ready.context);
+    leave();
+    await region.reload();
+    expect(calls).toEqual(['rename', 'rename']);
+    expect(region.snapshot().context).toBeNull();
+  } finally {
+    leave();
+  }
+});
+
 test('retired module loading never issues a later account request, and a late success cannot restore the destination', async () => {
   const ready: AccountRenameResult = {
     context: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },

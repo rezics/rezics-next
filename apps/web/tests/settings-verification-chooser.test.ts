@@ -269,6 +269,31 @@ test('native Retry-After blocks direct and debounced retries until deliberate re
   }
 });
 
+test('empty suggestions stay unselectable; only a current populated result can be chosen', async () => {
+  const search = new VerificationSubjectSearch(async (query) =>
+    query === 'Unknown' ? success([]) : success([person, organization]),
+  );
+  search.setEnabled(true);
+  try {
+    search.edit('Unknown');
+    await settle();
+    expect(search.snapshot()).toEqual({ query: 'Unknown', phase: 'ready', subjects: [] });
+    expect(search.current(person)).toBe(false);
+    search.edit('Avery');
+    await settle();
+    expect(search.snapshot().subjects).toEqual([person, organization]);
+    expect(search.current(person)).toBe(true);
+    expect(search.current(organization)).toBe(true);
+    expect(search.current({ ...person })).toBe(false);
+    const highlighted = search.snapshot().subjects[0]!;
+    expect(search.current(highlighted)).toBe(true);
+    search.clear();
+    expect(search.current(highlighted)).toBe(false);
+  } finally {
+    search.setEnabled(false);
+  }
+});
+
 test('retired retry callbacks cannot act in a later enabled episode', async () => {
   let calls = 0;
   const search = new VerificationSubjectSearch(async () => {

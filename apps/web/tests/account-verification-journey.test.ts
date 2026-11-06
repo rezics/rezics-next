@@ -9,7 +9,12 @@ import {
   type AgentVerificationRequest,
   type Operation,
 } from '../src/account-verification/transport';
-import { readVerification, requestVerification, withdrawVerification } from '../src/settings/verification-core';
+import {
+  readVerification,
+  readVerificationTitle,
+  requestVerification,
+  withdrawVerification,
+} from '../src/settings/verification-core';
 import {
   canRequestVerification,
   canRetryVerification,
@@ -17,6 +22,9 @@ import {
   VerificationRecovery,
   verificationWithdrawalObservation,
 } from '../src/settings/verification-recovery';
+import { readAccountRenameContext } from '../src/settings/account-rename-data';
+import { accountRenameHref, accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
+import { officialProfileRead } from '../src/settings/editable-profile-source';
 
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000100000001';
 const requestId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -302,6 +310,139 @@ test('an applicant reads current status, keeps original operands through uncerta
     ]);
   } finally {
     clock.mockRestore();
+    controller.deactivate();
+  }
+});
+
+test('signed-in safety destinations, admitted subject request, revisit, withdraw and return stay under one viewer', async () => {
+  const issuer = 'https://auth.example.test';
+  const pendingAdvice = [{ action: 'account:update', operations: ['account.withdraw_verification'] }];
+  const requestAdvice = [{ action: 'account:update', operations: ['account.request_verification'] }];
+  const draft = {
+    subject: subjectId,
+    statement: request.statement,
+    links: request.links.map((link) => ({ ...link })),
+  };
+  const calls: string[] = [];
+  let statusReads = 0;
+  let current: AgentVerificationRequest | null = null;
+  const client = clientFor(async (incoming) => {
+    const url = new URL(incoming.url);
+    calls.push(`${incoming.method} ${url.pathname}`);
+    if (url.pathname === `/v1/accounts/${accountId}/profile`)
+      return Response.json(
+        officialProfileRead({
+          id: accountId,
+          kind: 'actor',
+          handle: 'mira',
+          displayName: null,
+          bio: null,
+          links: [],
+          avatar: null,
+          publicViews: { posts: true, reviews: true, collections: true, realms: true },
+        }),
+      );
+    if (url.pathname === '/v1/viewerActions') {
+      expect(await incoming.json()).toEqual({ resources: [{ type: 'access.account', id: accountId }] });
+      return Response.json({
+        resources: [
+          {
+            type: 'access.account',
+            id: accountId,
+            viewerActions: [{ action: 'account:update', operations: ['account.update'] }],
+          },
+        ],
+      });
+    }
+    if (url.pathname === `/v1/accounts/${accountId}/verification`) {
+      statusReads++;
+      if (statusReads === 2)
+        return Response.json(
+          { detail: 'Current status unavailable', code: 'overloaded', retryable: true, request_id: 'status-1' },
+          { status: 503, headers: { 'Retry-After': '5' } },
+        );
+      return Response.json({
+        verificationRequest: current,
+        viewerActions: current?.state === 'pending' ? pendingAdvice : requestAdvice,
+      });
+    }
+    if (url.pathname === `/v1/accounts/${accountId}:requestVerification`) {
+      expect(await incoming.json()).toEqual(draft);
+      current = request;
+      return Response.json({ verificationRequest: request }, { status: 201 });
+    }
+    if (url.pathname === `/v1/accounts/${accountId}:withdrawVerification`) {
+      expect(await incoming.json()).toEqual({});
+      current = { ...request, state: 'withdrawn' };
+      return Response.json({ verificationRequest: current });
+    }
+    if (url.pathname === `/v1/subjects/${subjectId}`)
+      return Response.json({ subject: { labels: { en: 'Mira', ja: 'ミラ' } } });
+    throw new Error(`Unexpected safety path: ${url.pathname}`);
+  });
+  const destinations = await readAccountRenameContext(client, 'Bearer applicant', accountId);
+  const links = accountSafetyLinks(securityHrefFromIssuer(issuer));
+  expect(destinations).toEqual({ accountId, handle: 'mira', available: true });
+  expect(accountRenameHref(links?.security ?? null)).toBe(`${issuer}/account/rename`);
+  expect(links).toEqual({ security: `${issuer}/security`, deletion: `${issuer}/account/delete` });
+  const sent: unknown[] = [];
+  const controller = new VerificationRecovery(accountId, {
+    read: async (currentAccountId) => {
+      const status = await readVerification(client, currentAccountId, 'Bearer applicant');
+      return {
+        accountId: currentAccountId,
+        ...status,
+        subjectTitle: status.verificationRequest
+          ? await readVerificationTitle(
+              client,
+              status.verificationRequest.catalogueSubjectId,
+              'Bearer applicant',
+              ['en'],
+            )
+          : null,
+      };
+    },
+    request: async (currentAccountId, input) => {
+      sent.push(input);
+      return requestVerification(client, currentAccountId, 'Bearer applicant', input);
+    },
+    withdraw: async (currentAccountId, input) =>
+      withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
+  });
+  try {
+    await controller.reload();
+    expect(canRequestVerification(controller.snapshot().current)).toBe(true);
+    expect(controller.snapshot().current?.verificationRequest).toBeNull();
+    await controller.submit(draft);
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      readStatus: 'error',
+      attempt: { receipt: request, input: sent[0] },
+    });
+    expect(canRetryVerification(controller.snapshot().attempt, controller.snapshot().current)).toBe(false);
+    draft.statement = 'Later draft';
+    await controller.retry();
+    expect(sent).toHaveLength(1);
+    await controller.reload();
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'review',
+      attempt: null,
+      current: { verificationRequest: request, subjectTitle: 'Mira' },
+    });
+    expect(canWithdrawVerification(controller.snapshot().current)).toBe(true);
+    const confirmation = verificationWithdrawalObservation(controller.snapshot().current);
+    await controller.withdraw(true);
+    expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
+    expect(verificationWithdrawalObservation(controller.snapshot().current)).not.toBe(confirmation);
+    expect(await readAccountRenameContext(client, 'Bearer applicant', accountId)).toEqual(destinations);
+    expect(accountSafetyLinks(securityHrefFromIssuer(issuer))).toEqual(links);
+    const retired = controller.snapshot();
+    controller.deactivate();
+    await controller.reload();
+    await controller.withdraw(true);
+    expect(controller.snapshot()).toBe(retired);
+    expect(calls.filter((call) => call.endsWith('/verification') || call.includes('Verification')).length).toBe(6);
+  } finally {
     controller.deactivate();
   }
 });
