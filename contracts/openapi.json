@@ -137223,7 +137223,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -139771,7 +139771,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -142316,7 +142316,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -144884,7 +144884,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -147563,7 +147563,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -150328,7 +150328,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -153052,7 +153052,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -155837,7 +155837,7 @@
           },
           {}
         ],
-        "x-action": "collection:read",
+        "x-action": "library_archive:read",
         "x-authority-anchor": "own-account",
         "x-authority-resource-types": [
           "rezics:AnimeRelease",
@@ -299561,6 +299561,45 @@
                       },
                       "type": "object"
                     },
+                    "streams": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entries": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "forward",
+                                  "inverse"
+                                ],
+                                "type": "string"
+                              },
+                              "node": {
+                                "type": "string"
+                              },
+                              "property": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "node",
+                              "property",
+                              "direction"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "selected": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "entries"
+                      ],
+                      "type": "object"
+                    },
                     "subject": {
                       "type": "string"
                     },
@@ -300682,6 +300721,45 @@
                           "type": "object"
                         }
                       },
+                      "type": "object"
+                    },
+                    "streams": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entries": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "forward",
+                                  "inverse"
+                                ],
+                                "type": "string"
+                              },
+                              "node": {
+                                "type": "string"
+                              },
+                              "property": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "node",
+                              "property",
+                              "direction"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "selected": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "entries"
+                      ],
                       "type": "object"
                     },
                     "subject": {
@@ -524592,6 +524670,45 @@
                           "type": "object"
                         }
                       },
+                      "type": "object"
+                    },
+                    "streams": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entries": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "forward",
+                                  "inverse"
+                                ],
+                                "type": "string"
+                              },
+                              "node": {
+                                "type": "string"
+                              },
+                              "property": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "node",
+                              "property",
+                              "direction"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "selected": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "entries"
+                      ],
                       "type": "object"
                     },
                     "subject": {
