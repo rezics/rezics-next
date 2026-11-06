@@ -790,11 +790,12 @@ describe.skipIf(!process.env.DATABASE_URL)('native account and fixed Global work
       expect(admitted.some((entry) => entry.operation === 'access.opening')).toBe(true);
       expect(admitted.some((entry) => entry.operation === 'access.transaction')).toBe(true);
       expect(work.usage()).toEqual(sum(settled));
-      const unsupported = accounting();
+      // An accounting that refuses the verification producer leaves the verified bearer unproved: unavailable, not invalid.
+      const unsupported = accounting('access.authentication.jose-verify');
       const unsupportedContext = { pool, work: unsupported.work, deadline: unsupported.work.deadline };
       expect(await unsupported.work.capture(() => access.authenticate(bearer, unsupportedContext))).toMatchObject({
         state: 'unavailable',
-        dependency: 'Auth ES256 verification/JWKS native work producer',
+        dependency: 'access.authentication.jose-verify',
         usage: EMPTY_ACCESS_WORK,
       });
       expect(fetches).toBe(1);

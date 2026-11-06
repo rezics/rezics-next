@@ -304,17 +304,32 @@ export function accessNativeDeclaration(
   switch (operation) {
     case 'account-state':
       // unnest contributes one input row and the unique account point contributes
-      // at most one candidate per full key, including absent accounts.
+      // at most one candidate per full key, including absent accounts. The row is
+      // the closed accountRead projection: each text field is bounded by its validated
+      // maximum, charged at six bytes per code unit (the JSON escape of a control unit,
+      // the largest encoding) and contentPreferences at three bytes per code unit.
       examinedKeys = points = shape.targets ?? 1;
       rows = examinedKeys * 2;
       projection = rowBytes(
         {
-          id: uuid,
+          route: 65535,
+          accountId: uuid,
           kind: 'organization',
+          handle: 'x'.repeat(64),
+          displayName: '\u0001'.repeat(4096),
+          avatarUrl: '\u0001'.repeat(4096),
+          biography: '\u0001'.repeat(4096),
           state: 'suspended',
-          fenced: false,
           operatorAccountId: uuid,
+          controllerId: uuid,
+          birthDate: '9999-12-31',
+          contentPreferences: '€'.repeat(16384),
+          suspensionReason: '\u0001'.repeat(500),
           minimumAuthnEpoch: '9'.repeat(19),
+          fenced: false,
+          createdAt: -1.7976931348623157e308,
+          rateTier: 'ordinary',
+          transactionId: uuid,
         },
         examinedKeys,
       );
