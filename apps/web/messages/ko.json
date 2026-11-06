@@ -25,6 +25,7 @@
   "game_visit_context": "컨텍스트: {context}",
   "game_visit_realm": "Realm: {realm}",
   "game_visit_return": "현재 게임 읽기 화면으로 돌아가기",
+  "game_visit_restart": "현재 게임 읽기에서 다시 시작",
   "game_visit_inspect": "확인",
   "game_visit_inspect_assertion": "현재 {property} 서술 확인",
   "game_visit_inspection_title": "현재 분류 서술",

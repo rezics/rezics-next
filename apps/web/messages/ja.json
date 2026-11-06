@@ -25,6 +25,7 @@
   "game_visit_context": "コンテキスト: {context}",
   "game_visit_realm": "Realm: {realm}",
   "game_visit_return": "現在のゲームの閲覧画面に戻る",
+  "game_visit_restart": "現在のゲームの閲覧画面からやり直す",
   "game_visit_inspect": "確認",
   "game_visit_inspect_assertion": "現在の「{property}」の主張を確認",
   "game_visit_inspection_title": "現在の分類の主張",

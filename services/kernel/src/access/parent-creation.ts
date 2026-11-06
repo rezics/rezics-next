@@ -13,7 +13,7 @@ import { partitionOf } from '../route/route.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { resourceAuthorization } from './resource-authorization.ts';
+import { resourceAuthorization, resourceAuthorizationPage } from './resource-authorization.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import {
   creationManifestEntries,
@@ -29,6 +29,11 @@ import {
  */
 export type ParentAnchor = Readonly<{
   resource: Readonly<Resource>;
+  /** The parent operand's own resource type. A child action may declare a different
+   * type, so the parent is authorized as its own resource whenever this is supplied;
+   * otherwise the action's declared type decides, as for every point check.
+   */
+  resourceType?: string;
   validate(client: AccessClient, time: AuthoritativeTime): Promise<boolean>;
 }>;
 /** The owning child module proves its unique resource INSERT belongs to this
@@ -237,23 +242,35 @@ export function parentCreationAuthorization(input: {
       let proofDeadline = -Infinity;
       // One helper per attempt lets the creation wrapper retain the exact evidence
       // deadline without exposing it or adding creation rights to the generic API.
-      const authorization = resourceAuthorization({
-        access: {
-          authenticate: access.authenticate.bind(access),
-          authorize: access.authorize.bind(access),
-          async prepare(...args) {
-            // Forward the exact context: its opaque live-attempt admission marker
-            // must reach the installed Access without copying or refreshing twice.
-            const evidence = await access.prepare?.(...args);
-            proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-            return evidence;
-          },
+      const operand = {
+        authenticate: access.authenticate.bind(access),
+        authorize: access.authorize.bind(access),
+        ...(access.authorizePage ? { authorizePage: access.authorizePage.bind(access) } : {}),
+        async preparePage(...args: Parameters<NonNullable<Access['preparePage']>>) {
+          const evidence = await access.preparePage?.(...args);
+          proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+          return evidence;
         },
-        actor,
-        action,
-        anchor: { resource: parent, validate },
-        context: { pool, deadline, partition: partitionOf(resource.route) },
-      });
+        async prepare(...args: Parameters<NonNullable<Access['prepare']>>) {
+          // Forward the exact context: its opaque live-attempt admission marker
+          // must reach the installed Access without copying or refreshing twice.
+          const evidence = await access.prepare?.(...args);
+          proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+          return evidence;
+        },
+      };
+      const context = { pool, deadline, partition: partitionOf(resource.route) };
+      const authorization =
+        input.parent.resourceType === undefined
+          ? resourceAuthorization({ access: operand, actor, action, anchor: { resource: parent, validate }, context })
+          : // The parent operand is authorized as its own type, not the child action's declared type.
+            resourceAuthorizationPage({
+              access: operand,
+              actor,
+              action,
+              anchor: { route: parent.route, resourceType: input.parent.resourceType, ids: [parent.id], validate },
+              context,
+            });
       const proof = await authorization.prepare!(attempt);
       requireAccessDeadline(deadline);
       if (typeof proof !== 'object' || proof === null || !bound(attempt)) throw denied();

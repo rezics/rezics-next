@@ -121,7 +121,9 @@ their current admission; public reading does not require a correction companion.
 
 Decision: A released Book with a directed series membership remains that exact Book; neither a numbered title nor a stated count grants a new volume Type, member identity or integer position.
 
-Decision: Literary facts include the released work form and word count. An absent work word count is explicitly unknown; an edition's page count never supplies work length.
+Decision: Literary facts include the released work form, tag (`schema:keywords`) and word count. An absent work word count is explicitly unknown; an edition's page count never supplies work length.
+
+Decision: Generic Recipe and software-release templates have no Statements node; the overview projects those released facts from the current anonymous page so visible copy, sharing metadata and JSON-LD stay the same. Anonymous Game work overviews SSR admitted work facts from that same page; edition destinations stay the existing inverse window. SoftwareApplication pages overlay `schema:sameAs` and `schema:url`; Person and Organization keep their existing overviews. Route pages use that same current catalogue release so home TypeList selectors stay admitted.
 
 Every membership and Edition window supplied by the current Subject composition is discoverable in native order,
 labelled by its released property and direction. The explicitly selected node wins only in its own family; the

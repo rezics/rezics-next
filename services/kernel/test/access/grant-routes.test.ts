@@ -1,9 +1,11 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
-import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
-import { createAccess } from '../../src/access/index.ts';
+import { exportJWK, generateKeyPair } from 'jose';
+import { accessActionCatalogue, createAccess } from '../../src/access/index.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
+import { readAssignment } from '../../src/access/delegation-commands.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
@@ -24,6 +26,7 @@ const pool = new Pool({ connectionString: 'postgres://kernel.invalid/routes' });
 afterAll(() => pool.end());
 const app = createKernel({
   pool,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32),
   writeRate: {
     async spend() {
@@ -42,7 +45,7 @@ test('the actual mounted kernel catalogue contains the nonanonymous grant admini
     ['/v1/roleGrants/$change', 'role_grant.change'],
     ['/v1/roleGrants/$revoke', 'role_grant.revoke'],
   ]) {
-    const mounted = app.routes.filter((route) => route.path === path);
+    const mounted = app.routes.filter((route) => route.method === 'POST' && route.path === path);
     expect(mounted).toHaveLength(1);
     expect(mounted[0]!.hooks.detail).toMatchObject({
       operationId,
@@ -94,7 +97,7 @@ let now = Date.now();
 let fixedKernelTime = false;
 let spends = 0;
 
-async function issue(email: string, scope = scopes) {
+async function issue(email: string, scope = scopes, requestedBy?: string) {
   const signed = await service.handler(
     new Request(`${issuer}/signin`, {
       method: 'POST',
@@ -111,7 +114,7 @@ async function issue(email: string, scope = scopes) {
     new Request(`${issuer}/token`, {
       method: 'POST',
       headers: { origin: issuer, 'content-type': 'application/json', cookie },
-      body: '{}',
+      body: JSON.stringify(requestedBy === undefined ? {} : { requested_by: requestedBy }),
     }),
   );
   expect(response.status).toBe(200);
@@ -174,12 +177,24 @@ beforeAll(async () => {
   });
   kernel = createKernel({
     pool: db.pool,
+    receiptKeys: testReceiptKeys(),
     routeKey,
     tokens,
     clock: () => new Date(now),
     access: (config) => {
-      expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
-      return access;
+      scopes = [...accessActionCatalogue(config.actions).keys()].filter((scope) => scope !== 'media:complete');
+      return createAccess({
+        ...config,
+        auth: {
+          issuer,
+          audience,
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+        },
+      });
+    },
+    onAccessReady: (resolved) => {
+      access = resolved;
     },
     writeRate: {
       async spend(...args) {
@@ -188,25 +203,15 @@ beforeAll(async () => {
       },
     },
   });
-  const actions = actionCatalogue(kernel);
-  // media:complete is reserved to the confidential website client. gate:any is
-  // internal to Access and is required to delegate platform.governance.
-  scopes = [...new Set([...actions.keys()].filter((scope) => scope !== 'media:complete').concat('gate:any'))];
+  // media:complete is reserved to the confidential website client. The same
+  // installed internal catalogue supplies Access and Auth's registered scopes.
+
   authName = `grant_routes_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
   authPool = new Pool({ connectionString: await createAuthDatabase(process.env.DATABASE_URL!, authName) });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'grant-routes',
   };
-  access = createAccess({
-    actions,
-    auth: {
-      issuer,
-      audience,
-      jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-    },
-  });
   grants = createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' });
   // Compose the existing native human registration ports directly. The full
   // account binding also requires unmounted operator-management routes, which
@@ -225,11 +230,14 @@ beforeAll(async () => {
     audience,
     secret: 'grant-routes-auth-persistent-secret-32bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: createAuthBindings({
-      pool: db.pool,
-      ...registration,
-      verifyPendingIdentity: registration.verifyNativePendingIdentity,
-    }),
+    trustedAccess: {
+      ...createAuthBindings({
+        pool: db.pool,
+        ...registration,
+        verifyPendingIdentity: registration.verifyNativePendingIdentity,
+      }),
+      readAssignment: (reference, actorId) => readAssignment(db.pool, reference, actorId),
+    },
     access: registrationPorts,
     stagingKey: new Uint8Array(32).fill(73),
     maintenanceSchedule: '0 0 1 1 *',
@@ -291,20 +299,19 @@ test('real operator bootstrap then native binding grant enables HTTP delegation 
 
 test('actor grant, client scope, principal grant and every delegated action independently remain ceilings', async () => {
   const limited = await issue('grant_root@grant.test', ['access:grant']);
-  // A negative component token isolates the principal operand. Its assignment is
-  // test setup only; positive product proof above uses ordinary Auth tokens.
+  // Auth verifies the actual assignment before issuing the delegated bearer. The
+  // principal's missing resource grants remain an independent permission ceiling.
   const requestId = newId(routeOf(recipient.accountId)!);
   await db.admin.query(
     `INSERT INTO access.principal_assignment(route,principal_id,creator_principal_id,request_id,assigned_actor_id,valid,transaction_id)
     VALUES($1,$2,$2,$3,$4,'(,)',$5)`,
     [routeOf(recipient.accountId), recipient.accountId, requestId, root.accountId, Bun.randomUUIDv7()],
   );
-  const delegated = await new SignJWT({
-    ...decodeJwt<Record<string, unknown>>(root.bearer),
-    requested_by: `urn:rezics:request:${recipient.accountId}:${requestId}`,
-  })
-    .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
-    .sign(await importJWK(signingKey, 'ES256'));
+  const delegated = await issue(
+    'grant_root@grant.test',
+    scopes,
+    `urn:rezics:request:${recipient.accountId}:${requestId}`,
+  );
   for (const [bearer, body] of [
     [recipient.bearer, inputFor(root.accountId)],
     [limited, inputFor(root.accountId)],
@@ -451,7 +458,19 @@ test('direct and role change/revoke routes retain native identities and legacy r
     role: 'platform.governance',
     valid: '(,)',
   };
-  expect((await call(root.bearer, '/v1/roleGrants', role)).response.status).toBe(201);
+  const deniedActions: { action: string; scope: boolean }[] = [];
+  const authorize = access.authorize.bind(access);
+  const observation = spyOn(access, 'authorize').mockImplementation(async (client, actor, action, ...operands) => {
+    const allowed = await authorize(client, actor, action, ...operands);
+    if (!allowed) deniedActions.push({ action, scope: actor.kind === 'account' && actor.scopes.includes(action) });
+    return allowed;
+  });
+  try {
+    const created = await call(root.bearer, '/v1/roleGrants', role);
+    expect({ status: created.response.status, deniedActions }).toEqual({ status: 201, deniedActions: [] });
+  } finally {
+    observation.mockRestore();
+  }
   const roleChanged = { ...role, valid: '[2030-01-01,2031-01-01)', previous: { role: role.role, valid: role.valid } };
   expect((await call(root.bearer, '/v1/roleGrants:change', roleChanged)).response.status).toBe(200);
   expect(
