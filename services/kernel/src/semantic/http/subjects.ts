@@ -1205,11 +1205,7 @@ function subjectRoutes(
               async (tx) => {
                 if (!(await mergeGrant(tx))) return null;
                 const current = await observeSubjectIdentityOperation(tx, params.id);
-                if (
-                  !current ||
-                  current.original !== discovered.original ||
-                  current.terminal !== discovered.terminal
-                )
+                if (!current || current.original !== discovered.original || current.terminal !== discovered.terminal)
                   return null;
                 for (const { subject, route, readable } of reads) {
                   if (!(await readable(tx))) return null;

@@ -57,7 +57,10 @@ test('Person review admits merge through keyboard use on narrow and wide layouts
           statements: {},
         },
         related: {},
-        viewerActions: { state: 'available' as const, actions: [{ action: 'subject:merge', operations: ['subject.merge'] }] },
+        viewerActions: {
+          state: 'available' as const,
+          actions: [{ action: 'subject:merge', operations: ['subject.merge'] }],
+        },
         reviewedIdentity: {
           subject: original.subject,
           source: original.source,
@@ -104,7 +107,9 @@ test('Person review admits merge through keyboard use on narrow and wide layouts
 
   try {
     await act(async () =>
-      root.render(createElement(ProviderPersonReview, { transport, current: () => true, canWrite: true, locale: 'en' })),
+      root.render(
+        createElement(ProviderPersonReview, { transport, current: () => true, canWrite: true, locale: 'en' }),
+      ),
     );
     expect(host.querySelector('section')?.className).toContain('max-w-4xl');
     expect(host.querySelector('.grid')?.className).toContain('md:grid-cols-2');
@@ -162,7 +167,11 @@ test('Person review admits merge through keyboard use on narrow and wide layouts
       }
       const unknown = await fetch(`${kernel}/v1/subjects/${operation}`);
       expect([401, 404, 200, 308]).toContain(unknown.status);
-      const merge = await fetch(`${kernel}/v1/subjects:merge`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const merge = await fetch(`${kernel}/v1/subjects:merge`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
       expect([400, 401, 403]).toContain(merge.status);
     }
   } finally {

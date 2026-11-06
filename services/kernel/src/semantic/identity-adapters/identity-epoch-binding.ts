@@ -36,7 +36,12 @@ import {
   serializeIdentityValue as json,
   IdentityEpochStoreError,
 } from './index.ts';
-import { commandAuthorityAt, type IdentityAdmissionAuthority, type IdentityAdmissionInput, type IdentityJobRef } from './identity-epoch-contract.ts';
+import {
+  commandAuthorityAt,
+  type IdentityAdmissionAuthority,
+  type IdentityAdmissionInput,
+  type IdentityJobRef,
+} from './identity-epoch-contract.ts';
 import selectClaim from '../identity-epoch-binding-select.sql';
 import insertClaim from '../identity-epoch-binding-insert.sql';
 import acceptClaim from '../identity-epoch-binding-accept.sql';

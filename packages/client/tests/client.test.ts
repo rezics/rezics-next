@@ -402,6 +402,7 @@ test('installed identity operation poll types distinguish pending from published
     `${ORIGIN}/v1/subjectIdentityOperations/${ID}`,
   ]);
   expectTypeOf(published.data!.operation).toMatchTypeOf<
-    { id: string; done: false } | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } }
+    | { id: string; done: false }
+    | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } }
   >();
 });

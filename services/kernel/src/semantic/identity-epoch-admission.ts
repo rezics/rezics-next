@@ -83,7 +83,11 @@ import type {
 } from './identity-epoch-contract.ts';
 
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
-import { commandAuthorityAt, type IdentityAdmissionInput, type IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
+import {
+  commandAuthorityAt,
+  type IdentityAdmissionInput,
+  type IdentityAdmissionAuthority,
+} from './identity-epoch-contract.ts';
 import { guardReviewedPersonIdentity } from './reviewed-person-identity.ts';
 export type IdentityAdmissionProgress = Readonly<{
   job: IdentityJobRef;
