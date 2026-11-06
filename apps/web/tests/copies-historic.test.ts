@@ -272,6 +272,7 @@ test('malformed or wrong-shape native presentation is unavailable without invent
     { ...presentation, statusEditing: { state: 'supported', statuses: [] } },
     { ...presentation, statusEditing: { state: 'supported', statuses: 'loan' } },
     { ...presentation, statusEditing: { state: 'supported', statuses: [null] } },
+    { ...presentation, conditionEditing: undefined },
     {
       ...presentation,
       statusEditing: { state: 'supported', statuses: [{ id: 'loan', label: 'On loan' }] },

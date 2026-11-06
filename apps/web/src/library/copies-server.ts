@@ -112,7 +112,7 @@ function isPresentation(value: unknown): value is NativeCopyPresentation {
     isStatusEditing(value.statusEditing) &&
     (value.mediaCondition === undefined || isConditionDisplay(value.mediaCondition)) &&
     (value.packagingCondition === undefined || isConditionDisplay(value.packagingCondition)) &&
-    (value.conditionEditing === undefined || isConditionEditing(value.conditionEditing))
+    isConditionEditing(value.conditionEditing)
   );
 }
 
