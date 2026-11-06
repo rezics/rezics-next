@@ -37,8 +37,8 @@ native owner bindings in adapters. Contract, core and application import no impl
 edges reach only contract modules, `bounds` and `memoized`.
 
 Decision: native composition is installed by server and worker startup, the shared runtime defaults and the preload
-hook; facades never fall back to an implementation. Only typed History vocabulary imports the contract; comment or
-string matches of Pending are not consumers. The inherited ZoneWorkLedger ClassDeclaration load-time read is
+hook; facades never fall back to an implementation. The governance bootstrap command installs it through that same
+preload hook. Only typed History vocabulary imports the contract; comment or string matches of Pending are not consumers. The inherited ZoneWorkLedger ClassDeclaration load-time read is
 `membership.ts:90`.
 
 ## Zone receipts, outbox events and current closure boundary
