@@ -1,4 +1,4 @@
-import type { typeFrame as TypeFrameFn } from '../../subject/definitions';
+import type { CoverRatio } from '@rezics/ui/cover';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
@@ -40,7 +40,7 @@ import { SubjectViewError } from '../../subject/view-error';
 import { env } from 'cloudflare:workers';
 import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pages/subject-canonical-lifetime';
 
-type TypeFrame = Awaited<ReturnType<TypeFrameFn>>;
+type TypeFrame = { label?: string; ratio?: CoverRatio; schemaOrgType?: string };
 
 const viewLabel = {
   overview: () => m.subject_overview(),

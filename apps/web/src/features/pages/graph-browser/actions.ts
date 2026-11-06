@@ -1,6 +1,10 @@
 import { expectedCandidateReader } from '../../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
+import { kernelClient } from '../../../kernel/client';
+import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
+import { fetchGuideRelease } from '../../catalogue/definition-guide';
 import {
   GRAPH_LIMIT,
   graphQueryOf,
@@ -71,10 +75,6 @@ function address(value: unknown) {
 
 export async function exploreContext(locale: string, expectedReader: string | null, signal?: AbortSignal) {
   setResponseHeader('cache-control', 'private, no-store');
-  const [{ env }, { prepareSession, sessionSubject, viewerCredential }] = await Promise.all([
-    import('cloudflare:workers'),
-    import('../../../session/request'),
-  ]);
   signal?.throwIfAborted();
   const request = getRequest();
   await prepareSession(request, env as import('../../../session/client').SessionEnv);
@@ -82,7 +82,6 @@ export async function exploreContext(locale: string, expectedReader: string | nu
   const reader = sessionSubject(request);
   const authorization = viewerCredential(request) ?? undefined;
   if (expectedReader === null ? !!reader || !!authorization : reader !== expectedReader || !authorization) return null;
-  const { kernelClient } = await import('../../../kernel/client');
   signal?.throwIfAborted();
   return { client: kernelClient(locale), authorization };
 }
@@ -95,8 +94,6 @@ export const readSubjectGraphBrowser = createServerFn({ method: 'POST', strict: 
     const prepared = await exploreContext(data.locale, data.expectedReader, signal);
     signal.throwIfAborted();
     if (!prepared) return { ok: false, reason: 'denied' };
-    const { fetchGuideRelease } = await import('../../catalogue/definition-guide');
-    signal.throwIfAborted();
     const headers = data.expectedReader && prepared.authorization ? { authorization: prepared.authorization } : {};
     let release;
     try {

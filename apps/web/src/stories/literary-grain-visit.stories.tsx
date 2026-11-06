@@ -141,13 +141,16 @@ export const LongNamesAndJapaneseLabels: Story = {
     },
     windows: longLabels.windows.map((window) => ({
       ...window,
-      rows: window.rows.map((row) => ({
-        ...row,
-        summary: {
-          ...row.summary,
-          label: { value: '港の物語とそこに暮らした人々の長い記録'.repeat(5), language: 'ja' },
-        },
-      })),
+      rows: window.rows.map((row) => {
+        const grain = literaryGrainRow(row);
+        return {
+          ...grain,
+          summary: {
+            ...grain.summary,
+            label: { value: '港の物語とそこに暮らした人々の長い記録'.repeat(5), language: 'ja' },
+          },
+        };
+      }),
     })),
   },
   globals: { viewport: { value: 'phone390' }, theme: 'dark', locale: 'ja' },

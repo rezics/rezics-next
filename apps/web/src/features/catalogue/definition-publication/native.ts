@@ -211,7 +211,7 @@ export function definitionPublicationNative(
     async readExtension(context, digest) {
       try {
         const result = await (
-          client.contexts({ id: context }).definitions.extensions({ digest }) as ExtensionReadClient
+          client.contexts({ id: context }).definitions.extensions({ digest }) as unknown as ExtensionReadClient
         ).get({ headers });
         if (result.status !== 200 || !record(result.data) || result.data.digest !== digest)
           return { ok: false, reason: failureOf(result) };

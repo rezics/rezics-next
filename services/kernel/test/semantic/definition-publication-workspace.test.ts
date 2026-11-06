@@ -274,9 +274,9 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   expect(extensionRead.status, JSON.stringify(extensionRead.body)).toBe(200);
   expect(extensionRead.body.digest).toBe(extensionDigestValue);
   for (const locale of VERTICAL_LOCALES)
-    expect(extensionRead.body.extension.terms[`${termPrefix(context)}:boardLink`].labels[locale].length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      extensionRead.body.extension.terms[`${termPrefix(context)}:boardLink`].labels[locale].length,
+    ).toBeGreaterThan(0);
   const currentExtension = await call('editor', 'GET', `/v1/contexts/${context}/definitions`);
   const extensionHead = currentExtension.body.head as number;
   const activatedExtension = await call(
