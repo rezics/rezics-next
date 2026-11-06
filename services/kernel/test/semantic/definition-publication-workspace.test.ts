@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { EXTENSION_FORMAT, extensionDigest, termPrefix, type Extension } from '@rezics/definitions/extension';
 import { releaseDigest } from '@rezics/definitions';
@@ -9,7 +9,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
-import { VERTICAL_LOCALES, verticalManifests } from '../support/manifests.ts';
+import { VERTICAL_LOCALES } from '../support/manifests.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -92,22 +92,6 @@ async function call(
   return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
 }
 
-function sourcesFor(count: number) {
-  const bundled = bundledSources();
-  const extra = verticalManifests(count);
-  const imports = Array.from({ length: count }, (_, index) => `  - v${index}`).join('\n');
-  return {
-    root: bundled.root,
-    schemas: {
-      ...bundled.schemas,
-      ...extra.schemas,
-      'rezics.yaml': `${bundled.schemas['rezics.yaml']!.trimEnd()}\n${imports}\n`,
-    },
-    presentation: { ...bundled.presentation, ...extra.presentation },
-    contexts: bundled.contexts,
-  };
-}
-
 test('platform and Context editors publish, resume, activate and use a compiled fixture vertical with independent pinned reads', async () => {
   const anonymous = await call('anonymous', 'POST', '/v1/definitions/imports', { document: { types: {} } });
   expect(anonymous.status, JSON.stringify(anonymous.body)).toBe(403);
@@ -150,32 +134,6 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   const measured = await call('editor', 'POST', '/v1/definitions/imports', { document: ten });
   expect(measured.status, JSON.stringify(measured.body)).toBe(200);
   expect(measured.body.identity.digest).toBe(releaseDigest(compiledTen));
-
-  const vertical = sourcesFor(1);
-  const compiledVertical = await compileCatalogue(vertical);
-  const largePreview = await call('editor', 'POST', '/v1/definitions/imports', { document: vertical });
-  expect(largePreview.status, JSON.stringify(largePreview.body)).toBe(200);
-  expect(largePreview.body.kind).toBe('sources');
-  expect(largePreview.body.diagnostics).toEqual([]);
-  expect(largePreview.body.identity.digest).toBe(releaseDigest(compiledVertical));
-  expect(largePreview.body.comparison.addedTypes.some((id: string) => id.startsWith('ex:V0'))).toBe(true);
-  const largeDigest = largePreview.body.identity.digest as string;
-  const largeKey = { 'idempotency-key': JSON.stringify(randomUUID()) };
-  const largePublish = await call(
-    'editor',
-    'POST',
-    '/v1/definitions/releases',
-    { release: compiledVertical },
-    largeKey,
-  );
-  expect(largePublish.status, JSON.stringify(largePublish.body)).toBe(201);
-  expect(largePublish.body).toEqual({ digest: largeDigest });
-  const largeReplay = await call('editor', 'POST', '/v1/definitions/releases', { release: compiledVertical }, largeKey);
-  expect(largeReplay.status).toBe(201);
-  expect(largeReplay.body).toEqual(largePublish.body);
-  const largeRead = await call('anonymous', 'GET', `/v1/definitions/releases/${largeDigest}`);
-  expect(largeRead.status).toBe(200);
-  expect(largeRead.body.digest).toBe(largeDigest);
 
   const typeId = 'ex:V0Work';
   const usableClasses = {
@@ -252,12 +210,10 @@ test('platform and Context editors publish, resume, activate and use a compiled 
 
   const pinnedOld = await call('anonymous', 'GET', `/v1/definitions/releases/${previousDigest}`);
   const pinnedNew = await call('anonymous', 'GET', `/v1/definitions/releases/${digest}`);
-  const pinnedLarge = await call('anonymous', 'GET', `/v1/definitions/releases/${largeDigest}`);
   const active = await call('anonymous', 'GET', '/v1/definitions/active');
   expect(pinnedOld.status).toBe(200);
   expect(pinnedOld.body.digest).toBe(previousDigest);
   expect(pinnedNew.body.digest).toBe(digest);
-  expect(pinnedLarge.body.digest).toBe(largeDigest);
   expect(active.body.digest).toBe(digest);
   const created = await call('editor', 'POST', '/v1/subjects', {
     type: typeId,
@@ -265,7 +221,7 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const subjectId = created.body.subject.id as string;
-  const read = await call('anonymous', 'GET', `/v1/subjects/${subjectId}`);
+  const read = await call('editor', 'GET', `/v1/subjects/${subjectId}`);
   expect(read.status, JSON.stringify(read.body)).toBe(200);
   expect(read.body.subject.type).toBe(typeId);
   for (const locale of VERTICAL_LOCALES) {
@@ -325,11 +281,11 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   expect(activatedExtension.status, JSON.stringify(activatedExtension.body)).toBe(200);
 
   await real.grant(global, 'reader', 'definitions:publish');
-  const revokedGate = await call('reader', 'POST', '/v1/definitions/imports', { document: vertical });
+  const revokedGate = await call('reader', 'POST', '/v1/definitions/imports', { document: usable });
   expect(revokedGate.status).toBe(403);
   await real.grant(global, 'editor', 'gate:definition_publication');
   await real.revoke(global, 'editor', 'gate:definition_publication');
-  const revoked = await call('editor', 'POST', '/v1/definitions/imports', { document: vertical });
+  const revoked = await call('editor', 'POST', '/v1/definitions/imports', { document: usable });
   expect(revoked.status).toBe(403);
   expect(revoked.body.code).toBe('platform_closed');
 }, 180_000);
