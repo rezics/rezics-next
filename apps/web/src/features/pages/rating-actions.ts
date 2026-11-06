@@ -4,7 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { prepareExpectedReader, type ExpectedReader } from '../../session/expected-reader';
-import { QUESTION, validRatingUnits, writeRatingVote, preparedRatingReader, writeOwnRating } from './subject-ratings';
+import { validRatingUnits, writeRatingVote, preparedRatingReader, writeOwnRating } from './subject-ratings';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -183,8 +183,6 @@ export async function writeQuestionBoundRatingForCurrentReader(
   input: QuestionBoundRatingInput,
 ) {
   input = validateBoundRating(input);
-  // Conditional native providers remain unavailable without their atomic participant guard.
-  if (input.question.id !== QUESTION) return 'rejected' as const;
   const authorization = await prepareExpectedReader(request, env, input);
   if (!authorization) return 'rejected' as const;
   return writeRatingVote(client, {

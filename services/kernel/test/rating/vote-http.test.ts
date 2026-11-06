@@ -12,6 +12,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(93);
 const accountIds = {
@@ -40,6 +41,7 @@ function request(
   body?: unknown,
   as: Persona = 'owner',
   key: string | null = randomUUID(),
+  observation?: unknown,
 ) {
   return app.handle(
     new Request(`http://kernel.test${path}`, {
@@ -48,6 +50,7 @@ function request(
         'x-request-id': 'rating-vote-http',
         ...(as === 'anonymous' ? {} : { authorization: `Bearer ${tokens.get(as)!}` }),
         ...(key === null ? {} : { 'idempotency-key': JSON.stringify(key) }),
+        ...(observation === undefined ? {} : { 'x-rating-observation': JSON.stringify(observation) }),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -101,7 +104,8 @@ beforeAll(async () => {
     ratePeer: () => '127.0.0.1',
     routeKey,
     clock: () => new Date(),
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) },
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,
@@ -194,6 +198,21 @@ test('votes use strict integer JSON, require idempotency keys, and can be read o
   const written = await json(await request('PUT', base, { units: 14 }));
   expect(written).toEqual({ units: 14, revision: 1, at: expect.any(String) });
   expect(await json(await request('GET', base))).toEqual(written);
+  const observation = {
+    subjectId,
+    question: {
+      id: '00000000-0000-7000-8000-000000000001',
+      revision: 1,
+      grain: 'work',
+      meaning: 'How much did you like this work?',
+      scale: { min: 0, max: 20, displayStep: 1 },
+    },
+  };
+  const observedKey = randomUUID();
+  const observed = await json(await request('PUT', base, { units: 8 }, 'owner', observedKey, observation));
+  expect(observed).toEqual({ units: 8, revision: 2, at: expect.any(String) });
+  expect(await json(await request('PUT', base, { units: 8 }, 'owner', observedKey, observation))).toEqual(observed);
+  expect(await json(await request('GET', base))).toEqual(observed);
 
   expect((await request('DELETE', base, undefined, 'owner')).status).toBe(204);
   await problem(await request('GET', base), 404);
@@ -222,6 +241,40 @@ test('rating question reads return the stored label, grain, and integer unit sca
     grain: 'work',
     scale: { min: 0, max: 20, displayStep: 1 },
   });
+});
+
+test('a non-standard question observation answers 503 atomic_guard_unavailable and retries the original command', async () => {
+  const subjectId = await subject();
+  const extraQuestion = newId(0x2201);
+  await database.admin.query(
+    `INSERT INTO rating.question (id, revision, label, grain, minimum_units, maximum_units, step_units)
+     VALUES ($1, 1, 'Translation quality', 'work', 0, 20, 1)`,
+    [extraQuestion],
+  );
+  const path = `/v1/subjects/${subjectId}/ratings/${extraQuestion}/vote`;
+  const observation = {
+    subjectId,
+    question: {
+      id: extraQuestion,
+      revision: 1,
+      grain: 'work',
+      meaning: 'Translation quality',
+      scale: { min: 0, max: 20, displayStep: 1 },
+    },
+  };
+  const key = randomUUID();
+  const first = await problem(await request('PUT', path, { units: 8 }, 'owner', key, observation), 503);
+  expect(first).toMatchObject({ code: 'atomic_guard_unavailable', status: 503, retryable: true });
+  const retry = await problem(await request('PUT', path, { units: 8 }, 'owner', key, observation), 503);
+  expect(retry).toMatchObject({ code: 'atomic_guard_unavailable', status: 503, retryable: true });
+  const stored = await database.admin.query(
+    `SELECT units FROM rating.vote WHERE voter_id = $1 AND question_id = $2 AND target_id = $3`,
+    [accountIds.owner, extraQuestion, subjectId],
+  );
+  expect(stored.rows).toEqual([]);
+  const document = openApiDocument(app);
+  const votePut = document.paths['/v1/subjects/{id}/ratings/{questionId}/vote']?.put;
+  expect(JSON.stringify(votePut?.responses?.[503])).toContain('atomic_guard_unavailable');
 });
 
 test('anonymous, suspended, and unscoped callers cannot use rating routes', async () => {

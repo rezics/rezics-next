@@ -1,7 +1,7 @@
 import { subjectSummary } from './factories/subjects';
 import { expect, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
-import type { OwnVoteEntry } from '../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry } from '../src/ratings/own-votes/types';
 import { createOwnVoteIntent, parseOwnVoteIntent } from '../src/ratings/own-votes/intent';
 import { commandOutcome, readOriginalOwnVote } from '../src/ratings/own-votes/readback';
 
@@ -122,5 +122,6 @@ test('exact original readback treats DELETE 404 as cleared and PUT 404 as missin
   expect(await readOriginalOwnVote(client, 'Bearer test', targetId, questionId, 'PUT')).toEqual({ kind: 'missing' });
   expect(calls).toEqual([`${targetId}/${questionId}`, `${targetId}/${questionId}`]);
   expect(commandOutcome(503, undefined)).toBe('uncertain');
+  expect(commandOutcome(503, { code: 'atomic_guard_unavailable', retryable: true })).toBe('uncertain');
   expect(commandOutcome(400, undefined)).toBe('rejected');
 });
