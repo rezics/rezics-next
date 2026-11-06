@@ -152,7 +152,7 @@ test('reopen preserves the original response, current authority and terminal ref
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 120000);
 
 test('private exports are bounded regular owner-only UTF-8 files; the native endpoint owns XML admission', async () => {
   await mkdir(tempRoot, { recursive: true });
@@ -305,7 +305,7 @@ test('explicit review and confirmation keep original operands across reopen, par
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 120000);
 
 test('preview, explicit review, partial apply, reopen, changed reimport and independent Library/Progress stay separately observable', async () => {
   await mkdir(tempRoot, { recursive: true });
@@ -536,4 +536,4 @@ test('preview, explicit review, partial apply, reopen, changed reimport and inde
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 120000);

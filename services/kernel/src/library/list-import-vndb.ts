@@ -18,6 +18,7 @@ import {
   type RatingQuestion,
   type Vote,
   type VoteReview,
+  type VoteReviewGuard,
   type VoteCommandAdmission,
   type PreparedPutVote,
 } from '../rating/votes.ts';
@@ -2200,7 +2201,7 @@ export function createVndbImport(config: Config) {
     };
   }
 
-  function closedVoteGuard(score: ScoreDecision): PreparedPutVote['input']['guard'] {
+  function closedVoteGuard(score: ScoreDecision): VoteReviewGuard {
     const identity = score.nativeGuard.subject.identity;
     const observation =
       typeof score.nativeGuard.ownVote.observation === 'string'

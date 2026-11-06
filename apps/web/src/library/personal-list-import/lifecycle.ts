@@ -203,24 +203,47 @@ function visit(): VndbVisit {
 
 const unavailable = async () => ({ kind: 'unavailable' as const, status: 503 });
 
+function vndbLifecycleReviewed(command: { body: { action?: string } }): Extract<
+  Awaited<ReturnType<VndbPort['review']>>,
+  { kind: 'reviewed' }
+> {
+  return command.body.action === 'score'
+    ? {
+        kind: 'reviewed',
+        value: {
+          reviewId: VNDB_LIFECYCLE_SCORE_REVIEW,
+          status: 'reviewed',
+          targetId: VNDB_LIFECYCLE_TARGET,
+          action: 'vote',
+          units: 14,
+          question: VNDB_LIFECYCLE_QUESTION,
+          currentVote: { state: 'absent' },
+          consent: 'adopt-native-vote',
+          sourceReason: nativeScore.sourceReason,
+          nativeAdmission: 'conditional',
+        },
+      }
+    : {
+        kind: 'reviewed',
+        value: {
+          reviewId: VNDB_LIFECYCLE_REVIEW,
+          status: 'reviewed',
+          targetId: VNDB_LIFECYCLE_TARGET,
+          state: 'playing',
+          baseline: null,
+          replace: false,
+          action: 'state',
+          progress: null,
+        },
+      };
+}
+
 export function vndbLifecyclePort(page: VndbPage, overrides: Partial<VndbPort> = {}): VndbPort {
   return {
     preview: async () => ({ kind: 'previewed', value: { ...VNDB_LIFECYCLE_PREVIEW, rows: page.total } }),
     page: async () => ({ kind: 'page', value: page }),
     source: async () => ({ kind: 'source', xml: VNDB_LIFECYCLE_XML }),
-    review: async () => ({
-      kind: 'reviewed',
-      value: {
-        reviewId: VNDB_LIFECYCLE_REVIEW,
-        status: 'reviewed',
-        targetId: VNDB_LIFECYCLE_TARGET,
-        state: 'playing',
-        baseline: null,
-        replace: false,
-        action: 'state',
-        progress: null,
-      },
-    }),
+    review: async (command) => vndbLifecycleReviewed(command),
     apply: async (command) => ({
       kind: 'applied',
       value: {
@@ -253,38 +276,7 @@ export async function vndbLifecycleScoreReviewSnapshot(): Promise<VndbJourneySna
   const row = vndbLifecycleReviewedRow();
   const journey = createVndbJourney({
     visit: visit(),
-    port: vndbLifecyclePort(vndbLifecyclePage([row, vndbLifecycleZeroClearRow()]), {
-      review: async (command) =>
-        command.body.action === 'score'
-          ? {
-              kind: 'reviewed',
-              value: {
-                reviewId: VNDB_LIFECYCLE_SCORE_REVIEW,
-                status: 'reviewed',
-                targetId: VNDB_LIFECYCLE_TARGET,
-                action: 'vote',
-                units: 14,
-                question: VNDB_LIFECYCLE_QUESTION,
-                currentVote: { state: 'absent' },
-                consent: 'adopt-native-vote',
-                sourceReason: nativeScore.sourceReason,
-                nativeAdmission: 'conditional',
-              },
-            }
-          : {
-              kind: 'reviewed',
-              value: {
-                reviewId: VNDB_LIFECYCLE_REVIEW,
-                status: 'reviewed',
-                targetId: VNDB_LIFECYCLE_TARGET,
-                state: 'playing',
-                baseline: null,
-                replace: false,
-                action: 'state',
-                progress: null,
-              },
-            },
-    }),
+    port: vndbLifecyclePort(vndbLifecyclePage([row, vndbLifecycleZeroClearRow()])),
   });
   await journey.preview(VNDB_LIFECYCLE_XML);
   return journey.snapshot();
