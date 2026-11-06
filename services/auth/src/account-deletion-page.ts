@@ -8,10 +8,7 @@ export interface AccountDeletionPageAccess {
   readAccountDeletionAdvice(input: {
     human: SessionProof;
     deadline: number;
-  }): Promise<
-    | { kind: 'available' | 'refused'; handle: string | null }
-    | { kind: 'changed' | 'unavailable' }
-  >;
+  }): Promise<{ kind: 'available' | 'refused'; handle: string | null } | { kind: 'changed' | 'unavailable' }>;
 }
 export const ACCOUNT_DELETION_PAGE_PATH = '/account-management/deletion-page';
 export type AccountDeletionPage =

@@ -840,31 +840,27 @@ export function createCollectionReads(
   ) {
     const curatorId = row.curatorAccountId;
     const curatorRoute = curatorId ? routeOf(curatorId) : null;
-    const attribution = curatorId && curatorRoute !== null
-      ? contributionAttribution(
-          await withConnection(pool, (client) =>
-            readPublicAccount(deadlineClient(client, deadline), curatorRoute, curatorId),
-          ),
-        )
-      : ({ displayName: 'Deleted account' } as const);
+    const attribution =
+      curatorId && curatorRoute !== null
+        ? contributionAttribution(
+            await withConnection(pool, (client) =>
+              readPublicAccount(deadlineClient(client, deadline), curatorRoute, curatorId),
+            ),
+          )
+        : ({ displayName: 'Deleted account' } as const);
     if (row.membershipKind !== 'dynamic' || (row.visibility !== 'public' && row.visibility !== 'unlisted'))
       return { attribution };
     const collectionRoute = routeOf(row.id);
     if (collectionRoute === null) return { attribution };
     const members = await withConnection(pool, (client) =>
-      client.query<{ generation: string; subjectId: string | null }>(publicGeneration.sql, [
-        collectionRoute,
-        row.id,
-      ]),
+      client.query<{ generation: string; subjectId: string | null }>(publicGeneration.sql, [collectionRoute, row.id]),
     );
     const generation = members.rows[0]?.generation;
     if (!generation) return { attribution };
     return {
       attribution,
       generation,
-      subjectIds: members.rows
-        .map((item) => item.subjectId)
-        .filter((id): id is string => typeof id === 'string'),
+      subjectIds: members.rows.map((item) => item.subjectId).filter((id): id is string => typeof id === 'string'),
     };
   }
 

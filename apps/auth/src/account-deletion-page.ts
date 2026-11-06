@@ -44,8 +44,7 @@ export const loadAccountDeletionPage: AccountDeletionPageSource = async (signal)
         row.kind !== 'review' ||
         row.policy !== 'personal-deletion' ||
         (row.action !== 'available' && row.action !== 'refused') ||
-        (row.handle !== null &&
-          (typeof row.handle !== 'string' || row.handle.length < 1 || row.handle.length > 64)) ||
+        (row.handle !== null && (typeof row.handle !== 'string' || row.handle.length < 1 || row.handle.length > 64)) ||
         (row.email !== null &&
           (typeof row.email !== 'string' || row.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(row.email)))
       )

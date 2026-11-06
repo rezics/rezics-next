@@ -17,10 +17,7 @@ export function ContributionAttributionSchema() {
   return memoizedValue(ContributionAttributionSchema, () =>
     t.Union([
       t.Object({ id: t.String({ format: 'uuid' }), displayName: t.Union([t.String(), t.Null()]) }, closed),
-      t.Object(
-        { displayName: t.Union([t.Literal('Deleted account'), t.Literal('Deleted organization')]) },
-        closed,
-      ),
+      t.Object({ displayName: t.Union([t.Literal('Deleted account'), t.Literal('Deleted organization')]) }, closed),
     ]),
   );
 }

@@ -448,7 +448,8 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         method: 'GET',
         path: `/v1/collections/${publicCollection.collection.id}`,
       });
-      if (!publicRead.ok) throw new Error(`public collection A unread: ${publicRead.status} ${await publicRead.text()}`);
+      if (!publicRead.ok)
+        throw new Error(`public collection A unread: ${publicRead.status} ${await publicRead.text()}`);
 
       const pendingMarker = marker('pending-publication');
       const currentPublic = await json<{ collection: { revision: number } }>(

@@ -2184,16 +2184,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               { follow: followView(follow) },
               {
                 deadline: job.deadline,
-                ...(dependencies.followingSpaceTargets
-                  ? { followingSpaces: dependencies.followingSpaceTargets }
-                  : {}),
+                ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
                 follow: true,
               },
             );
             const target = await followContributionTarget(dependencies.pool, follow.targetId, follow.targetType);
-            return serializeFollowResponse(
-              target ? { follow: { ...shown.follow, target } } : shown,
-            );
+            return serializeFollowResponse(target ? { follow: { ...shown.follow, target } } : shown);
           }),
         );
       },

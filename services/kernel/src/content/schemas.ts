@@ -361,9 +361,7 @@ function item() {
     voteCitation: t.Union([voteCitation(), t.Null()]),
     revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
     attribution: t.Optional(ContributionAttributionSchema()),
-    parent: t.Optional(
-      t.Object({ postId: ContentIdSchema, attribution: ContributionAttributionSchema() }, closed),
-    ),
+    parent: t.Optional(t.Object({ postId: ContentIdSchema, attribution: ContributionAttributionSchema() }, closed)),
     ...viewerReaction(),
     ...reactions,
   }));
