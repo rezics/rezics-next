@@ -331,7 +331,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       );
     const type = subjectPageType(page.page);
     const typeData = await awaitSubjectRoute(signal, () =>
-      type ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : Promise.resolve({}),
+      context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
     );
     return {
       ...data,
