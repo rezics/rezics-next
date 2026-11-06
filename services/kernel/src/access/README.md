@@ -15,6 +15,23 @@ adds no baseline allowance and no old/new allow-OR. Source compatibility is no n
 
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
+## Domain composition
+
+Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
+bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.
+Use cases consume Access-owned ports in `access/application`. Native adapters in `access/adapters/native.ts` implement
+those ports by calling Content, Community, Semantic, Library and Search public capability facades, and
+`createKernel`/`server`/`worker` bind them through `composition/access.ts`. Contract, core and application import no
+downstream domain behaviour. Tests pin allow/deny, identity recovery with the original actor/request/deadline, and
+original-work admission against fake ports without loading native adapters; growth membership remains the native
+bounded-work check.
+
+Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/application/index.ts`,
+`access/adapters/index.ts`, plus the existing Access adapter facades. Ports: `AvatarMediaPort`,
+`RealmAdministrationPort`, `IdentitySemanticPort`, `IdentityRecoveryStorePort`, `IdentityRetentionPort`,
+`KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `ResourceAuthorizationPort`. Wiring adds no
+query, scan or extra statement; native cost stays with the existing producer declarations.
+
 ## Pure policy core consumer
 
 Decision: Kernel derives the compiled policy from its existing mounted actions and resolved resource roles; catalogue

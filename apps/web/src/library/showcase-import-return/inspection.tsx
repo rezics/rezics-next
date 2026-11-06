@@ -6,6 +6,7 @@ import { SubjectCover, rowRatio } from '../subject-row';
 import { vndbActionClass, VndbAction } from '../personal-list-import/controls';
 import { importLibraryShelfHref, importLibraryWorkHref } from './navigation';
 import type { ImportLibraryRow } from './presentation';
+import { ImportLibraryVote } from './vote';
 import type { ShelfLayout, ShelfSize } from '../shelf-params';
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -94,7 +95,7 @@ export function ImportLibraryInspection({
           {!row.progress ? (
             <p className="text-sm text-muted-foreground">{m.library_vndb_browse_inspection_no_progress()}</p>
           ) : null}
-          <p className="text-sm text-muted-foreground">{m.library_vndb_browse_inspection_rating()}</p>
+          <ImportLibraryVote row={row} detailed />
           <div className="flex flex-wrap gap-3">
             {work ? (
               <a href={work} className={vndbActionClass + ' inline-flex items-center rounded-md border text-primary'}>

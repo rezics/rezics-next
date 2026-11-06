@@ -3,7 +3,7 @@ import { jsonParameter } from '../database/json.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
-import { checkAvatarMedia } from '../content/avatar.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessClock } from './access-clock.ts';
 import { workflowApprovalBinding } from './workflow-approvals.ts';
@@ -1603,7 +1603,14 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           requireAllowed(await allowed(tx));
           if (Object.hasOwn(patch, 'speakersListed') && account.kind !== 'organization')
             throw new ProblemError('invalid_request');
-          if (typeof patch.avatar === 'string' && !(await checkAvatarMedia(tx, patch.avatar, input.accountId)))
+          if (
+            typeof patch.avatar === 'string' &&
+            !(await tryAccessApplication()?.qualifyAvatar({
+              client: tx,
+              mediaId: patch.avatar,
+              accountId: input.accountId,
+            }))
+          )
             throw new ProblemError('invalid_request');
           requireAllowed(
             affected(

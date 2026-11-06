@@ -202,7 +202,12 @@ test('accounts registers once before shared launch, schedules one admitted route
     import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
     import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
     import { createKernelWorkModules } from './src/work/modules.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
+    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(
+      createDiscoveryProducerEntry,
+      createKernelRuntimeDefaults,
+      composeSemanticIdentityParticipants,
+    );
     const accountsWorkModule = KERNEL_WORK_MODULES.find(m=>m.name==='accounts');
     assert.equal(KERNEL_WORK_MODULES.filter(m=>m.name==='accounts').length,1);
     assert.ok(accountsWorkModule);

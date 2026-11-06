@@ -15,7 +15,7 @@ mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics
 const { readConnectionVisit, connectionStreams } = await import('../src/features/pages/subject-connections');
 const { subjectBody } = await import('../src/features/pages/subject');
 const { holderItems } = await import('../src/features/pages/overview');
-const release = { ...definitions, digest: 'a'.repeat(64) } as unknown as GuideRelease;
+const release = { ...definitions, digest: `sha256:${'a'.repeat(64)}` } as unknown as GuideRelease;
 const page = qualifiedRelationsPage();
 const address = { id: page.subject!, locale: 'en' };
 const subject = subjectBody(page)!.subject;
@@ -28,7 +28,7 @@ const success = (): Extract<ConnectionVisit, { ok: true }> => ({
 });
 
 test('installed definitions expose both directions, appearances and character-qualified voice credits', () => {
-  const work = connectionStreams(release, subject.type, address.id, 'en');
+  const work = connectionStreams(release, 'schema:TVSeries', address.id, 'en');
   expect(work.some((stream) => stream.property === 'rezics:crossMediaCounterpart')).toBe(true);
   expect(work.some((stream) => stream.property === 'schema:character' && stream.direction === 'out')).toBe(true);
   expect(work.some((stream) => stream.group === 'credits')).toBe(true);

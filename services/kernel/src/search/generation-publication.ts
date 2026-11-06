@@ -37,6 +37,14 @@ import {
   GenerationReconciliationMismatch,
 } from './generations.ts';
 import { readGenerationPublicationCustody } from './public-filter-custody.ts';
+import {
+  classifyGenerationCoverage,
+  decodeGenerationPublicationQueried,
+  encodeGenerationPublicationQueried,
+  publicationPinFromNative,
+  sameGenerationPublicationPin,
+  type GenerationPublicationPin,
+} from './generation-publication-pin.ts';
 import { discoveryAlias } from './indices.ts';
 import {
   discoveryIndexName,
@@ -180,6 +188,9 @@ type Job = {
   observation: string | null;
   previous_target: string | null;
   previous_uuid: string | null;
+  bootstrap: string | null;
+  queried: string | null;
+  execution: string | null;
   revision: string;
 };
 type Home = { partition: number; epoch: number; position: string; account_revision: string; claim_revision: string };
@@ -403,6 +414,10 @@ export function createSearchGenerationPublication(
     const completion = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, context);
     add(meter, completion.cost);
     if (completion.status !== 'complete') throw new Pending('source_pending');
+    const pin = publicationPinFromNative(completion.publication);
+    const retained = jobPin(job);
+    if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
+    if (!retained) persistPin(job, pin);
     return completion.publication.queried;
   }
   async function completeSource(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
@@ -436,11 +451,32 @@ export function createSearchGenerationPublication(
       context,
     );
     add(meter, completion.cost);
-    if ('publication' in completion && !job.observation) {
-      job.observation = completion.publication.queried.snapshot.observation;
+    if ('publication' in completion) {
+      const pin = publicationPinFromNative(completion.publication);
+      const retained = jobPin(job);
+      if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
+      if (!retained) persistPin(job, pin);
+      if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
       await save(client, job, meter);
     }
     return completion.status === 'complete';
+  }
+
+  function jobPin(job: Job): GenerationPublicationPin | null {
+    if (!job.bootstrap || !job.queried || !job.execution) return null;
+    return {
+      job: job.job,
+      bootstrap: job.bootstrap,
+      queried: decodeGenerationPublicationQueried(job.queried),
+      execution: job.execution,
+    };
+  }
+  function persistPin(job: Job, pin: GenerationPublicationPin) {
+    if (pin.job !== job.job) throw new Pending('source_pending');
+    job.bootstrap = pin.bootstrap;
+    job.queried = encodeGenerationPublicationQueried(pin.queried);
+    job.execution = pin.execution;
+    job.observation = pin.queried.snapshot.observation;
   }
 
   const reference = (job: Job): GenerationPublicationJob => ({ consumer: structuredClone(job.consumer), job: job.job });
@@ -469,7 +505,8 @@ export function createSearchGenerationPublication(
   async function save(client: PoolClient, job: Job, meter: Meter) {
     const result = await client.query(
       `UPDATE search.generation_publication SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
-       pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,revision=revision+1
+       pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,
+       bootstrap=$16,queried=$17,execution=$18,revision=revision+1
        WHERE partition_no=0 AND job=$1 AND revision=$2 RETURNING revision::text`,
       [
         job.job,
@@ -487,6 +524,9 @@ export function createSearchGenerationPublication(
         job.previous_uuid,
         job.pass,
         job.activated_at,
+        job.bootstrap,
+        job.queried,
+        job.execution,
       ],
     );
     if (!result.rows[0]) throw new Pending('observation_lost');
@@ -871,6 +911,11 @@ export function createSearchGenerationPublication(
       meter.inputKeys += page.buckets.length;
       meter.engineIteratorSteps++;
       for (const group of grouped.values()) {
+        const coverage = classifyGenerationCoverage(
+          job.family === 'discovery' ? group.keys.map((key) => key.id) : group.ids,
+          group.ids,
+        );
+        if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition);
         await remember(job, before, client);
         const discoveryKeys =

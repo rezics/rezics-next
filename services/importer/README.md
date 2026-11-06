@@ -87,6 +87,13 @@ Bounds below describe importer-owned logical work, not PostgreSQL physical visib
 
 ### Source-feature costs
 
+- Personal-list explicit match and current Library return: selecting a different target adds one authenticated Entry
+  point read, and saving its review adds one retained-page read of at most eight rows. The independent current Library
+  page is one FULL read of at most eight rows; it supplies status, Progress and counted votes with no per-row request.
+  Reopen reuses the original upload and sealed review/apply commands. These reads write no votes and renew no source
+  retention. `apps/web/src/library/personal-list-import/transport.test.ts`, `reopen.test.ts` and
+  `apps/web/tests/m1-vndb-library-return.test.tsx` cover bounded receiving; `services/kernel/test/library/list-import-vndb-http.test.ts`
+  covers the native score choice and changed-export readback.
 - VNDB tag seed: ≤96 selected works, 512 dictionary tags, 256 associations, 1,024 parent edges, 8 closure steps, 512 vocabulary records and 64 KiB per selected-work record. Kana reads ≤512 bound tags, each ≤64 KiB, 6 MiB total, 3.5 seconds/request and 120 seconds/run; pending replay adds no request. Growth/native evidence: `tests/showcase-tags.test.ts`, `tests/showcase-cross-provider-tags.test.ts`, `tests/showcase-publication.test.ts`, `services/kernel/test/imports/m1-cross-provider-tags.test.ts`, `services/kernel/test/imports/vndb-public-tags.test.ts`.
 - VNDB work links/franchise relations: at most three families, 256 works/family and 32 links/owner (`W≤768`, `L≤32`); selected joins/candidates are O(W×L), dictionary work O(selected keys). No extra per-field permission queries. `tests/showcase-work-links.test.ts`, `tests/showcase-vndb-work-relations.test.ts`, `tests/showcase-franchise.test.ts` and `services/kernel/test/imports/showcase-work-links.test.ts` cover exact joins, typed reciprocal provenance, limits, adoption, reopen and facts fences.
 - Selected VNDB release dates/states: ≤64 releases, 64 vocabulary rows, 300 candidates; one date/state per Release and one status per Work; supersession depth 8 and ≤128 relation rows. `tests/showcase-vndb-releases.test.ts` and `services/kernel/test/imports/showcase-vndb-releases.test.ts` cover changed classification, retraction, reopen and reads.

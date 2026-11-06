@@ -1,16 +1,10 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import { runCommand } from '../command/command.ts';
-import { stepLibraryIdentityEpoch } from '../library/identity-epoch-participant.ts';
-import { createSearchIdentityEpochParticipant } from '../search/identity-epoch-participant.ts';
-import { createOpenSearch } from '../search/opensearch.ts';
-import { readSearchConfig } from '../search/work.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
 import type {
-  IdentityEpochParticipants,
   IdentityJobRef,
   IdentityStepName,
   IdentityStepProgress,
@@ -18,26 +12,28 @@ import type {
   ResumeIdentityEpochJob,
   WaitIdentityEpochPublished,
 } from './identity-epoch-contract.ts';
+import type { IdentityEpochParticipantPorts, IdentityStepReceiptLocator } from './contract/identity-epoch-ports.ts';
+import {
+  identityEpochNext,
+  identityEpochReceiptLocator,
+  identityEpochWorkflowId,
+  IDENTITY_EPOCH_SEGMENT_PAGES,
+  IDENTITY_EPOCH_WAIT_INTERVAL_MS,
+  type IdentityEpochNext,
+} from './core/identity-epoch-sequence.ts';
 import { stepIdentityEpochMapping } from './identity-epoch-mapping.ts';
 import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from './identity-adapters/index.ts';
 import control from './identity-epoch-coordinator-control.sql';
 import { withReadTransaction } from './read.ts';
 
 const workflowName = 'semantic.identityEpoch';
-const segmentPages = 100;
-const waitIntervalMs = 100;
 type JobLocator = Readonly<{ jobId: string; epoch: string }>;
-type ReceiptLocator = Readonly<{
-  job: JobLocator;
-  step: IdentityStepName;
-  version: 1;
-  native: Readonly<{ partition: number; epoch: number; position: string; transactionId: string }>;
-}>;
-type Next = 'preparing' | 'cancelling' | 'cancelled' | 'published' | IdentityStepName | 'publish';
+type ReceiptLocator = IdentityStepReceiptLocator;
+type Next = IdentityEpochNext;
 type WorkflowState = Readonly<{ status: string; nextSegment: number | null }> | null;
 type Installation = Readonly<{
   client: WorkContext['client'];
-  participants: IdentityEpochParticipants | null;
+  participants: IdentityEpochParticipantPorts<Pool> | null;
   read: (job: JobLocator) => Promise<Next>;
   status: (id: string) => Promise<WorkflowState>;
 }>;
@@ -65,7 +61,7 @@ function nativeJob(job: JobLocator): IdentityJobRef {
   locator(ref);
   return ref;
 }
-const workflowId = (job: JobLocator) => `semantic:identity:${job.jobId}:${job.epoch}`;
+const workflowId = (job: JobLocator) => identityEpochWorkflowId(job);
 
 async function readWorkflowState(client: WorkContext['client'], id: string): Promise<WorkflowState> {
   const workflow = await client.getWorkflow(id);
@@ -85,44 +81,28 @@ async function readNext(pool: Pool, ref: IdentityJobRef): Promise<Next> {
     if (!job) throw unavailable('Native identity job or its current owner is unavailable');
     const row = (await tx.query(control.sql, [identityJobPartition(ref)])).rows[0];
     if (!row) throw unavailable('Native identity control is unavailable');
-    if (job.state === 'published') {
-      if (BigInt(row.published_epoch) < ref.epoch || row.pending_job === ref.jobId)
-        throw unavailable('Native publication and control custody disagree');
-      return 'published';
-    }
-    if (job.state === 'cancelled' || job.state === 'cancelling') return job.state;
-    if (row.pending_job !== ref.jobId || BigInt(row.pending_epoch ?? -1) !== ref.epoch)
-      throw unavailable('Native identity job no longer owns its control reservation');
-    if (job.state === 'preparing') return 'preparing';
-    if (job.mapping?.state !== 'complete') return 'mapping';
-    if (job.participants['search-canonical-index']?.state !== 'complete') return 'search-canonical-index';
-    if (job.participants['library-private-follow-counts']?.state !== 'complete') return 'library-private-follow-counts';
-    return 'publish';
+    const next = identityEpochNext({
+      job: ref,
+      jobState: job.state,
+      mappingComplete: job.mapping?.state === 'complete',
+      searchComplete: job.participants['search-canonical-index']?.state === 'complete',
+      libraryComplete: job.participants['library-private-follow-counts']?.state === 'complete',
+      control: {
+        publishedEpoch: BigInt(row.published_epoch),
+        pendingJob: row.pending_job,
+        pendingEpoch: row.pending_epoch === null ? null : BigInt(row.pending_epoch),
+      },
+    });
+    if (next === 'publication-control-disagrees') throw unavailable('Native publication and control custody disagree');
+    if (next === 'reservation-lost') throw unavailable('Native identity job no longer owns its control reservation');
+    return next;
   });
 }
 
 function receiptLocator(ref: IdentityJobRef, step: IdentityStepName, progress: IdentityStepProgress): ReceiptLocator {
-  const receipt = progress.receipt;
-  if (
-    !sameJob(progress.job, ref) ||
-    !sameJob(receipt.job, ref) ||
-    receipt.step !== step ||
-    receipt.version !== 1 ||
-    !['more', 'complete'].includes(progress.state) ||
-    progress.frontier.after.length > 8 ||
-    Buffer.byteLength(JSON.stringify(progress.frontier)) > 2048 ||
-    progress.work.rows > 100 ||
-    Object.values(progress.work).some((value) => !Number.isSafeInteger(value) || value < 0)
-  )
-    throw invalidProgress();
-  if (progress.state === 'more' && progress.work.rows + progress.work.points + progress.work.engineRequests === 0)
-    throw noProgress();
-  return {
-    job: locator(ref),
-    step,
-    version: 1,
-    native: { ...receipt.native, position: receipt.native.position.toString() },
-  };
+  const checked = identityEpochReceiptLocator(ref, step, progress);
+  if (!checked.ok) throw checked.reason === 'no-progress' ? noProgress() : invalidProgress();
+  return { ...checked.locator, job: locator(ref) };
 }
 function nativeReceipt(receipt: ReceiptLocator): IdentityStepReceipt {
   return {
@@ -139,23 +119,14 @@ function installed(pool: Pool): Installation {
   return binding;
 }
 
-/** Trusted registration only; there is no caller-selected participant list or mutable installation setter. */
-export function registerIdentityEpochCoordinator(context: WorkContext): void {
+/** Trusted registration only. The composition root supplies the fixed participants; null leaves the coordinator
+ * unavailable. There is no caller-selected participant list or mutable installation setter.
+ */
+export function registerIdentityEpochCoordinator(
+  context: WorkContext,
+  participants: IdentityEpochParticipantPorts<Pool> | null,
+): void {
   if (installations.has(context.pool)) throw new Error('Identity epoch coordinator is already registered');
-  const config = readSearchConfig(context.env);
-  const routeKey = config && context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : null;
-  const participants: IdentityEpochParticipants | null =
-    config && routeKey
-      ? Object.freeze({
-          version: 1,
-          'search-canonical-index': createSearchIdentityEpochParticipant({
-            search: createOpenSearch(config.url),
-            prefix: config.prefix,
-            routeKey,
-          }),
-          'library-private-follow-counts': stepLibraryIdentityEpoch,
-        })
-      : null;
   const read = DBOS.registerStep(async (job: JobLocator) => readNext(context.pool, nativeJob(job)), {
     name: `${workflowName}.read`,
     ...COMMAND_STEP_RETRIES,
@@ -204,7 +175,7 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
   const continueWork = DBOS.registerStep(
     async (job: JobLocator, segment: number) => {
       if (!Number.isSafeInteger(segment) || segment < 1) throw new TypeError('Invalid identity workflow segment');
-      const id = `${workflowId(job)}:segment:${segment}`;
+      const id = identityEpochWorkflowId(job, segment);
       await context.client.enqueue(
         { workflowName, workflowID: id, workflowIDReusePolicy: 'return-existing', queueName: 'maintenance' },
         job,
@@ -217,7 +188,7 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
   DBOS.registerWorkflow(
     async (job: JobLocator, segment: number = 0) => {
       let previous: ReceiptLocator | null = null;
-      for (let page = 0; page < segmentPages; page++) {
+      for (let page = 0; page < IDENTITY_EPOCH_SEGMENT_PAGES; page++) {
         const next = await read(job);
         if (next === 'published' || next === 'cancelled') return { nextSegment: null };
         if (next === 'preparing' || next === 'cancelling') {
@@ -233,7 +204,7 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
       }
       // Each workflow contains at most 100 pages. Only the saved job and segment locator cross the boundary;
       // each producer rereads its native frontier. Release this queue slot before the next segment runs.
-      await DBOS.sleep(waitIntervalMs);
+      await DBOS.sleep(IDENTITY_EPOCH_WAIT_INTERVAL_MS);
       await continueWork(job, segment + 1);
       return { nextSegment: segment + 1 };
     },
@@ -269,7 +240,7 @@ export const waitIdentityEpochPublished: WaitIdentityEpochPublished = async (poo
     if (next === 'cancelled' || next === 'cancelling')
       throw new IdentityEpochStoreError('identity_effect_stale', 'Cancelled native identity work cannot publish');
     const current = installed(pool);
-    const id = segment === 0 ? workflowId(input) : `${workflowId(input)}:segment:${segment}`;
+    const id = identityEpochWorkflowId(input, segment);
     const workflow = await (DBOS.isInWorkflow() && !DBOS.isInStep()
       ? current.status(id)
       : readWorkflowState(current.client, id));
@@ -293,7 +264,7 @@ export const waitIdentityEpochPublished: WaitIdentityEpochPublished = async (poo
       }
     }
     if (DBOS.isInStep()) throw unavailable('Identity publication must wait outside a durable step');
-    if (DBOS.isInWorkflow()) await DBOS.sleep(waitIntervalMs);
-    else await Bun.sleep(waitIntervalMs);
+    if (DBOS.isInWorkflow()) await DBOS.sleep(IDENTITY_EPOCH_WAIT_INTERVAL_MS);
+    else await Bun.sleep(IDENTITY_EPOCH_WAIT_INTERVAL_MS);
   }
 };

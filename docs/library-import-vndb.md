@@ -44,6 +44,19 @@ Candidate arrays distinguish matched, ambiguous, unmatched, unavailable and unsu
 the ambiguous shape is reserved for multiple disclosed canonical candidates, never generated from titles.
 Unmatched rows accept an explicit readable target obtained through ordinary catalogue search.
 
+Explicit selection reads the chosen work's current private Entry before showing replacement consent. This uses
+one ordinary authenticated Entry read, independent of the export; absence and refusal remain distinct. Saving a
+review against a different target refreshes the current native target, released state choices and counted vote
+preview in one existing eight-row page read. A lost refresh retries only the read, retaining the acknowledged review.
+Score consent is then based on that target's actual vote. The independent Library return read uses the same FULL
+page's caller-private counted vote projection in native occurrence order, alongside status and Progress. It preserves
+zero, absence and unavailable, without rescaling or filling gaps from import decisions. At most eight native rows
+supply every layout and inspection; no per-row read is added. Result links carry the public-safe Library return landmark;
+private upload addresses, source XML and native cursors stay off the public work URL.
+
+Decision: consume the released import and graph owners; refresh explicit-match previews and retain the Library return
+landmark rather than introducing another importer, vote writer or provider identity mapping.
+
 ## Original command custody
 
 No absent value clears native facts. Existing entries are preserved by default; `replace:true` captures the current

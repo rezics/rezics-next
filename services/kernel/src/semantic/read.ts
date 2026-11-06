@@ -1,10 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+
+export { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable };
+export { withRequestDeadline };
 
 const snapshots = new AsyncLocalStorage<ReadonlyMap<Pool, { client: PoolClient; deadline: number; live: boolean }>>();
 

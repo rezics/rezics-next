@@ -838,6 +838,12 @@ only if the stored source must change.
 
 ## Confidential cursor and bounded name sort
 
+Decision: confidential Search continuations also bind the published identity-epoch digest; a changed epoch
+restarts the executed query. Canonical pages emit one terminal after original AND terminal admission.
+Search reads that digest through Semantic's public identity-adapters/read entry, which serves the digest from the
+mapping-read module rather than identity-basis.ts, and owns generation publication pins without importing Semantic
+internals.
+
 The Search cursor contract uses the shared encrypted list-cursor Search profile with AES-GCM. Its authenticated
 binding covers the route/operation, canonical request hash and viewer. The viewer is a real lowercase account UUID
 or null for anonymous readers. The encrypted position carries the concrete generation, selected Global question
@@ -1875,6 +1881,9 @@ full/exhausted pages and generation-recovery case and adds a prefix/current-summ
 Native acceptance remains deferred to integration; local compilation supplies no native readiness evidence.
 
 ## Bounded generation publication
+
+Decision: publication pins the original job, bootstrap, queried observation and execution on the generation row
+and encodes that proof with tagged scalar, bigint and undefined meaning. Resume and activation reuse that tuple.
 
 `createSearchGenerationPublication` in `generation-publication.ts` is the shared worker/CLI publication port.
 Its synchronous configuration is `{pool, search, source, sourceKeys, binding, clock, meaning, writerGuard,

@@ -5,12 +5,13 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { readVndbTargetStates } from './server';
 import type { VndbScoreNotice } from './controller';
-import type { VndbReviewInput, VndbRow, VndbState } from './contract';
+import type { VndbBaseline, VndbReviewInput, VndbRow, VndbState } from './contract';
 import { VndbAction, VndbCheck } from './controls';
 import { VndbEvidence } from './fields';
 import { VndbScoreReview } from './score-review';
 import { VndbProgressReview } from './progress-review';
 import { VndbTargetSearch } from './target';
+import { useVndbVisit } from './visit';
 
 type StateChoice = { id: string; label: string };
 
@@ -37,6 +38,7 @@ export function VndbRowReview({
   onReview: (body: VndbReviewInput) => void;
 }) {
   const id = useId();
+  const visit = useVndbVisit();
   const hasMinutes = !!row.fields.minutes && !!row.identifier;
   const notMappable = (row.kind === 'retained' && !hasMinutes) || row.match.status === 'unsupported';
   const [action, setAction] = useState<'state' | 'progress' | 'skip' | 'retain'>(
@@ -48,18 +50,23 @@ export function VndbRowReview({
   const [stateId, setStateId] = useState('');
   const [replace, setReplace] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<{ targetId: string; baseline: VndbBaseline } | null>(null);
   const targetId = target?.id ?? (nativeChosen ? row.target?.targetId : null);
   const baseline =
     row.target && targetId === row.target.targetId
       ? row.target.baseline
       : row.decision && targetId === row.decision.targetId
         ? row.decision.baseline
-        : null;
+        : selectedEntry && selectedEntry.targetId === targetId
+          ? selectedEntry.baseline
+          : null;
 
   useEffect(() => {
     let current = true;
     setStates([]);
     setStateId('');
+    setSelectedEntry(null);
+    setReplace(false);
     if (nativeChosen && row.target) {
       setStates(row.target.states.map((item) => ({ id: item.id, label: labelFor(item) })));
       setLoading(false);
@@ -85,17 +92,20 @@ export function VndbRowReview({
       };
     }
     const type = target.types[0];
-    if (!type) {
+    if (!type || !visit) {
       setLoading(false);
       return () => {
         current = false;
       };
     }
     setLoading(true);
-    void readVndbTargetStates({ data: { type } })
-      .then((options) => {
-        if (!current) return;
-        setStates(options.map((option) => ({ id: option.id, label: option.label.text })));
+    void readVndbTargetStates({ data: { type, targetId: target.id, sender: visit.subject } })
+      .then((result) => {
+        if (!current || !visit.current()) return;
+        if (result.kind === 'target') {
+          setStates(result.states.map((option) => ({ id: option.id, label: option.label.text })));
+          setSelectedEntry({ targetId: result.targetId, baseline: result.baseline });
+        }
         setLoading(false);
       })
       .catch(() => {
@@ -107,7 +117,7 @@ export function VndbRowReview({
     return () => {
       current = false;
     };
-  }, [row.target, target, nativeChosen]);
+  }, [row.target, target, nativeChosen, visit]);
 
   function selectAction(next: 'state' | 'progress' | 'skip' | 'retain') {
     setAction(next);

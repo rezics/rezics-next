@@ -4,6 +4,15 @@ This owner defines shared finite bounds and native growth measurement. Product o
 module's Cost section. [Performance acceptance](../../docs/goals/performance.capabilities.md) owns scenarios; the
 [Performance Goal](../../docs/goals/performance.md) owns the outcome.
 
+## Access domain composition
+
+Decision: Access contract/core/application add no SQL, scan or extra statement. Native ports are the existing
+Content avatar, Community realm-claim, Semantic identity, Library original-work and Kind-input, and Search
+Kind-preparation producers; `admitOriginalWork` composes their declared vectors with
+`HISTORY_ORIGINAL_LOCAL_ALLOWANCE` and `ADDITIONAL_ORIGINAL_TRANSFER_CONTROL`. Kind-audience overhead remains
+`originalControlWork(0, 4, 13, statementBytes)`. Compact tests cover allow/deny and identity recovery; native
+membership growth remains the bounded-work check.
+
 ## Finite bounds
 
 Producer bounds are immutable, closed declarations over all nine axes. Composition uses overflow-safe sums, applies

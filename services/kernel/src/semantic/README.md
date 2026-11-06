@@ -14,11 +14,11 @@ Subject IDs are permanent and never reused. Global subject:create creates revisi
 
 The pure kernel-identity-core leaf owns mapping DTOs, bounded evidence classification and immutable merge/unmerge/repoint transforms. Its public entry is identity-core/index.ts: no SQL, runtime, command, Access, environment, clock, randomness or crypto. It indexes acquired evidence once and performs O(N) time/space for at most 100 originals; its four states and reasons are unchanged, and pending never implies self.
 
-Effectful adapters remain in kernel-semantic. The exact entries are identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, and identity-adapters/identity-epoch-binding.ts for the public binding. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings and readIdentityRatingReview stay on read.ts and do not load the store or binding graph; the [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
+Semantic is split into four registered layers. Contract (`semantic/contract/`) holds the identity vocabulary and the fixed participant ports and has no runtime imports. Core (`semantic/core/`) holds pure next-step and receipt derivations over contract values. Application (`semantic/application/`) installs the fixed participant composition over those ports. Effectful adapters remain in kernel-semantic: the exact entries are identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, and identity-adapters/identity-epoch-binding.ts for the public binding. `identity-core/values.ts` re-exports the contract vocabulary. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings, readIdentityRatingReview and readIdentityBasis stay on read.ts and do not load the store or binding graph; published identity digest reads share the mapping-read module rather than identity-basis.ts so Search can consume them without a value-import cycle through semantic/read. The [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
 
-Static edges remain retention → binding → retention, binding → index → binding, binding → identity → retention, and reversal → binding. Deferred edges remain identity → binding for undo/lookup and binding → identity for reversal verification. Existing read.ts and index.ts cold-load behavior is unchanged. Remove only the four replaced Access-to-binding rule 2 exceptions; keep rule 3 cycle records. The adapter stays in kernel-semantic because admission, closure and participant mechanisms share its native authority.
+The identity coordinator receives the fixed Search currentness and Library custody participants as `IdentityEpochParticipantPorts`. The process composition root (`composition/semantic.ts`) binds the real implementations to the worker pool and injects them through `createKernelWorkModules` and `createSemanticWorkModule`. The coordinator, Semantic work module and identity-epoch contract facade therefore no longer import the Library or Search participants, the OpenSearch client or the membership route-key reader. Retention, binding, index and identity still form value cycles inside the adapters; those rule 3 records stay in the boundary baseline until a later extraction breaks them. Semantic edges to Library, Search, Rating and Content that are not yet ports remain baseline entries.
 
-Adapters own independent repeatable-read collection, route/home selection, support jobs, SQL, authorization, prearm, native receipt hashing, binding proofs, admission and publication. Library keeps originals and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps lifecycle writes. Mapping/store/publication/admission and three-scale growth remain owner acceptance. No wildcard custody export, new package, module, protocol, second Library resolver, permission cache or baseline exception is introduced.
+Adapters own independent repeatable-read collection, route/home selection, support jobs, SQL, authorization, prearm, native receipt hashing, binding proofs, admission and publication. Library keeps originals and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps lifecycle writes. Mapping/store/publication/admission and three-scale growth remain owner acceptance. No wildcard custody export, second Library resolver, permission cache or new protocol is introduced.
 
 ## Bounded current relation visits
 
@@ -765,7 +765,7 @@ before approval/page/finish/pending-clear. No worker is held through an outage. 
 same intent, never denies review. Access now records immutable account-home decision/reversal intents in the
 original native transaction/receipt and verifies them before releasing the home for admission. The original
 wrappers use the typed native coordinator adapter and require actual mapping and both participant publication.
-Current dev includes identity-epoch-coordinator.ts, registered by semantic/work-module.ts. registerIdentityEpochCoordinator wires persisted read/admission, mapping, the configured Search canonical-index and Library private-follow-counts participants, receipt reconciliation, publication and bounded workflow segments of at most 100 pages before yielding and resuming outside a durable step. resumeIdentityEpochJob re-enqueues the original immutable job with return-existing; waitIdentityEpochPublished checks committed native published custody, not SDK success. This confirms installed wiring only: independent native observations, both participant receipts and complete publication acceptance remain required, and unresolved custody/generation evidence stays pending.
+Current dev includes identity-epoch-coordinator.ts, registered by semantic/work-module.ts. registerIdentityEpochCoordinator receives the fixed Search canonical-index and Library private-follow-counts participants from the composition root and wires persisted read/admission, mapping, receipt reconciliation, publication and bounded workflow segments of at most 100 pages before yielding and resuming outside a durable step. resumeIdentityEpochJob re-enqueues the original immutable job with return-existing; waitIdentityEpochPublished checks committed native published custody, not SDK success. This confirms installed wiring only: independent native observations, both participant receipts and complete publication acceptance remain required, and unresolved custody/generation evidence stays pending.
 Historical missing custody and consumer-aware source minimization remain pending owner obligations; exact keys,
 delivered guards and integration debt are in the owning contract.
 No queue, public pending DTO, permission change or second operation protocol is introduced.
@@ -1480,6 +1480,26 @@ change.
   live-obligation axes. Reclaim/wakeup is in prepare and its own measured case. Native table counts and relation/index
   byte deltas cover every retained/crash/replay/abandon state; continuous disjoint jobs cannot stall finite owner pages.
   Complete producer/body/c_MAX evidence for all nine items remains required for full publication and Cost closure.
+
+### Identity epoch domain composition
+
+- Public entries: `semantic/contract/identity-values.ts` (vocabulary), `semantic/contract/identity-epoch-ports.ts` (fixed
+  participant ports), `semantic/core/identity-epoch-sequence.ts` (next-step, workflow-ID and receipt derivations),
+  `semantic/application/identity-epoch-participants.ts` (installed composition), `semantic/work-module.ts`
+  (`createSemanticWorkModule`) and `composition/semantic.ts` (`composeSemanticIdentityParticipants`).
+- Touches: the fixed two-port participant composition, bound once per worker pool at process composition; one job read and
+  one control row per durable page for the next-step derivation; one producer result per page for receipt validation. No new
+  statement, index, table or background work is added.
+- Bound: composition is O(1) with no I/O at construction; the next-step derivation is O(1) over the observed row; receipt
+  validation is capped at 8 frontier keys, 2048 JSON bytes, 100 rows and one receipt per page; a workflow identifier is O(job
+  identifier length). The existing 100-page segment bound and per-page producer call are unchanged, so scale stays with the
+  identity growth checks (`test/semantic/growth-identity-epoch-coordinator.test.ts`).
+- Regression: `test/semantic/domain-composition.test.ts` (six tests: fixed ports, next-step sequencing, receipt bounds,
+  workflow identifiers, composed bindings and layer imports). The native composed path is covered by the identity epoch
+  coordinator and work-module suites.
+- Observed architecture counters, base to candidate: Semantic outward file edges to non-Semantic modules 822 to 817, with
+  the coordinator's direct Library, Search and Access implementation imports moved to composition; kernel value cycle
+  unchanged at 405 files and largest SCC 388; 18 boundary-baseline entries removed; no violation added against the base commit.
 
 ### Command and receipt
 

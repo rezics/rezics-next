@@ -13,6 +13,11 @@ import {
   type SearchWindowHistory,
 } from './history';
 import { searchWindowFocus } from './focus';
+import {
+  rememberSearchDestination,
+  restoreSearchDestination,
+  retireSearchDestination,
+} from '../search-destination-return';
 
 const operations = [] as const;
 type Transition = { request: string; from: string | null | undefined; to: string | null; action: string };
@@ -74,8 +79,17 @@ export function useSearchWindow({
   };
   const changedOwner = visit.current?.request !== request;
   if (!visit.current || changedOwner) {
-    if (visit.current) focus.current.retire();
+    if (visit.current) {
+      focus.current.retire();
+      retireSearchDestination();
+    }
     pending.current = undefined;
+    const destination = restoreSearchDestination({
+      href: href(requestedCursor),
+      locale,
+      reader: session,
+      ...(requestedCursor === undefined ? {} : { cursor: requestedCursor }),
+    });
     visit.current = {
       request,
       cursor,
@@ -83,6 +97,7 @@ export function useSearchWindow({
       history: visit.current ? emptySearchWindows(firstHref) : persisted(),
       checkpoint:
         stored()?.request === request && typeof stored()?.checkpoint === 'string' ? stored().checkpoint : undefined,
+      ...(destination?.cursor !== undefined && destination.cursor === cursor ? { attemptedFrom: null } : {}),
     };
   } else if (visit.current.cursor !== cursor) {
     const transition = pending.current;
@@ -171,12 +186,18 @@ export function useSearchWindow({
       const expected = target ? href(target.to ?? undefined) : undefined;
       // Every unactivated navigation, including opening a result, retires focus immediately.
       if (!expected || locationHref.split('#')[0] !== expected) {
+        rememberSearchDestination({
+          href: href(cursor ?? undefined),
+          locale,
+          reader: session,
+          ...(cursor === null ? {} : { cursor }),
+        });
         pending.current = undefined;
         focus.current?.retire();
         setBusy(false);
       }
     });
-  }, [router, request, cursor, locale]);
+  }, [router, request, cursor, locale, session]);
 
   function activate(event: React.MouseEvent<HTMLAnchorElement>, target: string | undefined, action: string) {
     if (

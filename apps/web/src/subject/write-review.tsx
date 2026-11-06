@@ -6,7 +6,7 @@ import type { RealmLink } from '../community/space';
 import { m } from '../paraglide/messages.js';
 import { SignInPrompt } from '../threads/composer';
 import { readReviewDestination } from '../threads/review-destination/server';
-import type { ReviewDestinationPage } from '../threads/review-board-choices';
+import type { ReviewDestinationItem, ReviewDestinationPage } from '../threads/review-board-choices';
 import { reviewThreadHref } from '../threads/review-policy';
 import {
   beginReviewEntryRead,
@@ -144,7 +144,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
     void readBoardPage(realm, undefined);
   }
 
-  async function chooseBoard(board: ReviewDestinationPage['items'][number]) {
+  async function chooseBoard(board: ReviewDestinationItem) {
     const realm = selectedRealm;
     if (!realm || !reviewEntryVisitIsCurrent(visit)) return;
     retireRead('boards');

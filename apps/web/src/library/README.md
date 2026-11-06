@@ -8,8 +8,10 @@ reads one native FULL page of at most eight entries with the original prepared r
 `lastActivity desc` order. It never dispatches an import command, resolves an XML title to a Subject, hydrates a row,
 or overlays imported values. Original native Entry/Subject associations and repeated rows keep their positions.
 Released profile labels describe the current state; an unknown label uses the existing Other presentation.
-Progress appears only when the native page supplies its active session. This reader supplies no rating projection;
-the Work and full Library retain those controls.
+Progress appears only when the native page supplies its active session. The same FULL page's counted own-vote
+projection supplies each row's vote beside status and Progress: present units and revision, an explicit absence, or
+unavailable, in occurrence order. Zero, absence and unavailable stay distinct in list, grid, table and inspection.
+Import decisions and source scores never fill a missing projection, and the Work and full Library keep score controls.
 
 Decision: retain one replacement page and one previous address, retry the exact failed page, and open the full
 Library at its first page with explicit recent-activity order and the preview's supported layout and grid size.

@@ -467,8 +467,10 @@ minutes. Three usage-limit refusals on one pool within an hour exclude its allow
 failures exclude all aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
-minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A reset is not burn. `status` lists
-each pool's rate and the ready tasks waiting on it.
+minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A window is the same when its
+`minutes` match and its reset stamp is within 60 seconds of the current reading's, because providers stamp one reset a
+few milliseconds or seconds apart from reading to reading. A real reset moves the stamp by a window length, starts a new
+series and is not burn. `status` lists each pool's rate and the ready tasks waiting on it.
 
 Decision: `policy.maxConcurrent` is an optional positive integer per pool name, not per shared allowance. Selection
 counts that pool's live sessions (pending start and running) and skips a full pool like an exhausted one, for new tasks

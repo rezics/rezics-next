@@ -256,3 +256,42 @@ test('review keeps an explicit unmatched target selectable only while native rea
     '1 loaded entries still need review. 8 source rows have not been loaded',
   );
 });
+
+test('an explicit match refreshes the native target and vote without replacing the acknowledged review', async () => {
+  const source = authoredRow();
+  const decision = {
+    reviewId,
+    status: 'reviewed' as const,
+    targetId,
+    state: 'playing',
+    baseline: null,
+    replace: false,
+    action: 'state' as const,
+  };
+  const commands: VndbCommand[] = [];
+  const { journey, page } = setup([source], {
+    review: async (command) => {
+      commands.push(command);
+      page.rows = [
+        {
+          ...source,
+          decision,
+          target: { targetId, states: [{ id: 'playing', labels: { en: 'Playing' } }], baseline: null },
+          nativeScore: {
+            ...source.nativeScore,
+            currentVote: { state: 'set', units: 0, revision: 2, at: '2026-11-06T00:00:00Z' },
+          },
+        },
+      ];
+      return { kind: 'reviewed', value: decision };
+    },
+  });
+  await journey.reopen(address);
+  const snap = await journey.review({ ordinal: 0, action: 'state', targetId, state: 'playing', replace: false });
+  expect(commands).toHaveLength(1);
+  expect(snap.page?.rows[0]?.target?.targetId).toBe(targetId);
+  expect(snap.page?.rows[0]?.nativeScore.currentVote).toMatchObject({ state: 'set', units: 0 });
+  expect(snap.page?.rows[0]?.match.status).toBe('unmatched');
+  expect(snap.page?.rows[0]?.decision).toEqual(decision);
+  expect(snap.selectedEffects).toBe(1);
+});

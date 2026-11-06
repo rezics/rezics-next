@@ -1,6 +1,8 @@
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
+import { withSubjectVisitReturn } from '../../features/pages/showcase-work';
+import { importLibraryReturnHref } from '../showcase-import-return/navigation';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
 import type { VndbOutcome } from './contract';
@@ -42,10 +44,17 @@ export function VndbResultPage({
     snap.settledEffects.map((effect) => [`${effect.ordinal}:${effect.kind}:${effect.reviewId}`, effect]),
   );
   const pending = new Set(snap.pendingEffects.map((effect) => `${effect.ordinal}:${effect.kind}:${effect.reviewId}`));
-  const renderTarget = (targetId: string | null, ordinal: number) => {
+  const renderTarget = (targetId: string | null) => {
     if (!targetId) return null;
     return (
-      <a className="underline underline-offset-2" href={subjectHref({ id: targetId, label: '' }, getLocale()).href}>
+      <a
+        className="underline underline-offset-2"
+        href={withSubjectVisitReturn(
+          subjectHref({ id: targetId, label: '' }, getLocale()).href,
+          importLibraryReturnHref(getLocale()),
+          getLocale(),
+        )}
+      >
         {m.library_vndb_effect_target({ id: targetId })}
       </a>
     );
@@ -80,7 +89,6 @@ export function VndbResultPage({
             <p className="break-words text-sm">{m.library_vndb_effect_review_id({ id: outcomeId(outcome) })}</p>
             {renderTarget(
               settled.get(`${outcome.ordinal}:${outcomeKind(outcome)}:${outcomeId(outcome)}`)?.targetId ?? null,
-              outcome.ordinal,
             )}
           </li>
         ))}
@@ -109,7 +117,7 @@ export function VndbResultPage({
               </p>
               <p>{progress}</p>
               <p className="break-words text-sm">{m.library_vndb_effect_review_id({ id: effect.reviewId })}</p>
-              {renderTarget(effect.targetId, effect.ordinal)}
+              {renderTarget(effect.targetId)}
             </li>
           );
         })}

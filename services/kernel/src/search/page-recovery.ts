@@ -6,6 +6,21 @@ import type {
   PublicFilterConsumerRepair,
 } from './public-filter-consumer-contract.ts';
 
+export type SearchPageRecoveryTransition = 'preparing' | 'retry' | 'restart' | 'ready' | 'destination-return';
+
+/** Page recovery after rebuild, outage or identity change. A changed generation restarts the executed query. */
+export function searchPageRecoveryTransition(input: {
+  preparing?: boolean;
+  generationChanged?: boolean;
+  identityChanged?: boolean;
+  returning?: boolean;
+}): SearchPageRecoveryTransition {
+  if (input.generationChanged || input.identityChanged) return 'restart';
+  if (input.returning) return 'destination-return';
+  if (input.preparing) return 'preparing';
+  return 'ready';
+}
+
 /** A locator-only delivery boundary. The host supplies its existing durable work
  * enqueue operation; no local queue, job store or replacement frontier is created.
  */

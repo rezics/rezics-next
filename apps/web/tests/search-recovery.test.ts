@@ -15,6 +15,7 @@ import {
   searchPageForRecovery,
   searchRecoveryFromResponse,
   searchRetryAt,
+  narrowSearchRetryAt,
   searchUnavailablePage,
   type SearchRecoveryState,
 } from '../src/search/search-recovery';
@@ -218,6 +219,7 @@ test('recovery offers appropriate manual actions, honors Retry-After, and never 
   expect(render({ status: 'unavailable' })).not.toMatch(/0 results|No results|progressbar|%/);
   expect(searchRetryAt('1', 1000)).toBe(2000);
   expect(searchRetryAt('Thu, 01 Jan 1970 00:00:03 GMT', 1000)).toBe(3000);
+  expect(narrowSearchRetryAt(2000, 5000)).toBe(5000);
   expect(searchRetryAt('-1', 1000)).toBeUndefined();
   expect(searchRetryAt('invalid', 1000)).toBeUndefined();
   expect(searchRecoveryFromResponse({ status: 503, error: { code: 'index_not_ready' } })).not.toHaveProperty('retryAt');

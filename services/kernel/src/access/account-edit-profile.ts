@@ -1,5 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
-import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
+import type { AvatarSummary } from './contract/index.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { prepareReadDecisions, type Access, type AccessContext, type AccountActor } from '../request/access.ts';
@@ -249,7 +250,11 @@ export async function readEditableAccountProfile(
                       actual: (_input, summary) => (summary ? avatarBound : { ...avatarBound, emptySeeks: 1 }),
                     },
                     { media: avatarId },
-                    async () => (await readAvatarSummaries(client, [avatarId])).get(avatarId) ?? null,
+                    async () => {
+                      const application = tryAccessApplication();
+                      if (!application) throw new ProblemError('dependency_unavailable');
+                      return (await application.readAvatarSummaries(client, [avatarId])).get(avatarId) ?? null;
+                    },
                   )
                 : null;
               const kind = row.kind === 'organization' ? 'organization' : 'actor';

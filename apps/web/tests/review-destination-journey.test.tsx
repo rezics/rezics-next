@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, expectTypeOf, mock, test } from 'bun:test';
+import type { KernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
 import { act, createElement as h, StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,6 +7,11 @@ import { createKernelClient } from '@rezics/client';
 import memberships from '../src/kernel/recorded/my-realms.json';
 import boardRecording from '../src/kernel/recorded/realm-boards.json';
 import subjectRecording from '../src/kernel/recorded/subject.json';
+import type { ReviewDestinationPage } from '../src/threads/review-board-choices';
+
+type ReviewDestinationsRoute = ReturnType<KernelClient['realms']>['review-destinations'];
+type InstalledReviewDestinationPage = NonNullable<Awaited<ReturnType<ReviewDestinationsRoute['get']>>['data']>;
+expectTypeOf<ReviewDestinationPage>().toEqualTypeOf<InstalledReviewDestinationPage>();
 
 const reader = 'story-viewer';
 const otherReader = 'other-story-viewer';

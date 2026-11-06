@@ -279,6 +279,7 @@ test('XML → exact target/state review → explicit selected apply → a separa
     <VndbResultPage snap={result} busy={false} onResume={nothing} onReview={nothing} onDiscard={nothing} />,
   );
   expect(results).toContain('data-vndb-result="applied"');
+  expect(results).toContain('via=%2Fen%2Flibrary%2Fimport-vndb%23vndb-current-library');
   expect(results).toContain('data-vndb-result="unavailable"');
   expect(results).toContain(reviewId);
   expect(results).toContain(scoreReviewId);
@@ -578,5 +579,42 @@ test('old visit pages cannot attach after replacement, and native loss of access
     await active.refresh();
     expect(active.snapshot().visible).toBeNull();
     expect(active.snapshot().failed?.result.state).toBe(state);
+  }
+});
+
+test('fresh native vote projection keeps zero, absence and unavailable distinct in every Library layout', async () => {
+  setLocale('en', { reload: false });
+  const first = nativePage.libraryEntries[0]!;
+  const page: ImportLibraryPage = {
+    libraryEntries: [first, first, first],
+    next: null,
+    viewerFacts: {
+      state: 'current',
+      question: { ...question, scale: { min: 0, max: 20, displayStep: 1 } },
+      rows: [
+        { state: 'present', questionId: question.id, questionRevision: 1, units: 0, revision: 4 },
+        { state: 'absent', questionId: question.id, questionRevision: 1 },
+        { state: 'unavailable', reason: 'scope' },
+      ].map((vote, index) => ({
+        rowKey: `occurrence-${index}`,
+        subjectId: first.subjectId,
+        entry: { state: 'absent' },
+        vote: vote as NonNullable<ImportLibraryPage['viewerFacts']>['rows'][number]['vote'],
+      })),
+    },
+  };
+  expect(importLibraryRows(page, 'en').map((row) => row.vote?.state)).toEqual(['present', 'absent', 'unavailable']);
+  expect(importLibraryRows({ ...page, viewerFacts: undefined }, 'en')[0]!.vote).toBeNull();
+  for (const layout of ['list', 'grid', 'table'] as const) {
+    const html = await render(
+      <ImportLibraryView result={{ state: 'current', page }} layout={layout} busy={false} onRead={nothing} />,
+    );
+    expect(html.match(/data-vndb-native-vote="present"/g)).toHaveLength(1);
+    expect(html.match(/data-vndb-native-vote="absent"/g)).toHaveLength(1);
+    expect(html.match(/data-vndb-native-vote="unavailable"/g)).toHaveLength(1);
+    expect(html).toContain('Current vote: 0 units, revision 4.');
+    expect(html).toContain('There is no current vote.');
+    expect(html).toContain('The current vote could not be read.');
+    expect(html).not.toContain('Ratings are not included');
   }
 });
