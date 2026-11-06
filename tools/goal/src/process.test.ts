@@ -226,3 +226,20 @@ test('a reused leader with an ambiguous group inspection is fenced without signa
     await waitForProcess(unrelated);
   }
 });
+test('terminateProcessGroup waits until a memberless kernel group becomes absent', async () => {
+  const identity = { pid: 2_000_000_001, group: 2_000_000_001, start: '0', boot: 'fixture-boot' };
+  let visible = 3;
+  const kill = process.kill.bind(process);
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid === -identity.group && signal === 0) {
+      if (visible-- > 0) return true;
+      throw Object.assign(new Error('No such process'), { code: 'ESRCH' });
+    }
+    return kill(pid, signal);
+  });
+  try {
+    await terminateProcessGroup(identity, 200);
+  } finally {
+    killSpy.mockRestore();
+  }
+});
