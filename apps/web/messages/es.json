@@ -1765,6 +1765,8 @@
   "subject_qualifiers": "Calificadores",
   "subject_rating_control_clear": "Borrar tu valoración",
   "subject_rating_control_error": "No se pudo guardar tu valoración. Se restauró el valor anterior.",
+  "subject_rating_control_uncertain": "El resultado de la valoración es incierto. Vuelve a guardar con la misma petición para confirmarlo.",
+  "subject_rating_control_stale": "Esta revisión de la valoración está desactualizada. Revisa la pregunta actual y guarda de nuevo.",
   "subject_rating_control_label": "Tu valoración",
   "subject_rating_control_save": "Guardar valoración",
   "subject_rating_control_unrated": "Sin valorar",

@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { hostname } from 'node:os';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -767,8 +768,32 @@ export function formatConnectionRunSummary(
   return `PostgreSQL connections: peak ${peakTotal}/${maxConnections} max_connections; highest file peaks: ${highest.join(', ') || 'none'}`;
 }
 
-export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
-  const network = dockerNetworkArgs();
+export type PostgresContainerOptions = {
+  socketDirectory?: string;
+};
+
+function postgresSocketMount(socketDirectory: string): string[] {
+  if (!isAbsolute(socketDirectory) || /[,\s]/.test(socketDirectory))
+    throw new Error('Disposable PostgreSQL socket directory must be an absolute path');
+  chmodSync(socketDirectory, 0o1777);
+  return [
+    '-v',
+    `${socketDirectory}:/rezics-pg-socket:z`,
+    '-e',
+    'PGHOST=/rezics-pg-socket',
+  ];
+}
+
+/** Official image `docker_process_sql` clears PGHOST and talks to `/var/run/postgresql`. */
+export const isolatedPostgresUnixSockets = '/rezics-pg-socket,/var/run/postgresql';
+
+export function startPostgresContainer(
+  dockerCommand: DockerCommand = docker,
+  options: PostgresContainerOptions = {},
+): string {
+  const network = options.socketDirectory ? postgresSocketMount(options.socketDirectory) : dockerNetworkArgs();
+  const publish = options.socketDirectory ? [] : postgresPublishArgs(Number(pid), network);
+  const socketListen = options.socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : [];
   return dockerCommand([
     'run',
     '-d',
@@ -779,7 +804,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
-    ...postgresPublishArgs(Number(pid), network),
+    ...publish,
     // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
@@ -803,6 +828,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
+    ...socketListen,
   ]);
 }
 
