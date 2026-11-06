@@ -8,6 +8,7 @@ beforeAll(async () => {
   f = await resourceFixture();
   await f.available();
   await f.access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'operator', 'moderation:takedown');
+  await f.access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'operator', 'zone:purge');
 }, 180_000);
 afterAll(async () => {
   await f?.close();
@@ -263,4 +264,34 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
   );
   expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(200);
   expect((await f.raw(zone))!.withholding.custody).toHaveLength(2);
+});
+
+test('ordinary owners cannot early-purge, a hold blocks cleanup, and legal order then removes a private Zone', async () => {
+  const created = await f.call('owner', 'POST', '/v1/zones', createBody());
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.zone.id as string;
+  const deleted = await f.call(
+    'owner',
+    'DELETE',
+    `/v1/zones/${id}`,
+    undefined,
+    f.conditional(created.body.zone.revision),
+  );
+  expect(deleted.status, JSON.stringify(deleted.body)).toBe(200);
+  expect((await f.call('owner', 'POST', `/v1/platform/zones/${id}:purge`, { reason: 'early' })).status).toBe(403);
+  const held = await f.call('operator', 'POST', `/v1/platform/zones/${id}:hold`, { reason: 'Legal preservation' });
+  expect(held.status, JSON.stringify(held.body)).toBe(200);
+  expect(held.body.held).toBe(true);
+  f.advance(31 * day);
+  expect((await f.purge(id)).next).toBeNull();
+  expect((await f.raw(id))!.configuration).not.toBeNull();
+  expect((await f.call('operator', 'POST', `/v1/platform/zones/${id}:releaseHold`, {})).status).toBe(200);
+  const purge = await f.call('operator', 'POST', `/v1/platform/zones/${id}:purge`, {
+    reason: 'Legal order',
+    order: 'court-order-1',
+  });
+  expect(purge.status, JSON.stringify(purge.body)).toBe(200);
+  expect(purge.body.state).toBe('purge_pending');
+  expect((await f.purge(id)).next).toBeNull();
+  expect(await f.raw(id)).toBeUndefined();
 });

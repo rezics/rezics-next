@@ -28,29 +28,6 @@ test('actual Zone command custody reaches the registered owners and waits for th
   body.configuration.scope = [];
   const zone = await f.create(body);
   const path = `/v1/zones/${zone.id}`;
-  // PROBE (temporary, removed before landing): owner role row versus the fixture authority clock.
-  const probeRows = await f.db.admin.query(
-    'SELECT subject_kind, subject_id, subject_role, grant_role, valid::text AS valid FROM access.resource_role_grant WHERE resource_id = $1',
-    [zone.id],
-  );
-  const probeAt = f.clock().toISOString();
-  const probeHeld = await f.db.admin.query(
-    "SELECT count(*)::int AS n FROM access.resource_role_grant WHERE resource_id = $1 AND grant_role = 'semantic.zone.owner' AND subject_id = $2 AND valid @> $3::timestamptz",
-    [zone.id, f.accounts.owner, probeAt],
-  );
-  const probeNow = await f.db.admin.query('SELECT now()::text AS db_now');
-  console.log(
-    'PROBE',
-    JSON.stringify({
-      rows: probeRows.rows,
-      at: probeAt,
-      held: probeHeld.rows,
-      dbNow: probeNow.rows,
-      owner: f.accounts.owner,
-      route: routeOf(zone.id),
-    }),
-  );
-
   const configuration = structuredClone(body.configuration);
   configuration.labels.en = 'Private receipt payload';
   const configured = await f.call(
@@ -100,18 +77,30 @@ test('actual Zone command custody reaches the registered owners and waits for th
     [partition, sourceKey],
   );
   expect(sources.rows).toHaveLength(14);
+  const journeyEvents = [
+    'com.rezics.zone.created.v1',
+    'com.rezics.zone.configured.v1',
+    'com.rezics.zone.published.v1',
+    'com.rezics.zone.deleted.v1',
+    'com.rezics.zone.restored.v1',
+    'com.rezics.zone.taken_down.v1',
+    'com.rezics.zone.takedown_released.v1',
+  ] as const;
 
   const storedEvents = await f.events(zone.id);
-  expect(storedEvents.map((event) => event.type).sort()).toEqual([...ZONE_HISTORY_EVENT_TYPES].sort());
+  expect(storedEvents.map((event) => event.type).sort()).toEqual([...journeyEvents].sort());
   for (const event of storedEvents) {
     expect(Object.keys(event.data as object).sort()).toEqual(['id', 'revision']);
     expect(classifyEvent(event.type).kind).toBe('non-personal');
   }
+  for (const type of ZONE_HISTORY_EVENT_TYPES) expect(classifyEvent(type).kind).toBe('non-personal');
 
   const registry = new HistoryRegistry();
   registerZoneHistoryConsumers({ history: registry });
   expect(registry.familyGaps('zones')).toEqual(['zones:durable-work/v1']);
-  expect(registry.familyDefinitions().find((definition) => definition.family === 'zones')?.sources).toHaveLength(14);
+  expect(registry.familyDefinitions().find((definition) => definition.family === 'zones')?.sources).toHaveLength(
+    ZONE_HISTORY_RECEIPT_KINDS.length + ZONE_HISTORY_EVENT_TYPES.length,
+  );
 
   await f.tombstoneOwner();
   const barrierRow = (
@@ -150,7 +139,16 @@ test('actual Zone command custody reaches the registered owners and waits for th
     artifacts.push({ owner: owner!, artifact: { partition, locator, accounts } });
   }
   expect(artifacts.map(({ owner }) => owner.name).sort()).toEqual(
-    [...ZONE_HISTORY_EVENT_TYPES, ...ZONE_HISTORY_RECEIPT_KINDS].sort(),
+    [
+      ...journeyEvents,
+      'zone.create',
+      'zone.configure',
+      'zone.publish',
+      'zone.delete',
+      'zone.restore',
+      'zone.takedown',
+      'zone.release_takedown',
+    ].sort(),
   );
 
   const readiness = await runCommand(f.db.pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {

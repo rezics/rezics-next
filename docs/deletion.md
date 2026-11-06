@@ -127,7 +127,7 @@ rejects incomplete coverage and, when enabled, emits only a closed technical ver
 lists the concrete remaining producer, scope, consumer and routing proof gaps. These local pages do not establish
 Commerce's mandatory unused-account `none` result.
 
-Ordinary record purge remains a distinct owner exchange: Semantic's `record-purge-authority.ts` validates committed ordinary deletion, and Content and Accounts consume that exact opaque authority for their own bytes and history. Account-role custody or account erasure cannot authorize ordinary purge. Zone cleanup has separate branch admission and Zone CAS ownership; [Zones](zones.md#deletion-restoration-withholding-and-durable-cleanup) records the pending Access grant, Content order-scope and History receipt/outbox/work dispositions without claiming those interfaces are delivered.
+Ordinary record purge remains a distinct owner exchange: Semantic's `record-purge-authority.ts` validates committed ordinary deletion, and Content and Accounts consume that exact opaque authority for their own bytes and history. Account-role custody or account erasure cannot authorize ordinary purge. Zone cleanup admits Platform hold/release and purge intent on Global Context, then runs bounded `purgeZonePage` under the Zone CAS writer; Access grant minimization, Content order-scope admission and History durable-work remain pending. Native journeys pin delete/hide/restore, pointer takedown and hold/purge; two web mapping tests pin owner and denial UI; no Storybook stories. Served-page walks stay with the managed stack.
 
 ### Access and Auth participants
 

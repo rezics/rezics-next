@@ -102,6 +102,9 @@ export const ZONE_HISTORY_RECEIPT_KINDS = Object.freeze([
   'zone.restore',
   'zone.takedown',
   'zone.release_takedown',
+  'zone.hold',
+  'zone.release_hold',
+  'zone.purge',
 ] as const);
 export const ZONE_HISTORY_EVENT_TYPES = Object.freeze([
   'com.rezics.zone.created.v1',
@@ -111,6 +114,10 @@ export const ZONE_HISTORY_EVENT_TYPES = Object.freeze([
   'com.rezics.zone.restored.v1',
   'com.rezics.zone.taken_down.v1',
   'com.rezics.zone.takedown_released.v1',
+  'com.rezics.zone.held.v1',
+  'com.rezics.zone.hold_released.v1',
+  'com.rezics.zone.purge_pending.v1',
+  'com.rezics.zone.purged.v1',
 ] as const);
 export type ZoneHistoryReceiptKind = (typeof ZONE_HISTORY_RECEIPT_KINDS)[number];
 export type ZoneHistoryEventType = (typeof ZONE_HISTORY_EVENT_TYPES)[number];
@@ -438,6 +445,10 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.zone.restored.v1': nonPersonal,
   'com.rezics.zone.taken_down.v1': nonPersonal,
   'com.rezics.zone.takedown_released.v1': nonPersonal,
+  'com.rezics.zone.held.v1': nonPersonal,
+  'com.rezics.zone.hold_released.v1': nonPersonal,
+  'com.rezics.zone.purge_pending.v1': nonPersonal,
+  'com.rezics.zone.purged.v1': nonPersonal,
 } satisfies Readonly<Record<string, EventClassification>>);
 
 export function classifyEvent(type: string): EventClassification {

@@ -15,4 +15,8 @@ export const ZONE_EVENTS = {
   'com.rezics.zone.restored.v1': change,
   'com.rezics.zone.taken_down.v1': change,
   'com.rezics.zone.takedown_released.v1': change,
+  'com.rezics.zone.held.v1': change,
+  'com.rezics.zone.hold_released.v1': change,
+  'com.rezics.zone.purge_pending.v1': change,
+  'com.rezics.zone.purged.v1': change,
 } as const;
