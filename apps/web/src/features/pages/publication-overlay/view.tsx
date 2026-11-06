@@ -1,5 +1,4 @@
 import type { Related, Subject } from '../../../subject/types';
-import type { Reader } from '../../../subject/reader';
 import { CandidateValue } from '../data';
 import type { PageLink } from '../shared';
 import type { PublicationOverlayReading } from '../subject-metadata';
@@ -17,8 +16,7 @@ export function PublicationOverlayView({
   related: Related;
   documents?: unknown;
   locale: string;
-  reader?: Reader;
-  link?: PageLink;
+  link?: PageLink | undefined;
 }) {
   return (
     <section data-slot={`${reading.kind}-publication`} className="min-w-0 space-y-4">
@@ -36,7 +34,7 @@ export function PublicationOverlayView({
                   related={related}
                   locale={locale}
                   subject={subject.id}
-                  documents={documents}
+                  {...(documents !== undefined ? { documents } : {})}
                   {...(link ? { link } : {})}
                 />
               ))}

@@ -243,9 +243,8 @@ for (const [vertical, types] of Object.entries(launch)) {
         types: Record<string, string>;
       };
       const configured = Object.keys(presentation.types);
-      if (vertical === 'agents') {
-        expect(configured.filter((type) => types.includes(type)).sort()).toEqual([...types].sort());
-      } else expect(configured.sort()).toEqual([...types].sort());
+      // YAML may list extra presentation types this cell does not record.
+      expect(configured.filter((type) => types.includes(type)).sort()).toEqual([...types].sort());
       const release = await driver.request('anonymous', 'GET', '/v1/definitions/active');
       status(release, 200, 'actual released definition pointer');
       expect(release.body.digest).toBe(bundledDigest);

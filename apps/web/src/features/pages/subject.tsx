@@ -1011,6 +1011,19 @@ export function SubjectPage({
       return <Link {...props} href={contextHref(href, realm)} />;
     };
   }, [link, locale, literaryReturn, mangaReturn, realm, visitReturn]);
+  const releasedDefinitions = page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined;
+  const gameInitial =
+    read && releasedDefinitions && page.catalogue?.digest
+      ? gamePublicationInitial(
+          read.subject,
+          read.related,
+          read.summary,
+          releasedDefinitions,
+          page.catalogue.digest,
+          locale,
+          reader ?? defaultReader,
+        )
+      : undefined;
   const factsContext = read ? (page.context?.id ?? read.subject.context) : undefined;
   const factsRealm = page.context?.population.kind === 'realm' ? page.context.population.id : undefined;
   const factsOrigin =
@@ -1376,38 +1389,28 @@ export function SubjectPage({
             {overview &&
             read &&
             !page.account &&
-            recipePublicationReading(
-              read.subject,
-              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
-              locale,
-              reader ?? defaultReader,
-            ) ? (
+            recipePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
               <RecipePublicationEntry
                 subject={read.subject}
                 related={read.related}
-                documents={read.documents}
-                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
                 locale={locale}
                 reader={reader ?? defaultReader}
                 link={ContextLink}
+                {...(read.documents !== undefined ? { documents: read.documents } : {})}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {overview &&
             read &&
             !page.account &&
-            releasePublicationReading(
-              read.subject,
-              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
-              locale,
-              reader ?? defaultReader,
-            ) ? (
+            releasePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
               <ReleasePublicationEntry
                 subject={read.subject}
                 related={read.related}
-                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
                 locale={locale}
                 reader={reader ?? defaultReader}
                 link={ContextLink}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {!overview && heading && (
@@ -1580,38 +1583,21 @@ export function SubjectPage({
                 spoiler={reader?.spoilerLevel}
                 {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
                 sessionObservation={readingAdmission ?? ''}
-                {...(page.catalogue?.state === 'released'
-                  ? {
-                      initial: gamePublicationInitial(
-                        read.subject,
-                        read.related,
-                        read.summary,
-                        page.catalogue.definitions,
-                        page.catalogue.digest,
-                        locale,
-                        reader ?? defaultReader,
-                      ),
-                    }
-                  : {})}
+                {...(gameInitial ? { initial: gameInitial } : {})}
               />
             ) : null}
             {overview &&
             read &&
             !page.account &&
             !gameReaderEntry(read.subject.type, read.summary?.types) &&
-            gamePublicationReading(
-              read.subject,
-              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
-              locale,
-              reader ?? defaultReader,
-            ) ? (
+            gamePublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
               <GamePublicationEntry
                 subject={read.subject}
                 related={read.related}
-                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
                 locale={locale}
                 reader={reader ?? defaultReader}
                 link={ContextLink}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {overview &&
@@ -1619,19 +1605,14 @@ export function SubjectPage({
             !page.account &&
             read.subject.type !== 'schema:Person' &&
             read.subject.type !== 'schema:Organization' &&
-            agentPublicationReading(
-              read.subject,
-              page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
-              locale,
-              reader ?? defaultReader,
-            ) ? (
+            agentPublicationReading(read.subject, releasedDefinitions, locale, reader ?? defaultReader) ? (
               <AgentPublicationEntry
                 subject={read.subject}
                 related={read.related}
-                definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
                 locale={locale}
                 reader={reader ?? defaultReader}
                 link={ContextLink}
+                {...(releasedDefinitions ? { definitions: releasedDefinitions } : {})}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (
