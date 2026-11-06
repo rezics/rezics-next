@@ -269,7 +269,17 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   expect(byId[japanese.id]?.decision).toBeNull();
   expect(byId[korean.id]?.decision).toBeNull();
   expect(byId[chinese.id]?.decision).toBeNull();
-  expect(byId[japanese.id]?.statement.references).toEqual([citation('https://catalogue.example.test/editorial/ja')]);
+  expect(byId[japanese.id]?.statement.references).toMatchObject([
+    {
+      hash: expect.any(String),
+      parts: [
+        {
+          property: { id: 'schema:url', data_type: 'url' },
+          value: { type: 'value', content: 'https://catalogue.example.test/editorial/ja' },
+        },
+      ],
+    },
+  ]);
   expect(byId[japanese.id]?.source ?? null).not.toBe(undefined);
 
   const paged = await listCandidates(created.id, 'acceptor', 1);
