@@ -111,7 +111,7 @@ The existing `exposure.open` and `exposure.close` operations publish this declar
 it as `ViewerActionBinding.fixedResourceId`. Native viewer actions discard inapplicable bindings before
 preparation and gate/candidate work, and restrict mixed-batch action decisions and operation entries to
 the matching native reference. All existing resource existence/privacy, current T, scopes, principal,
-floor, explicit grants and denials still apply. Command authorization and receipt handling are unchanged.
+floor, explicit grants and denials still apply. Command pools need receipt keys before setup and grants.
 
 Consumers obtain both the type and fixed ID from the genuine mounted declaration, then request the existing
 `viewerActions` batch for that exact reference. Only an exact action and operation pair offers the control.
