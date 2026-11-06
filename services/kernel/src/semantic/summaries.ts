@@ -2,6 +2,7 @@ import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
+import type { ContentCoverRef } from './contract/domain-ports.ts';
 import { contentLifecycleOf } from './adapters/content-lifecycle.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
@@ -426,7 +427,9 @@ async function projectSummaries(
   ))
     partitions.add(partition);
   const lifecycle = contentLifecycleOf(deps.pool);
-  const media = mediaIds.length ? await lifecycle.checkCovers(deps.client, mediaIds) : new Map();
+  const media: Map<string, ContentCoverRef | null> = mediaIds.length
+    ? await lifecycle.checkCovers(deps.client, mediaIds)
+    : new Map();
   // Read each exact selected source tuple once, in independently anchored homes.
   // Media custody and source fences are facts, not permission or disclosure caches.
   const tuples = new Map<string, SourceFenceTuple>();

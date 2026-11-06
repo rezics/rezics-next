@@ -56,6 +56,7 @@ export type {
   SearchCurrentnessPort,
   ContentImportedFieldGroup,
   ContentQueryClient,
+  ContentCoverObligation,
   ContentCoverCredit,
   ContentCoverRef,
   ContentCoverSource,

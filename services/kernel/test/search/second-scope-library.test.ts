@@ -61,9 +61,6 @@ const search: SearchService = {
   async releaseGroups() {
     throw new Error('Unexpected release groups call');
   },
-  async savedCatalogueMembers() {
-    throw new Error('Unexpected saved catalogue members call');
-  },
 };
 const app = createKernel({ pool, access, tokens, receiptKeys: testReceiptKeys(), routeKey, search });
 

@@ -38,10 +38,12 @@ export type ContentCoverSource = Readonly<{
   external_id: string;
   field_group: ContentImportedFieldGroup;
 }>;
+export type ContentCoverObligation = 'cc:Attribution' | 'cc:ShareAlike' | 'cc:Notice' | 'cc:SourceCode';
 export type ContentCoverCredit = Readonly<{
   rightsHolder: string;
+  via: Readonly<{ name: string; url: string }>;
   license: string;
-  via?: Readonly<{ name: string; url: string }>;
+  obligations: ContentCoverObligation[];
 }>;
 export type ContentCoverRef = Readonly<{
   id: string;

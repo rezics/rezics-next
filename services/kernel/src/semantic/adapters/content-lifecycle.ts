@@ -30,15 +30,7 @@ function coverRef(cover: CoverReference): ContentCoverRef {
     ...(cover.placeholder === undefined ? {} : { placeholder: cover.placeholder }),
     ...(cover.variants === undefined ? {} : { variants: cover.variants }),
     ...(cover.focalPoint === undefined ? {} : { focalPoint: cover.focalPoint }),
-    ...(cover.credit === undefined
-      ? {}
-      : {
-          credit: {
-            rightsHolder: cover.credit.rightsHolder,
-            license: cover.credit.license,
-            via: cover.credit.via ? { name: cover.credit.via.name, url: cover.credit.via.url } : undefined,
-          },
-        }),
+    ...(cover.credit === undefined ? {} : { credit: cover.credit }),
   };
 }
 
