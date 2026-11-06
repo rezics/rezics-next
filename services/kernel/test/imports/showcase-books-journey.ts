@@ -228,6 +228,11 @@ try {
     ),
     'Kara author must stay an exact property_not_admitted gap',
   );
+  for (const path of ['/subject-persons/499/6023/position', '/subject-persons/499/5839/position'])
+    assert(
+      first.creditGaps.some((gap: any) => gap.path === path && gap.reason === 'property_not_admitted'),
+      `${path} must stay an exact property_not_admitted gap`,
+    );
   for (const key of ['26', '5329', '10862']) assert(first.selected.volumes.includes(key));
   for (const key of ['person:1466', 'person:1467', 'person:128', '233'])
     assert(first.identities[key], `Missing ${key}`);

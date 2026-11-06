@@ -257,6 +257,8 @@ test('pinned light-novel families publish a native graph with separate acceptanc
       expect.arrayContaining([
         expect.objectContaining({ path: '/subject-persons/2815/1466/position', reason: 'property_not_admitted' }),
         expect.objectContaining({ path: '/subject-persons/2815/1467/position', reason: 'property_not_admitted' }),
+        expect.objectContaining({ path: '/subject-persons/499/6023/position', reason: 'property_not_admitted' }),
+        expect.objectContaining({ path: '/subject-persons/499/5839/position', reason: 'property_not_admitted' }),
       ]),
     );
     expect(contentsOf(series, 'schema:publisher')).toContain(first.identities['person:128']!.id);
