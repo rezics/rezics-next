@@ -4,11 +4,34 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadDetail, loadInventory, loadOrganizationsAvailable } from '../src/accounts/management/data';
 import { ManagedAccountsPage } from '../src/accounts/management/pages';
-import { detailExample, inventoryExample, organization } from '../src/accounts/management/story-api';
+import {
+  detailExample,
+  inventoryExample,
+  organization,
+  routes,
+  selectManagementStory,
+} from '../src/accounts/management/story-api';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
-afterEach(() => mock.restore());
+afterEach(() => {
+  mock.restore();
+  selectManagementStory('populated');
+});
+
+test('illustrative directory rows follow installed navigation admission', () => {
+  const inventory = inventoryExample();
+  expect(inventory.organizations.items[0]!.navigation).toEqual({ state: 'admitted' });
+  expect(inventory.responsibilities.items[0]!.navigation).toEqual({ state: 'admitted' });
+  expect(inventory.responsibilities.items[1]!.navigation).toEqual({ state: 'concealed' });
+  selectManagementStory('long');
+  const long = routes[0]!.story!({
+    request: new Request('https://kernel.test/v1/me/managedAccounts'),
+    recordings: {},
+    match: null,
+  }) as typeof inventory;
+  expect(long.organizations.items[0]!.navigation).toEqual({ state: 'admitted' });
+});
 const schedule = globalThis.setTimeout;
 function fastDeadlines() {
   return spyOn(globalThis, 'setTimeout').mockImplementation(((run, _delay, ...args) =>
