@@ -71,6 +71,8 @@ export type {
 } from './facet-population-contract.ts';
 export { createFacetPopulationSource } from './facet-population.ts';
 
+export { bindIdentitySourceConsumerRuntime, identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
+export type { IdentitySourceConsumerRuntime, IdentitySourceWorkDeclaration } from './identity-source-consumer-ports.ts';
 export { createIdentitySourceSupportReader } from './identity-source-support.ts';
 export type {
   IdentitySourceSupportRequest,

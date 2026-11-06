@@ -551,3 +551,33 @@ export async function interruptNativeStatement<T>(f: EpochFixture, pattern: RegE
     for (const [client, query] of wrapped) client.query = query;
   }
 }
+
+/** Install Search and Library participants on this fixture pool, then launch the coordinator. */
+export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'pool'>) {
+  const { startWorker } = await import('../../../src/worker.ts');
+  const { workerTestEnv } = await import('../../support/worker-env.ts');
+  const { readSearchConfig } = await import('../../../src/search/work.ts');
+  const databaseUrl = f.pool.options.connectionString;
+  if (!databaseUrl) throw new Error('Identity publication fixture requires the owned pool connection string');
+  const env = workerTestEnv({
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+    KERNEL_SEARCH_PREFIX: `identity-${randomUUID().replaceAll('-', '')}`,
+  });
+  if (!readSearchConfig(env)) throw new Error('Actual default fixed Search participant needs OPENSEARCH_URL');
+  const pool = f.pool;
+  const end = pool.end.bind(pool);
+  let closing: Promise<void> | undefined;
+  pool.end = () => (closing ??= end());
+  return startWorker(
+    {
+      databaseUrl,
+      poolSize: 1,
+      kernelPool() {
+        return pool;
+      },
+    },
+    undefined,
+    env,
+  );
+}

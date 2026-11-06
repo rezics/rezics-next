@@ -210,7 +210,7 @@ export async function withSourceAssociationCommandDispatchLifetime<T>(
     pool,
     deadline,
     owner,
-    () => owner.reserve(SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE),
+    () => owner.reserve(SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE()),
     accountId,
     true,
     body,

@@ -12,6 +12,7 @@ import {
   SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE,
   withSourceAssociationCommandDispatchLifetime,
   SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE,
+  type SourceAssociationCommandDispatchAllowance,
 } from '../command/dispatch-lifetime.ts';
 import {
   NativeCollectionWork,
@@ -39,6 +40,7 @@ import {
 } from './identity-source-maintenance-config.ts';
 import { historyComposition, withPrepaidAgentIdentityHistoryUnit } from '../history/application/index.ts';
 import { HistoryRegistry } from '../history/contract/index.ts';
+import { identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
 
 const identitySourceConsumerMaintenance: unique symbol = Symbol('identity-source-consumer-maintenance');
 export type IdentitySourceConsumerMaintenanceWork = Readonly<{
@@ -602,8 +604,8 @@ export function withIdentitySourceAssociationCommand<T>(
       validate() {
         if (!live(frame, pool, deadline)) throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
       },
-      reserve(allowance: typeof SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE) {
-        if (allowance !== SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE || !live(frame, pool, deadline))
+      reserve(allowance: SourceAssociationCommandDispatchAllowance) {
+        if (allowance !== SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE() || !live(frame, pool, deadline))
           throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-changed');
         const cost = allowance.total.work;
         if (
@@ -648,11 +650,8 @@ export async function readIdentitySourceOriginalCostDisposition() {
   const history = historyComposition();
   const library = await import('../library/collection-source-work.ts');
   const effects = await import('../library/identity-scope-effects.ts');
-  const access = await import('../access/agent-verification-identity.ts');
-  const reversal = await import('../access/agent-verification-identity-reversal.ts');
   const participants = await import('./identity-epoch-participant-cost.ts');
-  const binding = await import('./identity-adapters/identity-epoch-binding.ts');
-  const libraryOriginal = await import('../library/identity-original-work.ts');
+  const runtime = identitySourceConsumerRuntime();
   const ownValue = (module: object, name: string): unknown => {
     const field = Object.getOwnPropertyDescriptor(module, name);
     return field && 'value' in field ? field.value : undefined;
@@ -714,18 +713,13 @@ export async function readIdentitySourceOriginalCostDisposition() {
       : ('requires executable reached History caller multiplicities' as const),
   });
   const schedule = IDENTITY_SOURCE_ORIGINAL_SCHEDULE.source;
-  const accessOriginal = asWork(invoke(access, 'ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION'));
-  const accessReversal = asWork(invoke(reversal, 'ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION'));
+  const accessOriginal = asWork(runtime.originalSourceDeclaration());
+  const accessReversal = asWork(runtime.reversalSettlementDeclaration());
   const jobRead = asWork(invoke(participants, 'IDENTITY_EPOCH_JOB_READ_DECLARATION'));
   const stepReconcile = asWork(invoke(participants, 'IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION'));
-  const bindingConsumer = asWork(invoke(binding, 'IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION'));
-  const nativeHold = (() => {
-    const hold = ownValue(libraryOriginal, 'declareLibraryIdentityCustodyOperation');
-    if (typeof hold !== 'function') return null;
-    const declared = (hold as (operation: 'revalidateHold') => unknown)('revalidateHold');
-    return asWork(declared);
-  })();
-  const association = SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE.total;
+  const bindingConsumer = asWork(runtime.bindingConsumerDeclaration());
+  const nativeHold = asWork(runtime.declareLibraryIdentityCustodyOperation('revalidateHold'));
+  const association = SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE().total;
   const reached = composeIdentitySourceReachedCosts([
     {
       name: 'AccountsLocalControl',

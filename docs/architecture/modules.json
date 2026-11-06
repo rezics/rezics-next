@@ -497,7 +497,8 @@
         "services/kernel/src/library/access-capabilities.ts",
         "services/kernel/src/library/work-module.ts",
         "services/kernel/src/library/adapters/index.ts",
-        "services/kernel/src/library/domain-binding.ts"
+        "services/kernel/src/library/domain-binding.ts",
+        "services/kernel/src/library/identity-original-work.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -605,6 +606,7 @@
         "services/kernel/src/semantic/identity-epoch-contract.ts",
         "services/kernel/src/semantic/identity-source-consumer-custody.ts",
         "services/kernel/src/semantic/identity-source-consumer-maintenance.ts",
+        "services/kernel/src/semantic/identity-source-consumer-ports.ts",
         "services/kernel/src/semantic/record-purge-authority.ts",
         "services/kernel/src/semantic/record-purge-custody.ts",
         "services/kernel/src/semantic/record-source-set.ts",

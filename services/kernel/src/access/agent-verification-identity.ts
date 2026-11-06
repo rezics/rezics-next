@@ -660,6 +660,7 @@ export async function verifyAccountIdentityTechnicalSource(
 }
 
 export {
+  ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION,
   readAccountIdentityReversalSettlement,
   verifyAccountIdentityReversalSettlement,
   type AccountIdentityReversalSettlement,

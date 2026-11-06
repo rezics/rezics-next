@@ -88,6 +88,7 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
         const job = await admit({ kind: 'merge', redirected, survivor, release: release.digest });
         return { job, survivor, redirectedOriginals: [redirected] };
       },
+      /** Admission only: mapping drain proves the Accounts job without Search/Library resume. */
       async admitAccountAgentVerify() {
         const catalogue = (await f.create('Accounts mapping catalogue', 0x9d10)).subject.id;
         const approved = await approvedVerification(f, catalogue);

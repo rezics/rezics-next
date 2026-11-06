@@ -114,9 +114,10 @@ and reversal settlement; Commerce and Search own their participant bodies; Libra
 that owner and callable. Subject erasure keeps a separate source walk. Native History composition
 installs the Accounts declaration binder before commands; merge, replay, custody and Accounts
 readback keep those original bodies. Worker-installed Search and Library participants remain
-required before Accounts verify/unverify can resume a job. Original-source native cases admit
-that Accounts job through `prepareAdmission` and keep the original intent; they do not resume
-publication without those worker participants.
+required before Accounts verify/unverify can resume a job. Original-source native cases install
+those participants, then run Accounts verify through `mergeVerifiedAgent` so the published job
+and participant receipts exist before original-funded prepare/checkpoint/finish. Admission-only
+cases may still call `prepareAdmission` without resume.
 
 ## Concurrent control and coherent admission
 

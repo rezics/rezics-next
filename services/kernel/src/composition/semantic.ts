@@ -19,6 +19,7 @@ import {
   type NativeSemanticDomain,
 } from '../semantic/adapters/index.ts';
 import { searchReceivingProductionDeclaration } from '../semantic/identity-search-receiving-statements.ts';
+import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -67,6 +68,7 @@ export function composeSemanticIdentityParticipants(
 /** Native Content cover and tuple routing, bound even when identity participants are unavailable. */
 export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  installIdentitySourceConsumerRuntime();
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */

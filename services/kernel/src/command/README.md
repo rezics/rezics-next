@@ -551,7 +551,7 @@ and denied-replay ordering retain their existing paths.
 
 ### Cost: selected Source association controls
 
-`SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE` exports `profile: 'event-callback-source-association'`.
+`SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE()` returns `profile: 'event-callback-source-association'`.
 It is the Source fence total plus `callbackAdmission` (72 bytes) and a zero `sourceAssociation`
 term. Maxima keep one event and admit two Source callbacks. History record-sources,
 record-source-set and agent-identity source stay refused. Prepare, checkpoint and finish
