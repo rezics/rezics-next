@@ -1,5 +1,13 @@
 import { Render } from '@puckeditor/core/rsc';
-import { createElement, Fragment, useMemo, type ComponentProps, type ComponentType, type ReactNode } from 'react';
+import {
+  createElement,
+  Fragment,
+  useMemo,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 
 /** Structurally the composition registry: a type and the props that hold nested nodes. */
 export type PageDefinition = {
@@ -81,9 +89,10 @@ function renderComponent({ component, slots }: PageRenderer) {
       if (key === 'puck' || key === 'editMode') continue;
       const value = props[key];
       if (slots.has(key)) {
-        // Puck creates a new slot callback on each render. Invoke that callback so its stable
-        // SlotRender child keeps the mounted controls, rather than using the callback as their component type.
-        next[key] = typeof value === 'function' ? value({ as: SlotContent }) : null;
+        // Puck creates a new slot callback on each render. Invoke it for its stable SlotRender element: using the
+        // callback as a component type would remount the composed controls on every render.
+        const slot = value as (props: { as: typeof SlotContent }) => ReactNode;
+        next[key] = typeof value === 'function' ? slot({ as: SlotContent }) : null;
       } else {
         next[key] = value;
       }
@@ -97,6 +106,15 @@ function renderRoot(pageRoot: PageDocument['root'], root: PageRoot | undefined) 
     root ? createElement(root, { ...pageRoot.props, children }) : createElement(Fragment, null, children);
 }
 
+/** Equal entries make an equal registry, even when a caller rebuilds the object on each render. */
+function sameRegistry(left: PageComponents, right: PageComponents): boolean {
+  const keys = Object.keys(right);
+  return (
+    keys.length === Object.keys(left).length &&
+    keys.every((key) => Object.hasOwn(left, key) && left[key] === right[key])
+  );
+}
+
 export function CompositionRender({
   document,
   definitions,
@@ -108,9 +126,13 @@ export function CompositionRender({
   components: PageComponents;
   root?: PageRoot;
 }) {
+  // Puck mounts each item through its config's render function, so an equal rebuilt registry keeps the stored one.
   // Stable component types preserve mounted public links and return recovery during private reader updates.
+  const [stored, setStored] = useState(components);
+  const registry = sameRegistry(stored, components) ? stored : components;
+  if (registry !== stored) setStored(registry);
   const { renderers, config } = useMemo(() => {
-    const renderers = pageRenderers(definitions, components);
+    const renderers = pageRenderers(definitions, registry);
     const configComponents: Record<
       string,
       { fields: Record<string, { type: 'slot' }>; render: (props: Record<string, unknown>) => ReactNode }
@@ -126,7 +148,7 @@ export function CompositionRender({
       root: { render: renderRoot(document.root, root) },
     } as ComponentProps<typeof Render>['config'];
     return { renderers, config };
-  }, [definitions, components, root, document.root]);
+  }, [definitions, registry, root, document.root]);
   const content = prune(document.content, renderers);
   return createElement(Render, { config, data: { root: document.root, content } });
 }
