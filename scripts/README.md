@@ -431,7 +431,8 @@ Editing JSON alone does not resize the slice. Provisioning takes memory and CPU 
 Each slot requires the host's configured `processorsPerSlot` (default **2**). Slot counts in the hosts file are a
 processor bound. Concurrent runs are also bounded by per-run memory: `floor(memoryMaxGiB / memoryPerRunGiB)` (default
 **6** GiB per run). A host with `memoryMaxGiB` 28 and 6 GiB per run therefore takes at most 4 runs, even when it still
-has a free slot. Runs reserve their command class's measured memory: `worker-check` passes its class weight with
+has a free slot. The production hosts set 8 GiB: a combined check that typechecks Web against its SQL database
+exceeded 6 GiB, and 20 of 131 measured runs were OOM-killed in three hours. Runs reserve their command class's measured memory: `worker-check` passes its class weight with
 `--memory-gib <positive integer>`, while other callers without a request retain the **2.5 GiB** default per slot.
 Multi-slot requests retain one reservation per requested slot. For each answering host, compute:
 
