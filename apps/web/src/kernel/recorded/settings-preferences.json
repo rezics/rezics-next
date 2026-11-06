@@ -36,7 +36,19 @@
       "sortFields": ["last_activity", "added", "finished", "title", "rating", "release_date", "progress"],
       "sortDirections": ["asc", "desc"],
       "gridSizes": ["small", "medium", "large"],
-      "tableColumns": ["cover", "title", "creator", "type", "status", "progress", "rating", "added", "started", "finished", "last_activity"]
+      "tableColumns": [
+        "cover",
+        "title",
+        "creator",
+        "type",
+        "status",
+        "progress",
+        "rating",
+        "added",
+        "started",
+        "finished",
+        "last_activity"
+      ]
     },
     "limits": {
       "maxLayouts": 32,
