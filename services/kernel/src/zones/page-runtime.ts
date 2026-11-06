@@ -1,12 +1,12 @@
 import { documentRead, planReads, platformRegistry, readCost } from '@rezics/composition';
-import { parseFilter, type FilterDocument } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
 import { admitGroup } from '../access/gates/admission.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError, PROBLEMS } from '../http/problem.ts';
-import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';
+import { zoneObservedReadKey } from '../presentation/zone-reads.ts';
+import { zoneTypeListMembership } from '../presentation/zone-type-list.ts';
 import { semanticPageView } from '../presentation/semantic-page.ts';
 import { PageReadBudget, readPage } from '../presentation/reads.ts';
 import type { Actor } from '../request/access.ts';
@@ -40,12 +40,20 @@ async function composeZonePage(
     deadline: number;
     clientAction: string;
   },
-): Promise<{
-  value: ZonePageResponse | { next: string };
-  status: 200 | 202;
-  component: SessionComponent;
-  components: SessionComponent[];
-}> {
+): Promise<
+  | {
+      value: ZonePageResponse;
+      status: 200;
+      component: SessionComponent;
+      components: SessionComponent[];
+    }
+  | {
+      value: { next: string };
+      status: 202;
+      component: SessionComponent;
+      components: SessionComponent[];
+    }
+> {
   const route = 'route' in input.body.target ? input.body.target.route : null;
   if (route?.split('/')[0] === 'subjects')
     throw new ProblemError('invalid_request', { errors: [{ pointer: '/target/route', code: 'invalid_format' }] });
@@ -189,69 +197,19 @@ async function composeZonePage(
     if (descriptor.kind !== 'search' && descriptor.kind !== 'members') continue;
     budget.charge(readCost(descriptor));
     work.select(key, descriptor.kind === 'search' ? descriptor.body.sort : 'id', readCost(descriptor));
-    let membership: ZoneMembership;
-    if (descriptor.kind === 'search') {
-      membership = await createZoneMembership(dependencies, {
-        ...base,
-        order: descriptor.body.sort,
-        filter: parseFilter(descriptor.body.filter),
-        pageSize: descriptor.body.limit,
-      });
-    } else {
-      const source =
-        descriptor.source.kind === 'collection'
-          ? { id: descriptor.source.id }
-          : await createBuiltinRuntime({ pool: dependencies.pool }).resolve(
-              input.actor,
-              descriptor.source,
-              input.deadline,
-            );
-      if (!source) {
-        observed.set(canonicalize(descriptor)!, { status: 404, body: { code: 'not_found' } });
-        continue;
-      }
-      const union = await createZoneMembership(dependencies, base);
-      const sourceMembership = await createZoneMembership(dependencies, {
-        ...base,
-        sources: { ...selected.sources, scopes: [], mounts: [source.id] },
-        ...(descriptor.filter ? { filter: parseFilter(JSON.parse(descriptor.filter) as FilterDocument) } : {}),
-      });
-      // MemberSource is an essential conjunct, not another OR arm. Its ordinary native provider retains
-      // occurrence/fact truth. Only canonical browsing locators enter this page's disposable preparation.
-      const streams = sourceMembership.streams.map((stream) => ({
-        ...stream,
-        async member(id: string, pending?: import('./membership.ts').ZonePending) {
-          const own = await stream.member(id, pending?.conjunct === 'zone' ? undefined : pending);
-          if (own.value !== true)
-            return {
-              ...own,
-              ...(own.pending ? { pending: { ...own.pending, source: 0, conjunct: 'source' as const } } : {}),
-            };
-          const match = await union.contains(
-            id,
-            pending?.conjunct === 'zone' ? { ...pending, source: pending.zoneSource ?? -1 } : undefined,
-          );
-          return {
-            ...match,
-            ...(match.pending
-              ? {
-                  pending: { ...match.pending, source: 0, zoneSource: match.pending.source, conjunct: 'zone' as const },
-                }
-              : {}),
-          };
-        },
-      }));
-      membership = {
-        ...sourceMembership,
-        streams,
-        basis: zoneDigest([sourceMembership.basis, union.basis]),
-        async contains(id, pending, _preferred) {
-          if (!streams[0]) return { value: false };
-          const match = await streams[0].member(id, pending);
-          return { ...match, source: 0 };
-        },
-      };
+    const preparedMembership = await zoneTypeListMembership(dependencies, {
+      actor: input.actor,
+      at: selected.time,
+      deadline: input.deadline,
+      sources: selected.sources,
+      work,
+      descriptor,
+    });
+    if ('status' in preparedMembership) {
+      observed.set(zoneObservedReadKey(descriptor, languages), preparedMembership);
+      continue;
     }
+    const membership = preparedMembership;
     const saved = position.reads[key];
     const before = saved?.basis === membership.basis ? saved : initialUnionPosition(membership.basis);
     const step = await advanceZoneUnion(
@@ -309,11 +267,7 @@ async function composeZonePage(
       };
     });
     const next = null;
-    const shaped =
-      descriptor.kind === 'search' && languages
-        ? { ...descriptor, body: { ...descriptor.body, languages: [...languages] } }
-        : descriptor;
-    observed.set(canonicalize(shaped)!, {
+    observed.set(zoneObservedReadKey(descriptor, languages), {
       status: 200,
       body:
         read.kind === 'search'

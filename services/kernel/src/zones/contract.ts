@@ -14,6 +14,7 @@ import {
 import { t } from 'elysia';
 import type { Static, TLiteral, TOptional, TSchema, TUnion } from 'typebox';
 import { extendPageResponseSchema } from '../presentation/http/page-contract.ts';
+import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 
 const closed = { additionalProperties: false } as const;
 const MAX_ZONE_MOUNTS = 16;
@@ -243,3 +244,33 @@ export type ZoneMetadataResponse = Static<ReturnType<typeof ZoneMetadataResponse
 export type ZoneConfigurationResponse = Static<ReturnType<typeof ZoneConfigurationResponseSchema>>;
 export type ZoneList = Static<ReturnType<typeof ZoneListSchema>>;
 export type ZonePublishInput = Static<typeof ZonePublishInputSchema>;
+
+function zoneSubjectListItemSchema() {
+  return memoizedValue(zoneSubjectListItemSchema, () =>
+    t.Object(
+      {
+        id: routedUuidSchema,
+        type: t.String(),
+        labels: t.Record(t.String(), t.String()),
+        summary: SubjectSummarySchema,
+      },
+      closed,
+    ),
+  );
+}
+
+/** Canonical UUID membership page. Continuation uses the default list-cursor profile. */
+export function ZoneSubjectListResponseSchema() {
+  return memoizedValue(ZoneSubjectListResponseSchema, () =>
+    t.Object(
+      {
+        subjects: t.Array(zoneSubjectListItemSchema(), { maxItems: 100 }),
+        next: t.Union([t.String({ minLength: 1, maxLength: 4096, pattern: '^[A-Za-z0-9_-]+$' }), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+
+export type ZoneSubjectListItem = Static<ReturnType<typeof zoneSubjectListItemSchema>>;
+export type ZoneSubjectListResponse = Static<ReturnType<typeof ZoneSubjectListResponseSchema>>;

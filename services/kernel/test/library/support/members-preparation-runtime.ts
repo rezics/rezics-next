@@ -215,6 +215,7 @@ export function definition(ordinal = 0): PreparationDefinition {
     sort: 'id',
     source: { kind: 'owner' },
     release: { digest: bundledDigest, value: bundledRelease },
+    source: { kind: 'owner' },
   };
 }
 

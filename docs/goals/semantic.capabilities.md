@@ -403,12 +403,12 @@ Released fixture: sources extension: actual public/unlisted/private curated Coll
 
 Scenarios and binding: Existing native Zone resource/typed/membership contracts; TO-FREEZE zone-user-site and full native default readPage composition. Original page outcomes remain bound.
 
-Stages: Declared: yes. Bound/exposed: resource and contract slices only; complete routed union/direct-target job open. API-passed: no; promoted: no.
+Stages: Declared: yes. Bound/exposed: resource, membership, mounted GET subjects, TypeList observed-key, served Zone routes and reader stale-cursor restart. API-passed: no; promoted: no. Full persona/growth/browser acceptance remains deferred.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):
 
 ```sh
-bun run --cwd services/kernel check test/zones/resource-core.test.ts test/zones/membership-contract.test.ts test/presentation/outcomes.test.ts
+bun run --cwd services/kernel check test/zones/resource-core.test.ts test/zones/membership-contract.test.ts test/zones/page-continuation-contract.test.ts test/presentation/zone-reads.test.ts test/presentation/outcomes.test.ts
 ```
 
 ## Zone and source lifecycle

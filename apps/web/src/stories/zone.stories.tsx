@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import {
@@ -16,7 +16,20 @@ const subject = staticSubject.subject.id;
 const hiddenZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e02';
 const unavailableZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e05';
 
-const meta = { title: 'Pages/Community/Zone', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const withinBudgetZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e03';
+
+const meta = {
+  title: 'Pages/Community/Zone',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -38,8 +51,12 @@ async function staticHomeReady({ canvasElement }: { canvasElement: HTMLElement }
   await view.findByText(recordedText(staticHome, 'zone-copy'));
   await view.findByRole('navigation', { name: m.zone_navigation() });
   const subjectLabel = staticSubject.subject.labels[getLocale()];
-  const subjectLink = await view.findByRole('link', { name: subjectLabel });
-  expect(subjectLink).toHaveAttribute('href', expect.stringContaining(`/subjects/${subject}/`));
+  const subjectLinks = view.getAllByRole('link', { name: subjectLabel });
+  expect(subjectLinks.some((link) => link.getAttribute('href')?.includes(`/subjects/${subject}/`))).toBe(true);
+  expect(subjectLinks.some((link) => link.getAttribute('href')?.includes(`/zones/${zone}/subjects/${subject}`))).toBe(
+    true,
+  );
+  expect(canvasElement.querySelector('[data-zone-type-list]')).not.toBeNull();
   await view.findByRole('link', { name: zoneRouteLabel('guide') });
 }
 
@@ -138,8 +155,101 @@ export const UnknownZone: Story = {
   render: () => <PageStory visitor="Signed Out" path={`/zones/${hiddenZone}`} />,
 };
 
-export const DirectTargetsClosed: Story = {
-  name: 'Direct subject routes are closed',
-  play: unknownZoneReady,
+async function subjectReturnReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  await pageReady({ canvasElement });
+  const view = within(canvasElement);
+  const siteName = staticHome.zone.labels[getLocale()] ?? m.zone_home();
+  const back = await view.findByRole('link', { name: m.zone_subject_return({ name: siteName }) });
+  expect(back).toHaveAttribute('href', `/${getLocale()}/zones/${zone}`);
+  await view.findByRole('navigation', { name: m.zone_navigation() });
+}
+
+async function preparedToUsefulReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  await pageReady({ canvasElement });
+  const view = within(canvasElement);
+  await view.findByRole('heading', { name: 'Field Notes' });
+  expect(view.queryByRole('heading', { name: m.zone_preparing_heading() })).toBeNull();
+}
+
+async function keyboardNavigationReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  await staticHomeReady({ canvasElement });
+  await userEvent.tab();
+  const view = within(canvasElement);
+  const navigation = view.getByRole('navigation', { name: m.zone_navigation() });
+  expect(navigation.querySelector('a')).toHaveFocus();
+}
+
+export const PreparedToUseful: Story = {
+  parameters: { __id: 'pages-zones-prepared-to-useful-completion' },
+  name: 'Prepared page reaches a useful route',
+  play: preparedToUsefulReady,
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${withinBudgetZone}`} />,
+};
+
+export const SubjectReturn: Story = {
+  parameters: { __id: 'pages-zones-subject-return-to-route' },
+  name: 'Direct subject returns to the Zone route',
+  play: subjectReturnReady,
+  globals: { viewport: { value: 'desktop1280' } },
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
+};
+
+export const SubjectReturnPhone: Story = {
+  name: 'Direct subject return on a narrow layout',
+  play: subjectReturnReady,
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
+};
+
+export const KeyboardNavigation: Story = {
+  name: 'Keyboard Zone navigation',
+  play: keyboardNavigationReady,
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+
+export const HomePhone: Story = {
+  name: 'Static home on a narrow layout',
+  play: staticHomeReady,
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+
+export const HomeLocales: Story = {
+  name: 'Static home in every launch locale',
+  play: staticHomeReady,
+  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+
+export const HomeDe: Story = {
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  play: staticHomeReady,
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+export const HomeJa: Story = {
+  globals: { locale: 'ja', viewport: { value: 'desktop1280' } },
+  play: staticHomeReady,
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+export const HomeKo: Story = {
+  globals: { locale: 'ko', viewport: { value: 'phone390' } },
+  play: staticHomeReady,
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+export const HomeFr: Story = {
+  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+  play: staticHomeReady,
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+export const HomeEs: Story = {
+  globals: { locale: 'es', viewport: { value: 'phone390' } },
+  play: staticHomeReady,
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+export const HomeZhHans: Story = {
+  globals: { locale: 'zh-Hans', viewport: { value: 'desktop1280' } },
+  play: staticHomeReady,
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };

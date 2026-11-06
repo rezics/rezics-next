@@ -99,7 +99,7 @@ function ItemCard({
     suitability: value.reader.suitability,
     labels: value.labels.cover,
   };
-  const destination = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
+  const destination = item.href ?? relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
   const creditHref = (href: string) =>
     creditVisit && item.credit ? creditDestinationHref(href, creditVisit, item.credit, value.locale) : href;
   const href = creditHref(destination);

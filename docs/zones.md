@@ -1,6 +1,6 @@
 # Zones
 
-Decision: This owner edit adopts the Zone cleanup and default-profile Subject GET contracts, consolidates the linked Identity/importer and synopsis Sources owners, and records design only; required native delivery remains pending.
+Decision: GET `/v1/zones/:id/subjects` is mounted with the default list-cursor profile. A stale or expired GET continuation is `409 stale_cursor` and never a silent restart; the Zone reader restarts that token once under current authority. TypeList on a Zone route stays on that route and opens Zone subject destinations; related composition links may leave the Zone. Collection members 200/202 keep the Collection `strict()` JSON producer, return preparing separately, and copy readonly members into a mutable page so Elysia keeps JSON typing. Generated OpenAPI/client publication remains a promotion output. Focused tests pin destinations, TypeList staying on the Zone, concurrent editor reapply, stale-cursor restart and the installed GET subjects client; native six-surface, growth, persona and served browser acceptance stay deferred.
 
 A Zone is an owner-controlled routed site over saved catalogue scopes and mounted Collections. It uses the
 one catalogue, the one Collection model and the common composition renderer. It is neither a Realm nor a
@@ -193,7 +193,7 @@ to `invalid_format`, prefixed with `/configuration`. Unknown envelope fields use
 | `PUT /v1/zones/{id}/configuration`              | `ConfigureZone` → 200 `ZoneResponse`                            | `zone:configure`; authenticated                                           |
 | `POST /v1/zones/{id}:publish`                   | `PublishZone` → 200 `ZoneResponse`                              | `zone:publish`; authenticated                                             |
 | `POST /v1/zones/{id}:readPage`                  | `PageRequest` → 200 `ZonePageResponse`                          | `zone:read`, public exposure                                              |
-| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | adopted: 200 `{subjects,next}`, 202 `{next}`, or dependency 503 | `zone:read`, anonymous floor and current source Access; route not mounted |
+| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | 200 `{subjects,next}`, 202 `{next}`, or dependency 503          | `zone:read`, anonymous floor and current source Access                    |
 | `GET /v1/zones/{id}/collections?limit=&cursor=` | 200 `{collections,next}`                                        | `zone:read`, current source Access                                        |
 | `DELETE /v1/zones/{id}`                         | no body → 200 `ZoneResponse`                                    | `zone:delete`; authenticated                                              |
 | `POST /v1/zones/{id}:restore`                   | `{}` → 200 `ZoneResponse`                                       | current owner role and `zone:restore`; authenticated                      |
@@ -256,7 +256,7 @@ implement scans or an unreviewed query engine to fill this dependency. Refer als
 ## Configuration, publication and Access
 
 The resource base mounts create, metadata, owned listing, configuration, publish, delete and restore.
-The mounted readPage runtime composes static documents and native source union/current-membership providers. The Subject GET is an adopted route design, not a mounted route; its native sparse preparation, replay, generated client and growth proof remain pending. Ordered Scope readiness and destructive lifecycle delivery are described in the [runtime inventory](../services/kernel/src/zones/README.md).
+The mounted readPage runtime composes static documents and native source union/current-membership providers. `GET /v1/zones/:id/subjects` lists the canonical union with the default cursor profile, retained preparation, predecessor replay and `409 stale_cursor` for incompatible tokens. Ordered Scope readiness and destructive lifecycle delivery are described in the [runtime inventory](../services/kernel/src/zones/README.md).
 The code-first `Zone*Schema` exports in `src/zones/contract.ts` define the resource envelopes.
 
 Creation authorizes the parent before touching the new partition. Allocate a routed Zone ID and copy the

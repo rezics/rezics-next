@@ -465,6 +465,7 @@ const typed = [
   'GET /v1/zones',
   'GET /v1/zones/:id',
   'GET /v1/zones/:id/collections',
+  'GET /v1/zones/:id/subjects',
   'POST /v1/zones/:id/$readPage',
   'GET /v1/zones/:id/configuration',
   'PUT /v1/zones/:id/configuration',
