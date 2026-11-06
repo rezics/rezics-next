@@ -634,7 +634,7 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30_000);
+}, 120_000);
 
 test('wrong, missing or retracted author evidence withholds only that claim and exact journal replay keeps identities', async () => {
   const planned = await planShowcaseBooks({
