@@ -126,6 +126,20 @@ test('continued inventory resumes its exact Edition and returns to only that re-
     expect(document.activeElement?.id).toBe(`creator-edition-${exactEditionId}`);
     expect(host.textContent).toContain(m.creator_edition_origin_present());
 
+    const retryNavigate = spyOn(returnRouter, 'navigate').mockResolvedValue(undefined);
+    try {
+      await act(async () => root.render(tree(returnRouter, client, { kind: 'unavailable' }, 'continued/+=')));
+      const retry = [...host.querySelectorAll('a')].find((link) => link.textContent === m.creator_editions_retry());
+      await act(async () => retry!.click());
+      const retryUrl = new URL((retryNavigate.mock.calls.at(-1)![0] as { href: string }).href, 'https://site.test');
+      expect(retryUrl.pathname).toBe('/fr/editions');
+      expect(retryUrl.searchParams.get('cursor')).toBe('continued/+=');
+      expect(retryUrl.searchParams.get('editionOrigin')).toBe(token);
+      expect(readCreatorEditionOrigin(token, accountId, exactEditionId).kind).toBe('current');
+    } finally {
+      retryNavigate.mockRestore();
+    }
+
     await act(async () =>
       root.render(tree(returnRouter, client, { kind: 'ready', editions: [], next: null }, 'continued/+=')),
     );

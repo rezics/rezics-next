@@ -30,7 +30,9 @@ export function creatorEditionsContinuationHref(cursor?: string): string {
   return `${creatorEditionsHref(cursor)}#${inventoryBoundaryId}`;
 }
 
-export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditionsPage; cursor?: string }) {
+type CreatorEditionsViewProps = { page: CreatorEditionsPage; cursor?: string | undefined };
+
+export function CreatorEditionsOriginView({ page, cursor }: CreatorEditionsViewProps) {
   const router = useRouter();
   const locationSearch = useLocation({ select: (location) => location.search });
   const originToken = creatorEditionOriginTokenFromSearch(locationSearch);
@@ -154,7 +156,9 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
       if (sameAddress) {
         preserveOriginOnLeave.current = true;
         event.preventDefault();
-        void router.navigate({ href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? href, originToken) });
+        void router.navigate({
+          href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? creatorEditionsHref(cursor), originToken),
+        });
         return;
       }
       // A new page or a changed cursor is a new inventory occurrence. Do not carry
@@ -196,7 +200,7 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
   );
 }
 
-export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPage; cursor?: string }) {
+export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) {
   const href = creatorEditionsHref(cursor);
   const notice =
     page.kind === 'sign-in'

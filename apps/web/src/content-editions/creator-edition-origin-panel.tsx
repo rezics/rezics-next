@@ -4,11 +4,11 @@ import type { CreatorEditionOriginReceipt, CreatorEditionOriginResolution } from
 
 type OriginPanelProps = {
   resolution: CreatorEditionOriginResolution;
-  occurrence?: 'checking' | 'present' | 'missing';
-  onReturn?: () => void;
+  occurrence?: 'checking' | 'present' | 'missing' | undefined;
+  onReturn?: (() => void) | undefined;
   onRestart?: () => void;
-  editionId?: string | null;
-  sourceRevisionId?: string | null;
+  editionId?: string | null | undefined;
+  sourceRevisionId?: string | null | undefined;
   children?: ReactNode;
 };
 
