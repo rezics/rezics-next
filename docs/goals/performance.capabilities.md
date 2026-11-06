@@ -280,7 +280,10 @@ payload/FK cascade counts and admitted bytes rather than selected workflow count
 application and seed identities. Growth checks use folded capture; raw nested auto_explain notices from a 1,000-id
 SDK delete exceed the 32 MiB and 20,000 retained-entry telemetry caps. Selector-plan notices come from acquired pool
 clients. Payload tables share the 32,768-row planner floor so fanout 1/8/64 stays an indexed equality delete.
-Cascade inserts pack by parent. Measured nonempty batches are five application statements plus two control. Explicit
+Cascade inserts pack by parent. Measured nonempty batches are five application statements plus two control. Payload
+bytes use harness scales 1/8/64 mapped to admitted 1,024/8,192/65,536 because a growth scale cannot exceed 4,096.
+Owned inventory is read after the measured capture. Installed `retireWorkflow` uses unlimited `withDbRetry`; finite
+invocation and recovery evidence stay open with Accounts SDK owner e18b. Explicit
 Imports driver bindings use repo-relative paths in command argv, resolved on admitted remote checkouts; the frozen
 suite receives an absolute path.
 

@@ -45,6 +45,7 @@ export {
   freezeWorkflowRetentionStart,
   inventoriesMatch,
   isRetentionCascadeDelete,
+  retentionAdmittedByteScale,
   retentionApplicationStatementCount,
   retentionBatchStatementCount,
   retentionBatchWork,

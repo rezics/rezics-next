@@ -13,6 +13,7 @@ import {
   classifyRetentionStatement,
   freezeWorkflowRetentionStart,
   isRetentionCascadeDelete,
+  retentionAdmittedByteScale,
   retentionBatchWork,
   retentionCompleteBatchWork,
   retentionInterruptedBatchWork,
@@ -22,6 +23,8 @@ import {
   retentionReplayBatchWork,
   retentionSelectionBinds,
   retentionSweepWork,
+  WORKFLOW_RETENTION_BYTE_SCALES,
+  WORKFLOW_RETENTION_COUNT_SCALES,
 } from '../../src/work/core/index.ts';
 import {
   runWorkflowRetentionBatch,
@@ -158,6 +161,10 @@ test('statement classification names the selector tag and the four exact-ID dele
 });
 
 test('complete nested deletion charges selected IDs, payload copies, FK cascades, fences and replay', () => {
+  expect(WORKFLOW_RETENTION_COUNT_SCALES).toEqual([1, 8, 64]);
+  expect(WORKFLOW_RETENTION_BYTE_SCALES).toEqual([1_024, 8_192, 65_536]);
+  expect(WORKFLOW_RETENTION_COUNT_SCALES.map(retentionAdmittedByteScale)).toEqual([...WORKFLOW_RETENTION_BYTE_SCALES]);
+  expect(() => retentionAdmittedByteScale(4_096)).toThrow(RangeError);
   const mixed = retentionPayloadFanoutInventory(10, retentionMixedNeighbourhoodFanout());
   const bytes = retentionPayloadByteInventory(10, retentionMixedNeighbourhoodFanout(), 1024);
   const work = retentionCompleteBatchWork(10, mixed, bytes, 10);

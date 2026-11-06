@@ -49,9 +49,11 @@ The growth-retention suite uses one folded capture per measured batch or sweep: 
 notices exceed the 32 MiB raw cap and the 20,000 retained-entry cap at a 1,000-id batch. Selector-plan notices from
 acquired pool clients prove `workflow_retention_selector`. Payload tables share the 32,768-row planner floor so
 fanout 1/8/64 keeps indexed equality deletes. Variable families grow independently within owner limits; single-copy
-families stay one row and vary admitted bytes; mixed-maximum and sparse/deep selected identities grow unrelated
-workflow/payload history at 64/512/4096. Nested FK work is four engine statements inside status delete. Measured
-nonempty batches are five application statements plus two control. Bound revision
+families stay one row and vary admitted bytes on harness scales 1/8/64 mapped to 1,024/8,192/65,536; mixed-maximum
+and sparse/deep selected identities grow unrelated workflow/payload history at 64/512/4096. Nested FK work is four
+engine statements inside status delete. Measured nonempty batches are five application statements plus two control;
+owned inventory is read after capture. Installed `retireWorkflow` uses unlimited `withDbRetry`; finite invocation
+stays open with Accounts SDK owner e18b. Bound revision
 `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2, operations fanout
 90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0. This complete outcome distinguishes those
 already-passing series from the family/byte/mixed/sparse cascade proof. Folded notice envelopes and walk occupancy
