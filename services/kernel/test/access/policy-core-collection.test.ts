@@ -174,3 +174,17 @@ test('mounted production actions retain complete board ownership and exact defin
   ] as const)
     expect(production.actionByName[action]?.resourceTypes).toContain(resourceType);
 });
+
+test('declared resources without role templates still compile and require explicit authority', () => {
+  const declared = compileNativePolicyCatalogue(
+    new Map([['subject:read', { anonymous: false, 'x-resource-types': ['semantic.subject'] }]]),
+    { roles: new Map(), types: new Map() },
+  );
+  expect(
+    decideNativePermission(
+      declared,
+      { ...collection, action: 'subject:read', resourceType: 'semantic.subject', hasPrincipal: false },
+      projection(),
+    ).decision,
+  ).toBe('deny');
+});

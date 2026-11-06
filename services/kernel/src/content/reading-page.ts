@@ -667,7 +667,7 @@ export function normalizeSelectedReadingCardReferences(
       .map((revision) => routeOf(revision));
     if (
       threadRoute === null ||
-      placeRoute !== threadRoute ||
+      placeRoute === null ||
       revisionRoutes.some((revisionRoute) => revisionRoute !== threadRoute) ||
       (reference.type === 'content.post' && routeOf(reference.id) !== threadRoute) ||
       (reference.type === 'content.thread' &&

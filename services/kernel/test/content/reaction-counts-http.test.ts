@@ -1,6 +1,7 @@
 import { fromPlainText } from '@rezics/document';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -341,6 +342,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     kernel = createKernel({
       pool: db.pool,
       routeKey,
+      receiptKeys: testReceiptKeys(),
       tokens,
       access: (config) =>
         createAccess({

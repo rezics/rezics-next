@@ -131,7 +131,9 @@ export default defineConfig((context) => {
           }
         },
       },
-      paraglideVitePlugin({ project: './project.inlang' }),
+      // Finite checks prepare the complete locale tree before importing tests. Starting another compiler here
+      // rewrites that shared tree while Bun and the Worker optimizer are reading it.
+      ...(process.env.REZICS_TEST_RUNTIME === '1' ? [] : [paraglideVitePlugin({ project: './project.inlang' })]),
       tanstackStart(),
       react(),
       tailwindcss(),

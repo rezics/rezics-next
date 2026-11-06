@@ -1,5 +1,9 @@
 # Thread authoring
 
+Decision: composed reader regressions use the existing per-file Web check lanes so server-module mocks cannot
+replace later files’ native client exports. Mounted route replacements update React state; privacy and return
+assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance.
+
 ## New-thread destination and community rules
 
 The signed-in new-thread route projects the posting destination only from the current board response through

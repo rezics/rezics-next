@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -299,9 +299,12 @@ let historyRequest = new Request('https://site.test/en/thread', { headers: { aut
 mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => historyRequest,
   setResponseHeader: () => {},
+  setResponseStatus: () => {},
 }));
 let historyClient: ReturnType<typeof client>;
-mock.module('../src/kernel/client', () => ({ kernelClient: () => historyClient }));
+const nativeKernel = await import('../src/kernel/client');
+const historyKernel = spyOn(nativeKernel, 'kernelClient').mockImplementation(() => historyClient);
+afterAll(() => historyKernel.mockRestore());
 const { readPostHistory } = await import('../src/threads/reads');
 const { createHistoricalReadBinding } = await import('../src/threads/historical-reader-provenance');
 const { RevisionEntry } = await import('../src/threads/post-history');
