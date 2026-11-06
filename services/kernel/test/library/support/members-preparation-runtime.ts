@@ -11,7 +11,7 @@ import {
   type PreparationDefinition,
   type PreparationLocator,
 } from '../../../src/library/members-preparation.ts';
-import { actorOf } from '../../../src/request/access.ts';
+import { accessCheck, actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
@@ -107,6 +107,14 @@ export async function membersPreparationRuntime() {
     const { collection } = (await created.json()) as { collection: { id: string; curatorAccountId: string } };
     expect(collection.curatorAccountId).toBe(owner.accountId);
     expect(routeOf(collection.id)).toBe(routeOf(owner.accountId));
+    const curator = await actor(owner);
+    expect(await (await accessCheck(
+      kernel.testAccess,
+      curator,
+      'collection:read',
+      { route: routeOf(collection.id)!, id: collection.id },
+      context(),
+    ))(db.pool)).toBe(true);
     const read = await capture(
       db,
       async () => {

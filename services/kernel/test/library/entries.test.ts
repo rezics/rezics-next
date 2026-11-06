@@ -180,6 +180,7 @@ function unrelatedPopulation(name: string): Population {
 beforeAll(async () => {
   database = await openGrowthDatabase();
   configureTestReceiptKeys(database.pool);
+  configureTestReceiptKeys(database.admin);
   await bootstrapRelease(database.pool, await compileEntryRelease('original'));
   accounts = new Map<string, Account>();
   await installAccount(setupIdentity.accountId, 'active');

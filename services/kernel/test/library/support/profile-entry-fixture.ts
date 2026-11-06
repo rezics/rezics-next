@@ -22,7 +22,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { AccountActor, Resource } from '../../../src/request/access.ts';
+import { accessCheck, type AccountActor, type Resource } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -258,6 +258,17 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
+    const governance: Record<string, boolean> = {};
+    for (const action of ['access:grant', 'definitions:publish', 'definitions:activate', 'subject:create', 'statement:propose']) {
+      governance[action] = await (await accessCheck(access, steward.actor, action, global, context(steward.actor)))(pool);
+    }
+    expect(governance).toEqual({
+      'access:grant': true,
+      'definitions:publish': true,
+      'definitions:activate': true,
+      'subject:create': true,
+      'statement:propose': true,
+    });
     const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
     const grant = (resource: Resource, subject: string, actions: string[]) =>
       grants.create(context(steward.actor), {

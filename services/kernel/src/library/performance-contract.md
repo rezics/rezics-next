@@ -1,7 +1,8 @@
 # Library native-operation authority
 
 Native Entry acceptance uses the mounted test Kernel composition and its durable receipt keys before any lifecycle
-setup command. Search preparation scenarios in one file share one native runtime: governance bootstrap is a one-time
+setup command, including setup through the separate admin pool. Native setup asserts the bootstrapped Global
+authority and a newly created private Collection’s curator read before measuring the retained operation. Search preparation scenarios in one file share one native runtime: governance bootstrap is a one-time
 database installation, while each scenario still creates its own Collection and preparation episode. Retain the
 original behavioral and native cost assertions; add regressions only for defects reached through the seeded journey.
 
