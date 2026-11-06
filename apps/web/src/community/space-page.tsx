@@ -223,9 +223,22 @@ export function RealmShelf({
   const lifetime = useSpacePageLifetime();
   const locale = getLocale();
   const selection = realmReadingSelection(returnTo);
+  const returnAddress = returnTo?.split('#', 1)[0];
   const lease = useMemo(
     () => ({ active: true, connected: false }),
-    [realm, transport, returnTo, lifetime, state, csrfToken, reader, locale, frozen],
+    [
+      realm,
+      transport,
+      returnAddress,
+      selection.node,
+      selection.cursor,
+      lifetime,
+      state,
+      csrfToken,
+      reader,
+      locale,
+      frozen,
+    ],
   );
   const latestLease = useRef(lease);
   if (latestLease.current !== lease) latestLease.current.active = false;
