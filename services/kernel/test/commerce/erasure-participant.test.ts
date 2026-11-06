@@ -27,7 +27,7 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas, type Persona } from '../support/personas.ts';
-import { testKernel, type TestKernel } from '../support/test-kernel.ts';
+import { testKernel, testTokens, type TestKernel } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createNativeEditionFixture, type NativeContentEdition } from './support/native-edition-fixture.ts';
 import { inspectNativeRetainedOrder, prepareNativeRetainedOrder } from './support/order-retention-fixture.ts';
@@ -250,7 +250,10 @@ beforeAll(async () => {
       )(pool);
       const row = result.rows[0];
       const board = row
-        ? await readBoard({ pool, access: kernel.testAccess }, row.board_id, { actor, deadline: Date.now() + 30_000 })
+        ? await readBoard({ pool, access: kernel.testAccess, tokens: testTokens() }, row.board_id, {
+            actor,
+            deadline: Date.now() + 30_000,
+          })
         : null;
       console.error(
         'Native board visibility diagnostic',
