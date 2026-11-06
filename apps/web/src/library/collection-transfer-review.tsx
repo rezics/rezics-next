@@ -41,12 +41,7 @@ export function CollectionTransferReviewPanel({
       data-collection-transfer-review
       aria-labelledby="collection-transfer-review-heading"
     >
-      <h3
-        id="collection-transfer-review-heading"
-        ref={headingRef}
-        tabIndex={-1}
-        className="font-semibold"
-      >
+      <h3 id="collection-transfer-review-heading" ref={headingRef} tabIndex={-1} className="font-semibold">
         {m.library_collection_move_review_heading()}
       </h3>
       <p>
@@ -87,7 +82,13 @@ export function CollectionTransferReviewPanel({
       {transferState === 'unknown' ? (
         <div role="alert" className="space-y-2">
           <p>{m.library_collection_move_unknown()}</p>
-          <Button type="button" variant="outline" className={action} disabled={pending || !canWrite} onClick={onRetryExact}>
+          <Button
+            type="button"
+            variant="outline"
+            className={action}
+            disabled={pending || !canWrite}
+            onClick={onRetryExact}
+          >
             {m.library_collection_move_retry_exact()}
           </Button>
         </div>
