@@ -56,6 +56,11 @@ import {
 } from './backlog-shared.ts';
 import { fail, recordGoalDispatch, recoverClaims } from './backlog-claims.ts';
 import { deliverResearchCompletions, dispatchResearchClaim, recoverResearchClaims } from './backlog-research.ts';
+import {
+  confirmedBacklogOwner,
+  requireUrgentDispatch,
+  type AuthenticatedManager,
+} from './priority-authority.ts';
 
 export { backlogDirectory };
 
@@ -114,7 +119,7 @@ export type BacklogRuntime = {
   stateDirectory: string;
   inbox: ManagerInbox;
   /** The `goal dispatch` path: create the task and request its first attempt. Returns the new task ID. */
-  dispatch(briefFile: string): Promise<BacklogDispatchResult>;
+  dispatch(briefFile: string, actor?: AuthenticatedManager | null): Promise<BacklogDispatchResult>;
   /** Queue a continuation through the existing task retry path. */
   continueTask(goal: string, continuation: BriefContinuation, briefFile: string): Promise<void>;
   /** The `goal cancel` path. */
@@ -123,6 +128,8 @@ export type BacklogRuntime = {
   chain?: ChainRuntime;
   now?: () => number;
   policy?: ControlPolicy | undefined;
+  /** Configured supermanager; when set, the sweep honours that manager's urgent grants. */
+  supermanager?: string;
   /** Active-task cap; defaults to `maxWorkers` in `<state>/capacity.json`, else 32. */
   workerCap?: number;
   perSweep?: number;
@@ -412,6 +419,74 @@ function closestMergeCandidates(
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
     .slice(0, 3)
     .map((other) => other.name);
+}
+
+type UrgentReturnEntry = { goal: string; brief: string; reason: string };
+
+function notifyUrgentReturns(runtime: BacklogRuntime, groups: Map<string, UrgentReturnEntry[]>): void {
+  const policy = runtime.policy ?? defaultPolicy;
+  for (const [managerId, entries] of groups) {
+    const listed = entries
+      .slice(0, policy.backlog.refusalBriefs)
+      .map((entry) => `${entry.brief} (${oneLine(entry.reason, policy.backlog.refusalReasonCharacters)})`)
+      .join('; ');
+    const more =
+      entries.length > policy.backlog.refusalBriefs
+        ? `; and ${entries.length - policy.backlog.refusalBriefs} more`
+        : '';
+    const locations = [
+      ...new Set(
+        entries.map((entry) => join(backlogDirectory(runtime.stateDirectory, entry.goal), RETURNED_DIRECTORY)),
+      ),
+    ].join(', ');
+    runtime.inbox.deliver({
+      managerId,
+      goalId: entries[0]!.goal,
+      kind: 'instruction',
+      summary: oneLine(
+        `Backlog dispatch returned ${entries.length} urgent brief(s): ${listed}${more}. They are in ${locations}.`,
+        policy.backlog.refusalSummaryCharacters,
+      ),
+    });
+  }
+}
+
+function returnUrgentBrief(
+  runtime: BacklogRuntime,
+  goalDirectory: string,
+  goal: string,
+  claimed: string,
+  reason: string,
+  now: number,
+  groups: Map<string, UrgentReturnEntry[]>,
+  managerId: string,
+): UrgentReturnEntry {
+  const archived = returnBrief(goalDirectory, claimed, reason);
+  recordFlow(runtime.db, {
+    taskId: `${goal}/${archived}`,
+    attempt: 0,
+    stage: 'dispatch',
+    action: 'returned',
+    at: new Date(now).toISOString(),
+    detail: reason,
+  });
+  const entry = { goal, brief: archived, reason };
+  groups.set(managerId, [...(groups.get(managerId) ?? []), entry]);
+  return entry;
+}
+
+function urgentBacklogActor(
+  runtime: BacklogRuntime,
+  goal: string,
+  markdown: string,
+): { urgent: boolean; actor: AuthenticatedManager | null; manager: string } {
+  const snapshot = readBriefSizeSnapshot(markdown);
+  if (!snapshot?.urgent) return { urgent: false, actor: null, manager: snapshot?.manager ?? goal };
+  return {
+    urgent: true,
+    actor: confirmedBacklogOwner(runtime.db, goal, snapshot.manager) ?? null,
+    manager: snapshot.manager,
+  };
 }
 
 function notifyReturns(runtime: BacklogRuntime, groups: Map<string, SizeReturnEntry[]>): void {
@@ -794,6 +869,7 @@ async function dispatchReady(
     for (const entry of recovered.refused) refuse(goal, entry.brief, entry.reason);
   }
   const returned = returnProductBriefs(runtime, goals, now);
+  const urgentReturnedByManager = new Map<string, UrgentReturnEntry[]>();
 
   const chained = await chainLanded(runtime, now, available, refuse);
   available -= chained.length;
@@ -883,7 +959,28 @@ async function dispatchReady(
           if (group.complete) recordGoalDispatch(runtime, pick.goal, group.writtenMs);
           continue;
         }
-        const dispatchedTask = dispatchResult(await runtime.dispatch(claimed));
+        const provenance = urgentBacklogActor(runtime, pick.goal, markdown);
+        if (provenance.urgent && runtime.supermanager) {
+          try {
+            requireUrgentDispatch(runtime.db, runtime.supermanager, provenance.actor);
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : errorText(error);
+            returned.push(
+              returnUrgentBrief(
+                runtime,
+                goalDirectory,
+                pick.goal,
+                claimed,
+                reason,
+                now,
+                urgentReturnedByManager,
+                provenance.manager,
+              ),
+            );
+            continue;
+          }
+        }
+        const dispatchedTask = dispatchResult(await runtime.dispatch(claimed, provenance.actor));
         taskId = dispatchedTask.taskId;
         lintWarnings = dispatchedTask.lintWarnings.length
           ? dispatchedTask.lintWarnings
@@ -922,6 +1019,7 @@ async function dispatchReady(
         ...(lintWarnings.length ? { lintWarnings } : {}),
       });
   }
+  notifyUrgentReturns(runtime, urgentReturnedByManager);
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
   return { dispatched, continued, refused, returned, chained };
 }
