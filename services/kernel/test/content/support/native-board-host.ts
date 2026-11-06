@@ -92,9 +92,7 @@ export async function grantAccountActions(
       },
       origin,
       {
-        'idempotency-key': JSON.stringify(
-          `accounts.grant:${resource.route}:${resource.id}:${accountId}:${action}`,
-        ),
+        'idempotency-key': JSON.stringify(`accounts.grant:${resource.route}:${resource.id}:${accountId}:${action}`),
       },
     );
     if (result.status !== 201 && result.status !== 409)
