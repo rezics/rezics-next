@@ -72,8 +72,9 @@ export type PreparationDefinition = Readonly<{
   filter: FilterDocument;
   sort: 'id' | 'ordinal';
   release: Readonly<{ digest: string; value: FilterRelease }>;
-  /** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
-  source: Readonly<{ kind: 'owner' | 'catalogue' }>;
+  /** Saved population selector. Omitted means owner-compatible execution. Owner keys keep the retained six-part
+   * basis; a catalogue key adds one element. */
+  source?: Readonly<{ kind: 'owner' | 'catalogue' }>;
 }>;
 export type PreparationDefinitionBasis = Readonly<{
   definition: PreparationDefinition;
@@ -210,6 +211,8 @@ function notFound(): ProblemError {
 
 function prepareBasis(ownerAccountId: string, collectionId: string, input: PreparationDefinition): Basis {
   try {
+    // An omitted source is owner-compatible execution: the owner's private population, six-part basis.
+    const source = input?.source ?? { kind: 'owner' as const };
     if (
       !input ||
       !input.filter ||
@@ -218,8 +221,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
       typeof input.release.digest !== 'string' ||
       !/^sha256:[0-9a-f]{64}$/.test(input.release.digest) ||
       !input.release.value ||
-      !input.source ||
-      (input.source.kind !== 'owner' && input.source.kind !== 'catalogue') ||
+      (source.kind !== 'owner' && source.kind !== 'catalogue') ||
       releaseDigest(input.release.value as Release) !== input.release.digest
     )
       throw unsupported();
@@ -227,7 +229,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
     const filter = admitFilter(parseFilter(input.filter), release, { owner: true });
     // Owner keys keep the six-part basis; a catalogue source adds one element.
     const basis = canonicalize(
-      input.source.kind === 'catalogue'
+      source.kind === 'catalogue'
         ? [BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest, 'catalogue']
         : [BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest],
     );
@@ -237,7 +239,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
       digest: createHash('sha256').update(basis).digest(),
       filter,
       sort: input.sort,
-      source: { kind: input.source.kind },
+      source: { kind: source.kind },
       releaseDigest: input.release.digest,
       release,
     });

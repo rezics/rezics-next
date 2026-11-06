@@ -684,6 +684,8 @@ const detail = (operationId: string) => ({
   security: [{ bearerAuth: [] }],
 });
 function denied(error: unknown): never {
+  // DIAG-TEMP: remove after the grant denial origin is known.
+  console.error('DIAG-TEMP grant denied', error instanceof Error ? { name: error.name, message: error.message, code: (error as { code?: unknown }).code, stack: error.stack } : error);
   if (error instanceof RealmLastOwnerError) throw error;
   // PostgreSQL rejects invalid temporal values/identities and conflicting grants.
   // Neither those failures nor native formula denials disclose stored grant state.

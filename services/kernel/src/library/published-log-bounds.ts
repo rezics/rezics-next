@@ -83,7 +83,9 @@ const bytes = (value: number): Bound =>
 // at most 1000 PostgreSQL characters. Six-byte JSON escaping bounds both control
 // characters and four-byte supplementary Unicode in the native JSON encoding.
 // PostgreSQL timestamp text reserves 64 characters including range/zone/BC suffix.
-const uuid = 'f'.repeat(36);
+// Canonical routable placeholder: subject-routed source plans derive their partition from it, so a
+// non-UUID width would fail route resolution before any bound is computed. Same 36-byte width.
+const uuid = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
 const timestamp = '\u0000'.repeat(64);
 const pageProjection = {
   route: 65535,
