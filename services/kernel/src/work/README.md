@@ -159,9 +159,10 @@ cutoff and the indexed upper key then present in that range. Pages walk `(create
 exclusive last-examined key, `rawLimit` at most 1000, and no OFFSET. The persistable continuation repeats the
 application, cutoff and upper key plus the last examined key. Terminal eligibility
 (`SUCCESS`/`ERROR`/`CANCELLED`/`MAX_RECOVERY_ATTEMPTS_EXCEEDED` and `completed_at <= createdBefore`) runs after the
-raw limit. Returned copies are status metadata only: id, name, status, created/completed timestamps and application.
-Examined count is the raw rows of that page, including pending custody and ineligible recent completion. Exhaustion
-is explicit.
+raw limit. Those statuses are the SDK `StatusString` literals; the scan module does not import `workflow.js`, so
+`dbos schema` can load the package through the existing CJS cycle. Returned copies are status metadata only: id,
+name, status, created/completed timestamps and application. Examined count is the raw rows of that page, including
+pending custody and ineligible recent completion. Exhaustion is explicit.
 
 The key is the SDK `workflow_status` invariant: `created_at` is a bigint assigned at insert and `workflow_uuid` is the
 immutable primary key. The SDK-owned covering index `idx_workflow_status_scan` on

@@ -320,17 +320,16 @@ index 5d56b40..208d5ff 100644
  export type { StepReservation } from './dbos';
  export { DBOSClient } from './client';
 diff --git a/dist/src/index.js b/dist/src/index.js
-index f549f85..519a70b 100644
+index f549f85..0cedd61 100644
 --- a/dist/src/index.js
 +++ b/dist/src/index.js
-@@ -37,6 +37,10 @@ var system_db_schema_1 = require("../schemas/system_db_schema");
+@@ -37,6 +37,9 @@ var system_db_schema_1 = require("../schemas/system_db_schema");
  Object.defineProperty(exports, "PortableWorkflowError", { enumerable: true, get: function () { return system_db_schema_1.PortableWorkflowError; } });
  var workflow_1 = require("./workflow");
  Object.defineProperty(exports, "StatusString", { enumerable: true, get: function () { return workflow_1.StatusString; } });
-+var workflow_status_scan_1 = require("./workflow_status_scan");
-+Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_INDEX", { enumerable: true, get: function () { return workflow_status_scan_1.WORKFLOW_STATUS_SCAN_INDEX; } });
-+Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_RAW_LIMIT", { enumerable: true, get: function () { return workflow_status_scan_1.WORKFLOW_STATUS_SCAN_RAW_LIMIT; } });
-+Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES", { enumerable: true, get: function () { return workflow_status_scan_1.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES; } });
++Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_INDEX", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_INDEX; } });
++Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_RAW_LIMIT", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_RAW_LIMIT; } });
++Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES; } });
  var debouncer_1 = require("./debouncer");
  Object.defineProperty(exports, "Debouncer", { enumerable: true, get: function () { return debouncer_1.Debouncer; } });
  Object.defineProperty(exports, "DebouncerClient", { enumerable: true, get: function () { return debouncer_1.DebouncerClient; } });
@@ -1010,21 +1009,20 @@ index 0000000..0c434b6
 +export declare const WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES: readonly WorkflowStatusString[];
 diff --git a/dist/src/workflow_status_scan.js b/dist/src/workflow_status_scan.js
 new file mode 100644
-index 0000000..e5de0c6
+index 0000000..5a191fa
 --- /dev/null
 +++ b/dist/src/workflow_status_scan.js
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,158 @@
 +"use strict";
 +Object.defineProperty(exports, "__esModule", { value: true });
 +exports.readWorkflowStatusScanPage = exports.openWorkflowStatusScan = exports.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES = exports.WORKFLOW_STATUS_SCAN_RAW_LIMIT = exports.WORKFLOW_STATUS_SCAN_INDEX = void 0;
-+const workflow_1 = require("./workflow");
 +exports.WORKFLOW_STATUS_SCAN_INDEX = 'idx_workflow_status_scan';
 +exports.WORKFLOW_STATUS_SCAN_RAW_LIMIT = 1000;
 +exports.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES = Object.freeze([
-+    workflow_1.StatusString.SUCCESS,
-+    workflow_1.StatusString.ERROR,
-+    workflow_1.StatusString.CANCELLED,
-+    workflow_1.StatusString.MAX_RECOVERY_ATTEMPTS_EXCEEDED,
++    'SUCCESS',
++    'ERROR',
++    'CANCELLED',
++    'MAX_RECOVERY_ATTEMPTS_EXCEEDED',
 +]);
 +const TERMINAL = new Set(exports.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES);
 +const APPLICATION_MAX_BYTES = 1024;

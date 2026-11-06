@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { DBOS, DBOSClient, WORKFLOW_STATUS_SCAN_RAW_LIMIT } from '@dbos-inc/dbos-sdk';
+import {
+  DBOS,
+  DBOSClient,
+  StatusString,
+  WORKFLOW_STATUS_SCAN_RAW_LIMIT,
+  WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES,
+} from '@dbos-inc/dbos-sdk';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,6 +71,12 @@ test('DBOS and DBOSClient export the same payload-free scan producer', () => {
   expect(typeof client.openWorkflowStatusScan).toBe('function');
   expect(typeof client.readWorkflowStatusScanPage).toBe('function');
   expect(WORKFLOW_STATUS_SCAN_RAW_LIMIT).toBe(1000);
+  expect(WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES).toEqual([
+    StatusString.SUCCESS,
+    StatusString.ERROR,
+    StatusString.CANCELLED,
+    StatusString.MAX_RECOVERY_ATTEMPTS_EXCEEDED,
+  ]);
 });
 
 test('empty, short and full pages advance exclusive keys and report honest examined counts', async () => {
