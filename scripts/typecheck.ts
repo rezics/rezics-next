@@ -58,20 +58,26 @@ type CompilerState = {
   discard: () => void;
 };
 
-/** Mapper, lockfile and workspace identities that must match between local and remote compiler runs. */
+/**
+ * Mapper, lockfile and workspace identities that must match between local and remote compiler runs. Each workspace
+ * that declares the Reylo content mapper resolves `reylo` from its own `node_modules`, so that installed package is the
+ * identity; the root has no such link, and naming it hashed nothing for the mapper.
+ */
 export function compilerIdentityPaths(): readonly string[] {
   return [
     'package.json',
     'bun.lock',
     'node_modules/typescript/package.json',
-    'node_modules/reylo/package.json',
     'services/kernel/package.json',
+    'services/kernel/node_modules/reylo/package.json',
     'services/kernel/tsconfig.json',
     'services/kernel/scripts/typecheck.ts',
     'services/auth/package.json',
+    'services/auth/node_modules/reylo/package.json',
     'services/auth/tsconfig.json',
     'services/auth/scripts/database.ts',
     'apps/web/package.json',
+    'apps/web/node_modules/reylo/package.json',
     'apps/web/tsconfig.json',
   ];
 }

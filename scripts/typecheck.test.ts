@@ -482,19 +482,21 @@ await Bun.write('typechecked', 'ok');
   }
 });
 
-test('compiler identity includes the installed Reylo mapper and Web workspace manifests', () => {
+test('compiler identity includes the Reylo mapper each workspace resolves and the Web workspace manifests', () => {
   expect(compilerIdentityPaths()).toEqual([
     'package.json',
     'bun.lock',
     'node_modules/typescript/package.json',
-    'node_modules/reylo/package.json',
     'services/kernel/package.json',
+    'services/kernel/node_modules/reylo/package.json',
     'services/kernel/tsconfig.json',
     'services/kernel/scripts/typecheck.ts',
     'services/auth/package.json',
+    'services/auth/node_modules/reylo/package.json',
     'services/auth/tsconfig.json',
     'services/auth/scripts/database.ts',
     'apps/web/package.json',
+    'apps/web/node_modules/reylo/package.json',
     'apps/web/tsconfig.json',
   ]);
 });
