@@ -141,14 +141,17 @@ test('official-sized 282-member tree returns exact nested bytes and hashes, dele
   expect(existsSync(join(consumer, 'packages/client/src/.kernel-output-tree/backup'))).toBe(false);
 });
 
-test('512 members fit the closed profile; 513 are refused without increasing ordinary limits', () => {
+test('the current 543-member closure and 1024-member bound fit; overflow is refused', () => {
   const producer = workspace();
-  generated(producer, 512);
+  generated(producer, 543);
+  const current = encodeOutputTree(producer, source);
+  expect(validateOutputTree(current, authority(current)).members).toHaveLength(543);
+  generated(producer, 1024);
   const bytes = encodeOutputTree(producer, source);
-  expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(512);
+  expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(1024);
   put(producer, `${PROFILE.root}/overflow.d.ts`, 'overflow');
   expect(() => encodeOutputTree(producer, source)).toThrow('member count');
-  const count = bundle([], [], { count: 513 });
+  const count = bundle([], [], { count: 1025 });
   expect(() => validateOutputTree(count, authority(count))).toThrow('manifest count');
   expect(() => outputTreeProfile('arbitrary-directory')).toThrow('unknown output profile');
 });
