@@ -235,7 +235,11 @@ beforeAll(async () => {
       const result = await pool.query(
         `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.title,
           b.security_revision::text,b.purpose,b.created_at,
-          (SELECT json_agg(json_build_object('role',r.grant_role,'valid',r.valid::text,'current',r.valid @> clock_timestamp()))
+          (SELECT i.resource_type FROM access.resource_initialization i
+           WHERE i.route=b.route AND i.resource_id=b.board_id) AS resource_type,
+          (SELECT json_agg(json_build_object(
+             'kind',r.subject_kind,'subject',r.subject_id::text,'subjectRole',r.subject_role,
+             'role',r.grant_role,'valid',r.valid::text,'current',r.valid @> clock_timestamp()))
            FROM access.resource_role_grant r
            WHERE r.route=b.route AND r.resource_id=b.board_id AND r.subject_id=$2) AS roles,
           (SELECT array_agg(g.action) FROM access.resource_grant g
@@ -312,6 +316,7 @@ beforeAll(async () => {
           subjectAllowed,
           row,
           ownerActions: resourceRoleCatalogue(kernel.testAccess)?.roles.get('content.board.owner'),
+          boardType: resourceRoleCatalogue(kernel.testAccess)?.types.get('content.board'),
           boardAllowed,
           boardRead: board?.value ?? null,
         }),
