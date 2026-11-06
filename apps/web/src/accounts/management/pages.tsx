@@ -8,7 +8,7 @@ import { Tombstone } from '@rezics/ui/tombstone';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
-import { managedAccountHref } from '../../settings/managed-accounts-read';
+import { managedAccountHref } from './auth-navigation';
 import type { WindowNavigation } from './window-route';
 import { readCursors, issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 

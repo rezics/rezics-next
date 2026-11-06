@@ -263,6 +263,8 @@ composed revision and does not add stories.
 Decision: kernel typecheck repairs keep SearchService and PublicSearchPage assertions; duplicate
 `savedCatalogueMembers` methods, a duplicate `matchEvidence` key, the missing catalogue-publication `record`
 guard, and docker stdout encoding are fixture and helper shape updates. No new behaviour tests.
+Decision: Accounts management projects native `authActions` and inventory DTOs locally so web-accounts does not
+import Settings private reads.
 
 ## 3. Credentials, sessions and tokens
 

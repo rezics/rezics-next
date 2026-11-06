@@ -19,6 +19,13 @@ test('the seeded walk mints website Kernel bearers through login then OAuth, nev
   expect(source).toContain("signIn(stack, person, 'login', [], secret)");
 });
 
+test('Accounts management does not import Settings private managed-account reads', () => {
+  for (const file of ['actions.ts', 'data.ts', 'pages.tsx', 'auth-navigation.ts']) {
+    const source = readFileSync(resolve(import.meta.dir, `../src/accounts/management/${file}`), 'utf8');
+    expect(source).not.toMatch(/settings\/managed-account/);
+  }
+});
+
 test('native web stack loads Commerce and Work only after DATABASE_URL setup', () => {
   const source = readFileSync(resolve(import.meta.dir, './native/stack.ts'), 'utf8');
   expect(source).not.toMatch(/^import \{ createCommerceWork/m);

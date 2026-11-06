@@ -3,8 +3,8 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { prepareSession, viewerCredential, sessionSubject } from '../../session/request';
-import { projectManagedAuthNavigation } from '../../settings/managed-account-actions-read';
 import type { SessionEnv } from '../../session/client';
+import { projectManagedAuthNavigation } from './auth-navigation';
 import {
   loadDetail,
   loadInventory,

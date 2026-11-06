@@ -1,13 +1,44 @@
 import type { KernelClient } from '@rezics/client';
-import type { ManagedAccountsPage } from '../../settings/managed-accounts-read';
-import type { ManagementDetail } from '../../settings/managed-account-detail-read';
-import type { ManagedAuthNavigation } from '../../settings/managed-account-actions-read';
+import type { ManagedAuthNavigation } from './auth-navigation';
 import { readWithin } from './read-deadline';
 
-// Additive native authActions stay on the load result only long enough to project authNavigation.
-export type Inventory = ManagedAccountsPage;
-export type Detail = ManagementDetail;
-export type Identity = Inventory['account'];
+export type Identity = {
+  id: string;
+  kind: 'actor' | 'organization';
+  handle: string | null;
+  displayName: string | null;
+};
+export type DirectoryNavigation = { state: 'admitted' | 'unavailable' | 'concealed' };
+export type Responsibility = {
+  reservationId: string;
+  accountId: string;
+  account: Identity | null;
+  state: 'current' | 'reconciling';
+  navigation?: DirectoryNavigation;
+};
+export type Inventory = {
+  account: Identity;
+  viewer: { state: 'current'; account: Identity };
+  organizations: {
+    state: 'ready' | 'preparing';
+    items: { account: Identity; role: 'owner' | 'member'; navigation?: DirectoryNavigation }[];
+    next: string | null;
+  };
+  responsibilities: { items: Responsibility[]; next: string | null };
+};
+export type Detail = {
+  account: Identity;
+  self: boolean;
+  role: 'owner' | 'member' | null;
+  operator: Identity | null;
+  relation: { operatorAccountId: string; reservationId: string; version: string } | null;
+  members: {
+    state: 'ready' | 'denied';
+    items: { accountId: string; account: Identity | null; role: 'owner' | 'member' }[];
+    next: string | null;
+  };
+  responsibilities: Inventory['responsibilities'] | null;
+};
 export type PageFailure = { state: 'denied' | 'unavailable' | 'preparing' | 'missing' | 'signed-out' };
 export type Page<T> =
   | {
@@ -89,7 +120,7 @@ export async function loadDetail(
       10_000,
     );
     if (result.error || !result.data) return failure(result.status, result.error?.value);
-    const data = result.data as ManagementDetail & { authActions?: unknown };
+    const data = result.data as Detail & { authActions?: unknown };
     const { authActions, ...value } = data;
     return {
       state: 'ready' as const,

@@ -198,7 +198,7 @@ test('Legacy account and organization management reaches the current selected Se
 test('current native inventory and detail DTOs retain viewer and navigation and expose only native-admitted management entries', async () => {
   const { loadManagedAccounts } = await import('../src/settings/managed-accounts-read');
   const { loadManagedAccountDetail } = await import('../src/settings/managed-account-detail-read');
-  const { projectManagedAuthNavigation } = await import('../src/settings/managed-account-actions-read');
+  const { projectManagedAuthNavigation } = await import('../src/accounts/management/auth-navigation');
   const value = inventoryExample();
   value.viewer = { state: 'current', account: human };
   value.organizations.items[0]!.navigation = { state: 'admitted' };
