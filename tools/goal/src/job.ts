@@ -733,17 +733,22 @@ export class WorkerJob implements GateOutcomeSink {
         if (cpu !== undefined) lastCpu = cpu;
         // The first worktree sample, and the first CPU reading, only record baselines. Timestamp them when the
         // sample finishes so a slow git/walk/proc scan is not counted as silence. A process group that has not
-        // appeared yet is still starting: start grace owns that, not stall.
+        // appeared yet is still starting: start grace owns that, not stall. One that has left /proc is exiting:
+        // settlement owns that, not stall. A log that already reports success is a finished worker, not a silent one.
         if (!hadWorkBaseline) return;
         if (!hadCpu && cpu !== undefined) return;
         if (!hadCpu && cpu === undefined && attempt.process) {
           const grace = this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs;
           if (Date.now() - activity.startedAt < grace) return;
         }
+        if (hadCpu && cpu === undefined) return;
+        if (reportsSuccess(readLogTail(ref.logPath, this.policy.worker.logTailBytes), agentAdapter(attempt.profile.cli)))
+          return;
         // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
-        // a local or remote check does not look silent while the command is running.
+        // a local or remote check does not look silent while the command is running. Idle time is the gap at sample
+        // start, so a slow /proc scan after that is not silence.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
-        if (Date.now() - lastLogActivityAt - waitedMs < silenceMs) return;
+        if (now - lastLogActivityAt - waitedMs < silenceMs) return;
         const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
         silenceFailure = `stalled: no output for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
         store.updateAttempt(ref, (current) => {
@@ -880,7 +885,11 @@ export class WorkerJob implements GateOutcomeSink {
         const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settledAttempt);
         if (resolved.length) this.resumePendingRetries();
       }
-      if (silenceFailure && store.attempt(ref).state === 'exited') {
+      if (
+        silenceFailure &&
+        store.attempt(ref).state === 'exited' &&
+        !reportsSuccess(store.attempt(ref).result, agentAdapter(store.attempt(ref).profile.cli))
+      ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.failureKind = 'tool';
           attempt.result = silenceFailure!;
