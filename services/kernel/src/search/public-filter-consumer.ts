@@ -22,7 +22,11 @@ import type {
   PublicFilterDependencyKey,
   PublicFilterProjectionMeaning,
 } from '../semantic/public-filter-source-contract.ts';
-import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
+import {
+  PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
+  PUBLIC_FILTER_PREPARATION_RAW_LIMIT,
+  type PublicFilterConsumerCaptureInput,
+} from './public-filter-consumer-contract.ts';
 import { compileFilter } from './filter.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
@@ -1614,7 +1618,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         const result = await nativeBatch(
           q,
           recovery.bootstrap.definition.capture,
-          100,
+          PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
           work.after,
           acquired.use,
           m,
@@ -1645,7 +1649,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         work.preparedRows.push(...checked.rows);
         work.materializing = result.queried;
         work.after = raw.at(-1)?.sort ?? work.after;
-        if (work.prepared.length > 1000) return m.unavailable('dependency_unavailable');
+        if (work.prepared.length > PUBLIC_FILTER_PREPARATION_RAW_LIMIT) return m.unavailable('dependency_unavailable');
         if (!result.exhausted) {
           await save(work, encoded, true, m);
           return { status: 'preparing', repair: job, cost: m.cost };

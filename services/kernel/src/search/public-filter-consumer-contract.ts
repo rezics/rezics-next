@@ -16,6 +16,11 @@ import type { OpenSearch } from './opensearch.ts';
 import type { SearchPlan, SearchResult, SubjectHit } from './query.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 
+/** Native mixed preparation advances one bounded page before saving its durable frontier. */
+export const PUBLIC_FILTER_PREPARATION_BATCH_SIZE = 100;
+/** Raw mixed candidates include duplicates and current-predicate rejects. */
+export const PUBLIC_FILTER_PREPARATION_RAW_LIMIT = 1_000;
+
 /** The ONE queried-observation type. Internal native locators, never public transport fields.
  * Each locator resolves to retained native execution/registration state; its shape proves nothing.
  */

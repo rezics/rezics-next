@@ -1710,6 +1710,7 @@ revalidates current disclosure before exposing distinct positive witnesses as `N
 separate proof and are not inferred from the candidate prefix. Source census and page length are never query counts.
 Tagged-work requests (`tagged-work-plan.ts`) keep that designated kind as a direct top-level AND leaf, compile the
 remaining catalogue predicate (`tagged-work-query.ts`) and prove kind chips from those current rows (`type-facet.ts`).
+Decision: selected kinds occupy AND leaf 0; native Tag acceptance measures retained raw progress and its actual frontier against named preparation budgets, while count execution retains credited text and qualifiers.
 Capture overflow includes statement and same-statement qualifier properties. Concept statements compile to a property
 superset; same-statement weight/metric/spoiler stay current native proof. Name and id execute directly through a
 bounded disclosed-candidate walk of `min(600, 6s+3)` raw rows in three `2s+1` windows. Spending that bound without a

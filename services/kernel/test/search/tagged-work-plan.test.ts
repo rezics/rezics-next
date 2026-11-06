@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { DiscoveryFilterDocument } from '@rezics/filter';
+import type { DiscoveryRegistry } from '../../src/search/discovery.ts';
 import { compileDiscoveryCapture } from '../../src/search/discovery-filter.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { admitDiscoveryRequest } from '../../src/search/discovery-request.ts';
@@ -30,7 +31,7 @@ const conceptLeaf = {
 };
 const words = { statement: { property: 'schema:wordCount', range: { gte: 1_000_001, unit: '1' as const } } };
 const filter: DiscoveryFilterDocument = {
-  and: [{ and: [conceptLeaf, words] }, { kind: { in: ['schema:Book'] } }],
+  and: [{ kind: { in: ['schema:Book'] } }, { and: [conceptLeaf, words] }],
 };
 
 const noRead = async (): Promise<never> => {
@@ -54,7 +55,7 @@ const registry = createDiscoveryRegistry({
 test('a designated kind leaf binds remaining catalogue predicate, native source and name order', () => {
   const plan = admitTaggedWorkPlan({
     filter,
-    kindCountLeaf: 1,
+    kindCountLeaf: 0,
     sort: 'name',
     limit: 24,
     registeredKinds: kinds,
@@ -101,6 +102,7 @@ test('a designated kind leaf binds remaining catalogue predicate, native source 
 test('descendant concept closures use retained membership; rating order stays finite preparation', () => {
   const descendants: DiscoveryFilterDocument = {
     and: [
+      { kind: { in: ['schema:Book', 'schema:Movie'] } },
       {
         statement: {
           property: 'schema:genre',
@@ -108,12 +110,11 @@ test('descendant concept closures use retained membership; rating order stays fi
           concept: { scheme, includeChildren: true },
         },
       },
-      { kind: { in: ['schema:Book', 'schema:Movie'] } },
     ],
   };
   const plan = admitTaggedWorkPlan({
     filter: descendants,
-    kindCountLeaf: 1,
+    kindCountLeaf: 0,
     sort: 'rating',
     limit: 24,
     registeredKinds: kinds,
@@ -122,8 +123,8 @@ test('descendant concept closures use retained membership; rating order stays fi
   expect(plan.execution).toBe('preparing');
   expect(plan.sort).toBe('rating');
   expect(plan.conceptSelections[0]?.includeChildren).toBe(true);
-  expect(taggedWorkRemainingHasConcept(descendants, 1)).toBe(true);
-  expect(taggedWorkRemainingHasConcept(filter, 0)).toBe(false);
+  expect(taggedWorkRemainingHasConcept(descendants, 0)).toBe(true);
+  expect(taggedWorkRemainingHasConcept(filter, 0)).toBe(true);
 });
 
 test('mixed discovery still refuses rating without a concept remaining predicate', () => {
@@ -144,20 +145,20 @@ test('tagged-work discovery admits rating when the remaining conjunct is a conce
       filter,
       sort: 'rating',
       languages: ['en'],
-      kindCountLeaf: 1,
+      kindCountLeaf: 0,
     },
     registry,
     bundledRelease,
   );
   expect(admitted.sort).toBe('rating');
-  expect(admitted.kindCountLeaf).toBe(1);
+  expect(admitted.kindCountLeaf).toBe(0);
   expect(admitted.countFilter).toEqual({ and: [conceptLeaf, words] });
 });
 
 test('direct name order admits a finite capture window and designated kind as a type leaf', () => {
   const plan = admitTaggedWorkPlan({
     filter,
-    kindCountLeaf: 1,
+    kindCountLeaf: 0,
     sort: 'id',
     limit: 24,
     registeredKinds: kinds,
@@ -174,4 +175,61 @@ test('direct name order admits a finite capture window and designated kind as a 
   expect(
     taggedWorkEngineWindow({ prepared: true, remainingHits: 1, remainingRaw: TAGGED_WORK_PREPARED_RAW_BOUND }),
   ).toBe(200);
+  const directRawBound = taggedWorkHitScanBound(undefined, 1);
+  const directWindows = Array.from({ length: 3 }, (_, round) =>
+    taggedWorkEngineWindow({ prepared: false, remainingHits: 1, remainingRaw: directRawBound - round * 3 }),
+  );
+  expect(directWindows).toEqual([3, 3, 3]);
+  expect(directWindows.reduce((total, size) => total + size, 0)).toBe(directRawBound);
+  const preparedWindows = Array.from({ length: 3 }, (_, round) =>
+    taggedWorkEngineWindow({
+      prepared: true,
+      remainingHits: 1,
+      remainingRaw: TAGGED_WORK_PREPARED_RAW_BOUND - round * 200,
+    }),
+  );
+  expect(preparedWindows).toEqual([200, 200, 200]);
+  expect(preparedWindows.reduce((total, size) => total + size, 0)).toBe(TAGGED_WORK_PREPARED_RAW_BOUND);
+});
+
+test('selected kind is registry-bound while credited count operands survive removing AND leaf zero', () => {
+  const role = '00000000-0000-4000-8000-000000000043';
+  const credited = admitDiscoveryRequest(
+    {
+      representation: 'discovery-v1',
+      text: 'writer',
+      textField: 'credited_creator',
+      creditQualifiers: [{ property: 'wdt:P3831', value: role }],
+      filter,
+      kindCountLeaf: 0,
+    },
+    registry,
+    bundledRelease,
+  );
+  expect(credited.countFilter).toEqual({ and: [conceptLeaf, words] });
+  expect(credited.textField).toBe('credited_creator');
+  expect(credited.creditQualifiers).toEqual([{ property: 'wdt:P3831', value: role }]);
+
+  const textOnlyRegistry = new Proxy({} as DiscoveryRegistry, {
+    get(_target, property) {
+      if (property === 'entries') throw new Error('Text-only admission must not consult the kind registry');
+      return undefined;
+    },
+  });
+  expect(
+    admitDiscoveryRequest({ representation: 'discovery-v1', text: 'writer' }, textOnlyRegistry, bundledRelease).text,
+  ).toBeDefined();
+
+  const emptyRegistry = { entries: [] } as unknown as DiscoveryRegistry;
+  expect(() =>
+    admitDiscoveryRequest(
+      {
+        representation: 'discovery-v1',
+        filter: { and: [{ kind: { in: ['schema:Book'] } }] },
+        kindCountLeaf: 0,
+      },
+      emptyRegistry,
+      bundledRelease,
+    ),
+  ).toThrow();
 });

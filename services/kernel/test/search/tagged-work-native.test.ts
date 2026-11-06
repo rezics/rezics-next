@@ -7,8 +7,37 @@ import {
   type ReleasedDiscoveryFixture,
 } from '../support/released-discovery.ts';
 import type { HttpResponse, Part, StatementInput } from '../../../../specs/semantic-driver.ts';
+import {
+  PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
+  PUBLIC_FILTER_PREPARATION_RAW_LIMIT,
+} from '../../src/search/public-filter-consumer-contract.ts';
+import { taggedWorkHitScanBound } from '../../src/search/tagged-work-plan.ts';
 
 const marker = `taggednative${randomUUID().replaceAll('-', '')}`;
+const DECOY_COUNT = PUBLIC_FILTER_PREPARATION_BATCH_SIZE + 5;
+
+function decodeConsumerState(value: unknown): unknown {
+  if (!Array.isArray(value)) throw new TypeError('Malformed retained Search progress');
+  const [tag, payload] = value;
+  if (tag === 'undefined') return undefined;
+  if (tag === 'value') return payload;
+  if (tag === 'bigint') return BigInt(String(payload));
+  if (tag === 'array') {
+    if (!Array.isArray(payload)) throw new TypeError('Malformed retained Search progress array');
+    return payload.map(decodeConsumerState);
+  }
+  if (tag === 'object') {
+    if (!Array.isArray(payload)) throw new TypeError('Malformed retained Search progress object');
+    return Object.fromEntries(
+      payload.map((entry) => {
+        if (!Array.isArray(entry) || typeof entry[0] !== 'string')
+          throw new TypeError('Malformed retained Search progress field');
+        return [entry[0], decodeConsumerState(entry[1])];
+      }),
+    );
+  }
+  throw new TypeError('Malformed retained Search progress tag');
+}
 
 function quantity(property: string, amount: number): StatementInput {
   return discoveryStatement(property, { amount: `+${amount}`, unit: '1' });
@@ -80,7 +109,7 @@ test('released tagged discovery agrees across native direct and resumed prepared
     // UUIDv7 IDs follow creation order. These broad native candidates fail only the
     // same-statement weight/metric/spoiler proof, so id order exhausts its direct budget.
     const decoys: CreatedSubject[] = [];
-    for (let index = 0; index < 105; index++) {
+    for (let index = 0; index < DECOY_COUNT; index++) {
       decoys.push(await createBook(fixture, `${marker} z-decoy-${String(index).padStart(2, '0')}`, tagA.id, 1));
     }
     const exactA = await createBook(fixture, `${marker} a-exact`, tagA.id, 3);
@@ -136,7 +165,21 @@ test('released tagged discovery agrees across native direct and resumed prepared
       [targetPattern],
     );
     expect(progress.rows).toHaveLength(1);
-    expect(progress.rows[0]!.consumer_work).toContain(decoys[99]!.id);
+    const work = decodeConsumerState(JSON.parse(progress.rows[0]!.consumer_work)) as {
+      prepared: { key: { id: string }; sort: readonly (string | number | null)[] }[];
+      after?: readonly (string | number | null)[];
+      rounds: number;
+      charged: number;
+    };
+    const rawIds = work.prepared.map(({ key }) => key.id);
+    const rawBound = taggedWorkHitScanBound(undefined, idRequest.limit);
+    expect(rawIds.length).toBeGreaterThanOrEqual(PUBLIC_FILTER_PREPARATION_BATCH_SIZE);
+    expect(rawIds.length).toBeGreaterThan(rawBound);
+    expect(rawIds.length).toBeLessThanOrEqual(PUBLIC_FILTER_PREPARATION_RAW_LIMIT);
+    expect(new Set(rawIds).size).toBe(rawIds.length);
+    expect(work.after).toEqual(work.prepared.at(-1)?.sort);
+    expect(work.rounds).toBeLessThanOrEqual(3);
+    expect(work.charged).toBeLessThanOrEqual(rawBound);
     const preparedFirst = await usefulPage(fixture, idRequest);
     expect(ids(preparedFirst)).toHaveLength(1);
     expect(preparedFirst.body.next).toEqual(expect.any(String));
@@ -164,7 +207,9 @@ test('released tagged discovery agrees across native direct and resumed prepared
     expect(ids(directFirst)).toEqual([exactA.id]);
     expect(directFirst.body.next).toEqual(expect.any(String));
     const directSecond = await usefulPage(fixture, { ...nameRequest, cursor: directFirst.body.next });
-    expect([...ids(directFirst), ...ids(directSecond)]).toEqual([exactA.id, exactB.id]);
+    const directIds = [...ids(directFirst), ...ids(directSecond)].sort();
+    expect(directIds).toEqual([exactA.id, exactB.id].sort());
+    expect(directIds).toEqual(preparedIds);
     expect(directSecond.body.next).toBeNull();
 
     const descendantRequest = {
