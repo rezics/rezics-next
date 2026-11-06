@@ -89,17 +89,19 @@ if (script.includes('MemAvailable')) {
   const expressSlotUsed = existsSync(dir + '/' + hostKey + '.slot.express');
   log({ kind: 'probe', ordinarySlotsUsed, expressSlotUsed });
   if (config.down) process.exit(255);
+  const available = config.available ?? 16 * 2 ** 30;
   console.log(
-    'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM ' + (config.available ?? 16 * 2 ** 30) +
-      '\\nAVAILABLE ' + (config.available ?? 16 * 2 ** 30) +
-      '\\nMEMORY_RESERVED 0' +
+    'MEMORY_CURRENT 0\\nMEMORY_MAX ' + 16 * 2 ** 30 +
+      '\\nMEMORY_HEADROOM ' + available +
+      '\\nMEMORY_RECLAIMABLE 0\\nMEMORY_RESERVED 0' +
       '\\nPROCESSORS 16\\nSLICE_PROCESSORS ' + ((config.cpuQuotaPercent ?? 800) / 100) +
-      '\\nLOAD 0\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
+      '\\nLOAD 0\\nAVAILABLE ' + available +
+      '\\nTMP_BYTES 17179869184\\nTMP_INODES 1000000\\nDISK_FREE ' + 512 * 2 ** 30 +
+      '\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
       '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0' +
       '\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -' +
       '\\nLANDING_WAITING_SLOTS 0\\nLANDING_WAITING_ID -' +
-      '\\nLANDING_WAITING_STARTED -\\nLANDING_WAITING_ESTIMATE_MS -1\\nLANDING_WAITING_MEMORY_BYTES 2684354560' +
-      '\\nTMP_BYTES 17179869184\\nTMP_INODES 1000000',
+      '\\nLANDING_WAITING_STARTED -\\nLANDING_WAITING_ESTIMATE_MS -1\\nLANDING_WAITING_MEMORY_BYTES 2684354560',
   );
 } else if (script.includes('REMOTE_CHECK_RESERVATION')) {
   const lock = dir + '/' + hostKey + '.reservation';
@@ -467,7 +469,8 @@ process.exitCode = result;`;
     REZICS_STACK_LEASE_DIR: join(directory, '.temp/stack-lease'),
   });
   try {
-    const running = runWorkerCheck(['--local', ...command], directory, false);
+    // --local of this nested command stays in-run only when worker-check's cwd is the check-host run.
+    const running = runWorkerCheck(['--local', ...command], onCheckHost(process.cwd()) ? repository : directory, false);
     for (let attempt = 0; attempt < 200 && !existsSync(localMarker); attempt++) await Bun.sleep(5);
     expect(existsSync(localMarker)).toBe(true);
     expect(readFileSync(localMarker, 'utf8')).not.toBe('missing');
@@ -603,7 +606,7 @@ process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
 const local = ['sh', '-c', 'echo "local slot=$REZICS_STACK_SLOT"; exit 3'];
 
 test("a stack run goes to a free check host and returns the command's exit code", async () => {
-  const { env, lease, events } = scenario({ a: { available: 4e9 }, b: { available: 30e9, exit: 7 } });
+  const { env, lease, events } = scenario({ a: { available: 5 * 2 ** 30 }, b: { available: 30e9, exit: 7 } });
   const result = await stack(env, local);
 
   expect(result.code, `${result.stderr} ${JSON.stringify(events())}`).toBe(7);
@@ -838,7 +841,7 @@ test('a stack run that is already on a check host, or that writes files the call
     ['forced local', { REZICS_STACK_REMOTE: 'off' }, [], 'REZICS_STACK_REMOTE=off'],
   ];
   for (const [name, extra, options, reason] of cases) {
-    const { env, events } = scenario({ a: { available: 4e9, exit: 7 } });
+    const { env, events } = scenario({ a: { available: 5 * 2 ** 30, exit: 7 } });
     const result = await stack({ ...env, ...extra }, local, options);
     expect(result.code, name).toBe(3);
     expect(result.stderr, name).toContain(`stack-run: the run local, ${reason}`);
@@ -846,7 +849,7 @@ test('a stack run that is already on a check host, or that writes files the call
   }
 
   // The working directory under the remote run root is what counts, not an environment variable.
-  const onHost = scenario({ a: { available: 4e9, exit: 7 } });
+  const onHost = scenario({ a: { available: 5 * 2 ** 30, exit: 7 } });
   const directory = workspace();
   const lines: string[] = [];
   const original = console.error;
@@ -871,7 +874,7 @@ test('a stack run that is already on a check host, or that writes files the call
   expect(onHost.events()).toEqual([]);
 
   // Without a hosts file, or with an unreadable one, the run is local as before and holds the local slot.
-  const none = scenario({ a: { available: 4e9 } });
+  const none = scenario({ a: { available: 5 * 2 ** 30 } });
   const unset = await stack({ ...none.env, KERNEL_CHECK_REMOTE: '' }, local);
   expect(unset.code).toBe(3);
   expect(unset.stderr).toContain('stack-run: the run local, no check host is configured');
@@ -883,7 +886,10 @@ test('a stack run that is already on a check host, or that writes files the call
 }, 30_000);
 
 test("a worker's stack run waits for a check host slot instead of running locally", async () => {
-  const { env, events } = scenario({ a: { available: 4e9, busy: 2 }, b: { available: 30e9, busy: 2, exit: 9 } });
+  const { env, events } = scenario({
+    a: { available: 5 * 2 ** 30, busy: 2 },
+    b: { available: 30e9, busy: 2, exit: 9 },
+  });
   const result = await stack({ ...env, GOAL_TASK_ID: 'worker' }, local);
 
   expect(result.code).toBe(9);
@@ -1207,7 +1213,7 @@ async function holdSlots(lease: string, indexes: number[]): Promise<() => Promis
 test('a walk worker starts its task-scoped stack through dev-stack, and its containers and volumes are removed when the attempt ends', async () => {
   const fixture = walkFixture();
   const walker = spawnWalk(fixture, 'walk-one', ['sleep', '60']);
-  const database = 'rezics-walk-walk-one-database';
+  const database = walkStackNames('walk-one', 1).database;
   await until(
     () => dockerRan(fixture, database),
     () => walker.stderr(),
@@ -1243,15 +1249,17 @@ test('walk stacks past the host policy wait in arrival order, each with its posi
     () => second.stderr(),
   );
   await release();
+  const firstDatabase = walkStackNames('walk-first', 1).database;
+  const secondDatabase = walkStackNames('walk-second', 1).database;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-first-database'),
+    () => dockerRan(fixture, firstDatabase),
     () => first.stderr(),
   );
-  expect(dockerRan(fixture, 'rezics-walk-walk-second-database')).toBe(false);
+  expect(dockerRan(fixture, secondDatabase)).toBe(false);
   first.child.kill('SIGTERM');
   await first.child.exited;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-second-database'),
+    () => dockerRan(fixture, secondDatabase),
     () => second.stderr(),
   );
   second.child.kill('SIGTERM');
@@ -1263,8 +1271,10 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
   const fixture = walkFixture();
   const release = await holdSlots(fixture.lease, [1, 2, 3, 4, 5]);
   const sixth = spawnWalk(fixture, 'walk-sixth', ['sleep', '60']);
+  const sixthDatabase = walkStackNames('walk-sixth', 6).database;
+  const seventhDatabase = walkStackNames('walk-seventh', 6).database;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-sixth-database'),
+    () => dockerRan(fixture, sixthDatabase),
     () => sixth.stderr(),
   );
   expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(
@@ -1275,11 +1285,11 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
     () => seventh.stderr().includes('walk walk-seventh waiting (6/6 held, 0 ahead)'),
     () => seventh.stderr(),
   );
-  expect(dockerRan(fixture, 'rezics-walk-walk-seventh-database')).toBe(false);
+  expect(dockerRan(fixture, seventhDatabase)).toBe(false);
   sixth.child.kill('SIGTERM');
   await sixth.child.exited;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-seventh-database'),
+    () => dockerRan(fixture, seventhDatabase),
     () => seventh.stderr(),
   );
   seventh.child.kill('SIGTERM');
@@ -1295,7 +1305,8 @@ test('a local stack container needs a worker whose brief lists native or browser
   const dir = join(root, `walk-gate-${counter++}`);
   mkdirSync(dir);
   const worker = { GOAL_TASK_ID: 'walk-gate', REZICS_WALK_STACK_DIR: dir };
-  const allowed = (environment: Record<string, string>) => workerLocalContainerError(environment, repository);
+  // Probe a cwd that is not the check-host run; onCheckHost(repository) is true when this file itself is remote.
+  const allowed = (environment: Record<string, string>) => workerLocalContainerError(environment, root);
   expect(await allowed(worker)).toBe(LOCAL_CONTAINER_REFUSAL);
   expect(await allowed({ ...worker, GOAL_ACCEPTANCE_REQUIRES: 'root', REZICS_WALK_STACK_SLOT: '1' })).toBe(
     LOCAL_CONTAINER_REFUSAL,
@@ -1310,8 +1321,8 @@ test('a local stack container needs a worker whose brief lists native or browser
     LOCAL_CONTAINER_REFUSAL,
   );
   await release();
-  expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, repository)).toBeNull();
-  expect(() => walkStackNames('not a name')).toThrow('GOAL_TASK_ID cannot name a walk stack');
+  expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, root)).toBeNull();
+  expect(() => walkStackNames('not a name', 1)).toThrow('GOAL_TASK_ID cannot name a walk stack');
 });
 
 test("a walk worker's own checks still place on a check host, as any other worker's do", async () => {
