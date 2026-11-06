@@ -78,7 +78,7 @@ export type Pool = {
     allowUnknown: boolean;
     maxAgeMs: number;
     maxBurnPerHour?: number;
-    /** Optional cap on this pool's current pending, running and waiting attempts. */
+    /** Optional cap on this pool's live sessions (pending start and running). Waiting attempts do not occupy it. */
     maxConcurrent?: number;
   };
 };

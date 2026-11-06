@@ -199,9 +199,10 @@ export async function runWorkerCommand(
       const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
       const now = Date.now();
       const readings = readRetainedPoolReadings(settings.stateDirectory);
-      const running = store.runningAttemptsByPool();
+      const live = store.runningAttemptsByPool();
+      const parked = store.waitingAttemptsByPool();
       const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
-      const waiting = table
+      const allowanceWaiting = table
         ? countAllowanceWaiting(
             selectedTasks.flatMap((task) => {
               if (task.state !== 'ready' || task.brief.urgent === true) return [];
@@ -219,14 +220,13 @@ export async function runWorkerCommand(
               spanMs,
               history: readings,
               policy: settings.policy?.provider,
-              running,
+              running: live,
             },
           )
         : {};
-      const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs, running).map((pool) => ({
-        ...pool,
-        waiting: waiting[pool.name] ?? 0,
-      }));
+      const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs, live, parked).map((pool) =>
+        pool.maxConcurrent === undefined ? { ...pool, waiting: allowanceWaiting[pool.name] ?? 0 } : pool,
+      );
       print(
         JSON.stringify(
           arg

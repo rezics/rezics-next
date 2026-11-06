@@ -8,7 +8,7 @@ export type PoolSelectionOptions = {
   now?: number;
   policy?: ControlPolicy['provider'] | undefined;
   spanMs?: number;
-  /** Current pending, running and waiting attempts on each pool name. */
+  /** Live worker sessions on each pool name: pending start and running. Waiting attempts do not occupy the cap. */
   running?: Readonly<Record<string, number>>;
 };
 
@@ -17,20 +17,33 @@ export type PoolBurnStatus = {
   allowanceKey: string;
   burnPerHour: number;
   maxBurnPerHour?: number;
-  running?: number;
+  live?: number;
+  waiting?: number;
   maxConcurrent?: number;
 };
 
-const occupyingStates = new Set(['pending', 'running', 'waiting']);
+const liveStates = new Set(['pending', 'running']);
 
-/** Occupancy that fills `policy.maxConcurrent`: pending, running and waiting attempts on each pool. */
-export function countRunningByPool(attempts: readonly { pool: string; state: string }[]): Record<string, number> {
+function countByPool(
+  attempts: readonly { pool: string; state: string }[],
+  include: (state: string) => boolean,
+): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const attempt of attempts) {
-    if (!occupyingStates.has(attempt.state)) continue;
+    if (!include(attempt.state)) continue;
     counts[attempt.pool] = (counts[attempt.pool] ?? 0) + 1;
   }
   return counts;
+}
+
+/** Occupancy that fills `policy.maxConcurrent`: pending-start and running sessions on each pool. */
+export function countRunningByPool(attempts: readonly { pool: string; state: string }[]): Record<string, number> {
+  return countByPool(attempts, (state) => liveStates.has(state));
+}
+
+/** Attempts parked on checks (state waiting); they do not occupy `policy.maxConcurrent`. */
+export function countWaitingByPool(attempts: readonly { pool: string; state: string }[]): Record<string, number> {
+  return countByPool(attempts, (state) => state === 'waiting');
 }
 
 // Milliseconds per hour, minutes per day and percentages below are unit conversions, not admission policy.
@@ -76,7 +89,8 @@ export function poolBurnStatus(
   history: readonly PoolReading[],
   now = Date.now(),
   spanMs = defaultPolicy.pacing.burnSpanMs,
-  running: Readonly<Record<string, number>> = {},
+  live: Readonly<Record<string, number>> = {},
+  waiting: Readonly<Record<string, number>> = {},
 ): PoolBurnStatus[] {
   return pools.map((pool) => {
     const series = history.filter((reading) => reading.allowanceKey === pool.allowanceKey && reading.observedAt);
@@ -91,7 +105,11 @@ export function poolBurnStatus(
       ...(pool.policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: pool.policy.maxBurnPerHour }),
       ...(pool.policy.maxConcurrent === undefined
         ? {}
-        : { running: running[pool.name] ?? 0, maxConcurrent: pool.policy.maxConcurrent }),
+        : {
+            live: live[pool.name] ?? 0,
+            waiting: waiting[pool.name] ?? 0,
+            maxConcurrent: pool.policy.maxConcurrent,
+          }),
     };
   });
 }

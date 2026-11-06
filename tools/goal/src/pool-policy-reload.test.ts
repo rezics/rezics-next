@@ -173,7 +173,6 @@ test('fractional hourly reserves preserve numeric boundaries without relaxing ot
     ['maxBurnPerHour', Number.NaN, 'invalid maxBurnPerHour'],
     ['maxConcurrent', 0, 'invalid maxConcurrent'],
     ['maxConcurrent', 1.5, 'invalid maxConcurrent'],
-    ['extra', 1, 'unknown pool policy field: extra'],
   ] as const;
   for (const [field, value, error] of invalidFields) {
     expect(() =>
@@ -183,4 +182,7 @@ test('fractional hourly reserves preserve numeric boundaries without relaxing ot
   expect(
     readPoolPolicies([{ ...pool, policy: { ...pool.policy, maxConcurrent: 8 } }], localFile)[0]!.policy.maxConcurrent,
   ).toBe(8);
+  expect(readPoolPolicies([{ ...pool, policy: { ...pool.policy, extra: 1 } }], localFile)[0]!.policy).toEqual(
+    pool.policy,
+  );
 });
