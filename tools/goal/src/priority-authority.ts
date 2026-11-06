@@ -7,10 +7,12 @@ export type AuthenticatedManager = { id: string; sessionId: string };
 type ManagerSession = {
   id?: unknown;
   kind?: unknown;
+  engine?: unknown;
   provider?: unknown;
   status?: unknown;
   threadId?: unknown;
   supermanager?: unknown;
+  goal?: unknown;
 };
 
 function hasManagerSessions(db: Database): boolean {
@@ -59,6 +61,36 @@ export function authenticatedManager(
   const manager = matches[0]!;
   if (env.GOAL_MANAGER && env.GOAL_MANAGER !== manager.id) return undefined;
   return manager;
+}
+
+/** Reconstruct a manager's live session as an authenticated actor for backlog dispatch and continuation. */
+export function backlogManagerActor(db: Database, managerId: string): AuthenticatedManager | undefined {
+  const state = managerSession(db, managerId);
+  if (!state || typeof state.threadId !== 'string') return undefined;
+  const engine = state.engine ?? (state.kind === 'resident-supermanager' ? state.provider : undefined);
+  const env =
+    engine === 'claude'
+      ? { GOAL_MANAGER: managerId, CLAUDE_CODE_SESSION_ID: state.threadId }
+      : engine === 'codex'
+        ? { GOAL_MANAGER: managerId, CODEX_THREAD_ID: state.threadId }
+        : undefined;
+  return env ? authenticatedManager(db, env) : undefined;
+}
+
+function sessionGoal(state: ManagerSession | undefined): string | undefined {
+  return typeof state?.goal === 'string' && state.goal.length ? state.goal : undefined;
+}
+
+/**
+ * The manager named in a brief may submit backlog dispatch only when that manager's live session owns the Goal
+ * directory, or when the manager id is the directory name and the session claims no other Goal.
+ */
+export function confirmedBacklogOwner(db: Database, goal: string, manager: string): AuthenticatedManager | undefined {
+  const actor = backlogManagerActor(db, manager);
+  if (!actor) return undefined;
+  const owned = sessionGoal(managerSession(db, manager));
+  if (owned ? owned !== goal : manager !== goal) return undefined;
+  return actor;
 }
 
 export function criticalPriority(brief: Pick<Brief, 'criticalPath'>, taskClass?: TaskClass): boolean {

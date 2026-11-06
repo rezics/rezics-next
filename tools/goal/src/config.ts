@@ -71,7 +71,7 @@ import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-m
 import { sweepWidthGovernor } from './width-governor.ts';
 import { backlogDirectory, sweepBacklog } from './backlog.ts';
 import { chainRuntime } from './chain.ts';
-import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
+import { backlogManagerActor } from './priority-authority.ts';
 import type { BriefContinuation } from './types.ts';
 
 export type Runtime = IntegrationRuntime & {
@@ -105,27 +105,6 @@ export type RuntimeOptions = {
     | 'handOff'
   >;
 };
-
-function backlogManagerActor(db: Database, managerId: string): AuthenticatedManager | undefined {
-  if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='manager_sessions'").get()) return undefined;
-  const row = db.query('SELECT state FROM manager_sessions WHERE id=?').get(managerId) as { state: string } | null;
-  if (!row) return undefined;
-  try {
-    const state = JSON.parse(row.state) as { engine?: unknown; kind?: unknown; provider?: unknown; threadId?: unknown };
-    if (!state || typeof state !== 'object' || Array.isArray(state) || typeof state.threadId !== 'string')
-      return undefined;
-    const engine = state.engine ?? (state.kind === 'resident-supermanager' ? state.provider : undefined);
-    const env =
-      engine === 'claude'
-        ? { GOAL_MANAGER: managerId, CLAUDE_CODE_SESSION_ID: state.threadId }
-        : engine === 'codex'
-          ? { GOAL_MANAGER: managerId, CODEX_THREAD_ID: state.threadId }
-          : undefined;
-    return env ? authenticatedManager(db, env) : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** The only production composition: every module shares this database connection and worker fence. */
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
@@ -434,10 +413,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         stateDirectory: settings.stateDirectory,
         policy: settings.policy,
         inbox,
-        async dispatch(brief) {
+        supermanager: settings.integration.supermanager,
+        async dispatch(brief, actor) {
           // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
           // so this short-lived process never waits for host capacity or a worker.
-          const task = tasks.dispatch(brief, null);
+          // Urgent briefs carry the Goal directory's confirmed manager so an active grant is honoured; others stay null.
+          const task = tasks.dispatch(brief, actor ?? null);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
           return { taskId: task.id, lintWarnings: task.brief.lintWarnings ?? [] };
         },

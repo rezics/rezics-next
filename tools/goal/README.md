@@ -54,8 +54,14 @@ integration split.
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
 supermanager, or a manager holding its urgent grant, may dispatch urgent work. The supermanager uses
 `goal urgent grant <manager>` and `goal urgent revoke <manager>` to manage that permission.
+The automatic backlog sweep submits an urgent brief as the manager named in its front matter when that manager's
+live session owns the Goal directory, so a grant covers backlog dispatch as well as the CLI. Without a confirmed
+owner or an active grant, the sweep returns the brief with the grant reason instead of dispatching it as a host
+session. Non-urgent backlog dispatch still submits no manager.
 Decision: urgent grants are manager-scoped and reusable until revoked; a task's urgent lane is fixed at dispatch.
 Revocation prevents new urgent dispatches; existing tasks retain their lane across retries and session resumes.
+Decision: backlog sweeps authenticate urgent dispatch as the confirmed Goal-directory owner; missing grants return
+the brief.
 
 `policy.capacity.urgentSlots` defaults to 2 and can also be overridden by `capacity.json`. These slots are outside
 `maxWorkers`; ordinary tasks never consume them. Urgent work still waits for `minAvailableMiB` of memory and for a
@@ -2300,6 +2306,10 @@ host's socket. The host skips the minute while the previous child is still runni
   A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
   reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
   lists path-prefix merge candidates; status and hourly reports count them.
+  An urgent brief is dispatched under the manager named in its front matter when that manager's live session owns the
+  Goal directory. The sweep passes that manager as the submitting actor so an active urgent grant is honoured; without
+  a confirmed owner or grant the brief moves to `returned/` with the grant reason. Non-urgent briefs still dispatch
+  with no submitting manager.
   Worker starts also obey `policy.goalMaxInFlight` per Goal, default six. Running tasks, including those parked on
   checks, and landing tasks count; dependency-held, urgent and control-plane tasks do not. A brief can be accepted
   into the task queue while its Goal is full and remains ready until a slot opens. Start admission reserves slots in
