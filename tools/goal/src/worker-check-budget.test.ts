@@ -189,6 +189,7 @@ test('the wrapper refuses a third check-host request before it writes a check re
   const directory = temporaryDirectory();
   const previousBudget = process.env.GOAL_WORKER_CHECK_BUDGET;
   const previousDirectory = process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
+  const previousRegistry = process.env.GOAL_CHECK_REGISTRY;
   try {
     mkdirSync(join(directory.path, 'scripts'), { recursive: true });
     writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
@@ -200,6 +201,7 @@ test('the wrapper refuses a third check-host request before it writes a check re
     expect(workerCheckNeedsStack(command, directory.path)).toBe(true);
     process.env.GOAL_WORKER_CHECK_BUDGET = '2';
     process.env.GOAL_WORKER_CHECK_BUDGET_DIR = budget;
+    process.env.GOAL_CHECK_REGISTRY = join(directory.path, 'missing-registry');
     expect(() => startWorkerCheck(command, directory.path)).toThrow(WORKER_CHECK_HOST_BUDGET_REFUSAL);
     expect(existsSync(join(directory.path, '.temp/goal/checks'))).toBe(false);
     expect(() => refuseExcessWorkerCheckHostRun({ GOAL_WORKER_CHECK_BUDGET_DIR: budget }, false)).not.toThrow();
@@ -208,6 +210,8 @@ test('the wrapper refuses a third check-host request before it writes a check re
     else process.env.GOAL_WORKER_CHECK_BUDGET = previousBudget;
     if (previousDirectory === undefined) delete process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
     else process.env.GOAL_WORKER_CHECK_BUDGET_DIR = previousDirectory;
+    if (previousRegistry === undefined) delete process.env.GOAL_CHECK_REGISTRY;
+    else process.env.GOAL_CHECK_REGISTRY = previousRegistry;
     directory.close();
   }
 });
