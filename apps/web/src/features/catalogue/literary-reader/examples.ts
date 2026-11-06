@@ -66,7 +66,38 @@ export function literaryDirection(property: string, direction: 'forward' | 'inve
     qualifiers: [],
   };
 }
-export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance' = 'schema:BookSeries') {
+export type LiteraryGrainRow = {
+  subject: string;
+  property: string;
+  statement: string;
+  assertion: Stmt;
+  label?: string;
+  type?: string;
+  related: object;
+  summary: { id: string; type: string; label: { value: string; language: string } };
+};
+
+export type LiteraryGrainExample = {
+  work: Subject;
+  related: Related;
+  source: object;
+  locale: string;
+  context: SelectedContext;
+  definitions: Release;
+  descriptorState: 'released';
+  digest: string;
+  windows: ProfileRelationWindow[];
+  view: string;
+  directions: ReleasedRelationDirectionResult[];
+};
+
+export function literaryGrainRow(value: unknown): LiteraryGrainRow {
+  return value as LiteraryGrainRow;
+}
+
+export function literaryGrainExample(
+  type: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance' = 'schema:BookSeries',
+): LiteraryGrainExample {
   const id =
     type === 'schema:BookSeries'
       ? literaryIds.series
@@ -117,7 +148,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     [literaryIds.author]: { id: literaryIds.author, type: 'schema:Person', labels: { en: 'Supplied author' } },
     [literaryIds.anime]: { id: literaryIds.anime, type: 'schema:Movie', labels: { en: 'First viewpoint' } },
   } as unknown as Related;
-  const memberRow = {
+  const memberRow: LiteraryGrainRow = {
     subject: literaryIds.member,
     property: 'wdt:P179',
     statement: membership.id,
@@ -128,7 +159,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     summary: { id: literaryIds.member, type: 'schema:Book', label: { value: 'Harbour work', language: 'ja' } },
   };
   const editionStatement = literaryStatement('schema:exampleOfWork', literaryIds.member);
-  const editionRow = {
+  const editionRow: LiteraryGrainRow = {
     subject: literaryIds.edition,
     property: 'schema:exampleOfWork',
     statement: editionStatement.id,

@@ -25,6 +25,17 @@ import {
 
 type KernelResult = { status: number; data?: unknown; error?: { value?: unknown } | null };
 type NativeWriteHeaders = { authorization: string; 'idempotency-key': string };
+type ImportPreviewBody = { document: unknown; context?: string; expected_head?: number | null };
+
+/** Generated KernelClient grows these routes on emission; the proxy already builds the native paths. */
+type DefinitionPublicationClient = KernelClient['definitions'] & {
+  imports: {
+    post: (body: ImportPreviewBody, options?: { headers?: Record<string, string> }) => Promise<KernelResult>;
+  };
+};
+type ExtensionReadClient = {
+  get: (options?: { headers?: Record<string, string> }) => Promise<KernelResult>;
+};
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -134,7 +145,7 @@ export function definitionPublicationNative(
             document: { ...pin },
           };
         }
-        const result = await client.definitions.imports.post(
+        const result = await (client.definitions as DefinitionPublicationClient).imports.post(
           {
             document,
             ...(context ? { context } : {}),
@@ -199,7 +210,9 @@ export function definitionPublicationNative(
     },
     async readExtension(context, digest) {
       try {
-        const result = await client.contexts({ id: context }).definitions.extensions({ digest }).get({ headers });
+        const result = await (
+          client.contexts({ id: context }).definitions.extensions({ digest }) as ExtensionReadClient
+        ).get({ headers });
         if (result.status !== 200 || !record(result.data) || result.data.digest !== digest)
           return { ok: false, reason: failureOf(result) };
         return { ok: true, digest };

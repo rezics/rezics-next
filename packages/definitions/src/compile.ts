@@ -17,7 +17,6 @@ import {
   DATA_TYPES,
   RELEASE_FORMAT,
   RELEASE_LIMITS,
-  validateRelease,
   valueSchema,
   type ContextSettings,
   type DataType,
@@ -27,7 +26,8 @@ import {
   type Release,
   type SavedFilter,
   type TypeDefinition,
-} from './index.ts';
+} from './portable.ts';
+import { validateRelease } from './index.ts';
 
 export type { CatalogueSourceInput, ImportedCatalogueDocument };
 

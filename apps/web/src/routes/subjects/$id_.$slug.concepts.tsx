@@ -120,7 +120,12 @@ function ConceptsRoute() {
   const propertyValue = property ?? workIntent?.property;
   const schemeValue = scheme ?? workIntent?.scheme;
   const typeValue = type ?? workIntent?.type;
-  const sortValue = sort ?? workIntent?.sort;
+  const sortValue =
+    sort === 'name' || sort === 'rating'
+      ? sort
+      : workIntent?.sort === 'name' || workIntent?.sort === 'rating'
+        ? workIntent.sort
+        : undefined;
   const childrenValue = includeChildren ?? workIntent?.includeChildren;
   const spoilerValue = spoilerThreshold ?? workIntent?.spoilerThreshold;
   const conditionValue = conditionText ?? workIntent?.conditionText;

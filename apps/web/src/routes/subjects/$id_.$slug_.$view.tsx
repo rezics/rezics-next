@@ -1,4 +1,4 @@
-import type { typeFrame } from '../../subject/definitions';
+import type { typeFrame as TypeFrameFn } from '../../subject/definitions';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
@@ -39,6 +39,8 @@ import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { SubjectViewError } from '../../subject/view-error';
 import { env } from 'cloudflare:workers';
 import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pages/subject-canonical-lifetime';
+
+type TypeFrame = Awaited<ReturnType<TypeFrameFn>>;
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -251,7 +253,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       Promise.all([
         type
           ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
-          : Promise.resolve<Awaited<ReturnType<typeof typeFrame>>>({}),
+          : Promise.resolve<TypeFrame>({}),
         deps.streamProperty
           ? context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale()))
           : Promise.resolve(undefined),
