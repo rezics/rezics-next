@@ -105,7 +105,8 @@ test('selected Bangumi Game date is independently adopted, read at source precis
             item.statement.value.type === 'value' &&
             item.statement.value.content === String(gameId),
         );
-        if (!candidate) throw new Error('Selected Bangumi Game identity proposal is missing');
+        if (!candidate || !('statement' in candidate))
+          throw new Error('Selected Bangumi Game identity proposal is missing');
         expect(
           (
             await editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, {
