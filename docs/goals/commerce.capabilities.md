@@ -14,6 +14,55 @@ It does not validate product completion, execute native cases, or replace the fu
 Product authority remains in the linked owning specifications; the audit's suggested transports are not adopted APIs.
 The existing per-capability Markdown format is used; no manifest schema or validator is introduced.
 
+## First-public journeys on dev
+
+This table is the single finishing register for Commerce and its linked Library Goal, scoped by
+[the public-scope rows](../scope.md). Target: every row passes on dev by 2026-11-07 09:30 UTC.
+The first seeded native-and-served-page walk is due by 00:30 UTC, then once each hour.
+One row is one complete user-visible path; the detailed capability scenarios below remain its acceptance contract.
+Provider personal-list imports, Library archive export/recovery and user-saved dynamic queries are second scope;
+their existing implementation contracts remain separate from this first-public total.
+
+Each measured result records PASS or FAIL, exact dev revision, UTC time, elapsed seconds, persona and evidence link.
+A shared setup failure is recorded as the actual failed stage for every affected path. Source inspection and typing
+do not supply a walk result. Owner, other account, anonymous, refunded/revoked, suspended/terminal and repair
+personas participate wherever the owner contract gives them an outcome. Native storage/readback, current authority,
+bounded execution and served-page review are required; real provider setup stays an explicit external condition.
+
+| Journey | User-visible path | Latest dev walk | Evidence / elapsed |
+| --- | --- | --- | --- |
+| Offer management | Creator opens /creator/offers, authors an exact Content-edition offer, revises price and delists it; historical sales retain accepted terms. | Pending first walk | — |
+| Purchase | Buyer opens a Subject and /offers/:id, accepts fixed revision/terms and opens hosted Checkout for one account-bound item. | Pending first walk | — |
+| Owned use | Buyer returns through /orders/:id and /entitlements/:id to the exact revision/SHA256 protected bytes; current admission is checked. | Pending first walk | — |
+| Payment repair | Buyer revisits an uncertain order while signed webhook replay, reconciliation, refund or dispute converges order and current benefit correctly. | Pending first walk | — |
+| Creator money | Creator opens /creator/sales and /creator/statements/:id and distinguishes attributed earnings, reserves, bank payout and attested external payment. | Pending first walk | — |
+| Financial lifecycle | Terminated buyer has restricted retained financial records, durable expiry and physical purge followed by separate Access retention resolution. | Pending first walk | — |
+| Entry facts | Member opens a Subject, records state, notes and priority, edits or clears one fact and sees independent remaining facts in /library. | Pending first walk | — |
+| Profiles | Member adopts a Library profile, edits its fields and reads historical values after a profile revision or retirement. | Pending first walk | — |
+| Labels | Member creates, renames, consolidates and applies labels in /library/labels, then filters the same Entries by them. | Pending first walk | — |
+| Progress | Member opens /library/progress/:id and records every admitted progress mode, units and sparse or noncontiguous episodes with current pins. | Pending first walk | — |
+| Sessions | Member records, edits and undoes a consumption session, including rereads, then sees the original units and time in history. | Pending first walk | — |
+| Copies and loans | Member manages copies and applicable status/condition, lends a copy, follows its calendar and records return without losing the Entry. | Pending first walk | — |
+| Everything and filters | Member opens /library and pages, sorts and filters Everything and exact-state built-ins across canonical originals with complete exhaustion. | Pending first walk | — |
+| Liked and score | Member rates or reacts to a Subject, sees Liked and personal-score ordering, then clears either fact independently. | Pending first walk | — |
+| Continue | Member opens /library/continue, resumes a pending item and sees goals and current progress with bounded navigation windows. | Pending first walk | — |
+| Curated Collections | Member creates a Collection, adds ordered duplicate occurrences with notes and cover, edits/reorders them and reopens the complete result. | Pending first walk | — |
+| Collection reading | Viewer opens /collections/:id, filters and pages its admitted members and sees preparation or exhaustion with current visibility. | Pending first walk | — |
+| Collection publication | Owner publishes or retracts a curated Collection; other-account and anonymous readers see only admitted public output and ItemList export. | Pending first walk | — |
+| Pins and return | Member pins a Collection, navigates Library and Subject actions and returns to the same current list and focused item. | Pending first walk | — |
+| Undo and archive | Member clears an Entry fact or archives a Collection, then restores through exact Undo while independent facts remain correct. | Pending first walk | — |
+| Personal history | Member opens /library/history and /library/logs, filters personal consumption and sees diary/statistical summaries from completed occurrences. | Pending first walk | — |
+| Published Logs | Member publishes a consumption snapshot at /logs/:id, reads its recorded attribution and history, retracts it and uses exact Undo with current authority. | Pending first walk | — |
+| Library lifecycle | Member deletes Library data or terminates the account; private pages close and durable work removes owned copies while retained output has its specified meaning. | Pending first walk | — |
+| Follow edges | Member follows or unfollows a canonical Subject or account and sees the correct edge after an exact retry or identity change. | Pending first walk | — |
+| Following | Member opens /library/following and reads bounded current Follow/History rows with live identity, id-free deletion or unknown attribution. | Pending first walk | — |
+| Follower counts | Member opens /library/follow-counts and sees only their own follower counts; another account and anonymous viewer receive their specified authorization outcome. | Pending first walk | — |
+
+The walk report supplies `passing/26` and the slowest failing path with its first differing command/result.
+After the initial walk, new briefs repair observed failing paths; they do not add outcomes or boundary-baseline
+refactors. Same-day newly introduced boundary violations remain repairable. Existing detailed scenarios and
+promotion obligations remain open until their own evidence is supplied.
+
 ## Evidence and stages
 
 Each capability has named job, authority, personas, fixture, surface, scenario, binding, gap and stage fields.
