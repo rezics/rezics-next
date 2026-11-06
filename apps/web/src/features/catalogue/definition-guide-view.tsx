@@ -19,6 +19,7 @@ import {
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { subjectHref } from '../../subject/subject-href';
+import { publicationHref } from './definition-publication/model';
 import { unitSymbols } from './statement-editor';
 import { DefinitionMeaning as Meaning } from './definition-meaning';
 import {
@@ -1124,6 +1125,9 @@ export function DefinitionGuideContent({
         <p className="text-muted-foreground">{m.guide_intro({}, o)}</p>
         <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={back}>
           {m.guide_back({}, o)}
+        </a>
+        <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={publicationHref(locale)}>
+          {m.definition_publication_title({}, o)}
         </a>
       </header>
       {(!read || retryPending) && <p role="status">{m.guide_loading({}, o)}</p>}

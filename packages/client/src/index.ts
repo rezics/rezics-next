@@ -581,3 +581,14 @@ export type {
   ReviewedPersonMerge,
   ReviewedPersonAdmission,
 } from './reviewed-person-identity.ts';
+export type {
+  ActivationReconciliation,
+  EditorialHead,
+  ExtensionComparison,
+  PublicationDiagnostic,
+  PublicationDocumentKind,
+  PublicationIdentity,
+  PublicationOperations,
+  ReleaseComparison,
+} from '@rezics/definitions';
+export { PUBLICATION_GRANT, classifyImportedDocument, compareReleases, compareExtensions } from '@rezics/definitions';

@@ -84,7 +84,7 @@ Stages: Declared: yes. Partial bound/exposed: original semantic extension API; l
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):
 
 ```sh
-bun run --cwd services/kernel check test/semantic/outcomes.test.ts test/semantic/expansion.test.ts
+bun run --cwd services/kernel check test/semantic/outcomes.test.ts test/semantic/expansion.test.ts test/semantic/definition-publication-workspace.test.ts
 ```
 
 ## Released verticals and identity grain
