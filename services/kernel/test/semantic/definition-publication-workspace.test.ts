@@ -59,6 +59,7 @@ beforeAll(async () => {
     'definitions:activate',
     'gate:definition_publication',
     'subject:create',
+    'subject:read',
     'context:create',
   ]) {
     await real.grant(global, 'editor', action);
@@ -82,7 +83,7 @@ async function call(
       headers: {
         ...(who === 'anonymous' ? {} : { authorization: `Bearer ${real.bearer(who)}` }),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        'idempotency-key': JSON.stringify(randomUUID()),
+        ...(body === undefined ? {} : { 'idempotency-key': JSON.stringify(randomUUID()) }),
         ...headers,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -209,7 +210,7 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const subjectId = created.body.subject.id as string;
   const read = await call('anonymous', 'GET', `/v1/subjects/${subjectId}`);
-  expect(read.status).toBe(200);
+  expect(read.status, JSON.stringify(read.body)).toBe(200);
   expect(read.body.subject.type).toBe(typeId);
   for (const locale of VERTICAL_LOCALES) {
     const descriptor = await call(
