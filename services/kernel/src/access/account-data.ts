@@ -18,7 +18,11 @@ import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/access-capabilities.ts';
-import { contributionAttribution, type ContributionAttribution } from './contribution-attribution.ts';
+import {
+  contributionAttribution,
+  contributionFromPublicIdentity,
+  type ContributionAttribution,
+} from './contribution-attribution.ts';
 import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
@@ -184,7 +188,7 @@ export async function readContributionAttributions(
       page.map(({ route }) => route),
       page.map(({ id }) => id),
     );
-    for (const identity of identities) result.set(identity.id, contributionAttribution(identity));
+    for (const identity of identities) result.set(identity.id, contributionFromPublicIdentity(identity));
   }
   return result;
 }

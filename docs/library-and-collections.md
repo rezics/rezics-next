@@ -129,6 +129,19 @@ display choices and opaque cursor; restart drops the cursor. Changing the native
 through the existing personal-shelf address owner. Sort forms submit the selected score address and direction; replacing
 the supplied address or its filters/display resets pending edits in place, preserving the focused control. Vote writes
 stay on Content's installed callable; a successful write invalidates Library, Liked and own-vote current reads.
+Decision: uncertain own-vote writes keep the optimistic units and original idempotency key so Save retries the same
+command; a stale review rolls back and requires an explicit fresh save.
+Decision: native personal-score grants use the mounted Global Context `POST /v1/grants` path after capturing the Auth
+service handler for JWKS and issuance, wrapping pages only after that first governor grant returns 201. The governor
+token carries compiled `platform.governance` actions, `access:grant` and `gate:any`, not grant-routes' complete
+catalogue. The unique typed Global grant body is `PLATFORM_RESOURCE`, `{kind:'account',id}` and `(,)`. Access still
+projects `PolicyFacts.deadlineLive` from the permission row's `live` column.
+Decision: Global distribution uses the native `/ratings` aggregate admission (exact subject identity and freshness);
+a published headline never reconstructs a histogram from an unadmitted source. Disposable native stacks reach
+PostgreSQL through a bind-mounted unix socket when the test namespace has only loopback, differs from PID 1, or
+cannot read PID 1's netns (`unshare --user`). Docker does not join `ns:/proc/.../ns/net`, and a published host
+port is invisible on that loopback. Isolated servers also listen on `/var/run/postgresql` so the image entrypoint
+can finish after it clears `PGHOST`.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;

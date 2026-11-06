@@ -7,6 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
 import { RelativeTime } from './logs-relative-time';
+import { logByline } from './log-contributor';
 import type { PublishedLogPage } from './logs-read';
 import {
   beginPublication,
@@ -252,11 +253,7 @@ function PublishedLogs({
               <ContentItem
                 key={JSON.stringify([log.id, occurrence])}
                 className="[&_h3]:[overflow-wrap:anywhere]"
-                title={
-                  [log.account?.displayName, log.account?.handle ? `@${log.account.handle}` : null]
-                    .filter(Boolean)
-                    .join(' ') || m.library_account_deleted()
-                }
+                title={logByline(log, getLocale())}
                 headingLevel={3}
                 {...(canRead ? { href: `/${getLocale()}/logs/${encodeURIComponent(log.id)}` } : {})}
                 metadata={<RelativeTime value={log.publishedAt} />}

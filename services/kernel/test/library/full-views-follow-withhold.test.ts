@@ -3,8 +3,13 @@ import type { AccountActor } from '../../src/request/access.ts';
 
 const original = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const moved = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
+const deleted = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
+const missing = '0192f3a0-6c1e-7b2a-9d4e-000000000004';
 const resolutions: string[] = [];
 let observationCurrent = true;
+const attributions = new Map<string, { id: string; displayName: string } | { displayName: 'Deleted account' } | null>([
+  [original, { id: original, displayName: 'Owner' }],
+]);
 
 mock.module('../../src/library/subject-anchor.ts', () => ({
   resolveSubject: async (_deps: unknown, _actor: unknown, id: string) => {
@@ -28,10 +33,17 @@ mock.module('../../src/access/account-data.ts', () => ({
   readAccount: async () => null,
   readPublicAccount: async () => ({
     accountId: original,
+    kind: 'actor',
     state: 'active',
     handle: 'owner',
     displayName: 'Owner',
   }),
+  readContributionAttributions: async (_client: unknown, ids: readonly string[]) =>
+    new Map(ids.map((id) => [id, attributions.has(id) ? attributions.get(id)! : null])),
+}));
+mock.module('../../src/access/public-identity.ts', () => ({
+  readContributionAttributions: async (_client: unknown, ids: readonly string[]) =>
+    new Map(ids.map((id) => [id, attributions.has(id) ? attributions.get(id)! : null])),
 }));
 
 const { fullView } = await import('../../src/library/views.ts');
@@ -91,7 +103,37 @@ test('FULL published-log withholds a changed Source and keeps the public snapsho
     ...snapshot,
     subject: null,
     account: { id: original, handle: 'owner', displayName: 'Owner' },
+    attribution: { id: original, displayName: 'Owner' },
   });
+});
+
+test('FULL published-log attribution keeps live identity, an id-free deletion label, and unknown', async () => {
+  observationCurrent = true;
+  attributions.set(deleted, { displayName: 'Deleted account' });
+  attributions.set(missing, null);
+  const log = (accountId: string) => ({
+    id: accountId,
+    accountId,
+    subjectId: original,
+    sessionState: 'completed' as const,
+    startedAt: '2026-11-06T00:00:00.000Z',
+    completedAt: '2026-11-06T01:00:00.000Z',
+    note: 'kept',
+    publishedAt: '2026-11-06T01:00:00.000Z',
+  });
+  resolutions.splice(0, resolutions.length, original, original, original, original, original, original);
+  const page = await fullView(
+    deps,
+    actor,
+    'FULL',
+    { publishedLogs: [log(original), log(deleted), log(missing)] },
+    { withholdChangedSource: true },
+  );
+  expect(page.publishedLogs.map((row) => row.attribution)).toEqual([
+    { id: original, displayName: 'Owner' },
+    { displayName: 'Deleted account' },
+    null,
+  ]);
 });
 
 test('FULL follow withholds when the summary observation is not current', async () => {

@@ -74,7 +74,7 @@ export const LongUnavailableSummaries: Story = {
     const view = await logsRegion(canvasElement);
     const rows = view.getAllByRole('listitem');
     expect(rows).toHaveLength(3);
-    expect(within(rows[1]!).getByRole('heading', { level: 3, name: m.library_account_deleted() })).toBeVisible();
+    expect(within(rows[1]!).getByRole('heading', { level: 3, name: m.thread_author_unknown() })).toBeVisible();
     const expand = within(rows[0]!).getByRole('button', { name: m.library_progress_log_reader_full_note() });
     const other = within(rows[2]!).getByRole('button', { name: m.library_progress_log_reader_full_note() });
     expect(expand).toHaveAttribute('aria-expanded', 'false');

@@ -296,7 +296,14 @@ test('Bounded notes expand by keyboard with exact whitespace and literal markup;
     account: { displayName: 'LongAccount'.repeat(25), handle: 'unbroken_handle'.repeat(20) },
     note: exact,
   };
-  const deleted: PublishedLog = { ...log, id: 'deleted/+?二%', account: null, subject: null, note: null };
+  const deleted: PublishedLog = {
+    ...log,
+    id: 'deleted/+?二%',
+    account: null,
+    attribution: { kind: 'deleted', displayName: 'Deleted account' },
+    subject: null,
+    note: null,
+  };
   const logs = [long, deleted, long];
   const original = JSON.stringify(logs);
   logs.forEach(Object.freeze);
@@ -315,7 +322,7 @@ test('Bounded notes expand by keyboard with exact whitespace and literal markup;
       expect(row.querySelector('time')?.textContent).not.toBe('');
       expect(row.querySelector('script, img, [role="progressbar"], a button')).toBeNull();
     }
-    expect(rows[1]!.querySelector('h3')?.textContent).toBe(m.library_account_deleted());
+    expect(rows[1]!.querySelector('h3')?.textContent).toBe(m.thread_author_deleted());
     expect(rows[1]!.querySelector('[data-content-item-slot="preview"]')).toBeNull();
     const note = rows[0]!.querySelector('p')!;
     const expand = within(rows[0]!).getByRole('button', { name: m.library_progress_log_reader_full_note() });

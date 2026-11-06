@@ -1,10 +1,10 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
-import { createLibraryEntry } from './library-navigation-fixture.ts';
+import { createLibraryEntry, grantGlobalCatalogueWrite } from './library-navigation-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const stacks: NativeWebStack[] = [];
@@ -15,9 +15,9 @@ const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const evidence = resolve(import.meta.dir, '../../../../.temp/library-personal-score');
 const label = 'Native library member';
 
-setDefaultTimeout(300_000);
+setDefaultTimeout(1_200_000);
 
-nativeBeforeAll(lifecycle, 600_000, async () => {
+nativeBeforeAll(lifecycle, 1_200_000, async () => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   stacks.push(await startNativeWebStack());
 });
@@ -62,15 +62,23 @@ async function prepareScore(stack: NativeWebStack, persona: string) {
   throw new Error('Score order preparation did not install');
 }
 
+async function waitForRatingIdle(page: Page) {
+  await page.waitForFunction(
+    () => document.querySelector('[data-slot="rating-control-reserved"]')?.getAttribute('aria-busy') === 'false',
+  );
+}
+
 async function saveRating(page: Page, unitsFromMin: number) {
   const control = page.getByRole('slider', { name: /rating/i });
   await control.waitFor({ state: 'visible' });
   await control.press('Home');
   for (let step = 0; step < unitsFromMin; step++) await page.keyboard.press('ArrowRight');
   await page.getByRole('button', { name: 'Save rating', exact: true }).click();
-  await page.waitForFunction(
-    () => document.querySelector('[data-slot="rating-control-reserved"]')?.getAttribute('aria-busy') === 'false',
-  );
+  await waitForRatingIdle(page);
+}
+
+async function publicFigure(stack: NativeWebStack, subjectId: string) {
+  return stack.kernel(`/v1/subjects/${subjectId}/figure`);
 }
 
 async function openScoreOrder(page: Page, stack: NativeWebStack) {
@@ -103,8 +111,11 @@ async function openScoreOrder(page: Page, stack: NativeWebStack) {
 
 test('signed-in voters rate a work and read the same current score in Library, Liked and public pages', async () => {
   const stack = stacks[0]!;
+  const steward = await stack.authPersona('steward');
+  const grant = await grantGlobalCatalogueWrite(stack, steward.accountId, ['subject:create']);
+  expect(grant.status, await grant.clone().text()).toBe(201);
   const alice = await stack.authPersona('alice');
-  const subject = await createLibraryEntry(stack, 'alice', alice.authorization);
+  const subject = await createLibraryEntry(stack, 'alice', alice.authorization, 'steward');
   const { subjectHref } = await import('../../src/subject/subject-href.ts');
   const pageUrl = `${stack.web}${subjectHref({ id: subject.id, label }, 'en').href}`;
   const auth = await startAuthStack(stack);
@@ -121,12 +132,21 @@ test('signed-in voters rate a work and read the same current score in Library, L
   expect(zeroVote.status, await zeroVote.clone().text()).toBe(200);
   expect(await zeroVote.json()).toMatchObject({ units: 0 });
   await capture(page, 'alice-subject-zero-1440-light');
-
   await page.emulateMedia({ colorScheme: 'dark' });
+  await capture(page, 'alice-subject-zero-1440-dark');
   await page.setViewportSize({ width: 390, height: 844 });
   await capture(page, 'alice-subject-zero-390-dark');
   await page.emulateMedia({ colorScheme: 'light' });
+  await capture(page, 'alice-subject-zero-390-light');
   await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: label, exact: true }).waitFor({ state: 'visible' });
+  await page.locator('[data-slot="own-rating"]').waitFor({ state: 'visible' });
+  expect(await page.locator('[data-slot="own-rating"]').innerText()).toMatch(/\b0\b/);
+  const refreshedZero = await vote(stack, subject.id, 'alice');
+  expect(refreshedZero.status, await refreshedZero.clone().text()).toBe(200);
+  expect(await refreshedZero.json()).toMatchObject({ units: 0 });
 
   await prepareScore(stack, 'alice');
   await openScoreOrder(page, stack);
@@ -146,7 +166,27 @@ test('signed-in voters rate a work and read the same current score in Library, L
 
   await page.getByRole('link', { name: label }).click();
   await page.getByRole('heading', { name: label, exact: true }).waitFor({ state: 'visible' });
+  await stack.injectKernelFailureOnce({
+    method: 'PUT',
+    path: `/v1/subjects/${subject.id}/ratings/${standardQuestion}/vote`,
+    status: 503,
+    body: JSON.stringify({
+      type: 'https://rezics.com/problems/overloaded',
+      title: 'Overloaded',
+      status: 503,
+      code: 'overloaded',
+      detail: 'injected vote write failure',
+      request_id: crypto.randomUUID(),
+    }),
+  });
   await saveRating(page, 15);
+  await page.getByRole('status').waitFor({ state: 'visible' });
+  expect(await page.getByRole('status').innerText()).toMatch(/uncertain/i);
+  const retrySave = page.getByRole('button', { name: 'Save rating', exact: true });
+  expect(await retrySave.isEnabled()).toBe(true);
+  await capture(page, 'alice-subject-uncertain');
+  await retrySave.click();
+  await waitForRatingIdle(page);
   await page.locator('[data-slot="own-rating"]').waitFor({ state: 'visible' });
   expect(await page.locator('[data-slot="own-rating"]').innerText()).toContain('7.5');
   const changedVote = await vote(stack, subject.id, 'alice');
@@ -245,17 +285,39 @@ test('signed-in voters rate a work and read the same current score in Library, L
   expect(html).not.toContain('Your rating: 0');
   expect(html).not.toContain('data-slot="own-rating"');
   expect(html).toContain('data-slot="rating-summary"');
+  const figure = await publicFigure(stack, subject.id);
+  expect(figure.status, await figure.clone().text()).toBe(200);
+  const figureBody = (await figure.json()) as { figure: { count: number; populationId?: string } };
+  expect(figureBody.figure.count).toBeGreaterThanOrEqual(0);
+  await writeFile(
+    resolve(evidence, 'readback.json'),
+    `${JSON.stringify(
+      {
+        subjectId: subject.id,
+        alice: await (await vote(stack, subject.id, 'alice')).json(),
+        bob: await (await vote(stack, subject.id, 'bob')).json(),
+        figure: figureBody.figure,
+        anonymousOwnRatingPresent: html.includes('data-slot="own-rating"'),
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
 
-  for (const [locale, scoreLabel] of [
-    ['zh-Hant', '個人評分'],
-    ['ja', '自分の評価'],
+  for (const [locale, scoreLabel, shot] of [
+    ['zh-Hant', '個人評分', 'alice-library-zh-Hant-390'],
+    ['ja', '自分の評価', 'alice-library-ja-1440'],
   ] as const) {
+    await page.setViewportSize(locale === 'zh-Hant' ? { width: 390, height: 844 } : { width: 1440, height: 900 });
     await page.goto(`${stack.web}/${locale}/library?orderBy=personalScore&direction=desc`, {
       waitUntil: 'domcontentloaded',
     });
     await page.locator('select[name="orderBy"]').waitFor({ state: 'visible' });
     expect(await page.locator('select[name="orderBy"]').innerText()).toContain(scoreLabel);
+    await capture(page, shot);
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto(`${stack.web}/en/library?orderBy=personalScore&direction=desc`, { waitUntil: 'domcontentloaded' });
   await page.getByText(label).waitFor({ state: 'visible' });

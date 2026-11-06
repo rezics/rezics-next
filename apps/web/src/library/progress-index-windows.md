@@ -8,4 +8,7 @@ An admitted visit retains at most eight predecessor coordinates, its current coo
 
 The stored window state contains coordinates and movement identity only. It contains no rows, session snapshots, labels, editor state, credentials, return authority or commands. Only the current native page supplies rows. A deliberate session link may carry the coordinates through the existing private Progress return context. Returning reads the saved address again; only that exact admitted result may restore the selected session. If it no longer contains the same session identity, existing first-page and current-work recovery remains available. A full departure or new runtime starts without predecessor coordinates.
 
+Decision: window history identity is the installed router history key (`state.key` or `__TSR_key`) with href fallback.
+Absent optional window fields are omitted rather than assigned `undefined`.
+
 Each current window costs one existing prepared native list read capped at 100 rows and the existing batched type/profile presentation for that page. If the selected Subject summary is absent from the page, the existing single Subject point read supplies it. A stale non-first cursor adds one cursorless native page read; the admitted coordinate is then the first page and the path restarts without a synthetic predecessor. A session return costs one fresh native list read at the saved coordinate, plus the same bounded presentation and conditional Subject point read. No page-chain replay, row hydration, refill, count read, prefetch or per-session read is added.

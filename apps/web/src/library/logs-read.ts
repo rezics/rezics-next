@@ -6,6 +6,7 @@ import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { PublishedLogListError, requireMyLogsSearch } from './my-logs';
+import { logContribution, type LogContribution } from './log-contribution';
 import {
   LIBRARY_PAGE_LIMIT,
   libraryFullQuery,
@@ -32,6 +33,7 @@ export type PublishedLog = {
   publishedAt: string;
   subject: LibrarySubject | null;
   account: LibraryAccount | null;
+  attribution?: LogContribution;
 };
 
 export type PublishedLogPage = {
@@ -42,6 +44,7 @@ export type PublishedLogPage = {
 };
 
 function present(log: RawPublishedLog): PublishedLog {
+  const attribution = logContribution((log as { attribution?: unknown }).attribution);
   return {
     id: log.id,
     sessionState: log.sessionState,
@@ -51,6 +54,7 @@ function present(log: RawPublishedLog): PublishedLog {
     publishedAt: log.publishedAt,
     subject: subjectOf(log.subject),
     account: log.account ? { handle: log.account.handle, displayName: log.account.displayName } : null,
+    ...(attribution.kind === 'unknown' ? {} : { attribution }),
   };
 }
 

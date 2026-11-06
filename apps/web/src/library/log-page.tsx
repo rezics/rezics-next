@@ -2,13 +2,14 @@ import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-relative-time';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { removePublishedLog, restorePublishedLog } from './logs-server';
 import { UndoNotice } from './copies-undo';
 import type { DeletionEvidence } from './copies-receipt';
 import type { PublishedLog } from './logs-read';
-import { AccountRef } from './account-ref';
+import { LogContributor } from './log-contributor';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
@@ -267,7 +268,7 @@ export function PublishedLogPageView({
         <div>
           <dt className="font-medium">{m.library_logs_account()}</dt>
           <dd>
-            <AccountRef account={log.account} />
+            <LogContributor attribution={log.attribution} account={log.account} locale={getLocale()} />
           </dd>
         </div>
         <div>

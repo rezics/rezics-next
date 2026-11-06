@@ -1768,6 +1768,8 @@
   "subject_qualifiers": "修飾子",
   "subject_rating_control_clear": "評価をクリア",
   "subject_rating_control_error": "評価を保存できませんでした。以前の値に戻しました。",
+  "subject_rating_control_uncertain": "評価の結果は未確定です。同じ保存を再試行して確定してください。",
+  "subject_rating_control_stale": "この評価の確認は古くなっています。現在の質問を確認してから保存し直してください。",
   "subject_rating_control_label": "あなたの評価",
   "subject_rating_control_save": "評価を保存",
   "subject_rating_control_unrated": "未評価",

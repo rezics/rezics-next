@@ -181,7 +181,7 @@ export const Unavailable: Story = {
   render: () => <Reader logs={[unavailableLog]} later continuation={next} />,
   play: async ({ canvasElement }) => {
     const view = await reader(canvasElement);
-    expect(view.getByRole('heading', { level: 3, name: m.library_account_deleted() })).toBeVisible();
+    expect(view.getByRole('heading', { level: 3, name: m.thread_author_unknown() })).toBeVisible();
     expect(view.queryByRole('link')).not.toBeInTheDocument();
     expect(view.getByRole('listitem').querySelector('time')).toBeVisible();
   },

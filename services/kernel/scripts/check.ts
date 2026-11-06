@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { hostname } from 'node:os';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -933,15 +934,25 @@ export type PostgresContainerOptions = {
   nonce?: string;
 };
 
+function postgresSocketMount(socketDirectory: string): string[] {
+  if (!isAbsolute(socketDirectory) || /[:\n\r,\s]/.test(socketDirectory))
+    throw new Error('Disposable PostgreSQL socket directory must be an absolute path');
+  chmodSync(socketDirectory, 0o1777);
+  return ['-v', `${socketDirectory}:/rezics-pg-socket:z`, '-e', 'PGHOST=/rezics-pg-socket'];
+}
+
+/** Official image `docker_process_sql` clears PGHOST and talks to `/var/run/postgresql`. */
+export const isolatedPostgresUnixSockets = '/rezics-pg-socket,/var/run/postgresql';
+
 export function startPostgresContainer(
   dockerCommand: DockerCommand = docker,
   options: PostgresContainerOptions = {},
 ): string {
-  const network = dockerNetworkArgs();
   const nonce = options.nonce ?? newCompilerNonce(Number(pid));
   const socketDirectory = options.socketDirectory;
-  if (socketDirectory !== undefined && (!isAbsolute(socketDirectory) || /[:\n\r,]/.test(socketDirectory)))
-    throw new Error('PostgreSQL socket directory must be an absolute path without delimiters');
+  const socketMount = socketDirectory ? postgresSocketMount(socketDirectory) : [];
+  const network = socketDirectory ? [] : dockerNetworkArgs();
+  const publish = socketDirectory ? [] : postgresPublishArgs(Number(pid), network);
   try {
     return dockerCommand([
       'run',
@@ -955,11 +966,11 @@ export function startPostgresContainer(
       `${KERNEL_CHECK_PID_LABEL}=${pid}`,
       '--label',
       `${KERNEL_CHECK_NONCE_LABEL}=${nonce}`,
-      ...postgresPublishArgs(Number(pid), network),
+      ...publish,
       // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
       '--mount',
       `type=volume,destination=/var/lib/postgresql,volume-label=${KERNEL_CHECK_PID_LABEL}=${pid}`,
-      ...(socketDirectory ? ['-v', `${socketDirectory}:/rezics-pg-socket`] : []),
+      ...socketMount,
       '-e',
       'POSTGRES_USER=rezics',
       '-e',
@@ -984,9 +995,7 @@ export function startPostgresContainer(
       `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
       '-c',
       'log_line_prefix=%m [%p] [%e] ',
-      // Keep /var/run/postgresql so the image entrypoint can finish init; the bind
-      // mount is the extra host-visible socket for private-network callers.
-      ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket,/var/run/postgresql'] : []),
+      ...(socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : []),
     ]);
   } catch (error) {
     reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, nonce, dockerCommand);

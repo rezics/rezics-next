@@ -1768,6 +1768,8 @@
   "subject_qualifiers": "수식어",
   "subject_rating_control_clear": "평가 지우기",
   "subject_rating_control_error": "평가를 저장하지 못했습니다. 이전 값으로 되돌렸습니다.",
+  "subject_rating_control_uncertain": "평가 결과를 확인할 수 없습니다. 같은 저장을 다시 시도해 확인하세요.",
+  "subject_rating_control_stale": "이 평가 검토가 오래되었습니다. 현재 질문을 확인한 뒤 다시 저장하세요.",
   "subject_rating_control_label": "내 평가",
   "subject_rating_control_save": "평가 저장",
   "subject_rating_control_unrated": "평가 안 함",

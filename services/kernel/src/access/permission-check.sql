@@ -7,6 +7,7 @@
 -- Access checks scope in process for the authenticated grant and explicit branches.
 -- policy_core is true only for an exact registered action/type profile. SQL booleans remain the fallback when a
 -- point type is absent/ambiguous or a batch supplies an unregistered type.
+-- One deadlineLive alias of deadline_live; policy-core maps PolicyFacts.deadlineLive from the live column.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :action::text AS action,
          :resource_ids::uuid[] AS resource_ids, COALESCE(:batch::nullable(boolean), false) AS batch, :include_global::boolean AS include_global,

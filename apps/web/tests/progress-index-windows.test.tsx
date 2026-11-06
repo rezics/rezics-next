@@ -113,7 +113,8 @@ test('stale cursor admission starts a first-page path and direct later entry has
     restarted: true,
     eligible: true,
   });
-  expect(restarted).toMatchObject({ current: null, predecessors: [], staged: undefined });
+  expect(restarted).toMatchObject({ current: null, predecessors: [] });
+  expect('staged' in restarted).toBe(false);
 });
 
 test('coordinate parsing enforces the native cursor boundary and eight-predecessor cap', () => {

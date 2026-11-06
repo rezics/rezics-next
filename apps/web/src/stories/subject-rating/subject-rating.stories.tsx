@@ -207,6 +207,51 @@ export const SaveFailure: Story = {
     await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeDisabled();
   },
 };
+export const UncertainSave: Story = {
+  render: () => (
+    <div className="mx-auto max-w-lg p-4 sm:p-6">
+      <RatingControlView
+        question={standardRatingQuestion}
+        subjectId={subject}
+        locale={getLocale()}
+        returnTo={`/${getLocale()}/subjects/${subject}/kokoro`}
+        state={{ kind: 'ready', units: 15 }}
+        pending={false}
+        retryable
+        failure={m.subject_rating_control_uncertain()}
+        onSet={() => {}}
+        onClear={() => {}}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_uncertain());
+    await expect(view.getByRole('button', { name: m.subject_rating_control_save() })).toBeEnabled();
+  },
+};
+export const StaleReview: Story = {
+  render: () => (
+    <div className="mx-auto max-w-lg p-4 sm:p-6">
+      <RatingControlView
+        question={standardRatingQuestion}
+        subjectId={subject}
+        locale={getLocale()}
+        returnTo={`/${getLocale()}/subjects/${subject}/kokoro`}
+        state={{ kind: 'ready', units: 0 }}
+        pending={false}
+        failure={m.subject_rating_control_stale()}
+        onSet={() => {}}
+        onClear={() => {}}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_stale());
+    await expect(view.getByRole('button', { name: m.subject_rating_control_save() })).toBeDisabled();
+  },
+};
 
 // Retained illustrative presentation data; connected directory stories below use the actual route and BFF.
 const suppliedContexts: Ratings = {
