@@ -28,7 +28,7 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
     OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
     KERNEL_SEARCH_MEMORY: '768m',
-    KERNEL_DATABASE_MEMORY: '256m',
+    KERNEL_DATABASE_MEMORY: '384m',
     KERNEL_DATABASE_BOUNDED: '1',
     KERNEL_WORKER_POOL_SIZE: '1',
     REZICS_WALK_SMOL: '1',
@@ -52,8 +52,8 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(search[search.indexOf('--memory') + 1]).toBe('768m');
   expect(search[search.indexOf('--memory-swap') + 1]).toBe('768m');
   const database = databaseRunArgs(env);
-  expect(database[database.indexOf('--memory') + 1]).toBe('256m');
-  expect(database[database.indexOf('--memory-swap') + 1]).toBe('256m');
+  expect(database[database.indexOf('--memory') + 1]).toBe('384m');
+  expect(database[database.indexOf('--memory-swap') + 1]).toBe('384m');
   expect(database).toContain('shared_buffers=32MB');
   expect(database).toContain('max_connections=50');
   expect(searchRunArgs('native-policy-test-image', {})).not.toContain('--memory');

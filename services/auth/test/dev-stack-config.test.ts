@@ -24,6 +24,7 @@ import {
   importerScopes,
   walkBun,
   walkHostPersonaAccount,
+  walkKernelServerCommand,
   walkSetupCommand,
   walkStackStartCommand,
   walkStartProcesses,
@@ -334,7 +335,8 @@ test('walk and start parents keep Kernel, Postgres and dump modules off the wait
     source.indexOf("['services/kernel/scripts/search.ts', 'up']"),
   );
   expect(source).toContain('before the walk signal');
-  expect(source).toContain("readFile(join(root, '.temp', 'walk', task, 'stack.log')");
+  expect(source).toContain('reprintWalkStackLog');
+  expect(source).toContain('if (code !== 0) await reprintWalkStackLog(log)');
   expect(source).not.toMatch(/children\.map\(async \(child\) => \{\s*await child\.exited;\s*\}\)/);
 });
 
@@ -371,6 +373,11 @@ test('a walk start keeps Vite and the worker down through seed and runs Kernel w
     'start',
   ]);
   expect(walk.map((row) => row.command.slice(-1)[0])).toEqual(['host', 'src/server.ts']);
+  expect(walkKernelServerCommand({ REZICS_WALK_SMOL: '1', REZICS_WALK_DEFER_FRONTENDS: '1' })).toEqual({
+    command: [process.execPath, 'src/server.ts'],
+    cwd: resolve(root, 'services/kernel'),
+  });
+  expect(walk[1]!.command.includes('--smol')).toBe(false);
   expect(walk.some((row) => row.command.includes('pages') || row.command.includes('web'))).toBe(false);
   expect(walk.some((row) => row.command.includes('worker') || row.command.includes('src/worker.ts'))).toBe(false);
   expect(walk.some((row) => row.command.includes('dev'))).toBe(false);

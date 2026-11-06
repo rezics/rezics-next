@@ -852,6 +852,14 @@ export function walkBun(env: NodeJS.ProcessEnv = process.env): string[] {
   return env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
 }
 
+/** Catalogue bootstrap and subject create need the ordinary heap; waiters stay --smol. */
+export function walkKernelServerCommand(env: NodeJS.ProcessEnv = process.env): { command: string[]; cwd: string } {
+  const kernel = join(root, 'services/kernel');
+  if (env.REZICS_WALK_SMOL === '1' || env.REZICS_WALK_DEFER_FRONTENDS === '1')
+    return { command: [process.execPath, 'src/server.ts'], cwd: kernel };
+  return { command: [...walkBun(env), 'run', '--cwd', 'services/kernel', 'dev'], cwd: root };
+}
+
 export function walkSetupCommand(env: NodeJS.ProcessEnv, script: readonly string[]): string[] {
   return [...walkBun(env), ...script];
 }
@@ -875,10 +883,7 @@ export function walkStartProcesses(
   const host = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'host'], cwd: root };
   const pages = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'pages'], cwd: root };
   const web = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'web'], cwd: root };
-  const server =
-    env.REZICS_WALK_SMOL === '1'
-      ? { command: [...bun, 'src/server.ts'], cwd: kernel }
-      : { command: [...bun, 'run', '--cwd', 'services/kernel', 'dev'], cwd: root };
+  const server = walkKernelServerCommand(env);
   const worker =
     env.REZICS_WALK_SMOL === '1'
       ? { command: [...bun, 'src/worker.ts'], cwd: kernel }
@@ -1205,6 +1210,16 @@ async function runWalkSetup(
   }
 }
 
+/** Host and Kernel stderr live here; reprint on start death and on a failed journey so create 500s are visible. */
+async function reprintWalkStackLog(log: string): Promise<void> {
+  try {
+    const recorded = await readFile(log, 'utf8');
+    if (recorded) process.stderr.write(recorded.slice(-32_768));
+  } catch {
+    // start may have died before creating the log
+  }
+}
+
 /**
  * Runs `command` against one walk stack: admission, the stack `dev:infra` and `dev` start, then teardown when the
  * command ends or the attempt is signalled. Only a worker whose brief lists native or browser acceptance may start one.
@@ -1274,16 +1289,10 @@ async function walk(command: string[]): Promise<number> {
         reclaimInactiveFileCache();
         current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
         code = await current.exited;
+        if (code !== 0) await reprintWalkStackLog(log);
       } catch (error) {
         failed = error;
-        if (starting) {
-          try {
-            const recorded = await readFile(join(root, '.temp', 'walk', task, 'stack.log'), 'utf8');
-            if (recorded) process.stderr.write(recorded.slice(-32_768));
-          } catch {
-            // start may have died before creating the log
-          }
-        }
+        await reprintWalkStackLog(join(root, '.temp', 'walk', task, 'stack.log'));
       }
       if (starting) await stopSpawned(starting);
       removeWalkStack(names);

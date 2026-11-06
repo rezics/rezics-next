@@ -297,14 +297,15 @@ SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck 
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 A child that exits before that signal fails start with a non-zero code, and the walk parent reprints
 the last 32 KiB of `.temp/walk/<task>/stack.log` so host or Kernel death cannot look like a clean ready wait.
+A failed journey reprints that same log so a Kernel `internal_error` during catalogue bootstrap is visible.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
 Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES`
 into the walk command without rewriting recorded argv. Walk search nodes use a 128m heap without mmap, Postgres 32MB
-shared_buffers, and docker memory ceilings (search 768m, database 256m) so seeded volume file cache cannot fill the
+shared_buffers, and docker memory ceilings (search 768m, database 384m) so seeded volume file cache cannot fill the
 6 GiB run slice. OpenSearch cannot start in 256m; that container OOM is recorded on the run slice as a 6 GiB kill.
 Reclaim writes only `inactive_file` bytes, never a 4 GiB request against a smaller slice. Walk setup skips Kernel
-catalogue composition; the Auth host writes frontend bindings after assemble. Kernel starts with bun --smol against
-`src/server.ts` (no `--watch`); the worker pool is 1. Web, Auth pages and the worker start after seed. Walk admission is
+catalogue composition; the Auth host writes frontend bindings after assemble. Kernel HTTP starts without bun --smol
+against `src/server.ts` (no `--watch`) so catalogue subject create has heap; waiters stay --smol. The worker pool is 1. Web, Auth pages and the worker start after seed. Walk admission is
 host-wide at `/tmp/rezics-walk-stacks` so concurrent remote-check checkouts share slots and ports; leftover containers
 for this slot are removed after admission, and a Docker bind that still reports the port allocated skips that slot.
 `persona` inside a deferred-frontend walk reuses the host-written `seed.env` instead of assembling a second Auth+Kernel

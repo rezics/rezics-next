@@ -70,10 +70,11 @@ independently, and records the exact profile occurrence return. The walk owns it
 
 Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and
 `GOAL_ACCEPTANCE_REQUIRES` into that walk command without rewriting recorded argv. Walk stacks cap OpenSearch at
-128m without mmap, give Postgres 256m and OpenSearch 768m docker ceilings so volume file cache cannot fill the 6 GiB
-run slice, and start Kernel with bun --smol and no `--watch`. Native Auth and Kernel stay up for persona/seed;
+128m without mmap, give Postgres 384m and OpenSearch 768m docker ceilings so volume file cache cannot fill the 6 GiB
+run slice, and start Kernel HTTP without bun --smol and without `--watch` so catalogue subject create has heap.
+Waiters stay --smol. Native Auth and Kernel stay up for persona/seed;
 Web, Auth pages, Playwright and the one-worker pool start after seed, with issuer JWKS forwarded through native Auth
-until the pages bind. Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in
+until the pages bind. A failed journey reprints the last 32 KiB of the stack log. Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in
 session is a second browser.
 Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
 The walk restores only the launcher's pinned archives onto `/srv/rezics-check/datasets/dumps/downloads`, then extracts
@@ -87,7 +88,7 @@ leftover Docker teardown never throws, and each walk/seed/browser phase asks the
 Launch the walk itself with `bun --smol` so the parent module graph shares that heap.
 `persona` reuses the host-written `seed.env` rather than assembling a second Auth+Kernel composition; issuer forwarding
 keeps POST bodies so seed sign-in reaches native Auth. The walk `start` waiter runs under bun --smol and fails if Host or Kernel exits before the walk
-signal, reprinting the stack log; Playwright and the Kernel client are imported only after seed.
+signal, reprinting the stack log on start death and on a failed journey; Playwright and the Kernel client are imported only after seed.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.
