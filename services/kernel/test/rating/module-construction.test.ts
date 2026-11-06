@@ -20,6 +20,7 @@ import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
 import { createRealAccess, type RealAccessFixture } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 
 const route = 0x5ab1;
@@ -42,14 +43,17 @@ const actor: AccountActor = {
   requestedBy: null,
   authnEpoch: 1,
 };
-const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
+const tokens = {
+  current: 1,
+  keys: new Map([[1, new Uint8Array(32).fill(23)]]),
+};
 const routeKey = new Uint8Array(32).fill(31);
 let database: GrowthDatabase;
 let access: RealAccessFixture<'voter'>;
 let app: ReturnType<typeof createKernel>;
 let rating: ReturnType<typeof createRatingModule>;
 let capabilities: RatingCapabilities;
-let at = '2026-11-04T10:00:00.000Z';
+let at = new Date(Date.now() + 60_000).toISOString();
 let idCalls = 0;
 let executions = 0;
 let projections = 0;
@@ -87,6 +91,7 @@ beforeAll(async () => {
     tokens,
     routeKey,
     rating: capabilities,
+    clock: capabilities.clock,
     receiptKeys: testReceiptKeys(),
     writeRate: access.writeRate,
   });
@@ -111,13 +116,19 @@ async function request(method: string, path: string, body?: unknown, key = rando
   return response.json();
 }
 async function subject(body: unknown) {
-  return (await request('POST', '/v1/subjects', body, randomUUID(), 201)).subject as {
+  const created = (await request('POST', '/v1/subjects', body, randomUUID(), 201)).subject as {
     id: string;
     statements: Record<string, { id: string }[]>;
   };
+  while ((await stepIdentityEpochBootstrap(database.pool, partitionOf(routeOf(created.id)!))).state !== 'caught-up') {}
+  return created;
 }
 function application() {
-  return rating.application({ access: access.access({ actions: actionCatalogue(app) }), tokens, routeKey });
+  return rating.application({
+    access: access.access({ actions: actionCatalogue(app) }),
+    tokens,
+    routeKey,
+  });
 }
 
 // The owner factory is exercised through native adapters, with current Access and no global replacements.
@@ -134,13 +145,20 @@ test('declared routes, permission contributions and events are the native mounte
 });
 
 test('vote execution, immutable replay and aggregate delivery use one supplied capability', async () => {
-  const target = await subject({ type: 'schema:Book', labels: { en: 'Constructed rating target' } });
+  const target = await subject({
+    type: 'schema:Book',
+    labels: { en: 'Constructed rating target' },
+  });
   const commands = application();
-  const input = { questionId: STANDARD_QUESTION_ID, targetId: target.id, units: 12 };
+  const input = {
+    questionId: STANDARD_QUESTION_ID,
+    targetId: target.id,
+    units: 12,
+  };
   const key = randomUUID();
   const vote = await commands.votes.putVote(actor, input, key);
   expect(vote?.changedAt).toBe(at);
-  at = '2026-11-04T11:00:00.000Z';
+  at = new Date(Date.parse(at) + 60_000).toISOString();
   expect(await commands.votes.putVote(actor, input, key)).toEqual(vote);
   expect(executions).toBeGreaterThanOrEqual(2);
   const effects: Effect[] = [];
@@ -187,7 +205,11 @@ test('vote execution, immutable replay and aggregate delivery use one supplied c
   expect(executions).toBeGreaterThan(before);
   await aggregate.run(event);
   expect(
-    await commands.aggregate({ questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT, targetId: target.id }),
+    await commands.aggregate({
+      questionId: STANDARD_QUESTION_ID,
+      populationId: GLOBAL_CONTEXT,
+      targetId: target.id,
+    }),
   ).toEqual(figure);
   const response = await request(
     'GET',
@@ -200,7 +222,10 @@ test('vote execution, immutable replay and aggregate delivery use one supplied c
 });
 
 test('classification commands and projector use supplied execution without changing their visibility threshold', async () => {
-  const concept = await subject({ type: 'skos:Concept', labels: { en: 'Constructed classification' } });
+  const concept = await subject({
+    type: 'skos:Concept',
+    labels: { en: 'Constructed classification' },
+  });
   const target = await subject({
     type: 'wd:Q95074',
     labels: { en: 'Constructed character' },
@@ -210,7 +235,10 @@ test('classification commands and projector use supplied execution without chang
           property: { id: 'schema:gender' },
           value: { type: 'value', content: concept.id },
           qualifiers: [
-            { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '+1', unit: '1' } } },
+            {
+              property: { id: 'rezics:spoilerLevel' },
+              value: { type: 'value', content: { amount: '+1', unit: '1' } },
+            },
           ],
         },
       ],
@@ -220,7 +248,12 @@ test('classification commands and projector use supplied execution without chang
   const ballots = application().classifications;
   const first = await ballots.set(
     actor,
-    { subjectId: target.id, associationId, assessment: 'support', falsePositive: false },
+    {
+      subjectId: target.id,
+      associationId,
+      assessment: 'support',
+      falsePositive: false,
+    },
     randomUUID(),
   );
   expect(first.delivery).toBe('enqueued');
@@ -245,26 +278,34 @@ test('question identity is allocated inside its command once and replay still re
   const realmId = newId(route),
     spaceId = newId(route),
     revisionId = newId(route);
-  await database.admin.query(
-    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+  const tx = await database.admin.connect();
+  try {
+    await tx.query('BEGIN');
+    await tx.query(
+      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
     VALUES($1,$2,'active',$3,$4,$5)`,
-    [route, spaceId, revisionId, at, accountId],
-  );
-  await database.admin.query(
-    `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,title,summary,created_at,author)
+      [route, spaceId, revisionId, at, accountId],
+    );
+    await tx.query(
+      `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,title,summary,created_at,author)
     VALUES($1,$2,$3,NULL,'Rating construction','',$4,$5)`,
-    [route, spaceId, revisionId, at, accountId],
-  );
-  await database.admin.query(
-    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+      [route, spaceId, revisionId, at, accountId],
+    );
+    await tx.query(
+      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
     VALUES($1,$2,$3,'active','public',$4,$5,$6,$7)`,
-    [route, realmId, spaceId, GLOBAL_CONTEXT, revisionId, at, accountId],
-  );
-  await database.admin.query(
-    `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+      [route, realmId, spaceId, GLOBAL_CONTEXT, revisionId, at, accountId],
+    );
+    await tx.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
     VALUES($1,$2,$3,NULL,'Rating construction','','public',$4,$5,$6)`,
-    [route, realmId, revisionId, GLOBAL_CONTEXT, at, accountId],
-  );
+      [route, realmId, revisionId, GLOBAL_CONTEXT, at, accountId],
+    );
+    await tx.query('COMMIT');
+  } finally {
+    await tx.query('ROLLBACK');
+    tx.release();
+  }
   await access.grant({ route, id: realmId }, 'voter', 'realm:manage');
   const commands = application();
   const input = {
@@ -275,16 +316,27 @@ test('question identity is allocated inside its command once and replay still re
     scale: { min: 0, max: 20, displayStep: 2 },
   };
   const key = randomUUID();
-  const created = await commands.createQuestion(actor, input, { deadline: Date.now() + 5_000, idempotencyKey: key });
+  const created = await commands.createQuestion(actor, input, {
+    deadline: Date.now() + 5_000,
+    idempotencyKey: key,
+  });
   expect(created.value.id).toBe(questionId);
   expect(idCalls).toBe(1);
   expect(
-    (await commands.createQuestion(actor, input, { deadline: Date.now() + 5_000, idempotencyKey: key })).value,
+    (
+      await commands.createQuestion(actor, input, {
+        deadline: Date.now() + 5_000,
+        idempotencyKey: key,
+      })
+    ).value,
   ).toEqual(created.value);
   expect(idCalls).toBe(1);
   await access.revoke({ route, id: realmId }, 'voter', 'realm:manage');
   await expect(
-    commands.createQuestion(actor, input, { deadline: Date.now() + 5_000, idempotencyKey: key }),
+    commands.createQuestion(actor, input, {
+      deadline: Date.now() + 5_000,
+      idempotencyKey: key,
+    }),
   ).rejects.toBeDefined();
   expect(idCalls).toBe(1);
 });
