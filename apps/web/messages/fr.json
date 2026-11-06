@@ -11170,5 +11170,7 @@
   "library_archive_recovery_restart_original": "Utiliser l’archive d’origine",
   "library_archive_entry_open_library": "Ouvrir la bibliothèque",
   "library_archive_progress_open_session": "Ouvrir la Session actuelle",
-  "library_archive_progress_restart": "Commencer une autre récupération avec l’archive d’origine"
+  "library_archive_progress_restart": "Commencer une autre récupération avec l’archive d’origine",
+  "exposure_grants_link": "Review tester grants",
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
 }

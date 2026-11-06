@@ -50,6 +50,7 @@ export {
   isClaimHandle,
   isReservedHandle,
 } from './handle.ts';
+export { RealmClaimDeniedError } from './realm-claim.ts';
 export type {
   AccessApplication,
   AccessApplicationPorts,

@@ -1,4 +1,4 @@
-/** Access-owned Community capabilities. Imported only through this public entry. */
+/** Narrow public entry retained for existing Access capability consumers. */
 export {
   applyRealmClaimApproval,
   lockRealmClaimApprovalSource,

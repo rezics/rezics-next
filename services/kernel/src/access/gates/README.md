@@ -31,6 +31,11 @@ The ordinary grant routes manage `gate:<group>` and `gate:any` as direct actions
 receive `gate:any`, `access:grant`, `exposure:open`, and `exposure:close` through the additive
 `platform.governance` action list.
 
+The mounted operator page links to ordinary Global resource-access management for tester grant/revoke. That
+reader prepares the current native Context owner, forwards authoritative T, and offers only installed mounted
+gate actions that current native grant authority can delegate, including the existing `gate:any` covering rule.
+The link supplies no authority; grant refusal remains independent of management-read and open/close advice.
+
 Opening and closing are idempotent commands:
 
 - `POST /v1/platform/exposure/{group}:open` starts `[T, infinity)` when closed.
