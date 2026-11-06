@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { parseAniList, AniListInputError } from '../../src/library/list-import-anilist-parser.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import { authenticateAccount } from '../support/admitted-access.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createAniListImport } from '../../src/library/list-import-anilist.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
@@ -83,7 +87,22 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     'progress_session:update',
   ]);
   await f.grantLibraryGate(importer.actor.accountId);
-  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
+  const deadline = deadlineFor(30000);
+  const steward = await authenticateAccount(
+    f.access,
+    { pool: f.pool, deadline },
+    { ...f.steward.actor, scopes: ['access:grant', 'subject:batch_write'] },
+  );
+  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
+    { pool: f.pool, actor: steward, deadline },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: importer.actor.accountId },
+      actions: ['subject:batch_write'],
+      valid: '(,)',
+      key: entryKey(),
+    },
+  );
   const mediaId = Math.floor(Math.random() * 1_000_000_000) + 1;
   const subjects: string[] = [];
   for (const source of ['anilist', 'myanimelist']) {
