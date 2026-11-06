@@ -201,7 +201,7 @@ function harnessGitTemplate(): string {
     git(root, ['init', '-b', 'main']);
     git(root, ['config', 'user.name', 'Fixture']);
     git(root, ['config', 'user.email', 'fixture@example.invalid']);
-    writeFileSync(join(root, '.gitignore'), '.temp/\n');
+    writeFileSync(join(root, '.gitignore'), '.temp/\nnode_modules/\n');
     writeFileSync(
       join(root, 'package.json'),
       JSON.stringify({ name: 'goal-fixture', private: true, workspaces: ['packages/*'] }),

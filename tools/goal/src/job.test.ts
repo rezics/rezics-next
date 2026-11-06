@@ -65,7 +65,9 @@ test('A worker whose run log stays empty but whose worktree files or branch head
     await job.start(task.id);
     await job.drain();
     expect(active.store.task(task.id).currentAttempt).toBe(1);
-    expect(active.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
+    const activeAttempt = active.store.attempt({ taskId: task.id, attempt: 1 });
+    expect(activeAttempt.state).toBe('exited');
+    expect(activeAttempt.failureKind ?? null).toBeNull();
     expect(landings).toHaveLength(1);
   } finally {
     await active.disposeAsync();

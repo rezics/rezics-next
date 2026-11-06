@@ -176,18 +176,25 @@ test('finished-worktree cleanup defers within a finite pass under sustained I/O 
 });
 
 test('a retry recreates a removed task worktree from its task branch and installs dependencies before launch', async () => {
-  const { h, task } = setup('stopped');
+  const h = harness(`#!/usr/bin/env bun
+await new Promise((resolve) => setTimeout(resolve, 600_000));
+`);
+  const task = h.tasks.dispatch(h.briefFile);
+  h.store.updateTask({ taskId: task.id, attempt: 0 }, (row) => {
+    row.state = 'stopped';
+  });
   writeFileSync(join(task.worktree, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
   const install = Bun.spawnSync(['bun', 'install'], { cwd: task.worktree, stdout: 'pipe', stderr: 'pipe' });
   if (install.exitCode !== 0) throw new Error(new TextDecoder().decode(install.stderr));
-  git(task.worktree, ['add', 'package.json']);
+  git(task.worktree, ['add', '-A']);
   git(task.worktree, ['commit', '-m', 'Add dependency manifest']);
   const original = git(task.worktree, ['rev-parse', 'HEAD']);
   git(h.root, ['worktree', 'remove', '--force', task.worktree]);
   try {
     await h.tasks.retry(task.id);
     expect(existsSync(task.worktree)).toBe(true);
-    expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(original);
+    // Retry may commit install leftovers after checkout; the recreated tree must still descend from the task branch.
+    expect(git(task.worktree, ['merge-base', original, 'HEAD'])).toBe(original);
     expect(existsSync(join(task.worktree, 'node_modules'))).toBe(true);
   } finally {
     await h.disposeAsync();

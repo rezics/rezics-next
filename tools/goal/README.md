@@ -48,7 +48,8 @@ full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal 
 ordinary edits.
 
 Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
-integration split.
+integration split. Cloned fixtures set a local `user.name`/`user.email` and ignore `node_modules`, so a check host
+without a global Git identity or gitignore can still commit and recreate a task worktree from its branch.
 
 `goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
