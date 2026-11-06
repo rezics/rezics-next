@@ -42,6 +42,7 @@ const kernel = createKernel({
   receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(42),
   writeRate: real.writeRate,
+  requestDeadlineMs: 30_000,
 });
 
 const language = 'schema:inLanguage';
@@ -217,6 +218,7 @@ beforeAll(async () => {
     "UPDATE access.account SET state='suspended', minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2",
     [routeOf(accounts.suspended), accounts.suspended],
   );
+  await get(null, `/v1/subjects/${newId(0x51ff)}`);
 }, 180_000);
 
 afterAll(async () => {

@@ -37,7 +37,7 @@ Requires native Access, parent creation grants and Kernel identity and storage p
 
 Use the [Semantic capability acceptance map](semantic.capabilities.md) to map scoped outcomes to personas and evidence; the map does not certify coverage. Acceptance requires current native persona outcomes, native growth bounds, installation and receiving checks bound to the promoted revision, plus browser evidence for the owned reading and editing journeys. A fixture, walkthrough UUID, typecheck or source review is not native or browser acceptance. Controller integration owns landing checks and promotion.
 
-Decision: the cited editorial publication journey is pinned by one native kernel walk and one served host walk; new contributions use authored cited fixtures, and public return stays independent of synopsis navigation. Candidate proposal authorizes the current Global Context parent as semantic.context rather than inferring the child revision type.
+Decision: the cited editorial publication journey is pinned by one native kernel walk and one served host walk; new contributions use authored cited fixtures, and public return stays independent of synopsis navigation. Candidate proposal authorizes the current Global Context parent as semantic.context rather than inferring the child revision type. The native walk uses the shared 30s test request deadline so first compilation of the mounted subject GET schema is not admitted as overloaded.
 
 ## External conditions
 
