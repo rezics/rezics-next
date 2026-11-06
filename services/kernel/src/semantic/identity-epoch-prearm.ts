@@ -345,7 +345,7 @@ async function acceptPage(
           tx,
           `UPDATE semantic.identity_epoch_prearm_directory
         SET sequence=$4,after_original=$5,after_scope=$6,after_registration=$7,
-        exhausted=$8,sealed_transaction_id=CASE WHEN $8 THEN $9 ELSE NULL END
+        exhausted=$8,sealed_transaction_id=CASE WHEN $8 THEN $9::uuid ELSE NULL END
         WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
           [
             page.partition_no,
@@ -707,7 +707,7 @@ export async function sealColocatedEmptyIdentityPrearm(
     );
     await tx.query(
       `UPDATE semantic.identity_epoch_prearm_directory
-      SET sequence=1,exhausted=true,sealed_transaction_id=$4 WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
+      SET sequence=1,exhausted=true,sealed_transaction_id=$4::uuid WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
       [home, ref.jobId, input.generation, transactionId],
     );
     await tx.query(

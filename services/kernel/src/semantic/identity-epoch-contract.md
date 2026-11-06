@@ -1547,7 +1547,9 @@ its source command, whose SQL revalidates source owner, subject and captured hea
 Receiving acquire joins only its retained local handoff, local group, owner, attempt and slot; close remains atomic
 with first absence and takes no capacity. Receiving waiters are discovered from local handoff/attempt records.
 
-Default startup first calls `installIdentityEpochBootstrap(pool)` before DBOS resumes work. The one-time
+Default startup first calls `installIdentityEpochBootstrap(pool)` before DBOS resumes work. Job immutability
+keeps intent and receipts fixed; admission may write pre-arm phase and cancellation locators. Topology custody
+binds the sealed transaction as uuid. The one-time
 installation cut drains structural source and custody writers with SHARE ROW EXCLUSIVE relation locks in a
 READ COMMITTED transaction. Its post-lock scan includes subjects, orphan revision/backlink sources, redirects,
 members, uncaptured dirty heads and retained bootstrap work. It excludes a native birth only with actual
