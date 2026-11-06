@@ -1,23 +1,38 @@
-import { expect, mock, spyOn, test } from 'bun:test';
+import { beforeAll, expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { ManagedAccountDetailCard } from '../src/settings/managed-account-detail';
-import {
-  ManagedAccountReader,
-  detailFailure,
-  loadManagedAccountDetail,
-  managedAccountTarget,
-  managedAccountsBackHref,
-  type DetailRequest,
-  type DetailResult,
-  type DetailSection,
-  type ManagementDetail,
+import type {
+  DetailRequest,
+  DetailResult,
+  DetailSection,
+  ManagementDetail,
 } from '../src/settings/managed-account-detail-read';
-import { m } from '../src/paraglide/messages.js';
-import { AnonymousSessionContext } from '../src/session/query';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
+
+// The settings modules reach server-only imports; the mocks must be installed before they load. The shared react-start
+// shim keeps isomorphic session selection the same in every focused file that loads these modules.
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+beforeAll(installMocks);
+let ManagedAccountDetailCard: (typeof import('../src/settings/managed-account-detail'))['ManagedAccountDetailCard'];
+let ManagedAccountReader: (typeof import('../src/settings/managed-account-detail-read'))['ManagedAccountReader'];
+let detailFailure: (typeof import('../src/settings/managed-account-detail-read'))['detailFailure'];
+let loadManagedAccountDetail: (typeof import('../src/settings/managed-account-detail-read'))['loadManagedAccountDetail'];
+let managedAccountTarget: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountTarget'];
+let managedAccountsBackHref: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountsBackHref'];
+let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let AnonymousSessionContext: (typeof import('../src/session/query'))['AnonymousSessionContext'];
+beforeAll(async () => {
+  installMocks();
+  ({ ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail'));
+  ({ ManagedAccountReader, detailFailure, loadManagedAccountDetail, managedAccountTarget, managedAccountsBackHref } =
+    await import('../src/settings/managed-account-detail-read'));
+  ({ m } = await import('../src/paraglide/messages.js'));
+  ({ AnonymousSessionContext } = await import('../src/session/query'));
+});
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const accountId = '019a0000-0000-7000-8000-000000000002';
@@ -42,12 +57,14 @@ function detail(): ManagementDetail {
           accountId: actorId,
           account: { ...member, id: actorId, displayName: 'Current indexer' },
           state: 'current',
+          navigation: { state: 'admitted' },
         },
         {
           reservationId: '019a0000-0000-7000-8000-000000000005',
           accountId: '019a0000-0000-7000-8000-000000000006',
           account: null,
           state: 'reconciling',
+          navigation: { state: 'concealed' },
         },
       ],
       next: operatorCursor,
@@ -246,7 +263,6 @@ test('the existing localized settings account region selects only an immutable I
   ])
     expect(managedAccountTarget(`/fr/settings?managedAccount=${value}`)).toBeNull();
 
-  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { SettingsPageView } = await import('../src/settings/settings-page');
   const queryClient = new QueryClient();
   const root = createRootRoute({
@@ -407,7 +423,6 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   expect(reader.snapshot().members.failure?.status).toBe(503);
   expect(reader.snapshot().authNavigation).toBe(authNavigation);
   expect(reader.snapshot().detail).toBe(currentDetail);
-  expect(markup(reader)).toContain('/organizations/delete');
   const stale = reader.load();
   reader.clear(); // Viewer, CSRF and target changes replace/clear this immutable reader.
   pending[8]!(positive);

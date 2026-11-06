@@ -5,7 +5,7 @@ import { retainPoolReadings } from './pacing.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Pool, PoolReading, Profile } from './types.ts';
-import { withoutAnnotations } from './local-settings.ts';
+import { ignoreUnknownKeys, withoutAnnotations } from './local-settings.ts';
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
@@ -13,7 +13,7 @@ function object(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
-  for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label} field: ${key}`);
+  ignoreUnknownKeys(value, allowed, label);
 }
 function text(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be a nonempty string`);

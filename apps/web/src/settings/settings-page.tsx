@@ -37,11 +37,7 @@ import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
 import { SectionsNavigation, settingsSections, type SettingsSection } from './sections-navigation';
 import { ManagedAccountDetail } from './managed-account-detail';
-import {
-  managedAccountTarget,
-  managedAccountsBackHref,
-  selectAdmittedManagedAccountTarget,
-} from './managed-account-detail-read';
+import { managedAccountTarget, managedAccountsBackHref } from './managed-account-detail-read';
 import { readSettingsPage, saveNotifications, savePreferences } from './actions';
 import type { ReadingIO } from './reading-preferences';
 import type { NotificationEditorIO } from './notification-recovery';
@@ -361,8 +357,8 @@ function SettingsSections({
   });
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
   const requestedManagedTarget = managedAccountTarget(location.publicHref);
-  // The official generated native viewer/navigation callable is not installed yet.
-  const managedTarget = selectAdmittedManagedAccountTarget(requestedManagedTarget, null);
+  // Native management GET independently authorizes direct selections; URL identity grants no access.
+  const managedTarget = requestedManagedTarget ?? undefined;
   const managedSelectionUnavailable = requestedManagedTarget !== undefined && managedTarget === undefined;
   const managedBackHref = managedAccountsBackHref(location.publicHref);
   const returnToManagedDirectory: MouseEventHandler<HTMLAnchorElement> = (event) => {
@@ -674,9 +670,6 @@ export function SettingsPageView({
   // A loader page or a seeded cache alone never establishes this route-bound session.
   const session = hydrated ? browserSession : (requestSession ?? browserSession);
   const requestedManagedTarget = managedAccountTarget(location.publicHref);
-  // A direct or stale query parameter cannot substitute for native admission.
-  const managedTarget = selectAdmittedManagedAccountTarget(requestedManagedTarget, null);
-  const managedSelectionUnavailable = requestedManagedTarget !== undefined && managedTarget === undefined;
   const signedOut =
     !retrying && (session.state === 'signed-out' || (!hydrated && !page.signedIn && session.state === 'unknown'));
   const ready =
@@ -721,7 +714,8 @@ export function SettingsPageView({
             retryFailed={retryFailed}
             onRetry={retry}
           />
-          {page.signedIn && managedSelectionUnavailable ? (
+          {/* Any requested account selection keeps its Back link while this session cannot open the detail. */}
+          {page.signedIn && requestedManagedTarget !== undefined ? (
             <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
               <ManagedAccountSelectionUnavailable backHref={managedAccountsBackHref(location.publicHref)} />
             </section>

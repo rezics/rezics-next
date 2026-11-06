@@ -15,7 +15,7 @@ export class ManagedSessionReader {
     readonly target: string | null | undefined,
     readonly token?: string | null,
   ) {}
-  private matches() {
+  matches() {
     const query = this.client?.getQueryState<{ state: string; subject?: string | null; csrfToken: string | null }>(
       sessionQuery.queryKey,
     );
@@ -85,13 +85,15 @@ export function useManagedSessionReader(
   useSyncExternalStore(subscribe, snapshot, snapshot);
   const ref = useRef<{ client: typeof client; owner: ManagedSessionReader } | null>(null);
   const previous = ref.current;
+  // A retired owner is replaced only by a fresh observation that currently matches. Replacing it while the
+  // session is unavailable would retire the replacement on attach and re-render forever.
   if (
     !previous ||
     previous.client !== client ||
     previous.owner.subject !== subject ||
     previous.owner.target !== target ||
     previous.owner.token !== token ||
-    previous.owner.snapshot()
+    (previous.owner.snapshot() && new ManagedSessionReader(client, subject, target, token).matches())
   ) {
     previous?.owner.retire();
     ref.current = { client, owner: new ManagedSessionReader(client, subject, target, token) };

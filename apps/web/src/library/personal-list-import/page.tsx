@@ -95,7 +95,7 @@ function VndbImportAccess({ visit, libraryReturn, address, onAddressChange }: Vn
       },
     };
   }, [visit, store, version]);
-  const identity = [visit.subject, visit.csrfToken, getLocale(), version].join(':');
+  const identity = [visit.identity, visit.subject, visit.csrfToken, getLocale(), version].join(':');
   if (!value.allowed[0]) return <VndbUnavailable />;
   return (
     <VndbImportSession

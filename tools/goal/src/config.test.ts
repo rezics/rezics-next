@@ -31,7 +31,9 @@ test('promotion placement requires an explicit ordinary host source in untracked
       gateSlots: 3,
     };
     writeFileSync(h.settings.localFile, JSON.stringify(local));
-    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('unknown promotionPlacement.gateSlots');
+    expect(checkSettings({ cwd: h.root, env: {} }).promotionPlacement).toEqual({
+      ordinaryHostsFile: join(h.root, '.temp/goal/remote-check-hosts.json'),
+    });
   } finally {
     h.dispose();
   }
@@ -220,10 +222,17 @@ test('an invalid live local file keeps its last valid settings, is reported once
     local.silenceMs = 22_222;
     local.pools[0].policy.typo = 1;
     writeFileSync(h.settings.localFile, JSON.stringify(local));
-    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('typo');
+    expect(checkSettings({ cwd: h.root, env: {} }).silenceMs).toBe(22_222);
+    expect(checkSettings({ cwd: h.root, env: {} }).pools[0]!.policy).not.toHaveProperty('typo');
+    expect(load().silenceMs).toBe(22_222);
+    expect(await run(['config', 'check', h.settings.localFile])).toBe(0);
+
+    local.silenceMs = 'invalid';
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('invalid silenceMs');
     for (let process = 0; process < 2; process++) {
       const settings = load();
-      expect(settings.silenceMs).toBe(11_111);
+      expect(settings.silenceMs).toBe(22_222);
       createRuntime({ settings }).close();
     }
     const inbox = new SqliteManagerInbox(openDb(join(h.settings.stateDirectory, 'goal.sqlite')), h.root);
@@ -231,13 +240,13 @@ test('an invalid live local file keeps its last valid settings, is reported once
       const events = inbox.read(manager).filter((entry) => entry.event.summary.includes('Local settings'));
       expect(events).toHaveLength(1);
       expect(events[0]!.deliveries).toBeUndefined();
-      expect(events[0]!.event.summary).toContain('typo');
+      expect(events[0]!.event.summary).toContain('invalid silenceMs');
     }
     expect(await run(['config', 'check', h.settings.localFile])).toBe(1);
 
-    delete local.pools[0].policy.typo;
+    local.silenceMs = 33_333;
     writeFileSync(h.settings.localFile, JSON.stringify(local));
-    expect(load().silenceMs).toBe(22_222);
+    expect(load().silenceMs).toBe(33_333);
     expect(await run(['config', 'check', h.settings.localFile])).toBe(0);
   } finally {
     h.dispose();

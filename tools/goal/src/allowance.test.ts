@@ -5,6 +5,7 @@ import {
   choosePoolWithFallback,
   countAllowanceWaiting,
   countRunningByPool,
+  countWaitingByPool,
   poolBurnStatus,
 } from './allowance.ts';
 import { fixturePool, reading } from './test-support.ts';
@@ -101,7 +102,7 @@ test('A pool with policy.maxConcurrent 8 and 8 running attempts admits no new ta
   ).toEqual({ fixture: 1 });
 });
 
-test('Pools without maxConcurrent behave as today; status shows running against maxConcurrent per pool.', () => {
+test('Pools without maxConcurrent behave as today; status shows live and waiting against maxConcurrent per pool.', () => {
   const open = { ...fixturePool(), policy: { ...fixturePool().policy, allowUnknown: false } };
   const capped = {
     ...open,
@@ -111,18 +112,18 @@ test('Pools without maxConcurrent behave as today; status shows running against 
   };
   const current = observed(open, 10, now);
   expect(choosePool(profile, [open], [current], { now, running: { fixture: 8 } }).name).toBe('fixture');
-  expect(
-    countRunningByPool([
-      { pool: 'fixture', state: 'running' },
-      { pool: 'fixture', state: 'waiting' },
-      { pool: 'fixture', state: 'pending' },
-      { pool: 'fixture', state: 'exited' },
-      { pool: 'cursor', state: 'running' },
-    ]),
-  ).toEqual({ fixture: 3, cursor: 1 });
-  expect(poolBurnStatus([open, capped], [current], now, span, { fixture: 8, capped: 8 })).toEqual([
+  const attempts = [
+    { pool: 'fixture', state: 'running' },
+    { pool: 'fixture', state: 'waiting' },
+    { pool: 'fixture', state: 'pending' },
+    { pool: 'fixture', state: 'exited' },
+    { pool: 'cursor', state: 'running' },
+  ];
+  expect(countRunningByPool(attempts)).toEqual({ fixture: 2, cursor: 1 });
+  expect(countWaitingByPool(attempts)).toEqual({ fixture: 1 });
+  expect(poolBurnStatus([open, capped], [current], now, span, { fixture: 8, capped: 5 }, { capped: 11 })).toEqual([
     { name: 'fixture', allowanceKey: 'fixture', burnPerHour: 0 },
-    { name: 'capped', allowanceKey: 'capped', burnPerHour: 0, running: 8, maxConcurrent: 8 },
+    { name: 'capped', allowanceKey: 'capped', burnPerHour: 0, live: 5, waiting: 11, maxConcurrent: 8 },
   ]);
 });
 

@@ -188,10 +188,13 @@ endpoint deadline guards every new detail read, including captured callbacks, fe
 whole-detail refresh. Already admitted sibling responses may settle without shortening that wait. Expiry only enables
 deliberate controls; it never dispatches. Missing or malformed headers add no delay. Failed first-page reads retain a
 cursor-free recovery request, and blocked controls preserve failure feedback, retained pages and native action advice.
-Installed-navigation continuation owns official viewer/navigation admission and directory/detail/back integration;
-detail response-wait recovery is owned by this existing reader and is outside that continuation's scope.
+Directory navigation and direct detail selection use the native observations described below; detail response-wait recovery remains with its existing reader.
+
+While the session is unavailable, any requested account selection shows only its Back link; invalid and valid selections share that view.
 
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
+
+A session credential replacement, including a CSRF token change, retires both feeds before late callbacks can install, and the replacement reader reads once. A retired session observation is replaced only by a fresh observation that matches the current session, so an unavailable session keeps the retired reader without re-creating it.
 
 The directory captures Retry-After once at response observation as an absolute endpoint deadline. The longest
 outstanding deadline guards both feeds, first-page recovery and whole refresh, including captured callbacks. An
@@ -201,7 +204,7 @@ presentation timer serves all directory controls, and reattachment never restart
 the observation with the private pages; detail, Auth and independent Settings endpoints remain independent.
 
 **Decision:** Directory Refresh is a separate deliberate cursor-free action; Retry preserves the failed feed request,
-and both obey the longest response deadline. Refresh clears old pages only when dispatch is eligible.
+and both obey the longest response deadline. A successful Refresh resets both feed coordinates; a failed Refresh retains usable pages and coordinates for deliberate recovery.
 
 Managed action reads publish their response-time Retry-After deadline in the viewer/target snapshot. The recovery
 control uses that same absolute deadline after reattachment; expiry enables deliberate retry only.
@@ -210,15 +213,14 @@ control uses that same absolute deadline after reattachment; expiry enables deli
 An older sibling may settle its selected feed page and loading state without replacing newer shared detail or
 navigation observations, including when that older feed fails. Native restrictions still withdraw proof and invalidate sibling reads.
 
-Directory identities, membership roles and responsibility holds supply no detail admission. The current Kernel producer returns the closed viewer and per-row navigation observations, but the generated `@rezics/client` route still exposes the prior response and Settings does not install the corresponding callable/root. Until the official client publication and composition root are integrated, identity rows have no detail links and show explicit unavailable feedback. This consumer does not publish declarations, add a shadow schema, or infer missing authority.
+Directory identities, membership roles and responsibility holds supply no detail admission. Settings consumes the native current-viewer and per-row navigation observations: only admitted disclosed rows link to detail. A direct selection reads the native management endpoint without fetching the directory; that endpoint independently enforces current viewer and target authorization. The installed client declarations are published only by the official Kernel emitter.
 
 **Decision:** A directory detail link requires the native admitted navigation observation. Returning removes only `managedAccount`, preserves locale and query context, retains at most the current page per feed for the same current viewer, and focuses the originating row or its feed heading if that row is no longer present.
 
 The Settings account panel keeps a visited directory reader mounted but hidden and inert during a detail selection;
 returning uses the router and reuses its current pages, exact failed requests, deadlines and eight predecessor
 coordinates. A direct detail selection does not start a directory read to infer admission. Session, credential or
-client replacement still retires that retained reader while hidden. Row links and source-row return focus require
-the official generated navigation publication described above.
+client replacement still retires that retained reader while hidden. Keyboard return restores the originating admitted row, or its feed heading when that row is absent; pointer return leaves focus alone. A newer cross-feed observation retires older navigation admission while retaining each feed’s bounded rows and exact recovery coordinates.
 
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.
 
@@ -233,3 +235,5 @@ The Account card reads the current identity from the managed session and keeps r
 **Decision:** Sign-out recovery bounds the existing session query with that same deadline. Timeout keeps original uncertainty visible, unlocks only the deliberate Reload, and never submits sign-out or treats a late session as idle for an obsolete viewer.
 
 **Decision:** Account safety recovery is proven by the existing region, link and card checks plus setup-envelope, non-cooperative session recovery, old-viewer late completion and deliberate current destination assertions. No extra timer-test family or stories.
+
+**Decision:** Reuse the retained directory and native management GET for selection, with regressions for installed GET serialization, current-viewer binding, cross-feed admission retirement and keyboard return. Browser/native seeded acceptance remains with integration; fixtures and focused checks do not establish it.

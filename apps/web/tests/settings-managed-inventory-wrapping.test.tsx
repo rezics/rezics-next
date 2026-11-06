@@ -1,25 +1,38 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import * as start from '../.storybook/react-start';
 import type {
   ManagedAccountsCursors,
   ManagedAccountsPage,
   ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // Actual mounted components/readers with supplied bounded IO. DOM plumbing is illustrative, not geometry proof.
 // This additive regression and its browser story geometry counterparts are authored, UNRUN.
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => ({
-  ...start,
-  getRequest: () => {
-    throw new Error('Unexpected native session read');
-  },
-}));
-mock.module('cloudflare:workers', () => ({ env: {} }));
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+beforeAll(installMocks);
+let createRoot: (typeof import('react-dom/client'))['createRoot'];
+let ManagedAccounts: (typeof import('../src/settings/managed-accounts'))['ManagedAccounts'];
+let ManagedAccountsSection: (typeof import('../src/settings/managed-accounts'))['ManagedAccountsSection'];
+let managedAccountHref: (typeof import('../src/settings/managed-accounts-read'))['managedAccountHref'];
+let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-read'))['managedAccountsFailure'];
+let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
+let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let setLocale: (typeof import('../src/paraglide/runtime.js'))['setLocale'];
+beforeAll(async () => {
+  install();
+  installMocks();
+  ({ createRoot } = await import('react-dom/client'));
+  ({ ManagedAccounts, ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
+  ({ managedAccountHref, managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));
+  ({ sessionQuery } = await import('../src/session/query'));
+  ({ m } = await import('../src/paraglide/messages.js'));
+  ({ setLocale } = await import('../src/paraglide/runtime.js'));
+});
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -39,19 +52,19 @@ const globals = {
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-const { createRoot } = await import('react-dom/client');
-const { ManagedAccounts, ManagedAccountsSection } = await import('../src/settings/managed-accounts');
-const { managedAccountHref, managedAccountsFailure } = await import('../src/settings/managed-accounts-read');
-const { sessionQuery } = await import('../src/session/query');
-const { m } = await import('../src/paraglide/messages.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
+// Each file owns its globals while its tests run; test files load together in one process.
+const install = () => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+};
+install();
+beforeAll(install);
 
 const viewer = '019a0000-0000-7000-8000-000000000001';
 const org = '019a0000-0000-7000-8000-000000000002';
@@ -59,9 +72,15 @@ const operator = '019a0000-0000-7000-8000-000000000003';
 const withheld = '019a0000-0000-7000-8000-000000000099';
 const longName = 'InternationaleLesegemeinschaftFürUnabhängigeVeröffentlichungen'.repeat(5);
 const settingsHref = '/de/settings?panel=compact&managedAccount=old#profile';
+// A direct detail URL does not start a directory read, so connected sections begin on the directory.
+const directoryHref = '/de/settings?panel=compact#account';
 function page(size = 1): ManagedAccountsPage {
   return {
     account: { id: viewer, kind: 'actor', displayName: longName, handle: longName.toLowerCase() },
+    viewer: {
+      state: 'current',
+      account: { id: viewer, kind: 'actor', displayName: longName, handle: longName.toLowerCase() },
+    },
     organizations: {
       state: 'ready',
       items: Array.from({ length: size }, (_, index) => ({
@@ -72,6 +91,7 @@ function page(size = 1): ManagedAccountsPage {
           handle: longName,
         },
         role: index % 2 ? 'member' : 'owner',
+        navigation: { state: 'admitted' },
       })),
       next: 'organization opaque +/= &?%',
     },
@@ -82,8 +102,15 @@ function page(size = 1): ManagedAccountsPage {
           accountId: operator,
           account: { id: operator, kind: 'actor', displayName: `Operator ${longName}`, handle: null },
           state: 'current',
+          navigation: { state: 'admitted' },
         },
-        { reservationId: operator, accountId: withheld, account: null, state: 'reconciling' },
+        {
+          reservationId: operator,
+          accountId: withheld,
+          account: null,
+          state: 'reconciling',
+          navigation: { state: 'concealed' },
+        },
       ],
       next: 'responsibility opaque +/= &?%',
     },
@@ -139,7 +166,7 @@ function button(host: Element, label: string): HTMLButtonElement {
 function feed(host: Element, label: string) {
   const list = [...host.querySelectorAll('ul')].find((node) => node.getAttribute('aria-label') === label);
   expect(list).toBeDefined();
-  return list!.parentElement!;
+  return list!.closest<HTMLElement>('[role="region"]')!;
 }
 function geometryContract(host: Element) {
   for (const control of host.querySelectorAll<HTMLButtonElement>('button')) {
@@ -260,7 +287,7 @@ test('mounted independent inventories retain native controls, long and unavailab
     await settle(() => a.replies[4]!.resolve(ready(exhausted)));
     expect(a.calls[4]).toEqual({ organizationsCursor: 'sparse continuation +/=' });
     expect(organizations.textContent).toContain(m.managed_no_organizations());
-    expect(organizations.querySelector('button')).toBeNull();
+    expect(button(organizations, m.managed_next()).disabled).toBe(true);
     await settle(() => b.replies[1]!.resolve(ready()));
     geometryContract(view.host);
   } finally {
@@ -349,7 +376,7 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
       const route = createRootRoute({ component: () => <ManagedAccountsSection io={source.io} /> });
       const router = createRouter({
         routeTree: route,
-        history: createMemoryHistory({ initialEntries: [settingsHref] }),
+        history: createMemoryHistory({ initialEntries: [directoryHref] }),
       });
       await router.load();
       const view = await mount(
@@ -361,8 +388,9 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
         expect(source.calls).toEqual([{}]);
         await settle(() => source.replies[0]!.resolve(ready()));
         const links = [...view.host.querySelectorAll('a')];
-        await settle(() => button(feed(view.host, m.managed_operated_title()), m.settings_managed_load_more()).click());
+        // The feed read starts in the same act as the transition: its admission retirement is not yet committed.
         await settle(() => {
+          button(feed(view.host, m.managed_operated_title()), m.settings_managed_load_more()).click();
           if (transition === 'error')
             client
               .getQueryCache()
@@ -420,7 +448,11 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       const siblingLabel = selected === 'organizations' ? m.managed_operated_title() : m.managed_organizations_title();
       const region = feed(view.host, label);
       const sibling = feed(view.host, siblingLabel);
-      const rows = region.querySelector('ul')!.innerHTML;
+      // A sibling read retires link admission across feeds; the retained rows keep their identities and text.
+      const rows = [...region.querySelectorAll('li')].map((row) => [
+        row.dataset.managedKey,
+        row.querySelector('h4')?.textContent,
+      ]);
       await settle(() => button(region, m.settings_managed_load_more()).click());
       await settle(() => source.replies[1]!.resolve(managedAccountsFailure(400, { code: 'invalid_cursor' })));
       await settle(() => button(sibling, m.settings_managed_load_more()).click());
@@ -428,7 +460,9 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       expect(source.calls[3]).toEqual({});
       expect(button(region, m.settings_retry()).disabled).toBe(true);
       expect(button(region, m.settings_managed_restart_list()).disabled).toBe(true);
-      expect(region.querySelector('ul')!.innerHTML).toBe(rows);
+      expect(
+        [...region.querySelectorAll('li')].map((row) => [row.dataset.managedKey, row.querySelector('h4')?.textContent]),
+      ).toEqual(rows);
       await settle(() =>
         source.replies[3]!.resolve(managedAccountsFailure(429, { code: 'rate_limited' }, { 'Retry-After': '1' })),
       );

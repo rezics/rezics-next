@@ -1,11 +1,10 @@
-import { afterAll, expect, mock, test } from 'bun:test';
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h, StrictMode, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
-import * as start from '../.storybook/react-start';
+import { boundaries, env as sharedEnv, installManagedModuleMocks, requests } from './fixtures/managed-module-mocks';
 import type { SessionEnv } from '../src/session/client';
 import type { ManagedAccountsResult } from '../src/settings/managed-accounts-read';
 import type { DetailResult } from '../src/settings/managed-account-detail-read';
@@ -34,13 +33,19 @@ const globals = {
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// Each file owns its globals while its tests run; test files load together in one process.
+const install = () => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+};
+install();
+beforeAll(install);
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -60,7 +65,7 @@ const session = (subject = viewerId, csrfToken: string | null = token) => ({
   csrfToken,
 });
 let nativeSession = session();
-const env = {
+const env = Object.assign(sharedEnv, {
   SITE_ORIGINS: 'https://site.test',
   AUTH_ISSUER: 'https://auth.test',
   API_RESOURCE: 'https://api.test',
@@ -75,35 +80,7 @@ const env = {
       credential: async () => ({ status: 'active', ...nativeSession, accessToken: 'original-native-reader' }),
     }),
   },
-} as unknown as SessionEnv;
-const requests = new AsyncLocalStorage<Request>();
-const boundaries: Request[] = [];
-mock.module('@tanstack/react-start', () => ({
-  ...start,
-  createServerFn: (options?: { method?: string }) => {
-    const original = start.createServerFn();
-    const chain = {
-      validator(validate: (input: unknown) => unknown) {
-        original.validator(validate);
-        return chain;
-      },
-      handler<T extends (...args: never[]) => unknown>(handler: T): T {
-        const invoke = original.handler(handler);
-        return ((input?: { headers?: HeadersInit }) => {
-          const headers = new Headers(input?.headers);
-          headers.set('cookie', `__Host-rezics_session=${'a'.repeat(43)}`);
-          headers.set('origin', 'https://site.test');
-          const request = new Request('https://site.test/en/settings', { method: options?.method ?? 'GET', headers });
-          boundaries.push(request);
-          return requests.run(request, () => invoke(input as never));
-        }) as unknown as T;
-      },
-    };
-    return chain;
-  },
-}));
-mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => requests.getStore()! }));
-mock.module('cloudflare:workers', () => ({ env }));
+}) as unknown as SessionEnv;
 const pending: { request: Request; response: ReturnType<typeof deferred<Response>> }[] = [];
 const native = createKernelClient('https://kernel.test', {
   fetch: async (url, init) => {
@@ -115,8 +92,18 @@ const native = createKernelClient('https://kernel.test', {
     return response.promise;
   },
 });
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+installMocks();
+beforeAll(installMocks);
 const originalKernel = { ...(await import('../src/kernel/client')) };
-mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => native }));
+const installKernelMock = () =>
+  mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => native }));
+installKernelMock();
+beforeAll(() => {
+  installMocks();
+  installKernelMock();
+});
 const { createRoot } = await import('react-dom/client');
 const { sessionQuery } = await import('../src/session/query');
 const { ManagedSessionReader } = await import('../src/settings/managed-session-reader');
@@ -128,6 +115,7 @@ const { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } =
 const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
 const { ManagedAccountDetail } = await import('../src/settings/managed-account-detail');
 const { ManagedAccountActions } = await import('../src/settings/managed-account-actions');
+const { closedProfileEditing } = await import('../src/settings/editable-profile-source');
 const identity = (id = viewerId) => ({
   id,
   kind: 'actor' as const,
@@ -136,13 +124,28 @@ const identity = (id = viewerId) => ({
 });
 const inventory = () => ({
   account: identity(),
+  viewer: { state: 'current' as const, account: identity() },
   organizations: {
     state: 'ready' as const,
-    items: [{ account: { ...identity(targetId), kind: 'organization' as const }, role: 'owner' as const }],
+    items: [
+      {
+        account: { ...identity(targetId), kind: 'organization' as const },
+        role: 'owner' as const,
+        navigation: { state: 'admitted' as const },
+      },
+    ],
     next: 'org/+==',
   },
   responsibilities: {
-    items: [{ reservationId: otherId, accountId: targetId, account: null, state: 'reconciling' as const }],
+    items: [
+      {
+        reservationId: otherId,
+        accountId: targetId,
+        account: null,
+        state: 'reconciling' as const,
+        navigation: { state: 'concealed' as const },
+      },
+    ],
     next: 'ops/+==',
   },
 });
@@ -600,6 +603,7 @@ function responseFor(request: Request) {
         avatar: null,
         publicViews: { posts: true, reviews: true, collections: true, realms: true },
       },
+      editing: closedProfileEditing({ id: viewerId, kind: 'actor' }, viewerId),
     };
   return {}; // viewerActions body is supplied from the exact request selection in answer().
 }
@@ -727,7 +731,7 @@ for (const surface of ['inventory', 'detail', 'actions', 'safety'] as const) {
   });
 }
 
-test('inventory production custody preserves loaded pages and does no IO for a CSRF-only transition', async () => {
+test('inventory production custody retires loaded pages on a CSRF replacement and reads once with the new credential', async () => {
   const view = await mounted('inventory');
   try {
     await answer();
@@ -736,9 +740,12 @@ test('inventory production custody preserves loaded pages and does no IO for a C
       lose(view.client, 'token');
       await tick();
     });
-    expect(pending).toHaveLength(count);
+    expect(host.innerHTML).not.toContain('private-handle');
+    expect(host.querySelector('a[href*="managedAccount="]')).toBeNull();
+    const fresh = pending.slice(count);
+    expect(fresh).toHaveLength(1);
+    await answer(fresh);
     expect(host.innerHTML).toContain('private-handle');
-    expect(host.querySelector('a[href*="managedAccount="]')).not.toBeNull();
   } finally {
     await view.close();
   }

@@ -581,17 +581,25 @@ export class WorkerStore implements AttemptFence {
   runningAttemptsCount(): number {
     return this.currentAttemptsCount();
   }
-  /** Current pending, running and waiting attempts on each pool, for `policy.maxConcurrent`. */
+  /** Live sessions (pending start and running) on each pool, for `policy.maxConcurrent`. */
   runningAttemptsByPool(): Record<string, number> {
+    return this.countAttemptsByPool(['pending', 'running']);
+  }
+  /** Attempts parked on checks; they do not occupy `policy.maxConcurrent`. */
+  waitingAttemptsByPool(): Record<string, number> {
+    return this.countAttemptsByPool(['waiting']);
+  }
+  private countAttemptsByPool(states: readonly string[]): Record<string, number> {
+    const placeholders = states.map(() => '?').join(', ');
     const rows = this.db
       .query(
         `SELECT json_extract(a.body, '$.pool') AS pool, count(*) AS count
          FROM worker_current_attempts AS c
          JOIN worker_attempts AS a ON a.task_id = c.task_id AND a.attempt = c.current_attempt
-         WHERE c.attempt_state IN ('pending', 'running', 'waiting')
+         WHERE c.attempt_state IN (${placeholders})
          GROUP BY 1`,
       )
-      .all() as { pool: string | null; count: number }[];
+      .all(...states) as { pool: string | null; count: number }[];
     const counts: Record<string, number> = {};
     for (const row of rows) if (typeof row.pool === 'string' && row.pool) counts[row.pool] = row.count;
     return counts;

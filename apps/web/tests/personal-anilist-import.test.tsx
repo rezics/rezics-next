@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createKernelClient } from '@rezics/client';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import {
   ANILIST_APPLY,
@@ -12,7 +13,7 @@ import {
 } from '../src/library/personal-anilist-import/contract';
 import { aniListCallTotal, expectedAniListCalls } from '../src/library/personal-anilist-import/cost';
 import { createAniListJourney } from '../src/library/personal-anilist-import/controller';
-import { kernelAniListPort } from '../src/library/personal-anilist-import/native';
+import { kernelAniListPort, nativeAniListImport } from '../src/library/personal-anilist-import/native';
 import { libraryNavigation } from '../src/library/navigation';
 import type { AniListVisit } from '../src/library/personal-anilist-import/visit';
 import { QUESTION } from '../src/features/pages/subject-ratings';
@@ -745,6 +746,8 @@ test('partial acknowledgement, cancellation and evidence removal stay independen
 });
 
 test('installed AniList adapter forwards score consent and preserves owner readback and outcomes', async () => {
+  expect(nativeAniListImport(createKernelClient('https://kernel.invalid'))).toBeDefined();
+  expect(nativeAniListImport({} as never)).toBeUndefined();
   const reviewScore = {
     source: { present: true, value: 0, lexeme: '0.00', scale: 'POINT_10', validity: 'valid', reason: 'Exact source.' },
     action: 'vote',
@@ -848,7 +851,7 @@ test('installed AniList adapter forwards score consent and preserves owner readb
     $preview: { post: async () => ({ status: 200, data: { id, count: 1 } }) },
   });
   const client = {
-    libraryImports: { anilist },
+    libraryImports: Object.assign(() => {}, { anilist }),
     'rating-questions': (input: unknown) => ({
       get: async (options: unknown) => {
         pointRequest = { input, options };

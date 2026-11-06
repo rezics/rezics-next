@@ -377,6 +377,35 @@ test('zero scores, unknown dates and independent chapter/volume measures stay di
   expect(libraryNavigation.some((entry) => entry.id === 'library.create-collection')).toBe(true);
 });
 
+test('an account round trip in one React batch discards private import evidence even with unchanged credentials', async () => {
+  const port = {
+    async preview() {
+      return { kind: 'previewed', id };
+    },
+    async page() {
+      return { kind: 'page', page: pageOf([row()]) };
+    },
+  } as MalImportPort;
+  const client = await mountObserved(port, 'round-trip-owner', 'same-csrf');
+  await uploadXml();
+  expect(host.querySelector('[data-mal-row="0"]')).not.toBeNull();
+  await act(async () => {
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: 'another-member',
+      csrfToken: 'other-csrf',
+    });
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: 'round-trip-owner',
+      csrfToken: 'same-csrf',
+    });
+  });
+  await settle();
+  expect(host.querySelector('[data-mal-row]')).toBeNull();
+  expect(button(m.library_mal_upload())).toBeDefined();
+});
+
 test('explicit unmatched target, status selection, confirmation and partial results keep original retry', async () => {
   const previewXml: string[] = [];
   const reviews: unknown[] = [];

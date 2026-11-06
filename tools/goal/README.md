@@ -403,9 +403,10 @@ is in `risk-areas.json`. Account names, pool mapping, executable/configuration p
 in the untracked `<main checkout>/.temp/goal/local.json`. The loader refuses a tracked local file. There is no implicit
 account or pool policy.
 
-Any object in the file may carry `note` or `$comment` annotations; they are dropped before validation, and every other
-unknown field is an error. Validate an edit before replacing the live file with
-`bun tools/goal/src/cli.ts config check [file]` (the live file when omitted): it applies the strict schema, never falls
+Any object in the file may carry `note` or `$comment` annotations; they are dropped before validation. An unknown field
+is ignored after one stderr warning per key, so an older tools/goal still reads a newer shared local file; a known field
+with an invalid value is still an error. Validate an edit before replacing the live file with
+`bun tools/goal/src/cli.ts config check [file]` (the live file when omitted): it applies the same schema, never falls
 back and changes nothing. Each valid version of a local file is kept in `<main checkout>/.temp/goal/configuration/`. When
 the live file later fails to read or validate, every process, including a new CLI command, uses that file's last valid
 version (revalidated with the current schema and environment) and reports the exact error once to the operations
@@ -434,21 +435,21 @@ fields listed below; the empty policy object deliberately provides no account po
 }
 ```
 
-| Pool field              | Meaning                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| `name`                  | Local pool name; appears only in local state and configuration.                            |
-| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.          |
-| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.     |
-| `command`               | Official CLI executable or an absolute local launcher path.                                |
-| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.             |
-| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                           |
-| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.   |
-| `policy.weight`         | Required positive number for relative pool preference.                                     |
-| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                       |
-| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.           |
-| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                    |
-| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                          |
-| `policy.maxConcurrent`  | Optional positive integer cap on this pool's current pending, running and waiting workers. |
+| Pool field              | Meaning                                                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                  | Local pool name; appears only in local state and configuration.                                                                             |
+| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.                                                           |
+| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.                                                      |
+| `command`               | Official CLI executable or an absolute local launcher path.                                                                                 |
+| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.                                                              |
+| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                                                                            |
+| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.                                                    |
+| `policy.weight`         | Required positive number for relative pool preference.                                                                                      |
+| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                                                                        |
+| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.                                                            |
+| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                                                                     |
+| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                                                                           |
+| `policy.maxConcurrent`  | Optional positive integer cap on this pool's live sessions (pending start and running). Waiting attempts parked on checks do not occupy it. |
 
 Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool. When a
 CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: a used-up window or a reading older
@@ -461,8 +462,13 @@ minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks
 each pool's rate and the ready tasks waiting on it.
 
 Decision: `policy.maxConcurrent` is an optional positive integer per pool name, not per shared allowance. Selection
-counts that pool's current pending, running and waiting attempts and skips a full pool like an exhausted one, for new
-tasks and retries alike. `status` lists running against the cap. Pools that omit the key keep today's admission.
+counts that pool's live sessions (pending start and running) and skips a full pool like an exhausted one, for new tasks
+and retries alike. Attempts in state waiting, parked on checks, do not occupy the cap. `status` lists live and waiting
+counts separately against the cap. Pools that omit the key keep today's admission. Do not set `maxConcurrent` on a
+shared local file until every live worktree's tools/goal ignores unknown pool policy keys.
+
+Decision: the fewest tests that pin this are one unknown-key warning/ignore plus invalid-value throws, and one
+live-versus-waiting occupancy and status case; existing tests that required unknown keys to throw were updated.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed

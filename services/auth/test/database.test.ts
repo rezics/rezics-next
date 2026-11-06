@@ -25,6 +25,9 @@ test('run keeps its 120-second default and reports ETIMEDOUT for a child exceedi
     failure = error;
   }
   expect(failure).toHaveProperty('code', 'ETIMEDOUT');
+  expect((failure as Error).message).toContain('spawnSync');
+  expect((failure as Error).message).toContain('ETIMEDOUT');
+  expect((failure as Error).message).toContain('--eval');
 });
 
 function traceDocker(action: (commands: () => string[][], temporary: string) => void): void {
@@ -99,7 +102,9 @@ test(
       }
       const dumps = calls.filter((args) => args.includes('pg_dump'));
       expect(dumps.map((args) => args.slice(0, 3))).toEqual([['exec', container, 'pg_dump']]);
-      expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
+      const launched = calls.filter((args) => args[0] === 'run');
+      expect(launched).toHaveLength(1);
+      expect(launched[0]).toContain('--rm');
       expect(calls).toContainEqual(['rm', '-f', '-v', container]);
       expect(calls).toContainEqual(['ps', '-aq', '--filter', expect.stringMatching(/^label=rezics.auth.check.pid=/)]);
       const volumes = calls.filter((args) => args[0] === 'volume');

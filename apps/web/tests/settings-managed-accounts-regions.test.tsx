@@ -1,14 +1,14 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import * as start from '../.storybook/react-start';
 import type {
   ManagedAccountsCursors,
   ManagedAccountsPage,
   ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // UNRUN: real component, router, session admission and inventory; only supplied IO/DOM are illustrative.
 // Layout, native disclosure and browser acceptance remain with integration.
@@ -34,22 +34,43 @@ const globals = {
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
-mock.module('cloudflare:workers', () => ({ env: {} }));
-const { createRoot } = await import('react-dom/client');
-const { within } = await import('storybook/test');
-const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
-const { ManagedAccountSelectionUnavailable } = await import('../src/settings/settings-page');
-const { managedAccountsFailure } = await import('../src/settings/managed-accounts-read');
-const { sessionQuery } = await import('../src/session/query');
-const { managedAccountsExample, managedViewer } = await import('../src/stories/patterns/managed-accounts.fixtures');
-const { m } = await import('../src/paraglide/messages.js');
-const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
-const previousLocale = getLocale();
-setLocale('en', { reload: false });
+// Each file owns its globals while its tests run; test files load together in one process.
+const install = () => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+};
+install();
+beforeAll(install);
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+beforeAll(installMocks);
+let createRoot: (typeof import('react-dom/client'))['createRoot'];
+let within: (typeof import('storybook/test'))['within'];
+let ManagedAccountsSection: (typeof import('../src/settings/managed-accounts'))['ManagedAccountsSection'];
+let ManagedAccountSelectionUnavailable: (typeof import('../src/settings/settings-page'))['ManagedAccountSelectionUnavailable'];
+let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-read'))['managedAccountsFailure'];
+let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
+let managedAccountsExample: (typeof import('../src/stories/patterns/managed-accounts.fixtures'))['managedAccountsExample'];
+let managedViewer: (typeof import('../src/stories/patterns/managed-accounts.fixtures'))['managedViewer'];
+let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let getLocale: (typeof import('../src/paraglide/runtime.js'))['getLocale'];
+let setLocale: (typeof import('../src/paraglide/runtime.js'))['setLocale'];
+let previousLocale: string;
+beforeAll(async () => {
+  install();
+  installMocks();
+  ({ createRoot } = await import('react-dom/client'));
+  ({ within } = await import('storybook/test'));
+  ({ ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
+  ({ ManagedAccountSelectionUnavailable } = await import('../src/settings/settings-page'));
+  ({ managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));
+  ({ sessionQuery } = await import('../src/session/query'));
+  ({ managedAccountsExample, managedViewer } = await import('../src/stories/patterns/managed-accounts.fixtures'));
+  ({ m } = await import('../src/paraglide/messages.js'));
+  ({ getLocale, setLocale } = await import('../src/paraglide/runtime.js'));
+  previousLocale = getLocale();
+  setLocale('en', { reload: false });
+});
 
 const longName = 'Independent Readers and Translators — 読書会 — مجموعة القراءة — ' + 'ReadTogether'.repeat(12);
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -181,8 +202,8 @@ test('two mounted inventories name their independent feeds and retain exact spar
     const resp = region(a, m.managed_operated_title());
     const otherOrg = region(b, m.managed_organizations_title());
     const identity = within(org).getByRole('heading', { name: longName, level: 4 });
-    expect(within(a).queryByRole('link')).toBeNull();
-    expect(a.textContent).toContain(m.settings_managed_navigation_unavailable());
+    expect(within(a).getAllByRole('link')).toHaveLength(4);
+    expect(within(org).getByRole('link', { name: longName }).getAttribute('href')).toContain('managedAccount=');
     const unavailable = within(resp)
       .getByRole('heading', { level: 4, name: m.settings_managed_identity_unavailable() })
       .closest('li')!;
@@ -292,13 +313,14 @@ test('organization retry and first-page controls preserve retained responsibilit
     const inventory = view.inventory();
     const org = region(inventory, m.managed_organizations_title());
     const resp = region(inventory, m.managed_operated_title());
-    const retained = resp.innerHTML;
+    const retained = [...resp.querySelectorAll('h4')];
     await view.click(button(org, m.managed_next()));
     await feed.answer(managedAccountsFailure(400, { code: 'invalid_cursor' }));
     associations(inventory);
     await view.click(button(org, m.settings_retry()));
     await feed.answer(managedAccountsFailure(409, { code: 'stale_cursor' }));
-    expect(resp.innerHTML).toBe(retained);
+    expect([...resp.querySelectorAll('h4')]).toEqual(retained);
+    expect(within(resp).queryByRole('link')).toBeNull();
     await view.click(button(org, m.settings_managed_restart_list()));
     await feed.answer(
       ready({
@@ -308,7 +330,8 @@ test('organization retry and first-page controls preserve retained responsibilit
       }),
     );
     expect(org.textContent).toContain(m.managed_no_organizations());
-    expect(resp.innerHTML).toBe(retained);
+    expect([...resp.querySelectorAll('h4')]).toEqual(retained);
+    expect(within(resp).queryByRole('link')).toBeNull();
     expect(feed.calls).toEqual([
       {},
       { organizationsCursor: initial.organizations.next! },
@@ -377,7 +400,7 @@ test('supplied handle and unnamed fallbacks stay human while unavailable respons
     const resp = region(inventory, m.managed_operated_title());
     expect(within(viewer).getByRole('heading', { level: 4 }).textContent).toBe(`@${initial.account.handle}`);
     expect(within(org).getByRole('heading', { name: m.managed_unnamed(), level: 4 })).toBeDefined();
-    expect(within(inventory).queryByRole('link')).toBeNull();
+    expect(within(inventory).getAllByRole('link')).toHaveLength(4);
     const unavailable = within(resp)
       .getByRole('heading', { name: m.settings_managed_identity_unavailable() })
       .closest('li')!;
@@ -583,5 +606,33 @@ afterAll(async () => {
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+test('admitted row selection retains the directory and keyboard return focuses its source', async () => {
+  const feed = source();
+  const view = await mounted([feed]);
+  try {
+    const initial = managedAccountsExample();
+    await feed.answer(ready(initial));
+    const inventory = view.inventory();
+    const org = region(inventory, m.managed_organizations_title());
+    const link = within(org).getByRole('link', { name: 'Atlas Editors' }) as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(
+      `/en/settings?panel=compact&managedAccount=${initial.organizations.items[0]!.account.id}#account`,
+    );
+    link.focus();
+    await view.click(link);
+    expect(link.closest('[hidden]')).not.toBeNull();
+    link.blur();
+    await view.navigate('/en/settings?panel=compact#account');
+    expect(document.activeElement).toBe(link);
+    expect(feed.calls).toEqual([{}]);
+    const concealed = within(region(inventory, m.managed_operated_title()))
+      .getByRole('heading', { name: m.settings_managed_identity_unavailable() })
+      .closest('li')!;
+    expect(concealed.querySelector('a')).toBeNull();
+  } finally {
+    await view.close();
   }
 });
