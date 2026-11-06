@@ -195,6 +195,8 @@ export function readShowcasePersonalLibrary(input: { client: KernelClient; curso
     input.client.libraryEntries.get({
       query: {
         view: 'FULL',
+        orderBy: 'lastActivity',
+        direction: 'desc',
         limit: 8,
         ...(input.cursor ? { cursor: input.cursor } : {}),
       },

@@ -309,3 +309,5 @@ it does not reinterpret V1/V2/V3 or make V4 recoverable. Independent all-pool 64
 composed V4 fidelity/recovery refusal and terminal cases remain controller acceptance, not results of this derivation.
 
 Native source consent binds the canonical identity epoch, accepting type, profile release and owner epoch. A private review write advancing the partition position does not change that source. Entry command receipt positions are retained as decimal strings so retry evidence remains JSON serializable.
+
+The native date caller preserves its prepared intent when an unexpected dispatch or acknowledgement error throws. Only known native refusal/conflict results become terminal field outcomes; a retry reconciles the original receipt. Receiving fixtures include the generated Progress result even for a state-only decision, where its value is null.

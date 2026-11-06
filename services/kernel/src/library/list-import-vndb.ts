@@ -26,7 +26,12 @@ import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from '
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
+import {
+  createSessionCommands,
+  ProgressConflictError,
+  ProgressInvalidError,
+  type ProgressSessionJournalAdmission,
+} from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
@@ -1372,7 +1377,14 @@ export function createVndbImport(config: Config) {
                   error instanceof LibraryNotFoundError ||
                   (error instanceof ProblemError &&
                     ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
-                rethrowError: (error) => error instanceof GrantDeniedError,
+                rethrowError: (error) =>
+                  !(
+                    error instanceof ProblemError ||
+                    error instanceof ProgressInvalidError ||
+                    error instanceof ProgressConflictError ||
+                    error instanceof LibraryConflictError ||
+                    error instanceof LibraryNotFoundError
+                  ),
               },
             );
           return (

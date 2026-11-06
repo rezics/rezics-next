@@ -39,6 +39,7 @@ const apply = (id: string, rows: { ordinal: number; reviewId: string }[]) =>
   json('POST', `${base}/${id}:apply`, { rows });
 beforeAll(async () => {
   f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const producer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   producerBearer = producer.bearer;
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
@@ -337,7 +338,6 @@ test('a changed export updates the same matched Library entry and current readba
   await json('DELETE', `${base}/${changedUpload.uploadId}`);
 }, 120000);
 test('journalled explicit review and changed reimport survive lost delivery and independently return the same Entry and Progress', async () => {
-  expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const targetId = await f.createSubject('game');
   const sourceId = 'v999999999991';
   const journal = new ShowcaseJournal(':memory:');
@@ -348,6 +348,8 @@ test('journalled explicit review and changed reimport survive lost delivery and 
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const response = await f.handle(request.clone());
+      if (request.method === 'GET' && !response.ok)
+        throw new Error(`Owner read ${request.url}: ${response.status} ${await response.clone().text()}`);
       if (new URL(request.url).pathname.endsWith(':apply')) {
         requests.push(await request.text());
         if (loseApply) {
@@ -1010,11 +1012,11 @@ test('VNDB typed dates select one repeat, preserve precision, and clear only wit
     rows: [{ ordinal: 0, version: pending.version, fields: ['startDate'] }],
   };
   let acknowledgements = 0;
-  expect(
-    await service.applyConsumptionDates(f.owner.actor, uploadId, selection, () => {
+  await expect(
+    service.applyConsumptionDates(f.owner.actor, uploadId, selection, () => {
       if (++acknowledgements === 2) throw new Error('Lost journal acknowledgement');
     }),
-  ).toMatchObject({ outcomes: [{ status: 'failed' }] });
+  ).rejects.toThrow('Lost journal acknowledgement');
   const accepted = await sessions.readSessionJournal(f.owner.actor, first.id);
   await f.pool.query(
     "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
