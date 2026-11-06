@@ -4,6 +4,7 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import {
   LibraryReadForbiddenError,
+  libraryLabel,
   readLibraryResult,
   StaleCursorError,
   subjectOf,
@@ -45,16 +46,26 @@ export type MineFollowingPage = {
   cursorReset?: true;
 };
 
-/** Subject and collection/space summaries have `type`; account and deleted-account targets do not. */
+/** FULL follow targets are a catalogue summary, a live account identity, an id-free deletion, or unavailable. */
 function followSubject(target: RawFollow['target']): LibrarySubject | null {
-  if (!target || !('id' in target) || !('type' in target)) return null;
-  return subjectOf({
+  if (!target || !('id' in target)) return null;
+  if ('type' in target) {
+    return subjectOf({
+      id: target.id,
+      type: target.type,
+      label: 'label' in target ? target.label : null,
+      ...('types' in target && target.types ? { types: target.types } : {}),
+      ...('cover' in target ? { cover: target.cover } : {}),
+    });
+  }
+  if (!('kind' in target)) return null;
+  return {
     id: target.id,
-    type: target.type,
-    ...('types' in target ? { types: target.types } : {}),
-    label: 'label' in target ? target.label : null,
-    ...('cover' in target ? { cover: target.cover } : {}),
-  });
+    type: target.kind,
+    types: [target.kind],
+    label: libraryLabel(target.displayName, target.id),
+    cover: null,
+  };
 }
 
 function present(follow: RawFollow): MineFollow {

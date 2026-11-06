@@ -57,6 +57,7 @@ test('Published progress log items preserve immutable supplied snapshots and adm
     ...first,
     id: 'snapshot/opaque+?locale=ja#二%',
     account: null,
+    attribution: { kind: 'deleted', displayName: 'Deleted account' },
     note: `  A retained snapshot.\n\n${'Every supplied word stays in this note. '.repeat(25)}\n  `,
     publishedAt: '2026-10-20T09:05:00.000Z',
   };
@@ -119,7 +120,7 @@ test('Published progress log items preserve immutable supplied snapshots and adm
     expect(heading.closest('[aria-hidden="true"], .sr-only')).toBeNull();
     expect(rows[0]!.querySelectorAll('a')).toHaveLength(1);
     expect(rows[0]!.querySelector('[data-content-item-slot="preview"] p')?.textContent).toBe(first.note);
-    const fallback = within(rows[1]!).getByRole('heading', { level: 3, name: m.library_account_deleted() });
+    const fallback = within(rows[1]!).getByRole('heading', { level: 3, name: m.thread_author_deleted() });
     expect(within(rows[1]!).getByRole('link', { name: fallback.textContent! }).getAttribute('href')).toBe(
       `/en/logs/${encodeURIComponent(deleted.id)}`,
     );
