@@ -29,6 +29,11 @@ root run prepares one database with both schemas, shares it with the selected wo
 consumers finish. Direct Kernel and Auth retain their existing migration, SQL analysis, construct, diagnostic,
 failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged. A workspace whose tsconfig names a content mapper declares that mapper's package itself, so the mapper resolves from that workspace (Web declares `reylo` 0.7.0 beside its `contentMappers` entry).
 
+Decision: Web's official typecheck and check gate both execute `tsc --noEmit --runExternalCode` for `tsconfig.json`
+then `tsconfig.scripts.json`. The scripts program still runs after a red web program. The check gate does not
+substitute `bun check --no-script`. Pin with `apps/web/scripts/typecheck.test.ts`. Native, browser and full root
+journeys remain separate acceptance.
+
 Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving
 entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
 projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes declare their bounded

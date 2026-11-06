@@ -171,3 +171,6 @@ Decision: generate Paraglide messages before Vite starts and treat `/en` as read
 missing-module overlay. Readiness reports the observed probe, fetch or child-exit cause; only an actual ECONNREFUSED
 is hydration startup. A closed-listener probe does not invent that code. Pin with the existing walk-stack,
 messages-ready and storybook-dev unit files. Original native acceptance remains open.
+Decision: Web official typecheck and the check gate both run `tsc --noEmit --runExternalCode` for `tsconfig.json` then
+`tsconfig.scripts.json`; the scripts program still runs after a red web program. Fewest tests: one shared-program pin
+and one continue-after-red pin in `apps/web/scripts/typecheck.test.ts`. Original native acceptance remains open.

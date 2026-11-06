@@ -361,7 +361,9 @@ compilers exited 2: base diagnostics plus 0.7 JSON errors later adapted. These m
 Observation: On 2026-11-05 (UTC), a focused `bun run --cwd services/kernel check scripts/check.test.ts` on check host c, with the analysis for this toolchain and schema already warm, took 71.7s of admitted-command time. Before its tests started it spent 22.4s in the database image, 15.6s in migrations, 2.7s in the schema dump, 1.1s in SQL analysis (2,001 files, none analysed, no entries written) and 16.6s in the compiler: 58.4s in total. Cold runs of the same code, reached by a comment-only edit to the cache module that changes the toolchain identity and was then reverted, analysed all 2,001 files in 240.3s on host c (1,995 statement entries written; database image 68.4s, migrations 12.6s, compiler 19.9s) and in 264.1s on host b, where the database image took 234.8s under that host's load. A changed schema dump starts a cold analysis for the new schema.
 
 Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
-root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.
+root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration. The official
+typecheck and the check gate both run `tsc --noEmit --runExternalCode` for `tsconfig.json` then `tsconfig.scripts.json`;
+the scripts program still runs after a red web program.
 
 Mapper preparation: the Reylo content mapper (`contentMappers` in `apps/web`, `services/kernel`, `services/auth`
 tsconfig files) is resolved by TypeScript 7 from the tsconfig's own directory upward, through the `reylo` link that

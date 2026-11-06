@@ -115,6 +115,8 @@ export function compilerIdentityPaths(): readonly string[] {
     'apps/web/package.json',
     'apps/web/node_modules/reylo/package.json',
     'apps/web/tsconfig.json',
+    'apps/web/tsconfig.scripts.json',
+    'apps/web/scripts/typecheck.ts',
   ];
 }
 

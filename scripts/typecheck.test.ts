@@ -516,6 +516,8 @@ test('compiler identity includes the Reylo mapper each workspace resolves and th
     'apps/web/package.json',
     'apps/web/node_modules/reylo/package.json',
     'apps/web/tsconfig.json',
+    'apps/web/tsconfig.scripts.json',
+    'apps/web/scripts/typecheck.ts',
   ]);
 });
 
