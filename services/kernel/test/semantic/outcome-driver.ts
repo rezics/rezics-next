@@ -10,10 +10,11 @@ import { compileCatalogue } from '@rezics/definitions/compile';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
-import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -26,7 +27,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -49,7 +50,6 @@ export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number
 
 const password = 'semantic outcome registration password with enough entropy';
 const clientId = 'semantic-outcomes';
-const kernelRoot = resolve(import.meta.dir, '../..');
 
 function required<T>(value: T | null | undefined, message: string): T {
   if (value == null) throw new Error(message);
@@ -230,6 +230,12 @@ async function startDriver(
     const kernelUrl = databaseUrl(source, kernelName);
     pool = createPool(kernelUrl);
     runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
+    const receiptKeyEnv = [...testReceiptKeys().keys]
+      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+      .join(',');
+    process.env.KERNEL_RECEIPT_KEYS = receiptKeyEnv;
+    configureTestReceiptKeys(pool);
+    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool);
     timer.mark('kernel database');
 
     const routeKey = randomBytes(32);
@@ -273,7 +279,9 @@ async function startDriver(
     });
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
-    const governanceScopes = [...scopes, 'gate:any'];
+    for (const action of LIFECYCLE_ACTIONS.keys()) if (!scopes.includes(action)) scopes.push(action);
+    if (!scopes.includes('access:grant')) scopes.push('access:grant');
+    const governanceScopes = [...new Set([...scopes, 'gate:any', 'access:grant'])];
     const knownScopes = new Set(governanceScopes);
     // Kernel Access is lazy. Resolve it through an ordinary public read after
     // composition, retaining exactly the instance returned by access(config).
@@ -477,29 +485,7 @@ async function startDriver(
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);
-
-    const bootstrap = Bun.spawn(
-      [process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.accountId],
-      {
-        cwd: kernelRoot,
-        env: {
-          ...process.env,
-          DATABASE_URL: kernelUrl,
-          KERNEL_RECEIPT_KEYS: [...testReceiptKeys().keys]
-            .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
-            .join(','),
-        },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
-    );
-    const [bootstrapCode, bootstrapOut, bootstrapErr] = await Promise.all([
-      bootstrap.exited,
-      new Response(bootstrap.stdout).text(),
-      new Response(bootstrap.stderr).text(),
-    ]);
-    if (bootstrapCode !== 0)
-      throw new Error(`Governance bootstrap exited ${bootstrapCode}: ${bootstrapOut}${bootstrapErr}`);
+    await bootstrapGovernance(pool, governor.accountId);
 
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
@@ -538,17 +524,20 @@ async function startDriver(
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId = GLOBAL_CONTEXT,
+      resourceId = PLATFORM_RESOURCE.id,
       grantor: Account = governor,
     ) {
-      const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
-      if (route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
+      const resource =
+        resourceId === PLATFORM_RESOURCE.id || resourceId === GLOBAL_CONTEXT
+          ? PLATFORM_RESOURCE
+          : { route: routeOf(resourceId), id: resourceId };
+      if (resource.route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
       const response = await send(
         grantor,
         'POST',
         '/v1/grants',
         {
-          resource: { route, id: resourceId },
+          resource,
           subject: { kind: 'account', id: account.accountId },
           actions,
           valid: '(,)',
@@ -615,7 +604,8 @@ async function startDriver(
       },
       async grant(persona, actions, resourceId) {
         if (persona === 'anonymous') throw new Error('Anonymous is not an account grant recipient');
-        const grantor = resourceId === GLOBAL_CONTEXT ? governor : editor;
+        const grantor =
+          resourceId === GLOBAL_CONTEXT || resourceId === PLATFORM_RESOURCE.id ? governor : editor;
         await grantAccount(accounts[persona], actions, resourceId, grantor);
       },
       async projection(state) {
