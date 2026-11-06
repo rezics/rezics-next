@@ -58,3 +58,22 @@ fixture therefore fails before its first case on base: `boards-http`, `subject-t
 content read changes, so none of them can verify those changes until the fixture constructs Access again.
 
 The owner decides whether the refusal or the fixture role is wrong; this part does not weaken either.
+
+## Owner decision 52451 (received)
+
+Accounts122 retains Global parent and live authorization, so the Space and Realm creation grant above belongs to that
+owner. Community660535a9 owns Space witness stale-reference provenance, forward migration and regeneration, and the
+populated Realm revision and replay repair. Those are received normally in native composed acceptance; this branch
+does not patch them. The full Realm acceptance remains 0/16, and a narrow provisioning pass does not accept this outcome.
+
+What this branch still owns, and what it has not yet proved:
+
+- Native late-revocation coverage: anonymous takedown for thread head, post head and exact revision
+  (`test/content/late-board-revocation-point-reads.test.ts`), and anonymous takedown for the newest board page and
+  thread post pages, first and continuation (`test/content/late-board-revocation-pages.test.ts`).
+- Protected read-grant revocation for the same families still needs an account fixture. The standing fixture
+  cannot construct Access on this base (see the second blocker above). The composed user-case suite covers it once
+  Accounts122 and Community660535a9 land their parts.
+- Hot and active board pages are not covered natively yet; they need board rank rows.
+- The composed `specs/content-user-cases-outcomes.test.ts` (19 cases) still fails at provisioning until Accounts122's
+  Global authorization lands.
