@@ -98,6 +98,9 @@ test('preparation keys deduplicate only identical accepted owner definitions', (
   );
   expect(basis?.basisDigest).toEqual(createHash('sha256').update(basis!.canonicalBasis).digest());
   expect(preparationDefinitionBases(owner, collection, [selected, { ...selected, sort: 'ordinal' }])).toHaveLength(2);
+  expect(
+    preparationDefinitionBases(owner, collection, [selected, { ...selected, source: { kind: 'catalogue' } }]),
+  ).toHaveLength(2);
 });
 
 test('retained definitions recover exact immutable meaning and reject invalid bytes before release I/O', async () => {

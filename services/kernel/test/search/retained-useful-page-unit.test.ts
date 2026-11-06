@@ -165,6 +165,34 @@ test('retained windows consume raw ordinals and preserve filtered suffix and loo
   expect(calls).toEqual([{ size: 5, refill: undefined }]);
 });
 
+test('retained windows consume trailing rejects after a filled page and leave unused useful lookahead', async () => {
+  const a = hit('a', 1);
+  const hidden = hit('hidden', 2);
+  const b = hit('b', 3);
+  const alias = hit('alias-a', 4);
+  const c = hit('c', 5);
+  const result = await collectRetainedUsefulPage({
+    limit: 2,
+    check: async () =>
+      new Map([
+        [a, 'a'],
+        [b, 'b'],
+        [alias, 'a'],
+        [c, 'c'],
+      ]),
+    canonicalId: (id) => id,
+    read: async () => ({
+      execution: 'filled',
+      hits: [a, hidden, b, alias, c],
+      window: { positions: [0, 1, 2, 3, 4], examined: 5, exhausted: false },
+    }),
+  });
+  expect(result.values).toEqual(['a', 'b']);
+  expect(result.status).toBe('filled');
+  expect(result.continuation).toEqual({ execution: 'filled', consumed: 4 });
+  expect(result.frontier).toEqual({ after: [4] });
+});
+
 test('empty filtered windows charge hidden raw prefixes and never certify EOF', async () => {
   let round = 0;
   const result = await collectRetainedUsefulPage({

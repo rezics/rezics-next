@@ -94,6 +94,7 @@ import { readSavedCatalogueMembers, type SavedCatalogueMembers } from './service
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 import { compileText, parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';
+import { publicCatalogueKindCounts } from './kind-count-proof.ts';
 import { collectUsefulPage } from './useful-page.ts';
 import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type {
@@ -1166,11 +1167,17 @@ export function createSearchService({
           }
           const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
           const observed = await observation(generation);
-          const witnesses = new Map<string, number>();
-          if (request.cursor === undefined && request.kindCursor === undefined)
-            for (const subject of shown.slice(0, 2))
-              witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
-          const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+          const metadata = kinds?.page(
+            kindAfter,
+            hitOptions.languages ?? [],
+            publicCatalogueKindCounts(
+              shown.map((subject) => subject.type),
+              {
+                continuation: request.cursor !== undefined || request.kindCursor !== undefined,
+                exhausted: page.exhausted,
+              },
+            ),
+          );
           const nextAfter = page.after;
           if (!page.exhausted && nextAfter === null) throw new ProblemError('search_restart_required');
           const response: PublicSearchPage = {
@@ -1346,8 +1353,7 @@ export function createSearchService({
                 throw new ProblemError('search_restart_required');
               })();
       let overflow = false;
-      const witnesses = new Map<string, number>();
-      let witnessCount = 0;
+      const kindTypes: string[] = [];
       // Observe every checked snapshot, including rejected candidates: current overflow can
       // precede its indexed marker, so an exact candidate total would also be unsafe there.
       const sourcePositions = new Map<number, bigint>();
@@ -1551,9 +1557,17 @@ export function createSearchService({
         );
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         const observed = await observation(generation!);
-        const witnesses = new Map<string, number>();
-        for (const subject of shown.slice(0, 2)) witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
-        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+        const metadata = kinds?.page(
+          kindAfter,
+          hitOptions.languages ?? [],
+          publicCatalogueKindCounts(
+            shown.map((subject) => subject.type),
+            {
+              continuation: request.cursor !== undefined || request.kindCursor !== undefined,
+              exhausted,
+            },
+          ),
+        );
         const response: PublicSearchPage = {
           subjects: publicResults,
           ...(metadata
@@ -1684,12 +1698,7 @@ export function createSearchService({
             matchEvidence: projectMatchEvidence(subject, evidenceById.get(subject.id), matchEvidencePlan),
           })),
         );
-        for (const subject of shown) {
-          if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {
-            witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
-            witnessCount++;
-          }
-        }
+        kindTypes.push(...shown.map((subject) => subject.type));
         if (hitOptions.properties) {
           const facts = await sourceRequest(() =>
             projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
@@ -1709,7 +1718,14 @@ export function createSearchService({
             throw new ProblemError('search_restart_required');
         }
         const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
-        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], retainedRead ? new Map() : witnesses);
+        const metadata = kinds?.page(
+          kindAfter,
+          hitOptions.languages ?? [],
+          publicCatalogueKindCounts(kindTypes, {
+            continuation: request.cursor !== undefined || request.kindCursor !== undefined || Boolean(retainedRead),
+            exhausted,
+          }),
+        );
         const response: PublicSearchPage = {
           subjects: publicResults,
           ...(metadata

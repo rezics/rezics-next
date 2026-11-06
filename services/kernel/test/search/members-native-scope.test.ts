@@ -23,10 +23,14 @@ import { testRouteKey } from '../support/test-kernel.ts';
 type Runtime = Awaited<ReturnType<typeof membersPreparationRuntime>>;
 type Fixture = Awaited<ReturnType<Runtime['fixture']>>;
 const presence: FilterDocument = { owner: { presence: true } };
-const definition = (sort: 'id' | 'ordinal', filter: FilterDocument = presence): PreparationDefinition => ({
+const definition = (
+  sort: 'id' | 'ordinal',
+  filter: FilterDocument = presence,
+  source: PreparationDefinition['source'] = { kind: 'owner' },
+): PreparationDefinition => ({
   filter: admitFilter(parseFilter(filter), bundledRelease, { owner: true, saved: true }),
   sort,
-  source: { kind: 'owner' },
+  source,
   release: { digest: bundledDigest, value: bundledRelease },
 });
 
