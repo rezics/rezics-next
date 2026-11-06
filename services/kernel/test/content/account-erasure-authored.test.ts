@@ -13,6 +13,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createWorkClient } from '../../src/work/client.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 
@@ -289,13 +290,13 @@ beforeAll(async () => {
     process.execPath,
     ['run', new URL('./support/disclosure-fixtures.ts', import.meta.url).pathname, '--disclosure-worker'],
     {
-      env: {
+      env: workerTestEnv({
         ...process.env,
         DATABASE_URL: url,
         CONTENT_TEST_STORAGE: 'http://127.0.0.1:1',
         CONTENT_TEST_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url'),
         CONTENT_TEST_DISABLE_ERASURE_PARTICIPANT: 'true',
-      },
+      }),
       stdio: 'pipe',
     },
   );

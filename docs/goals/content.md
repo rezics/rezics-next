@@ -94,9 +94,10 @@ declared receipt keys before setup and grants; `createKernel` reuses a pool ring
 Policy catalogues drop resource types that did not resolve for the mounted action subset. JSON-array readers bind
 keys as text so `jsonb_to_recordset` never sees a non-array. Composition tests compare installed roles with
 `accessActionCatalogue` of the mounted routes. The Realm minting test records `preparePage` for the Global parent
-and `prepare` for Space/Context extras; extras deadline is bound to that command attempt at prepare
-so authorize admits the same attempt, and GrantDeniedError maps to forbidden before its write-denied
-superclass. Sequential fixtures unfence and re-issue tokens at the current
+and `prepare` for Space/Context extras; extras deadline and the Space slot witness are stored on
+that command attempt at prepare so authorize admits only that attempt, without a shared scalar
+fallback. GrantDeniedError maps to forbidden before its write-denied superclass. Native HTTP
+fixtures carry dedicated receipt keys and the shared 30s request budget. Sequential fixtures unfence and re-issue tokens at the current
 authentication floor after suspension and never decrease `minimum_authn_epoch`.
 Boolean Realm-read and publication disclosure checks conceal eligibility `not_found` as a closed miss;
 a metadata revision rechecks current visibility. The publication list fixture deletes
