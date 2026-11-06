@@ -158,11 +158,19 @@ these helper cases are internal accounting evidence, not public count permission
 rejected taken_down lookahead”. They resume from rejected consumed keys through real HTTP with indexing paused
 for anonymous and editor; the suspended pre-suspension bearer stays 401 and pages omit totals.
 
-**Native wrapper/command:** these outcomes import [Search driver](../../services/kernel/test/search/outcome-driver.ts);
-`bun run --cwd services/kernel check test/search/deletion-count-outcomes.test.ts test/search/cursor-confidentiality-outcomes.test.ts`.
-Fewest unit tests pin currentness, trusted stale recovery, page disclosure and independent aggregate proofs; native persona and seeded browser stay unaccepted. New withheld-positive/negative, foreign repair and late barrier/ACK races: REQUIRED NOT YET FROZEN/BOUND. Reuse
-[Semantic producer contract](../../services/kernel/src/semantic/public-filter-source-contract.md), currently types/future
-boundary: same-transaction lossless reductions, complete routing/registration, all4096-home logical coverage through
+**Native wrapper/command:** the owning [native query-privacy cell](../../services/kernel/test/search/query-privacy-user-cases.test.ts)
+reuses released Book, Concept, owner and transport fixtures for positive/NOT membership, requested fields,
+name/rating order, local/foreign reductions, permission changes, final-observation races and ordinary relay recovery.
+`bun run --cwd services/kernel check test/search/query-privacy-user-cases.test.ts test/search/query-privacy.test.ts test/search/query-privacy-page.test.ts test/search/query-privacy-aggregate.test.ts test/search/owner-current-disclosure.test.ts`.
+Decision: preserve the exact native page opener through request/continuation handles; an irrelevant excluded-key
+reduction must leave useful anonymous/editor pages during Search-only pause, while returned-subject blocks and
+suspended credentials retain their independent checks. Initial/final owner hydration batches at 100 identities
+also cover a full 200-candidate window. Unit cases distinguish admitted cursors, positive kind lower bounds and
+independent whole-query aggregate proof. Native passage must be observed; seeded browser and promoted-main closure
+remain held separately. The older deletion/count wrappers need reconciliation of their public-total expectations;
+they are not the owning acceptance cell. Reuse the
+[Semantic producer contract](../../services/kernel/src/semantic/public-filter-source-contract.md):
+same-transaction lossless reductions, complete routing/registration, all4096-home logical coverage through
 behind/changed access paths, actual refresh-visible local AND dependent foreign repair before contiguous ACK.
 ACK binds physical target/incarnation, consumer/projection generation and meaning/read definition; checkpoint/alias
 is insufficient. Late registration, old snapshots, lost CAS, ambiguous sink result and pruning must not advance ACK.

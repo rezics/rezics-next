@@ -611,6 +611,98 @@ test('native correct-password sign-in of the suspended account returns ACCOUNT_S
   expect(response.headers.get('set-cookie')).toBeNull();
 }, 30_000);
 
+test('irrelevant excluded native keys keep useful permitted pages during lag and converge through the ordinary relay', async () => {
+  const subject = books.subjects['B-short'];
+  const fact = books.facts.find((fact) => fact.subject === subject.id && fact.property === fixture.meaning.words);
+  assert(fact);
+  await originalPages(harem, positiveNames);
+  await originalPages(notHarem, negativeNames);
+  const bound = await capturedNative(capturePlan(harem), 'pit');
+  let queried = bound.capture.queried;
+  let hidden = false;
+  try {
+    const baseline = await bound.operations.query(queried, nativeContext());
+    assert(baseline.status === 'queried', JSON.stringify(baseline));
+    queried = baseline.queried;
+    await fixture.search!.indexing('paused');
+    status(
+      await fixture.request(
+        'editor',
+        'POST',
+        `/v1/subjects/${subject.id}/candidates/${fact.candidate}:hide`,
+        { reason: 'Withhold an excluded word-count key outside the executed harem predicate and order' },
+        discoveryKey(),
+      ),
+      200,
+    );
+    hidden = true;
+    const read = status(await fixture.read(subject), 200).body.subject as Subject;
+    expect(read.statements[fixture.meaning.words] ?? []).toEqual([]);
+    // A real reduction has committed with indexing stopped. The retained positive
+    // execution excludes this subject and does not depend on its word-count key.
+    const lagged = await bound.operations.readStatus({ queried, execution: baseline.execution }, nativeContext());
+    assert(lagged.status === 'observed', lagged.status);
+    expect(lagged.blocking).toEqual([]);
+    for (const persona of ['anonymous', 'editor'] as const) {
+      const response = status(
+        await fixture.request(persona, 'POST', '/v1/subjects:search', {
+          filter: harem,
+          text: originalBookText,
+          sort: 'name',
+          limit: 100,
+          languages: ['en'],
+          properties: ['schema:keywords'],
+        }),
+        200,
+      );
+      countFreeList(response.body);
+      const hits = response.body.subjects as SearchHit[];
+      expect(hits.map(({ id }) => id).sort()).toEqual(ids(positiveNames));
+      expect(hits.map(({ labels }) => labels.en)).toEqual([...hits.map(({ labels }) => labels.en)].sort());
+      expect(response.body.next).toBeNull();
+      for (const hit of hits)
+        expect(hit.facts?.['schema:keywords']?.map((value) => value.kind === 'item' && value.id)).toEqual([
+          classification.harem.id,
+        ]);
+    }
+    const denied = status(await fixture.request('suspended', 'POST', '/v1/subjects:search', { filter: harem }), 401);
+    expect(denied.body.code).toBe('invalid_credentials');
+    expect(denied.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    // The same key belongs to a returned NOT candidate, so own-row currentness
+    // still applies independently of the irrelevant filter/order classification.
+    privateReadiness(
+      await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
+        filter: notHarem,
+        text: originalBookText,
+        sort: 'id',
+        properties: [fixture.meaning.words],
+      }),
+    );
+    await fixture.search!.indexing('running');
+    await originalPages(harem, positiveNames);
+    const recovered = await originalPages(notHarem, negativeNames);
+    expect(recovered.hits.map(({ id }) => id)).toContain(subject.id);
+    const final = await bound.operations.readStatus({ queried, execution: baseline.execution }, nativeContext());
+    assert(final.status === 'observed', final.status);
+    expect(final.blocking).toEqual([]);
+  } finally {
+    await bound.operations.closeObservation(queried, nativeContext());
+    await bound.operations.close();
+    if (hidden)
+      status(
+        await fixture.request(
+          'editor',
+          'POST',
+          `/v1/subjects/${subject.id}/candidates/${fact.candidate}:restore`,
+          { reason: 'Restore the original released word-count control' },
+          discoveryKey(),
+        ),
+        200,
+      );
+    await fixture.search!.indexing('running');
+  }
+}, 240_000);
+
 for (const reduction of ['local-tag', 'foreign-target'] as const) {
   for (const phase of ['request', 'response'] as const) {
     for (const polarity of ['positive', 'negative'] as const) {

@@ -247,7 +247,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     return wrapper;
   }
   function requestHandle(operations: PublicDiscoveryConsumerOperations): PublicDiscoveryConsumerOperations {
-    return {
+    const handle: PublicDiscoveryConsumerOperations = {
       capture: operations.capture.bind(operations),
       captureDiscovery: operations.captureDiscovery.bind(operations),
       queryDiscovery: operations.queryDiscovery.bind(operations),
@@ -257,6 +257,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       closeObservation: operations.closeObservation.bind(operations),
       close: async () => {},
     };
+    // Request cleanup does not own the shared factory, but the request still uses
+    // its exact capture, meter and native START/FINAL page. Forward the private
+    // opener through every handle, including handles reopened for continuations.
+    forwardPublicFilterCoveragePage(operations, handle);
+    return handle;
   }
   async function subjectOperations(
     physicalTarget: string,

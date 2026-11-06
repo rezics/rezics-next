@@ -21,9 +21,9 @@ const context: DiscoveryReadContext = {
 const unused = async (): Promise<never> => {
   throw new Error('Owner current disclosure must not read a catalogue producer');
 };
-function collectionCard(title: string, revision: number): PublicCollectionDiscoverySummary {
+function collectionCard(title: string, revision: number, collectionId = id): PublicCollectionDiscoverySummary {
   return {
-    id,
+    id: collectionId,
     title,
     description: null,
     presentationKind: null,
@@ -33,7 +33,7 @@ function collectionCard(title: string, revision: number): PublicCollectionDiscov
     curator: { state: 'unavailable', reason: 'deidentified' },
     preview: { state: 'empty' },
     kind: 'collection',
-    destination: `/collections/${id}`,
+    destination: `/collections/${collectionId}`,
     visibility: 'public',
     revision,
     sourceGeneration: 'generation-1',
@@ -41,22 +41,22 @@ function collectionCard(title: string, revision: number): PublicCollectionDiscov
     outputGeneration: 'generation-1',
   };
 }
-function collection(title: string, revision: string): DiscoveryOwnerMetadataSummary<'collection'> {
+function collection(title: string, revision: string, collectionId = id): DiscoveryOwnerMetadataSummary<'collection'> {
   return {
-    id,
+    id: collectionId,
     title,
     summary: null,
     revision,
     sourcePosition: '4',
     queryObservation,
-    card: collectionCard(title, Number(revision)),
+    card: collectionCard(title, Number(revision), collectionId),
     operands: {
-      id,
+      id: collectionId,
       presentationKind: { kind: 'mixed' },
       curator: { state: 'unavailable', reason: 'deidentified' },
       subjectMembership: null,
       popularity: null,
-      recency: [null, route, id],
+      recency: [null, route, collectionId],
       eligible: { presentationKind: null, curator: null, subject: null },
     },
   };
@@ -103,8 +103,12 @@ test('a public-to-private change during nested hydration withholds the owner hit
   expect(reads).toBe(2);
 });
 
-test('unchanged owner rows after nested hydration keep the current card', async () => {
-  const rows = [collection('Public shelf', '1')];
+test('a full owner window keeps current cards through bounded initial and final hydration', async () => {
+  const ids = Array.from(
+    { length: 200 },
+    (_, index) => `018f0000-0000-7000-8000-00a0${String(index + 1).padStart(8, '0')}`,
+  );
+  const rows = new Map(ids.map((id) => [id, collection('Public shelf', '1', id)]));
   let reads = 0;
   const registry = createDiscoveryRegistry({
     release: bundledRelease,
@@ -128,7 +132,8 @@ test('unchanged owner rows after nested hydration keep the current card', async 
           metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'library' },
           async readCurrent(ids) {
             reads++;
-            return new Map(ids.map((currentId) => [currentId, rows[0]!] as const));
+            expect(ids.length).toBeLessThanOrEqual(100);
+            return new Map(ids.map((currentId) => [currentId, rows.get(currentId)!] as const));
           },
         },
       },
@@ -136,14 +141,17 @@ test('unchanged owner rows after nested hydration keep the current card', async 
       space: { readiness: 'unavailable' },
     },
   });
-  const candidates: DiscoveryOwnerCandidate[] = [
-    { key: { owner: 'commerce', kind: 'collection', route, id }, revision: '1', sourcePosition: '4' },
-  ];
+  const candidates: DiscoveryOwnerCandidate[] = ids.map((id) => ({
+    key: { owner: 'commerce', kind: 'collection', route, id },
+    revision: '1',
+    sourcePosition: '4',
+  }));
   const hits = await hydrateOwnerDiscoveryHits(registry, candidates, context);
-  expect(hits).toHaveLength(1);
+  expect(hits).toHaveLength(200);
+  expect(hits.map((hit) => hit?.summary.value.id)).toEqual(ids);
   expect(hits[0]?.summary.value.id).toBe(id);
   expect(hits[0]?.summary.value.title).toBe('Public shelf');
-  expect(reads).toBe(2);
+  expect(reads).toBe(4);
 });
 
 test('a changed owner revision during nested hydration restarts instead of publishing the stale card', async () => {
