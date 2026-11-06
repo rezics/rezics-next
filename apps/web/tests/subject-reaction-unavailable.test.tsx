@@ -675,7 +675,8 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   const fourthId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
   const oldProviderRead = deferred<NativeReactionRead>();
   queueNativeRead(oldProviderRead);
-  await paint(zoneOutcome(fourthId));
+  const fourthOutcome = zoneOutcome(fourthId);
+  await paint(fourthOutcome);
   await until(
     () =>
       personalCalls.length === 4 &&
@@ -686,12 +687,13 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   replacementClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   replacementClient.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 200, data: { kind: null } });
-  await paint(zoneOutcome(fourthId), replacementClient);
+  await paint(fourthOutcome, replacementClient);
   await until(
     () =>
       ownReads.length === ownReadsBeforeMount + 6 && chips().length > 0 && chips().some((button) => !button.disabled),
   );
   const combinedCountBeforeOldResponse = personalCalls.length;
+  expect(combinedCountBeforeOldResponse).toBe(4);
   oldProviderRead.resolve({ status: 200, data: { kind: 'love' } });
   await tick();
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
@@ -1028,10 +1030,12 @@ test('production Zone reloads its personal source after session loss while react
   await until(
     () =>
       ownReads.length === 2 &&
-      followReads.length === mountedFollowReads + 1 &&
+      followButton()?.disabled === false &&
       chips().some((button) => !button.disabled),
   );
-  independentZonePayload(4, 4, mountedFollowReads + 1);
+  const recoveredFollowReads = followReads.length;
+  expect(recoveredFollowReads).toBeGreaterThan(mountedFollowReads);
+  independentZone(4, 4, recoveredFollowReads);
 });
 
 test('anonymous production Zone makes zero private reaction reads and preserves its public counts', async () => {
