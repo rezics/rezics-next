@@ -95,6 +95,7 @@ export function kernelVndbPort(
     return { authorization, ...(key ? { 'idempotency-key': quotedVndbKey(key) } : {}) };
   }
   const route = nativeVndbImport(client);
+  const privateFetch = { cache: 'no-store', redirect: 'manual' } as const;
 
   async function call<T, R>(
     command: VndbCommand,
@@ -120,7 +121,11 @@ export function kernelVndbPort(
     preview(command) {
       return call(
         command,
-        (authorization) => route!.$preview.post({ xml: command.xml }, { headers: headers(authorization, command.key) }),
+        (authorization) =>
+          route!.$preview.post(
+            { xml: command.xml },
+            { headers: headers(authorization, command.key), fetch: privateFetch },
+          ),
         (value) => ({ kind: 'previewed', value }),
       );
     },
@@ -131,6 +136,7 @@ export function kernelVndbPort(
           route!({ uploadId: command.uploadId }).get({
             query: { offset: command.offset },
             headers: headers(authorization),
+            fetch: privateFetch,
           }),
         // Retained evidence comes from the importer's stored JSON, typed unknown by the emitter.
         (value) => ({ kind: 'page', value: value as VndbPage }),
@@ -142,6 +148,7 @@ export function kernelVndbPort(
         (authorization) =>
           route!({ uploadId: command.uploadId }).source.get({
             headers: headers(authorization),
+            fetch: privateFetch,
           }),
         (value) => ({ kind: 'source', xml: value.xml }),
       );
@@ -152,6 +159,7 @@ export function kernelVndbPort(
         (authorization) =>
           route!({ uploadId: command.uploadId }).$review.post(command.body, {
             headers: headers(authorization, command.key),
+            fetch: privateFetch,
           }),
         (value) => ({ kind: 'reviewed', value }),
       );
@@ -160,7 +168,10 @@ export function kernelVndbPort(
       return call(
         command,
         (authorization) =>
-          route!({ uploadId: command.uploadId }).$apply.post(command.body, { headers: headers(authorization) }),
+          route!({ uploadId: command.uploadId }).$apply.post(command.body, {
+            headers: headers(authorization),
+            fetch: privateFetch,
+          }),
         (value) => ({ kind: 'applied', value }),
       );
     },
@@ -168,7 +179,10 @@ export function kernelVndbPort(
       return call(
         command,
         (authorization) =>
-          route!({ uploadId: command.uploadId }).$cancel.post({}, { headers: headers(authorization, command.key) }),
+          route!({ uploadId: command.uploadId }).$cancel.post(
+            {},
+            { headers: headers(authorization, command.key), fetch: privateFetch },
+          ),
         () => ({ kind: 'cancelled' }),
       );
     },
@@ -176,7 +190,10 @@ export function kernelVndbPort(
       return call(
         command,
         (authorization) =>
-          route!({ uploadId: command.uploadId }).delete(undefined, { headers: headers(authorization, command.key) }),
+          route!({ uploadId: command.uploadId }).delete(undefined, {
+            headers: headers(authorization, command.key),
+            fetch: privateFetch,
+          }),
         () => ({ kind: 'deleted' }),
       );
     },

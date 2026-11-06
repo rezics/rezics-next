@@ -100,7 +100,10 @@ export async function seedShowcasePersonalList(input: {
   try {
     response = await input.client.libraryImports.vndb.$preview.post(
       { xml: sealed.xml },
-      { headers: { 'idempotency-key': JSON.stringify(action.idempotency_key) } },
+      {
+        headers: { 'idempotency-key': JSON.stringify(action.idempotency_key) },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      },
     );
   } catch (error) {
     if (!(error instanceof TypeError) && !(error instanceof DOMException) && !(error instanceof SyntaxError))
@@ -144,7 +147,9 @@ type Caller = {
 };
 type ReviewCommand = { kind: 'review'; uploadId: string; body: ShowcasePersonalListReview };
 type ApplyCommand = { kind: 'apply'; uploadId: string; body: ShowcasePersonalListSelection };
-type Command = ReviewCommand | ApplyCommand;
+type CancelCommand = { kind: 'cancel'; uploadId: string };
+type DeleteCommand = { kind: 'delete'; uploadId: string };
+type Command = ReviewCommand | ApplyCommand | CancelCommand | DeleteCommand;
 type SealedCommand = ShowcasePersonalListIdentity & { command: Command };
 
 function sameIdentity(left: ShowcasePersonalListIdentity, right: ShowcasePersonalListIdentity): boolean {
@@ -291,4 +296,168 @@ export async function applyShowcasePersonalList(
     return { state: 'unknown-delivery', code: 'apply-response-changed' };
   if (response.value.stopped === null) input.journal.acknowledgeAction(sealed.actionKey, command.uploadId);
   return { state: 'acknowledged', value: response.value };
+}
+
+/** Independent Progress page for one chosen work. Absence of a session is a current empty page, never a vote. */
+export function readShowcasePersonalProgress(input: { client: KernelClient; subjectId: string; language?: string }) {
+  return nativeRead(() =>
+    input.client.progressSessions.get({
+      query: { subjectId: input.subjectId, limit: 8 },
+      headers: { 'accept-language': input.language ?? 'en' },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    }),
+  );
+}
+
+type Removed = NonNullable<Awaited<ReturnType<UploadedVndb['$cancel']['post']>>['data']>;
+
+/** Cancel stops fresh admission; acknowledged Library, Progress and vote effects stay. */
+export async function cancelShowcasePersonalList(
+  input: Caller & { intentId: string; uploadId: string },
+): Promise<ShowcasePersonalListAcknowledgement<Removed>> {
+  const sealed = sealCommand(input, input.intentId, { kind: 'cancel', uploadId: input.uploadId });
+  if ('failure' in sealed) return sealed.failure;
+  const command = sealed.command as CancelCommand;
+  const response = await nativeRead(() =>
+    input.client.libraryImports.vndb({ uploadId: command.uploadId }).$cancel.post(
+      {},
+      {
+        headers: { 'idempotency-key': JSON.stringify(sealed.key) },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      },
+    ),
+  );
+  if (response.state !== 'current') return refuseCommand(input, sealed.actionKey, response);
+  input.journal.acknowledgeAction(sealed.actionKey, command.uploadId);
+  return { state: 'acknowledged', value: response.value };
+}
+
+/** Terminal deletion of the private upload. Native facts are not rolled back. */
+export async function deleteShowcasePersonalList(
+  input: Caller & { intentId: string; uploadId: string },
+): Promise<ShowcasePersonalListAcknowledgement<Removed>> {
+  const sealed = sealCommand(input, input.intentId, { kind: 'delete', uploadId: input.uploadId });
+  if ('failure' in sealed) return sealed.failure;
+  const command = sealed.command as DeleteCommand;
+  const response = await nativeRead(() =>
+    input.client.libraryImports.vndb({ uploadId: command.uploadId }).delete(undefined, {
+      headers: { 'idempotency-key': JSON.stringify(sealed.key) },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    }),
+  );
+  if (response.state !== 'current') return refuseCommand(input, sealed.actionKey, response);
+  input.journal.acknowledgeAction(sealed.actionKey, command.uploadId);
+  return { state: 'acknowledged', value: response.value };
+}
+
+export type ShowcasePersonalLifecycleCommand =
+  | { kind: 'preview'; xml: string }
+  | { kind: 'page'; uploadId: string; offset?: number; language?: string }
+  | { kind: 'review'; intentId: string; uploadId: string; body: ShowcasePersonalListReview }
+  | { kind: 'apply'; intentId: string; uploadId: string; body: ShowcasePersonalListSelection }
+  | { kind: 'library'; cursor?: string; language?: string }
+  | { kind: 'progress'; subjectId: string; language?: string }
+  | { kind: 'cancel'; intentId: string; uploadId: string }
+  | { kind: 'delete'; intentId: string; uploadId: string };
+
+type PageValue = NonNullable<Awaited<ReturnType<UploadedVndb['get']>>['data']>;
+type LibraryValue = NonNullable<Awaited<ReturnType<KernelClient['libraryEntries']['get']>>['data']>;
+type ProgressValue = NonNullable<Awaited<ReturnType<KernelClient['progressSessions']['get']>>['data']>;
+
+export type ShowcasePersonalLifecycleResult =
+  | { kind: 'preview'; value: ShowcasePersonalListUpload }
+  | { kind: 'page'; value: ShowcasePersonalListRead<PageValue> }
+  | { kind: 'review'; value: ShowcasePersonalListAcknowledgement<Reviewed> }
+  | { kind: 'apply'; value: ShowcasePersonalListAcknowledgement<Applied> }
+  | { kind: 'library'; value: ShowcasePersonalListRead<LibraryValue> }
+  | { kind: 'progress'; value: ShowcasePersonalListRead<ProgressValue> }
+  | { kind: 'cancel'; value: ShowcasePersonalListAcknowledgement<Removed> }
+  | { kind: 'delete'; value: ShowcasePersonalListAcknowledgement<Removed> };
+
+/**
+ * One durable owner lifecycle: sealed preview, explicit match/review, confirmation, reopen, changed
+ * reimport, cancel/delete, then independent current Library and Progress reads. Journal receipts never
+ * substitute for a native current page.
+ */
+export async function runShowcasePersonalLifecycle(
+  input: Caller & { commands: readonly ShowcasePersonalLifecycleCommand[] },
+): Promise<ShowcasePersonalLifecycleResult[]> {
+  const results: ShowcasePersonalLifecycleResult[] = [];
+  for (const command of input.commands) {
+    const caller = { client: input.client, journal: input.journal, identity: input.identity };
+    if (command.kind === 'preview') {
+      results.push({ kind: 'preview', value: await seedShowcasePersonalList({ ...caller, xml: command.xml }) });
+      continue;
+    }
+    if (command.kind === 'page') {
+      results.push({
+        kind: 'page',
+        value: await readShowcasePersonalList({
+          client: input.client,
+          uploadId: command.uploadId,
+          ...(command.offset === undefined ? {} : { offset: command.offset }),
+          ...(command.language === undefined ? {} : { language: command.language }),
+        }),
+      });
+      continue;
+    }
+    if (command.kind === 'review') {
+      results.push({
+        kind: 'review',
+        value: await reviewShowcasePersonalList({
+          ...caller,
+          intentId: command.intentId,
+          uploadId: command.uploadId,
+          body: command.body,
+        }),
+      });
+      continue;
+    }
+    if (command.kind === 'apply') {
+      results.push({
+        kind: 'apply',
+        value: await applyShowcasePersonalList({
+          ...caller,
+          intentId: command.intentId,
+          uploadId: command.uploadId,
+          body: command.body,
+        }),
+      });
+      continue;
+    }
+    if (command.kind === 'library') {
+      results.push({
+        kind: 'library',
+        value: await readShowcasePersonalLibrary({
+          client: input.client,
+          ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
+          ...(command.language === undefined ? {} : { language: command.language }),
+        }),
+      });
+      continue;
+    }
+    if (command.kind === 'progress') {
+      results.push({
+        kind: 'progress',
+        value: await readShowcasePersonalProgress({
+          client: input.client,
+          subjectId: command.subjectId,
+          ...(command.language === undefined ? {} : { language: command.language }),
+        }),
+      });
+      continue;
+    }
+    if (command.kind === 'cancel') {
+      results.push({
+        kind: 'cancel',
+        value: await cancelShowcasePersonalList({ ...caller, intentId: command.intentId, uploadId: command.uploadId }),
+      });
+      continue;
+    }
+    results.push({
+      kind: 'delete',
+      value: await deleteShowcasePersonalList({ ...caller, intentId: command.intentId, uploadId: command.uploadId }),
+    });
+  }
+  return results;
 }

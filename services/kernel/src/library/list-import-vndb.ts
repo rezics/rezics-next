@@ -245,7 +245,6 @@ function nativeVoteView(vote: Pick<Vote, 'units' | 'revision' | 'changedAt'> | n
 
 /** Counted zero stays a set vote; explicit clear stays cleared; proven absence stays absent. */
 function nativeVoteFromReview(vote: VoteReview['currentVote']): NativeVoteObservation {
-  if (vote.state === 'unavailable') return { state: 'unavailable' };
   if (vote.state === 'absent') return { state: 'absent' };
   if (vote.state === 'clear') return { state: 'cleared', revision: vote.revision, at: vote.changedAt };
   return { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
@@ -2201,34 +2200,39 @@ export function createVndbImport(config: Config) {
     };
   }
 
-  function scoreCommandInput(score: ScoreDecision): PreparedPutVote['input'] {
+  function closedVoteGuard(score: ScoreDecision): PreparedPutVote['input']['guard'] {
     const identity = score.nativeGuard.subject.identity;
+    const observation =
+      typeof score.nativeGuard.ownVote.observation === 'string'
+        ? score.nativeGuard.ownVote.observation
+        : JSON.stringify(score.nativeGuard.ownVote.observation);
+    return {
+      version: 1,
+      question: {
+        revision: Number(score.nativeGuard.question.revision),
+        lifecycleRevision: Number(score.nativeGuard.question.lifecycleRevision),
+      },
+      subject: {
+        canonicalId: score.nativeGuard.subject.canonicalId,
+        epochs: score.nativeGuard.subject.epochs.map((entry) => ({
+          partition: Number(entry.partition),
+          epoch: String(entry.epoch),
+        })),
+        ...(identity === undefined ? {} : { identity: closedVoteIdentity(identity) }),
+      },
+      ownVote: {
+        state: score.nativeGuard.ownVote.state,
+        observation,
+      },
+    };
+  }
+
+  function scoreCommandInput(score: ScoreDecision): PreparedPutVote['input'] {
     return {
       questionId: score.question.id,
       targetId: score.targetId,
       units: score.units === null ? null : Number(score.units),
-      guard: {
-        version: 1,
-        question: {
-          revision: Number(score.nativeGuard.question.revision),
-          lifecycleRevision: Number(score.nativeGuard.question.lifecycleRevision),
-        },
-        subject: {
-          canonicalId: score.nativeGuard.subject.canonicalId,
-          epochs: score.nativeGuard.subject.epochs.map((entry) => ({
-            partition: Number(entry.partition),
-            epoch: String(entry.epoch),
-          })),
-          ...(identity === undefined ? {} : { identity: closedVoteIdentity(identity) }),
-        },
-        ownVote: {
-          state: score.nativeGuard.ownVote.state,
-          observation:
-            typeof score.nativeGuard.ownVote.observation === 'string'
-              ? score.nativeGuard.ownVote.observation
-              : JSON.stringify(score.nativeGuard.ownVote.observation),
-        },
-      },
+      guard: closedVoteGuard(score),
       observation: {
         subjectId: score.nativeGuard.subject.canonicalId,
         question: {

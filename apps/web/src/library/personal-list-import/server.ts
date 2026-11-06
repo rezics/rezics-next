@@ -125,6 +125,7 @@ export const readVndbOccurrences = createServerFn({ method: 'GET' })
     const response = await readerClient().progressSessions.get({
       query: { subjectId: data.targetId, limit: 8 },
       headers: { authorization: auth.authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     if (response.error) return { kind: 'unavailable' as const };
     return { kind: 'occurrences' as const, sessions: response.data.progressSessions, next: response.data.next };
