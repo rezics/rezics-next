@@ -366,9 +366,11 @@ export function bulkRoutes(
                   cause: error,
                   commandIndex: pending.index,
                 });
-              const payload = (await response.json()) as BulkProblemBody;
-              if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
-              results[pending.index] = { key, status: response.status, problem: payload };
+              const payload: unknown = await response.json();
+              if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
+              const payloadProblem = payload as BulkProblemBody;
+              if (error instanceof SubjectRedirectError) payloadProblem.redirect = { from: error.from, to: error.to };
+              results[pending.index] = { key, status: response.status, problem: payloadProblem };
             }
           }
         } finally {
@@ -400,10 +402,12 @@ export function bulkRoutes(
             id: requestId,
             action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
           });
+          const payload: unknown = await response.json();
+          if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
           results[pending.index] = {
             key,
             status: response.status,
-            problem: (await response.json()) as BulkProblemBody,
+            problem: payload as BulkProblemBody,
           };
         }
       }

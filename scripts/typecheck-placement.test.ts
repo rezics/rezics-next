@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -6,6 +6,8 @@ import { runKernelTypecheck } from '../services/kernel/scripts/typecheck.ts';
 import { runAuthTypecheck } from '../services/auth/scripts/typecheck.ts';
 import { runOnCheckHost } from './stack-run.ts';
 import { KERNEL_CLIENT_OUTPUT } from './check-output-tree.ts';
+import type { CheckHostRecognitionDisposition } from './check-placement.ts';
+import { compilerDatabaseRunArgs, COMPILER_PID_LABEL } from './compiler-database.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporaryDirectories: string[] = [];
@@ -16,6 +18,13 @@ const physicalAdmission = {
   supervisor: { pid: 1, started: '1', group: 1 },
 };
 const recognize = () => physicalAdmission;
+const refused = (): CheckHostRecognitionDisposition => ({ outcome: 'refused', reason: 'cwd-outside-runs' });
+
+function spawnEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...extra };
+  delete env.REZICS_CHECK_PHASES;
+  return env;
+}
 
 // These children exercise real compiler command composition with inert executables,
 // under explicitly injected physical evidence rather than an environment-only URL bypass.
@@ -51,6 +60,7 @@ test('without DATABASE_URL, a reachable check host receives the typecheck and re
   const status = await runKernelTypecheck(
     { PATH: process.env.PATH },
     {
+      recognize: refused,
       place: async (run) => {
         invocation = { label: run.label, command: run.command };
         return 23;
@@ -74,6 +84,7 @@ test.each([
   const status = await runKernelTypecheck(
     { PATH: process.env.PATH },
     {
+      recognize: refused,
       place: async (run) => {
         expect(run.command).toEqual(command);
         return 23;
@@ -110,6 +121,7 @@ test.each([
     const status = await runKernelTypecheck(
       { PATH: process.env.PATH },
       {
+        recognize: refused,
         place: async (run) => {
           expect(run.command).toEqual(command);
           descriptor = { keepsFiles: run.keepsFiles, returns: run.returns };
@@ -179,6 +191,7 @@ test.each([false, true])('local opt-out still places the compiler with its emiss
   const status = await runKernelTypecheck(
     { REZICS_STACK_REMOTE: 'off', KERNEL_CHECK_REMOTE: 'configured-hosts.json' },
     {
+      recognize: refused,
       place: async (run) => {
         placed = true;
         expect(run.command.includes('--emit-client')).toBe(emitClient);
@@ -240,6 +253,7 @@ test('Kernel compiler placement returns only its genuinely required bounded outp
         const status = await runKernelTypecheck(
           env,
           {
+            recognize: refused,
             place: async (run, receivedEnv) => {
               placements++;
               expect(receivedEnv).toBe(env);
@@ -342,16 +356,22 @@ test('named client output is placed before SQL execution and external projects r
     const status = await runKernelTypecheck(
       { KERNEL_CHECK_REMOTE: hosts },
       {
+        recognize: refused,
         place: (run, env) =>
-          runOnCheckHost(run, env, async (options) => {
-            placements++;
-            expect(options.command).toEqual(['bun', 'scripts/typecheck.ts', ...args]);
-            expect(options.returns).toEqual([
-              KERNEL_CLIENT_OUTPUT.transport,
-              ...(args.length === 2 ? ['services/kernel/db/semantic/schema.sql'] : []),
-            ]);
-            return 23;
-          }),
+          runOnCheckHost(
+            run,
+            env,
+            async (options) => {
+              placements++;
+              expect(options.command).toEqual(['bun', 'scripts/typecheck.ts', ...args]);
+              expect(options.returns).toEqual([
+                KERNEL_CLIENT_OUTPUT.transport,
+                ...(args.length === 2 ? ['services/kernel/db/semantic/schema.sql'] : []),
+              ]);
+              return 23;
+            },
+            refused,
+          ),
         withThrowawayDatabase: async () => {
           throw new Error('local database');
         },
@@ -418,7 +438,7 @@ test('a tsc failure returns its status and diagnostics without running construct
   const result = spawnSync(process.execPath, [admittedEntrypoint('kernel', directory)], {
     cwd: repository,
     encoding: 'utf8',
-    env: { ...process.env, DATABASE_URL: 'postgres://existing.test/db', PATH: `${bin}:${process.env.PATH}` },
+    env: spawnEnv({ DATABASE_URL: 'postgres://existing.test/db', PATH: `${bin}:${process.env.PATH}` }),
     timeout: 60_000,
   });
 
@@ -440,7 +460,7 @@ test('construct failure is returned after a successful tsc', () => {
   const result = spawnSync(process.execPath, [admittedEntrypoint('kernel', directory)], {
     cwd: repository,
     encoding: 'utf8',
-    env: { ...process.env, DATABASE_URL: 'postgres://existing.test/db', PATH: `${bin}:${process.env.PATH}` },
+    env: spawnEnv({ DATABASE_URL: 'postgres://existing.test/db', PATH: `${bin}:${process.env.PATH}` }),
     timeout: 60_000,
   });
 
@@ -452,6 +472,7 @@ test('without DATABASE_URL, auth uses kernel placement and the host owns its mig
   const events: string[] = [];
   const env = { PATH: process.env.PATH };
   const status = await runAuthTypecheck(env, {
+    recognize: refused,
     place: async (run, receivedEnv) => {
       expect(run).toEqual({
         label: 'auth typecheck',
@@ -568,7 +589,7 @@ process.exitCode = await runAuthTypecheck(process.env, {
 `,
   );
   for (const placement of ['existing', 'local', 'host']) {
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${directory}:${process.env.PATH}` };
+    const env: NodeJS.ProcessEnv = spawnEnv({ PATH: `${directory}:${process.env.PATH}` });
     delete env.DATABASE_URL;
     if (placement === 'existing') env.DATABASE_URL = 'postgres://existing.test/auth';
     const result = spawnSync(process.execPath, [fixture, placement], {
@@ -588,6 +609,7 @@ test('a successful auth typecheck on a check host never starts another compiler 
   const status = await runAuthTypecheck(
     {},
     {
+      recognize: refused,
       place: async () => 0,
       prepareCompilerDatabase: async () => {
         throw new Error('must not start a database after remote success');
@@ -624,120 +646,61 @@ test('auth removes its compiler database when starting tsc fails', async () => {
     },
   );
 
-  await expect(result).rejects.toBe(failure);
+  expect(await result).toBe(75);
   expect(events).toEqual(['tsc', 'removed']);
 });
 
-test('A compiler database remains reachable from the actual selected typecheck process until the compiler and kernel construct finish', () => {
-  mkdirSync(join(repository, '.temp'), { recursive: true });
-  const directory = mkdtempSync(join(repository, '.temp/compiler-consumers-'));
-  temporaryDirectories.push(directory);
-  const alive = join(directory, 'database-alive');
-  const record = join(directory, 'consumers');
-  const consumer = join(directory, 'consumer.ts');
-  writeFileSync(
-    consumer,
-    `
-import { appendFileSync, existsSync } from 'node:fs';
-import assert from 'node:assert/strict';
-assert.equal(existsSync(${JSON.stringify(alive)}), true);
-assert.equal(process.env.DATABASE_URL, 'postgres://rezics:rezics@127.0.0.1:34646/rezics?sslmode=disable');
-await Bun.sleep(20);
-assert.equal(existsSync(${JSON.stringify(alive)}), true);
-appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');
-`,
-  );
-  for (const executable of ['tsc', 'bun']) {
-    const path = join(directory, executable);
-    writeFileSync(path, `#!/bin/sh\nexec '${process.execPath}' '${consumer}' "$@"\n`);
-    chmodSync(path, 0o755);
-  }
-  const fixture = join(directory, 'run.ts');
-  writeFileSync(
-    fixture,
-    `
-import { mock } from 'bun:test';
-import assert from 'node:assert/strict';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
-const inherited = { url: process.env.DATABASE_URL, container: process.env.KERNEL_DATABASE_CONTAINER };
-const starts = [];
-mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/database.ts'))}, () => ({
-  POSTGRES_IMAGE: 'postgres:fixture',
-  migrate(url) { assert.equal(existsSync(${JSON.stringify(alive)}), true); },
-  schemaDumps() { throw new Error('unexpected schema dump'); },
-  validateMigrationVersions() {},
-}));
-mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/check.ts'))}, () => ({
-  docker(args) {
-    if (args[0] === 'run') {
-      starts.push(args);
-      writeFileSync(${JSON.stringify(alive)}, 'owned');
-      return 'owned-compiler-container';
-    }
-    assert.deepEqual(args, ['port', 'owned-compiler-container', '5432/tcp']);
-    return '127.0.0.1:34646';
-  },
-  cleanup(ids) {
-    assert.deepEqual(ids, ['owned-compiler-container']);
-    rmSync(${JSON.stringify(alive)});
-  },
-  run() { throw new Error('unexpected generator'); },
-}));
-const { runKernelTypecheck } = await import(${JSON.stringify(join(repository, 'services/kernel/scripts/typecheck.ts'))});
-const { withThrowawayDatabase } = await import(${JSON.stringify(join(repository, 'services/kernel/scripts/derived.ts'))});
-assert.equal(await runKernelTypecheck({ ...process.env, DATABASE_URL: undefined }, {
-  recognize: () => {
-    assert.equal(existsSync(${JSON.stringify(alive)}), false);
-    return (${JSON.stringify(physicalAdmission)});
-  },
-  place: async () => { throw new Error('nested placement'); },
-}), 0);
-assert.equal(existsSync(${JSON.stringify(alive)}), false);
-assert.equal(process.env.DATABASE_URL, inherited.url);
-assert.equal(process.env.KERNEL_DATABASE_CONTAINER, inherited.container);
-const failure = new Error('consumer failed');
-await assert.rejects(withThrowawayDatabase(async () => {
-  await Promise.resolve();
-  throw failure;
-}, { analysis: false }), error => error === failure);
-assert.equal(process.env.DATABASE_URL, inherited.url);
-assert.equal(process.env.KERNEL_DATABASE_CONTAINER, inherited.container);
-// Disposable labelled volumes keep PostgreSQL off the checkout and off unreserved slice cache.
-assert.equal(starts.length, 2);
-for (const args of starts) {
-  assert.equal(args.includes('--mount'), true);
-  assert.equal(
-    args.includes('type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=' + process.pid),
-    true,
-  );
-  assert.equal(args.includes('--tmpfs'), false);
-  for (const flag of ['-v', '--volume', '--user']) assert.equal(args.includes(flag), false);
-}
-`,
-  );
+test('A compiler database remains reachable from the actual selected typecheck process until the compiler and kernel construct finish', async () => {
   for (const inherited of [false, true]) {
-    const env = { ...process.env, PATH: `${directory}:${process.env.PATH}` };
-    delete env.DATABASE_URL;
-    delete env.KERNEL_DATABASE_CONTAINER;
+    const originalUrl = process.env.DATABASE_URL;
+    const originalContainer = process.env.KERNEL_DATABASE_CONTAINER;
+    let alive = false;
+    let seenDuringCompile = false;
+    const url = 'postgres://fixture.test/compiler';
     if (inherited) {
-      env.DATABASE_URL = 'postgres://developer.test/untouched';
-      env.KERNEL_DATABASE_CONTAINER = 'developer-container';
+      process.env.DATABASE_URL = 'postgres://developer.test/untouched';
+      process.env.KERNEL_DATABASE_CONTAINER = 'developer-container';
+    } else {
+      delete process.env.DATABASE_URL;
+      delete process.env.KERNEL_DATABASE_CONTAINER;
     }
-    const result = spawnSync(process.execPath, [fixture], { cwd: repository, env, encoding: 'utf8', timeout: 10_000 });
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe('');
+    try {
+      const status = await runKernelTypecheck(
+        { PATH: process.env.PATH },
+        {
+          recognize,
+          place: async () => {
+            throw new Error('nested placement');
+          },
+          withThrowawayDatabase: async (work) => {
+            alive = true;
+            try {
+              return await work({ DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: 'owned-compiler-container' });
+            } finally {
+              alive = false;
+            }
+          },
+          typecheck: async (received) => {
+            seenDuringCompile = alive && received.DATABASE_URL === url;
+            await Bun.sleep(20);
+            expect(alive).toBe(true);
+            expect(received.DATABASE_URL).toBe(url);
+            return 0;
+          },
+        },
+      );
+      expect(status).toBe(0);
+      expect(seenDuringCompile).toBe(true);
+      expect(alive).toBe(false);
+      expect(process.env.DATABASE_URL).toBe(inherited ? 'postgres://developer.test/untouched' : originalUrl);
+      expect(process.env.KERNEL_DATABASE_CONTAINER).toBe(inherited ? 'developer-container' : originalContainer);
+    } finally {
+      if (originalUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = originalUrl;
+      if (originalContainer === undefined) delete process.env.KERNEL_DATABASE_CONTAINER;
+      else process.env.KERNEL_DATABASE_CONTAINER = originalContainer;
+    }
   }
-  expect(
-    readFileSync(record, 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line)),
-  ).toEqual([
-    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
-    ['run', 'construct'],
-    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
-    ['run', 'construct'],
-  ]);
 });
 
 test('Compiler connection and SQL analysis failures keep their real diagnostics and status without disabling analysis', () => {
@@ -767,12 +730,11 @@ exit 23
         cwd: repository,
         encoding: 'utf8',
         timeout: 10_000,
-        env: {
-          ...process.env,
+        env: spawnEnv({
           PATH: `${directory}:${process.env.PATH}`,
           DATABASE_URL: 'postgres://developer.test/explicit',
           COMPILER_DIAGNOSTIC: diagnostic,
-        },
+        }),
       });
       expect(result.status).toBe(23);
       expect(result.stdout).toBe(`${diagnostic}\n`);
@@ -782,57 +744,108 @@ exit 23
 });
 
 test('A worktree-writing compiler helper container preserves invoking user ownership or uses a disposable volume without writing root-owned files into the checkout', () => {
-  mkdirSync(join(repository, '.temp'), { recursive: true });
-  const directory = mkdtempSync(join(repository, '.temp/compiler-storage-'));
-  temporaryDirectories.push(directory);
-  const log = join(directory, 'docker-commands');
-  const docker = join(directory, 'docker');
-  writeFileSync(
-    docker,
-    `#!${process.execPath}
-import { appendFileSync } from 'node:fs';
-const args = process.argv.slice(2);
-appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
-console.log(args[0] === 'run' ? 'owned-container' : '127.0.0.1:34646');
-`,
-  );
-  chmodSync(docker, 0o755);
-  const fixture = join(directory, 'run.ts');
-  writeFileSync(
-    fixture,
-    `
-import { mock } from 'bun:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-const commands = () => readFileSync(${JSON.stringify(log)}, 'utf8').trim().split('\\n').map(line => JSON.parse(line));
-const migrations = [];
-mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/database.ts'))}, () => ({
-  POSTGRES_IMAGE: 'postgres:fixture', migrate(url) { migrations.push(['kernel', url]); },
-}));
-mock.module(${JSON.stringify(join(repository, 'services/auth/scripts/database.ts'))}, () => ({
-  migrate(url) { migrations.push(['auth', url]); },
-}));
-const { prepareCompilerDatabase } = await import(${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))});
-const database = await prepareCompilerDatabase();
-const start = commands()[0];
-// The server's writes are disposable and never reach a host-mounted checkout.
-assert.equal(start[start.indexOf('--tmpfs') + 1], '/var/lib/postgresql:rw,size=1g');
-for (const flag of ['-v', '--volume', '--mount', '--user']) assert.equal(start.includes(flag), false);
-assert.equal(start.includes('--rm'), true);
-assert.deepEqual(migrations, [['kernel', database.url], ['auth', database.url]]);
-await Promise.resolve();
-assert.equal(commands().length, 2);
-await database.remove();
-await database.remove();
-assert.deepEqual(commands().slice(2), [['rm', '-f', '-v', 'owned-container']]);
-`,
-  );
-  const result = spawnSync(process.execPath, [fixture], {
-    cwd: repository,
-    encoding: 'utf8',
-    timeout: 10_000,
-    env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
-  });
-  expect(result.stderr).toBe('');
-  expect(result.status).toBe(0);
+  const args = compilerDatabaseRunArgs(9, 'nonce-9', []);
+  expect(args).toContain('--rm');
+  expect(args).toContain('--mount');
+  expect(args).toContain(`type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=9`);
+  expect(args).not.toContain('--tmpfs');
+  expect(args).not.toContain('--user');
+  expect(args.includes('-v') && args.some((arg) => arg.includes(repository))).toBe(false);
+});
+
+test('direct compiler placement retains native statuses and reports infrastructure status with the original phase', async () => {
+  const output = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (const run of [runKernelTypecheck, runAuthTypecheck]) {
+      for (const status of [0, 1, 2, 23, 75, 124, 130, 143]) {
+        output.mockClear();
+        expect(await run({}, { recognize: refused, place: async () => status }, [])).toBe(
+          [75, 124, 130, 143].includes(status) ? 75 : status,
+        );
+        if ([75, 124, 130, 143].includes(status)) {
+          expect(output.mock.calls.flat().join('\n')).toContain(
+            `phase=placement: check-host execution ended with status ${status}`,
+          );
+        } else expect(output).not.toHaveBeenCalled();
+      }
+      output.mockClear();
+      expect(
+        await run(
+          {},
+          {
+            recognize: refused,
+            place: async () => {
+              throw new Error('SSH master channel lost');
+            },
+          },
+          [],
+        ),
+      ).toBe(75);
+      expect(output.mock.calls.flat().join('\n')).toContain('phase=placement: SSH master channel lost');
+    }
+  } finally {
+    output.mockRestore();
+  }
+});
+
+test('direct compiler setup, launch and cleanup failures keep their cause, phase and owned cleanup', async () => {
+  const output = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (const workspace of ['kernel', 'auth']) {
+      for (const failedPhase of ['database-setup', 'compiler', 'database-cleanup']) {
+        output.mockClear();
+        let removed = 0;
+        let compiled = 0;
+        const prepare = async () => {
+          if (failedPhase === 'database-setup') throw new Error('docker run ETIMEDOUT');
+          return {
+            url: 'postgres://fixture/typecheck',
+            remove: async () => {
+              removed++;
+              if (failedPhase === 'database-cleanup') throw new Error('docker rm ETIMEDOUT');
+            },
+          };
+        };
+        const typecheck = async () => {
+          compiled++;
+          if (failedPhase === 'compiler') throw new Error('spawn tsc ENOENT');
+          return 23;
+        };
+        const dependencies = { recognize, typecheck };
+        const result =
+          workspace === 'auth'
+            ? await runAuthTypecheck({}, { ...dependencies, prepareCompilerDatabase: prepare }, [])
+            : await runKernelTypecheck(
+                {},
+                {
+                  ...dependencies,
+                  withThrowawayDatabase: async (work) => {
+                    const database = await prepare();
+                    try {
+                      return await work({ DATABASE_URL: database.url });
+                    } finally {
+                      await database.remove();
+                    }
+                  },
+                },
+                [],
+              );
+        expect(result).toBe(75);
+        expect(removed).toBe(failedPhase === 'database-setup' ? 0 : 1);
+        expect(compiled).toBe(failedPhase === 'database-setup' ? 0 : 1);
+        const diagnostic = output.mock.calls.flat().join('\n');
+        expect(diagnostic).toContain(`phase=${failedPhase}`);
+        expect(diagnostic).toContain(
+          failedPhase === 'compiler'
+            ? 'spawn tsc ENOENT'
+            : failedPhase === 'database-setup'
+              ? 'docker run ETIMEDOUT'
+              : 'docker rm ETIMEDOUT',
+        );
+        if (failedPhase === 'database-cleanup') expect(diagnostic).toContain('compiler status 23');
+      }
+    }
+  } finally {
+    output.mockRestore();
+  }
 });

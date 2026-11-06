@@ -6,8 +6,12 @@ import { withThrowawayDatabase } from './derived.ts';
 import {
   compilerConfigArgs,
   compilerEnvironment,
+  compilerInfrastructureFailure,
+  compilerInfrastructurePhase,
+  compilerPlacementResult,
   isLocalTypecheckLanding,
   placeCompilerRun,
+  reclaimAdmittedFileCache,
   type CompilerPlacementDependencies,
 } from '../../../scripts/typecheck.ts';
 import { schemaDumps, validateMigrationVersions } from './database.ts';
@@ -92,6 +96,7 @@ async function typecheck(
   const compilerEnv = analysis.available ? analysis.environment : env;
   const typecheckEnv = { ...compilerEnv };
   if (analysis.available) delete typecheckEnv.DATABASE_URL;
+  reclaimAdmittedFileCache();
   let compiled: number;
   try {
     compiled = await withCommandPhase(
@@ -171,12 +176,18 @@ export async function runKernelTypecheck(
   const emitSchema = args.find((arg) => arg.startsWith('--emit-schema='))?.slice('--emit-schema='.length);
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
-  const compile = (databaseEnv: NodeJS.ProcessEnv) => {
+  const label = 'kernel typecheck';
+  let databasePhase = 'database-setup';
+  let compilerResult: number | undefined;
+  const compile = async (databaseEnv: NodeJS.ProcessEnv) => {
     const compilerEnv =
       env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
-    return emitSchema === undefined
-      ? runCommands(compilerEnv, emitClient, undefined, emitOpenApi, dependencies.prepareSqlAnalysis)
-      : runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis);
+    const result = await compilerInfrastructurePhase(label, 'compiler', () =>
+      runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis),
+    );
+    databasePhase = 'database-cleanup';
+    compilerResult = result;
+    return result;
   };
   const config = compilerConfigArgs(env, repository, [directory]);
   const returns = returnedPaths(env, emitClient, emitSchema, emitOpenApi);
@@ -190,20 +201,22 @@ export async function runKernelTypecheck(
   ];
   const placed = isLocalTypecheckLanding(env)
     ? null
-    : await placeCompilerRun(
-        {
-          label: 'kernel typecheck',
-          root: repository,
-          cwd: directory,
-          command: remoteCommand,
-          keepsFiles: emitClient || emitOpenApi || emitSchema !== undefined || returns === undefined,
-          ...(returns === undefined ? {} : { returns }),
-        },
-        directory,
-        env,
-        dependencies,
+    : await compilerInfrastructurePhase(label, 'placement', () =>
+        placeCompilerRun(
+          {
+            label: 'kernel typecheck',
+            root: repository,
+            cwd: directory,
+            command: remoteCommand,
+            keepsFiles: emitClient || emitOpenApi || emitSchema !== undefined || returns === undefined,
+            ...(returns === undefined ? {} : { returns }),
+          },
+          directory,
+          env,
+          dependencies,
+        ),
       );
-  if (placed !== null) return placed;
+  if (placed !== null) return compilerPlacementResult(label, placed);
   writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);
   // The compiler database applies the same migrations as derived generation, in admitted custody only.
   validateMigrationVersions(
@@ -211,9 +224,22 @@ export async function runKernelTypecheck(
     new Date(),
   );
   // The analysis cache is prepared by typecheck itself, with its own phases, so the seam must not prepare it again.
-  const run = () => (env.DATABASE_URL ? compile(env) : withDatabase(compile, { analysis: false }));
+  const run = async () => {
+    if (env.DATABASE_URL) return compile(env);
+    try {
+      return await withDatabase(compile, { analysis: false });
+    } catch (error) {
+      const cause =
+        databasePhase === 'database-cleanup'
+          ? `compiler status ${compilerResult}; ${error instanceof Error ? error.message : String(error)}`
+          : error;
+      return compilerInfrastructureFailure(label, databasePhase, cause);
+    }
+  };
   return emitClient
-    ? (dependencies.outputTree ?? withKernelClientOutput)(repository, run, { returns: returns ?? [] })
+    ? compilerInfrastructurePhase(label, 'output-publication', () =>
+        (dependencies.outputTree ?? withKernelClientOutput)(repository, run, { returns: returns ?? [] }),
+      )
     : run();
 }
 

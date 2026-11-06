@@ -11,8 +11,26 @@ import { fileURLToPath } from 'node:url';
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
 
-async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> {
-  const child = Bun.spawn(args, {
+/** Official typecheck and the check gate compile these two programs with the same tsc guidance. */
+export const WEB_COMPILER_PROGRAMS = [
+  ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+  ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.scripts.json'],
+] as const;
+
+/** Both programs always run; the first nonzero status is kept so a red web program cannot skip the scripts. */
+export async function compileWebPrograms(
+  run: (args: readonly string[]) => Promise<number>,
+): Promise<number> {
+  let result = 0;
+  for (const args of WEB_COMPILER_PROGRAMS) {
+    const code = await run(args);
+    if (result === 0) result = code;
+  }
+  return result;
+}
+
+async function command(args: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
+  const child = Bun.spawn([...args], {
     cwd: directory,
     env,
     stdin: 'inherit',
@@ -30,17 +48,7 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
     const code = await command(args, env);
     if (code !== 0) return code;
   }
-  // The tooling scripts import kernel and auth sources, so they run as their own program within the check memory envelope.
-  // Both programs run even when the web program has diagnostics; the scripts are never skipped by a red web program.
-  let result = 0;
-  for (const args of [
-    ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
-    ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.scripts.json'],
-  ]) {
-    const code = await command(args, env);
-    if (result === 0) result = code;
-  }
-  return result;
+  return compileWebPrograms((args) => command(args, env));
 }
 
 async function run(args: readonly string[]): Promise<number> {

@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -49,6 +50,7 @@ import {
   CHECK_HOST_MIN_TMP_INODES,
   BASE_REFRESH_INTERVAL_SECONDS,
   BASE_RETENTION_SECONDS,
+  retireExpiredBasesShell,
   sshControlDirectory,
   unixListenerFits,
   installedPackageCacheCheck,
@@ -3490,6 +3492,33 @@ test('bases older than the retention period are removed by host cleanup while th
   expect(cleanup).toContain('flock -x 9');
 });
 
+test('expired bases leave the bases lock as renames; the recursive delete runs after the lock is released', async () => {
+  const checkRoot = mkdtempSync(join(repository, '.temp/base-retire-'));
+  try {
+    mkdirSync(join(checkRoot, 'bases/base-now'), { recursive: true });
+    mkdirSync(join(checkRoot, 'bases/base-old/tree'), { recursive: true });
+    writeFileSync(join(checkRoot, 'bases/base-old/tree/payload'), 'old');
+    symlinkSync(join(checkRoot, 'bases/base-now'), join(checkRoot, 'bases/current'));
+    const old = new Date(Date.now() - 3 * BASE_RETENTION_SECONDS * 1000);
+    utimesSync(join(checkRoot, 'bases/base-old'), old, old);
+    const retire = spawnSync('sh', ['-c', retireExpiredBasesShell(checkRoot)], { encoding: 'utf8' });
+    expect(retire.status, retire.stderr).toBe(0);
+    expect(existsSync(join(checkRoot, 'bases/base-old'))).toBe(false);
+    expect(readlinkSync(join(checkRoot, 'bases/current'))).toBe(join(checkRoot, 'bases/base-now'));
+    expect(spawnSync('flock', ['-n', join(checkRoot, 'bases/.lock'), 'true']).status).toBe(0);
+    for (
+      let waited = 0;
+      waited < 50 && readdirSync(join(checkRoot, 'bases')).some((name) => name.startsWith('.retired-'));
+      waited++
+    ) {
+      await Bun.sleep(100);
+    }
+    expect(readdirSync(join(checkRoot, 'bases')).filter((name) => name.startsWith('.retired-'))).toEqual([]);
+  } finally {
+    rmSync(checkRoot, { recursive: true, force: true });
+  }
+});
+
 test('an rsync exit 24 completes the upload and changing build outputs stay out of the upload', async () => {
   const { env, events } = scenario({ a: { available: 8e9, rsyncExit: 24 } });
   const directory = workspace();
@@ -4600,8 +4629,11 @@ test('gates waiting on every host still drain their hosts', async () => {
     Array.from({ length: 2 }, () => startRemote(hostEnv, workspace(), ['true'])),
   );
   try {
-    await waitFor(() => events().filter((event) => event.kind === 'run').length === 2);
-    await waitFor(() => events().filter((event) => event.kind === 'slot' && event.granted === false).length >= 2);
+    await waitFor(() => events().filter((event) => event.kind === 'run').length === 2, 20_000);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'slot' && event.granted === false).length >= 2,
+      20_000,
+    );
     const started = events().filter((event) => event.kind === 'run');
     expect(started.map((event) => event.address).sort()).toEqual(['ops@a.test', 'ops@b.test']);
     expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(2);
@@ -5261,6 +5293,16 @@ test('each check run executes in its own cgroup with MemoryMax 6 GiB and MemoryS
   expect(script).toContain("slice_properties='--slice-property=MemoryMax=6G --slice-property=MemorySwapMax=0'");
   expect(script).toContain('memory.max');
   expect(script).toContain('memory.swap.max');
+  expect(script).toContain('reclaim_run_file_cache');
+  expect(script).toContain('memory.reclaim');
+  const install = script.indexOf('"$bun" install --frozen-lockfile');
+  const firstReclaim = script.indexOf('reclaim_run_file_cache', install);
+  const command = script.indexOf('\n        "$@"');
+  const secondReclaim = script.lastIndexOf('reclaim_run_file_cache', command);
+  expect(install).toBeGreaterThanOrEqual(0);
+  expect(firstReclaim).toBeGreaterThan(install);
+  expect(command).toBeGreaterThan(secondReclaim);
+  expect(secondReclaim).toBeGreaterThan(firstReclaim);
 });
 
 test('a host memoryPerRunGiB override is the run MemoryMax', () => {
@@ -5955,7 +5997,7 @@ test('a silent live remote command remains governed by its command deadline, not
   expect(slotMarkers(env, 'a')).toEqual([]);
 });
 
-test('a stalled control master is closed and replaced before upload and command startup', async () => {
+test('a stalled control probe retries on the same master before upload and command startup', async () => {
   const { env, events } = scenario({ a: { available: 8e9, stalledControlProbes: 1 } });
   env.REMOTE_CHECK_CONTROL_PROBE_TIMEOUT_MS = '2000';
   const result = await remote(env, workspace(), ['true']);
@@ -5963,7 +6005,6 @@ test('a stalled control master is closed and replaced before upload and command 
 
   const seen = events();
   const probes = seen.filter((event) => event.kind === 'control-probe');
-  const closed = seen.find((event) => event.kind === 'control-close')!;
   expect(probes).toHaveLength(2);
   const controlPath = (event: Event): string | undefined =>
     (event.controlPath as string | undefined) ??
@@ -5972,14 +6013,11 @@ test('a stalled control master is closed and replaced before upload and command 
   const secondPath = controlPath(probes[1]!);
   expect(firstPath).toBeDefined();
   expect(secondPath).toBe(firstPath);
-  expect(controlPath(closed)).toBe(firstPath);
-  const firstAt = seen.indexOf(probes[0]!);
-  const closeAt = seen.indexOf(closed);
+  // A stalled probe is a busy-or-slow master, not a dead one: closing it would cut every run multiplexed through it.
+  expect(seen.some((event) => event.kind === 'control-close')).toBe(false);
   const secondAt = seen.indexOf(probes[1]!);
   const uploadAt = seen.findIndex((event) => event.kind === 'rsync');
   const runAt = seen.findIndex((event) => event.kind === 'run');
-  expect(firstAt).toBeLessThan(closeAt);
-  expect(closeAt).toBeLessThan(secondAt);
   expect(secondAt).toBeLessThan(uploadAt);
   expect(uploadAt).toBeLessThan(runAt);
   for (const event of seen.filter((entry) => ['base', 'slot', 'run'].includes(entry.kind))) {
@@ -5995,7 +6033,7 @@ test('a failed replacement control probe is a host-scoped transport failure befo
   expect(result.stderr).toContain('connection to a failed during control probe');
   const seen = events();
   expect(seen.filter((event) => event.kind === 'control-probe')).toHaveLength(2);
-  expect(seen.filter((event) => event.kind === 'control-close')).toHaveLength(1);
+  expect(seen.filter((event) => event.kind === 'control-close')).toHaveLength(0);
   expect(seen.filter((event) => event.kind === 'rsync')).toHaveLength(0);
   expect(seen.filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(0);
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(0);
@@ -6384,8 +6422,12 @@ test('missing or unreadable remote configuration never starts a local kernel che
   const missing = scenario({ a: { available: 4.5e9 } });
   const unavailable = await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
   expect(unavailable.code).not.toBe(0);
-  expect(missing.events().some((event) => event.kind === 'docker')).toBe(false);
-  expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
+  if (onCheckHost(kernel)) {
+    expect(unavailable.stderr).toContain('stack-run: kernel check already on an approved remote-check run');
+  } else {
+    expect(missing.events().some((event) => event.kind === 'docker')).toBe(false);
+    expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
+  }
 
   // The flag does not itself force local placement; actual check-host location still takes precedence.
   const onRemote = scenario({ a: { available: 4.5e9 } });

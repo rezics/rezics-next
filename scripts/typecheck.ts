@@ -4,7 +4,17 @@
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveBunCommand } from './gate.ts';
@@ -34,6 +44,36 @@ function infrastructure(label: string, reason: string): number {
   return 75;
 }
 
+/** Entrypoints retain the physical failure phase while returning the infrastructure contract's status. */
+export function compilerInfrastructureFailure(label: string, phase: string, error: unknown): 75 {
+  infrastructure(label, `phase=${phase}: ${error instanceof Error ? error.message : String(error)}`);
+  return 75;
+}
+
+/** Placement statuses describe the host run; ordinary compiler exits still pass through unchanged. */
+export function compilerPlacementResult(label: string, status: number): number {
+  return [75, 124, 130, 143].includes(status)
+    ? compilerInfrastructureFailure(label, 'placement', `check-host execution ended with status ${status}`)
+    : status;
+}
+
+/** Catch only at the external execution boundary, including executable launch and database setup/cleanup. */
+export async function compilerInfrastructurePhase<T>(
+  label: string,
+  phase: string,
+  run: () => T | Promise<T>,
+): Promise<T | 75> {
+  try {
+    return await run();
+  } catch (error) {
+    return compilerInfrastructureFailure(label, phase, error);
+  }
+}
+
+function retainOriginalAndCleanupMessage(original: string, cleanup: string, context: string): string {
+  return `${context} (${original}); cleanup could not be proven (${cleanup})`;
+}
+
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
 
 /** The train opts in only with both immutable revisions bound to this local landing check. */
@@ -54,16 +94,34 @@ type CompilerState = {
   discard: () => void;
 };
 
-function compilerStateFingerprint(root: string, env: NodeJS.ProcessEnv): string {
-  const files = new Set([
+/**
+ * Mapper, lockfile and workspace identities that must match between local and remote compiler runs. Each workspace
+ * that declares the Reylo content mapper resolves `reylo` from its own `node_modules`, so that installed package is the
+ * identity; the root has no such link, and naming it hashed nothing for the mapper.
+ */
+export function compilerIdentityPaths(): readonly string[] {
+  return [
     'package.json',
     'bun.lock',
     'node_modules/typescript/package.json',
     'services/kernel/package.json',
+    'services/kernel/node_modules/reylo/package.json',
     'services/kernel/tsconfig.json',
     'services/kernel/scripts/typecheck.ts',
+    'services/auth/package.json',
+    'services/auth/node_modules/reylo/package.json',
+    'services/auth/tsconfig.json',
     'services/auth/scripts/database.ts',
-  ]);
+    'apps/web/package.json',
+    'apps/web/node_modules/reylo/package.json',
+    'apps/web/tsconfig.json',
+    'apps/web/tsconfig.scripts.json',
+    'apps/web/scripts/typecheck.ts',
+  ];
+}
+
+function compilerStateFingerprint(root: string, env: NodeJS.ProcessEnv): string {
+  const files = new Set<string>(compilerIdentityPaths());
   for (const glob of [
     'services/kernel/db/**/migrations/*.sql',
     'services/auth/db/**/migrations/*.sql',
@@ -377,7 +435,9 @@ function blockFor(
   forcedOutcome?: WorkspaceOutcome,
 ): WorkspaceResult {
   const output = code === 0 ? '' : [stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join('\n');
-  const hasDiagnostics = /(?:^|\n)[^\n]*\.(?:[cm]?[jt]sx?)(?:\(\d+,\d+\)|:\d+:\d+)\s*(?::|\s+-)?\s*error\b/m.test(
+  // Reylo SQL analysis errors name their `.sql` file and line and are type errors. A `tsconfig.json` diagnostic such as
+  // an unresolved content mapper (TS18075) is not, so `json` stays out of this list.
+  const hasDiagnostics = /(?:^|\n)[^\n]*\.(?:[cm]?[jt]sx?|sql)(?:\(\d+,\d+\)|:\d+:\d+)\s*(?::|\s+-)?\s*error\b/m.test(
     output,
   );
   const outcome: WorkspaceOutcome =
@@ -435,6 +495,63 @@ async function runWorkspace(root: string, workspace: Workspace, env: Record<stri
   }
 }
 
+/** Mapper-enabled compilers run one at a time so Kernel, Auth and Web cannot share an admitted 6GiB slice. */
+export function typecheckRunOrder<W extends { needsDatabase: boolean }>(
+  workspaces: readonly W[],
+): {
+  parallel: W[];
+  serial: W[];
+} {
+  return {
+    parallel: workspaces.filter((workspace) => !workspace.needsDatabase),
+    serial: workspaces.filter((workspace) => workspace.needsDatabase),
+  };
+}
+
+export type FileCacheReclaim = {
+  cgroup?: string;
+  readStat?: (path: string) => string;
+  writeReclaim?: (path: string, bytes: string) => void;
+};
+
+function processCgroupDirectory(): string | undefined {
+  try {
+    const match = readFileSync('/proc/self/cgroup', 'utf8').match(/^0::(.+)$/m);
+    return match ? `/sys/fs/cgroup${match[1]}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Drop inactive file pages in the admitted run cgroup so Kernel tsc is not sharing a 6GiB cap with install cache.
+ * A missing or unwritable `memory.reclaim` is ignored and never fails typecheck.
+ */
+export function reclaimAdmittedFileCache(options: FileCacheReclaim = {}): number {
+  const directory = options.cgroup ?? processCgroupDirectory();
+  if (!directory) return 0;
+  const statPath = join(directory, 'memory.stat');
+  const reclaimPath = join(directory, 'memory.reclaim');
+  if (!options.writeReclaim && !existsSync(reclaimPath)) return 0;
+  let contents: string;
+  try {
+    contents = options.readStat ? options.readStat(statPath) : readFileSync(statPath, 'utf8');
+  } catch {
+    return 0;
+  }
+  const inactive = contents.match(/^inactive_file (\d+)$/m);
+  const bytes = inactive ? Number(inactive[1]) : 0;
+  if (!Number.isSafeInteger(bytes) || bytes < 1) return 0;
+  const value = `${bytes}\n`;
+  try {
+    if (options.writeReclaim) options.writeReclaim(reclaimPath, value);
+    else writeFileSync(reclaimPath, value);
+  } catch {
+    return 0;
+  }
+  return bytes;
+}
+
 async function runWorkspaces(
   root: string,
   workspaces: readonly Workspace[],
@@ -450,18 +567,22 @@ async function runWorkspaces(
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
   const results: WorkspaceResult[] = [];
-  await Promise.all(
-    workspaces.map(async (workspace) => {
-      const workspaceEnv =
-        state && relative(root, workspace.directory) === 'services/kernel'
-          ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
-          : childEnv;
-      const result = await runWorkspace(root, workspace, workspaceEnv);
-      if (result.code === 0) write(result.block);
-      else failures.push(result.block);
-      results.push(result);
-    }),
-  );
+  const runOne = async (workspace: Workspace): Promise<void> => {
+    const workspaceEnv =
+      state && relative(root, workspace.directory) === 'services/kernel'
+        ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
+        : childEnv;
+    const result = await runWorkspace(root, workspace, workspaceEnv);
+    if (result.code === 0) write(result.block);
+    else failures.push(result.block);
+    results.push(result);
+  };
+  const { parallel, serial } = typecheckRunOrder(workspaces);
+  await Promise.all(parallel.map(runOne));
+  for (const workspace of serial) {
+    reclaimAdmittedFileCache();
+    await runOne(workspace);
+  }
   for (const block of failures) write(block);
   if (failures.length === 0) return 0;
   return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;
@@ -534,6 +655,13 @@ async function withStartedDatabase(
     } catch (error) {
       cleanupFailure = error instanceof Error ? error.message : String(error);
     }
+  }
+  if (failure && cleanupFailure) {
+    state?.discard();
+    return infrastructure(
+      'root typecheck',
+      retainOriginalAndCleanupMessage(failure, cleanupFailure, 'compiler run could not be completed'),
+    );
   }
   if (cleanupFailure) {
     state?.discard();
@@ -666,13 +794,7 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
       ),
     );
   }
-  if (placed !== null) {
-    if ([75, 124, 130, 143].includes(placed))
-      return finish(
-        Promise.resolve(infrastructure('root typecheck', `check-host execution ended with status ${placed}`)),
-      );
-    return finish(Promise.resolve(placed));
-  }
+  if (placed !== null) return finish(Promise.resolve(compilerPlacementResult('root typecheck', placed)));
   if (env.DATABASE_URL) return finish(run(env));
   return finish(completeWithDatabase());
 }

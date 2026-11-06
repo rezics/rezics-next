@@ -111,7 +111,6 @@ export function boardOpeningExample(state: BoardOpeningExample = 'current', size
     threads: cards.slice(5),
     next: boardOpeningCursor,
     rankRefreshedAt: boardOpeningNow,
-    pinRevision: '1',
     reactionsAsOf: null,
     viewer: { participation: 'sign-in' },
     actions: { createThread: 'sign-in' },
