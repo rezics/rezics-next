@@ -465,7 +465,7 @@ test('a transfer is approved by the source manager accepted by the destination m
   );
   expect(result).toEqual({ accountId: subject.accountId });
   expect(parseAccountOperationApproval(accepted)).toEqual(accepted);
-  expect(JSON.stringify(accepted).length).toBeLessThanOrEqual(ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES);
+  expect(JSON.stringify(accepted).length).toBeLessThanOrEqual(TRANSFER_APPROVAL_MAX_RESPONSE_BYTES);
   expect(JSON.stringify(result).length).toBe(TRANSFER_EXECUTION_MAX_RESPONSE_BYTES);
   const replay = await execute(source, {
     operationKey: key,
