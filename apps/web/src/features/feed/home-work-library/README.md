@@ -1,6 +1,8 @@
 # Home personal facts and actions
 
-Decision: Until Content publishes the generated admitted personal-actions page, retain the unavailable native seam, remove arbitrary control callbacks and keep local prepared facts separate from permission.
+Decision: Home maps the installed `viewerPersonalActions` page into this seam once per feed window snapshot. Replacement,
+loading or sign-out retires those facts; missing or unavailable native facts stay unavailable; no control callbacks are
+installed; and facts remain separate from permission.
 
 Decision: Fact reconciliation retains its original source lifetime; only a new source observation can admit fresh facts after retirement, including replacement back to the same reader.
 
@@ -29,7 +31,6 @@ the current standard question `00000000-0000-7000-8000-000000000001`, revision 1
 scores cannot supply the reader's counted vote. Withdrawn occurrences and replaced readers must retire command
 callbacks and delayed completions. Shared observation remains with the existing retirement adapter.
 
-The native callable alone supplies no HTTP contract. Content must deliver the admitted-page composition and final
-feed fence; the complete-input publisher must independently publish its generated HTTP DTO and client exports.
-Until those inputs exist, do not import Kernel server code, add a Web endpoint, cast a client or handwrite native
-declarations. Public-owner cards remain with their existing continuation.
+The installed generated response supplies the HTTP contract. Web still imports no Kernel server code, adds no endpoint,
+casts no client and handwrites no native declarations. The receiver installs no writers: Entry, progress and vote
+commands stay with their existing owners. Public-owner cards remain with their existing continuation.
