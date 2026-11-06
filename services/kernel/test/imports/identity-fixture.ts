@@ -25,7 +25,7 @@ import { GrantDeniedError, type GrantInput } from '../../src/access/grant-comman
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import {
   COMMON_ACTIONS,
@@ -272,6 +272,7 @@ export type IdentitySupport = {
  * The unrelated baseline history is seeded in set-based writes; measured outcomes remain native. */
 export async function openImportIdentity(options: ImportIdentityOptions): Promise<ImportIdentity> {
   const { database, clock } = options;
+  configureTestReceiptKeys(database.pool);
   const counters = { authMigrationCalls: 0, baselineWorkflowCalls: { registrations: 0, keyInstalls: 0 } };
   let countingBaselineCalls = false;
   const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];

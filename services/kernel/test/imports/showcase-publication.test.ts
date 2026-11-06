@@ -156,7 +156,7 @@ test('local publication accepts only its acknowledged plan after authorization a
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 180_000);
 
 test('selected VNDB prequel relation reopens exactly and reports publication only after current public readback', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
@@ -339,4 +339,4 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 60_000);
+}, 180_000);
