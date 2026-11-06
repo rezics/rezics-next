@@ -128,14 +128,15 @@ the same `startDevServer` ready and `/en` first-response path as Copies.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
 page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and
-five custody suites; do not add page stories.
+five custody suites; do not add page stories. Public contribution on LabelShelf is live id/kind/displayName,
+id-free Deleted account/organization, or null unknown; loan counterparties stay loan-owned.
 
 Cross-capability receiving keeps the existing exposure parity assertion narrow: run only its operation-to-group
 case from `closed-controls.test.ts`, together with Home Continue admission and viewer-exposure lifetime, before the
 Copies journey. The remaining closed-controls browser cases stay out of this selection. The Worker denied-file
 loader resolves `/src/...` and realpath aliases before its browser guard; the served-startup case must still load the
-Worker while browser reads of those files remain denied. The generated Semantic contract currently omits the mounted
-`definitions.import` operation, so parity must expose that producer gap until the supported OpenAPI command emits it.
+Worker while browser reads of those files remain denied. Web exposure maps mounted `definitions.import` onto `definition_publication`, and the generated client supplies
+`definitions.imports.post`. Parity keeps that operation-to-group case.
 Worker SSR resolves TanStack Store's `use-sync-external-store/shim/with-selector` import to the local ESM adapter;
 the package entry is CommonJS and reaches Workerd with a runtime `require` call. The browser keeps the package
 implementation. Focused checks regenerate Paraglide when the generated message index refers to a module missing
