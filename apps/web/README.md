@@ -86,7 +86,7 @@ Source read for this surface: the native edition model, routes, reads and fixed-
 edition publication route/controls and shell-integrated stories; and the existing creator-offer list transport/view.
 No external reference-project source applies to this metadata list.
 Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `.dev.vars` from `.dev.vars.example` only when absent. Normal checks and isolated test startup leave it untouched.
-Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load.
+Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. The Worker environment does not scan its server graph: it pre-bundles only React, TanStack's server set and the paraglide polyfill, and loads other packages directly, so the first Worker request does not wait for a whole-graph scan.
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 
@@ -111,12 +111,14 @@ The focused runner prepares generated messages and routes, gives the command an 
 removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
 database leases, Docker, a database or remote dispatch. A `bun test` command starts one shared Web dev server for that
 invocation; test files acquire it through `tests/support/dev-server.ts` and keep their own browser, context and Worker
-fixture overlay. Vite dependency pre-bundling uses a host-local cache keyed by `bun.lock` and is reused across runs and
-worktrees until the lock changes. The runner stops that Vite process tree, including descendants that left the process
-group, when the invocation ends or is interrupted. Lifecycle, fixture-lock and lock-hash cache tests pin that
-composed-run behaviour; existing browser page assertions stay unchanged. An explicit `bun test tests/*.host.test.ts`
-through this runner uses the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's
-host-file exclusion does not hide a named file.
+fixture overlay. Decision: compose the Worker explicit dependency set with a host-local `optimizeDeps` cache keyed by
+`bun.lock`; `vite optimize --force` publishes that cache once per lock, then the focused run starts one shared Vite
+server. Source modules stay worktree-current; only the dependency output is shared until the lock changes. The runner
+stops that Vite process tree, including descendants that left the process group, when the invocation ends or is
+interrupted. Lifecycle, fixture-lock and lock-hash cache tests pin that composed-run behaviour; existing browser page
+assertions stay unchanged. An explicit `bun test tests/*.host.test.ts` through this runner uses the same
+`--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does not hide
+a named file.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.

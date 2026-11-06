@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { cleanupAll, ownBunProcess } from './server-custody.ts';
 
 export const viteDepCacheReadyName = '_ready';
 export const viteDepCacheLockName = '_lock';
+export const viteDepCacheMetadataName = join('deps', '_metadata.json');
 
 export type ViteDepCacheReady = {
   lockHash: string;
@@ -53,57 +53,27 @@ function readReady(directory: string, lockHash: string): ViteDepCacheReady | und
   return parsed;
 }
 
-async function waitFor(path: string, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (!existsSync(path)) {
-    if (Date.now() >= deadline) return false;
-    await Bun.sleep(Math.min(pollIntervalMs, deadline - Date.now()));
-  }
-  return true;
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close((error) => (error ? reject(error) : resolvePort(port)));
-    });
-  });
+export function viteDepCacheOptimizeCommand(appRoot: string): string[] {
+  return [join(appRoot, 'node_modules', '.bin', 'vite'), 'optimize', '--force'];
 }
 
 async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, appRoot: string): Promise<void> {
-  const port = await freePort();
-  const origin = `http://127.0.0.1:${port}`;
-  const child = Bun.spawn(['bun', 'run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+  const child = Bun.spawn(viteDepCacheOptimizeCommand(appRoot), {
     cwd: appRoot,
     env: { ...env, WEB_VITE_CACHE_DIR: stagingDirectory, REZICS_TEST_RUNTIME: '1' },
-    detached: true,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const custody = ownBunProcess(child, {
-    label: 'Vite dependency pre-bundle',
-    termGraceMs: 2_000,
-    settleTimeoutMs: 4_000,
-  });
-  let lastError: unknown = new Error('pre-bundle has not served /en');
+  const custody = ownBunProcess(child, { label: 'Vite dependency pre-bundle' });
   try {
-    const deadline = Date.now() + 180_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`Vite dependency pre-bundle exited with ${child.exitCode}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
-        await response.body?.cancel();
-        if (response.status < 500) return;
-        lastError = new Error(`HTTP ${response.status} for /en`);
-      } catch (error) {
-        lastError = error;
-      }
-      if (Date.now() >= deadline) throw new Error(`Vite dependency pre-bundle did not serve /en: ${String(lastError)}`);
-      await Bun.sleep(250);
+    const status = await child.exited;
+    if (status !== 0) {
+      throw new Error(`Vite dependency pre-bundle exited with ${status}\n${custody.diagnostics()}`);
+    }
+    const metadata = join(stagingDirectory, viteDepCacheMetadataName);
+    if (!existsSync(metadata)) {
+      throw new Error(`Vite dependency pre-bundle did not write ${metadata}\n${custody.diagnostics()}`);
     }
   } finally {
     await cleanupAll([{ label: 'Vite dependency pre-bundle', run: () => custody.close(), timeoutMs: 12_000 }]);
