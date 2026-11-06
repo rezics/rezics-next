@@ -199,6 +199,7 @@ test('createKernel subject:read POST custom search authorizes without a write ch
       },
     },
     search: {
+      savedCatalogueMembers: () => Promise.reject(new Error('saved catalogue members are not used here')),
       async search(principal, body) {
         searches.push([principal, body]);
         return result;

@@ -83,6 +83,7 @@ const asOf = '2026-10-25T00:00:00.000Z';
 const calls: unknown[][] = [];
 let failure: ProblemError | null = null;
 const service: SearchService = {
+  savedCatalogueMembers: () => Promise.reject(new Error('saved catalogue members are not used here')),
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;

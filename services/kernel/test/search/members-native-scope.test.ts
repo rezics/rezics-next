@@ -26,6 +26,7 @@ const presence: FilterDocument = { owner: { presence: true } };
 const definition = (sort: 'id' | 'ordinal', filter: FilterDocument = presence): PreparationDefinition => ({
   filter: admitFilter(parseFilter(filter), bundledRelease, { owner: true, saved: true }),
   sort,
+  source: { kind: 'owner' },
   release: { digest: bundledDigest, value: bundledRelease },
 });
 
