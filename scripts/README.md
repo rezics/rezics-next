@@ -64,9 +64,10 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next auto connection. A
-socket file left by a killed master is removed when `-O check` reports a refused or missing listener; while it
-remains, OpenSSH prints `already exists, disabling multiplexing` and every connection pays a full handshake.
+idle sockets. A failed probe never stops a master: a busy master times out too, and `-O exit` would cut every run
+multiplexed through it (their rsync sessions end with exit 255). A socket file left by a killed master is removed when
+`-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
+multiplexing` and every connection pays a full handshake.
 Expired immutable bases are renamed aside under `bases/.lock` and deleted after it is released, so a base lookup never
 waits behind another run's recursive delete.
 Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted

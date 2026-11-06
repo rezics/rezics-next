@@ -6,7 +6,8 @@
  * when the runtime directory is unset (`REMOTE_CHECK_SSH_CONTROL_DIR` overrides). OpenSSH's unix_listener adds a
  * `.XXXXXXXXXX` suffix, so a path at or over 97 bytes fails; a long override or runtime directory relocates to a
  * hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that master.
- * Completing a run never `-O exit`s it. A stale master is recovered with `-O check` then `-O exit`.
+ * Completing a run never `-O exit`s it, and a failed probe never does either: a socket is removed only when `-O check`
+ * reports its listener refused.
  */
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
