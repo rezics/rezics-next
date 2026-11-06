@@ -1,6 +1,6 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import type { ProfileLink, ProfileValues } from '../../settings/profile-data';
-import type { EditableProfile } from '../../settings/editable-profile-source';
+import { officialProfileRead, type EditableProfile } from '../../settings/editable-profile-source';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 import { storyViewerId } from './identities';
 
@@ -197,7 +197,7 @@ const readEditable: NonNullable<FakeRoute['story']> = ({ request, match }) => {
     publicViews: current.publicViews,
     ...(typeof current.speakersListed === 'boolean' ? { speakersListed: current.speakersListed } : {}),
   };
-  return { status: 200, profile };
+  return { status: 200, ...officialProfileRead(profile) };
 };
 
 export const routes: FakeRoute[] = [

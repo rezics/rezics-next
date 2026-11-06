@@ -41,6 +41,8 @@ and public Profile journeys remain unaccepted; integration owns their native, br
 focus and exact-account cost assertions. Named phone and desktop admission, recovery and keyboard-return stories stay;
 no extra pages. Native, browser and root acceptance remain with integration.
 
+**Decision:** Combined Profile–Watches–Profile focused suites consume the installed `{ profile, editing }` GET recording and Settings Structured Field command-key encoding; they do not import Kernel SQL modules. Existing named suites remain the fewest pins for edit/save/readback, draft/focus return, Watch admission and original removal.
+
 Same-tab Watch visits carry the current Profile draft and last keyboard field. Return restores that draft onto the
 current native profile. Keyboard section return focuses only that exact current field; pointer return leaves focus
 alone. A missing Watch row focuses the admitted watches region without scanning neighbours.

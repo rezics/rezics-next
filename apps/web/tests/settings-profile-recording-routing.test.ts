@@ -44,6 +44,10 @@ test('Settings profile recording handles only its exact scene and single owned t
     expect(profileResponse.status).toBe(200);
     expect(await profileResponse.json()).toMatchObject({
       profile: { id: storyViewerId, handle: 'reader', displayName: 'Avery Reader' },
+      editing: {
+        viewer: { accountId: storyViewerId },
+        target: { accountId: storyViewerId, kind: 'actor' },
+      },
     });
 
     const commaBatch = accountRequest(`ids=${mira.id},${deletedOrganizationId}`);
@@ -98,20 +102,24 @@ test('Settings profile recording handles only its exact scene and single owned t
     story(`/en/threads/${mentionThreadId}/thread`);
     const unrelatedScene = accountRequest(`ids=${storyViewerId}`);
     expect(await answerFakeRoute('story', unrelatedScene)).toBeUndefined();
-    expect(await (await fetchRecorded(unrelatedScene)).json()).toEqual({ accounts: [mira], next: null });
+    expect(await (await fetchRecorded(unrelatedScene)).json()).toEqual({ accounts: [], next: null });
 
     story('/en/settings?profile=organization');
     const organizationProfile = await fetchRecorded(new Request(`${kernelUrl}/v1/accounts/${storyViewerId}/profile`));
     expect(organizationProfile.status).toBe(200);
     expect(await organizationProfile.json()).toMatchObject({
       profile: { id: storyViewerId, kind: 'organization', speakersListed: false },
+      editing: { target: { accountId: storyViewerId, kind: 'organization' } },
     });
 
     for (const variant of ['self', 'handleless', 'readback', 'refused']) {
       story(`/en/settings?profile=${variant}`);
       const editable = await fetchRecorded(new Request(`${kernelUrl}/v1/accounts/${storyViewerId}/profile`));
       expect(editable.status).toBe(200);
-      expect(await editable.json()).toMatchObject({ profile: { id: storyViewerId } });
+      expect(await editable.json()).toMatchObject({
+        profile: { id: storyViewerId },
+        editing: { target: { accountId: storyViewerId } },
+      });
       const saved = await fetchRecorded(
         new Request(`${kernelUrl}/v1/accounts/${storyViewerId}`, {
           method: 'PATCH',

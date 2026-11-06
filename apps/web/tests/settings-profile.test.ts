@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { settingsCommandKeyHeader } from '../src/settings/command-headers';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
 import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
@@ -158,7 +158,7 @@ test('profile HTTP serialization preserves the semantic key and original patch o
       const sent = calls[attempt - 1]!;
       expect(sent.method).toBe('PATCH');
       expect(sent.url).toBe(`/v1/accounts/${before.accountId}`);
-      expect(idempotencyKeyOf(sent.key)).toBe(idempotencyKey);
+      expect(sent.key).toBe(settingsCommandKeyHeader(idempotencyKey));
       expect(sent.body).toEqual({ biography: '  Original e\u0301\nwords  ' });
       expect({ before, after, idempotencyKey }).toEqual(original);
     }
