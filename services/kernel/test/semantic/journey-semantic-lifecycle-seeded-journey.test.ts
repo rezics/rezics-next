@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createBody, page, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createBody, page, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 
 let f: ResourceFixture;
 beforeAll(async () => {
@@ -55,7 +55,13 @@ test('owner, another owner, anonymous reader, moderator and a delegate see curre
     f.conditional(deleted.body.zone.revision),
   );
   expect(taken.status).toBe(200);
-  const restored = await f.call('owner', 'POST', `/v1/zones/${id}:restore`, {}, f.conditional(taken.body.zone.revision));
+  const restored = await f.call(
+    'owner',
+    'POST',
+    `/v1/zones/${id}:restore`,
+    {},
+    f.conditional(taken.body.zone.revision),
+  );
   expect(restored.status).toBe(200);
   const shown = await f.read(id, 'anonymous');
   expect(shown.status).toBe(200);

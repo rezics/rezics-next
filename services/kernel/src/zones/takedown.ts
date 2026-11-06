@@ -1,4 +1,6 @@
 import type { ZoneConfiguration } from '@rezics/composition';
+import type { Json } from 'reylo';
+import { jsonParameter } from '../database/json.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { ZoneHead } from './resource-store.ts';
 
@@ -132,8 +134,8 @@ export function withholdingOf(value: unknown): Withholding {
   return { decisions, custody };
 }
 
-export function withholdingJson(next: Withholding): Record<string, unknown> {
-  return { ...next.decisions, ...(next.custody.length > 0 ? { [CUSTODY]: next.custody } : {}) };
+export function withholdingJson(next: Withholding): Json {
+  return jsonParameter({ ...next.decisions, ...(next.custody.length > 0 ? { [CUSTODY]: next.custody } : {}) });
 }
 
 /** Whether a live takedown decision exists. Configuration then reads only for the Zone owner. */
