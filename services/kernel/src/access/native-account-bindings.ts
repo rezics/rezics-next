@@ -48,6 +48,8 @@ import { createOperatorCommands, OperatorDeniedError } from './operator.ts';
 import { createRecoveryCompletion } from './recovery-completion.ts';
 
 import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
+import { bindAuthErasureAcknowledgement, type AuthDeletionHandleRead } from '@rezics/auth';
+import { acknowledgeErasure } from './erasure.ts';
 import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
@@ -116,6 +118,20 @@ export type NativeAccountBindings = {
   delegations: ReturnType<typeof createDelegationCommands>;
   continuations: ReturnType<typeof createCommittedContinuations>;
 };
+
+/** Live current-handle reader for Auth deletion execute confirmation. */
+export function createAuthDeletionHandleRead(deps: { pool: Pool; access: Access }): AuthDeletionHandleRead {
+  return {
+    async readDeletionHandle(token, accountId, context) {
+      const actor = await deps.access.authenticate(token, context as { pool: Pool; deadline: number });
+      if (actor.kind !== 'account' || actor.accountId !== accountId) return null;
+      const route = routeOf(accountId);
+      if (route === null) return null;
+      const account = await readAccount(deps.pool, route, accountId);
+      return account?.handle ?? null;
+    },
+  };
+}
 
 export class NativeAccountBindingsUnavailableError extends Error {
   constructor() {
@@ -387,6 +403,10 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     readAssignment: (requestedBy, assignedActorId) =>
       readAssignment(pool, requestedBy, assignedActorId, accessClock(access)),
   };
+  bindAuthErasureAcknowledgement(trustedAccess, {
+    acknowledgeAccountErasure: (accountId, outcome) =>
+      acknowledgeErasure({ pool }, { accountId, participant: 'auth', outcome }).then(() => undefined),
+  });
   const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = authWorkflowBoundary({
     readOriginalLifecycleResult: (input: OriginalLifecycleRequest) =>
       readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),

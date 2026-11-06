@@ -16,7 +16,7 @@ import { createRealAccess } from './real-access.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import '../support/native-history-composition.ts';
 import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/index.ts';
-import { bindCommandHistoryEvidence } from '../../src/history/application/index.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/command-evidence.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');

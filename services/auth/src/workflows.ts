@@ -94,7 +94,7 @@ export interface AccountWorkflowOptions<Context = WorkflowContext> {
   systemDatabaseSchemaName?: string;
   systemDatabasePool?: Pool;
   /** Compose service registrations before this host's single launch. */
-  registerWorkflows?: () => void;
+  registerWorkflows?: () => void | Promise<void>;
   /** A containing service host owns signals and pool shutdown when false. */
   handleSignals?: boolean;
   /** Persistent Auth-only 32-byte key, independent of Better Auth/signing keys. */
@@ -218,7 +218,9 @@ function businessOperation(input: AccountOperation) {
 }
 
 /** One explicit Auth application owns DBOS. createAuthService has no global
- * executor side effects. Do not create two workflow hosts in one process. */
+ * executor side effects. Each host keeps one token through start and close;
+ * a later host starts only after that generation's explicit close or failed
+ * start has released the owner. */
 export function createAccountWorkflows<Context = WorkflowContext>(options: AccountWorkflowOptions<Context>) {
   const { database, auth, access } = options;
   installNativeRoleProducer(database);
@@ -285,9 +287,21 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   }
   let started = false;
   let starting: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
+  let closed = false;
   let registered = false;
+  let releasing: Promise<void> | undefined;
+  let lifecycle = Promise.resolve();
+  const enqueue = <T>(work: () => Promise<T>) => {
+    const run = lifecycle.then(work, work);
+    lifecycle = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
   const active = () => {
-    if (!started || owner !== token) throw new Error('Start the Auth workflow host first');
+    if (closed || !started || owner !== token) throw new Error('Start the Auth workflow host first');
   };
   async function stage(id: string): Promise<Stage> {
     return required(
@@ -749,8 +763,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         if ('conflict' in installed) {
           await expire(claim);
           await release(claim);
-          await erase(row.account_id);
           await expired(input.registrationId);
+          await erase(row.account_id);
           const deniedEvent = { error: 'registration_denied' as const };
           await DBOS.setEvent('credential', deniedEvent);
           return { accountId: row.account_id, error: deniedEvent.error };
@@ -774,8 +788,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       }
       await expire(claim);
       await release(claim);
-      await erase(row.account_id);
       await expired(input.registrationId);
+      await erase(row.account_id);
       return { accountId: row.account_id, expired: true as const };
     };
     const registrationResult = step('native-registration-result', (id: string, result: unknown) =>
@@ -1318,10 +1332,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         }
         await expire(claim);
         await release(claim);
+        await expired(input.registrationId);
         await erase(row.account_id);
         await retireOperator(held);
         await releaseOperator(held);
-        await expired(input.registrationId);
         denied();
       }
       if (input.kind === 'revoke') {
@@ -1605,33 +1619,44 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     await disclose();
     return result;
   }
-  const close = async () => {
-    await starting;
-    if (!started || owner !== token) return;
-    started = false;
-    process.off('SIGINT', interrupt);
-    process.off('SIGTERM', interrupt);
-    try {
-      await copyClient?.destroy();
-      copyClient = undefined;
-      copyWriter = undefined;
-      await DBOS.shutdown({ deregister: true });
-    } finally {
-      owner = undefined;
-      registered = false;
-    }
+  // One release path for this generation. Shutdown and owner-clear run only while
+  // this token still owns DBOS, so a late cleanup cannot unseat a successor.
+  const releaseOwned = () => {
+    if (owner !== token) return Promise.resolve();
+    return (releasing ??= (async () => {
+      try {
+        try {
+          await copyClient?.destroy();
+        } finally {
+          copyClient = undefined;
+          copyWriter = undefined;
+          if (owner !== token) return;
+          await DBOS.shutdown({ deregister: true });
+        }
+      } finally {
+        if (owner === token) {
+          owner = undefined;
+          registered = false;
+        }
+        releasing = undefined;
+      }
+    })());
   };
   const interrupt = () => {
     void close();
   };
-  const start = async () => {
-    if (owner) throw new Error('Another Auth workflow host owns DBOS in this process');
+  const launch = async () => {
+    if (closed) throw new Error('Auth workflow host is stopped');
+    if (owner && owner !== token) throw new Error('Another Auth workflow host owns DBOS in this process');
+    if (started && owner === token) return;
     owner = token;
     try {
+      if (closed) throw new Error('Auth workflow host is stopped');
       if (!registered) {
         register();
-        options.registerWorkflows?.();
+        await options.registerWorkflows?.();
       }
+      if (closed) throw new Error('Auth workflow host is stopped');
       DBOS.setConfig({
         name: AUTH_WORKFLOW_APPLICATION,
         systemDatabaseUrl: options.systemDatabaseUrl,
@@ -1644,6 +1669,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         logger: authWorkflowLogger,
       });
       await DBOS.launch();
+      if (closed) throw new Error('Auth workflow host is stopped');
       if (sameDatabase) {
         await installCopyRecorder(database);
         await installWorkflowRequestRetention(database);
@@ -1678,20 +1704,27 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           send: (id, message, topic, key) => DBOS.send(id, message, topic, key),
         };
       }
+      if (closed) throw new Error('Auth workflow host is stopped');
       started = true;
       if (options.handleSignals !== false) {
         process.once('SIGINT', interrupt);
         process.once('SIGTERM', interrupt);
       }
     } catch (error) {
-      await copyClient?.destroy();
-      copyClient = undefined;
-      copyWriter = undefined;
-      await DBOS.shutdown({ deregister: true });
-      owner = undefined;
-      registered = false;
+      // The start failure is the reported cause. Cleanup can fail after DBOS was never launched; it must not hide
+      // the cause. Release still belongs to this generation.
+      await releaseOwned().catch(() => {});
       throw error;
     }
+  };
+  const close = () => {
+    closed = true;
+    return (closing ??= enqueue(async () => {
+      process.off('SIGINT', interrupt);
+      process.off('SIGTERM', interrupt);
+      started = false;
+      await releaseOwned();
+    }));
   };
   async function authorizeOperatorOpening(input: {
     key: string;
@@ -1721,8 +1754,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   }
   return {
     start() {
-      if (started) return Promise.resolve();
-      return (starting ??= start().finally(() => {
+      if (closed || closing) return Promise.reject(new Error('Auth workflow host is stopped'));
+      if (started && owner === token) return Promise.resolve();
+      return (starting ??= enqueue(launch).finally(() => {
         starting = undefined;
       }));
     },

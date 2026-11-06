@@ -84,6 +84,7 @@ test('real host offers authentication before display, then native advice without
     kind: 'review',
     accountId: human.accountId,
     email: expect.stringContaining('@ordinary.test'),
+    handle: expect.stringMatching(/^deletion_[a-z0-9]+$/),
     action: 'available',
     policy: 'personal-deletion',
   });

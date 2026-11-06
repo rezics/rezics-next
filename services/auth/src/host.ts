@@ -229,7 +229,8 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     // A refusal happens before workflows/maintenance register or a handler escapes.
     service = await createAuthService(options);
   } catch (error) {
-    await endPools();
+    // The construction failure is the reported cause; releasing pools must not replace it.
+    await endPools().catch(() => undefined);
     throw error;
   }
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
@@ -267,7 +268,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
           ? listener(request)
           : Promise.resolve(Response.json({ error: 'unavailable' }, { status: 503 }));
     } catch {
-      await endPools();
+      await endPools().catch(() => undefined);
       throw new AuthHostConfigurationError('private-consent');
     }
   }
@@ -411,8 +412,10 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
           process.once('SIGTERM', interrupt);
         } catch (error) {
           privateConsentAccepting = false;
-          await workflows.close();
-          await endPools();
+          // Native workflow shutdown still precedes pool release. Neither cleanup failure replaces the first
+          // lifecycle error, which is the one a caller learns the cause from.
+          await workflows.close().catch(() => undefined);
+          await endPools().catch(() => undefined);
           throw error;
         }
       })());

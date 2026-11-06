@@ -1468,14 +1468,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           throw new Denied();
         const identity = await trustedAccess.readAuthErasureBarrier?.(accountId);
         if (!identity) {
+          // Pending registration expiry has no active-account erasure barrier.
+          // Access already fenced the account; an incomplete stage is the native
+          // proof. Do not wait for Auth expiry markers the consumer never writes.
           const expiry = await database.query(
-            'SELECT 1 FROM auth_registration_stage WHERE account_id=$1 AND expired_at IS NOT NULL AND completed_at IS NULL AND erasure_release_at IS NOT NULL LIMIT 1',
+            'SELECT 1 FROM auth_registration_stage WHERE account_id=$1 AND completed_at IS NULL LIMIT 1',
             [accountId],
           );
           if (!expiry.rowCount) throw new Denied(503);
         }
-        // Pending registration expiry has no active-account erasure barrier.
-        // It retains its separate native cleanup semantics and emits no proof.
         const id = await startNativeErasure(database, accountId, account.authnEpoch, identity ?? undefined);
         if (identity) await bindErasureBarrier(database, id, identity);
         return id;
@@ -1527,7 +1528,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         // Every page commits/releases before continuing; no owner/client list is retained.
         for (;;) {
           const page = await nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure);
-          if (page.state !== 'more') return;
+          if (page.state !== 'more') {
+            if (page.state !== 'consent') {
+              const { authErasureAcknowledgement } = await import('./kernel-access.ts');
+              await authErasureAcknowledgement(trustedAccess)?.acknowledgeAccountErasure(accountId, 'erased');
+            }
+            return;
+          }
         }
       },
       async stageCredentialEffect(input) {

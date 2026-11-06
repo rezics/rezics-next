@@ -2,7 +2,7 @@ import { Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { jsonParameter } from '../database/json.ts';
 import { registerLiveCopyRecovery } from './live-copy-work.ts';
-import { registerNativeErasureWork } from './erasure-native.ts';
+import { bindNativeErasureAcknowledgement, registerNativeErasureWork } from './erasure-native.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkModule } from '../work/registry.ts';
 import canonicalize from 'canonicalize';
@@ -231,6 +231,8 @@ export async function acknowledgeErasure(
     },
   );
 }
+
+bindNativeErasureAcknowledgement(acknowledgeErasure);
 
 /** The owner calls this in a separate platform command after its expiry purge commits. */
 export async function resolveRetention(

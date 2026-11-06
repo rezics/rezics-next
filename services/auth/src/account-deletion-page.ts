@@ -8,7 +8,10 @@ export interface AccountDeletionPageAccess {
   readAccountDeletionAdvice(input: {
     human: SessionProof;
     deadline: number;
-  }): Promise<{ kind: 'available' | 'refused' | 'changed' | 'unavailable' }>;
+  }): Promise<
+    | { kind: 'available' | 'refused'; handle: string | null }
+    | { kind: 'changed' | 'unavailable' }
+  >;
 }
 export const ACCOUNT_DELETION_PAGE_PATH = '/account-management/deletion-page';
 export type AccountDeletionPage =
@@ -17,6 +20,7 @@ export type AccountDeletionPage =
       kind: 'review';
       accountId: string;
       email: string | null;
+      handle: string | null;
       action: 'available' | 'refused';
       policy: 'personal-deletion';
     }
@@ -67,10 +71,15 @@ export function accountDeletionPageTransport(
           const identity = await readNativeAccountIdentity(database, human.account_id);
           await service.internal.accessTokenForProof(human);
           if (Date.now() >= deadline) return { kind: 'unavailable' };
+          const handle =
+            typeof advice.handle === 'string' && advice.handle.length > 0 && advice.handle.length <= 64
+              ? advice.handle
+              : null;
           return {
             kind: 'review',
             accountId: identity.account_id,
             email: identity.email,
+            handle,
             action: advice.kind,
             policy: 'personal-deletion',
           };

@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AuthService, type AccessAccount } from '../src/index.ts';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { encodeCursor } from '../../kernel/src/tokens/cursor.ts';
 
@@ -510,3 +511,72 @@ test('native copy registrations publish pending events across close/relaunch and
     await workflows.close();
   }
 }, 120_000);
+
+test('failed launch keeps the first error through cleanup failure and a later host recovers', async () => {
+  await workflows.close();
+  const shutdown = DBOS.shutdown.bind(DBOS);
+  DBOS.shutdown = (async (config) => {
+    await shutdown(config);
+    throw new Error('cleanup failed');
+  }) as typeof DBOS.shutdown;
+  try {
+    const failing = createAccountWorkflows({
+      ...options,
+      registerWorkflows: () => {
+        throw new Error('injected launch failure');
+      },
+    });
+    await expect(failing.start()).rejects.toThrow('injected launch failure');
+    const recovered = createAccountWorkflows(options);
+    await recovered.start();
+    const opened = await recovered.beginRegistration({
+      key: 'lifecycle-failed-launch',
+      handle: 'Lifecycle_Failed',
+    });
+    expect(opened.accountId).toBe('workflow-account-lifecycle-failed-launch');
+    await recovered.close();
+    workflows = recovered;
+  } finally {
+    DBOS.shutdown = shutdown;
+  }
+}, 60_000);
+
+test('a second host does not shut down a healthy owner', async () => {
+  await workflows.close();
+  workflows = createAccountWorkflows(options);
+  await workflows.start();
+  const other = createAccountWorkflows(options);
+  await expect(other.start()).rejects.toThrow('Another Auth workflow host owns DBOS in this process');
+  const opened = await workflows.beginRegistration({
+    key: 'lifecycle-healthy-owner',
+    handle: 'Lifecycle_Healthy',
+  });
+  expect(opened.accountId).toBe('workflow-account-lifecycle-healthy-owner');
+}, 60_000);
+
+test('close during launch settles that generation before a sequential host starts', async () => {
+  await workflows.close();
+  let releaseLaunch = () => {};
+  const gate = new Promise<void>((resolve) => {
+    releaseLaunch = resolve;
+  });
+  const launching = createAccountWorkflows({
+    ...options,
+    registerWorkflows: () => gate,
+  });
+  const start = launching.start();
+  const closed = launching.close();
+  releaseLaunch();
+  await closed;
+  await expect(start).rejects.toThrow('Auth workflow host is stopped');
+  const next = createAccountWorkflows(options);
+  await next.start();
+  await start.catch(() => {});
+  const opened = await next.beginRegistration({
+    key: 'lifecycle-close-during-launch',
+    handle: 'Lifecycle_Close',
+  });
+  expect(opened.accountId).toBe('workflow-account-lifecycle-close-during-launch');
+  await next.close();
+  workflows = next;
+}, 60_000);

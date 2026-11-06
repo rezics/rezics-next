@@ -35,7 +35,11 @@ synchronous. See [Content deletion](../services/kernel/src/content/README.md#del
 ## Account erasure
 
 1. **Confirmation and T.** Account erasure is final at confirmation, with fresh authentication and the typed
-   confirmation. That instant, T, is both a read and write fence: private and unlisted reads, exports, counts, media
+   confirmation. Native execute confirmation is the account's current handle, compared after NFC and case-folding;
+   Auth-page localized phrases stay a client-only gate and are not the execute field. Handleless accounts skip the
+   typed execute field. The deletion-page review carries that current handle so the page can send it. A 503
+   unavailable execute retries once while current; malformed output, timeout and proven refusal (including 403
+   platform_closed not_applied) do not. That instant, T, is both a read and write fence: private and unlisted reads, exports, counts, media
    and producers reject the owner immediately. Every worker checks the fence before any effect. Authentication
    denial alone is not enough for public or unlisted routes. Imports and late webhooks can never recreate the
    account's data or benefits. The 30-day restore window applies to records deleted one by one; it never postpones
@@ -237,7 +241,9 @@ being inferred from a successful local page.
 
 ### Auth-local copies and the fixed proof boundary
 
-Auth owns its database and `auth_dbos`; kernel `dbos` is a different store. Auth
+Auth owns its database and `auth_dbos`; kernel `dbos` is a different store. Native
+Auth fixtures copy the once-migrated `rezics_kernel_test` template rather than
+replaying kernel migrations per file. Auth
 records account roles and exact workflow/artifact keys in the same transaction as
 SDK enqueue/message writes. App-owned native-table triggers cover subsequent
 status, input, output/error, operation, event/history and message writes. Unknown
@@ -307,3 +313,6 @@ Access evidence at authorize time. Native cleanup/hold commit fences, erasure ef
 readback and the original browser journeys remain acceptance obligations after landing.
 Decision: Subject source pages precheck each statement minimum then charge returned rows; identity mapping
 uses the unmetered pool and one original key so tombstone homes cannot overflow the caller limit.
+Decision: Account-erasure Zone grant drain uses the committed barrier version/T and persists the Access cursor
+through both grant stores; empty resource-grant progress no longer stalls owner-role cleanup. The two Zone tests
+pin empty owner-role drain, paging, non-1 barrier, interruption/replay, unrelated grants and persisted readback.

@@ -7,7 +7,9 @@ import { capture, runLaneSuite } from '../../../scripts/test-lanes.ts';
 import { betterAuthSchemaOptions } from '../src/better-auth.ts';
 import {
   databaseCheck,
+  KERNEL_TEMPLATE_DATABASE,
   migrate,
+  migrateKernelTemplate,
   ownDatabase,
   run,
   schemaDump,
@@ -111,6 +113,8 @@ if (import.meta.main) {
           if (result.status !== 0) throw new Error(`psql -c ${sql} failed:\n${result.output}`);
         };
         // The template is migrated and dump-checked and never used by a test; each file runs on its own copy.
+        // Native fixtures copy this kernel template; migrating it here replaces one replay per fixture.
+        migrateKernelTemplate(database.url);
         const { failed } = await runLaneSuite({
           service: 'auth',
           directory,
@@ -124,6 +128,7 @@ if (import.meta.main) {
               ...env,
               AUTH_CHECK_CONTAINER: database.container,
               AUTH_CHECK_LANE_OWNER: String(process.pid),
+              AUTH_CHECK_KERNEL_TEMPLATE: KERNEL_TEMPLATE_DATABASE,
               DATABASE_URL: url,
               AUTH_TEST_DATABASE_URL: url,
             };

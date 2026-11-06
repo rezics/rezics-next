@@ -34,6 +34,18 @@ import {
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { discoverErasurePage, ERASURE_DISCOVERY_ROLES, type ErasureDiscoveryPage } from './erasure-progress.ts';
 
+type NativeErasureAcknowledgement = (
+  deps: { pool: Pool },
+  input: { accountId: string; participant: string; outcome: 'erased' | 'none' },
+) => Promise<unknown>;
+
+let acknowledgeAccessErasure: NativeErasureAcknowledgement | undefined;
+
+/** Coordinator binds acknowledgement so native paging does not import the public erasure module. */
+export function bindNativeErasureAcknowledgement(acknowledge: NativeErasureAcknowledgement): void {
+  acknowledgeAccessErasure = acknowledge;
+}
+
 /** Delivered native groups only. The rest of the inventory is explicitly pending.
  * Ordering consumes handle effect children before their terminal operation parents.
  * Cursor-bearing groups require their deployed native cutover before mutation.
@@ -58,6 +70,9 @@ export function NATIVE_ERASURE_GROUPS() {
       ] as const,
   );
 }
+
+export type NativeErasureGroup = ReturnType<typeof NATIVE_ERASURE_GROUPS>[number];
+export type NativeErasureGroups = ReturnType<typeof NATIVE_ERASURE_GROUPS>;
 
 type Progress = {
   route: number;
@@ -128,8 +143,9 @@ export async function advanceNativeErasure(
   );
   const anchor = initial.rows[0];
   allow(anchor);
+  const groups = NATIVE_ERASURE_GROUPS();
   let expected: Work = { ...anchor, retry: false };
-  if (anchor.phase === NATIVE_ERASURE_GROUPS().length) {
+  if (anchor.phase === groups.length) {
     // Two ordered point-prefix seeks rotate only the fixed inventory's blocked
     // phases. No account graph, workflow enumeration or population scan.
     const blocked = await withConnection(pool, async (tx) => {
@@ -154,14 +170,18 @@ export async function advanceNativeErasure(
           `UPDATE access.erasure_native_progress SET native_complete_at=COALESCE(native_complete_at,statement_timestamp()),
           pending='shared-history-producer' WHERE progress_id=$1 AND phase=$2
           AND NOT EXISTS (SELECT 1 FROM access.erasure_native_blocked WHERE progress_id=$1)`,
-          [progressId, NATIVE_ERASURE_GROUPS().length],
+          [progressId, groups.length],
         );
       });
+      await acknowledgeAccessErasure!(
+        { pool },
+        { accountId: expected.account_id, participant: 'access', outcome: 'erased' },
+      );
       return 'pending-shared-custody';
     }
     expected = { ...anchor, ...blocked, retry: true };
   }
-  const group = NATIVE_ERASURE_GROUPS()[expected.phase];
+  const group = groups[expected.phase];
   allow(group);
   const [store, role] = group;
   const spec = ERASURE_DISCOVERY_ROLES.find((entry) => entry[0] === store && entry[1] === role);
@@ -433,7 +453,7 @@ export async function advanceNativeErasure(
           current.account_id,
           progressId,
           expected.phase,
-          current.phase === NATIVE_ERASURE_GROUPS().length,
+          current.phase === groups.length,
           authRetirement,
         )) ??
         (await nativeStoreBlocker(tx, store, key, current.account_id, role));
@@ -532,7 +552,7 @@ export async function advanceNativeErasure(
         progressId,
         nextPhase,
         page.done ? 0 : expected.page + 1,
-        nextPhase === NATIVE_ERASURE_GROUPS().length ? 'native-inventory' : null,
+        nextPhase === groups.length ? 'native-inventory' : null,
       ]);
     }
     // Discovery replay contains account-linked raw keys. Drop each consumed page in

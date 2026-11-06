@@ -216,6 +216,8 @@
         "services/kernel/src/access/durable-initiator.ts",
         "services/kernel/src/access/erasure.ts",
         "services/kernel/src/access/zone-grant-cleanup.ts",
+        "services/kernel/src/access/contribution-attribution.ts",
+        "services/kernel/src/access/public-identity.ts",
         "services/kernel/src/access/adapters/index.ts",
         "services/kernel/src/access/agent-verification-identity.ts",
         "services/kernel/src/access/agent-verification.ts",

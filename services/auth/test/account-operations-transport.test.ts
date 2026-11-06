@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
-import { createAuthHost, type AccountOperationAccess } from '../src/index.ts';
+import { bindAuthDeletionHandleRead, createAuthHost, type AccountOperationAccess } from '../src/index.ts';
 import { parseAccountOperationApprovalResponse, parseOrganizationExecutionResponse } from '@rezics/auth-contract';
 import { accountOperationTransport } from '../src/account-operations-transport.ts';
 import { createBarrierProofVerifier } from '../src/barrier-proofs.ts';
@@ -230,8 +230,10 @@ beforeAll(async () => {
     creationBinding: proofs.creationBinding,
   });
   const context = () => ({ pool: kernelPool, deadline: Date.now() + 10000 });
+  const deletionHandle = modules.createAuthDeletionHandleRead({ pool: kernelPool, access });
   const accountOperations: AccountOperationAccess = {
     context,
+    readDeletionHandle: (token, accountId, ctx) => deletionHandle.readDeletionHandle(token, accountId, ctx),
     approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
     resolveForCaller: (token, reference, operation, ctx) =>
       workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),
@@ -255,6 +257,7 @@ beforeAll(async () => {
       }
     },
   };
+  bindAuthDeletionHandleRead(accountOperations, deletionHandle);
   installedAccess = accountOperations;
   const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: 'ops' };
   host = await createAuthHost({
@@ -378,6 +381,7 @@ test('a signed-in person approves and executes organization creation rename and 
     operationKey: 'delete-created-organization',
     operation: removeOrganization,
     reference: organizationApproval.reference,
+    confirmation: handle,
   };
   const deletedOrganization = await done(await execute(creator, deletionBody));
   expect(deletedOrganization).toEqual({ accountId: organizationId });
@@ -412,6 +416,7 @@ test('a signed-in person approves and executes organization creation rename and 
     operationKey: 'delete-self',
     operation: removal,
     reference: removalApproval.reference,
+    confirmation: leaving.handle,
   });
   expect(await done(deleted)).toEqual({ accountId: leaving.accountId });
   expect(deleted.headers.get('cache-control')).toBe('no-store');
@@ -733,7 +738,12 @@ test('deletion is never gated', async () => {
   });
   const approval = await ok(await approve(leaving, 'ungated-delete-self', removal));
   expect(approval.reference).toBeString();
-  await execute(leaving, { operationKey: 'ungated-delete-self', operation: removal, reference: approval.reference });
+  await execute(leaving, {
+    operationKey: 'ungated-delete-self',
+    operation: removal,
+    reference: approval.reference,
+    confirmation: leaving.handle,
+  });
   expect(await stateOf(leaving.accountId)).not.toBe('active');
 }, 120000);
 

@@ -201,7 +201,8 @@ test(
         {
           operationKey: postBodies('/account-operations/approve')[0]!.operationKey,
           operation: { kind: 'delete', accountId },
-          reference: 'approval-' + postBodies('/account-operations/approve')[0]!.operationKey + '.' + 'a'.repeat(43),
+          reference: `bmF0aXZl.${'a'.repeat(43)}`,
+          confirmation: 'reader',
         },
       ]);
     } finally {

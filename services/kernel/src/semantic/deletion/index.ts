@@ -4,6 +4,7 @@ export {
   type ZoneCleanupAdmission,
   type ZoneCleanupIntent,
 } from './zone-cleanup.ts';
+export type { ZoneGrantCleanupCursor } from '../../access/zone-grant-cleanup.ts';
 export {
   PLATFORM_NATIVE_INVERSE_REMOVAL_PURPOSE,
   platformNativeInverseRemovalCost,
