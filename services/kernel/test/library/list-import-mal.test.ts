@@ -231,7 +231,11 @@ test('native HTTP own preview, explicit unmatched resolution, supported status, 
   });
   expect(result.outcomes[1].status).toBe('skipped');
   expect((await apply(id, 3, resolvedVersion)).outcomes[0].status).toBe('applied');
-  expect(result.outcomes[0]).toMatchObject({ status: 'applied', applied: ['status'] });
+  expect(result.outcomes[0]).toMatchObject({
+    status: 'unsupported',
+    applied: ['status'],
+    score: { action: null, status: 'unsupported', reason: 'score-action-not-reviewed' },
+  });
   expect(result.outcomes[0].retained).toContain('my_comments');
   const history = await json('GET', `/v1/libraryEntries/${target}/state-history`);
   expect(history.changes).toContainEqual(
@@ -314,12 +318,13 @@ test('native conflict defaults preserve facts; replacement has revision and rele
 
 test('MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer', async () => {
   const actor = await native.identity([
-      ...native.owner.actor.scopes,
-      'rating:vote',
-      'definitions:read',
-      'subject:read',
-    ]),
-    targets = await Promise.all(Array.from({ length: 4 }, () => native.createSubject('game')));
+    ...native.owner.actor.scopes,
+    'rating:vote',
+    'definitions:read',
+    'subject:read',
+  ]);
+  const targets: string[] = [];
+  for (let index = 0; index < 4; index++) targets.push(await native.createSubject('game'));
   await native.grantLibraryGate(actor.actor.accountId);
   const id = (
     await json(
@@ -715,7 +720,7 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
     retiredVersion,
     bearer,
   );
-  await json('POST', `/v1/progressSessions/${occurrences[4]!.id}:retire`, { revision: 0 }, randomUUID(), bearer);
+  await json('POST', `/v1/progressSessions/${occurrences[4]!.id}:retire`, { revision: 1 }, randomUUID(), bearer);
   expect((await dateApply(4, retiredVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale' });
   await json('DELETE', `${base}/${id}`);
 });
@@ -730,8 +735,6 @@ test('native redirect requires a deliberate review of the canonical MAL target',
   const subjects = [await native.createSubject('game'), await native.createSubject('game')].sort();
   const canonical = subjects[0]!;
   const selected = subjects[1]!;
-  const merger = await native.identity(['subject:merge']);
-  await native.grantAccountActions(merger.actor.accountId, ['subject:merge']);
   const votes = createVoteCommands({ pool: native.pool, access: native.access });
   let redirected = false;
   const service = createMalImport({
@@ -744,14 +747,7 @@ test('native redirect requires a deliberate review of the canonical MAL target',
       ...votes,
       async readVoteReview(reviewActor, questionId, targetId) {
         if (!redirected) {
-          const response = await native.sendWithHeaders(
-            merger.bearer,
-            'POST',
-            '/v1/subjects:merge',
-            { subjects: [canonical, selected] },
-            { 'idempotency-key': JSON.stringify(randomUUID()) },
-          );
-          expect(response.status).toBe(202);
+          await native.admitSubjectMerge(canonical, selected);
           redirected = true;
         }
         return votes.readVoteReview(reviewActor, questionId, targetId);

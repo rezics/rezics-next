@@ -13,10 +13,15 @@ export function malValueLabel(value: MalValue): string {
   return text;
 }
 
+function scoreScale(score: MalValue): { min: number; max: number; step: number } | undefined {
+  return 'scale' in score && score.scale ? score.scale : undefined;
+}
+
 export function malScoreLabel(score: MalValue): string {
   if (score.kind === 'zero') return m.library_mal_score_none();
-  const scale = score.scale ? m.library_mal_score_scale({ min: score.scale.min, max: score.scale.max }) : '';
-  return scale ? `${malValueLabel(score)} (${scale})` : malValueLabel(score);
+  const scale = scoreScale(score);
+  const labelled = scale ? m.library_mal_score_scale({ min: scale.min, max: scale.max }) : '';
+  return labelled ? `${malValueLabel(score)} (${labelled})` : malValueLabel(score);
 }
 
 export function malOriginalScoreLabel(score: MalValue): string {
@@ -24,10 +29,11 @@ export function malOriginalScoreLabel(score: MalValue): string {
     score.kind === 'zero'
       ? m.library_mal_score_zero_source({ value: score.raw ?? String(score.value ?? 0) })
       : malValueLabel(score);
-  const scale = score.scale
-    ? m.library_mal_score_source_scale({ min: score.scale.min, max: score.scale.max, step: score.scale.step })
+  const scale = scoreScale(score);
+  const labelled = scale
+    ? m.library_mal_score_source_scale({ min: scale.min, max: scale.max, step: scale.step })
     : m.library_mal_none();
-  return m.library_mal_score_source_details({ value, scale });
+  return m.library_mal_score_source_details({ value, scale: labelled });
 }
 
 export function malMatchLabel(match: MalMatch, skipped: boolean): string {

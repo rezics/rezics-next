@@ -6,7 +6,7 @@ export const labelReviewRow: MalPreviewRow = {
   title: 'Retained native evidence',
   identifier: { namespace: 'mal_anime', source: 'mal_anime', value: '1' },
   status: { kind: 'value', value: 'Watching' },
-  score: { kind: 'zero', value: 0 },
+  score: { kind: 'zero', value: 0, scale: { min: 1, max: 10, step: 1 } },
   progress: {},
   dates: {},
   notes: { kind: 'missing' },

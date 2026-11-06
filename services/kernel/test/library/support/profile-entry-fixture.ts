@@ -40,6 +40,7 @@ import {
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
@@ -363,6 +364,7 @@ export async function createProfileEntryFixture(
     // Governance bootstrap already performed the Global parent's one-time installation.
     // Extend its standing creation authority through ordinary, fully authorized grants.
     await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
+    await installIdentityEpochBootstrap(pool);
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
       grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
@@ -440,6 +442,23 @@ export async function createProfileEntryFixture(
       const active = await readHead();
       expect(active?.digest).toBe(digest);
       return active!;
+    }
+    async function admitSubjectMerge(canonical: string, selected: string) {
+      const merger = await identity(['subject:merge', 'gate:subject_identity', 'subject:read']);
+      await grantOnDeadline({ kind: 'account', id: merger.actor.accountId }, [
+        'subject:merge',
+        'gate:subject_identity',
+      ]);
+      const opened = await send('steward', 'POST', '/v1/platform/exposure/subject_identity:open');
+      expect(opened.status).toBe(200);
+      const response = await sendWithHeaders(
+        merger.bearer,
+        'POST',
+        '/v1/subjects:merge',
+        { subjects: [canonical, selected] },
+        { 'idempotency-key': JSON.stringify(entryKey()) },
+      );
+      expect(response.status).toBe(202);
     }
     async function createSubject(vertical: ProfileVertical, label: string = vertical) {
       const response = await send('owner', 'POST', '/v1/subjects', {
@@ -535,6 +554,7 @@ export async function createProfileEntryFixture(
       send,
       sendWithHeaders,
       createSubject,
+      admitSubjectMerge,
       publish,
       activate,
       readHead,

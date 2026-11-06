@@ -91,8 +91,9 @@ uncertain retry first uses `reconcilePutVote(actor, receipt)`. A Rating redirect
 no vote guard and requires an explicit new target review. Native stale/unavailable errors are definitive typed
 outcomes. Unexpected delivery/readback errors throw and retain that checkpoint for exact command retry; current reads
 cannot settle uncertain delivery. A review refresh cannot replace a started unresolved score, including when labels are
-refreshed. Missing score consent remains resumable. Independent effects cannot turn a selected unsuccessful vote into
-overall success.
+refreshed. Missing score consent remains resumable. A selected score without a completed review is
+`score-action-not-reviewed`: status may still appear in `applied`, and the row status follows that unsuccessful
+independent score. Independent effects cannot turn a selected unsuccessful vote into overall success.
 
 The consumer adapts the native flat question scale fields into the existing nested review scale.
 Definitive score outcomes persist independently before remaining labels or Progress; retries retain that original

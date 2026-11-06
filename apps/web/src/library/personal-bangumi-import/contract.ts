@@ -7,7 +7,7 @@ import type {
   BangumiScoreCurrentVote,
   BangumiScoreOutcome as KernelBangumiScoreOutcome,
   BangumiScoreReview as KernelBangumiScoreReview,
-  BangumiScoreSelection,
+  BangumiScoreSelection as KernelBangumiScoreSelection,
   PersonalEntrySourceAdmission,
 } from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
@@ -24,6 +24,8 @@ type GeneratedLibraryLabels = NonNullable<
 >['labels'][number];
 
 export type BangumiTagPage = NonNullable<Awaited<GeneratedBangumiTagCall>['data']>;
+export type BangumiTag = BangumiTagPage['tags'][number];
+export type BangumiScoreSelection = KernelBangumiScoreSelection;
 export type BangumiLabelReviewBody = Parameters<GeneratedBangumiReviewLabelsCall>[0];
 export type BangumiLabelMapping = BangumiLabelReviewBody['mappings'][number];
 export type BangumiLabelState = NonNullable<

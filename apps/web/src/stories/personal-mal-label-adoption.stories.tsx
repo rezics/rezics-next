@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MalRowReview } from '../library/personal-mal-import/row';
+import { draftFromRow, MalRowReview } from '../library/personal-mal-import/row';
 import { MalConfirmPage } from '../library/personal-mal-import/confirm';
 import { MalResultPage } from '../library/personal-mal-import/results';
 import { labelReviewRow as row } from '../library/personal-mal-import/labels.fixture';
@@ -7,7 +7,15 @@ import { labelReviewRow as row } from '../library/personal-mal-import/labels.fix
 const meta = {
   title: 'Library/MAL label adoption',
   component: MalRowReview,
-  args: { row, busy: false, onSave: () => {} },
+  args: {
+    row,
+    draft: draftFromRow(row),
+    question: null,
+    busy: false,
+    onChange: () => {},
+    onSave: () => {},
+    onReadCurrent: () => {},
+  },
   parameters: {
     layout: 'padded',
     viewport: {

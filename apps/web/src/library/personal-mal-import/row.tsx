@@ -1,12 +1,6 @@
 import { useId } from 'react';
 import { m } from '../../paraglide/messages.js';
-import type {
-  MalLabelSelection,
-  MalOwnVoteReadback,
-  MalPreviewRow,
-  MalQuestion,
-  MalScoreReviewInput,
-} from './contract';
+import type { MalLabelSelection, MalOwnVoteReadback, MalPreviewRow, MalQuestion } from './contract';
 import { MalAction, MalCheck } from './controls';
 import {
   admittedFields,
@@ -21,8 +15,8 @@ import { MalTargetSearch } from './target';
 import { MalLabelsReview } from './labels';
 
 type DraftScore =
-  | (Extract<MalScoreReviewInput, { action: 'adopt' }> & { units?: number })
-  | Extract<MalScoreReviewInput, { action: 'clear' }>;
+  | { action: 'adopt'; questionId: string; questionRevision: number; units?: number; replaceCurrent?: true }
+  | { action: 'clear'; questionId: string; questionRevision: number };
 
 export type RowDraft = {
   row: number;
@@ -155,6 +149,17 @@ function questionLabel(question: MalQuestion): string {
   });
 }
 
+export type MalRowReviewProps = {
+  row: MalPreviewRow;
+  draft: RowDraft;
+  question: MalQuestion | null;
+  voteReadback?: MalOwnVoteReadback;
+  busy: boolean;
+  onChange: (draft: RowDraft) => void;
+  onSave: (draft: RowDraft) => void;
+  onReadCurrent: () => void;
+};
+
 export function MalRowReview({
   row,
   draft,
@@ -164,16 +169,7 @@ export function MalRowReview({
   onChange,
   onSave,
   onReadCurrent,
-}: {
-  row: MalPreviewRow;
-  draft: RowDraft;
-  question: MalQuestion | null;
-  voteReadback?: MalOwnVoteReadback;
-  busy: boolean;
-  onChange: (draft: RowDraft) => void;
-  onSave: (draft: RowDraft) => void;
-  onReadCurrent: () => void;
-}) {
+}: MalRowReviewProps) {
   const base = useId();
   const admitted = admittedFields(row);
   const canTarget = row.match !== 'unavailable';

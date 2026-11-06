@@ -1,6 +1,9 @@
 import { createContext, useContext } from 'react';
 import { sessionCsrfToken } from '../../session/query';
-import type { BangumiImportPort } from './contract';
+import type {
+  BangumiImportPort,
+  BangumiTagPageResult,
+} from './contract';
 
 export const BangumiImportPortContext = createContext<BangumiImportPort | null>(null);
 
@@ -61,7 +64,7 @@ const productionPort: BangumiImportPort = {
     const { deleteBangumiImport } = await import('./server');
     return deleteBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },
-  async tags(command) {
+  async tags(command): Promise<BangumiTagPageResult> {
     const { readBangumiTags } = await import('./server');
     return readBangumiTags({ data: command });
   },

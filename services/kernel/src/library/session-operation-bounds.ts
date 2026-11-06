@@ -88,7 +88,7 @@ export type SessionSqlPlan<I, R> = Readonly<{
 }>;
 
 export const SESSION_LIMITS = Object.freeze({ page: 100, ownerPage: 50, measures: 8, unitWrite: 100, units: 20_000 });
-const uuid = 'f'.repeat(36);
+const uuid = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
 const timestamp = '\0'.repeat(64);
 // PostgreSQL unconstrained numeric: 131072 digits before and 16383 after the
 // decimal point, plus sign and point. Native imported/retained values can exceed
@@ -799,7 +799,11 @@ export function sessionSourceWork(subjectId: string, withProfile: boolean): Boun
     // terminal can differ from the requested ID, but both UUID binds have the same width.
     sqlWork(
       itemTypes.sql,
-      { partition_no: partitionOf(routeOf(subjectId)!), routes: [routeOf(subjectId)!], subject_ids: [subjectId] },
+      {
+        partition_no: partitionOf(routeOf(subjectId) ?? 65535),
+        routes: [routeOf(subjectId) ?? 65535],
+        subject_ids: [subjectId],
+      },
       2,
       2,
       size({ id: uuid, type: '', agent_account_id: uuid, agent_verified: false }) + 6 * RELEASE_LIMITS.bytes,

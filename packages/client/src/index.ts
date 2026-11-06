@@ -75,6 +75,17 @@ export type {
   RealmClaimReviewQuery,
 } from './kernel/community/claim-review-page';
 export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
+export type {
+  BangumiChoice,
+  BangumiOutcome,
+  BangumiReview,
+  BangumiScoreChoice,
+  BangumiScoreCurrentVote,
+  BangumiScoreOutcome,
+  BangumiScoreReview,
+  BangumiScoreSelection,
+} from './kernel/library/list-import-bangumi-model.ts';
+export type { BangumiTag, BangumiTagPage } from './kernel/library/list-import-bangumi-label-model.ts';
 
 type Routes = KernelType['~Routes']['v1'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];

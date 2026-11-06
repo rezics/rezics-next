@@ -443,8 +443,6 @@ test('native redirect requires a deliberate review of the canonical AniList targ
   const subjects = [await f.createSubject('game'), await f.createSubject('game')].sort();
   const canonical = subjects[0]!;
   const selected = subjects[1]!;
-  const merger = await f.identity(['subject:merge']);
-  await f.grantAccountActions(merger.actor.accountId, ['subject:merge']);
   const votes = createVoteCommands({ pool: f.pool, access: f.access });
   let redirected = false;
   const service = createAniListImport({
@@ -456,14 +454,7 @@ test('native redirect requires a deliberate review of the canonical AniList targ
       ...votes,
       async readVoteReview(actor, questionId, targetId) {
         if (!redirected) {
-          const response = await f.sendWithHeaders(
-            merger.bearer,
-            'POST',
-            '/v1/subjects:merge',
-            { subjects: [canonical, selected] },
-            { 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
-          );
-          expect(response.status).toBe(202);
+          await f.admitSubjectMerge(canonical, selected);
           redirected = true;
         }
         return votes.readVoteReview(actor, questionId, targetId);

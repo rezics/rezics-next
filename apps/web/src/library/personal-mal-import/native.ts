@@ -267,8 +267,8 @@ export function kernelMalPort(
       if (result.error) return failure(result.status, result.error.value);
       return { kind: 'assignments', assignments: result.data.assignments };
     },
-    async preview(command) {
-      const result = await call(
+    async preview(command): Promise<MalPreviewResult> {
+      return call(
         command,
         (mal, authorization) => {
           return mal.$preview.post({ xml: command.xml }, { headers: headers(authorization, command.key) });
@@ -278,7 +278,6 @@ export function kernelMalPort(
           return id ? ({ kind: 'previewed', id } as const) : undefined;
         },
       );
-      return result;
     },
     async page(command) {
       const result = await call(

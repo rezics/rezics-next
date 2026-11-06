@@ -2,11 +2,7 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
-import { batchCommand } from '../../src/semantic/bulk.ts';
-import { globalContextAnchor } from '../../src/semantic/context.ts';
-import { tupleRoute } from '../../src/content/imported-contract.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createBangumiImport } from '../../src/library/list-import-bangumi.ts';
 import { purgeExpiredBangumiUploadPage } from '../../src/library/list-import-bangumi-retention.ts';
@@ -57,41 +53,34 @@ async function setState(state: string) {
     randomUUID(),
   );
 }
+async function admitBangumiClaim(externalId: number, label: string, digest = 'a'.repeat(64), revision = 'v0') {
+  const importer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
+  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write', 'subject:create']);
+  const made = await f.send(importer.bearer, 'POST', '/v1/subjects:batchWrite', {
+    commands: [
+      {
+        op: 'create',
+        key: randomUUID(),
+        source: {
+          source: 'bangumi',
+          external_id: String(externalId),
+          record_revision: revision,
+          digest,
+          converter_revision: 'fixture',
+          field_group: 'facts',
+        },
+        subject: { type: 'ex:Child', labels: { en: label } },
+      },
+    ],
+  });
+  expect(made.status).toBe(200);
+  const result = (await made.json()).results[0];
+  expect(result).toMatchObject({ status: 201 });
+  return result.value.id as string;
+}
 beforeAll(async () => {
   f = await createProfileEntryFixture();
-  const importer = await f.identity(['subject:batch_write', 'subject:read']);
-  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
-  const route = tupleRoute(testRouteKey(), 'bangumi', String(providerId));
-  const result = await batchCommand(f.pool, {
-    actor: importer.actor,
-    route,
-    routeKey: testRouteKey(),
-    clock: () => new Date(),
-    deadline: Date.now() + 30000,
-    authorization: resourceAuthorization({
-      access: f.access,
-      actor: importer.actor,
-      action: 'subject:batch_write',
-      anchor: globalContextAnchor,
-      context: { pool: f.pool, deadline: Date.now() + 30000, partition: partitionOf(route) },
-    }),
-    release: { digest: f.originalDigest, release: f.original },
-    command: {
-      op: 'create',
-      key: randomUUID(),
-      subject: { type: 'ex:Child', labels: { en: 'Source title' } },
-      source: {
-        source: 'bangumi',
-        external_id: String(providerId),
-        record_revision: 'v0',
-        digest: 'a'.repeat(64),
-        converter_revision: 'fixture',
-        field_group: 'facts',
-      },
-    },
-  });
-  if (!('id' in result.value)) throw new Error('Native provider subject was not created');
-  matched = result.value.id;
+  matched = await admitBangumiClaim(providerId, 'Source title');
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -344,42 +333,11 @@ test('lost native acknowledgement replays the original receipt and a changed pro
   expect(await apply(uploadId, confirmed)).toEqual(accepted);
   expect((await f.commands.readEntry(f.owner.actor, matched)).state).toBe('paused');
 
-  const lateId = 900103,
-    importer = await f.identity(['subject:batch_write', 'subject:read']);
-  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
-  const claimRoute = tupleRoute(testRouteKey(), 'bangumi', String(lateId));
+  const lateId = 900103;
   const changedTarget = await f.createSubject('game');
   const unbound = await preview([record(lateId)]);
   const lateReview = await review(unbound.uploadId, 0, changedTarget);
-  const replacement = await batchCommand(f.pool, {
-    actor: importer.actor,
-    route: claimRoute,
-    routeKey: testRouteKey(),
-    clock: () => new Date(),
-    deadline: Date.now() + 30000,
-    authorization: resourceAuthorization({
-      access: f.access,
-      actor: importer.actor,
-      action: 'subject:batch_write',
-      anchor: globalContextAnchor,
-      context: { pool: f.pool, deadline: Date.now() + 30000, partition: partitionOf(claimRoute) },
-    }),
-    release: { digest: f.originalDigest, release: f.original },
-    command: {
-      op: 'create',
-      key: randomUUID(),
-      subject: { type: 'ex:Child', labels: { en: 'Late canonical provider subject' } },
-      source: {
-        source: 'bangumi',
-        external_id: String(lateId),
-        record_revision: 'v1',
-        digest: 'b'.repeat(64),
-        converter_revision: 'fixture',
-        field_group: 'facts',
-      },
-    },
-  });
-  if (!('id' in replacement.value)) throw new Error('Changed provider subject was not created');
+  await admitBangumiClaim(lateId, 'Late canonical provider subject', 'b'.repeat(64), 'v1');
   expect((await apply(unbound.uploadId, [choice(0, lateReview)])).outcomes[0].status).toBe('stale');
 });
 test('partial state application can stop after one accepted row and cancellation preserves that native fact', async () => {
@@ -664,8 +622,6 @@ test('native redirect requires a deliberate review of the canonical Bangumi targ
     const subjects = [await score.createSubject('game'), await score.createSubject('game')].sort();
     const canonical = subjects[0]!;
     const selected = subjects[1]!;
-    const merger = await score.identity(['subject:merge']);
-    await score.grantAccountActions(merger.actor.accountId, ['subject:merge']);
     const native = createVoteCommands({ pool: score.pool, access: score.access });
     let redirected = false;
     const importer = createBangumiImport({
@@ -677,14 +633,7 @@ test('native redirect requires a deliberate review of the canonical Bangumi targ
         ...native,
         async readVoteReview(actor, questionId, targetId) {
           if (!redirected) {
-            const response = await score.sendWithHeaders(
-              merger.bearer,
-              'POST',
-              '/v1/subjects:merge',
-              { subjects: [canonical, selected] },
-              { 'idempotency-key': JSON.stringify(randomUUID()) },
-            );
-            expect(response.status).toBe(202);
+            await score.admitSubjectMerge(canonical, selected);
             redirected = true;
           }
           return native.readVoteReview(actor, questionId, targetId);

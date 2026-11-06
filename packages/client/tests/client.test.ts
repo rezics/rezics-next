@@ -18,6 +18,9 @@ import {
   type NoticeInboxPage,
   type SubjectRead,
   type UnreadNoticeSummary,
+  type BangumiChoice,
+  type BangumiScoreSelection,
+  type BangumiTag,
 } from '../src/index.ts';
 
 const ORIGIN = 'https://kernel.test';
@@ -214,6 +217,12 @@ test('the derived subjects group keeps native counts and routes contributed by o
     await client.libraryImports.anilist({ importId: ID }).get();
     await client.libraryImports.mal({ id: ID }).get();
     await client.libraryImports.bangumi({ uploadId: ID }).get();
+    const bangumiChoice: BangumiChoice = { ordinal: 0, reviewToken: ID, state: 'omit', skip: true };
+    const bangumiScore: BangumiScoreSelection = { action: 'preserve' };
+    const bangumiTag: BangumiTag = { index: 0, value: 'tag', status: 'supported', proposedName: null };
+    void bangumiChoice;
+    void bangumiScore;
+    void bangumiTag;
     // @ts-expect-error a subject parameter is required
     subjects({});
     // @ts-expect-error omitted public aggregates are optional
