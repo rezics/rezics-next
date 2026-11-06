@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import platform from '@rezics/composition/profiles/platform.json';
 import type { SubjectPageData } from '../src/features/pages/subject.tsx';
@@ -270,7 +271,16 @@ test('thin subjects and later relations pages are noindex, while the page cover 
     },
   });
   const rendered = renderToString(
-    createElement(SubjectPage, { page, locale: 'en', messages, renderJsonLd: false, typeLabel: 'Book' } as never),
+    createElement(QueryClientProvider, {
+      client: new QueryClient(),
+      children: createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages,
+        renderJsonLd: false,
+        typeLabel: 'Book',
+      } as never),
+    }),
   );
   const cover = rendered.match(/<img[^>]*fetch[Pp]riority="high"[^>]*>/g) ?? [];
   expect(cover).toHaveLength(1);

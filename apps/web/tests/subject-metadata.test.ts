@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import recorded from '../src/kernel/recorded/subject-page.json';
@@ -97,7 +98,10 @@ test('the recorded native page joins its visible creators and editions without a
   const loaded = await loadSubjectPage(client, id);
   if (loaded.kind !== 'page') throw new Error('Expected the recorded public page');
   const html = renderToString(
-    createElement(SubjectPage, { page: loaded.page, locale: 'en', messages, renderJsonLd: false }),
+    createElement(QueryClientProvider, {
+      client: new QueryClient(),
+      children: createElement(SubjectPage, { page: loaded.page, locale: 'en', messages, renderJsonLd: false }),
+    }),
   );
   const result = head(loaded.page);
   const json = JSON.parse(result.scripts[0]!.children);
@@ -133,7 +137,12 @@ test('the head and structured image use only the currently authorized visible co
   const page = fixture({ cover });
   const result = head(page, 'ja');
   const json = JSON.parse(result.scripts[0]!.children);
-  const html = renderToString(createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }));
+  const html = renderToString(
+    createElement(QueryClientProvider, {
+      client: new QueryClient(),
+      children: createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }),
+    }),
+  );
   expect(html).toContain('/media/current-public-cover/webp-1200');
   expect(meta(result, 'og:image')).toBe(`${origin}/media/current-public-cover/webp-1200`);
   expect(meta(result, 'og:image:width')).toBe('1200');
