@@ -3,6 +3,7 @@ import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -145,6 +146,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     clock: () => new Date(now),
     access: (config) => {
       expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
