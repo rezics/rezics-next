@@ -153,7 +153,16 @@ export function parseEntryImportMetadataSelections(value: unknown): EntryImportM
 }
 
 export function entryImportMetadataDigest(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value)).digest('base64url');
+  const serialized = JSON.stringify(value, (_key, item) =>
+    item !== null && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.keys(item)
+            .sort()
+            .map((key) => [key, item[key]]),
+        )
+      : item,
+  );
+  return createHash('sha256').update(serialized).digest('base64url');
 }
 
 export function entryPersonalMetadataDigest(personal: PersonalEntry): string {

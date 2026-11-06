@@ -17,6 +17,10 @@ selection resumable; an acknowledgement describes command outcomes only. A separ
 read supplies actual current Entry, Progress and counted-vote values. The development persona requests the existing
 Library, Progress and vote scopes for these explicit choices; source scores never confer consent.
 
+Native review digests sort object properties recursively, preserving array order, so JSONB storage cannot change
+the identity of reviewed operands. State dispatch records its start checkpoint before sending the native command;
+an interrupted acknowledgement throws and leaves the original intent available for receipt reconciliation.
+
 Decision: the mounted Web caller carries state, explicit minute occurrences and deliberate native vote units
 through the same retained review/apply commands. Native units zero and clear stay distinct. The official client uses
 a typed compatibility binding for these already mounted additions until whole-Kernel declaration emission succeeds;

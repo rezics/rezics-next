@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { entryImportMetadataDigest } from '../../src/library/list-import-entry-metadata.ts';
 import type {
   EntryImportMetadataConfirmation,
   EntryImportMetadataReview,
@@ -10,6 +11,15 @@ import {
 } from '../../src/library/list-import-metadata-coordinator.ts';
 
 const fields = [{ field: 'note' as const, action: 'adopt' as const }];
+
+test('retained review digests survive JSONB property ordering and preserve changed operands', () => {
+  const decoded = { pin: { provenance: 'profile', release: 'first' }, fields: ['note', 'priority'] };
+  const stored = { fields: ['note', 'priority'], pin: { release: 'first', provenance: 'profile' } };
+  expect(entryImportMetadataDigest(decoded)).toBe(entryImportMetadataDigest(stored));
+  expect(entryImportMetadataDigest(decoded)).not.toBe(
+    entryImportMetadataDigest({ ...stored, fields: ['priority', 'note'] }),
+  );
+});
 
 function confirmation(): EntryImportMetadataConfirmation {
   return {

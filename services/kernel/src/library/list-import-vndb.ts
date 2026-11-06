@@ -222,7 +222,7 @@ function nativeQuestionView(question: RatingQuestion): NativeQuestion {
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning,
+    meaning: question.meaning ?? question.label,
     label: question.label,
     grain: question.grain,
     scale: { min: question.minimumUnits, max: question.maximumUnits, step: question.stepUnits },
@@ -1733,7 +1733,7 @@ export function createVndbImport(config: Config) {
         status = 'skipped';
       } else {
         const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
-        await mutation(
+        const started = await mutation(
           actor,
           'apply-entry-start',
           startKey,
@@ -1756,6 +1756,7 @@ export function createVndbImport(config: Config) {
           },
         );
         decision = { ...decision, status: 'applying' };
+        record(started);
         try {
           const result = await entries.putEntry(
             actor,
@@ -1769,6 +1770,12 @@ export function createVndbImport(config: Config) {
             decision.commandKey,
             decision.guard!,
           );
+          decision.receipt = {
+            partition: result.partition,
+            epoch: result.epoch,
+            position: result.position,
+            transactionId: result.transactionId,
+          };
           record(result);
           status = 'applied';
         } catch (error) {
@@ -1798,6 +1805,12 @@ export function createVndbImport(config: Config) {
           decision.commandKey,
           decision.guard!,
         );
+        decision.receipt = {
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+          transactionId: result.transactionId,
+        };
         record(result);
         status = 'applied';
       } catch (error) {

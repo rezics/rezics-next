@@ -284,7 +284,12 @@ test('a changed export updates the same matched Library entry and current readba
     progress: { value: '4' },
     progressMeasure: { value: 'chapter' },
   });
-  const firstReview = await review(firstUpload.uploadId, { ordinal: 0, action: 'state', state: 'playing' });
+  const firstReview = await review(firstUpload.uploadId, {
+    ordinal: 0,
+    action: 'state',
+    state: 'playing',
+    replace: true,
+  });
   const firstApplied = await apply(firstUpload.uploadId, [{ ordinal: 0, reviewId: firstReview.reviewId }]);
   expect(firstApplied.outcomes[0].status).toBe('applied');
   const firstEntry = await f.commands.readEntry(f.owner.actor, matched);
@@ -320,6 +325,7 @@ test('a changed export updates the same matched Library entry and current readba
   await json('DELETE', `${base}/${changedUpload.uploadId}`);
 }, 120000);
 test('journalled explicit review and changed reimport survive lost delivery and independently return the same Entry and Progress', async () => {
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const targetId = await f.createSubject('game');
   const sourceId = 'v999999999991';
   const journal = new ShowcaseJournal(':memory:');
@@ -614,7 +620,7 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     },
     entryKey(),
   );
-  expect(missingConsent.status).toBe(422);
+  expect(missingConsent.status).toBe(400);
   const retired = await c.scoreReview(uploadId, 0);
   const chosen = await c.scoreReview(uploadId, 15);
   expect(chosen).toMatchObject({
@@ -1026,13 +1032,11 @@ test('lost state acknowledgement reconciles the original receipt after expiry wi
   const first = await review(id, { ordinal: 0, action: 'state', targetId: target, state: 'planned' });
   const second = await review(id, { ordinal: 1, action: 'state', targetId: untouched, state: 'playing' });
   let acknowledgements = 0;
-  expect(
-    (
-      await service.apply(f.owner.actor, id, [{ ordinal: 0, reviewId: first.reviewId }], () => {
-        if (++acknowledgements === 2) throw new Error('Lost native acknowledgement');
-      })
-    ).outcomes[0]?.status,
-  ).toBe('failed');
+  await expect(
+    service.apply(f.owner.actor, id, [{ ordinal: 0, reviewId: first.reviewId }], () => {
+      if (++acknowledgements === 2) throw new Error('Lost native acknowledgement');
+    }),
+  ).rejects.toThrow('Lost native acknowledgement');
   const accepted = await f.commands.readEntry(f.owner.actor, target),
     effects = await f.inspect();
   await f.pool.query(
