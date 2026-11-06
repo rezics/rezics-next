@@ -89,6 +89,7 @@ async function fixture(pool: Pool, admin: Pool) {
     },
   });
   const actors: AccountActor[] = [];
+  const tokens: string[] = [];
   for (const id of ids) {
     await admin.query(
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -117,6 +118,7 @@ async function fixture(pool: Pool, admin: Pool) {
     );
     expect(issued.status).toBe(200);
     const token = ((await issued.json()) as { access_token: string }).access_token;
+    tokens.push(token);
     const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
     if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
     actors.push(actor);
@@ -129,9 +131,26 @@ async function fixture(pool: Pool, admin: Pool) {
   }
   return {
     access,
-    actor: actors[0]!,
-    other: actors[1]!,
+    get actor() {
+      return actors[0]!;
+    },
+    get other() {
+      return actors[1]!;
+    },
     grant,
+    async restoreAccounts() {
+      await admin.query(
+        `UPDATE access.account
+         SET state='active', minimum_authn_epoch=1, authn_fenced=false, fence_receipt_id=NULL, suspension_reason=NULL
+         WHERE account_id=ANY($1::uuid[])`,
+        [ids],
+      );
+      for (const [index, token] of tokens.entries()) {
+        const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
+        if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
+        actors[index] = actor;
+      }
+    },
     async close() {
       await authPool.end();
       await dropTestDatabase(admin, database);
@@ -157,9 +176,7 @@ beforeEach(async () => {
   await admin.query(
     'TRUNCATE community.realm, community.realm_revision, community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, access.resource_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
   );
-  await admin.query("UPDATE access.account SET state='active' WHERE account_id=ANY($1::uuid[])", [
-    [f.actor.accountId, f.other.accountId],
-  ]);
+  await f.restoreAccounts();
   await f.grant(f.actor.accountId);
 });
 afterAll(async () => {
@@ -197,16 +214,22 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   await f.grant(f.actor.accountId, root, 'realm:create');
   const request = context();
   const preparations: { action: string; context: AccessContext }[] = [];
-  const prepare = f.access.prepare!.bind(f.access);
+  const prepare = f.access.prepare;
+  const preparePage = f.access.preparePage;
   f.access.prepare = async (actor, action, resource, context) => {
     preparations.push({ action, context });
-    return prepare(actor, action, resource, context);
+    return prepare!.call(f.access, actor, action, resource, context);
+  };
+  f.access.preparePage = async (actor, action, page, context) => {
+    preparations.push({ action, context });
+    return preparePage!.call(f.access, actor, action, page, context);
   };
   let created;
   try {
     created = await realm.createRealm(deps(), f.actor, { ...input, spaceId }, request);
   } finally {
     f.access.prepare = prepare;
+    f.access.preparePage = preparePage;
   }
   const { realmId, revisionId } = created.value;
   const route = routeOf(spaceId)!;
@@ -303,10 +326,10 @@ test('missing Global permission, a non-owner, a missing Space or Context and sus
 test('unreadable classification Context denies both create and context changes without writes', async () => {
   const spaceId = await createSpace();
   await f.grant(f.actor.accountId, root, 'realm:create');
-  const prepare = f.access.prepare!.bind(f.access);
+  const prepare = f.access.prepare;
   // Simulate an unavailable public Context observation, retaining production Access for all proofs.
   f.access.prepare = (actor, action, resource, context) =>
-    action === 'context:read' ? Promise.resolve(null) : prepare(actor, action, resource, context);
+    action === 'context:read' ? Promise.resolve(null) : prepare!.call(f.access, actor, action, resource, context);
   let before = await snapshot();
   try {
     expect(await realm.createRealm(deps(), f.actor, { ...input, spaceId }, context()).catch((e) => e)).toBeInstanceOf(
@@ -323,7 +346,7 @@ test('unreadable classification Context denies both create and context changes w
     [contextId],
   );
   f.access.prepare = (actor, action, resource, context) =>
-    action === 'context:read' ? Promise.resolve(null) : prepare(actor, action, resource, context);
+    action === 'context:read' ? Promise.resolve(null) : prepare!.call(f.access, actor, action, resource, context);
   before = await snapshot();
   try {
     expect(

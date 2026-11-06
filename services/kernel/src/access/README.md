@@ -41,7 +41,8 @@ and 4 KiB.
 Decision: Kernel uses the pure core for every exact registered action/resource-type pair: points infer a type only
 when it is unique (or a page supplies it), batches use their admitted type, and own-account checks bind to the
 existing `access.account` profile. Point actions without one exact target type retain the SQL evaluator until
-`Resource` carries that operand.
+`Resource` carries that operand. Composition tests compare the installed role catalogue with `accessActionCatalogue`
+of the mounted routes, including internal Access actions.
 
 `services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
 `ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Action resource types that

@@ -92,6 +92,7 @@ async function fixture(pool: Pool, admin: Pool) {
     },
   });
   const actors: AccountActor[] = [];
+  const tokens: string[] = [];
   for (const id of ids) {
     await admin.query(
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -120,6 +121,7 @@ async function fixture(pool: Pool, admin: Pool) {
     );
     expect(issued.status).toBe(200);
     const token = ((await issued.json()) as { access_token: string }).access_token;
+    tokens.push(token);
     const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
     if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
     actors.push(actor);
@@ -132,9 +134,26 @@ async function fixture(pool: Pool, admin: Pool) {
   }
   return {
     access,
-    actor: actors[0]!,
-    other: actors[1]!,
+    get actor() {
+      return actors[0]!;
+    },
+    get other() {
+      return actors[1]!;
+    },
     grant,
+    async restoreAccounts() {
+      await admin.query(
+        `UPDATE access.account
+         SET state='active', minimum_authn_epoch=1, authn_fenced=false, fence_receipt_id=NULL, suspension_reason=NULL
+         WHERE account_id=ANY($1::uuid[])`,
+        [ids],
+      );
+      for (const [index, token] of tokens.entries()) {
+        const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
+        if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
+        actors[index] = actor;
+      }
+    },
     async close() {
       await authPool.end();
       await dropTestDatabase(admin, database);
@@ -162,9 +181,7 @@ beforeEach(async () => {
   await admin.query(
     'TRUNCATE community.publication_head, community.publication, community.realm, community.realm_revision, community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, access.resource_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
   );
-  await admin.query("UPDATE access.account SET state='active' WHERE account_id=ANY($1::uuid[])", [
-    [f.actor.accountId, f.other.accountId],
-  ]);
+  await f.restoreAccounts();
   await f.grant(f.actor.accountId);
 });
 afterAll(async () => {

@@ -60,10 +60,9 @@ test('the default kernel Access receives every mounted action and resolves the c
     }
     expect(recognized).toEqual(new Set(mounted.keys()));
 
-    // Access adds the internal governance action; it has no mounted HTTP route.
-    const known = new Map(mounted).set('gate:any', { anonymous: false });
+    // Access adds internal actions that have no mounted HTTP route, then resolves roles from that complete catalogue.
     const roles = resourceRoleCatalogue(installed!);
-    expect(roles).toEqual(resolveResourceRoles(known));
+    expect(roles).toEqual(resolveResourceRoles(accessModule.accessActionCatalogue(factory.mock.calls[0]![0].actions)));
     for (const type of ['semantic.context', 'library.collection', 'community.realm', 'community.space'])
       expect(roles!.types.has(type)).toBe(true);
     for (const metadata of mounted.values())
@@ -88,7 +87,7 @@ test('a composing kernel refuses early Access resolution and uses its final cata
   mounted = actionCatalogue(createKernel({ pool: db.pool, routeKey: testRouteKey(), receiptKeys: testReceiptKeys() }));
   const installed = resolver.resolveAccess(partial);
   expect(resourceRoleCatalogue(installed)).toEqual(
-    resolveResourceRoles(new Map(mounted).set('gate:any', { anonymous: false })),
+    resolveResourceRoles(accessModule.accessActionCatalogue(mounted)),
   );
   expect(resolver.resolveAccess(partial)).toBe(installed);
 });
