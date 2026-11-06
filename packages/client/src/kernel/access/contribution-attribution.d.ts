@@ -29,5 +29,7 @@ export type ContributionIdentity = {
  * Suspension remains a live public attribution, as on the account IDs surface.
  */
 export declare function contributionAttribution(identity: ContributionIdentity | null | undefined): ContributionAttribution;
+/** Observed public identity for Log and Collection views: pending or missing stays unknown. */
+export declare function contributionFromPublicIdentity(identity: ContributionIdentity | null | undefined): ContributionAttribution;
 /** An absent id alone cannot establish deletion on a partially assembled public view. */
 export declare function contributionDeleted(value: Pick<ContributionIdentity, 'id' | 'displayName'> | null | undefined): value is DeletedContributionAttribution;

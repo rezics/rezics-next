@@ -9509,6 +9509,13 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     handle: string | null;
                                     displayName: string | null;
                                 } | null;
+                                attribution?: {
+                                    id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | null;
                                 id: string;
                                 accountId: string;
                                 subjectId: string;
@@ -9633,6 +9640,13 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 id: string;
                                 handle: string | null;
                                 displayName: string | null;
+                            } | null;
+                            attribution?: {
+                                id: string;
+                                kind: "actor" | "organization";
+                                displayName: string | null;
+                            } | {
+                                displayName: "Deleted account" | "Deleted organization";
                             } | null;
                             id: string;
                             accountId: string;
