@@ -170,10 +170,10 @@ function Responsibilities({
                 headingLevel={3}
                 title={item.account ? name(item.account) : m.managed_missing_title()}
                 {...(item.account && item.state === 'current' && item.navigation?.state === 'admitted'
-                  ? {
-                      href: managementHref(item.account),
-                    }
-                  : {})}
+                  ? { href: managementHref(item.account) }
+                  : item.account?.handle && item.navigation?.state !== 'concealed'
+                    ? { href: `/${getLocale()}/@${encodeURIComponent(item.account.handle)}` }
+                    : {})}
                 metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
                 state={
                   <Badge
