@@ -1,9 +1,12 @@
 import { runCommand, authoritativeTimeValue, type CommandTransaction } from '../command/command.ts';
+import { bindExecutionContract } from '../command/execution-contract.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
 import type { Pool, PoolClient } from 'pg';
+import { historyExecutionPort } from '../history/application/operational.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import { createWorkClient } from '../work/client.ts';
+import { workExecutionPort } from '../work/selected-runtime.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import type { LiveCopyRole } from './live-copy.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
@@ -72,6 +75,7 @@ export async function prepareLiveCopyDiscovery(pool: Pool, store: string, accoun
   });
   const partition = frontier.partition_no;
   const client = await createWorkClient(pool.options.connectionString!, pool);
+  bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   let sealed = false;
   try {
     sealed = await runOperationalTransaction(

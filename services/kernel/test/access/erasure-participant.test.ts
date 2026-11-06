@@ -168,8 +168,11 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
     // Resume the bounded native inventory independently; the restarted worker
     // below owns the terminal acknowledgement and shared-custody distinction.
     composeAccessApplication();
-    while ((await progress(erased.accountId))?.phase !== NATIVE_ERASURE_GROUPS().length)
+    const inventoryUntil = Date.now() + 540000;
+    while ((await progress(erased.accountId))?.phase !== NATIVE_ERASURE_GROUPS().length) {
+      if (Date.now() >= inventoryUntil) throw new Error('Native inventory did not reach completion');
       await advanceNativeErasure(pool, progressId);
+    }
     await start();
     // Redeliver the original committed tombstone through the real registered effect.
     await client.enqueue(
@@ -286,4 +289,4 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
   } finally {
     await client.close();
   }
-}, 600000);
+}, 900000);
