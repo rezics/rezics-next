@@ -71,9 +71,6 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
         ...(template.owner ? { ownerRole: template.owner } : {}),
         standingRoles: [...template.standing],
       })),
-      ...[...new Set([...actions.values()].flatMap((metadata) => metadata['x-resource-types'] ?? []))]
-        .filter((type) => !roles.types.has(type) && !(type === 'access.account' && hasOwnAccountAction))
-        .map((type) => ({ type, standingRoles: [] })),
       ...(roles.types.has('access.account') || !hasOwnAccountAction
         ? []
         : [{ type: 'access.account', standingRoles: [] }]),

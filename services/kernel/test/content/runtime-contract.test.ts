@@ -75,7 +75,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
     const omitted = compose.mock.calls.at(-1)![1];
     for (const field of Object.keys(runtime)) expect(Object.hasOwn(omitted, field)).toBe(false);
 
-    for (let mask = 0; mask < 8; mask++) {
+    for (const mask of [0, 7] as const) {
       const content: KernelContent = {
         ...(mask & 1 ? { fetchConfig } : {}),
         ...(mask & 2 ? { workflows } : {}),

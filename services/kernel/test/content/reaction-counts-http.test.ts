@@ -246,6 +246,7 @@ if (process.argv.includes('--reaction-count-worker')) {
       KERNEL_WORKER_POOL_SIZE: '10',
       KERNEL_ROUTE_KEY: workerRouteKey,
       KERNEL_SESSION_KEYS: `1:${sessionKey}`,
+      KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 17).toString('base64url')}`,
       AUTH_ISSUER: 'https://reaction-counts-worker.auth.test',
       AUTH_AUDIENCE: 'https://api.rezics.test',
       AUTH_JWKS_URL: 'https://reaction-counts-worker.auth.test/.well-known/jwks.json',

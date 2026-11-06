@@ -365,49 +365,19 @@ function sitemapFailures() {
   }));
 }
 function subjectThreadsQuery() {
-  return memoizedValue(subjectThreadsQuery, () =>
-    strictContentSchema(
-      t.Object(
-        {
-          ...SubjectThreadsQuerySchema.properties,
-          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  );
+  return memoizedValue(subjectThreadsQuery, () => strictContentSchema(SubjectThreadsQuerySchema));
 }
 function subjectThreadsResponse() {
   return memoizedValue(subjectThreadsResponse, () => strictContentSchema(SubjectThreadsResponseSchema()));
 }
 function authorThreadsQuery() {
-  return memoizedValue(authorThreadsQuery, () =>
-    strictContentSchema(
-      t.Object(
-        {
-          ...AuthorThreadsQuerySchema.properties,
-          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  );
+  return memoizedValue(authorThreadsQuery, () => strictContentSchema(AuthorThreadsQuerySchema));
 }
 function authorThreadsResponse() {
   return memoizedValue(authorThreadsResponse, () => strictContentSchema(AuthorThreadsResponseSchema()));
 }
 function authorPostsQuery() {
-  return memoizedValue(authorPostsQuery, () =>
-    strictContentSchema(
-      t.Object(
-        {
-          ...AuthorPostsQuerySchema.properties,
-          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  );
+  return memoizedValue(authorPostsQuery, () => strictContentSchema(AuthorPostsQuerySchema));
 }
 function authorPostsResponse() {
   return memoizedValue(authorPostsResponse, () => strictContentSchema(AuthorPostsResponseSchema()));
@@ -1062,7 +1032,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
             return {
-              thread: { ...shown, ...final.value },
+              thread: { ...final.value, ...shown },
               reactionsAsOf: counted.reactionsAsOf,
               ...(authorErasure ? { authorErasure } : {}),
             };
@@ -1162,7 +1132,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
                 reactionsAsOf = source;
             }
             return {
-              posts: page.entries.map((post) => ({ ...enriched.get(post.id)!, ...post })),
+              posts: page.entries.map((post) => ({ ...post, ...enriched.get(post.id)! })),
               next: page.nextCursor,
               reactionsAsOf,
             };
@@ -1233,7 +1203,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             if (!final.value) throw new ProblemError('not_found');
             session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
-            return { post: { ...shown, ...final.value } };
+            return { post: { ...final.value, ...shown } };
           }),
         ),
     )

@@ -82,7 +82,7 @@ Subject discussions and author activity retain their native final disclosure and
 Decision: retain original source authority through enrichment, preserve sparse continuation frontiers, and use
 connection-free timing barriers for late-revocation acceptance. `disclosureBarrier` pauses after initial Board/Access
 checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
-Author and Subject page HTTP limits validate URL strings from 1 through 20 before conversion to internal numbers.
+Author and Subject page handlers convert the existing numeric query limit (1 through 20) for internal paging.
 Selected reading references validate each Board’s own routed identity. Current thread-to-Board membership supplies
 placement authority; the Board and thread need not share a native home.
 Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.

@@ -11,6 +11,7 @@ import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { TEST_REQUEST_DEADLINE_MS } from '../../support/test-kernel.ts';
+import { createWorkClient } from '../../../src/work/client.ts';
 import { seedGovernanceAuthority } from './disclosure-fixtures.ts';
 import { governance, highRates, openUserCasesSystem } from './user-cases-fixtures.ts';
 
@@ -23,12 +24,17 @@ type Hold = { enter(): void; released: Promise<void> };
 /** Native HTTP creation and projection for the Thread/Board contract, independent of Realm setup. */
 export async function openThreadBoardSystem() {
   const system = await openUserCasesSystem();
+  let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   try {
     const moderator = await governance(system);
     const author = { id: system.actors.author.actor.accountId, bearer: system.actors.author.bearer };
     const member = { id: system.actors.other.actor.accountId, bearer: system.actors.other.bearer };
     const outsider = { id: system.actors.moderator.actor.accountId, bearer: system.actors.moderator.bearer };
     const pool = system.database.pool;
+    const databaseUrl = pool.options.connectionString;
+    if (!databaseUrl) throw new Error('Thread/Board fixture database URL is missing');
+    const client = await createWorkClient(databaseUrl, pool);
+    workClient = client;
     const pointHolds = new Map<string, Hold>();
     const pageHolds = new Map<string, Hold>();
     const sources = new Set<number>();
@@ -45,6 +51,7 @@ export async function openThreadBoardSystem() {
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
       receiptKeys: testReceiptKeys(),
+      workClient: client,
       access: () => system.access,
       requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       content: {
@@ -226,10 +233,20 @@ export async function openThreadBoardSystem() {
       async takedown(board: Board) {
         await command('POST', `/v1/boards/${board.id}:takeDown`, { reason: 'Controlled late Board takedown' });
       },
-      close: () => system.close(),
+      async close() {
+        try {
+          await client.close();
+        } finally {
+          await system.close();
+        }
+      },
     };
   } catch (error) {
-    await system.close();
+    try {
+      await workClient?.close();
+    } finally {
+      await system.close();
+    }
     throw error;
   }
 }
