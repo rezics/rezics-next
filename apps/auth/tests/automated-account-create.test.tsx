@@ -4,6 +4,7 @@ import {
   creationFixture,
   automatedOperatorPage,
   approval,
+  nativeApprovalReference,
   button,
   fill,
   flush,
@@ -288,7 +289,7 @@ test('an expired approval and malformed execution replies keep the original unkn
     operationKey: original.operationKey,
     operation: original.operation,
     operator: original.operator,
-    reference: 'native-approval',
+    reference: nativeApprovalReference,
     submitted: true,
   });
 
@@ -311,7 +312,7 @@ test('an expired approval and malformed execution replies keep the original unkn
     operationKey: original.operationKey,
     operation: original.operation,
     operator: original.operator,
-    reference: 'native-approval',
+    reference: nativeApprovalReference,
     submitted: true,
   });
 });
@@ -352,7 +353,7 @@ test('newer exact native approval and execution refusals cannot clear an earlier
     accountId: original.accountId,
     operationKey: original.operationKey,
     operation: original.operation,
-    reference: 'native-approval',
+    reference: nativeApprovalReference,
     submitted: true,
   });
 });

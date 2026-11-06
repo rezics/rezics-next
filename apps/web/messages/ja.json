@@ -11281,5 +11281,7 @@
   "library_archive_progress_open_session": "現在の Session を開く",
   "library_archive_progress_restart": "元のアーカイブで別の復元を始める",
   "exposure_grants_link": "Review tester grants",
-  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access.",
+  "managed_create_automation": "ソフトウェアアカウントを作成",
+  "managed_open_automation": "ソフトウェアアカウントを開く"
 }

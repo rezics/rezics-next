@@ -85,6 +85,19 @@ test('development search node carries the exact ordered subject auto-create poli
   const args = searchRunArgs('native-policy-test-image');
   const environment = args.flatMap((arg, i) => (arg === '-e' ? [args[i + 1]] : []));
   expect(environment.filter((entry) => entry?.startsWith('action.auto_create_index='))).toEqual([policy]);
+  expect(environment.filter((entry) => entry?.startsWith('OPENSEARCH_JAVA_OPTS='))).toEqual([
+    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+  ]);
+  expect(args.includes('--memory')).toBe(false);
+});
+
+test('walk search heap and container memory follow the caller environment', () => {
+  const args = searchRunArgs('native-policy-test-image', {
+    OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
+    KERNEL_SEARCH_MEMORY: '400m',
+  });
+  expect(args.includes('OPENSEARCH_JAVA_OPTS=-Xms128m -Xmx128m')).toBe(true);
+  expect(args[args.indexOf('--memory') + 1]).toBe('400m');
 });
 
 test('actual native late bulk cannot implicitly recreate a retired subject generation while explicit creation works', async () => {

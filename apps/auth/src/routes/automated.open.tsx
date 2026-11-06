@@ -1,3 +1,4 @@
+import { operatorWebsiteHref } from '../operator-opening-navigation';
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -46,9 +47,8 @@ export const Route = createFileRoute('/automated/open')({
   head: () => ({ meta: [{ title: `${m.auth_opening_heading()} · REZICS` }] }),
   component: OperatorSessionOpeningPage,
 });
-const websiteOrigin = 'https://rezics.com';
-function websiteHref(path: '/' | '/accounts') {
-  return new URL(`/${getLocale()}${path === '/' ? '/' : path}`, websiteOrigin).toString();
+function websiteHref(path: '/' | '/accounts', renew = false) {
+  return operatorWebsiteHref(import.meta.env.PUBLIC_ORIGIN ?? 'https://rezics.com', getLocale(), path, renew);
 }
 function message(kind: string) {
   if (kind === 'step-up') return m.auth_opening_step_up();
@@ -671,7 +671,11 @@ function OpeningReview({
           </>
         ) : null}
         {outcome?.kind === 'opened' && outcomeSource ? (
-          <OpeningCurrentSessionView session={outcome.session} source={outcomeSource} continueHref={websiteHref('/')} />
+          <OpeningCurrentSessionView
+            session={outcome.session}
+            source={outcomeSource}
+            continueHref={websiteHref('/', true)}
+          />
         ) : null}
       </div>
     </>

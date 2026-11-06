@@ -11184,5 +11184,7 @@
   "library_archive_progress_open_session": "打开当前的 Session",
   "library_archive_progress_restart": "用原始归档再开始一次恢复",
   "exposure_grants_link": "Review tester grants",
-  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access.",
+  "managed_create_automation": "创建软件账号",
+  "managed_open_automation": "打开软件账号"
 }

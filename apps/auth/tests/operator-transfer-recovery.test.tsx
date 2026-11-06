@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { nativeSignInProof } from './sign-in-fixture';
 import { act } from 'react';
-import { creationFixture, button, fill, open } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, open } from './creation-page-fixture';
 import type { AccountSessionResult } from '../src/account-operations';
 import type { OperatorRelation, TransferAttempt } from '../src/operator-transfer';
 
@@ -21,7 +21,11 @@ const session: AccountSessionResult = {
 const sessionBody = { account_id: session.accountId, client_id: session.clientId, scope: session.scopes };
 const request = {
   version: 1 as const,
-  previous: { subjectAccountId: 'private-subject', operatorAccountId: 'private-source', reservationId: 'old-slot' },
+  previous: {
+    subjectAccountId: '00000000-0000-7000-8000-000000000001',
+    operatorAccountId: 'private-source',
+    reservationId: 'old-slot',
+  },
   expectedVersion: '12',
   operatorAccountId: 'private-destination',
   sourceOperationKey: 'private-operation-key',
@@ -70,7 +74,10 @@ async function mount(attempt: TransferAttempt, viewer: string = 'ready', owner: 
     account_id: owner.kind === 'ready' ? owner.accountId : session.accountId,
   });
   await settle();
-  if (page.calls[0]) await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' }, viewer)));
+  if (page.calls[0])
+    await settle(() =>
+      page.calls[0]!.resolve(response({ kind: viewer === 'ready' ? 'readiness' : 'refused' }, viewer)),
+    );
   return page;
 }
 function privateValues() {
@@ -208,6 +215,8 @@ test('step-up restoration does not disclose or unlock the saved source command b
   await settle(() => {
     fill(page.host.querySelector<HTMLInputElement>('#transfer-email')!, 'operator@example.test');
     fill(page.host.querySelector<HTMLInputElement>('#transfer-password')!, 'password-value');
+  });
+  await settle(() => {
     page.host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
   const signIn = page.calls.find(({ path }) => path === '/signin')!;
@@ -263,5 +272,76 @@ test('recovery presentation messages are present in every supported locale', () 
     }
   } finally {
     overwriteGetLocale(() => 'en');
+  }
+});
+
+test.each(['failed-read', 'conflicting-read', 'replaced', 'retired', 'failed-save'] as const)(
+  'mounted original execution preserves acknowledgement or retired uncertainty through %s',
+  async (mode) => {
+    const page = await mount(unknown);
+    await settle(() => button(page.host, m.auth_transfer_recovery_review()).click());
+    await settle(() => page.calls[1]!.resolve(response({ kind: 'source', relation: oldRelation, action: 'allowed' })));
+    await settle(() => page.host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
+    await settle(() => button(page.host, m.auth_transfer_recovery_retry_exact()).click());
+    const execution = page.calls.find(({ path }) => path.endsWith('/execute'))!;
+    const before = page.calls.length;
+    const replacement = { ...unknown, request: { ...request, sourceOperationKey: 'newer-view' } };
+    if (mode === 'replaced') storeTransferAttempt(replacement);
+    if (mode === 'retired') await settle(() => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event));
+    const storage = window.sessionStorage;
+    const setItem = storage.setItem;
+    if (mode === 'failed-save')
+      Object.defineProperty(storage, 'setItem', {
+        configurable: true,
+        value: () => {
+          throw new Error('storage unavailable');
+        },
+      });
+    try {
+      await settle(() => execution.resolve(Response.json({ accountId: request.previous.subjectAccountId })));
+      if (mode === 'failed-read' || mode === 'conflicting-read') {
+        expect(page.calls).toHaveLength(before + 1);
+        await settle(() =>
+          page.calls
+            .at(-1)!
+            .resolve(
+              mode === 'failed-read'
+                ? new Response(null, { status: 503 })
+                : response({ kind: 'source', relation: oldRelation, action: 'allowed' }),
+            ),
+        );
+        expect(page.host.textContent).toContain(m.auth_transfer_recovery_acknowledged());
+        expect(restoreTransferAttempt()).toMatchObject({ phase: 'readback' });
+      } else {
+        expect(page.calls).toHaveLength(before);
+        expectPrivateTransferHidden(page.host);
+        expect(page.host.textContent).toContain(
+          mode === 'failed-save' ? m.auth_transfer_recovery_acknowledged() : m.auth_transfer_recovery_source_unknown(),
+        );
+        expect(restoreTransferAttempt()).toEqual(mode === 'replaced' ? replacement : unknown);
+      }
+      expect(page.calls.filter(({ path }) => path.endsWith('/execute'))).toHaveLength(1);
+      expect(page.calls.some(({ path }) => path.endsWith('/approve'))).toBe(false);
+    } finally {
+      if (mode === 'failed-save') Object.defineProperty(storage, 'setItem', { configurable: true, value: setItem });
+    }
+  },
+);
+
+test('the management URL selects the exact software account without approving or executing a transfer', async () => {
+  const { transferSelection } = await import('../src/routes/operators.transfer');
+  const accountId = request.previous.subjectAccountId;
+  expect(transferSelection({ accountId })).toEqual({ accountId });
+  expect(transferSelection({ accountId: 'foreign?operation=execute' })).toEqual({ accountId: '' });
+  window.sessionStorage.clear();
+  const page = await open(<OperatorTransferPage initial={session} selectedSubject={accountId} />, sessionBody);
+  try {
+    await settle();
+    await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' })));
+    expect((page.host.querySelector('#transfer-subject') as HTMLInputElement).value).toBe(accountId);
+    expect(page.calls).toHaveLength(1);
+    expect(restoreTransferAttempt()).toBeNull();
+  } finally {
+    window.sessionStorage.clear();
   }
 });

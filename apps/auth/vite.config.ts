@@ -21,6 +21,7 @@ export default defineConfig((context) => {
     build: { assetsInlineLimit: 0 },
     server: { cors: false, allowedHosts: ['rezics.com'] },
     define: {
+      'import.meta.env.PUBLIC_ORIGIN': JSON.stringify(process.env.PUBLIC_ORIGIN ?? 'https://rezics.com'),
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
     },
     plugins: [

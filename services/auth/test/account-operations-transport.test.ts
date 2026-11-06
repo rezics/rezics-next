@@ -3,6 +3,9 @@ import {
   MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES,
   parseMembershipApprovalResponse,
   parseMembershipExecutionResponse,
+  TRANSFER_APPROVAL_MAX_RESPONSE_BYTES,
+  TRANSFER_EXECUTION_MAX_RESPONSE_BYTES,
+  parseAccountOperationApproval,
 } from '@rezics/auth-contract';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -461,6 +464,16 @@ test('a transfer is approved by the source manager accepted by the destination m
     }),
   );
   expect(result).toEqual({ accountId: subject.accountId });
+  expect(parseAccountOperationApproval(accepted)).toEqual(accepted);
+  expect(JSON.stringify(accepted).length).toBeLessThanOrEqual(TRANSFER_APPROVAL_MAX_RESPONSE_BYTES);
+  expect(JSON.stringify(result).length).toBe(TRANSFER_EXECUTION_MAX_RESPONSE_BYTES);
+  const replay = await execute(source, {
+    operationKey: key,
+    operation: { kind: 'transfer', ...transfer },
+    reference: sourceApproval.reference,
+    acceptance: accepted.reference,
+  });
+  expect(await done(replay)).toEqual(result);
   expect(
     (
       await kernelPool.query('SELECT operator_account_id::text FROM access.account WHERE route=$1 AND account_id=$2', [

@@ -245,10 +245,14 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Kernel, 4 for PostgreSQL and 5 for search.
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
-   answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
+3. Runs `db up`, `search up` and `setup`, starts native Auth, Kernel (`start`, not `--watch`) and the Kernel worker,
+   and waits until Web and the Auth pages answer, for at most ten minutes. `REZICS_WALK_DEFER_FRONTENDS=1` omits Vite,
+   OpenSearch, the Kernel worker and a second Kernel process, serves Kernel HTTP from the Auth host, and waits for
+   native Auth and Kernel health instead; the child starts issuer then Web when it needs mounted pages.
+   Output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
-   inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
+   inside `<command>`: run `dev-stack.ts persona`, then load its private `seed.env` and run
+   `bun scripts/datasets/cross-media-seed.ts --dev`, as described under seeded journey walks below.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
@@ -256,6 +260,10 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 A walk stack is admitted only while the slot lock its launch holds is held: the environment names the slot, but the
 name alone does not admit a container. Walk stacks do not change check placement; the worker's checks still run on
 hosts a and b.
+
+Local Web bindings advertise the four installed Auth management review pages (rename, membership, transfer and
+organization deletion). An explicit `AUTH_MANAGEMENT_PAGE_ROUTES` deployment value is preserved. These links
+select review; native current authority and explicit confirmation still own every command.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance. Local stack-lease tests set `KERNEL_CHECK_REMOTE` to a missing hosts file

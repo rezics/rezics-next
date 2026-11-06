@@ -1,4 +1,6 @@
 import {
+  parseAccountOperationApproval,
+  parseTransferExecution,
   parseAccountOperationApprovalResponse,
   parseRenameExecutionResponse,
   parseDeletionExecutionResponse,
@@ -162,6 +164,9 @@ export function accountOperationTransport(
       return denied(400);
     let effectDispatched = false;
     let automatedExecutionMayHaveCompleted = false;
+    let transfer = false;
+    let executionStarted = false;
+    const uncertain = () => response({ error: 'account_operation_unavailable' }, 503);
     try {
       const body = await readJsonObject(
         request,
@@ -174,6 +179,7 @@ export function accountOperationTransport(
       if (Object.keys(body).some((field) => !names.includes(field))) return denied(400);
       const key = text(body.operationKey);
       const operation = operationOf(body.operation);
+      transfer = operation.kind === 'transfer' || operation.kind === 'transfer-acceptance';
       const management = Object.hasOwn(body, 'accountId');
       if (management) text(body.accountId);
       const automated = operation.kind === 'automated';
@@ -208,6 +214,10 @@ export function accountOperationTransport(
           );
         });
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
+        if (transfer) {
+          const result = parseAccountOperationApproval(approval);
+          return result ? response(result) : uncertain();
+        }
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
         if (
           ['opening', 'rename', 'delete', 'organization'].includes(operation.kind) &&
@@ -294,8 +304,9 @@ export function accountOperationTransport(
             ? response(result)
             : response({ error: 'unavailable' }, 503);
         }
-        case 'transfer':
-          return response(
+        case 'transfer': {
+          executionStarted = true;
+          const result = parseTransferExecution(
             await workflows.transferOperator({
               ...input,
               previous: operation.previous as never,
@@ -303,7 +314,10 @@ export function accountOperationTransport(
               operatorAccountId: operation.operatorAccountId as string,
               ...(operation.acceptance === undefined ? {} : { acceptance: text(operation.acceptance) }),
             }),
+            (operation.previous as { subjectAccountId: string }).subjectAccountId,
           );
+          return result ? response(result) : uncertain();
+        }
         case 'membership':
           effectDispatched = true;
           return response(
@@ -323,6 +337,8 @@ export function accountOperationTransport(
       if (effectDispatched) return response({ error: 'unavailable' }, 503);
       if (automatedExecutionMayHaveCompleted)
         return response({ error: 'account_operation_unresolved' } satisfies AutomatedAccountExecutionUnresolved, 503);
+      // Workflow publication or final disclosure may already have changed the relation.
+      if (transfer && executionStarted) return uncertain();
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;

@@ -283,6 +283,7 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
     });
     service = await createAuthService({
       database: authDb(),
+      clock,
       issuer,
       audience,
       secret,
@@ -849,15 +850,9 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
     async populatePrivateData(subjectId) {
       const secretBirthDate = '1990-06-15';
       const marker = `private-${randomUUID()}`;
-      // The subject's own session, or its operator opening one: both are real Auth sessions.
-      const own = latest.get(subjectId);
+      // Software profile writes use the operator's management authority, not the operated session.
       const operatorId = (await responsibilityOf(subjectId))?.operator_account_id;
-      const operatorSession = operatorId ? latest.get(operatorId) : undefined;
-      let caller = own;
-      if (!caller && operatorSession) {
-        const opened = await openingFor({ opaque: operatorSession }, subjectId);
-        if (opened.outcome === 'authenticated') caller = callerOf(opened.session);
-      }
+      const caller = latest.get(operatorId ?? subjectId);
       if (!caller) throw new Error(`No session can reach the private settings of ${subjectId}`);
       const ctx = await actorContext(caller);
       const populated = await refused(() =>

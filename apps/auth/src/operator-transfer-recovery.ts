@@ -49,11 +49,14 @@ export function confirmsTransferReadback(attempt: TransferAttempt, relation: Ope
 }
 
 /** Recovery is deliberately read-only. It never submits approval or execution. */
-export async function readTransferRecovery(attempt: TransferAttempt): Promise<TransferRecoveryRead> {
+export async function readTransferRecovery(
+  attempt: TransferAttempt,
+  signal?: AbortSignal,
+): Promise<TransferRecoveryRead> {
   if (attempt.side === 'source' && (attempt.phase === 'execute' || attempt.phase === 'readback')) {
-    const relation = await readOperatorRelation(attempt.request.previous.subjectAccountId, attempt.accountId);
+    const relation = await readOperatorRelation(attempt.request.previous.subjectAccountId, attempt.accountId, signal);
     return relation.kind === 'ready' ? { kind: 'relation', relation: relation.relation } : relation;
   }
-  const failure = await refreshTransferAdvice(attempt);
+  const failure = await refreshTransferAdvice(attempt, signal);
   return failure ?? { kind: 'advice' };
 }
