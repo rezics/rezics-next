@@ -265,6 +265,8 @@ Publication, not a pending 503, is the completed Label/Shelf result. Fewest test
 covers last-complete, field-backfill preparing, and the original Label/Shelf action after publication. Served HTTP
 uses own-account library admission and bundled Definition resource types; Shelf reads admit that owner as listEntries
 does, without a second Access grant on the account resource. The independent Labels unit file mocks `cloudflare:workers` before any module that loads the Worker client.
+Native evidence: Kernel `shelf-maintenance`/`shelf-reads` passed as check `7fcd4dff` after the bound-query interrupt
+and serial-journey repairs; independent Labels passed as check `b2df82cc`.
 
 Presentation decision: the Library shows the source of its effective layout and sort, and flags saved sorts or table columns that current native reads cannot honor; navigation keeps inherited choices out of the URL.
 

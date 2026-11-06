@@ -754,6 +754,14 @@ The Library command runner keeps Content's injectable `command` executor and pri
 consumed again on Core retry. Import identity stays in the Label command plan; incomplete-plan notes from cancelled
 label composition are superseded by this complete attempt unit.
 
+Reached defects: check `8cdb8b5f` admitted `shelf-maintenance`/`shelf-reads` and failed because the
+count-collections interrupt wrapped `client.query` after Core had bound the live function, so the page resolved
+instead of rolling back, and because source-change shared Alice's rebuilding gate and raised partition contention.
+Repair: wrap the bound query for that interrupt; keep empty-owner, source-change, purge and last-complete journeys
+serial, with `orgOwner` on source-change. Those same files then passed as check `7fcd4dff`. Served Labels catalogue
+to assignment/shelf passed as check `b2df82cc`. Content `36983e320e7d` command-support receiving stays the optional
+`command` dispatch on this runner.
+
 The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
 the raw frontier without refill; existing assignment, lifecycle and catalogue journeys retain their replay, CAS,
