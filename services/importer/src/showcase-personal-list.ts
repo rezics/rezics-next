@@ -190,7 +190,7 @@ export function readShowcasePersonalList(input: { client: KernelClient; uploadId
 }
 
 /** Independent owner return. One FULL page carries current state, Progress and counted own votes. */
-export function readShowcasePersonalLibrary(input: { client: KernelClient; cursor?: string }) {
+export function readShowcasePersonalLibrary(input: { client: KernelClient; cursor?: string; language?: string }) {
   return nativeRead(() =>
     input.client.libraryEntries.get({
       query: {
@@ -200,6 +200,7 @@ export function readShowcasePersonalLibrary(input: { client: KernelClient; curso
         limit: 8,
         ...(input.cursor ? { cursor: input.cursor } : {}),
       },
+      headers: { 'accept-language': input.language ?? 'en' },
       fetch: { cache: 'no-store', redirect: 'manual' },
     }),
   );

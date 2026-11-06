@@ -114,6 +114,15 @@ for (const status of ['applied', 'stale', 'unsupported'] as const) {
       }),
     ).toThrow();
     expect(mergeListImportMetadataConfirmation(pending, terminal)).toEqual(terminal);
+    // JSONB reorders object keys at every checkpoint; that must preserve the sealed native operand.
+    const stored = JSON.parse(
+      JSON.stringify(terminal, (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)))
+          : value,
+      ),
+    );
+    expect(mergeListImportMetadataConfirmation(stored, pending)).toEqual(terminal);
   });
 }
 

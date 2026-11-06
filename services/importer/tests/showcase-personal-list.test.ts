@@ -185,7 +185,7 @@ test('explicit review and confirmation keep original operands across reopen, par
   const targetId = '01900000-0000-4000-8000-000000000002';
   const reviewId = '01900000-0000-4000-8000-000000000003';
   const scoreReviewId = '01900000-0000-4000-8000-000000000004';
-  const calls: { path: string; body: unknown; key: string | null }[] = [];
+  const calls: { path: string; body: unknown; key: string | null; language: string | null }[] = [];
   let reply = () => new Response(null, { status: 503 });
   const client = createKernelClient(identity.origin, {
     headers: { authorization: 'Bearer owner' },
@@ -195,6 +195,7 @@ test('explicit review and confirmation keep original operands across reopen, par
         path: new URL(request.url).pathname,
         body: request.method === 'POST' ? await request.json() : null,
         key: request.headers.get('idempotency-key'),
+        language: request.headers.get('accept-language'),
       });
       return reply();
     }) as typeof fetch,
@@ -265,6 +266,9 @@ test('explicit review and confirmation keep original operands across reopen, par
     reply = () => Response.json(current);
     expect(await readShowcasePersonalLibrary({ client })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.path).toBe('/v1/libraryEntries');
+    expect(calls.at(-1)?.language).toBe('en');
+    expect(await readShowcasePersonalLibrary({ client, language: 'ja' })).toEqual({ state: 'current', value: current });
+    expect(calls.at(-1)?.language).toBe('ja');
     reply = () => Response.json({ detail: 'private response must not enter a journal failure' }, { status: 403 });
     expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
     const denied = calls.length;

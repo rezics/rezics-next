@@ -87,6 +87,7 @@ async function snapshot(results: boolean) {
         baseline: null,
         replace: false,
         action: 'state' as const,
+        progress: null,
       },
     }),
     apply: async () => ({
