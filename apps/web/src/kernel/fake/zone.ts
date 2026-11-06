@@ -159,13 +159,14 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
   if (typeof target.subject === 'string') {
     if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details')
       return problem(404, { 'cache-control': 'no-store' });
+    const requestedLanguages = isRecord(body) ? body.languages : undefined;
     const home = await response(
       new Request(request.url, {
         method: 'POST',
         headers: request.headers,
         body: JSON.stringify({
           target: { route: '' },
-          ...(Array.isArray(isRecord(body) ? body.languages : undefined) ? { languages: body.languages } : {}),
+          ...(Array.isArray(requestedLanguages) ? { languages: requestedLanguages } : {}),
         }),
       }),
       match,
