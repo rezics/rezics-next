@@ -22,12 +22,13 @@ import {
   sourceInputVerificationProgram,
   validateCandidateUploadPaths,
   validateExpectedSourceManifest,
+  EMPTY_DIRECTORY_DIGEST,
 } from './remote-check.ts';
 
 type SourceEntry = {
   path: string;
   mode: number;
-  kind: 'file' | 'link';
+  kind: 'file' | 'link' | 'directory';
   sha256: string;
   target: string | null;
 };
@@ -455,6 +456,20 @@ test('reserved producer control names fail before staging and cannot masquerade 
     expect(() => validateExpectedSourceManifest(manifestFor([], ['.remote-check-supervisor']))).toThrow(
       'reserved deleted path',
     );
+    mkdirSync(join(fixture.root, 'schema-empty'));
+    const emptyDirectory = manifestFor([
+      ...fixture.manifest.entries,
+      {
+        path: 'schema-empty',
+        mode: lstatSync(join(fixture.root, 'schema-empty')).mode & 0o777,
+        kind: 'directory',
+        sha256: EMPTY_DIRECTORY_DIGEST,
+        target: null,
+      },
+    ]);
+    expect(() => validateExpectedSourceManifest(emptyDirectory, emptyDirectory.sourceSha256)).not.toThrow();
+    const emptyResult = runSource(fixture, emptyDirectory);
+    expect(emptyResult.status, emptyResult.stderr).toBe(0);
   } finally {
     cleanup(fixture);
   }

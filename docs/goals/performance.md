@@ -76,3 +76,8 @@ original-work admission against fake ports; the existing native membership growt
 proof. Contract/core/application load no downstream implementations. Native adapters are bound by ordinary
 `createKernel`/`server`/`worker` composition. The split adds no query or extra statement; cost stays the existing
 producer declarations composed through `admitOriginalWork` and Kind-audience work vectors.
+Decision: pin this increment's user-visible check-infrastructure behaviour with the existing remote-check, check-ssh,
+compiler-database, Kernel script and page-data unit files rather than a second suite. Observed bounds: one OpenSSH
+ControlMaster per configured host under workspace `.temp`; throwaway PostgreSQL `--rm` plus owner-pid cleanup;
+`container:<id>` isolated-stack attachment; empty-directory manifests hash `directory\0`; page-data boot keeps the
+first substantive error after Task `$ ` echoes.

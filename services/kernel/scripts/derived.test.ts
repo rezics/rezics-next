@@ -6,7 +6,9 @@ import {
   openApiCacheMatches,
   openApiSourceFingerprint,
   reusableDerivedDatabase,
+  throwawayDatabaseRunArgs,
 } from './derived.ts';
+import { dockerNetworkArgs } from '../../../scripts/compiler-database.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -49,4 +51,19 @@ test('derived caches invalidate on migration, source, output, and container chan
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+});
+
+test('throwaway databases use --rm and refuse Linux namespace paths as Docker networks', () => {
+  const args = throwawayDatabaseRunArgs(7);
+  expect(args[0]).toBe('run');
+  expect(args).toContain('--rm');
+  expect(args).toContain('rezics.kernel.derived.pid=7');
+  expect(args).not.toContain('--network');
+  expect(() => dockerNetworkArgs({ REZICS_DOCKER_NETWORK: 'ns:/proc/9/ns/net' })).toThrow(
+    'Docker treats ns:/proc/... as a network name',
+  );
+  expect(dockerNetworkArgs({ REZICS_ISOLATED_STACK_CONTAINER: 'isolated-pause' })).toEqual([
+    '--network',
+    'container:isolated-pause',
+  ]);
 });

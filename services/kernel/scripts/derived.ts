@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { migrate, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import { cleanup, docker, run } from './check.ts';
 import { cgroupArgs } from './search.ts';
+import { dockerNetworkArgs, sharesIsolatedStackNetwork } from '../../../scripts/compiler-database.ts';
 import { withCommandPhase } from './command-phases.ts';
 import { prepareReyloAnalysisCache } from './reylo-cache.ts';
 
@@ -243,6 +244,7 @@ function inspectDerivedContainer(name: string): DerivedContainer | undefined {
 }
 
 function mappedPort(container: string): string {
+  if (sharesIsolatedStackNetwork()) return '5432';
   const port = docker(['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
   if (!port) throw new Error('Could not determine the throwaway database port');
   return port;
@@ -278,14 +280,17 @@ function createDatabaseContainer(name: string, checkout: string): string {
 
 /** One-run compiler database: slice-confined, disk-backed, never a checkout bind mount. */
 export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
+  const network = dockerNetworkArgs();
+  const isolated = sharesIsolatedStackNetwork(network);
   return [
     'run',
     '-d',
+    '--rm',
+    ...network,
     ...cgroupArgs(),
     '--label',
     `rezics.kernel.derived.pid=${pid}`,
-    '-p',
-    '127.0.0.1::5432',
+    ...(isolated ? [] : ['-p', '127.0.0.1::5432']),
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${pid}`,
     '-e',

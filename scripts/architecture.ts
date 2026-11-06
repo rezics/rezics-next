@@ -1,8 +1,15 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
-import { parseSync, visitorKeys, type Node, type Program } from 'oxc-parser';
+import { fileURLToPath } from 'node:url';
+import type { Node, Program } from 'oxc-parser';
+
+const oxcParser = createRequire(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'))(
+  'oxc-parser',
+) as typeof import('oxc-parser');
+const { parseSync, visitorKeys } = oxcParser;
 
 export type ModuleKind = 'contract' | 'core' | 'application' | 'adapter' | 'composition root' | 'UI/transport library';
 

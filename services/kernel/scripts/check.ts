@@ -39,6 +39,7 @@ import {
   registerArtifactDeclarations,
   writeArtifactCatalog,
 } from '../../../scripts/check-artifacts.ts';
+import { dockerNetworkArgs, sharesIsolatedStackNetwork } from '../../../scripts/compiler-database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -754,14 +755,17 @@ export function formatConnectionRunSummary(
 }
 
 export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
+  const network = dockerNetworkArgs();
+  const isolated = sharesIsolatedStackNetwork(network);
   return dockerCommand([
     'run',
     '-d',
+    '--rm',
+    ...network,
     ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
-    '-p',
-    '127.0.0.1::5432',
+    ...(isolated ? [] : ['-p', '127.0.0.1::5432']),
     // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
@@ -919,10 +923,10 @@ async function main(): Promise<void> {
   let env: NodeJS.ProcessEnv = process.env;
   await withCommandPhase('database-image', () => {
     container = startPostgresContainer();
-    const portOutput = docker(['port', container, '5432/tcp']);
-    const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
-    if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
-    url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
+    const isolated = sharesIsolatedStackNetwork();
+    const port = isolated ? '5432' : docker(['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
+    if (!port) fail(`Could not determine the test database port`);
+    url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
     process.env.KERNEL_DATABASE_CONTAINER = container;
     env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
   });

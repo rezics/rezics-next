@@ -41,6 +41,7 @@ import {
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_RUN_MEMORY_GIB,
   CHECK_SLOT_PROCESSORS,
+  EMPTY_DIRECTORY_DIGEST,
   hostAdmittedRunCapacity,
   CHECK_HOST_MIN_TMP_BYTES,
   CHECK_HOST_MIN_TMP_INODES,
@@ -137,6 +138,7 @@ test('a trusted driver without a Bun pin binds a candidate runtime through remot
   mkdirSync(join(driver, 'scripts/check-host'), { recursive: true });
   copyFileSync(remoteCheck, join(driver, 'scripts/remote-check.ts'));
   for (const file of [
+    'check-ssh.ts',
     'check-artifacts.ts',
     'check-output-tree.ts',
     'check-placement.ts',
@@ -447,7 +449,7 @@ for (let index = 0; index < args.length;) {
     const value = args[index + 1];
     if (!value || value.startsWith('-')) reject('option ' + argument + ' must have one value');
     if (argument === '-o' && !/^[A-Za-z][A-Za-z0-9]*=.+$/.test(value)) reject('invalid -o configuration');
-    if (argument === '-O' && value !== 'exit') reject('unsupported -O operation');
+    if (argument === '-O' && value !== 'exit' && value !== 'check') reject('unsupported -O operation');
     options.push(argument, value);
     index += 2;
   } else if (argument.startsWith('-')) reject('unexpected option ' + argument);
@@ -456,12 +458,12 @@ for (let index = 0; index < args.length;) {
     index += 1;
   }
 }
-const controlExit = options.includes('-O');
+const controlOperation = options.includes('-O') ? options[options.indexOf('-O') + 1] : undefined;
 if (options.filter((argument) => argument === '-O').length > 1) reject('duplicate -O operation');
-if (positionals.length !== (controlExit ? 1 : 2)) reject('expected host and optional command positionals');
+if (positionals.length !== (controlOperation ? 1 : 2)) reject('expected host and optional command positionals');
 const address = positionals[0]!;
 if (!/^ops@[^:]+\.test$/.test(address)) reject('invalid host position');
-let script = controlExit ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
+let script = controlOperation === 'exit' ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
 const launchCommand = script;
 if (script.startsWith('python3 -c ') && script.includes('truncated launch')) {
   const bytes = Buffer.from(await Bun.stdin.text());
@@ -505,8 +507,12 @@ const refusedControlSession = Boolean(config.refuseControlSession && controlPath
 const transport = refusedControlSession ? 'standalone-fallback' : controlPath && controlPath !== 'ControlPath=none' ? 'control-master' : 'standalone';
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, transport, observedAt: Date.now(), ...event }) + '\\n');
 const slotHeld = () => readdirSync(dir).some((name) => name.startsWith(hostKey + '.slot.'));
-if (controlExit) {
+if (controlOperation === 'exit') {
   log({ kind: 'control-close' });
+  process.exit(0);
+}
+if (controlOperation === 'check') {
+  log({ kind: 'control-check' });
   process.exit(0);
 }
 if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
@@ -2051,9 +2057,11 @@ test('compile cache: each remote run keeps Node compile cache inside its own run
   for (const [index, script] of scripts.entries()) {
     const cachePath = script.match(/(?:^|\s)BUN_RUNTIME_TRANSPILER_CACHE_PATH=([^\s]+)/)?.[1];
     expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
-    expect(script).toContain(`export NODE_COMPILE_CACHE=${runDirectories[index]}/.temp/node-compile-cache`);
+    expect(script).toContain('export NODE_DISABLE_COMPILE_CACHE=1');
+    expect(script).toContain('unset NODE_COMPILE_CACHE');
+    expect(script).toContain(`BUN_RUNTIME_TRANSPILER_CACHE_PATH=${runDirectories[index]}/bun-runtime-transpiler-cache`);
     expect(script).not.toContain('/tmp/node-compile-cache');
-    expect(script.indexOf('export NODE_COMPILE_CACHE')).toBeLessThan(
+    expect(script.indexOf('unset NODE_COMPILE_CACHE')).toBeLessThan(
       script.indexOf('"$bun" install --frozen-lockfile'),
     );
   }
@@ -2918,8 +2926,8 @@ test('acquisition prefers the host with the most free capacity', async () => {
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
   const probes = events().filter((event) => event.kind === 'probe');
   expect(probes).toHaveLength(4);
-  expect(probes.slice(0, 2).every((event) => event.transport === 'standalone')).toBe(true);
-  expect(probes.slice(2).every((event) => event.transport === 'standalone')).toBe(true);
+  expect(probes.slice(0, 2).every((event) => event.transport === 'control-master')).toBe(true);
+  expect(probes.slice(2).every((event) => event.transport === 'control-master')).toBe(true);
   const granted = events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted);
   expect(granted).toHaveLength(2);
   expect(new Set(granted.map((event) => event.call)).size).toBe(1);
@@ -3244,6 +3252,7 @@ test("the remote run's output streams back and its exit code becomes the local e
   const files = (seen.find((event) => event.kind === 'rsync')!.files as string[]).sort();
   expect(files.filter((file) => !file.startsWith('.temp/remote-check-git-'))).toEqual([
     '.gitignore',
+    'package.json',
     'src/tracked.ts',
     'src/untracked.ts',
   ]);
@@ -3582,11 +3591,10 @@ test('a host that cannot be reached is skipped', async () => {
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
 });
 
-test('standalone and multiplexed ssh calls use paired options and one run-private control master', async () => {
+test('every ssh and rsync path uses one host ControlMaster under workspace .temp', async () => {
   const { env, events } = scenario({ a: { available: 4.5e9, exit: 255, present: ['result.txt'] } });
-  expect(controlSocketDirectoryPath(undefined, 124)).toBe('/tmp/rezics-ssh-124');
-  expect(controlSocketDirectoryPath(undefined, undefined, 124)).toBe('/tmp/rezics-ssh-124');
-  expect(controlSocketDirectoryPath(env.XDG_RUNTIME_DIR, 124)).toBe(join(env.XDG_RUNTIME_DIR!, 'rezics-ssh'));
+  const directory = workspace();
+  expect(controlSocketDirectoryPath(directory)).toBe(join(directory, '.temp', 'ssh-control'));
   const rejected = spawnSync(
     'ssh',
     ['-i', '/keys/a', '-o', '-o', 'ControlMaster=no', 'ops@a.test', 'REMOTE_CHECK_MUST_NOT_RUN'],
@@ -3596,7 +3604,7 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
   expect(rejected.stderr).toContain('fake ssh: option -o must have one value');
   expect(events()).toEqual([]);
 
-  const result = await remote(env, workspace(), ['true'], ['--returns', 'result.txt']);
+  const result = await remote(env, directory, ['true'], ['--returns', 'result.txt']);
   expect(result.code).toBe(255);
 
   const sshEvents = events().filter((event) => Array.isArray(event.argv));
@@ -3612,6 +3620,7 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
     'returns',
     'cleanup',
   ]);
+  const hostSocket = `ControlPath=${join(directory, '.temp', 'ssh-control', 'a')}`;
   for (const event of sshEvents) {
     const options = event.options as string[];
     const argv = event.argv as string[];
@@ -3623,7 +3632,7 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
         expect(value, `${event.kind}: ${argument} must have one value`).toBeDefined();
         expect(value, `${event.kind}: ${argument} must not consume another option`).not.toStartWith('-');
         if (argument === '-o') expect(value).toMatch(/^[A-Za-z][A-Za-z0-9]*=.+$/);
-        if (argument === '-O') expect(value).toBe('exit');
+        if (argument === '-O') expect(['check', 'exit']).toContain(value);
         index += 1;
       } else {
         expect(argument, `${event.kind}: unexpected option`).not.toStartWith('-');
@@ -3631,24 +3640,17 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
       }
     }
     expect(positionals[0]).toBe(event.address);
-    if (event.kind === 'control-close') expect(positionals).toHaveLength(1);
+    if (event.kind === 'control-close' || event.kind === 'control-check') expect(positionals).toHaveLength(1);
     else {
       expect(positionals).toHaveLength(2);
       expect(positionals[1]).toBe(argv.at(-1));
     }
 
-    if (event.transport === 'standalone') {
-      expect(options).toContain('ControlMaster=no');
-      expect(options).toContain('ControlPath=none');
-      expect(options.filter((option) => option.startsWith('ControlPath='))).toEqual(['ControlPath=none']);
-    } else {
-      expect(options).toContain('ControlMaster=auto');
-      expect(options).toContain('ControlPersist=10m');
-      expect(options.filter((option) => option.startsWith('ControlPath='))).toHaveLength(1);
-      expect(options.find((option) => option.startsWith('ControlPath='))).toMatch(
-        new RegExp(`^ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/[a-z0-9]{8}-%C$`),
-      );
-    }
+    expect(event.transport).toBe('control-master');
+    expect(options).toContain('ControlMaster=auto');
+    expect(options).toContain('ControlPersist=10m');
+    expect(options).not.toContain('ControlPath=none');
+    expect(options.filter((option) => option.startsWith('ControlPath='))).toEqual([hostSocket]);
   }
 
   const multiplexed = sshEvents.filter((event) => event.transport === 'control-master');
@@ -3667,33 +3669,78 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
     expect(event.rsh as string).toContain(selectedControlPath!);
   }
 
-  const controlDirectory = join(env.XDG_RUNTIME_DIR!, 'rezics-ssh');
+  const controlDirectory = join(directory, '.temp', 'ssh-control');
   expect(statSync(controlDirectory).mode & 0o777).toBe(0o700);
-  await remote(env, workspace(), ['true']);
+  await remote(env, directory, ['true']);
   const repeated = events()
     .filter((event) => event.kind === 'control-probe')
     .at(-1)!;
   const repeatedPath = (repeated.options as string[]).find((option) => option.startsWith('ControlPath='));
-  expect(repeatedPath).toMatch(new RegExp(`^ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/[a-z0-9]{8}-%C$`));
-  expect(repeatedPath).not.toBe(selectedControlPath);
+  expect(repeatedPath).toBe(selectedControlPath);
 });
 
-test('a control master session refusal falls back to its own connection', async () => {
-  const { env, events } = scenario({ a: { available: 4.5e9, refuseControlSession: true } });
-  const result = await remote(env, workspace(), ['true']);
-
-  expect(result.code).toBe(0);
+test('a completed run leaves the host ControlMaster for a concurrent caller', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, slots: 4, runDurationMs: 100 } });
+  const directory = workspace();
+  const first = startRemote(env, directory, ['true']);
+  await waitFor(() => events().some((event) => event.kind === 'run'));
+  const second = startRemote(env, directory, ['true']);
+  await waitFor(() => events().filter((event) => event.kind === 'run').length === 2);
+  writeFileSync(join(env.FAKE_DIR!, 'clock'), '100');
+  expect(await first.child.exited).toBe(0);
+  expect(await second.child.exited).toBe(0);
   const seen = events();
-  const probe = seen.find((event) => event.kind === 'probe')!;
-  const controlProbe = seen.find((event) => event.kind === 'control-probe')!;
-  const refusedAt = seen.findIndex((event) => event.kind === 'master-session-refused');
-  const fallbackAt = seen.findIndex((event) => event.kind === 'standalone-fallback');
-  expect(probe.transport).toBe('standalone');
-  expect(controlProbe.transport).toBe('standalone-fallback');
-  expect(refusedAt).toBeGreaterThan(seen.indexOf(controlProbe));
-  expect(fallbackAt).toBeGreaterThan(refusedAt);
-  expect(seen.find((event) => event.kind === 'run')!.transport).toBe('standalone-fallback');
-  expect(seen.find((event) => event.kind === 'cleanup')!.transport).toBe('standalone-fallback');
+  const sockets = new Set(
+    seen
+      .filter((event) => Array.isArray(event.options))
+      .map((event) => (event.options as string[]).find((option) => option.startsWith('ControlPath='))),
+  );
+  expect(sockets.size).toBe(1);
+  expect([...sockets][0]).toBe(`ControlPath=${join(directory, '.temp', 'ssh-control', 'a')}`);
+  expect(seen.some((event) => event.kind === 'control-close')).toBe(false);
+});
+
+test('an 11 GiB reservation waits then places on host b and reports the reservation', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: 64 * 2 ** 30,
+      memoryMaxGiB: 16,
+      memoryMax: 16 * 2 ** 30,
+      memoryHeadroom: 16 * 2 ** 30,
+      slots: 4,
+      ordinaryBusy: 1,
+      busyMemoryGiB: 8,
+    },
+    b: {
+      available: 64 * 2 ** 30,
+      memoryMaxGiB: 32,
+      memoryMax: 32 * 2 ** 30,
+      memoryHeadroom: 32 * 2 ** 30,
+      slots: 4,
+      ordinaryBusy: 4,
+      busyMemoryGiB: 2.5,
+    },
+  });
+  env.REMOTE_CHECK_POLL_MS = '20';
+  const run = startRemote(env, workspace(), ['true'], ['--memory-gib', '11']);
+  await waitFor(() => run.output.stderr.includes('reservation 11 GiB'));
+  expect(run.output.stderr).toContain('waiting for a free one');
+  for (const name of readdirSync(env.FAKE_DIR!).filter((entry) => entry.startsWith(`${hostKey('b')}.slot.`))) {
+    rmSync(join(env.FAKE_DIR!, name), { recursive: true, force: true });
+  }
+  expect(await run.child.exited).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
+});
+
+test('excluded hosts stay out of this invocation', async () => {
+  const { env, events } = scenario({
+    a: { available: 64 * 2 ** 30, slots: 4 },
+    b: { available: 4 * 2 ** 30, slots: 4 },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--exclude-hosts', 'a']);
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
+  expect(events().some((event) => event.address === 'ops@a.test')).toBe(false);
 });
 
 function provisionScenario(existing?: string) {
@@ -5885,7 +5932,7 @@ test('a stalled control master is closed and replaced before upload and command 
   const firstPath = controlPath(probes[0]!);
   const secondPath = controlPath(probes[1]!);
   expect(firstPath).toBeDefined();
-  expect(secondPath).not.toBe(firstPath);
+  expect(secondPath).toBe(firstPath);
   expect(controlPath(closed)).toBe(firstPath);
   const firstAt = seen.indexOf(probes[0]!);
   const closeAt = seen.indexOf(closed);
@@ -6114,6 +6161,31 @@ test('the returns probe rejects symlinked or oversized bounded output trees befo
     expect(oversized.status).toBe(0);
     expect(oversized.stdout).toContain(`OVERSIZE ${path} `);
     expect(oversized.stdout).toContain('OVERSIZE_RETURN_SET');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('return inventory hashes empty directory leaves as directory NUL so the transferred tree compares', () => {
+  const temporaryDirectory = join(root, '.temp');
+  mkdirSync(temporaryDirectory, { recursive: true });
+  const directory = mkdtempSync(join(temporaryDirectory, 'empty-return-'));
+  mkdirSync(join(directory, 'schema-empty'));
+  try {
+    const inventory = spawnSync('bash', ['-c', returnsProbe(directory, ['schema-empty'], true)], {
+      encoding: 'utf8',
+      cwd: directory,
+    });
+    expect(inventory.status).toBe(0);
+    expect(inventory.stderr).toBe('');
+    expect(inventory.stdout).toContain('PRESENT schema-empty');
+    const encoded = inventory.stdout
+      .trimEnd()
+      .split('\n')
+      .find((line) => line.startsWith('MANIFEST '))!;
+    expect(JSON.parse(Buffer.from(encoded.slice('MANIFEST '.length), 'base64').toString())).toEqual([
+      { path: 'schema-empty', size: 0, sha256: EMPTY_DIRECTORY_DIGEST, kind: 'directory' },
+    ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -54,9 +54,21 @@ Runs share the host's package cache through hardlinks. A run that writes into an
 its cache entry is removed. Patch a dependency through `patchedDependencies` in `package.json`, never at run time.
 
 This section owns the operational rules. The implementation is in [remote-check.ts](remote-check.ts),
-[stack-run.ts](stack-run.ts), [stack-lease.ts](stack-lease.ts),
+[check-ssh.ts](check-ssh.ts), [stack-run.ts](stack-run.ts), [stack-lease.ts](stack-lease.ts),
 [provision-check-host.sh](provision-check-host.sh) and the [Docker wrapper](check-host/docker).
 Their adjacent tests exercise placement, admission, accounting and cleanup.
+
+Every remote-check SSH and rsync path, including admission probes, polling, heartbeat, transfer, result fetch and
+cleanup, uses OpenSSH `ControlMaster=auto` with `ControlPersist=10m` and one socket per configured host under
+`<workspace>/.temp/ssh-control/<host>` (`REMOTE_CHECK_SSH_CONTROL_DIR` overrides the directory). Concurrent callers
+reuse that host master. Completing a run releases its channels and never `-O exit`s a master other runs still use;
+ControlPersist reaps idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next
+auto connection. Stderr reports connection work separately from admitted execution. `--exclude-hosts` and the wait
+line's `reservation N GiB` expose host exclusions and the memory reservation, including the 11 GiB wait that still
+places on host b.
+
+Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
+the existing remote-check/check-ssh unit files rather than a second suite.
 `GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
 workspace-relative path and returned with the run result. Existing local profile lines are preserved when the
 returned file is merged.

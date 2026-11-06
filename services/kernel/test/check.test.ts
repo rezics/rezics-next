@@ -137,7 +137,7 @@ test("the check's PostgreSQL container keeps its logs when it exits early and is
   const postgresContainer = startPostgresContainer(stubDocker);
 
   expect(calls[0]?.[0]).toBe('run');
-  expect(calls[0]).not.toContain('--rm');
+  expect(calls[0]).toContain('--rm');
   expect(postgresContainer).toBe('postgres-container');
 
   cleanup(['search-container', postgresContainer], stubDocker);

@@ -564,8 +564,23 @@ function pageDataSettings(settings: Settings): PageDataPolicy {
   return settings.policy?.pageData ?? defaultPolicy.pageData;
 }
 
+/** Skip Task `$ ` echoes and keep the first substantive error, with credentials already redacted by safeLine. */
+export function firstSubstantiveErrorLine(value: string): string {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const skipped = (line: string) =>
+    line.startsWith('$ ') || /^task:\s/i.test(line) || line.startsWith('+ ') || /^task \S/.test(line);
+  const candidates = lines.filter((line) => !skipped(line));
+  const preferred = candidates.find((line) =>
+    /\b(?:error|fatal|fail(?:ed|ure)?|panic|exception)\b/i.test(line),
+  );
+  return safeLine(preferred ?? candidates[0] ?? 'process failed without output');
+}
+
 function externalErrorLine(value: string): string {
-  return safeLine(value.split(/\r?\n/).find((line) => line.trim()) ?? 'process failed without output');
+  return firstSubstantiveErrorLine(value);
 }
 
 async function freePort(): Promise<number> {

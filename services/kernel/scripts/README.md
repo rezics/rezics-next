@@ -28,7 +28,7 @@ Reylo analyses are cached in immutable snapshots under the host's typecheck cach
 
 Decision: One host-local Reylo analysis cache, keyed by toolchain, database configuration and schema dump, serves typecheck, check and the throwaway-database seam; each run re-keys its copy to its own server so only changed statements are analysed.
 
-The one-run compiler database uses a labelled anonymous volume inside the run slice, matching kernel check storage. It does not use a 1 GiB tmpfs and does not bind-mount the checkout. Persistent derived reuse for local schema/contract generation keeps its existing tmpfs cache.
+The one-run compiler database uses a labelled anonymous volume inside the run slice, matching kernel check storage. It does not use a 1 GiB tmpfs and does not bind-mount the checkout. Persistent derived reuse for local schema/contract generation keeps its existing tmpfs cache. Throwaway `docker run -d` uses `--rm` plus `cleanupStale` on labelled owner pids so a killed owner or failed startup leaves no owned container. Isolated-stack attachment uses `--network container:<id>` from `REZICS_ISOLATED_STACK_CONTAINER`; Docker treats `ns:/proc/<pid>/ns/net` as a network name and that path is refused.
 
 When `REZICS_CHECK_PHASES` is set, stderr also records source HEAD, argv, concurrency, and slice `anon` / `file` / `inactive_file` plus `io.pressure` averages when those cgroup files are readable. Missing counters stay omitted. Compare like command/source classes using those command phases and the transport `slotWaitSeconds` / rsync lines separately. Do not treat wrapper wall time as compiler duration.
 
