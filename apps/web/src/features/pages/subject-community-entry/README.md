@@ -63,6 +63,10 @@ remain anonymous. Navigation carries the supplied preset and regional request, w
 observations remain in their readings and the composer obtains its own current admission. No authority is serialized
 into sign-in or return addresses.
 
+Decision: community return uses the existing Subject/community and Library visit validators for locale, source
+address, node, cursor and fragment; the supplied Board operand stays on that source address. Search's return
+producer is not served.
+
 The seeded participation walk runs with
 `bun --smol services/auth/scripts/dev-stack.ts walk -- bun --smol apps/web/scripts/vndb-seeded-journey.ts`.
 It consumes the wrapper's published Subject/Board pair, follows actual author links, reads durable native effects

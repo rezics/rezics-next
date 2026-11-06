@@ -84,6 +84,7 @@ test('small declarations retain sixteen/once and cannot be combined with a nativ
 test('a native-set declaration excludes repeated sets and small declarations; a fabricated handle cannot serialize', async () => {
   const before = (await f.db.admin.query('SELECT count(*)::integer AS n FROM core.record_history_source_set')).rows[0]
     .n;
+  const producer = actualProducer();
   await expect(
     command(async (tx) => {
       declareCommandRecordSourceSet(tx, forged());
@@ -92,7 +93,7 @@ test('a native-set declaration excludes repeated sets and small declarations; a 
       await declareCommandHistory(tx, kind, scope(person));
       return noEffect({ payload: 'must roll back rather than claim native membership' });
     }),
-  ).rejects.toBeInstanceOf(RecordSourceSetUnavailableError);
+  ).rejects.toBeInstanceOf(producer ? TypeError : RecordSourceSetUnavailableError);
   expect((await f.db.admin.query('SELECT count(*)::integer AS n FROM core.record_history_source_set')).rows[0].n).toBe(
     before,
   );

@@ -172,7 +172,7 @@ test('a Board visit and its composer keep the current Subject region return', as
       cursor,
     },
   };
-  const currentHref = `/en/subjects/${subjectId}/book/reviews?realm=${realmId}&cursor=old&node=old`;
+  const currentHref = `/en/subjects/${subjectId}/book/reviews?realm=${realmId}&board=${boardId}&cursor=old&node=old`;
   const fullListHref = `/en/subjects/${subjectId}/book/reviews?realm=${realmId}`;
   const returnTo = communityRegionReturnTo({
     currentHref,
@@ -186,7 +186,7 @@ test('a Board visit and its composer keep the current Subject region return', as
   });
 
   expect(returnTo).toBe(
-    `/en/subjects/${subjectId}/book/reviews?realm=${realmId}&cursor=${encodeURIComponent(cursor)}&node=review-list#subject-community-review-list`,
+    `/en/subjects/${subjectId}/book/reviews?realm=${realmId}&board=${boardId}&cursor=${encodeURIComponent(cursor)}&node=review-list#subject-community-review-list`,
   );
   expect(returnTo).not.toBe(fullListHref);
   expect(communityRegionAnchor('review-list')).toBe('subject-community-review-list');
@@ -229,18 +229,23 @@ test('a Board visit and its composer keep the current Subject region return', as
 
 test('mounted overview and full-view routes retain their exact community return address', async () => {
   const base = `/en/subjects/${subjectId}/book`;
-  expect(await mountedReturn(`${base}?realm=${realmId}`, false)).toBe(
-    `${base}?realm=${realmId}#subject-community-threads`,
+  expect(await mountedReturn(`${base}?realm=${realmId}&board=${boardId}`, false)).toBe(
+    `${base}?realm=${realmId}&board=${boardId}#subject-community-threads`,
   );
+  expect(subjectCommunityVisitReturn(`${base}?board=not-a-board#subject-community-threads`, 'en')).toBeUndefined();
 
   const expected = new URL(`${base}/discussion`, 'https://site.test');
   expected.searchParams.set('realm', realmId);
+  expected.searchParams.set('board', boardId);
   expected.searchParams.set('cursor', cursor);
   expected.searchParams.set('node', 'threads');
   expected.hash = 'subject-community-threads';
-  expect(await mountedReturn(`${base}/discussion?realm=${realmId}&cursor=route-cursor&node=route-node`, true)).toBe(
-    `${expected.pathname}${expected.search}${expected.hash}`,
-  );
+  expect(
+    await mountedReturn(
+      `${base}/discussion?realm=${realmId}&board=${boardId}&cursor=route-cursor&node=route-node`,
+      true,
+    ),
+  ).toBe(`${expected.pathname}${expected.search}${expected.hash}`);
 });
 
 test('independent community list mounts need no router when Overview context is missing', () => {
