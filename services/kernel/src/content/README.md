@@ -594,9 +594,9 @@ Library merge.
 exhaustive dispatch and exact route, kind and primary identity checks. It translates only the public
 `library/collection` and `community/space` keys to Content's `commerce/collection` and `content/space` feed
 identities; Review keeps `content/review`. Unsupported or inconsistent variants fail the discovery lane without
-advancing its retry position. The mapper performs no owner reads or refill. Search's current Collection summary
-supplies only title and description, and its Review summary supplies no rating; the feed leaves curator, cover and
-rating absent instead of filling those facts locally.
+advancing its retry position. The mapper performs no owner reads or refill. Search's Collection summary supplies its
+closed `card` (curator, cover, presentation and preview completeness), which the feed passes through unchanged. Its
+Review summary supplies no rating; the feed leaves rating absent instead of filling it locally.
 Thread and post summaries add optional `author` (Accounts display name, handle and avatar) and `excerpt`.
 Projection consumes only the opening/post revision that passed native disclosure; one deduplicated page-level
 Accounts summary batch supplies at most 20 current identities with its own final checks. A missing summary
