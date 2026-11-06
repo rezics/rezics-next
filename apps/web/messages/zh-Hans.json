@@ -10042,7 +10042,6 @@
   "library_vndb_browse_inspection_close": "返回这一页",
   "library_vndb_browse_inspection_dates": "日期来自原生资料库，以 UTC 显示。",
   "library_vndb_browse_inspection_no_progress": "此资料库条目未提供进行中的进度记录。请打开作品或资料库使用可用操作。",
-  "library_vndb_browse_inspection_rating": "本次资料库读取未包含评分。请打开作品查看当前的评分操作。",
   "library_vndb_browse_inspection_work": "打开作品",
   "library_copy_editor_edit_description": "编辑此副本，保存或取消后返回库存。",
   "library_copy_editor_create_description": "选择版本及可用的副本类型与状态，也可在下方填写选填资料。",

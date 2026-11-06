@@ -10040,7 +10040,6 @@
   "library_vndb_browse_inspection_close": "このページに戻る",
   "library_vndb_browse_inspection_dates": "日付はライブラリの元の日付を UTC で表示しています。",
   "library_vndb_browse_inspection_no_progress": "この行には進行中の進捗セッションが含まれていません。作品またはライブラリで利用可能な操作を確認してください。",
-  "library_vndb_browse_inspection_rating": "このライブラリ読み込みには評価が含まれていません。作品を開いて現在の評価操作を確認してください。",
   "library_vndb_browse_inspection_work": "作品を開く",
   "library_copy_editor_edit_description": "この所蔵を編集し、保存またはキャンセルして一覧に戻ります。",
   "library_copy_editor_create_description": "版と利用可能な所蔵の種類・状態を選択してください。下に任意の詳細も入力できます。",
