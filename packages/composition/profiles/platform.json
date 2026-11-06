@@ -3015,24 +3015,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -3048,24 +3030,6 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
-                },
-                "property": "wdt:P144",
-                "limit": 4
               }
             },
             {
@@ -3087,24 +3051,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -3120,24 +3066,6 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 4
               }
             },
             {
@@ -3525,25 +3453,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -3556,25 +3465,6 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
-                },
-                "property": "wdt:P144",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -3601,25 +3491,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -3632,25 +3503,6 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -3917,24 +3769,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -3950,24 +3784,6 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
-                },
-                "property": "wdt:P144",
-                "limit": 4
               }
             },
             {
@@ -3989,24 +3805,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -4022,24 +3820,6 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 4
               }
             },
             {
@@ -4427,25 +4207,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -4458,25 +4219,6 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
-                },
-                "property": "wdt:P144",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -4503,25 +4245,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -4534,25 +4257,6 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -5241,24 +4945,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -5274,24 +4960,6 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
-                },
-                "property": "wdt:P144",
-                "limit": 4
               }
             },
             {
@@ -5313,24 +4981,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -5346,24 +4996,6 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 4
               }
             },
             {
@@ -5448,25 +5080,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -5479,25 +5092,6 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
-                },
-                "property": "wdt:P144",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -5524,25 +5118,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -5555,25 +5130,6 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -6965,24 +6521,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -6998,24 +6536,6 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
-                },
-                "property": "wdt:P144",
-                "limit": 4
               }
             },
             {
@@ -7037,24 +6557,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 4
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -7070,24 +6572,6 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 4
               }
             },
             {
@@ -7172,25 +6656,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-side-stories",
-                "title": {
-                  "de": "Nebengeschichte zu",
-                  "en": "Side story of",
-                  "es": "Historia paralela de",
-                  "fr": "Histoire annexe de",
-                  "ja": "外伝の本編",
-                  "ko": "외전의 본편",
-                  "zh-Hans": "番外篇的本篇",
-                  "zh-Hant": "番外篇的本篇"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -7203,25 +6668,6 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
-                },
-                "property": "wdt:P144",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-adaptations",
-                "title": {
-                  "de": "basiert auf",
-                  "en": "based on",
-                  "es": "basado en",
-                  "fr": "basé sur",
-                  "ja": "派生元",
-                  "ko": "다음에 기반을 두었음",
-                  "zh-Hans": "改编自",
-                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -7248,25 +6694,6 @@
               }
             },
             {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-versions",
-                "title": {
-                  "de": "Andere Erzählfassung",
-                  "en": "Alternative telling",
-                  "es": "Versión narrativa alternativa",
-                  "fr": "Autre interprétation",
-                  "ja": "異なる描き方",
-                  "ko": "다르게 풀어낸 이야기",
-                  "zh-Hans": "不同演绎",
-                  "zh-Hant": "不同演繹"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -7279,25 +6706,6 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 24,
-                "paged": true
-              }
-            },
-            {
-              "type": "OutgoingRelations",
-              "props": {
-                "id": "out-related",
-                "title": {
-                  "de": "Verknüpft (Bangumi)",
-                  "en": "Related (Bangumi)",
-                  "es": "Relacionado (Bangumi)",
-                  "fr": "Associé (Bangumi)",
-                  "ja": "関連（Bangumi）",
-                  "ko": "관련 작품 (Bangumi)",
-                  "zh-Hans": "关联（Bangumi）",
-                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
