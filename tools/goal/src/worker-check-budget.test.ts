@@ -11,10 +11,13 @@ import type { WorkerTasks } from './tasks.ts';
 import {
   admitWorkerCheckHostRun,
   refuseExcessWorkerCheckHostRun,
+  settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostCommandReached,
   workerCheckHostRunsUsed,
   WORKER_CHECK_HOST_BUDGET_REFUSAL,
+  WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
   WORKER_CHECK_HOST_RUN_LIMIT,
 } from './worker-check-budget.ts';
 
@@ -24,8 +27,8 @@ test('a worker attempt may start one check-host run and one rerun; a third reque
   const directory = temporaryDirectory();
   try {
     const budget = workerCheckBudgetDirectory(directory.path, 'task', 1);
-    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 1 });
-    expect(admitWorkerCheckHostRun({ directory: budget, limit: '2' })).toEqual({ ok: true, used: 2 });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 1, stamp: '1' });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: '2' })).toEqual({ ok: true, used: 2, stamp: '2' });
     const third = admitWorkerCheckHostRun({ directory: budget, limit: 2 });
     expect(third).toEqual({
       ok: false,
@@ -51,8 +54,8 @@ test('the count is per attempt and lives in controller state, not the worktree',
     expect(admitWorkerCheckHostRun({ directory: first, limit: 2 }).ok).toBe(true);
     expect(admitWorkerCheckHostRun({ directory: first, limit: 2 }).ok).toBe(true);
     expect(admitWorkerCheckHostRun({ directory: first, limit: 2 }).ok).toBe(false);
-    expect(admitWorkerCheckHostRun({ directory: second, limit: 2 })).toEqual({ ok: true, used: 1 });
-    expect(admitWorkerCheckHostRun({ directory: other, limit: 2 })).toEqual({ ok: true, used: 1 });
+    expect(admitWorkerCheckHostRun({ directory: second, limit: 2 })).toEqual({ ok: true, used: 1, stamp: '1' });
+    expect(admitWorkerCheckHostRun({ directory: other, limit: 2 })).toEqual({ ok: true, used: 1, stamp: '1' });
     expect(workerCheckHostRunsUsed(join(worktree.path, 'runs', 'task', '1.check-host-runs'))).toBe(0);
     expect(first.startsWith(controller.path)).toBe(true);
     expect(first.includes(worktree.path)).toBe(false);
@@ -98,9 +101,9 @@ test('proof-run, registered-proof, acceptance-requiring, urgent and control-plan
   const directory = temporaryDirectory();
   try {
     const budget = workerCheckBudgetDirectory(directory.path, 'urgent', 1);
-    expect(admitWorkerCheckHostRun({ directory: budget, limit: 'off' })).toEqual({ ok: true, used: 1 });
-    expect(admitWorkerCheckHostRun({ directory: budget, limit: 'off' })).toEqual({ ok: true, used: 2 });
-    expect(admitWorkerCheckHostRun({ directory: budget, limit: 'off' })).toEqual({ ok: true, used: 3 });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 'off' })).toEqual({ ok: true, used: 1, stamp: '1' });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 'off' })).toEqual({ ok: true, used: 2, stamp: '2' });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 'off' })).toEqual({ ok: true, used: 3, stamp: '3' });
   } finally {
     directory.close();
   }
@@ -156,7 +159,7 @@ test('status shows checks used per running attempt', async () => {
     db.query("UPDATE worker_tasks SET body=json_set(body, '$.state', 'running') WHERE id=?").run(task.id);
     const live = new WorkerStore(db);
     const budget = workerCheckBudgetDirectory(directory.path, task.id, 1);
-    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 1 });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 1, stamp: '1' });
     const output: string[] = [];
     const code = await runWorkerCommand('status', [task.id], {
       settings: { stateDirectory: directory.path, mainCheckout: directory.path, integrationBranch: 'dev' } as Settings,
@@ -198,6 +201,59 @@ test('the wrapper refuses a third check-host request before it writes a check re
     else process.env.GOAL_WORKER_CHECK_BUDGET = previousBudget;
     if (previousDirectory === undefined) delete process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
     else process.env.GOAL_WORKER_CHECK_BUDGET_DIR = previousDirectory;
+    directory.close();
+  }
+});
+
+test('an infrastructure exit 75 before the check command ran gives its budget stamp back', () => {
+  const directory = temporaryDirectory();
+  try {
+    const budget = workerCheckBudgetDirectory(directory.path, 'task', 1);
+    const env: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    };
+    refuseExcessWorkerCheckHostRun(env, true);
+    expect(env.GOAL_WORKER_CHECK_BUDGET_STAMP).toBe('1');
+    expect(workerCheckHostRunsUsed(budget)).toBe(1);
+    expect(workerCheckHostCommandReached(undefined)).toBe(false);
+    expect(workerCheckHostCommandReached({ resources: { commandStartedMonoMs: null } })).toBe(false);
+    settleWorkerCheckHostBudget(env, WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT, false);
+    expect(workerCheckHostRunsUsed(budget)).toBe(0);
+    expect(readdirSync(budget)).toEqual([]);
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 1, stamp: '1' });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 2, stamp: '2' });
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 }).ok).toBe(false);
+  } finally {
+    directory.close();
+  }
+});
+
+test('runs that reached the check command keep counting, whatever their exit code', () => {
+  const directory = temporaryDirectory();
+  try {
+    const budget = workerCheckBudgetDirectory(directory.path, 'task', 1);
+    const env: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    };
+    expect(workerCheckHostCommandReached({ resources: { commandStartedMonoMs: 12 } })).toBe(true);
+    refuseExcessWorkerCheckHostRun(env, true);
+    settleWorkerCheckHostBudget(env, WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT, true);
+    expect(workerCheckHostRunsUsed(budget)).toBe(1);
+    refuseExcessWorkerCheckHostRun(env, true);
+    for (const code of [0, 1, 70, 124, WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT]) {
+      settleWorkerCheckHostBudget(env, code, true);
+      expect(workerCheckHostRunsUsed(budget)).toBe(2);
+    }
+    settleWorkerCheckHostBudget(env, 1, false);
+    expect(workerCheckHostRunsUsed(budget)).toBe(2);
+    expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({
+      ok: false,
+      used: 2,
+      message: WORKER_CHECK_HOST_BUDGET_REFUSAL,
+    });
+  } finally {
     directory.close();
   }
 });

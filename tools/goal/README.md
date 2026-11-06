@@ -112,6 +112,11 @@ failed. The controller keeps the count per attempt in its state directory, not t
 same attempt is refused before any host is reserved, with a one-line message to finish the outcome and return success
 or a blocker. Proof-run, registered-proof and acceptance-requiring briefs keep their declared checks; urgent and
 control-plane tasks are exempt. `status` shows `checksUsed` and `checkBudget` on each running or waiting attempt.
+A check-host run that ends with infrastructure exit 75 before the check command ran (probe, upload or transport
+failure) gives that stamp back, so it does not count toward the one check and one rerun. The wrapper releases the
+stamp where it records the run's final exit code. A run that reached the check command keeps its stamp, including
+when that command itself exits 75. Two tests pin that release and retention; numbered stamps reuse the lowest free
+integer so giving a stamp back cannot livelock admission.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
 Decision: an owner decision that does not fit the prompt points to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 
