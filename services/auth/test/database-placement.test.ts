@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { FIXTURE_LAUNCH_TIMEOUT, POSTGRES_IMAGE } from '../scripts/database.ts';
+import { COMPILER_DATABASE, FIXTURE_LAUNCH_TIMEOUT, POSTGRES_IMAGE, TEMPLATE_DATABASE } from '../scripts/database.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 const database = resolve(import.meta.dir, '../scripts/database.ts');
@@ -254,6 +254,41 @@ first.close(); second.close();`,
     expect(
       f.events().some((event) => event.args?.includes('CREATE DATABASE lane_copy_1 TEMPLATE rezics_auth_test')),
     ).toBe(true);
+  } finally {
+    f.close();
+  }
+});
+
+test('compiler typecheck reuses the labelled fixture without docker run', async () => {
+  const f = fixture();
+  try {
+    const result = f.run(
+      `
+import { COMPILER_DATABASE, withCompilerSchema } from ${JSON.stringify(database)};
+const url = await withCompilerSchema(
+  { url: ${JSON.stringify(`postgres://fake/${TEMPLATE_DATABASE}?sslmode=disable`)}, container: 'lane', close() {} },
+  async (compiler) => compiler,
+  { kernel() {}, auth() {} },
+);
+if (!url.includes('/' + COMPILER_DATABASE + '?')) throw new Error(url);
+`,
+      {
+        AUTH_CHECK_CONTAINER: 'lane',
+        AUTH_CHECK_LANE_OWNER: String(process.pid),
+        DATABASE_URL: 'postgres://fake/lane',
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toBe('');
+    const docker = f
+      .events()
+      .filter((event) => event.kind === 'docker')
+      .map((event) => event.args ?? []);
+    expect(docker.map((args) => args[0])).not.toContain('run');
+    const sql = docker.flatMap((args) => args.filter((arg) => arg.includes(COMPILER_DATABASE)));
+    expect(sql[0]).toContain(`DROP DATABASE IF EXISTS ${COMPILER_DATABASE} WITH (FORCE)`);
+    expect(sql[1]).toContain(`CREATE DATABASE ${COMPILER_DATABASE}`);
+    expect(sql.at(-1)).toContain(`DROP DATABASE IF EXISTS ${COMPILER_DATABASE} WITH (FORCE)`);
   } finally {
     f.close();
   }

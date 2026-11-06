@@ -2,11 +2,14 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
 
 export const TEMPLATE_DATABASE = 'rezics_auth_test';
+/** Reylo typecheck copy in the labelled Auth fixture; not a second PostgreSQL container. */
+export const COMPILER_DATABASE = 'rezics_compiler';
 export const DEFAULT_RUN_TIMEOUT = 120_000;
 /** Fixture `docker run -d` may pull or wait on a busy daemon; keep other commands at DEFAULT_RUN_TIMEOUT. */
 export const FIXTURE_LAUNCH_TIMEOUT = 600_000;
@@ -51,9 +54,11 @@ function cleanupDocker(args: string[]): string {
 function cleanupOwned(): void {
   const filter = `label=${OWNER_LABEL}=${process.pid}`;
   const containers = cleanupDocker(['ps', '-aq', '--filter', filter]).split('\n').filter(Boolean);
-  if (containers.length) cleanupDocker(['rm', '-f', '-v', ...containers]);
+  // Listing stays on the short cleanup budget. Removal waits on the daemon, so a busy host must not fail a finished
+  // check the way compiler-database `docker rm` did after typecheck.
+  if (containers.length) removeContainerResources(['rm', '-f', '-v', ...containers]);
   const volumes = cleanupDocker(['volume', 'ls', '-q', '--filter', filter]).split('\n').filter(Boolean);
-  if (volumes.length) cleanupDocker(['volume', 'rm', '-f', ...volumes]);
+  if (volumes.length) removeContainerResources(['volume', 'rm', '-f', ...volumes]);
 }
 
 /** Place the whole check: a fixture's loopback URL cannot be handed back from a remote host. */
@@ -119,9 +124,13 @@ export function run(
 // hook budget, and a non-zero `docker rm -f` (already gone, or removal already
 // in progress) then fails the hook. Issue the removal in its own session so the
 // caller can return; a later check still collects a fixture whose owner has exited.
-function removeContainer(id: string): void {
-  const child = spawn('docker', ['rm', '-f', '-v', id], { cwd: directory, detached: true, stdio: 'ignore' });
+function removeContainerResources(args: string[]): void {
+  const child = spawn('docker', args, { cwd: directory, detached: true, stdio: 'ignore' });
   child.unref();
+}
+
+function removeContainer(id: string): void {
+  removeContainerResources(['rm', '-f', '-v', id]);
 }
 
 export function migrate(url: string, migrationsDirectory = 'db/migrations'): void {
@@ -135,6 +144,33 @@ export function migrate(url: string, migrationsDirectory = 'db/migrations'): voi
     '--wait',
     'up',
   ]);
+}
+
+type CompilerMigrators = {
+  kernel?: (url: string) => void;
+  auth?: (url: string) => void;
+};
+
+/**
+ * Reylo typecheck needs kernel and Auth schemas. Create that copy in the labelled Auth fixture instead of starting
+ * another PostgreSQL container whose `docker rm` then races the check host daemon.
+ */
+export async function withCompilerSchema<T>(
+  fixture: TestDatabase,
+  action: (url: string) => Promise<T>,
+  migrators: CompilerMigrators = {},
+): Promise<T> {
+  const url = fixture.url.replace(`/${TEMPLATE_DATABASE}?`, `/${COMPILER_DATABASE}?`);
+  process.stdout.write(`Compiler schema ${COMPILER_DATABASE} on ${fixture.container} pid=${process.pid}\n`);
+  run('docker', laneStatement(fixture.container, `DROP DATABASE IF EXISTS ${COMPILER_DATABASE} WITH (FORCE)`));
+  run('docker', laneStatement(fixture.container, `CREATE DATABASE ${COMPILER_DATABASE}`));
+  try {
+    (migrators.kernel ?? migrateKernel)(url);
+    (migrators.auth ?? migrate)(url);
+    return await action(url);
+  } finally {
+    run('docker', laneStatement(fixture.container, `DROP DATABASE IF EXISTS ${COMPILER_DATABASE} WITH (FORCE)`));
+  }
 }
 
 export function schemaDump(url: string, fixture?: TestDatabase): string {

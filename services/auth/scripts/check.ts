@@ -3,10 +3,17 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
-import { prepareCompilerDatabase } from '../../../scripts/compiler-database.ts';
 import { capture, runLaneSuite } from '../../../scripts/test-lanes.ts';
 import { betterAuthSchemaOptions } from '../src/better-auth.ts';
-import { databaseCheck, migrate, ownDatabase, run, schemaDump, TEMPLATE_DATABASE } from './database.ts';
+import {
+  databaseCheck,
+  migrate,
+  ownDatabase,
+  run,
+  schemaDump,
+  TEMPLATE_DATABASE,
+  withCompilerSchema,
+} from './database.ts';
 
 type CheckPlan = { files: string[] | null; tests: string[] };
 
@@ -83,17 +90,14 @@ if (import.meta.main) {
         await pool.end();
       }
       const env = { ...process.env, AUTH_TEST_DATABASE_URL: database.url };
-      const compilerDatabase = await prepareCompilerDatabase();
-      try {
+      await withCompilerSchema(database, async (compilerUrl) => {
         run(
           resolve('../../node_modules/.bin/tsc'),
           ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
-          { ...env, DATABASE_URL: compilerDatabase.url },
+          { ...env, DATABASE_URL: compilerUrl },
           { timeout: 600_000 },
         );
-      } finally {
-        await compilerDatabase.remove();
-      }
+      });
       run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])], env);
       run(resolve('../../node_modules/.bin/oxfmt'), ['--check', ...(plan.files ?? ['.'])], env);
       if (plan.tests.length > 0) {

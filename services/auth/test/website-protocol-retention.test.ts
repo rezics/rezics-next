@@ -116,10 +116,22 @@ test('one retention invocation removes at most one bounded batch of expired rows
   await seed('due', 1, batch + 20, true);
   expect(await service.internal.pruneExpiredProtocolState(batch)).toBe(kinds.length * batch);
   expect(await counts('due')).toEqual(Object.fromEntries(kinds.map((kind) => [kind, 20])));
+  expect(
+    (await db.admin.query<{ id: string }>('SELECT id FROM "oauthAccessToken" WHERE id=$1', ['due-access-1'])).rows,
+  ).toEqual([]);
+  expect(
+    (await db.admin.query<{ id: string }>('SELECT id FROM "oauthAccessToken" WHERE id=$1', ['due-access-101'])).rows,
+  ).toEqual([{ id: 'due-access-101' }]);
   expect(await service.internal.pruneExpiredProtocolState(batch)).toBe(kinds.length * 20);
   expect(await service.internal.pruneExpiredProtocolState(batch)).toBe(0);
+  expect(
+    (await db.admin.query<{ id: string }>('SELECT id FROM "oauthAccessToken" WHERE id=$1', ['due-access-101'])).rows,
+  ).toEqual([]);
   // Unexpired families stay, including revoked ones: revocation is final until expiry.
   expect(await counts('live')).toEqual(Object.fromEntries(kinds.map((kind) => [kind, 50])));
+  expect(
+    (await db.admin.query<{ id: string }>('SELECT id FROM "oauthAccessToken" WHERE id=$1', ['live-access-1'])).rows,
+  ).toEqual([{ id: 'live-access-1' }]);
   for (const invalid of [0, 1001, 1.5])
     await expect(service.internal.pruneExpiredProtocolState(invalid)).rejects.toThrow(RangeError);
   await db.admin
