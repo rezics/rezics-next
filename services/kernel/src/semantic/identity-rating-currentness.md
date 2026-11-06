@@ -43,13 +43,16 @@ The growth journey fixes the reviewed Subject/control pair while growing unrelat
 
 Visibility repair uses `IdentityRatingParent` as the native Performance boundary. The parent persists the immutable page binding and commit receipt with each effect, verifies the owner incarnation before commit and acknowledgement, and replays those records after an interrupted return. The consumer processes at most 64 work items per page and at most 8 pages per invocation; terminal provenance is reclaimed only after the parent's final-reference check succeeds.
 
+Decision: `createIdentityRatingRepairProducer()` from `identity-rating-repair-producer.ts` and `semantic/index.ts` is the native mapping/obligation producer for Rating identity repair. `hold(tx, page)` on the original voter command locks `core.partition` for that home, classifies at most 64 same-home original-to-visible-terminal mappings, and inserts a retained obligation covering later mapping changes and votes beyond the captured upper key. Empty terminal pages take the same path with no mappings. `complete` binds that obligation to the Rating receipt in the same transaction; a failed handoff rolls the page back. Foreign source or control homes return pending (`semantic-cross-home-repair-hold-required`) so a later one-partition prepare/handoff can extend the port; released `readMapping` observations never implement hold. Composition installs the factory; Rating's module uses it as the production producer. Content still owns vote/effect/receipt/checkpoint writes and adapter acceptance. The two-key `createIdentityRatingCommitParticipant` remains the reviewed same-home vote guard and is not this 64-vote page authority.
+
 ## Retained progress boundary
 
 Decision: native acknowledgement retains the exact page checkpoint; the consumer resumes after an acknowledged nonterminal page and verifies a native tombstone before replaying a reclaimed terminal page.
 
 `IdentityRatingParent` is the minimal native seam on this source. The journal below
-supplies retained-page storage; producer inventory storage, the consumer transaction
-wrapper and moderation scheduling remain producer work.
+supplies retained-page storage. Mapping and retained-obligation authority is
+`createIdentityRatingRepairProducer`. Rating vote inventory and moderation
+scheduling remain Rating's.
 The consumer does not create another rating or erasure writer. Existing parents without
 checkpoint support keep their receipt-based behavior; durable continuations require all
 three native methods described below and `native` metadata on their selected pages.
@@ -104,7 +107,7 @@ and at most one reclamation step. Its ceiling is `8 * 5 + 1 + 1 + 1 = 43` native
 compact terminal replay takes at most two. Failures terminate the invocation; no local
 retry loop repeats IO. Pending paths are prefixes of these finite paths. These are
 consumer bounds; they do not claim the absent producer's SQL/index/trigger bounds.
-The concrete producer must compose its documented per-call bounds with these finite
+The mapping producer composes its documented per-call bounds with these finite
 multiplicities. No quote, prepaid balance or runtime dispatch allowance is required.
 
 ## Native retained-page journal

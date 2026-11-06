@@ -319,6 +319,47 @@ export async function readIdentityRatingEvidenceInTransaction(
   return { state: 'ready', evidence: assembleEvidence(source, control) };
 }
 
+export const IDENTITY_RATING_REPAIR_MAX_ORIGINALS = 64;
+
+/** Same-home repair evidence on the caller's locked command connection. Up to 64 originals. */
+export async function readIdentityRepairEvidenceInTransaction(
+  client: Queryable,
+  input: Readonly<{ originals: readonly string[]; commandHome: number }>,
+): Promise<
+  | Readonly<{ state: 'empty' }>
+  | Readonly<{ state: 'foreign-home' }>
+  | Readonly<{ state: 'ready'; requests: IdentityMappingRequest[]; evidence: IdentityMappingEvidence }>
+> {
+  const originals = [...input.originals];
+  if (originals.length > IDENTITY_RATING_REPAIR_MAX_ORIGINALS)
+    throw new RangeError('Identity rating repair page must contain at most 64 originals');
+  if (!originals.length) return { state: 'empty' };
+  const routes: number[] = [];
+  for (const original of originals) {
+    const route = routeOf(original);
+    if (route === null) throw new TypeError('Identity rating repair requires native routed identities');
+    if (partitionOf(route) !== input.commandHome) return { state: 'foreign-home' };
+    routes.push(route);
+  }
+  const ownerResult = await client.query(owners.sql, [[input.commandHome]]);
+  const sourceRows = (await client.query(sources.sql, [originals, routes])).rows.map(selectedSourceEvidence);
+  const locators = controlLocatorsOf(sourceRows);
+  if (locators.some((locator) => locator.partition !== input.commandHome)) return { state: 'foreign-home' };
+  const control = await controlPhase(client, locators, sourceRows);
+  if (control.owners.some((owner) => owner.partition_no !== input.commandHome)) return { state: 'foreign-home' };
+  return {
+    state: 'ready',
+    requests: originals.map((original) => ({ original, sourceHome: input.commandHome })),
+    evidence: sortedEvidence({
+      sourceOwners: ownerResult.rows as unknown as IdentityOwnerEvidence[],
+      sourceRows,
+      controlOwners: control.owners,
+      pendingRows: control.pending,
+      currentRows: control.current,
+    }),
+  };
+}
+
 /** Pure classifier reused by the transaction participant after it has acquired the native owner fence. */
 export function classifyIdentityRatingReviewEvidence(
   requestedOriginalId: string,

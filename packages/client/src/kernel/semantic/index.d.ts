@@ -11,6 +11,8 @@ export { readIdentityRatingReview } from './identity-adapters/read.ts';
 export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, } from './identity-adapters/read.ts';
 export { createIdentityRatingCommitParticipant, IdentityRatingCommitUnavailableError, } from './identity-rating-commit-participant.ts';
 export type { IdentityRatingCommitHeld, IdentityRatingCommitParticipant, IdentityRatingCommitPreparation, } from './identity-rating-commit-participant.ts';
+export { createIdentityRatingRepairProducer, identityRatingRepairMappingDigest, } from './identity-rating-repair-producer.ts';
+export type { IdentityRatingRepairAuthority, IdentityRatingRepairMapping, IdentityRatingRepairPage, IdentityRatingRepairProducer, IdentityRatingRepairVote, IdentityRatingRepairVoteKey, } from './identity-rating-repair-producer.ts';
 export { readCopyWorkDisclosure, COPY_WORK_DISCLOSURE_LOOKAHEAD, COPY_WORK_DISCLOSURE_MAX_RAW, COPY_WORK_DISCLOSURE_MAX_WORKS, COPY_WORK_PROPERTY, } from './copy-work-disclosure.ts';
 export type { CopyWorkDisclosureDependencies, CopyWorkDisclosureObservation, CopyWorkDisclosureRequest, CopyWorkDisclosureState, CopyWorkReference, } from './copy-work-disclosure-contract.ts';
 export { semanticRetention } from './retention.ts';

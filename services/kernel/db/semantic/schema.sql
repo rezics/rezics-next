@@ -7042,6 +7042,42 @@ CREATE TABLE semantic.identity_rating_repair_page (
 
 
 --
+-- Name: identity_rating_repair_obligation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_rating_repair_obligation (
+    partition_no integer NOT NULL,
+    obligation_id uuid NOT NULL,
+    voter_id uuid NOT NULL,
+    work_id uuid NOT NULL,
+    generation text NOT NULL,
+    page_id uuid NOT NULL,
+    page_digest text NOT NULL,
+    mapping_digest text NOT NULL,
+    mappings jsonb NOT NULL,
+    originals jsonb NOT NULL,
+    through_question_id uuid,
+    through_target_id uuid,
+    owner_node text NOT NULL,
+    owner_epoch integer NOT NULL,
+    state text NOT NULL,
+    later_change boolean DEFAULT false NOT NULL,
+    receipt_transaction_id uuid,
+    CONSTRAINT identity_rating_repair_obligation_generation_check CHECK ((generation ~ '^[1-9][0-9]{0,17}$'::text)),
+    CONSTRAINT identity_rating_repair_obligation_mapping_digest_check CHECK ((mapping_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT identity_rating_repair_obligation_mappings_check CHECK ((octet_length((mappings)::text) <= 65536)),
+    CONSTRAINT identity_rating_repair_obligation_originals_check CHECK ((octet_length((originals)::text) <= 16384)),
+    CONSTRAINT identity_rating_repair_obligation_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_rating_repair_obligation_owner_node_check CHECK (((octet_length(owner_node) >= 1) AND (octet_length(owner_node) <= 256))),
+    CONSTRAINT identity_rating_repair_obligation_page_digest_check CHECK ((page_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT identity_rating_repair_obligation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_rating_repair_obligation_state_check CHECK ((state = ANY (ARRAY['held'::text, 'bound'::text]))),
+    CONSTRAINT identity_rating_repair_obligation_held_receipt_check CHECK (((state = 'held'::text) = (receipt_transaction_id IS NULL))),
+    CONSTRAINT identity_rating_repair_obligation_through_check CHECK (((through_question_id IS NULL) = (through_target_id IS NULL)))
+);
+
+
+--
 -- Name: identity_receiving_capture_pending; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -10188,6 +10224,22 @@ ALTER TABLE ONLY semantic.identity_rating_repair_page
 
 
 --
+-- Name: identity_rating_repair_obligation identity_rating_repair_obligation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_obligation
+    ADD CONSTRAINT identity_rating_repair_obligation_pkey PRIMARY KEY (partition_no, obligation_id);
+
+
+--
+-- Name: identity_rating_repair_obligation identity_rating_repair_obligation_partition_no_voter_id_page_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_obligation
+    ADD CONSTRAINT identity_rating_repair_obligation_partition_no_voter_id_page_id_key UNIQUE (partition_no, voter_id, page_id);
+
+
+--
 -- Name: identity_receiving_capture_pending identity_receiving_capture_pending_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11784,6 +11836,13 @@ CREATE UNIQUE INDEX identity_rating_repair_page_unacknowledged ON semantic.ident
 
 
 --
+-- Name: identity_rating_repair_obligation_originals; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_rating_repair_obligation_originals ON semantic.identity_rating_repair_obligation USING gin (originals);
+
+
+--
 -- Name: identity_receipt_claim_native_command; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -13356,6 +13415,23 @@ CREATE CONSTRAINT TRIGGER identity_epoch_mapping_effect_erasure AFTER INSERT OR 
 --
 -- Name: identity_epoch_mapping_effect identity_epoch_mapping_effect_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
+
+CREATE FUNCTION semantic.touch_identity_rating_repair_obligation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  home integer := (NEW.route / 16);
+BEGIN
+  UPDATE semantic.identity_rating_repair_obligation
+     SET later_change = true
+   WHERE partition_no = home
+     AND state IN ('held', 'bound')
+     AND originals ? NEW.original::text;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER identity_rating_repair_mapping_later_change AFTER INSERT OR UPDATE OF terminal, epoch, control_partition, control_group ON semantic.identity_epoch_mapping FOR EACH ROW EXECUTE FUNCTION semantic.touch_identity_rating_repair_obligation();
 
 CREATE TRIGGER identity_epoch_mapping_effect_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_mapping_effect FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
 

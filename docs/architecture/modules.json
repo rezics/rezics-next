@@ -609,6 +609,7 @@
         "services/kernel/src/semantic/identity-source-consumer-custody.ts",
         "services/kernel/src/semantic/identity-source-consumer-maintenance.ts",
         "services/kernel/src/semantic/identity-source-consumer-ports.ts",
+        "services/kernel/src/semantic/identity-rating-repair-producer.ts",
         "services/kernel/src/semantic/record-purge-authority.ts",
         "services/kernel/src/semantic/record-purge-custody.ts",
         "services/kernel/src/semantic/record-source-set.ts",

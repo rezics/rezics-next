@@ -12,7 +12,9 @@ import {
 import { sourceClassificationRouteDeclarations } from './source-classification-routes.ts';
 import { createSourceClassificationProducer } from './source-classification.ts';
 import { createRatingWorkModule, ratingWorkDeclarations } from './work-module.ts';
+import { createIdentityRatingRepairProducer } from '../semantic/identity-rating-repair-producer.ts';
 import { createRatingIdentityRepairCommands } from './identity-repair.ts';
+import type { RatingIdentityProducer } from './segment-identity-guard.ts';
 import { createVoteCommands } from './votes.ts';
 import { createClassificationBallotCommands } from './classification-ballot.ts';
 import { createRealmRatingQuestion } from './question-authoring.ts';
@@ -62,6 +64,7 @@ export function createRatingModule(options: {
   pool: Pool;
   capabilities: RatingCapabilities;
   definition?: RatingDefinition;
+  producer?: RatingIdentityProducer;
 }) {
   const { pool, capabilities } = options;
   const definition = options.definition ?? createRatingDefinition();
@@ -89,7 +92,10 @@ export function createRatingModule(options: {
       const supplied = dependencies(config);
       return {
         votes: createVoteCommands(supplied),
-        identityRepair: createRatingIdentityRepairCommands(supplied),
+        identityRepair: createRatingIdentityRepairCommands({
+          ...supplied,
+          producer: options.producer ?? createIdentityRatingRepairProducer(),
+        }),
         classifications: createClassificationBallotCommands(supplied),
         providers: createSourceStatisticCommands(supplied),
         sourceClassifications: createSourceClassificationProducer(supplied),

@@ -40,6 +40,18 @@ export type {
   IdentityRatingCommitPreparation,
 } from './identity-rating-commit-participant.ts';
 export {
+  createIdentityRatingRepairProducer,
+  identityRatingRepairMappingDigest,
+} from './identity-rating-repair-producer.ts';
+export type {
+  IdentityRatingRepairAuthority,
+  IdentityRatingRepairMapping,
+  IdentityRatingRepairPage,
+  IdentityRatingRepairProducer,
+  IdentityRatingRepairVote,
+  IdentityRatingRepairVoteKey,
+} from './identity-rating-repair-producer.ts';
+export {
   readCopyWorkDisclosure,
   COPY_WORK_DISCLOSURE_LOOKAHEAD,
   COPY_WORK_DISCLOSURE_MAX_RAW,
