@@ -5,7 +5,7 @@ import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { readReceiptKeyRing } from '../command/receipt-key.ts';
-import { createKernel } from '../http/kernel.ts';
+import { createKernel, realmAwareContentAccess } from '../http/kernel.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from './client.ts';
@@ -42,7 +42,7 @@ export function createWorkerAuthorization(
     access: (mounted) => createAccess({ ...mounted, auth: config.auth, clock: deps.clock }),
     content: { readConsent },
     onAccessReady: (mounted) => {
-      access = mounted;
+      access = realmAwareContentAccess(mounted);
     },
   });
   if (!access) throw new Error('Kernel composition did not supply worker Access');

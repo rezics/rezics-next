@@ -95,6 +95,12 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Test and deployment override for the kernel-registered current Realm role reader. */
     realmRoleReader?: AccessRealmRoleReader;
 };
+/** A Realm's read grant gates every content item on its boards. Bind the
+ * relationship before checkout, then recheck it with both read formulas at T.
+ * Wrapping is identity-preserving: parent Content and worker authorization share
+ * one wrap of the mounted Access.
+ */
+export declare function realmAwareContentAccess(access: Access): Access;
 export declare class KernelAccessCompositionError extends Error {
     constructor();
 }

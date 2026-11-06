@@ -22,7 +22,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createRealmMembership } from '../../../src/community/membership.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
-import { accessCheck } from '../../../src/request/access.ts';
+import { accessCheck, type AccessRealmRoleReader } from '../../../src/request/access.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { assertSetupResponse } from './setup-response.ts';
@@ -196,13 +196,36 @@ async function createNativeContentSystemWithOptions(
     const createFreshAccess: ContentSystem['createFreshAccess'] = (observeJwks) => {
       let fresh: ReturnType<typeof createAccess>;
       let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
-      fresh = createAccess({
-        actions,
-        clock,
-        realmRoleReader: (client, input) => {
+      const realmRoleReader: AccessRealmRoleReader = Object.assign(
+        (client: Parameters<AccessRealmRoleReader>[0], input: Parameters<AccessRealmRoleReader>[1]) => {
           realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
           return realmMembership.roleReader(client, input);
         },
+        {
+          batch: ((client, input) => {
+            realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+            return realmMembership.roleReader.batch!(client, input);
+          }) as NonNullable<AccessRealmRoleReader['batch']>,
+        },
+      );
+      Object.defineProperties(realmRoleReader, {
+        work: {
+          get: () => {
+            realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+            return realmMembership.roleReader.work;
+          },
+        },
+        batchWork: {
+          get: () => {
+            realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+            return realmMembership.roleReader.batchWork;
+          },
+        },
+      });
+      fresh = createAccess({
+        actions,
+        clock,
+        realmRoleReader,
         auth: {
           issuer,
           audience,

@@ -409,6 +409,7 @@ remains explicit advice.
 Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
 suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
 establishes no allowed action. Consumers use supported Access preparations rather than reproduce this formula.
+Parent Kernel Content and worker `createWorkerAuthorization` share one Realm-aware wrap of that mounted Access.
 Decision: resource Access retains an uncertain command with its original caller and transport across departure
 and return; only explicit retry may send it, and a later refusal cannot settle the earlier unknown outcome.
 Session replacement retires its callbacks and private observations; it never lends the replacement session to that command.

@@ -9,6 +9,7 @@ export function deriveAccess(base: Access, overrides: Partial<Access>): Access {
   inheritOriginalAuthenticator(base.authenticate, authenticate);
   const derived: Access = {
     authenticate,
+    ...(base.kindAudience ? { kindAudience: base.kindAudience } : {}),
     ...(base.prepare ? { prepare: base.prepare.bind(base) } : {}),
     ...(base.preparePage ? { preparePage: base.preparePage.bind(base) } : {}),
     ...(base.authorizePage ? { authorizePage: base.authorizePage.bind(base) } : {}),

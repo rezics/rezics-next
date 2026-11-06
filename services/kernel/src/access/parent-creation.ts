@@ -12,6 +12,7 @@ import { type Access, type AccessClient, type AccessContext, type Actor, type Re
 import { partitionOf } from '../route/route.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
+import { deriveAccess } from './derived-access.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import { resourceAuthorization, resourceAuthorizationPage } from './resource-authorization.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
@@ -240,25 +241,21 @@ export function parentCreationAuthorization(input: {
       requireAccessDeadline(deadline);
       if (!bound(attempt)) throw denied();
       let proofDeadline = -Infinity;
-      // One helper per attempt lets the creation wrapper retain the exact evidence
-      // deadline without exposing it or adding creation rights to the generic API.
-      const operand = {
-        authenticate: access.authenticate.bind(access),
-        authorize: access.authorize.bind(access),
-        ...(access.authorizePage ? { authorizePage: access.authorizePage.bind(access) } : {}),
+      // Keep Kind audience, page, explicit and read-decision ports. Wrapping only
+      // scalar prepare drops typed parent-page preparation and its attempt/time
+      // association, so absent evidence would look like a formula denial.
+      const operand = deriveAccess(access, {
         async preparePage(...args: Parameters<NonNullable<Access['preparePage']>>) {
           const evidence = await access.preparePage?.(...args);
           proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
           return evidence;
         },
         async prepare(...args: Parameters<NonNullable<Access['prepare']>>) {
-          // Forward the exact context: its opaque live-attempt admission marker
-          // must reach the installed Access without copying or refreshing twice.
           const evidence = await access.prepare?.(...args);
           proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
           return evidence;
         },
-      };
+      });
       const context = { pool, deadline, partition: partitionOf(resource.route) };
       const authorization =
         input.parent.resourceType === undefined

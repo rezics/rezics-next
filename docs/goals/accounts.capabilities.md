@@ -98,7 +98,12 @@ review/readback or credential effects. Seeded browser and promoted desktop/phone
 
 **Frozen scenarios:** Existing: “actor grant AND consented scope AND principal grant permit the same action and resource”, “revoking only the actor grant denies”, “revoking only client consent denies an already authenticated request”, “revoking only the principal grant denies”, “active explicit denies override each account grant”, “without a principal actor grants and consent suffice”, “suspended and deleted actors fail closed” (`specs/permission-outcomes.test.ts`; native binding: `services/kernel/test/access/permission-outcome.test.ts`).
 
-**Native acceptance:** `bun run --cwd services/kernel check test/access/permission-outcome.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/permission-outcome.test.ts test/access/current-authority-permission.test.ts`.
+The original matrix preserves its assertions and compares each product request against isolated worker composition on
+the same native authority. The focused fixture covers actual publisher board roles and Auth consent, strict sale
+restoration, ordinary grant/revoke, Realm membership join/leave, current Realm bans, anonymous floor, session
+revocation and native membership work receipts. Source coverage alone claims neither an executed pass nor the
+complete Commerce receiving journey or controller-owned browser release.
 
 ## platform-gates
 
