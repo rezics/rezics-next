@@ -364,7 +364,7 @@ export function bulkRoutes(
                 });
               const payload: unknown = await response.json();
               if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
-              const problem = payload as {
+              const payloadProblem = payload as {
                 type: string;
                 title: string;
                 status: number;
@@ -372,8 +372,8 @@ export function bulkRoutes(
                 errors?: unknown[];
                 redirect?: { from: unknown; to: unknown };
               };
-              if (error instanceof SubjectRedirectError) problem.redirect = { from: error.from, to: error.to };
-              results[pending.index] = { key, status: response.status, problem };
+              if (error instanceof SubjectRedirectError) payloadProblem.redirect = { from: error.from, to: error.to };
+              results[pending.index] = { key, status: response.status, problem: payloadProblem };
             }
           }
         } finally {

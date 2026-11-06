@@ -358,15 +358,20 @@ test('named client output is placed before SQL execution and external projects r
       {
         recognize: refused,
         place: (run, env) =>
-          runOnCheckHost(run, env, async (options) => {
-            placements++;
-            expect(options.command).toEqual(['bun', 'scripts/typecheck.ts', ...args]);
-            expect(options.returns).toEqual([
-              KERNEL_CLIENT_OUTPUT.transport,
-              ...(args.length === 2 ? ['services/kernel/db/semantic/schema.sql'] : []),
-            ]);
-            return 23;
-          }),
+          runOnCheckHost(
+            run,
+            env,
+            async (options) => {
+              placements++;
+              expect(options.command).toEqual(['bun', 'scripts/typecheck.ts', ...args]);
+              expect(options.returns).toEqual([
+                KERNEL_CLIENT_OUTPUT.transport,
+                ...(args.length === 2 ? ['services/kernel/db/semantic/schema.sql'] : []),
+              ]);
+              return 23;
+            },
+            refused,
+          ),
         withThrowawayDatabase: async () => {
           throw new Error('local database');
         },
@@ -660,27 +665,30 @@ test('A compiler database remains reachable from the actual selected typecheck p
       delete process.env.KERNEL_DATABASE_CONTAINER;
     }
     try {
-      const status = await runKernelTypecheck({ PATH: process.env.PATH }, {
-        recognize,
-        place: async () => {
-          throw new Error('nested placement');
+      const status = await runKernelTypecheck(
+        { PATH: process.env.PATH },
+        {
+          recognize,
+          place: async () => {
+            throw new Error('nested placement');
+          },
+          withThrowawayDatabase: async (work) => {
+            alive = true;
+            try {
+              return await work({ DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: 'owned-compiler-container' });
+            } finally {
+              alive = false;
+            }
+          },
+          typecheck: async (received) => {
+            seenDuringCompile = alive && received.DATABASE_URL === url;
+            await Bun.sleep(20);
+            expect(alive).toBe(true);
+            expect(received.DATABASE_URL).toBe(url);
+            return 0;
+          },
         },
-        withThrowawayDatabase: async (work) => {
-          alive = true;
-          try {
-            return await work({ DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: 'owned-compiler-container' });
-          } finally {
-            alive = false;
-          }
-        },
-        typecheck: async (received) => {
-          seenDuringCompile = alive && received.DATABASE_URL === url;
-          await Bun.sleep(20);
-          expect(alive).toBe(true);
-          expect(received.DATABASE_URL).toBe(url);
-          return 0;
-        },
-      });
+      );
       expect(status).toBe(0);
       expect(seenDuringCompile).toBe(true);
       expect(alive).toBe(false);

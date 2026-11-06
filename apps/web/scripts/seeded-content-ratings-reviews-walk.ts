@@ -4,6 +4,7 @@
  * persona, seeds the development showcase, starts Auth pages and Web after the seed, then runs the journey from
  * apps/web so root bun-test preloads cannot send it to check hosts. Evidence stays under `.temp/ratings-walk/`.
  */
+import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
@@ -72,7 +73,6 @@ async function run(): Promise<void> {
     process.exit(await child.exited);
   }
 
-  const assert: typeof import('node:assert/strict') = await import('node:assert/strict');
   const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings.ts');
   const pageTypes = installedRatingsPage();
   assert.equal(pageTypes.questionId, QUESTION);

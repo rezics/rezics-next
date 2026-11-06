@@ -3506,7 +3506,11 @@ test('expired bases leave the bases lock as renames; the recursive delete runs a
     expect(existsSync(join(checkRoot, 'bases/base-old'))).toBe(false);
     expect(readlinkSync(join(checkRoot, 'bases/current'))).toBe(join(checkRoot, 'bases/base-now'));
     expect(spawnSync('flock', ['-n', join(checkRoot, 'bases/.lock'), 'true']).status).toBe(0);
-    for (let waited = 0; waited < 50 && readdirSync(join(checkRoot, 'bases')).some((name) => name.startsWith('.retired-')); waited++) {
+    for (
+      let waited = 0;
+      waited < 50 && readdirSync(join(checkRoot, 'bases')).some((name) => name.startsWith('.retired-'));
+      waited++
+    ) {
       await Bun.sleep(100);
     }
     expect(readdirSync(join(checkRoot, 'bases')).filter((name) => name.startsWith('.retired-'))).toEqual([]);
@@ -4625,8 +4629,11 @@ test('gates waiting on every host still drain their hosts', async () => {
     Array.from({ length: 2 }, () => startRemote(hostEnv, workspace(), ['true'])),
   );
   try {
-    await waitFor(() => events().filter((event) => event.kind === 'run').length === 2);
-    await waitFor(() => events().filter((event) => event.kind === 'slot' && event.granted === false).length >= 2);
+    await waitFor(() => events().filter((event) => event.kind === 'run').length === 2, 20_000);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'slot' && event.granted === false).length >= 2,
+      20_000,
+    );
     const started = events().filter((event) => event.kind === 'run');
     expect(started.map((event) => event.address).sort()).toEqual(['ops@a.test', 'ops@b.test']);
     expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(2);

@@ -178,3 +178,6 @@ Decision: leftover History callers import the contract and application public en
 refusing recognizer so they relocate on check hosts; Kernel/Auth map host 75/124/130/143 and placement exceptions to
 infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files. Original native
 acceptance remains open.
+Decision: keep the existing placement composition tests; inject a refusing recognizer into `runOnCheckHost` and skip
+nested-candidate refusal for injected remotes so those tests still relocate on an admitted checkout. Type repairs for
+bulk write payloads and the ratings-walk assert import add no new tests. Original native acceptance remains open.

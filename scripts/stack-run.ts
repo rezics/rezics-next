@@ -204,7 +204,9 @@ export async function runOnCheckHost(
     console.error(`stack-run: ${run.label} already on an approved remote-check run`);
     return null;
   }
-  const checkHostCandidate = isCheckHostRunCandidate(run.cwd);
+  // Nested-candidate refusal applies only to the real remote. Injected remotes still compose hosts
+  // and argv when the suite itself is running inside an admitted checkout.
+  const checkHostCandidate = runRemote === remoteCheck && isCheckHostRunCandidate(run.cwd);
   if (checkHostCandidate)
     console.error(`stack-run: ${run.label} physical run recognition refused (${recognition.reason})`);
   const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
