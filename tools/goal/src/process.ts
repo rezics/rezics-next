@@ -242,6 +242,30 @@ export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[
   }
   return members;
 }
+function noLiveMembersVisible(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('no live members visible');
+}
+/**
+ * Wait out a scan race and init reaping. A kernel-visible group with no live /proc members after the grace is gone:
+ * there is nobody to signal, and treating that leftover as unconfirmed custody left finished workers running.
+ */
+async function checkedProcessGroupAfterZombies(
+  identity: ProcessIdentity,
+  graceMs: number,
+  policy: typeof defaultPolicy.process,
+): Promise<ProcessIdentity[]> {
+  const deadline = Date.now() + Math.max(0, graceMs);
+  for (;;) {
+    try {
+      return checkedProcessGroup(identity);
+    } catch (error) {
+      if (!noLiveMembersVisible(error)) throw error;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return [];
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(policy.exitPollMs, remaining)));
+    }
+  }
+}
 /** Process groups with a live member, from one scan of /proc. */
 export function liveGroups(): Set<number> {
   const groups = new Set<number>();
@@ -413,7 +437,7 @@ export async function terminateProcessGroup(
   policy = defaultPolicy.process,
 ): Promise<void> {
   if (!identity) return;
-  const members = checkedProcessGroup(identity);
+  const members = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
   if (!members.length) return;
   for (const member of members) {
     await signalProcessIdentity(member, 'SIGTERM', policy);
@@ -430,7 +454,7 @@ export async function terminateProcessGroup(
   } finally {
     clearTimeout(timer);
   }
-  const remaining = checkedProcessGroup(identity);
+  const remaining = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
   for (const member of remaining) {
     if (member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start))
       throw new Error('process group identity changed');
@@ -438,7 +462,8 @@ export async function terminateProcessGroup(
   }
   await Promise.all(remaining.map((identity) => waitForProcess(identity, undefined, undefined, policy)));
   await gone;
-  if (checkedProcessGroup(identity).length) throw new Error('worker process group is still alive');
+  if ((await checkedProcessGroupAfterZombies(identity, graceMs, policy)).length)
+    throw new Error('worker process group is still alive');
 }
 /**
  * Stop every process whose working directory is inside a directory, such as a finished attempt's worktree. A dev

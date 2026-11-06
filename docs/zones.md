@@ -118,6 +118,8 @@ another attempt. Trash displays the backend's original `restoreUntil`, removes r
 that deadline, and leaves expiry, write fences and current permissions to the backend. There is no owner
 hard-delete action. All owner reads and commands use the existing session/CSRF handling and private,
 no-store responses. Primary-owner metadata never supplies UI permission.
+Decision: The configuration editor composes delete and restore with the current resource reading, the same CAS basis configuration save consumes. One pending intent holds id, revision, key, operation and CSRF; repeated activation and uncertain retry reuse that sealed request. Acknowledged native revisions are adopted into the loaded head so Delete1 then Restore2 can complete; helper-supplied revisions do not prove the mounted route. Independent drafts survive reconciliation. A new capture admission or session signature remounts the admitted editor so its session cannot keep an ended visit. Native, browser and public-readback acceptance stay on the lifecycle capability row.
+Decision: Zone purge and resource-commands take ACCOUNT_ROLE_BITS from the History public contract index; lifecycle and cleanup keep native grants, terminal ordering and current owner authority. Source-set fixture repair remains Source1c.
 
 The implementation adds code-first TypeBox/Elysia request and response declarations in
 `services/kernel/src/zones/http.ts`. These TypeScript shapes specify that ABI; emit OpenAPI from those

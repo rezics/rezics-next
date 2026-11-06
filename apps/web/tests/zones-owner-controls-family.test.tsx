@@ -658,3 +658,32 @@ test('supplied-data growth stays at 1/8/20 rows with zero render IO and one unch
     await view.close();
   }
 });
+
+test('editor lifecycle controls keep complete delete and restore labels after an acknowledged revision', async () => {
+  const { zoneEditorFixture } = await import('../src/features/zones/editor/fixture');
+  const { ZoneEditorSession } = await import('../src/features/zones/editor/model');
+  const { ZoneConfigurationEditor } = await import('../src/features/zones/editor/view');
+  const fixture = zoneEditorFixture();
+  const session = new ZoneEditorSession(fixture.transport, fixture.initial);
+  const view = await mounted();
+  try {
+    for (const width of [390, 1280]) {
+      await view.show(
+        <div style={{ width }}>
+          <ZoneConfigurationEditor session={session} locale="en" />
+        </div>,
+      );
+      expect(button(view.host, 'Delete zone').disabled).toBe(false);
+    }
+    await act(async () => session.changeLifecycle('delete'));
+    await view.show(
+      <div style={{ width: 390 }}>
+        <ZoneConfigurationEditor session={session} locale="en" />
+      </div>,
+    );
+    expect(button(view.host, 'Restore zone').disabled).toBe(false);
+    expect(session.snapshot().saved?.zone.deletedAt).not.toBeNull();
+  } finally {
+    await view.close();
+  }
+});

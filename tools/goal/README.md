@@ -49,7 +49,8 @@ full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal 
 ordinary edits.
 
 Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
-integration split.
+integration split. Cloned fixtures set a local `user.name`/`user.email` and ignore `node_modules`, so a check host
+without a global Git identity or gitignore can still commit and recreate a task worktree from its branch.
 
 `goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
@@ -84,7 +85,7 @@ Workers do not merge, except that a product worker integrating into dev in its o
 cherry-picks a branch or commit its contract names explicitly.
 If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
 Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
-Decision: task-local Git/worktree preparation (branch heads, leftover and finished-work commits, shared frozen files, missing-worktree recreation and authorized proof captures) lives in `task-workspace.ts`. `WorkerTasks` remains the lifecycle coordinator and delegates that family under the caller's lease and existing store writes. Tests pin those behaviours at the public `WorkerTasks` entry with real Git fixtures rather than mirroring each helper.
+Decision: task-local Git/worktree preparation (branch heads, leftover and finished-work commits, shared frozen files, missing-worktree recreation, authorized proof captures, and making an owned tree writable so Git/cache leftovers can be removed) lives in `task-workspace.ts`. `WorkerTasks` remains the lifecycle coordinator and delegates that family under the caller's lease and existing store writes. Tests pin those behaviours at the public `WorkerTasks` entry with real Git fixtures rather than mirroring each helper.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
@@ -1700,11 +1701,18 @@ until promotion completes; Goal completion still requires every scoped task to b
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
 cancelled worktrees one at a time, under idle I/O priority, after waiting up to 30 seconds for `/proc/pressure/io` to
 report `some avg10` at or below 20 (hosts without that file do not wait); sustained pressure defers the pass and lets a
-later sweep retry. A retry recreates a missing worktree from its task branch and installs its
-dependencies before launch. A permission-denied removal records the offending path and owner when available and sends
-the task manager one durable notice for that path generation. The sweep continues with independent finished tasks; it
-does not retry the blocked path until its ownership, permissions or filesystem identity changes. Cleanup leaves shared
-dependency stores and symlink targets outside the worktree untouched.
+later sweep retry. Before Git unregisters a tree, and again before deleting leftovers, the controller adds owner-write
+on owned directories so a same-owner 0555/0444 remote-check cache is removed rather than left as an operator ticket.
+A retry recreates a missing worktree from its task branch and installs its
+dependencies before launch. Directories under the worktrees root that have no `.git` entry and belong to an integrated,
+merged, cancelled or stopped task, or to no task, are removed in the same pass; a live process cwd inside one keeps
+that directory and reports it once. One task's cleanup failure is recorded with its task id and does not fail the rest
+of the pass; the same failure is reported once, not every hour. `status` reports the current stray directory count and
+bytes reclaimed in the last hour. A permission-denied removal that still fails after the writable rewrite (foreign owner)
+records the offending path and owner when available and sends the task manager one durable notice for that path
+generation. The sweep continues with independent finished tasks; it does not retry the blocked path until its ownership,
+permissions or filesystem identity changes. Cleanup leaves shared dependency stores and symlink targets outside the
+worktree untouched.
 Declared paths never hold a task: tasks that declare the same file run side by side and resolve any overlap when they
 rebase. Only `after:` holds a task.
 
@@ -1764,7 +1772,7 @@ native CLI failure, and stored on the attempt. A usage-limit refusal with a fres
 is retried on the same pool; a spent window, a stale reading, or three refusals within an hour routes the retry to a
 different allowed pool. A provider capacity refusal continues after a short pause, however often it repeats.
 
-A running worker is stalled only when none of these move for `silenceMs` (40 minutes): run-log growth, the worktree branch HEAD, newest mtime of tracked or untracked worktree files (skipping `node_modules` and `.temp`), and CPU time of the worker's process group. Grok and Cursor write their log only on exit, so log silence alone is not a stall. Check-wait time is still subtracted from idle time. Each log event records growth at once, but the HEAD, worktree walk and CPU samples run at most once per `min(silenceCheckMs, silenceMs)`, one at a time per worker, off the host event loop: git runs asynchronously and the walk and process scan yield between entries.
+A running worker is stalled only when none of these move for `silenceMs` (40 minutes): run-log growth, the worktree branch HEAD, newest mtime of tracked or untracked worktree files (skipping `node_modules` and `.temp`), and CPU time of the worker's process group. Grok and Cursor write their log only on exit, so log silence alone is not a stall. Check-wait time is still subtracted from idle time. Each log event records growth at once, but the HEAD, worktree walk and CPU samples run at most once per `min(silenceCheckMs, silenceMs)`, one at a time per worker, off the host event loop: git runs asynchronously and the walk and process scan yield between entries. The first worktree sample, and the first CPU reading, record baselines and start the silence clock when that sample finishes, so a slow walk is not counted as idle time. Idle time is measured at the start of a later sample, so a slow `/proc` scan is not silence. A stall is declared only on a later sample that still shows no movement. A process group that has not yet appeared is still starting: start grace owns that, not stall. A process group that has left `/proc`, or a run log that already reports success, is a finished worker: settlement owns that exit, and a late silence sample does not retract it.
 
 A provider connection drop is classified from the worker's `<log>.err` stream, not from the exit code: Cursor
 `Client network socket disconnected before secure TLS connection was established`; `Connection lost, reconnecting to …`

@@ -118,6 +118,51 @@ export function zoneEditorFixture() {
           reads: {},
         });
       }
+      if (request.method === 'DELETE' && url.pathname === `/v1/zones/${id}`) {
+        if (mode.mutationStatus)
+          return problem(
+            mode.mutationStatus,
+            mode.mutationStatus === 412 ? 'precondition_failed' : 'dependency_unavailable',
+          );
+        const key = request.headers.get('idempotency-key') ?? '';
+        const signature = JSON.stringify([url.pathname, request.headers.get('if-match'), 'delete']);
+        const receipt = receipts.get(key);
+        if (receipt)
+          return receipt.signature === signature
+            ? response({ zone: receipt.value })
+            : problem(422, 'idempotency_conflict');
+        if (request.headers.get('if-match') !== `"${resource.zone.revision}"`)
+          return problem(412, 'precondition_failed');
+        resource.zone.deletedAt = '2026-11-06T00:00:00.000Z';
+        resource.zone.restoreUntil = '2026-12-06T00:00:00.000Z';
+        advance();
+        receipts.set(key, { signature, value: structuredClone(resource.zone) });
+        return response({ zone: resource.zone });
+      }
+      if (
+        request.method === 'POST' &&
+        (url.pathname === `/v1/zones/${id}:restore` || url.pathname === `/v1/zones/${id}/$restore`)
+      ) {
+        if (mode.mutationStatus)
+          return problem(
+            mode.mutationStatus,
+            mode.mutationStatus === 412 ? 'precondition_failed' : 'dependency_unavailable',
+          );
+        const key = request.headers.get('idempotency-key') ?? '';
+        const signature = JSON.stringify([url.pathname, request.headers.get('if-match'), 'restore']);
+        const receipt = receipts.get(key);
+        if (receipt)
+          return receipt.signature === signature
+            ? response({ zone: receipt.value })
+            : problem(422, 'idempotency_conflict');
+        if (request.headers.get('if-match') !== `"${resource.zone.revision}"`)
+          return problem(412, 'precondition_failed');
+        resource.zone.deletedAt = null;
+        resource.zone.restoreUntil = null;
+        advance();
+        receipts.set(key, { signature, value: structuredClone(resource.zone) });
+        return response({ zone: resource.zone });
+      }
       if (request.method === 'PUT' || url.pathname === `/v1/zones/${id}:publish`) {
         if (mode.mutationStatus)
           return problem(
@@ -157,6 +202,46 @@ export function zoneEditorFixture() {
   const transport: Transport = {
     load: () => loadConfiguration(client, id, authorization, readRelease),
     mutate: (input) => mutate(client, authorization, input),
+    lifecycle: async (input) => {
+      if (mode.mutationStatus)
+        return {
+          kind: 'failure',
+          status: mode.mutationStatus,
+          code: mode.mutationStatus === 412 ? 'precondition_failed' : 'dependency_unavailable',
+        };
+      const signature = JSON.stringify([input.operation, input.revision, input.id]);
+      const receipt = receipts.get(input.key);
+      if (receipt)
+        return receipt.signature === signature
+          ? {
+              kind: 'ready',
+              value: {
+                revision: receipt.value.revision,
+                deletedAt: receipt.value.deletedAt,
+                restoreUntil: receipt.value.restoreUntil,
+              },
+            }
+          : { kind: 'failure', status: 422, code: 'idempotency_conflict' };
+      if (input.revision !== resource.zone.revision)
+        return { kind: 'failure', status: 412, code: 'precondition_failed' };
+      if (input.operation === 'delete') {
+        resource.zone.deletedAt = '2026-11-06T00:00:00.000Z';
+        resource.zone.restoreUntil = '2026-12-06T00:00:00.000Z';
+      } else {
+        resource.zone.deletedAt = null;
+        resource.zone.restoreUntil = null;
+      }
+      advance();
+      receipts.set(input.key, { signature, value: structuredClone(resource.zone) });
+      return {
+        kind: 'ready',
+        value: {
+          revision: resource.zone.revision,
+          deletedAt: resource.zone.deletedAt,
+          restoreUntil: resource.zone.restoreUntil,
+        },
+      };
+    },
     preview: (route) => preview(client, authorization, id, route, 'en'),
     collections: (cursor) => collections(client, authorization, cursor),
   };

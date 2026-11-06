@@ -13,10 +13,7 @@ not evidence that the capabilities have passed.
 
 Decision: Published Log public lifecycle acceptance stays on the seven existing Log operation/growth/retention/source
 suites and the five retained Search scope/work-context suites, plus affected Web log tests. FULL withhold of a changed
-Source and the My Logs history-state return frontier are pinned on those suites. The public Back link uses a
-cursor-free My Logs address. An ordinary click restores history only when bound to the captured My Logs visit for
-this log and current session; a direct visit follows that address. History length alone does not identify the
-return visit. Session replacement uses current admission when recovering the list. Full native Auth walk,
+Source and the My Logs history-state return frontier are pinned on those suites. Full native Auth walk,
 64/512/4096 growth and rendered 720-hour retention remain open until observed passing. Verification.md keeps general
 check policy; these suites and the deferred native walk live here and in Library owners. Fewest tests: extend
 operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin. A retired completed
@@ -235,28 +232,6 @@ delete of `operation_outputs` with unit cascade copies. Measured nonempty batche
 plus two control. Explicit Imports driver bindings use repo-relative paths in command argv, resolved on admitted
 remote checkouts; the frozen suite receives an absolute path.
 
-Decision: the passing Work retention series establishes its measured unit-cascade and operation-output cases.
-Complete cleanup cost acceptance remains open for independently growing admitted event, event-history,
-notification and stream copies and payload bytes. The current Work derivation records that growing those cascades
-failed its linear block assertion, then held them constant. Restore those axes in the existing native suites and
-correct the violated derivation or growth classification using native plans and a derived work envelope. Keep
-physical packing effects and raw diagnostics visible; a smaller fixture cannot establish the missing bound.
-
-Decision: Auth retirement fixtures require the real versioned terminal consumer proof before request deletion;
-synthetic maintenance requests remain recoverable. Healthy native growth evidence alone does not bound an
-invocation whose SDK closure retries connection failures indefinitely. The supported producer must expose finite
-caller-funded attempt ceilings and an absolute deadline covering connection admission, dispatch, native waits,
-backoff and reconciliation. Reserve before every dispatch and retain failed work and the original closure identity
-for resumption after uncertainty. Prove interrupted closure and lost-response recovery through the real maintenance
-consumer, separately from healthy 256/1,024/4,096 selection and deletion growth. Recovery continues from durable
-custody on a later funded invocation; a timeout cannot manufacture retirement or absence.
-
-Decision: installed Rating repair cost receiving consumes Semantic's exact mapping/retained-obligation producer
-and Content's installed composition. Complete native accounting includes producer preparation, holds, handoff,
-rollback, replay, empty completion and durable future-custody work in the original operation context. Independently
-vary unrelated voters, retained history and current input at 256/1,024/4,096. The injected seam evidence below
-remains narrower than installed composition acceptance.
-
 Decision: independently grow unrelated voters, same-voter retained withdrawal receipts and voter input at
 256/1,024/4,096 while fixing the other axes at 256 and the selected nonempty page at the owner limit of 64;
 empty completion grows later input beyond the admitted upper key.
@@ -273,13 +248,8 @@ resumption, and withdrawal verifies that repeated cancellation retains the prior
 These are Rating transaction/page seam scenarios with an explicitly injected producer fixture. The production
 unavailable-producer scenario must stay pending with unchanged selection/checkpoint and no effects or receipt;
 local withdrawal uses no producer. Production Semantic exact currentness and held obligations remain unavailable
-in ordinary composition: `rating/module.ts` supplies no identity producer, and `identity-repair.ts` defaults to
-`unavailableRatingIdentityProducer`. Content owns completing the installed repair with Semantic's native mapping
-and retained-obligation authority; Performance receives its complete nested cost and independent growth evidence.
-Acceptance requires native admission through the empty terminal receipt, counted effects and checkpoint readback,
-including identity changes, rollback and same-input recovery. Injected success or permanent pending cannot establish
-that outcome. The suite is registered for future acceptance; no native pass follows from a preparation failure or
-from its presence in this inventory.
+and separately owned. The suite is registered for future acceptance; no native pass follows from a preparation
+failure or from its presence in this inventory.
 
 Use these explicit groups through their existing workspace runners; each group contains at most twelve files.
 These commands specify future acceptance, with no execution or promotion claim:

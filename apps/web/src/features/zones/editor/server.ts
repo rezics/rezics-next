@@ -7,7 +7,20 @@ import type { SessionEnv } from '../../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
 import { readRelease } from '../../../subject/definitions';
 import { caught, collections, loadConfiguration, mutate, preview } from './api';
-import { unavailable, validRevision, type Loaded, type Mutation } from './model';
+import {
+  changeZoneLifecycle,
+  type ZoneLifecycleClient,
+  type ZoneLifecycleResult,
+} from '../../catalogue/lifecycle-zone-commands.ts';
+import {
+  unavailable,
+  validRevision,
+  type LifecycleMutation,
+  type LifecycleReading,
+  type Loaded,
+  type Mutation,
+  type Result,
+} from './model';
 import type { OwnerReadObservation } from './owner-lifetime';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -72,6 +85,63 @@ export const readConfiguration = createServerFn({ method: 'GET', strict: false }
       );
     } catch (error) {
       return observed(noResource(caught(error)), prepared?.ownerObservation);
+    }
+  });
+const lifecycleStatus = {
+  denied: 403,
+  missing: 404,
+  conflict: 412,
+  invalid: 400,
+  unavailable: 503,
+} as const;
+const lifecycleCode = {
+  denied: 'forbidden',
+  missing: 'not_found',
+  conflict: 'precondition_failed',
+  invalid: 'invalid_request',
+  unavailable: 'dependency_unavailable',
+} as const;
+function lifecycleResult(result: ZoneLifecycleResult): Result<LifecycleReading> {
+  if (result.ok)
+    return {
+      kind: 'ready',
+      value: { revision: result.revision, deletedAt: result.deletedAt, restoreUntil: result.restoreUntil },
+    };
+  return { kind: 'failure', status: lifecycleStatus[result.reason], code: lifecycleCode[result.reason] };
+}
+export const writeLifecycle = createServerFn({ method: 'POST', strict: false })
+  .validator((value: Omit<LifecycleMutation, 'csrf'> & { locale: string } & OwnerRequest) => {
+    input(value);
+    if (
+      !validRevision(value.revision) ||
+      !/^[0-9a-f-]{36}$/.test(value.key) ||
+      (value.operation !== 'delete' && value.operation !== 'restore')
+    )
+      throw new Error('Invalid Zone lifecycle');
+    return { ...value, ...ownerRequest(value) };
+  })
+  .handler(async ({ data }): Promise<Result<LifecycleReading>> => {
+    let prepared: Awaited<ReturnType<typeof preparedReader>> | null = null;
+    try {
+      prepared = await preparedReader(data);
+      if (!prepared) return denied;
+      return observed(
+        lifecycleResult(
+          await changeZoneLifecycle(
+            kernelClient(data.locale) as unknown as ZoneLifecycleClient,
+            prepared.authorization,
+            {
+              id: data.id,
+              revision: data.revision,
+              key: data.key,
+              operation: data.operation,
+            },
+          ),
+        ),
+        prepared.ownerObservation,
+      );
+    } catch (error) {
+      return observed(caught(error), prepared?.ownerObservation);
     }
   });
 export const writeConfiguration = createServerFn({ method: 'POST' })

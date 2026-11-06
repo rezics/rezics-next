@@ -2,7 +2,16 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
-import type { Loaded, Mutation, Preview, Result, Transport, ZoneOwned } from '../src/features/zones/editor/model';
+import type {
+  LifecycleMutation,
+  LifecycleReading,
+  Loaded,
+  Mutation,
+  Preview,
+  Result,
+  Transport,
+  ZoneOwned,
+} from '../src/features/zones/editor/model';
 import type { OwnerReadObservation } from '../src/features/zones/editor/owner-lifetime';
 import type { CommandOutcome, ListOutcome } from '../src/features/zones/manage/model';
 
@@ -26,6 +35,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: (...args: Parameters<typeof window.scrollTo>) => window.scrollTo(...args),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -47,16 +57,24 @@ type ReadData = { id: string; locale: string; expectedReader?: string; admission
 type ReadChoicesData = { locale: string; cursor: string; expectedReader?: string; admission?: string };
 type PreviewData = ReadData & { route: string };
 type WriteData = Mutation & { locale: string; expectedReader?: string; admission?: string };
+type LifecycleData = Omit<LifecycleMutation, 'csrf'> & {
+  locale: string;
+  expectedReader?: string;
+  admission?: string;
+};
 type OwnedReadArgs<T> = { data: T; headers?: Record<string, string> };
 
 let backendViewer: Viewer = { state: 'signed-in', subject: 'A', csrfToken: null };
 let nextEditorRead: ReturnType<typeof deferred<Loaded>> | undefined;
 let nextEditorWrite: 'unavailable' | undefined;
 let heldEditorWrite: ReturnType<typeof deferred<Result<ZoneOwned>>> | undefined;
+let nextEditorLifecycle: 'unavailable' | undefined;
+let heldEditorLifecycle: ReturnType<typeof deferred<Result<LifecycleReading>>> | undefined;
 let delayedPreview: ReturnType<typeof deferred<Preview>> | undefined;
 let delayedChoices: ReturnType<typeof deferred<Loaded['options']['collections']>> | undefined;
 const editorReads: ReadData[] = [];
 const editorWrites: { data: WriteData; csrf: string | undefined }[] = [];
+const editorLifecycles: { data: LifecycleData; csrf: string | undefined }[] = [];
 const editorPreviews: PreviewData[] = [];
 const editorChoices: ReadChoicesData[] = [];
 const editorFixtureModule = await import('../src/features/zones/editor/fixture');
@@ -141,6 +159,45 @@ const editorServer = {
       };
     } else editorLoaded = { ...editorLoaded, resource: { kind: 'ready', value: { ...saved, zone } } };
     return { kind: 'ready', value: zone, ownerObservation: observation };
+  },
+  writeLifecycle: async ({ data, headers }: OwnedReadArgs<LifecycleData>): Promise<Result<LifecycleReading>> => {
+    editorLifecycles.push({ data, csrf: headers?.['X-CSRF-Token'] });
+    const observation = responseObservation(data);
+    if (
+      !observation ||
+      !backendViewer.csrfToken ||
+      headers?.['X-CSRF-Token'] !== backendViewer.csrfToken ||
+      !/^[A-Za-z0-9_-]{22}$/.test(headers?.['X-CSRF-Token'] ?? '')
+    )
+      return { kind: 'failure', status: 403, code: 'forbidden' };
+    if (heldEditorLifecycle) {
+      const pending = heldEditorLifecycle;
+      heldEditorLifecycle = undefined;
+      return pending.promise;
+    }
+    if (nextEditorLifecycle === 'unavailable') {
+      nextEditorLifecycle = undefined;
+      return { kind: 'failure', status: 503, code: 'dependency_unavailable', ownerObservation: observation };
+    }
+    if (editorLoaded.resource.kind !== 'ready') return { kind: 'failure', status: 404, code: 'not_found' };
+    const saved = editorLoaded.resource.value;
+    if (data.revision !== saved.zone.revision)
+      return { kind: 'failure', status: 412, code: 'precondition_failed', ownerObservation: observation };
+    const revision = (BigInt(saved.zone.revision) + 1n).toString();
+    const deleted = data.operation === 'delete';
+    const zone: ZoneOwned = {
+      ...saved.zone,
+      id: data.id,
+      revision,
+      deletedAt: deleted ? '2026-11-06T00:00:00.000Z' : null,
+      restoreUntil: deleted ? '2026-12-06T00:00:00.000Z' : null,
+    };
+    editorLoaded = { ...editorLoaded, resource: { kind: 'ready', value: { ...saved, zone } } };
+    return {
+      kind: 'ready',
+      value: { revision: zone.revision, deletedAt: zone.deletedAt, restoreUntil: zone.restoreUntil },
+      ownerObservation: observation,
+    };
   },
   readSavedPreview: async ({ data }: OwnedReadArgs<PreviewData>): Promise<Preview> => {
     editorPreviews.push(data);
@@ -318,11 +375,12 @@ function CreateRoutePage() {
   const location = useLocation();
   const { lifetime, snapshot } = useOwnerLifetime(location.pathname + JSON.stringify(location.search));
   const navigate = useNavigate();
+  const session = state === 'unknown' && backendViewer.state === 'signed-in' ? 'signed-in' : state;
   return (
     <CreateZone
       key={`${location.pathname}:${snapshot.incarnation}`}
       locale="en"
-      session={state}
+      session={session}
       owner={lifetime}
       onCreate={createZone}
       onNavigate={(href) => {
@@ -363,15 +421,31 @@ const router = createRouter({
 const queryClient = router.options.context.queryClient;
 const navigations: string[] = [];
 
+async function withActBudget<T>(work: () => Promise<T>, ms = 2000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Mounted Zone journey did not settle')), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 const settle = async (action: () => void | Promise<void>) =>
-  act(async () => {
-    await action();
+  withActBudget(() =>
+    act(async () => {
+      await action();
+    }),
+  );
+const flush = async () =>
+  withActBudget(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   });
-const flush = async () => {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-};
 async function until(predicate: () => boolean) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if (predicate()) return;
@@ -400,13 +474,23 @@ function starterSelector(host: HTMLElement): string {
   );
   return `select[id="${label?.htmlFor ?? ''}"]`;
 }
+function reactProps(element: Element): { [name: string]: unknown } | undefined {
+  for (const node of [element, ...element.querySelectorAll('*')]) {
+    const key = Object.keys(node).find((entry) => entry.startsWith('__reactProps$'));
+    if (key) return Reflect.get(element, key) as { [name: string]: unknown };
+  }
+  return undefined;
+}
 function setInput(host: HTMLElement, selector: string, value: string) {
   const target = host.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
   if (!target) throw new Error(`Missing input: ${selector}`);
+  const onChange = reactProps(target)?.onChange;
   target.value = value;
-  target.dispatchEvent(
-    new window.Event(target instanceof window.HTMLSelectElement ? 'change' : 'input', { bubbles: true }),
-  );
+  if (typeof onChange === 'function') onChange({ target, currentTarget: target });
+  else
+    target.dispatchEvent(
+      new window.Event(target instanceof window.HTMLSelectElement ? 'change' : 'input', { bubbles: true }),
+    );
 }
 function signedIn(subject: string, csrfToken: string | null): Viewer {
   return { state: 'signed-in', subject, csrfToken };
@@ -429,136 +513,152 @@ test('mounted My Zones to publish journey keeps async state in its original read
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
-  await settle(() =>
-    root.render(
-      <StrictMode>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </StrictMode>,
-    ),
-  );
-  await until(() => host.textContent?.includes(m.zones_owner_title({}, { locale: 'en' })) ?? false);
+  try {
+    await settle(() =>
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </StrictMode>,
+      ),
+    );
+    await until(() => host.textContent?.includes(m.zones_owner_title({}, { locale: 'en' })) ?? false);
 
-  expect(listCalls).toHaveLength(1);
-  expect(managed.calls.length - apiCallsBefore).toBe(1);
-  expect(button(host, m.zones_owner_trash_action({}, { locale: 'en' })).disabled).toBe(true);
+    expect(listCalls).toHaveLength(1);
+    expect(managed.calls.length - apiCallsBefore).toBe(1);
+    expect(button(host, m.zones_owner_trash_action({}, { locale: 'en' })).disabled).toBe(true);
 
-  backendViewer = signedIn('A', csrfA);
-  await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => router.invalidate());
-  await until(
-    () => !!host.querySelector('button') && !button(host, m.zones_owner_trash_action({}, { locale: 'en' })).disabled,
-  );
-  await settle(() => button(host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
-  await settle(confirmTrash);
-  await until(() => lifecycleCalls.length === 1);
-  await until(() => host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false);
-  await settle(() => button(host, m.zones_owner_retry({}, { locale: 'en' })).click());
-  await until(() => lifecycleCalls.length === 2);
-  expect(lifecycleCalls[1]!.command).toEqual(lifecycleCalls[0]!.command);
-  const lifecycleRequests = managed.calls.filter((call) => call.path === `/v1/zones/${fixtureZoneId}`);
-  expect(lifecycleRequests.slice(-2).map((call) => [call.key, call.match, call.method])).toEqual([
-    [lifecycleRequests.at(-2)!.key, '"3"', 'DELETE'],
-    [lifecycleRequests.at(-2)!.key, '"3"', 'DELETE'],
-  ]);
+    backendViewer = signedIn('A', csrfA);
+    await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => router.invalidate());
+    await until(
+      () => !!host.querySelector('button') && !button(host, m.zones_owner_trash_action({}, { locale: 'en' })).disabled,
+    );
+    await settle(() => button(host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+    await settle(confirmTrash);
+    await until(() => lifecycleCalls.length === 1);
+    await until(() => host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false);
+    await settle(() => button(host, m.zones_owner_retry({}, { locale: 'en' })).click());
+    await until(() => lifecycleCalls.length === 2);
+    expect(lifecycleCalls[1]!.command).toEqual(lifecycleCalls[0]!.command);
+    const lifecycleRequests = managed.calls.filter((call) => call.path === `/v1/zones/${fixtureZoneId}`);
+    expect(lifecycleRequests.slice(-2).map((call) => [call.key, call.match, call.method])).toEqual([
+      [lifecycleRequests.at(-2)!.key, '"3"', 'DELETE'],
+      [lifecycleRequests.at(-2)!.key, '"3"', 'DELETE'],
+    ]);
 
-  await settle(() => router.navigate({ to: '/my/zones/new' }));
-  await until(() => !!host.querySelector(starterSelector(host)));
-  await settle(() => setInput(host, starterSelector(host), 'book'));
-  await settle(() => setInput(host, '#zone-label-en', 'Field Notes'));
-  await settle(() => button(host, m.zones_create_submit({}, { locale: 'en' })).click());
-  await until(() => createCalls.length === 1);
-  await until(() => navigations.length === 1);
-  expect(createCalls[0]!.command.key).toMatch(/^[0-9a-f-]{36}$/);
-  expect(navigations).toEqual([`/en/my/zones/${fixtureZoneId}/edit`]);
-  await until(() => host.querySelector('#zone-label-en') !== null);
+    await settle(() => router.navigate({ to: '/my/zones/new' }));
+    await until(() => !!host.querySelector(starterSelector(host)));
+    await settle(() => setInput(host, starterSelector(host), 'book'));
+    await settle(() => setInput(host, '#zone-label-en', 'Field Notes'));
+    await settle(() => button(host, m.zones_create_submit({}, { locale: 'en' })).click());
+    await until(() => createCalls.length === 1);
+    await until(() => navigations.length === 1);
+    expect(createCalls[0]!.command.key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(navigations).toEqual([`/en/my/zones/${fixtureZoneId}/edit`]);
+    await until(() => host.querySelector('#zone-label-en') !== null);
 
-  const loadedLabel = host.querySelector<HTMLInputElement>('#zone-label-en')!.value;
-  await settle(() => setInput(host, '#zone-label-en', 'Same-reader draft to retire'));
-  backendViewer = signedIn('A', null);
-  await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => router.invalidate());
-  await until(() => host.querySelector('#zone-label-en') !== null);
-  expect(host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe(loadedLabel);
-  expect(button(host, m.zone_editor_save()).disabled).toBe(true);
-  expect(button(host, m.zone_editor_publish()).disabled).toBe(true);
-  expect(button(host, m.zone_editor_preview()).disabled).toBe(false);
-  expect(button(host, m.zone_editor_more()).disabled).toBe(false);
-  await settle(() => button(host, m.zone_editor_preview()).click());
-  await until(() => editorPreviews.length === 1);
-  expect(editorPreviews[0]!.expectedReader).toBe('A');
-  await until(() => host.textContent?.includes(m.zone_preparing_message()) ?? false);
-  await settle(() => button(host, m.zone_editor_more()).click());
-  await until(() => editorChoices.length === 1);
-  expect(editorChoices[0]!.expectedReader).toBe('A');
-  await until(() => host.textContent?.includes('Later collection') ?? false);
+    const loadedLabel = host.querySelector<HTMLInputElement>('#zone-label-en')!.value;
+    await settle(() => setInput(host, '#zone-label-en', 'Same-reader draft to retire'));
+    backendViewer = signedIn('A', null);
+    await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => router.invalidate());
+    await until(() => host.querySelector('#zone-label-en') !== null);
+    expect(host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe(loadedLabel);
+    expect(button(host, m.zone_editor_save()).disabled).toBe(true);
+    expect(button(host, m.zone_editor_publish()).disabled).toBe(true);
+    expect(button(host, m.zone_editor_preview()).disabled).toBe(false);
+    expect(button(host, m.zone_editor_more()).disabled).toBe(false);
+    await settle(() => button(host, m.zone_editor_preview()).click());
+    await until(() => editorPreviews.length === 1);
+    expect(editorPreviews[0]!.expectedReader).toBe('A');
+    await until(() => host.textContent?.includes(m.zone_preparing_message()) ?? false);
+    await settle(() => button(host, m.zone_editor_more()).click());
+    await until(() => editorChoices.length === 1);
+    expect(editorChoices[0]!.expectedReader).toBe('A');
+    await until(() => host.textContent?.includes('Later collection') ?? false);
 
-  backendViewer = signedIn('A', csrfB);
-  await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => router.invalidate());
-  await until(() => !!host.querySelector('#zone-label-en') && button(host, m.zone_editor_save()).disabled);
-  await settle(() => setInput(host, '#zone-label-en', 'Saved notes'));
-  nextEditorWrite = 'unavailable';
-  await settle(() => button(host, m.zone_editor_save()).click());
-  await until(() => editorWrites.length === 1 && !host.querySelector('[aria-busy="true"]'));
-  expect(editorWrites[0]!.csrf).toBe(csrfB);
-  await settle(() => button(host, m.zone_editor_save()).click());
-  await until(() => editorWrites.length === 2 && host.textContent?.includes(m.zone_editor_saved()) === true);
-  expect(editorWrites[1]!.data.key).toBe(editorWrites[0]!.data.key);
-  expect(editorWrites[1]!.data.revision).toBe(editorWrites[0]!.data.revision);
+    backendViewer = signedIn('A', csrfB);
+    await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => router.invalidate());
+    await until(() => !!host.querySelector('#zone-label-en') && button(host, m.zone_editor_save()).disabled);
+    await settle(() => setInput(host, '#zone-label-en', 'Saved notes'));
+    nextEditorWrite = 'unavailable';
+    await settle(() => button(host, m.zone_editor_save()).click());
+    await until(() => editorWrites.length === 1 && !host.querySelector('[aria-busy="true"]'));
+    expect(editorWrites[0]!.csrf).toBe(csrfB);
+    await settle(() => button(host, m.zone_editor_save()).click());
+    await until(() => editorWrites.length === 2 && host.textContent?.includes(m.zone_editor_saved()) === true);
+    expect(editorWrites[1]!.data.key).toBe(editorWrites[0]!.data.key);
+    expect(editorWrites[1]!.data.revision).toBe(editorWrites[0]!.data.revision);
 
-  await settle(() => setInput(host, '#zone-label-en', 'Uncertain draft to retire'));
-  nextEditorWrite = 'unavailable';
-  await settle(() => button(host, m.zone_editor_save()).click());
-  await until(() => editorWrites.length === 3 && !host.querySelector('[aria-busy="true"]'));
-  const retiredRetryKey = editorWrites[2]!.data.key;
-  backendViewer = signedIn('A', csrfC);
-  await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => router.invalidate());
-  await until(
-    () =>
-      host.querySelector<HTMLInputElement>('#zone-label-en')?.value === 'Saved notes' &&
-      button(host, m.zone_editor_save()).disabled,
-  );
-  await settle(() => setInput(host, '#zone-label-en', 'Saved notes refreshed'));
-  await settle(() => button(host, m.zone_editor_save()).click());
-  await until(() => editorWrites.length === 4 && !host.querySelector('[aria-busy="true"]'));
-  expect(editorWrites[3]!.data.key).not.toBe(retiredRetryKey);
-  expect(editorWrites[3]!.csrf).toBe(csrfC);
+    await settle(() => setInput(host, '#zone-label-en', 'Uncertain draft to retire'));
+    nextEditorWrite = 'unavailable';
+    await settle(() => button(host, m.zone_editor_save()).click());
+    await until(() => editorWrites.length === 3 && !host.querySelector('[aria-busy="true"]'));
+    const retiredRetryKey = editorWrites[2]!.data.key;
+    backendViewer = signedIn('A', csrfC);
+    await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => router.invalidate());
+    await until(
+      () =>
+        host.querySelector<HTMLInputElement>('#zone-label-en')?.value === 'Saved notes' &&
+        button(host, m.zone_editor_save()).disabled,
+    );
+    await settle(() => setInput(host, '#zone-label-en', 'Saved notes refreshed'));
+    await settle(() => button(host, m.zone_editor_save()).click());
+    await until(() => editorWrites.length === 4 && !host.querySelector('[aria-busy="true"]'));
+    expect(editorWrites[3]!.data.key).not.toBe(retiredRetryKey);
+    expect(editorWrites[3]!.csrf).toBe(csrfC);
 
-  await settle(() => setInput(host, '#zone-visibility', 'public'));
-  await settle(() => button(host, m.zone_editor_publish()).click());
-  await until(() => host.textContent?.includes(m.zone_editor_published()) ?? false);
-  expect(editorWrites.at(-1)!.data.operation).toBe('publish');
-  expect(editorWrites.at(-1)!.csrf).toBe(csrfC);
+    await settle(() => setInput(host, '#zone-visibility', 'public'));
+    await settle(() => button(host, m.zone_editor_publish()).click());
+    await until(() => host.textContent?.includes(m.zone_editor_published()) ?? false);
+    expect(editorWrites.at(-1)!.data.operation).toBe('publish');
+    expect(editorWrites.at(-1)!.csrf).toBe(csrfC);
 
-  const oldReader = queryClient.getQueryData(sessionQuery.queryKey) as Viewer;
-  backendViewer = signedIn('B', null);
-  await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => router.invalidate());
-  await until(() => host.querySelector('#zone-label-en') !== null);
-  expect(host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe('Saved notes refreshed');
-  expect(button(host, m.zone_editor_save()).disabled).toBe(true);
-  expect(oldReader.subject).toBe('A');
+    const oldReader = queryClient.getQueryData(sessionQuery.queryKey) as Viewer;
+    backendViewer = signedIn('B', null);
+    await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => router.invalidate());
+    await until(() => host.querySelector('#zone-label-en') !== null);
+    expect(host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe('Saved notes refreshed');
+    expect(button(host, m.zone_editor_save()).disabled).toBe(true);
+    expect(oldReader.subject).toBe('A');
 
-  await settle(() => router.navigate({ to: '/my/zones/new' }));
-  await until(() => !!host.querySelector(starterSelector(host)));
-  backendViewer = signedIn('B', csrfB);
-  await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => setInput(host, starterSelector(host), 'book'));
-  await settle(() => setInput(host, '#zone-label-en', 'Late draft'));
-  const lateCreate = deferred<CommandOutcome>();
-  delayedCreateOutcome = lateCreate;
-  await settle(() => button(host, m.zones_create_submit({}, { locale: 'en' })).click());
-  await until(() => createCalls.length === 2);
-  await settle(() => router.navigate({ to: '/my/zones' }));
-  await until(() => host.textContent?.includes(m.zones_owner_title({}, { locale: 'en' })) ?? false);
-  lateCreate.resolve({ kind: 'saved', zone: fixtureZone(), ownerObservation: createCalls.at(-1)!.capture });
-  await flush();
-  expect(navigations).toHaveLength(1);
-  await settle(() => root.unmount());
-});
+    await settle(() => void router.navigate({ to: '/my/zones/new' }));
+    await until(() => !!host.querySelector(starterSelector(host)));
+    backendViewer = signedIn('B', csrfB);
+    await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
+    await settle(() => setInput(host, starterSelector(host), 'book'));
+    await settle(() => setInput(host, '#zone-label-en', 'Late draft'));
+    const lateCreate = deferred<CommandOutcome>();
+    delayedCreateOutcome = lateCreate;
+    await settle(() => button(host, m.zones_create_submit({}, { locale: 'en' })).click());
+    await until(() => createCalls.length === 2);
+    await settle(() => void router.navigate({ to: '/my/zones' }));
+    await until(() => host.textContent?.includes(m.zone_editor_leave()) ?? false);
+    await settle(() => button(host, m.zone_editor_discard()).click());
+    await until(() => {
+      try {
+        return !!button(host, m.zones_owner_trash_action({}, { locale: 'en' }));
+      } catch {
+        return false;
+      }
+    });
+    lateCreate.resolve({ kind: 'saved', zone: fixtureZone(), ownerObservation: createCalls.at(-1)!.capture });
+    await flush();
+    expect(navigations).toHaveLength(1);
+  } finally {
+    try {
+      root.unmount();
+    } catch {
+      /* already unmounted */
+    }
+    host.remove();
+  }
+}, 30_000);
 
 test('ZoneEditorSession ignores delayed results after error, removal, replacement, ABA, and unmount', async () => {
   const phases = ['load', 'write', 'retry-read', 'preview', 'choices'] as const;
@@ -602,6 +702,7 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
             return loading.promise;
           },
           mutate: () => writing.promise,
+          lifecycle: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
           preview: () => previewing.promise,
           collections: () => choosing.promise,
         };
@@ -671,6 +772,7 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
         const freshTransport: Transport = {
           load: async () => freshRead,
           mutate: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
+          lifecycle: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
           preview: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
           collections: async () => ({ kind: 'failure', status: 503, code: 'dependency_unavailable' }),
         };
@@ -725,6 +827,31 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
   }
 });
 
+test('mounted editor lifecycle stays on its captured owner visit after replacement', async () => {
+  const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+  try {
+    const pending = deferred<Result<LifecycleReading>>();
+    heldEditorLifecycle = pending;
+    const before = editorLifecycles.length;
+    await settle(() => button(visit.host, 'Delete zone').click());
+    await until(() => editorLifecycles.length === before + 1);
+    backendViewer = signedIn('B', csrfB);
+    await settle(() => visit.client.setQueryData(sessionQuery.queryKey, backendViewer));
+    pending.resolve({
+      kind: 'ready',
+      value: { revision: '2', deletedAt: '2026-11-06T00:00:00.000Z', restoreUntil: '2026-12-06T00:00:00.000Z' },
+      ownerObservation: {
+        reader: editorLifecycles[before]!.data.expectedReader!,
+        admission: editorLifecycles[before]!.data.admission!,
+      },
+    });
+    await flush();
+    expect(visit.host.textContent).not.toContain('Restore zone');
+  } finally {
+    await visit.close();
+  }
+});
+
 // UNRUN: connected original-visit regressions. These retain real rendered handlers and
 // invoke them in the SAME stack as a cache/route change, before React can run effects.
 const { getLocale } = await import('../src/paraglide/runtime.js');
@@ -733,8 +860,7 @@ type BrowserCapture = NonNullable<Parameters<typeof createZone>[1]>;
 type CreateInput = Parameters<typeof createZone>[0];
 type LifecycleInput = Parameters<typeof changeZone>[0];
 function retainHandler(element: Element, name = 'onClick'): () => void {
-  const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'));
-  const handler = key && Reflect.get(element, key)?.[name];
+  const handler = reactProps(element)?.[name];
   if (typeof handler !== 'function') throw new Error(`Missing mounted React ${name}`);
   return () => {
     const nativeEvent = new window.MouseEvent('click', { bubbles: true, cancelable: true });
@@ -1411,21 +1537,22 @@ for (const transition of ['route', 'id', 'search', 'locale', 'unmount'] as const
           const stop = visit.router.subscribe('onBeforeNavigate', invoke);
           try {
             if (transition === 'search')
-              await settle(() => visit.router.navigate({ to: start, search: { marker: 'replacement' } }));
+              await settle(() => void visit.router.navigate({ to: start, search: { marker: 'replacement' } }));
             else if (transition === 'id' && surface === 'editor')
-              await settle(() =>
-                visit.router.navigate({
-                  to: '/my/zones/$id/edit',
-                  params: { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e71' },
-                }),
+              await settle(
+                () =>
+                  void visit.router.navigate({
+                    to: '/my/zones/$id/edit',
+                    params: { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e71' },
+                  }),
               );
-            else await settle(() => visit.router.navigate({ to: '/elsewhere' }));
+            else await settle(() => void visit.router.navigate({ to: '/elsewhere' }));
           } finally {
             stop();
           }
           // Invoke once more after the original controls have genuinely left the tree.
           await settle(invoke);
-          await settle(() => visit.router.navigate({ to: start }));
+          await settle(() => void visit.router.navigate({ to: start }));
           await settle(invoke);
           expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Old address draft');
         }
@@ -1720,13 +1847,18 @@ for (const transition of ['route', 'search', 'locale', 'unmount'] as const) {
               visit.client.setQueryData(['locale-rerender'], 'ja');
             });
           else if (transition === 'search')
-            await settle(() =>
-              visit.router.navigate({
-                to: visit.router.state.location.pathname,
-                search: { marker: 'replacement' },
-              }),
+            await settle(
+              () =>
+                void visit.router.navigate({
+                  to: visit.router.state.location.pathname,
+                  search: { marker: 'replacement' },
+                }),
             );
-          else await settle(() => visit.router.navigate({ to: '/elsewhere' }));
+          else await settle(() => void visit.router.navigate({ to: '/elsewhere' }));
+          const discard = [...visit.host.querySelectorAll('button')].find(
+            (node) => node.textContent?.trim() === m.zone_editor_discard(),
+          );
+          if (discard) await settle(() => discard.click());
           const before = totals(visit);
           const failure = {
             kind: 'failure' as const,
@@ -1818,7 +1950,7 @@ test('unavailable Zone routes retry once at the requested location', async () =>
       </QueryClientProvider>,
     ),
   );
-  await settle(() => router.navigate({ to: '/my/zones/recovery' as never }));
+  await settle(() => void router.navigate({ to: '/my/zones/recovery' as never }));
   await until(() => host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false);
   const address = router.state.location.href,
     retry = button(host, m.zones_owner_retry({}, { locale: 'en' }));

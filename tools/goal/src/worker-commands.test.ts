@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from './cli.ts';
@@ -88,9 +89,19 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
     runningAttemptsByPool: () => ({}),
     waitingAttemptsByPool: () => ({}),
   } as unknown as WorkerStore;
+  const checkout = join(temporary.path, 'checkout');
+  mkdirSync(checkout);
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: checkout, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr?.trim() || `git ${args[0]} failed`);
+  };
+  git('init', '-b', 'dev');
+  git('config', 'user.email', 'fixture@example.invalid');
+  git('config', 'user.name', 'Fixture');
+  git('commit', '--allow-empty', '-m', 'dev');
   const settings = {
     stateDirectory: temporary.path,
-    mainCheckout: process.cwd(),
+    mainCheckout: checkout,
     integrationBranch: 'dev',
   } as Settings;
   const tasks = Object.assign(Object.create(WorkerTasks.prototype), { settings, store }) as WorkerTasks;
@@ -137,6 +148,8 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
     { lane: 'dev', state: 'missing' },
   ]);
   expect(status.reapedLastHour).toEqual({ processes: 0, containers: 0, volumes: 0, bytes: 0 });
+  expect(status.strayDirectories).toBe(0);
+  expect(status.strayBytesReclaimedLastHour).toBe(0);
   expect(JSON.parse(output[1]!).trains).toEqual(status.trains);
   expect(status.tasks.map(({ id }: Task) => id)).toEqual(all.map(({ id }) => id));
   for (const malformed of status.tasks.slice(2))
