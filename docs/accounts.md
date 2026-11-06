@@ -865,3 +865,5 @@ fixtures invoke the current erasure producer-list function and define each Searc
 these repairs align trusted producers without adding authorization rules or changing account custody.
 
 Composed native grant clients register scopes from the installed action catalogue that Access uses, including the internal actions a delegated role needs. Mounted HTTP actions alone do not define that scope ceiling. Native deadline decisions use the SQL `deadlineLive` operand in scalar, explicit and batch checks; statement freshness (`live`) stays separate. Source original-work admission stays unavailable until its owner publishes the complete declaration; Accounts does not synthesize that ownership.
+
+Decision: the mounted resource-access route imports only declared public entries: Accounts' resource data and recovery visits, and the content-owned post-command session source. It keeps no second session observer.

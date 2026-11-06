@@ -894,7 +894,10 @@
       "kind": "UI/transport library",
       "owner": "accounts",
       "paths": ["apps/web/src/accounts/**", "apps/web/src/account-verification/**"],
-      "publicEntries": [],
+      "publicEntries": [
+        "apps/web/src/accounts/resource-access/data.ts",
+        "apps/web/src/accounts/resource-access/visits.ts"
+      ],
       "allowedDependencies": [
         "client",
         "composition",
@@ -939,7 +942,8 @@
       "publicEntries": [
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
-        "apps/web/src/media/cover-src.ts"
+        "apps/web/src/media/cover-src.ts",
+        "apps/web/src/threads/post-command-lifetime.ts"
       ],
       "allowedDependencies": [
         "client",
