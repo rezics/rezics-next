@@ -214,7 +214,8 @@ beforeAll(async () => {
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
     if (method === 'POST' && path === '/v1/boards') {
       const conceptId = (body as { conceptId: string }).conceptId;
-      await grant(seller, { route: routeOf(conceptId)!, id: conceptId }, ['subject:read']);
+      // The trusted fixture grants the exact read needed by Global board creation.
+      await seedGovernanceAuthority(pool, routeOf(conceptId)!, conceptId, seller.accountId, ['subject:read']);
     }
     return kernel.handle(
       new Request(`http://kernel.test${path}`, {
