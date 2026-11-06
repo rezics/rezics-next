@@ -328,10 +328,12 @@ export async function stageCollectionPublicationStep(
       throw unavailable();
     if (source.metadata.factFence === null) throw unavailable();
     const plan = compileCurrentOwnerFilter(native.definition.filter);
-    const catalogueOnly =
-      plan.leaves.length > 0 && plan.leaves.every((leaf) => leaf.kind === 'catalogue');
+    const catalogueOnly = plan.leaves.length > 0 && plan.leaves.every((leaf) => leaf.kind === 'catalogue');
     // Owner publication keeps the private capture. Catalogue publication uses Search's public population.
-    if (!catalogueOnly && (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner')))
+    if (
+      !catalogueOnly &&
+      (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner'))
+    )
       throw unavailable();
     const scope = catalogueOnly ? null : createSearchScopeSource(options);
     const ownerPrepared: PreparedSearchScope | null = catalogueOnly

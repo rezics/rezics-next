@@ -30,7 +30,9 @@ export async function readCataloguePublicationPage(input: {
     filter: compiled.query,
     size: input.limit + 1,
     ...(input.after === null ? {} : { after: [input.after] }),
-    overflowProperties: [...new Set(compiled.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : [])))],
+    overflowProperties: [
+      ...new Set(compiled.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+    ],
     ...(input.work ? { work: input.work } : {}),
   });
   const unique: string[] = [];

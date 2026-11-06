@@ -120,7 +120,12 @@ test('directory pages the complete frontier so newly eligible identities sort gl
     recency: ['250', route, '018f0000-0000-7000-8000-00a000000004'],
     popularity: { followers: '1' },
   });
-  const refreshed = pageCollectionDirectory(sortCollectionDirectory([...ordered, inserted], 'recency'), 'recency', [], 2);
+  const refreshed = pageCollectionDirectory(
+    sortCollectionDirectory([...ordered, inserted], 'recency'),
+    'recency',
+    [],
+    2,
+  );
   expect(refreshed.items.map((item) => item.key.id)).toEqual([older, '018f0000-0000-7000-8000-00a000000004']);
 });
 
