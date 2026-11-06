@@ -260,4 +260,5 @@ a served-page binding marked pending does not become covered merely by linking a
 - **Acceptance command**: `bun test specs/collection-source-outcomes.test.ts specs/pages-outcomes.test.ts` with
   their native drivers for owner contracts; publication verifier above for destination cases. Routed Zone lists bind
   native `readPage` slots, Zone continuation, private-mount SSR isolation and same-tab Subject return; Search TypeList
-  stays Global. Broader native collection-source/configured-page persona acceptance remains the owner suites.
+  stays Global. This slice is pinned by scoped web and presentation tests; mounted native/page return stays pending.
+  Broader native collection-source/configured-page persona acceptance remains the owner suites.

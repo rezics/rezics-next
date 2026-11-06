@@ -13,7 +13,7 @@ export const Route = createFileRoute('/zones/$id')({
         id: params.id,
         locale: getLocale(),
         target: { route: '' },
-        credentialMode: context.credentialMode,
+        ...(context.credentialMode === undefined ? {} : { credentialMode: context.credentialMode }),
         ...zoneLocationSearch(location.search),
       },
     }),
@@ -42,7 +42,7 @@ function ZoneHomeRoute() {
         id,
         locale,
         target: { route: '' },
-        credentialMode,
+        ...(credentialMode === undefined ? {} : { credentialMode }),
         ...search,
       }}
     >
