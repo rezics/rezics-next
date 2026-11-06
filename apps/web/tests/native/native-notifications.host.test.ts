@@ -202,7 +202,12 @@ nativeTest(
     await browserExpect(replyRow.locator('[data-notice-byline]')).toContainText(bobByline ?? 'Community member');
     await browserExpect(replyRow.locator('a')).toHaveAttribute(
       'href',
-      threadLocation('en', { id: replyNotice.threadId!, title: replyNotice.threadTitle }, undefined, replyNotice.postId!),
+      threadLocation(
+        'en',
+        { id: replyNotice.threadId!, title: replyNotice.threadTitle },
+        undefined,
+        replyNotice.postId!,
+      ),
     );
     const initialMentionRow = alicePage.locator(`[data-notice-id="${initialMentionNotice.id}"]`);
     await browserExpect(initialMentionRow).toHaveAttribute('data-kind', 'mention');
@@ -455,8 +460,8 @@ nativeTest(
         const nativePath = path(url);
         return (
           nativePath === `/v1/accounts/${bobId}/notifications:markSeen` ||
-          nativePath.startsWith(`/v1/accounts/${bobId}/notifications/`) &&
-            (nativePath.endsWith(':markSeen') || nativePath.endsWith('$markSeen'))
+          (nativePath.startsWith(`/v1/accounts/${bobId}/notifications/`) &&
+            (nativePath.endsWith(':markSeen') || nativePath.endsWith('$markSeen')))
         );
       }).length;
       growth.push({

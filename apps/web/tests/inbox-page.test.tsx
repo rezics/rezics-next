@@ -709,7 +709,11 @@ test('a validated receipt followed by failed page and count observations offers 
   const view = await mount(async () => {
     pages += 1;
     if (pages > 1)
-      return { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
+      return {
+        signedIn: true,
+        state: 'unavailable',
+        failure: { status: 503, retryable: true, code: 'deadline_exceeded' },
+      };
     return readyInboxPage([notice('chosen')], null, 'alice');
   });
   try {

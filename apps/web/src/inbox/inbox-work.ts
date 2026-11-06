@@ -60,12 +60,10 @@ export function composeInboxWork(input: {
   const cursorPayloadBytes = inboxCursorPayloadBytes(input.cursors);
   const hydrationRequests = input.hydrationRequests ?? 0;
   const commandRequests = input.commandRequests ?? 0;
-  if (input.retainedRows > INBOX_PAGE_SIZE)
-    throw new RangeError('Inbox retains at most one 20-row body');
+  if (input.retainedRows > INBOX_PAGE_SIZE) throw new RangeError('Inbox retains at most one 20-row body');
   if (input.priorAddresses > MAX_INBOX_PRIOR_ADDRESSES)
     throw new RangeError('Inbox retains at most eight prior addresses');
-  if (cursorPayloadBytes > MAX_INBOX_CURSOR_PAYLOAD_BYTES)
-    throw new RangeError('Inbox cursor payload exceeds 80 KiB');
+  if (cursorPayloadBytes > MAX_INBOX_CURSOR_PAYLOAD_BYTES) throw new RangeError('Inbox cursor payload exceeds 80 KiB');
   if (hydrationRequests > INBOX_HYDRATION_KERNEL_READ_CEILING)
     throw new RangeError('Inbox pages do not hydrate actors or targets');
   return Object.freeze({

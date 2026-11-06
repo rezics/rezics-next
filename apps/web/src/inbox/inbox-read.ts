@@ -244,8 +244,7 @@ function validActor(value: unknown): value is NativeActor {
         : value.avatarUrl === null || typeof value.avatarUrl === 'string')
     );
   }
-  if (value.state === 'withheld')
-    return validClosedActorLabels(value, 'withheld', 'Former or unavailable account');
+  if (value.state === 'withheld') return validClosedActorLabels(value, 'withheld', 'Former or unavailable account');
   return validClosedActorLabels(value, 'system', 'Moderation team');
 }
 

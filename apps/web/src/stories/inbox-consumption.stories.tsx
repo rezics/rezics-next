@@ -146,22 +146,20 @@ function nativeNotice(id: string, kind: InboxNotice['kind'], unread = true): Inb
 function ReturnPreview() {
   const reads: InboxPageQuery[] = [];
   const loadPage = useMemo(
-    () => async (query: InboxPageQuery): Promise<InboxPage> => {
-      reads.push(query);
-      const resolved = await resolveInboxItems(
-        nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], 'watch-older', 'alice', query.selection),
-      );
-      return { signedIn: true, state: 'ready', ...resolved };
-    },
+    () =>
+      async (query: InboxPageQuery): Promise<InboxPage> => {
+        reads.push(query);
+        const resolved = await resolveInboxItems(
+          nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], 'watch-older', 'alice', query.selection),
+        );
+        return { signedIn: true, state: 'ready', ...resolved };
+      },
     [],
   );
   return (
     <PatternStory visitor="Signed In" path="/inbox">
       <AppShell>
-        <InboxPageView
-          loadPage={loadPage}
-          historyKey={reads.length > 1 ? 'returned-range' : 'original-range'}
-        />
+        <InboxPageView loadPage={loadPage} historyKey={reads.length > 1 ? 'returned-range' : 'original-range'} />
       </AppShell>
     </PatternStory>
   );
@@ -194,12 +192,13 @@ export const KeyboardReturnDesktop: Story = {
 function RecoveryPreview() {
   const attempts: InboxNoticeSeenAttempt[] = [];
   const loadPage = useMemo(
-    () => async (query: InboxPageQuery): Promise<InboxPage> => {
-      const resolved = await resolveInboxItems(
-        nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], null, 'alice', query.selection),
-      );
-      return { signedIn: true, state: 'ready', ...resolved };
-    },
+    () =>
+      async (query: InboxPageQuery): Promise<InboxPage> => {
+        const resolved = await resolveInboxItems(
+          nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], null, 'alice', query.selection),
+        );
+        return { signedIn: true, state: 'ready', ...resolved };
+      },
     [],
   );
   const acknowledgeNotice = async (attempt: InboxNoticeSeenAttempt) => {

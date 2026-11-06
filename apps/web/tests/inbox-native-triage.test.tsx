@@ -366,18 +366,17 @@ test('composed Inbox work keeps one 20-row body, eight prior addresses and zero 
   const { composeInboxWork, INBOX_CONTENT_DISCLOSURE_EVIDENCE, MAX_INBOX_CURSOR_LENGTH } =
     await import('../src/inbox/inbox-work');
   const rows = Array.from({ length: 20 }, (_, index) => notice(`page-${index}`, 'reply'));
-  let state = receiveInboxPage(
-    emptyInboxPagination,
-    { signedIn: true, state: 'ready', ...(await resolveInboxItems(nativeInboxEnvelope(rows, 'cursor-1', 'alice'))) },
-  );
+  let state = receiveInboxPage(emptyInboxPagination, {
+    signedIn: true,
+    state: 'ready',
+    ...(await resolveInboxItems(nativeInboxEnvelope(rows, 'cursor-1', 'alice'))),
+  });
   for (let index = 1; index <= 10; index += 1) {
     state = nextInboxPage(state);
     state = receiveInboxPage(state, {
       signedIn: true,
       state: 'ready',
-      ...(await resolveInboxItems(
-        nativeInboxEnvelope(rows, index === 10 ? null : `cursor-${index + 1}`, 'alice'),
-      )),
+      ...(await resolveInboxItems(nativeInboxEnvelope(rows, index === 10 ? null : `cursor-${index + 1}`, 'alice'))),
     });
   }
   const work = inboxPaginationWork(state, { listRequests: 11, countRequests: 1, commandRequests: 0, visits: 3 });
@@ -389,14 +388,16 @@ test('composed Inbox work keeps one 20-row body, eight prior addresses and zero 
     content: INBOX_CONTENT_DISCLOSURE_EVIDENCE,
   });
   expect(work.cursorPayloadBytes).toBeLessThanOrEqual(80 * 1024);
-  expect(composeInboxWork({
-    listRequests: 1,
-    countRequests: 1,
-    retainedRows: 20,
-    priorAddresses: 8,
-    cursors: Array.from({ length: 9 }, () => 'c'.repeat(MAX_INBOX_CURSOR_LENGTH)),
-    visits: 2,
-  }).content.growth).toContain('services/kernel/test/content/growth-notice-inbox.test.ts');
+  expect(
+    composeInboxWork({
+      listRequests: 1,
+      countRequests: 1,
+      retainedRows: 20,
+      priorAddresses: 8,
+      cursors: Array.from({ length: 9 }, () => 'c'.repeat(MAX_INBOX_CURSOR_LENGTH)),
+      visits: 2,
+    }).content.growth,
+  ).toContain('services/kernel/test/content/growth-notice-inbox.test.ts');
 });
 
 test('concurrent unread-count consumers for one viewer episode share one native observation', async () => {

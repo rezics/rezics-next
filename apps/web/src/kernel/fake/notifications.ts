@@ -553,8 +553,19 @@ const noticeSeen: FakeRoute = {
         : { status: 204 };
     }
     if (fixture === 'seen-wait') {
-      inboxSeenRecoveryStory.commands.push({ through: new URL(request.url).pathname, key: request.headers.get('idempotency-key') });
-      return inboxSeenRecoveryStory.commands.length > 1 ? { status: 204 } : { status: 429, code: 'rate_limited', retryable: true, request_id: 'story-inbox-notice-seen', headers: { 'Retry-After': '2' } };
+      inboxSeenRecoveryStory.commands.push({
+        through: new URL(request.url).pathname,
+        key: request.headers.get('idempotency-key'),
+      });
+      return inboxSeenRecoveryStory.commands.length > 1
+        ? { status: 204 }
+        : {
+            status: 429,
+            code: 'rate_limited',
+            retryable: true,
+            request_id: 'story-inbox-notice-seen',
+            headers: { 'Retry-After': '2' },
+          };
     }
     return { status: 204 };
   },
