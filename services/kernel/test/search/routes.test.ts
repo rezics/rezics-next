@@ -521,6 +521,8 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     },
   };
   const subjects: IndexedSubject[] = [];
+  let indexCreated = false;
+  let templatesCreated = false;
   beforeAll(async () => {
     await closeStubPool();
     driver = await createSemanticDriver();
@@ -553,6 +555,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       fake.put(subject);
     }
     await installTemplates(native, prefix);
+    templatesCreated = true;
     service = createSearchService({
       pool: driver.fixtures.pool,
       client: engine,
@@ -562,6 +565,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       release: async () => version,
     });
     await createSubjectIndex(native, prefix, 1);
+    indexCreated = true;
     const partitions = new Map<number, string[]>();
     for (const subject of subjects) {
       const partition = subjectPartition(subject.id);
@@ -575,9 +579,10 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
   }, 600_000);
   afterAll(async () => {
     try {
-      await native.request('DELETE', `/${index}`);
-      for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
-        await native.request('DELETE', `/_scripts/${prefix}${name}`);
+      if (indexCreated) await native.request('DELETE', `/${index}`);
+      if (templatesCreated)
+        for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
+          await native.request('DELETE', `/_scripts/${prefix}${name}`);
     } finally {
       try {
         await driver?.close();

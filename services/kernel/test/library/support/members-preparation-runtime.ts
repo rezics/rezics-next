@@ -20,7 +20,7 @@ import { deletePersona as deleteNativePersona } from '../../support/account-dele
 import { authorizeMintedRead, collectionReadEligibility } from '../../support/admitted-access.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
-import { registerTestClient, testKernel } from '../../support/test-kernel.ts';
+import { registerTestClient, TEST_REQUEST_DEADLINE_MS, testKernel } from '../../support/test-kernel.ts';
 
 /** Auth owns the only process-global executor. This fixture launches no kernel work runtime. */
 export async function membersPreparationRuntime() {
@@ -58,7 +58,7 @@ export async function membersPreparationRuntime() {
     .filter((scope) => scope !== 'media:complete')
     .sort();
   await registerTestClient(service, { clientId, firstParty: true, scopes });
-  const context = () => ({ pool: db.pool, deadline: Date.now() + 5000 });
+  const context = () => ({ pool: db.pool, deadline: Date.now() + TEST_REQUEST_DEADLINE_MS });
   const actor = (persona: Persona | null, pool: Pool = db.pool) =>
     actorOf(
       kernel.testAccess,

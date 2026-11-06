@@ -140,7 +140,8 @@ Operational, synthesize Source identity, add a writer, or expand permissions. Ac
 the permanent writer gates stay in force.
 
 Native Members fixtures execute `collection:read` the same way GET members does: current grants, private-collection
-eligibility (public floor false), minted read T, and a repeatable-read snapshot. Owner and catalogue pages remain
-distinct admission episodes. Search reuses the constructor runtime (pool, client, prefix, source, current release,
-authenticated context) through `createSearchScopeForService`; public capture uses `compilePublicFilterConsumerCapture`.
-Each fixture releases owned pools and runtime after the original context, including after a failing assertion.
+eligibility (public floor false), the kernel request deadline, and a repeatable-read snapshot. Authorize on that
+client without minting a second T that prepare did not capture. Owner and catalogue pages remain distinct admission
+episodes. Search reuses the constructor runtime (pool, client, prefix, source, current release, authenticated context)
+through `createSearchScopeForService`; public capture uses `compilePublicFilterConsumerCapture`. Each fixture releases
+owned pools and runtime after the original context, including after a failing assertion.

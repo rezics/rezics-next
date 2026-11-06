@@ -20,9 +20,11 @@ a complete unchanged retained definition must reach the native reader. Immutable
 substitute for the Source binding, capture and dependency keys.
 
 Decision: public Search-scope capture compiles through `compilePublicFilterConsumerCapture` before Source binding.
-Members fixtures mint read T and evaluate current grants plus collection eligibility on a repeatable-read snapshot,
-matching GET members. Extra kernel HTTP probes mount through `createKernel.modules` before compile. Native Search and
-HTTP fixtures release source-database sessions before clone and after the original context.
+Members fixtures evaluate current grants plus collection eligibility on a repeatable-read snapshot the same way GET
+members `loadCollection` authorizes, using the kernel request deadline and without a second minted T that prepare did
+not capture. Extra kernel HTTP probes mount through `createKernel.modules` before compile. Native Search and HTTP
+fixtures release source-database sessions before clone and after the original context. Command-running bootstrap
+installs native History the same way server and worker do.
 
 Decision: the exported native receiving statement catalogue is SearchNativeReceivingSql-indexed `{ sql: string }`;
 consumers use that SQL text, so reylo generator metadata stays off the declaration surface.

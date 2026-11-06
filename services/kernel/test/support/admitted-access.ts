@@ -1,7 +1,7 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess, createResourcePublicEligibility, type AccessConfig } from '../../src/access/index.ts';
-import { mintReadTime, releaseOperationalTime } from '../../src/command/command.ts';
+import collectionRead from '../../src/library/collection-reads-collection.sql';
 import type { Access, AccessCheck, AccessContext, AccountActor, Resource } from '../../src/request/access.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
 
@@ -76,40 +76,28 @@ export async function authenticateAccount(
 
 /** Current GET members floor: private collections are not public; owner grants remain the read path. */
 export function collectionReadEligibility(resource: Pick<Resource, 'route' | 'id'>) {
+  const identity = Object.freeze({ route: resource.route, id: resource.id });
   return createResourcePublicEligibility({
-    resource,
+    resource: identity,
     action: 'collection:read',
     async prepare() {
       return { ready: true as const };
     },
     async verify({ client }) {
-      const result = await client.query<{ visibility: string; state: string }>(
-        `SELECT visibility, state FROM library.collection WHERE route=$1 AND collection_id=$2`,
-        [resource.route, resource.id],
-      );
-      const row = result.rows[0];
-      return row !== undefined && row.state === 'active' && row.visibility !== 'private';
+      const row = await collectionRead.run(client, identity);
+      return row != null && row.state === 'active' && row.visibility !== 'private';
     },
   });
 }
 
-/** Repeatable-read snapshot plus minted T, matching the production collection read. */
+/**
+ * Repeatable-read snapshot matching GET members `loadCollection` / FULL members:
+ * authorize on that client without a second minted T that prepare did not capture.
+ */
 export async function authorizeMintedRead(
   check: AccessCheck,
   pool: Pool,
   deadline = Date.now() + 5000,
-  clock?: () => Date,
 ): Promise<boolean> {
-  return withReadTransaction(
-    pool,
-    async (client) => {
-      const time = await mintReadTime(client, clock);
-      try {
-        return await check(client, time);
-      } finally {
-        releaseOperationalTime(time);
-      }
-    },
-    deadline,
-  );
+  return withReadTransaction(pool, (client) => check(client), deadline);
 }
