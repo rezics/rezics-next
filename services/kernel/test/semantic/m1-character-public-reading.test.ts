@@ -12,11 +12,14 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 
 setDefaultTimeout(120_000);
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
 let real: Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>;
+const editor = newId(0xc849);
+const erasureTrace: unknown[] = [];
 const text = fromPlainText('A supplied Character profile.');
 const japanese = fromPlainText('公開された人物紹介。');
 async function call(method: string, path: string, body?: unknown, signedIn = false) {
@@ -69,14 +72,28 @@ beforeAll(async () => {
   await bootstrapRelease(db.pool, bundledRelease);
   await bootstrapProfile(db.pool, platformProfile);
   const actions = ['subject:create', 'subject:read', 'statement:propose', 'document:erase'];
-  real = await createRealAccess(db.admin, { editor: newId(0xc849) }, actions);
+  real = await createRealAccess(db.admin, { editor }, actions);
   for (const action of actions) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
   app = createKernel({
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(49),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(50)]]) },
     receiptKeys: testReceiptKeys(),
-    access: real.access,
+    access(config) {
+      const access = real.access(config);
+      return deriveAccess(access, {
+        async prepare(...args) {
+          const evidence = await access.prepare!(...args);
+          if (args[1] === 'document:erase') erasureTrace.push({ prepared: evidence !== null });
+          return evidence;
+        },
+        async authorize(...args) {
+          const allowed = await access.authorize(...args);
+          if (args[2] === 'document:erase') erasureTrace.push({ authorized: allowed });
+          return allowed;
+        },
+      });
+    },
     writeRate: real.writeRate,
   });
   // Compile the served routes during startup, outside the native request budget.
@@ -129,12 +146,16 @@ test('fallback language stays explicit and erasure withholds the body while pres
   const fallback = await call('GET', `/v1/subjects/${subject.id}?language=fr&includeDocuments=true`);
   expect(fallback.status, JSON.stringify(fallback.body)).toBe(200);
   expect(fallback.body.documents).toEqual({
-    [statement.id]: expect.objectContaining({ language: 'en', body: text }),
+    [statement.id]: expect.objectContaining({ language: 'en', body: text, origin: 'account', author: editor }),
   });
   const document = statement.value.content.document;
   await real.grant({ route: routeOf(document)!, id: document }, 'editor', 'document:erase');
   const erased = await call('DELETE', `/v1/documents/${document}`, undefined, true);
-  expect(erased.status, JSON.stringify(erased.body)).toBe(204);
+  const stored = await db.admin.query(
+    'SELECT author_account_id, availability FROM content.authored_field WHERE route=$1 AND id=$2',
+    [routeOf(document), document],
+  );
+  expect(erased.status, JSON.stringify({ problem: erased.body, erasureTrace, stored: stored.rows })).toBe(204);
   const exact = await call('GET', `/v1/documents/${statement.value.content.document}`);
   expect(exact.status, JSON.stringify(exact.body)).toBe(404);
   const native = await call('GET', `/v1/subjects/${subject.id}?language=en&includeDocuments=true`);
