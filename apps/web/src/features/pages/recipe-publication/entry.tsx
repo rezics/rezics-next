@@ -1,9 +1,9 @@
 import type { Related, Subject } from '../../../subject/types';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import type { PageLink } from '../shared';
+import { PublicationOverlayView } from '../publication-overlay';
 import type { PublicationDefinitions } from '../subject-metadata';
 import { recipePublicationReading } from './model';
-import { RecipePublicationView } from './view';
 
 /** No extra read: overlay uses the current anonymous page's statements, related and documents. */
 export function RecipePublicationEntry({
@@ -18,21 +18,20 @@ export function RecipePublicationEntry({
   subject: Subject;
   related: Related;
   documents?: unknown;
-  definitions?: PublicationDefinitions;
+  definitions?: PublicationDefinitions | undefined;
   locale: string;
   reader?: Reader;
-  link?: PageLink;
+  link?: PageLink | undefined;
 }) {
   const reading = recipePublicationReading(subject, definitions, locale, reader);
   if (!reading) return null;
   return (
-    <RecipePublicationView
-      reading={reading}
+    <PublicationOverlayView
+      reading={{ kind: 'recipe', fields: reading.fields }}
       subject={subject}
       related={related}
-      documents={documents}
       locale={locale}
-      reader={reader}
+      {...(documents !== undefined ? { documents } : {})}
       {...(link ? { link } : {})}
     />
   );

@@ -1,9 +1,9 @@
 import type { Related, Subject, Summary } from '../../../subject/types';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import type { PageLink } from '../shared';
+import { PublicationOverlayView } from '../publication-overlay';
 import type { PublicationDefinitions } from '../subject-metadata';
-import { gamePageInitial, gamePublicationReading } from './model';
-import { GamePublicationView } from './view';
+import { gameOverlayReading, gamePageInitial } from './model';
 
 /** No extra read: overlay uses the current anonymous page's statements and related summaries. */
 export function GamePublicationEntry({
@@ -16,19 +16,19 @@ export function GamePublicationEntry({
 }: {
   subject: Subject;
   related: Related;
-  definitions?: PublicationDefinitions;
+  definitions?: PublicationDefinitions | undefined;
   locale: string;
   reader?: Reader;
-  link?: PageLink;
+  link?: PageLink | undefined;
 }) {
-  if (!gamePublicationReading(subject, definitions, locale, reader)) return null;
+  const reading = gameOverlayReading(subject, definitions, locale, reader);
+  if (!reading) return null;
   return (
-    <GamePublicationView
+    <PublicationOverlayView
+      reading={reading}
       subject={subject}
       related={related}
-      definitions={definitions}
       locale={locale}
-      reader={reader}
       {...(link ? { link } : {})}
     />
   );
