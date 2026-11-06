@@ -138,6 +138,8 @@ export const UnavailableRetry: Story = {
     expect(await canvas.findByRole('heading', { name: m.sources_selected() })).toBeTruthy();
   },
 };
+export const UnavailableRetryPhone: Story = { ...UnavailableRetry, globals: { viewport: { value: 'phone390' } } };
+export const UnavailableRetryDesktop: Story = { ...UnavailableRetry, globals: { viewport: { value: 'desktop1280' } } };
 
 const richTitle = '旅人の物語 — 長い道のりを越えて、ふたたび出会う人々と終わらない読書の記録';
 const qualifierUrl = 'https://catalogue.example.test/editions/original';
