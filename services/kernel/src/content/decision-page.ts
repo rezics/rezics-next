@@ -1,6 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
-import { accessClock } from '../access/access-clock.ts';
 import { readAccount } from '../access/account-data.ts';
 import { ApprovalIdentityDeniedError, verifiedBearerExpiry } from '../access/approved-identity.ts';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -97,7 +96,7 @@ async function identityWitness(deps: ContentReadDependencies, actor: Actor, dead
     deadlineClient(deps.pool, deadline),
     actor.requestedBy,
     actor.accountId,
-    deps.clock ?? accessClock(deps.access),
+    deps.clock,
   );
   if (assignment.kind === 'unresolved') return null;
   const ids = [...new Set([actor.accountId, ...(assignment.kind === 'resolved' ? [assignment.principalId] : [])])];
@@ -212,7 +211,7 @@ export async function readDecisionPage(
           if (error instanceof ApprovalIdentityDeniedError) throw new ProblemError('not_found');
           throw error;
         }
-        const now = (deps.clock ?? accessClock(deps.access))();
+        const now = deps.clock();
         if (!Number.isFinite(now.getTime())) throw new TypeError('Invalid command clock');
         let appeal: Advice;
         if (finalSource.target_kind === 'board') appeal = { state: 'unsupported', reason: 'board' };

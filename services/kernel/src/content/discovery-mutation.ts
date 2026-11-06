@@ -49,7 +49,7 @@ import envelope from './read-outbox-event-index.sql';
 export type DiscoveryOperationReference = Readonly<{ route: number; intent: string; generation: string }>;
 export type DiscoveryOperation = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 type Target = Readonly<{ kind: 'board' | 'thread' | 'post'; id: string }>;
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date }>;
 type Command = Readonly<{
   identity: PrincipalCommandIdentity;
   authorization: CommandAuthorization;

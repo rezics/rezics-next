@@ -104,7 +104,7 @@ async function executeJoinedOperation(
   if (targetPartition === sourcePartition) throw new Error('Reaction source and target require distinct partitions');
 
   const result = await setReaction(
-    { pool: db.pool, access: base!.system.access },
+    { clock: () => new Date(), pool: db.pool, access: base!.system.access },
     actor,
     { targetKind: 'thread', targetId, kind },
     { idempotencyKey, deadline: Date.now() + 30_000, requestId: randomUUID() },

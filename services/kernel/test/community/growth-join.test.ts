@@ -285,10 +285,16 @@ beforeAll(async () => {
     actions: accessActions,
     realmRoleReader: (client, input) => roleReader(client, input),
   });
-  const apiMembership = createRealmMembership({ pool: db.pool, access: production.access, referenceKeys: tokens });
+  const apiMembership = createRealmMembership({
+    clock: () => new Date(),
+    pool: db.pool,
+    access: production.access,
+    referenceKeys: tokens,
+  });
   roleReader = apiMembership.roleReader;
 
   const workerMembership = createRealmMembership({
+    clock: () => new Date(),
     pool: db.pool,
     access: production.access,
     referenceKeys: tokens,

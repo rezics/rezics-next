@@ -77,7 +77,7 @@ export async function listGlobalBoards(
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
   if (input.purpose !== undefined && input.purpose !== 'discussion' && input.purpose !== 'reviews')
     throw new TypeError('Invalid board purpose');
-  const now = new Date((dependencies.cursorNow ?? Date.now)());
+  const now = new Date(dependencies.cursorNow());
   const scope = binding(input.purpose, limit);
   const start = await position(dependencies, scope, now, input.cursor);
   const budget = CANDIDATES_PER_ITEM * limit;

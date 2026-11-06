@@ -60,7 +60,7 @@ export async function workFixture(options: { readonly pool?: Pool } = {}) {
       fetch: async () => Response.json({ keys: [jwk] }),
     },
   });
-  const commands = createCommerceCommands({ pool, access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool, access });
   // Direct fixture setup must admit the same native creation intent as HTTP/work.
   // The provider fixture and its idempotency/error behavior remain unchanged.
   const stripe: StripePort = {

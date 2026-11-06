@@ -20,7 +20,7 @@ export type EditionSourceAuthorization = (action: string, anchor: AuthorizationA
 /** The pinned ID stays Semantic-owned. A redirect never rewrites a sold binding.
  * Each observation releases the subject home before any edition checkout. */
 export async function prepareEditionSubject(
-  deps: Readonly<{ pool: Pool; access: Access }>,
+  deps: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   targetSubjectId: string,
   time: AuthoritativeTime,
   accessContext: AccessContext,

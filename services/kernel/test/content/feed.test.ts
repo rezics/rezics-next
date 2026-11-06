@@ -399,11 +399,11 @@ test('Default feed route applies the selected native kind across the mixed strea
     const second = await page('schema:Book', 'home', 1, first.next!);
     expect(second.feedItems[0]).toMatchObject({ source: 'continue', key: { id: book, kind: 'schema:Book' } });
 
-    const raw = await createFeedActivityStore({ pool: driver.fixtures.pool, tokens }).pageFollowingActivity(
-      viewer.accountId,
-      { limit: 1 },
-      Date.now() + 30_000,
-    );
+    const raw = await createFeedActivityStore({
+      clock: () => new Date(),
+      pool: driver.fixtures.pool,
+      tokens,
+    }).pageFollowingActivity(viewer.accountId, { limit: 1 }, Date.now() + 30_000);
     expect(raw.activities[0]!.object.id).toBe(collection);
     const empty = await page('schema:Book', 'following', 1);
     expect(empty.feedItems).toEqual([]);
@@ -411,11 +411,11 @@ test('Default feed route applies the selected native kind across the mixed strea
     expect(empty.next).toBeString();
     // Rejected rows advance the native source cursor, even when the output is empty.
     const examined = await position(empty.next!, 'following', 'schema:Book');
-    const nativeAfter = await createFeedActivityStore({ pool: driver.fixtures.pool, tokens }).pageFollowingActivity(
-      viewer.accountId,
-      { limit: 1, cursor: examined.following as string },
-      Date.now() + 30_000,
-    );
+    const nativeAfter = await createFeedActivityStore({
+      clock: () => new Date(),
+      pool: driver.fixtures.pool,
+      tokens,
+    }).pageFollowingActivity(viewer.accountId, { limit: 1, cursor: examined.following as string }, Date.now() + 30_000);
     expect(nativeAfter.activities.some((activity) => activity.id === raw.activities[0]!.id)).toBe(false);
     expect((await page('collection', 'following', 1)).feedItems[0]!.key.id).toBe(collection);
     for (const kind of [undefined, 'schema:Movie']) {

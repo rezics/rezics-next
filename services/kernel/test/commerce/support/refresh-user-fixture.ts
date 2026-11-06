@@ -230,7 +230,7 @@ export async function refreshUserFixture(provider?: ReturnType<typeof startFakeS
       key: 'refresh-seller',
     },
   );
-  const commands = createCommerceCommands({ pool, access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool, access });
   const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool, deadline: Date.now() + 15_000 });
   const offer = (
     await commands.createOffer(

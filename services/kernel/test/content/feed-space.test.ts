@@ -13,7 +13,11 @@ test('Space-selected Following retains native membership, kind conjunction, spar
       });
     const selected = await world.createRealmTarget('Selected Space', 'public');
     const unrelated = await world.createRealmTarget('Unrelated Space', 'public');
-    const store = createFeedActivityStore({ pool: world.system.database.pool, tokens: world.system.tokenKeys });
+    const store = createFeedActivityStore({
+      clock: () => new Date(),
+      pool: world.system.database.pool,
+      tokens: world.system.tokenKeys,
+    });
     const spaces: string[] = [];
     // Retain references to actual committed source events. Delivery uses the native
     // inbox writer; no replacement reader, summary or membership verdict is supplied.

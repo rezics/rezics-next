@@ -34,10 +34,11 @@ test.serial(
     const access = world.kernel.testAccess;
     const actor = await access.authenticate(world.owner.bearer, { pool: world.db.pool, deadline: deadline() });
     const dependencies = {
+      clock: () => new Date(),
       pool: world.db.pool,
       access,
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
     };
     const context = () => ({
       deadline: deadline(),

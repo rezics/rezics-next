@@ -150,7 +150,7 @@ test('mechanical edition eligibility restores the native publisher without inven
   const f = await fixture();
   const id = f.draft.editionId;
   const base = `/v1/contentEditions/${id}`;
-  const deps = { pool: f.native.database.pool, access: f.native.access };
+  const deps = { clock: () => new Date(), pool: f.native.database.pool, access: f.native.access };
   const mechanical = () => readContentEditionMechanicalSaleAuthority(deps, id, { deadline: Date.now() + 10000 });
   expect(await mechanical()).toBeNull();
   await value(wire(f.token, `${base}:publish`, 'POST', {}, '1'), 200);
@@ -211,7 +211,7 @@ test('mechanical edition eligibility preserves immutable subject association and
   const f = await fixture();
   const id = f.draft.editionId;
   const base = `/v1/contentEditions/${id}`;
-  const deps = { pool: f.native.database.pool, access: f.native.access };
+  const deps = { clock: () => new Date(), pool: f.native.database.pool, access: f.native.access };
   const mechanical = () => readContentEditionMechanicalSaleAuthority(deps, id, { deadline: Date.now() + 10000 });
   await value(wire(f.token, `${base}:publish`, 'POST', {}, '1'), 200);
   const authority = await mechanical();

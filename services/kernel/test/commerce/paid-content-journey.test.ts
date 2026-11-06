@@ -111,7 +111,7 @@ beforeAll(async () => {
       readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
     },
   });
-  commands = createCommerceCommands({ pool: native.database.pool, access: native.access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool: native.database.pool, access: native.access });
 
   const bootstrap = await native.database.pool.query<{ accountId: string }>(
     'SELECT account_id::text AS "accountId" FROM access.governance_bootstrap',

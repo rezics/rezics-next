@@ -64,17 +64,27 @@ test('a person sets, changes and clears one reaction on a subject, and counts an
   const actor = await f.verified();
   const input = { targetKind: 'subject' as const, targetId };
 
-  await commands.setReaction({ pool: f.db.pool, access: f.access }, actor, { ...input, kind: 'like' }, request());
+  await commands.setReaction(
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
+    actor,
+    { ...input, kind: 'like' },
+    request(),
+  );
   await relay();
   expect(await reactor(targetId)).toBe('like');
   expect((await counts(targetId)).counts).toEqual([{ kind: 'like', count: 1 }]);
 
-  await commands.setReaction({ pool: f.db.pool, access: f.access }, actor, { ...input, kind: 'love' }, request());
+  await commands.setReaction(
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
+    actor,
+    { ...input, kind: 'love' },
+    request(),
+  );
   await relay();
   expect(await reactor(targetId)).toBe('love');
   expect((await counts(targetId)).counts).toEqual([{ kind: 'love', count: 1 }]);
 
-  await commands.clearReaction({ pool: f.db.pool, access: f.access }, actor, input, request());
+  await commands.clearReaction({ clock: () => new Date(), pool: f.db.pool, access: f.access }, actor, input, request());
   await relay();
   expect(await reactor(targetId)).toBeNull();
   expect((await counts(targetId)).counts).toEqual([]);
@@ -85,7 +95,7 @@ test('subject reactions accept the five emoji kinds and reject score reactions w
   const actor = await f.verified();
   for (const kind of ['like', 'love', 'laugh', 'insightful', 'sad'] as const) {
     await commands.setReaction(
-      { pool: f.db.pool, access: f.access },
+      { clock: () => new Date(), pool: f.db.pool, access: f.access },
       actor,
       { targetKind: 'subject', targetId, kind },
       request(),
@@ -94,7 +104,7 @@ test('subject reactions accept the five emoji kinds and reject score reactions w
   for (const kind of ['upvote', 'downvote'] as const) {
     await expect(
       commands.setReaction(
-        { pool: f.db.pool, access: f.access },
+        { clock: () => new Date(), pool: f.db.pool, access: f.access },
         actor,
         { targetKind: 'subject', targetId, kind },
         request(),
@@ -113,7 +123,7 @@ test('unknown and unreadable subjects are not found, and a merged subject reacti
   );
   await expect(
     commands.setReaction(
-      { pool: f.db.pool, access: f.access },
+      { clock: () => new Date(), pool: f.db.pool, access: f.access },
       actor,
       { targetKind: 'subject', targetId: mergedId, kind: 'like' },
       request(),
@@ -143,7 +153,7 @@ test('unknown and unreadable subjects are not found, and a merged subject reacti
   const survivor = [targetId, mergedId].sort()[0]!;
   const redirected = [targetId, mergedId].sort()[1]!;
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     actor,
     { targetKind: 'subject', targetId: redirected, kind: 'like' },
     request(),
@@ -155,7 +165,7 @@ test('unknown and unreadable subjects are not found, and a merged subject reacti
 
   await expect(
     commands.setReaction(
-      { pool: f.db.pool, access: f.access },
+      { clock: () => new Date(), pool: f.db.pool, access: f.access },
       actor,
       { targetKind: 'subject', targetId: newId(f.targetRoute), kind: 'like' },
       request(),
@@ -167,7 +177,7 @@ test('the subject reactor index contains one row per reactor and clears with the
   const targetId = await subject('Reactor erasure');
   const actor = await f.verified();
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     actor,
     { targetKind: 'subject', targetId, kind: 'sad' },
     request(),
@@ -176,7 +186,7 @@ test('the subject reactor index contains one row per reactor and clears with the
   expect(await reactor(targetId)).toBe('sad');
 
   await commands.clearReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     actor,
     { targetKind: 'subject', targetId },
     request(),

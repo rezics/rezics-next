@@ -13,7 +13,7 @@ import type { BoardView } from './model.ts';
 import targets from './appeal-review-page-targets.sql';
 
 export type AppealReviewAnchor = Readonly<{ partition: number; epoch: number; position: bigint }>;
-export type AppealReviewDependencies = Readonly<{ pool: Pool; access: Access; tokens?: KeyRing }>;
+export type AppealReviewDependencies = Readonly<{ pool: Pool; access: Access; tokens?: KeyRing; clock: () => Date }>;
 export type AppealReviewIdentity = Readonly<
   | {
       state: 'available';
@@ -188,7 +188,7 @@ export async function readAppealReviewTargetContexts(
     for (const target of unique.values()) result.set(targetKey(target), { state: 'unavailable' });
     return result;
   }
-  const readers = { pool: deps.pool, access: deps.access, tokens };
+  const readers = { pool: deps.pool, access: deps.access, tokens, clock: deps.clock };
   const threads = new Map<string, Promise<ThreadView | null>>();
   const boards = new Map<string, Promise<BoardView | null>>();
   const readCurrentThread = (id: string) => {

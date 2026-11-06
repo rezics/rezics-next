@@ -521,10 +521,14 @@ test.serial(
 
     let after: import('../../src/community/account-erasure-records.ts').CommunityRecordsCursor | null = null;
     do {
-      const page = await purgeAccountBanReasonsPage({ pool: system.database.pool }, account.id, {
-        asOf: secondDue,
-        after,
-      });
+      const page = await purgeAccountBanReasonsPage(
+        { clock: () => new Date(), pool: system.database.pool },
+        account.id,
+        {
+          asOf: secondDue,
+          after,
+        },
+      );
       after = page.next;
     } while (after !== null);
     await resolveRetention(

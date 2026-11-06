@@ -3,7 +3,11 @@ import type { Pool } from 'pg';
 import { contentEditionBenefitBinding, copyContentEditionBenefit } from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
 import type { ContentEditionSaleAuthority } from '../content/edition-model.ts';
-import { readContentEditionSaleAuthority, readContentEditionMechanicalSaleAuthority } from '../content/edition-sale.ts';
+import {
+  readContentEditionSaleAuthority,
+  readContentEditionMechanicalSaleAuthority,
+  type ContentEditionConsentReader,
+} from '../content/edition-sale.ts';
 import type { ReadContext } from '../content/model.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -38,7 +42,13 @@ export function nativeEditionAuthorityAvailability(): NativeEditionAuthorityUnav
   return { kind: 'unavailable', reason: 'content-edition-sale-port-pending' };
 }
 
-type SaleDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+/** Auth-owned consent is an explicit operand of content sale reads; absent when Auth is unconfigured. */
+export type SaleDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  clock: () => Date;
+  readConsent?: ContentEditionConsentReader;
+}>;
 
 /** Translate only the closed native facts; this value is immutable terms, not permission. */
 export function captureContentEditionSaleAuthority(

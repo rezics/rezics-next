@@ -71,7 +71,7 @@ export function mediaImportRoutes(
       pool: dependencies.pool,
       access: dependencies.access,
       routeKey: dependencies.routeKey,
-      clock: dependencies.clock ?? (() => new Date()),
+      clock: dependencies.clock,
       fetchConfig: dependencies.fetchConfig,
     };
   }

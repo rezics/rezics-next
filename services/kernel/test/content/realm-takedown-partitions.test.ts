@@ -18,7 +18,7 @@ const context = () => ({
   requestId: crypto.randomUUID(),
   deadline: Date.now() + 10000,
 });
-const deps = () => ({ pool: f.pool, access: f.access, routeKey: new Uint8Array(32).fill(7) });
+const deps = () => ({ clock: () => new Date(), pool: f.pool, access: f.access, routeKey: new Uint8Array(32).fill(7) });
 
 beforeAll(async () => {
   f = await standingFixture(['realm:read', 'realm:ban', 'realm:publish', 'board:create']);

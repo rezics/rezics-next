@@ -118,7 +118,7 @@ async function verifyHandleHolder(dependencies: SpaceDependencies, actor: Actor,
   const holder = await withConnection(dependencies.pool, (client) => handleHolder(client, address));
   if (!holder || holder.accountId === claimant) return;
   const holderRoute = routeOf(holder.accountId);
-  const at = dependencies.clock?.() ?? new Date();
+  const at = dependencies.clock();
   if (!Number.isFinite(at.getTime())) throw new SpaceInputError();
   const role =
     holderRoute === null

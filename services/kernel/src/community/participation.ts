@@ -81,7 +81,7 @@ export function realmParticipationAnchor(resource: Resource) {
 export function createRealmParticipationCheck(input: {
   pool: Pool;
   access: Access;
-  clock?: () => Date;
+  clock: () => Date;
 }): RealmParticipationCheck {
   return async (client, { realmId, actor, readDecision }, time) => {
     const route = routeOf(realmId);

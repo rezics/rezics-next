@@ -6,6 +6,7 @@ import { REVIEW_DISCOVERY_PAGE_LIMIT } from '../../src/content/review-discovery.
 test('mixed population respects the Review owner page bound and keeps its signed continuation', async () => {
   const after = { route: 0, id: '00000000-0000-8000-8000-000000000001' };
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool: {} as Pool,
     routeKey: new Uint8Array(32),
     access: {} as never,

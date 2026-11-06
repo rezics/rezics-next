@@ -23,6 +23,9 @@ import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts'
 import { registerFeedWork } from './feed-work.ts';
 import { registerReportLocatorWork } from './report-locator-work.ts';
 import { createConversationActivityEffect } from './conversation-activity.ts';
+import { CONTENT_EVENTS } from './events.ts';
+import { FEED_OPERATION_DECLARATIONS } from './feed-operation-declarations.ts';
+import { contentViewerActionResources } from './viewer-actions.ts';
 
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
@@ -140,31 +143,49 @@ function unavailableConsent(): CurrentConsentReader {
   };
 }
 
-/** Sole kernel worker composition entry; configuration comes from its shared context. */
-export const registerContent: WorkModule = {
-  name: 'content',
-  async register(context) {
-    const dependencies = contentWorkDependencies(context.env, fetch);
-    const collectionPartitions = testCollectionPartitions(context.env);
-    for (const group of dependencies.absentGroups) {
-      console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
-    }
-    const { access, readConsent } = context.getAuthorization();
-    await createContentWork({
-      storage: dependencies.storage,
-      access,
-      readConsent,
-      routeKey: readMembershipRouteKey(context.env),
-      fetchConfig: dependencies.fetchConfig,
-      ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
-    }).register(context);
-    registerReportLocatorWork(context);
-    registerModerationDirectoryWork(context);
-    context.addEffects([
-      createConversationActivityEffect(context.pool),
-      ...contentEffects(context.pool, context.client),
-      ...contentNoticeEffects(context.pool, access),
-    ]);
-    await registerFeedWork(context);
-  },
-};
+/** Network access is an explicit operand supplied by the composition root. */
+export type ContentWorkAmbient = Readonly<{ fetch: (request: Request) => Promise<Response> }>;
+
+/** Content's declared surfaces, read by the composition root. Events, operations and permissions are data;
+ * the worker is a factory over explicit operands. HTTP routes are mounted by the HTTP composition. */
+export function contentDeclaration() {
+  return Object.freeze({
+    name: 'content',
+    events: CONTENT_EVENTS,
+    operations: FEED_OPERATION_DECLARATIONS,
+    permissions: contentViewerActionResources,
+    work: createContentWorkModule,
+  });
+}
+
+/** Content's worker registration, constructed from the composition's explicit operands. Configuration comes
+ * from the shared work context; nothing here reads the process environment, the network or the clock at load. */
+export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule {
+  return {
+    name: 'content',
+    async register(context) {
+      const dependencies = contentWorkDependencies(context.env, ambient.fetch);
+      const collectionPartitions = testCollectionPartitions(context.env);
+      for (const group of dependencies.absentGroups) {
+        console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
+      }
+      const { access, readConsent } = context.getAuthorization();
+      await createContentWork({
+        storage: dependencies.storage,
+        access,
+        readConsent,
+        routeKey: readMembershipRouteKey(context.env),
+        fetchConfig: dependencies.fetchConfig,
+        ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
+      }).register(context);
+      registerReportLocatorWork(context);
+      registerModerationDirectoryWork(context);
+      context.addEffects([
+        createConversationActivityEffect(context.pool),
+        ...contentEffects(context.pool, context.client),
+        ...contentNoticeEffects(context.pool, access),
+      ]);
+      await registerFeedWork(context);
+    },
+  };
+}

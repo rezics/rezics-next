@@ -1014,7 +1014,7 @@ export async function readBoardSlowMode(
   deadline: number,
 ): Promise<BoardSlowModeRead> {
   const board = resource(boardId);
-  const now = deps.clock?.() ?? new Date();
+  const now = deps.clock();
   const nowMs = now.getTime();
   if (!Number.isFinite(nowMs)) throw new TypeError('Invalid board slow-mode read clock');
   const check =

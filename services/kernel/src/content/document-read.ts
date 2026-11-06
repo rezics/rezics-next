@@ -15,7 +15,13 @@ import { readAuthoredField, readAuthoredFieldBounded, type AuthoredFieldView } f
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { readFences } from './source-fences.ts';
 
-export type DocumentReadDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
+/** `now` is the wall-clock budget source supplied by the composition; deadlines are compared against it. */
+export type DocumentReadDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  routeKey: Uint8Array;
+  now: () => number;
+}>;
 type DocumentMetadata = Readonly<{
   id: string;
   subjectId: string;
@@ -144,7 +150,7 @@ export async function readDocument(
   if (
     route === null ||
     !Number.isFinite(context.deadline) ||
-    Date.now() >= context.deadline ||
+    dependencies.now() >= context.deadline ||
     (maxSourceBytes !== undefined &&
       (!Number.isSafeInteger(maxSourceBytes) || maxSourceBytes < 1 || maxSourceBytes > MAX_DOCUMENT_BYTES))
   )
@@ -219,7 +225,7 @@ export async function readDocument(
       if (!disclosure?.disclosed || disclosure.security_revision !== semantic.security_revision) return null;
       return current.origin === 'import' ? viewImported(current.row) : viewAuthored(current.row);
     });
-    if (!final.value || Date.now() >= context.deadline) return null;
+    if (!final.value || dependencies.now() >= context.deadline) return null;
     return { document: final.value, anchors: fenceAnchor ? [fenceAnchor, final.anchor] : [final.anchor] };
   } catch (error) {
     if (error instanceof GrantDeniedError || error instanceof RangeError) return null;

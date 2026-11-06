@@ -613,7 +613,7 @@ async function registerWork(
     createSubjectThreadEffect(context.pool),
     createAuthorItemEffect(context.pool),
     createReportLocatorEffect(context.pool),
-    createCreatorEditionIndexEffect(context.pool),
+    createCreatorEditionIndexEffect(context.pool, context.clock),
     createPartyLocatorEffect(context.pool),
     createAccountUploadIndexEffect(context.pool, storage),
   ]);

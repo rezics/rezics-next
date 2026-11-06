@@ -81,7 +81,7 @@ export async function claimRealmPresentationMedia(
 }
 
 export async function readRealmPresentationImages(
-  deps: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  deps: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   input: Readonly<{ realmId: string; avatarMediaId: string | null; bannerMediaId: string | null }>,
   context: ReadContext,
 ): Promise<

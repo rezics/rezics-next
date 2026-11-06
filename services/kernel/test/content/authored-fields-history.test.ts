@@ -160,7 +160,12 @@ test('actual standalone authored-field command enrolls exact original native sou
   expect(Object.keys(stored).sort()).toEqual(['digest', 'id']);
   expect(await copies(source)).toEqual([]);
   const request = context();
-  const erased = await eraseAuthoredField({ pool: db.pool, access }, author, stored.id, request);
+  const erased = await eraseAuthoredField(
+    { clock: () => new Date(), pool: db.pool, access },
+    author,
+    stored.id,
+    request,
+  );
   expect(erased).toMatchObject({ replayed: false, value: { id: stored.id, subject, authorId: author.accountId } });
   if (!erased) throw new Error('Standalone erase did not commit');
   expect(Object.keys(erased.value).sort()).toEqual(['authorId', 'id', 'subject']);
@@ -217,10 +222,14 @@ test('actual standalone authored-field command enrolls exact original native sou
   expect((await outer(async (tx) => result(await readAuthoredFieldHistorySource(tx, stored.id)))).value).toEqual(
     source,
   );
-  expect(await eraseAuthoredField({ pool: db.pool, access }, author, stored.id, request)).toMatchObject({
+  expect(
+    await eraseAuthoredField({ clock: () => new Date(), pool: db.pool, access }, author, stored.id, request),
+  ).toMatchObject({
     replayed: true,
   });
-  expect(await eraseAuthoredField({ pool: db.pool, access }, author, stored.id, context())).toBeNull();
+  expect(
+    await eraseAuthoredField({ clock: () => new Date(), pool: db.pool, access }, author, stored.id, context()),
+  ).toBeNull();
   expect(await copies(source)).toEqual(enrolled);
   expect(
     (
@@ -306,18 +315,18 @@ test('missing native history enrollment and repeated or late outer source declar
 
 test('source metadata cannot bypass current erase permission, exact authorship or missing native rows', async () => {
   const { stored, source } = await field();
-  await expect(eraseAuthoredField({ pool: db.pool, access }, other, stored.id, context())).rejects.toBeInstanceOf(
-    ContentNotFoundError,
-  );
+  await expect(
+    eraseAuthoredField({ clock: () => new Date(), pool: db.pool, access }, other, stored.id, context()),
+  ).rejects.toBeInstanceOf(ContentNotFoundError);
   await grant(stored.id, other.accountId, 'document:erase');
-  await expect(eraseAuthoredField({ pool: db.pool, access }, other, stored.id, context())).rejects.toBeInstanceOf(
-    ContentNotFoundError,
-  );
+  await expect(
+    eraseAuthoredField({ clock: () => new Date(), pool: db.pool, access }, other, stored.id, context()),
+  ).rejects.toBeInstanceOf(ContentNotFoundError);
   const missing = newId(route);
   await grant(missing, author.accountId, 'document:erase');
-  await expect(eraseAuthoredField({ pool: db.pool, access }, author, missing, context())).rejects.toBeInstanceOf(
-    ContentNotFoundError,
-  );
+  await expect(
+    eraseAuthoredField({ clock: () => new Date(), pool: db.pool, access }, author, missing, context()),
+  ).rejects.toBeInstanceOf(ContentNotFoundError);
   expect(await copies(source)).toEqual([]);
   expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({
     availability: 'available',

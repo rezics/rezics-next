@@ -34,7 +34,12 @@ let decodedBodies = 0;
 let database: GrowthDatabase;
 let access: ReturnType<typeof createAccess>;
 let sign: (accountId: string, scopes: readonly string[]) => Promise<string>;
-const deps = (selected: Access = access) => ({ pool: database.pool, access: selected, tokens });
+const deps = (selected: Access = access) => ({
+  clock: () => new Date(),
+  pool: database.pool,
+  access: selected,
+  tokens,
+});
 const ctx = (actor: Actor = { kind: 'anonymous' }) => ({ actor, deadline: Date.now() + 10_000 });
 const elapsedSeconds = (started: number) => Math.round(((performance.now() - started) / 1000) * 10_000) / 10_000;
 const reportFixturePhases = (phases: Record<string, number>) =>

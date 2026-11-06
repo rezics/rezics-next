@@ -31,7 +31,7 @@ const kinds = [
 ] as const;
 type Kind = (typeof kinds)[number];
 export type CommunityRecordsCursor = { kind: Kind; dueAt: string; ownerRoute: number; ownerId: string; key: string };
-type Dependencies = { pool: Pool; clock?: () => Date };
+type Dependencies = { pool: Pool; clock: () => Date };
 export const MEMBERSHIP_OPERATION_ENQUEUE_GRACE_MS = 60 * 60 * 1000;
 type Locator = { kind: string; due_at: string; owner_route: number; owner_id: string; key: string };
 const FIRST = {
@@ -210,14 +210,7 @@ export async function eraseAccountCommunityRecordsPage(
   let pending = 0;
   let reasonsKeptUntil: string | null = null;
   for (const row of rows) {
-    const result = await eraseAccountCommunityRecordItem(
-      { pool, ...(clock ? { clock } : {}) },
-      accountId,
-      row,
-      input.erasedAt,
-      false,
-      at,
-    );
+    const result = await eraseAccountCommunityRecordItem({ pool, clock }, accountId, row, input.erasedAt, false, at);
     if (result.pending) {
       pending++;
       continue;

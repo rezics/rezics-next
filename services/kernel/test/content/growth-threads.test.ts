@@ -114,11 +114,11 @@ function readContext() {
 }
 
 function commandDependencies(pool: Pool = db.pool) {
-  return { pool, access: fixture.access, routeKey };
+  return { clock: () => new Date(), pool, access: fixture.access, routeKey };
 }
 
 function readDependencies(pool: Pool = db.pool) {
-  return { pool, access: publicAccess, tokens: pageTokens };
+  return { clock: () => new Date(), pool, access: publicAccess, tokens: pageTokens };
 }
 
 async function observedActor(pool: Pool): Promise<AccountActor> {

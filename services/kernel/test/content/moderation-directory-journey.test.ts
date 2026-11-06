@@ -20,11 +20,7 @@ let boardId: string;
 let moderator: Awaited<ReturnType<typeof w.person>>;
 let member: Awaited<ReturnType<typeof w.person>>;
 const deadline = () => Date.now() + 30_000;
-const deps = () => ({
-  pool: w.db.pool,
-  access: w.kernel.testAccess,
-  tokens: testTokens(),
-});
+const deps = () => ({ clock: () => new Date(), pool: w.db.pool, access: w.kernel.testAccess, tokens: testTokens() });
 const actor = (person = moderator): Promise<AccountActor> =>
   w.kernel.testAccess.authenticate(person.bearer, {
     pool: w.db.pool,

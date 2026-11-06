@@ -11,7 +11,7 @@ import { routeOf } from '../route/route.ts';
  * A home consumes that protocol once, without a second presentation authority.
  */
 export async function readRealmHomePresentation(
-  deps: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  deps: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   realmId: string,
   context: ReadContext,
 ): Promise<CommunityPresentation | null> {

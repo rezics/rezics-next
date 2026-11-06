@@ -37,6 +37,7 @@ beforeAll(async () => {
     actor: { ...verified, authnEpoch: Math.max(verified.authnEpoch, 1) },
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
     deadline: Date.now() + 180_000,
+    now: () => new Date(),
   };
 }, 120_000);
 afterAll(async () => {

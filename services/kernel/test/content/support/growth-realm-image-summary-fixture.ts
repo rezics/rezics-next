@@ -157,7 +157,11 @@ export async function realmImageSummaryFixture() {
       input: { realmId: string; avatarMediaId: string | null; bannerMediaId: string | null } = selected,
       actor: Actor = reader,
       pool = db.pool,
-    ) => readRealmPresentationImages({ ...deps, pool }, input, { actor, deadline: Date.now() + 30_000 });
+    ) =>
+      readRealmPresentationImages({ clock: () => new Date(), ...deps, pool }, input, {
+        actor,
+        deadline: Date.now() + 30_000,
+      });
     const facts = await db.admin.query<{
       media_id: string;
       format: 'avif' | 'webp';

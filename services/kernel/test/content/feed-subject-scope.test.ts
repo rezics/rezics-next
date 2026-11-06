@@ -11,6 +11,7 @@ test('native Space Subject scope retains complete publication membership and rej
     expect(realm.response.status, realm.text).toBe(200);
     const spaceId = realm.value!.realm.spaceId as string;
     const deps = {
+      clock: () => new Date(),
       pool: world.system.database.pool,
       access: world.system.access,
       contentAccess: world.system.access,

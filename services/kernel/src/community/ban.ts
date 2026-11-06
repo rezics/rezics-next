@@ -142,7 +142,7 @@ export async function banAccount(
             {
               pool: deps.pool,
               access: deps.access,
-              ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+              clock: deps.clock,
               tokens: deps.tokens,
               client: await deps.workClient(),
             },

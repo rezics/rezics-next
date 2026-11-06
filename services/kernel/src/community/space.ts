@@ -32,7 +32,7 @@ import moveHead from './space-head.sql';
 import eligibilityRead from './space-eligibility-read.sql';
 import { viewerActionEligibilityWork, spaceEligibilityAccessWork } from './eligibility-access-work.ts';
 
-export type SpaceDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
+export type SpaceDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>;
 export type SpaceContext = Readonly<{ idempotencyKey: string; deadline: number }>;
 export type SpaceInput = Readonly<{ title: string; summary?: string }>;
 export type SpaceUpdate = Readonly<{ spaceId: string; expectedHead: string; title?: string; summary?: string }>;

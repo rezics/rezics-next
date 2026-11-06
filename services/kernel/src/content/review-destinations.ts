@@ -147,7 +147,7 @@ export async function readReviewDestinationPage(
   const nativeContext = await prepareSubjectThreadContext(dependencies, subjectId, realmId, 'review', context);
   const current = contextProjection(nativeContext.initial);
   const binding = cursorBinding(actor, current);
-  const now = (dependencies.cursorNow ?? Date.now)();
+  const now = dependencies.cursorNow();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
 
   let innerCursor: string | undefined;

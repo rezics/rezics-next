@@ -27,7 +27,14 @@ let actor: Awaited<ReturnType<typeof f.context>>['actor'];
 let sitemapAccess: ReturnType<typeof createAccess>;
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
-const deps = () => ({ pool: f.pool, access: f.access, routeKey, tokens });
+const deps = () => ({
+  cursorNow: () => Date.now(),
+  clock: () => new Date(),
+  pool: f.pool,
+  access: f.access,
+  routeKey,
+  tokens,
+});
 const context = () => ({
   idempotencyKey: crypto.randomUUID(),
   requestId: crypto.randomUUID(),

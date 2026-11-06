@@ -299,7 +299,7 @@ async function createTestRealm() {
     authnEpoch: 1,
   };
   const routeKey = new Uint8Array(32).fill(44);
-  const dependencies = { pool: db.pool, access, routeKey };
+  const dependencies = { clock: () => new Date(), pool: db.pool, access, routeKey };
   await bootstrapRelease(db.pool, bundledRelease);
   const space = await createSpace(
     dependencies,

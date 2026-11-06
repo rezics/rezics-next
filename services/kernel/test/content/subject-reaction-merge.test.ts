@@ -151,19 +151,19 @@ test('a real subject merge queues one event-derived job and reactions converge w
   await grantManagerReaction(merged);
 
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     actorA,
     { targetKind: 'subject', targetId: merged, kind: 'like' },
     request(),
   );
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     actorA,
     { targetKind: 'subject', targetId: survivor, kind: 'love' },
     request(),
   );
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     actorB,
     { targetKind: 'subject', targetId: merged, kind: 'laugh' },
     request(),
@@ -264,7 +264,7 @@ test('a restarted merge job uses its saved actor cursor and a chained merge reso
   const chain = [await subject('Chain earliest'), await subject('Chain middle'), await subject('Chain latest')].sort();
   const [finalSurvivor, intermediate, chainSource] = chain as [string, string, string];
   await commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     await f.verified(),
     { targetKind: 'subject', targetId: chainSource, kind: 'sad' },
     request(),

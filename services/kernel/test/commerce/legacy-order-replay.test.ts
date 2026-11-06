@@ -72,7 +72,7 @@ beforeAll(async () => {
       readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
     },
   });
-  commands = createCommerceCommands({ pool, access: system.access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access: system.access });
   governance = await contentGovernanceCredential(system);
   for (const group of ['selling', 'purchases'])
     await value(wire(governance, `/v1/platform/exposure/${group}:open`), 200);

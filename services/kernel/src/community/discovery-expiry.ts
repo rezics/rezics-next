@@ -19,8 +19,8 @@ type Due = {
 };
 
 /** A single shared-worker step consumes at most fifty indexed keys, including independent old storage cleanup. */
-export async function expireRealmDiscovery(pool: Pool, options: { clock?: () => Date } = {}): Promise<number> {
-  const now = (options.clock ?? (() => new Date()))();
+export async function expireRealmDiscovery(pool: Pool, options: { clock: () => Date }): Promise<number> {
+  const now = options.clock();
   const due = await discoverySnapshot(
     pool,
     DISCOVERY_PARTITION,
