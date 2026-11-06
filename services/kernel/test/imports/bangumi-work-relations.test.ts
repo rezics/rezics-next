@@ -9,6 +9,7 @@ import { planCrossMediaSeed, seedCrossMedia, type CrossMediaTables } from '../..
 import { openApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { routeOf } from '../../src/route/route.ts';
 
 type Candidate = {
   id: string;
@@ -121,7 +122,7 @@ test('production operator imports reciprocal and one-sided work relations for in
     expect(createdContext.status).toBe(201);
     const context = (createdContext.body as { context: { id: string } }).context.id;
     const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: context },
+      resource: { route: routeOf(context)!, id: context },
       subject: { kind: 'account', id: runtime.identity.governance.accountId },
       actions: ['context:accept', 'context:adopt'],
       valid: '(,)',
