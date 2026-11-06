@@ -18,9 +18,7 @@ Next and Previous replace the current window rather than appending history. A pe
 the independently read page visible and explicitly says that completion has not been established. Retry retains the
 failed cursor and navigation intent; Refresh deliberately rereads the visible window; Restart reads the first page.
 An expired cursor is explicit and never silently converted into a first-page success. Native denial, sign-out or
-closure withdraws visible private results. Auth workflow-history and website-protocol retention retire expired
-eligible history only; a live signed-in Web session remains the current Library reader until the member signs out
-or the session itself expires. A sparse page retains Next; an empty first page, empty final window and
+closure withdraws visible private results. A sparse page retains Next; an empty first page, empty final window and
 unavailable read have separate presentation. No private Library cursor is placed in a public Work link, Auth return,
 local storage or an import receipt.
 

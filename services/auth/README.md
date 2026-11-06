@@ -142,23 +142,21 @@ PostgreSQL 19 image as kernel. It never uses `DATABASE_URL`, `AUTH_DATABASE_URL`
 or the development database. It applies committed dbmate migrations twice,
 compares the normalized schema dump, checks the schema against the installed
 Better Auth migration API, runs strict root TypeScript, root lint/format tools
-and the frozen Bun tests. Containers use `rezics.auth.check.pid` labels and disk-backed volumes;
-normal exit and SIGINT/SIGTERM remove them, and later checks remove stale fixtures.
-Auth test databases run through `scripts/stack-run.ts` on a performance-approved check host.
-Workers do not start a second local PostgreSQL container when no host answers; that placement is unavailable.
-An admitted check reuses the lane's labelled fixture and removes leftover owned containers on failure.
-Reylo typecheck uses `rezics_compiler` inside that same fixture (kernel then Auth migrations) instead of a second
-PostgreSQL container; `DROP DATABASE` replaces `docker rm` for that copy. Standalone Auth typecheck still prepares
-the shared compiler container, with a ten-minute `docker run -d` budget and a two-minute `docker rm` budget, and
-names the exact argv on spawnSync timeout.
-Docker is required; a missing database URL never skips tests. Direct database tests must use
+and the frozen Bun tests. Throwaway `docker run -d` uses `--rm` plus
+`rezics.auth.check.pid` labels and disk-backed volumes. Owner exit, failure,
+SIGINT and SIGTERM remove only those labelled fixtures; later checks remove
+stale ones. Auth test databases run through `scripts/stack-run.ts` on a
+performance-approved check host. A worker does not start a local PostgreSQL
+container when no host answers; that placement is unavailable. An admitted
+check publishes `AUTH_TEST_DATABASE_URL` and `AUTH_CHECK_CONTAINER`; bun-test
+workers consume that migrated copy at import and do not start a second server.
+`ownDatabase` waits until `pg_isready` on the owned identity before migrate.
+A spawnSync timeout names the exact owned `docker` argv. Fixture commands keep
+the 120-second default. Reylo typecheck uses `rezics_compiler` inside the same
+fixture instead of a second PostgreSQL container. Docker is required; a missing
+database URL never skips tests. Direct database tests must use
 `bun run --cwd services/auth check <file>` so the whole test can be placed.
 `AUTH_TEST_DATABASE_URL` is reserved for the check's fixture, never a development database.
-`testDatabase` consumes that URL and `AUTH_CHECK_CONTAINER` at module import, including bun-test workers whose
-parent pid is not the check; it does not start another labelled PostgreSQL container. A spawnSync timeout names
-the exact owned `docker` argv, including `rezics.auth.check.pid` and nonce labels. Fixture `docker run -d` uses a
-ten-minute allocation budget, distinct from the 120-second default for other commands. The check's `ownDatabase`
-launch then waits until `pg_isready` on that same owned identity before migrate.
 
 Create an Auth-only database and apply migrations before starting an application:
 
@@ -2488,22 +2486,10 @@ cannot strand bindings. Product migrations define the trigger function without
 requiring the DBOS schema to exist during migration.
 
 The Cost table records the full/short native batch series and its fixed-batch,
-retained-child and long-lived-workflow qualifications.
-
-Empty and post-drain workflow retention (`test/growth-empty-retention.test.ts`)
-and website protocol retention (`test/website-protocol-retention.test.ts`) run
-through `bun run --cwd services/auth check <file>`. `testDatabase` consumes the
-check lane's `AUTH_TEST_DATABASE_URL` and labelled fixture; it does not start
-another PostgreSQL container at module import. The check's Reylo typecheck uses
-`rezics_compiler` in that fixture rather than a second compiler container.
-A spawnSync timeout names the exact owned `docker` argv, including
-`rezics.auth.check.pid` and nonce labels.
-Fixture allocation uses a ten-minute `docker run -d` budget; readiness probes stay
-short. Keep those causal assertions unchanged; a live session remains usable after
-expired protocol history is retired. Native API and Auth-app page sign-in (phone
-and desktop, denied-then-repaired password, keyboard/focus, locale) pin that
-session after the drain. Exact expired and retained workflow identities are pinned
-in the empty-retention suite. The seeded Web walk supplies the same cookie contract.
+retained-child and long-lived-workflow qualifications. Empty and post-drain
+workflow retention and website protocol retention run through
+`bun run --cwd services/auth check <file>` so they consume the admitted lane;
+native scales and session/browser journeys remain open.
 
 ### Erasure cursor deployment
 

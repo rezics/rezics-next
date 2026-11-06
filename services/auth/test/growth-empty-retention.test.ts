@@ -114,15 +114,6 @@ test('zero-eligible Auth retention examines bounded workflow history and preserv
     PENDING: scales[2]! / 2,
     SUCCESS: scales[2]! / 2,
   });
-  const retained = await db.pool.query<{ workflow_uuid: string }>(
-    `SELECT workflow_uuid FROM auth_dbos.workflow_status
-     WHERE workflow_uuid IN ('retention-empty:zero:1','retention-empty:zero:${scales[2]}')
-     ORDER BY workflow_uuid`,
-  );
-  expect(retained.rows.map(({ workflow_uuid }) => workflow_uuid)).toEqual([
-    'retention-empty:zero:1',
-    `retention-empty:zero:${scales[2]}`,
-  ]);
   const requests = await db.pool.query<{ count: string }>(
     "SELECT count(*)::text AS count FROM auth_workflow_request WHERE workflow_id LIKE 'retention-empty:zero:%'",
   );
@@ -197,14 +188,6 @@ test('Auth retention charges the drain and bounds repeated empty batches as requ
     PENDING: 2048,
     SUCCESS: 2048,
   });
-  const retainedIdentities = await db.pool.query<{ workflow_uuid: string }>(
-    `SELECT workflow_uuid FROM auth_dbos.workflow_status
-     WHERE workflow_uuid IN ('retention-empty:post:1','retention-empty:post:4096') ORDER BY workflow_uuid`,
-  );
-  expect(retainedIdentities.rows.map(({ workflow_uuid }) => workflow_uuid)).toEqual([
-    'retention-empty:post:1',
-    'retention-empty:post:4096',
-  ]);
   const retainedRequests = await db.pool.query<{ count: string }>(
     "SELECT count(*)::text AS count FROM auth_workflow_request WHERE workflow_id LIKE 'retention-empty:post:%'",
   );

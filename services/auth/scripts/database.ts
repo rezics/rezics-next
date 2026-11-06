@@ -11,8 +11,6 @@ export const TEMPLATE_DATABASE = 'rezics_auth_test';
 /** Reylo typecheck copy in the labelled Auth fixture; not a second PostgreSQL container. */
 export const COMPILER_DATABASE = 'rezics_compiler';
 export const DEFAULT_RUN_TIMEOUT = 120_000;
-/** Fixture `docker run -d` may pull or wait on a busy daemon; keep other commands at DEFAULT_RUN_TIMEOUT. */
-export const FIXTURE_LAUNCH_TIMEOUT = 600_000;
 
 type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
 
@@ -23,10 +21,27 @@ const READY_TIMEOUT = 60_000;
 let placed = false;
 let cleanupRegistered = false;
 
+function interrupt(code: number): void {
+  cleanupOwned();
+  process.exit(code);
+}
+
+const onSigint = (): void => interrupt(130);
+const onSigterm = (): void => interrupt(143);
+
 function registerCleanup(): void {
   if (cleanupRegistered) return;
   cleanupRegistered = true;
   process.once('exit', cleanupOwned);
+  process.once('SIGINT', onSigint);
+  process.once('SIGTERM', onSigterm);
+}
+
+function unregisterCleanup(): void {
+  process.off('exit', cleanupOwned);
+  process.off('SIGINT', onSigint);
+  process.off('SIGTERM', onSigterm);
+  cleanupRegistered = false;
 }
 
 export function assertDatabasePlacement(): void {
@@ -54,11 +69,9 @@ function cleanupDocker(args: string[]): string {
 function cleanupOwned(): void {
   const filter = `label=${OWNER_LABEL}=${process.pid}`;
   const containers = cleanupDocker(['ps', '-aq', '--filter', filter]).split('\n').filter(Boolean);
-  // Listing stays on the short cleanup budget. Removal waits on the daemon, so a busy host must not fail a finished
-  // check the way compiler-database `docker rm` did after typecheck.
-  if (containers.length) removeContainerResources(['rm', '-f', '-v', ...containers]);
+  if (containers.length) cleanupDocker(['rm', '-f', '-v', ...containers]);
   const volumes = cleanupDocker(['volume', 'ls', '-q', '--filter', filter]).split('\n').filter(Boolean);
-  if (volumes.length) removeContainerResources(['volume', 'rm', '-f', ...volumes]);
+  if (volumes.length) cleanupDocker(['volume', 'rm', '-f', ...volumes]);
 }
 
 /** Place the whole check: a fixture's loopback URL cannot be handed back from a remote host. */
@@ -71,8 +84,7 @@ export async function databaseCheck(command: string[], action: () => Promise<num
       return await action();
     } finally {
       cleanupOwned();
-      process.off('exit', cleanupOwned);
-      cleanupRegistered = false;
+      unregisterCleanup();
       placed = false;
     }
   });
@@ -94,6 +106,7 @@ export function run(
       'run',
       '--stop-timeout',
       '2',
+      '--rm',
       '--label',
       `${OWNER_LABEL}=${process.pid}`,
       '--label',
@@ -105,7 +118,7 @@ export function run(
     cwd: directory,
     env,
     encoding: 'utf8',
-    timeout: fixture && timeout === DEFAULT_RUN_TIMEOUT ? FIXTURE_LAUNCH_TIMEOUT : timeout,
+    timeout,
   });
   if (nonce && (result.error || result.status !== 0)) {
     // docker run can create a container without starting it or returning its id.
@@ -314,10 +327,10 @@ function waitUntilReady(container: string): void {
       encoding: 'utf8',
       timeout: 5_000,
     });
-    if (inspect.error?.code === 'ETIMEDOUT') {
+    if ((inspect.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') {
       last = `inspect timeout ${container}`;
     } else if (inspect.error) {
-      spawnError('docker', ['inspect', '-f', format, container], inspect.error);
+      spawnError('docker', ['inspect', '-f', format, container], inspect.error as NodeJS.ErrnoException);
     } else {
       last = (inspect.stdout ?? inspect.stderr ?? '').trim();
       const [status] = last.split(' ');
@@ -328,8 +341,12 @@ function waitUntilReady(container: string): void {
           timeout: 5_000,
         });
         if (!ready.error && ready.status === 0) return;
-        if (ready.error && ready.error.code !== 'ETIMEDOUT') {
-          spawnError('docker', ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE], ready.error);
+        if (ready.error && (ready.error as NodeJS.ErrnoException).code !== 'ETIMEDOUT') {
+          spawnError(
+            'docker',
+            ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE],
+            ready.error as NodeJS.ErrnoException,
+          );
         }
       }
     }
@@ -408,12 +425,6 @@ export function ownDatabase(): TestDatabase {
       removeContainer(container);
     }
   };
-  const interrupt = (code: number) => {
-    close();
-    process.exit(code);
-  };
-  process.once('SIGINT', () => interrupt(130));
-  process.once('SIGTERM', () => interrupt(143));
   try {
     waitUntilReady(container);
     const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];

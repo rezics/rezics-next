@@ -1,32 +1,14 @@
-// Reylo prepares `.sql` modules against DATABASE_URL. The root typecheck and the Auth standalone typecheck share this
-// preparation so those modules see the kernel schema and the Auth schema. Auth `check` reuses its labelled fixture
-// instead of this second container.
+// Reylo prepares `.sql` modules against DATABASE_URL. The root typecheck and the Auth check share this
+// preparation so those modules see the kernel schema and the Auth schema.
 import { spawnSync } from 'node:child_process';
 import { migrate as migrateAuth } from '../services/auth/scripts/database.ts';
 import { migrate as migrateKernel, POSTGRES_IMAGE } from '../services/kernel/scripts/database.ts';
 import { withCommandPhase } from '../services/kernel/scripts/command-phases.ts';
 import type { StartedDatabase } from './typecheck.ts';
 
-const COMPILER_LAUNCH_TIMEOUT = 600_000;
-const COMPILER_REMOVE_TIMEOUT = 120_000;
-const COMPILER_DOCKER_TIMEOUT = 30_000;
-
-function dockerTimeout(args: string[]): number {
-  if (args[0] === 'run' && args.includes('-d')) return COMPILER_LAUNCH_TIMEOUT;
-  if (args[0] === 'rm') return COMPILER_REMOVE_TIMEOUT;
-  return COMPILER_DOCKER_TIMEOUT;
-}
-
 function docker(args: string[]): string {
-  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: dockerTimeout(args) });
-  if (result.error) {
-    if ((result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-      throw Object.assign(result.error, {
-        message: `spawnSync docker ETIMEDOUT ${JSON.stringify(['docker', ...args])}`,
-      });
-    }
-    throw result.error;
-  }
+  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 10_000 });
+  if (result.error) throw result.error;
   if (result.status !== 0)
     throw new Error(
       `docker ${args.join(' ')} failed with status ${result.status}: ${result.stderr?.trim() || '(no stderr)'}`,

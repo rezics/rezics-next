@@ -17,7 +17,9 @@ import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 if (args[0] === 'run') console.log('postgres-container');
-else if (!['ps', 'port', 'rm', 'volume'].includes(args[0])) process.exit(74);
+else if (args[0] === 'inspect') console.log('running postgres-container ' + process.pid + ' nonce');
+else if (args[0] === 'exec' && args.includes('pg_isready')) process.exit(0);
+else if (!['ps', 'port', 'rm', 'volume', 'inspect', 'exec'].includes(args[0])) process.exit(74);
 `,
   );
   chmodSync(shim, 0o755);

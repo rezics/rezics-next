@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { COMPILER_DATABASE, FIXTURE_LAUNCH_TIMEOUT, POSTGRES_IMAGE, TEMPLATE_DATABASE } from '../scripts/database.ts';
+import { COMPILER_DATABASE, DEFAULT_RUN_TIMEOUT, POSTGRES_IMAGE, TEMPLATE_DATABASE } from '../scripts/database.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 const database = resolve(import.meta.dir, '../scripts/database.ts');
@@ -59,10 +59,20 @@ if (args[0] === 'run') {
   const label = args.find(arg => arg.startsWith('rezics.auth.check.nonce='));
   writeFileSync(${JSON.stringify(state)}, label ?? 'missing nonce');
   if (process.env.FAKE_HANG === '1') setInterval(() => {}, 1000);
+  else if (process.env.FAKE_WAIT_READY === '1') console.log('waiting-container');
+  else if (process.env.FAKE_READY === '1') console.log('ready-container');
   else { console.error('created but never started'); process.exit(73); }
+} else if (args[0] === 'inspect') {
+  if (process.env.FAKE_WAIT_READY === '1') setInterval(() => {}, 1000);
+  else if (process.env.FAKE_READY === '1') console.log('running ' + args.at(-1) + ' ' + process.pid + ' ready');
+  else process.exit(74);
+} else if (args[0] === 'exec' && args.includes('pg_isready')) {
+  if (process.env.FAKE_READY === '1') process.exit(0);
+  else process.exit(74);
 } else if (args[0] === 'ps' && args.includes('-aq')) {
   const filter = args.at(-1);
   if (process.env.FAKE_PID_RESOURCES === '1' && filter.startsWith('label=rezics.auth.check.pid=')) console.log('owned-container');
+  else if (existsSync(${JSON.stringify(state)}) && filter.startsWith('label=rezics.auth.check.pid=')) console.log('created-container');
   else if (existsSync(${JSON.stringify(state)}) && filter === 'label=' + readFileSync(${JSON.stringify(state)}, 'utf8')) console.log('created-container');
 } else if (args[0] === 'rm') {
   // Delayed removal proves the caller waits, rather than detaching docker rm.
@@ -70,7 +80,7 @@ if (args[0] === 'run') {
   rmSync(${JSON.stringify(state)}, { force: true });
   appendFileSync(${JSON.stringify(log)}, JSON.stringify({ kind: 'removed' }) + '\\n');
 } else if (args[0] === 'volume' && args[1] === 'ls' && process.env.FAKE_PID_RESOURCES === '1') { console.log('owned-volume');
-} else if (!['ps', 'exec', 'volume'].includes(args[0])) process.exit(74);
+} else if (!['ps', 'exec', 'volume', 'inspect', 'port'].includes(args[0])) process.exit(74);
 `,
     ssh: `
 import { appendFileSync } from 'node:fs';
@@ -199,11 +209,11 @@ try { ownDatabase(); } catch (error) {
       const events = f.events();
       if (!hang) {
         expect(events.find((event) => event.kind === 'wait' && event.args?.[0] === 'run')?.timeout).toBe(
-          FIXTURE_LAUNCH_TIMEOUT,
+          DEFAULT_RUN_TIMEOUT,
         );
       }
       const run = events.find((event) => event.kind === 'docker' && event.args?.[0] === 'run')!.args!;
-      expect(run.slice(1, 3)).toEqual(['--stop-timeout', '2']);
+      expect(run.slice(1, 4)).toEqual(['--stop-timeout', '2', '--rm']);
       const nonce = run.find((arg) => arg.startsWith('rezics.auth.check.nonce='))!;
       expect(events.filter((event) => event.kind === 'docker').map((event) => event.args)).toContainEqual([
         'ps',
@@ -317,3 +327,138 @@ first.close();`,
     f.close();
   }
 });
+
+test('fixture creation waits for pg_isready on the owned identity before port discovery', () => {
+  const f = fixture();
+  try {
+    const result = f.run(
+      `
+import { ownDatabase } from ${JSON.stringify(database)};
+try { ownDatabase(); } catch (error) {
+  console.error(error);
+  process.exitCode = 79;
+}`,
+      {
+        AUTH_CHECK_CONTAINER: 'lane',
+        AUTH_CHECK_LANE_OWNER: String(process.pid),
+        DATABASE_URL: 'postgres://fake/lane',
+        FAKE_READY: '1',
+      },
+    );
+    expect(result.exitCode).toBe(79);
+    expect(result.stderr.toString()).toContain('Cannot determine Auth test database port');
+    const docker = f
+      .events()
+      .filter((event) => event.kind === 'docker')
+      .map((event) => event.args!);
+    expect(docker.find((args) => args[0] === 'run')).toContain('--rm');
+    const inspect = docker.findIndex((args) => args[0] === 'inspect');
+    const ready = docker.findIndex((args) => args.includes('pg_isready'));
+    const port = docker.findIndex((args) => args[0] === 'port');
+    expect(inspect).toBeGreaterThanOrEqual(0);
+    expect(ready).toBeGreaterThan(inspect);
+    expect(port).toBeGreaterThan(ready);
+    expect(docker[inspect]).toEqual([
+      'inspect',
+      '-f',
+      expect.stringContaining('rezics.auth.check.pid'),
+      'ready-container',
+    ]);
+    expect(docker.some((args) => args[0] === 'rm')).toBe(true);
+  } finally {
+    f.close();
+  }
+});
+
+test('process exit removes only pid-labelled containers and volumes', () => {
+  const f = fixture();
+  try {
+    const result = f.run(
+      `
+import { ownDatabase } from ${JSON.stringify(database)};
+try { ownDatabase(); } catch { process.exitCode = 79; }`,
+      {
+        AUTH_CHECK_CONTAINER: 'lane',
+        AUTH_CHECK_LANE_OWNER: String(process.pid),
+        DATABASE_URL: 'postgres://fake/lane',
+        FAKE_PID_RESOURCES: '1',
+      },
+    );
+    expect(result.exitCode).toBe(79);
+    const commands = f
+      .events()
+      .filter((event) => event.kind === 'docker')
+      .map((event) => event.args!);
+    expect(commands).toContainEqual([
+      'ps',
+      '-aq',
+      '--filter',
+      expect.stringMatching(/^label=rezics.auth.check.pid=\d+$/),
+    ]);
+    expect(commands).toContainEqual(['rm', '-f', '-v', 'owned-container']);
+    expect(commands).toContainEqual([
+      'volume',
+      'ls',
+      '-q',
+      '--filter',
+      expect.stringMatching(/^label=rezics.auth.check.pid=\d+$/),
+    ]);
+    expect(commands).toContainEqual(['volume', 'rm', '-f', 'owned-volume']);
+    expect(
+      commands
+        .filter((args) => args[0] === 'rm')
+        .every((args) => args.includes('created-container') || args.includes('owned-container')),
+    ).toBe(true);
+  } finally {
+    f.close();
+  }
+});
+
+for (const [signal, code] of [
+  ['SIGTERM', 143],
+  ['SIGINT', 130],
+] as const) {
+  test(`${signal} removes the owned throwaway fixture`, async () => {
+    const f = fixture();
+    try {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          '--preload',
+          join(f.root, 'preload.ts'),
+          '-e',
+          `import { run, POSTGRES_IMAGE } from ${JSON.stringify(database)}; run('docker', ['run', '-d', POSTGRES_IMAGE]); await Bun.sleep(1 << 30);`,
+        ],
+        {
+          cwd: repository,
+          env: {
+            ...f.env,
+            AUTH_CHECK_CONTAINER: 'lane',
+            AUTH_CHECK_LANE_OWNER: String(process.pid),
+            DATABASE_URL: 'postgres://fake/lane',
+            FAKE_WAIT_READY: '1',
+          },
+          stderr: 'pipe',
+          stdout: 'pipe',
+        },
+      );
+      const started = Date.now() + 8_000;
+      while (
+        Date.now() < started &&
+        !f.events().some((event) => event.args?.[0] === 'run' && event.args.includes('-d'))
+      )
+        await Bun.sleep(20);
+      expect(f.events().some((event) => event.args?.[0] === 'run')).toBe(true);
+      await Bun.sleep(100);
+      child.kill(signal);
+      expect(await child.exited).toBe(code);
+      const deadline = Date.now() + 2_000;
+      while (Date.now() < deadline && !f.events().some((event) => event.args?.[0] === 'rm' || event.kind === 'removed'))
+        await Bun.sleep(20);
+      expect(f.events().find((event) => event.kind === 'docker' && event.args?.[0] === 'run')?.args).toContain('--rm');
+      expect(f.events().some((event) => event.args?.[0] === 'rm' || event.kind === 'removed')).toBe(true);
+    } finally {
+      f.close();
+    }
+  }, 15_000);
+}

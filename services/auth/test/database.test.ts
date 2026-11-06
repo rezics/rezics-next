@@ -4,7 +4,6 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_RUN_TIMEOUT,
-  FIXTURE_LAUNCH_TIMEOUT,
   assertDatabasePlacement,
   migrate,
   POSTGRES_IMAGE,
@@ -18,7 +17,6 @@ const timeout = 60_000;
 
 test('run keeps its 120-second default and reports ETIMEDOUT for a child exceeding a per-call timeout', () => {
   expect(DEFAULT_RUN_TIMEOUT).toBe(120_000);
-  expect(FIXTURE_LAUNCH_TIMEOUT).toBe(600_000);
   expect(run(process.execPath, ['--eval', 'console.log("completed")'])).toBe('completed');
   let failure: unknown;
   try {
@@ -104,7 +102,9 @@ test(
       }
       const dumps = calls.filter((args) => args.includes('pg_dump'));
       expect(dumps.map((args) => args.slice(0, 3))).toEqual([['exec', container, 'pg_dump']]);
-      expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
+      const launched = calls.filter((args) => args[0] === 'run');
+      expect(launched).toHaveLength(1);
+      expect(launched[0]).toContain('--rm');
       expect(calls).toContainEqual(['rm', '-f', '-v', container]);
       expect(calls).toContainEqual(['ps', '-aq', '--filter', expect.stringMatching(/^label=rezics.auth.check.pid=/)]);
       const volumes = calls.filter((args) => args[0] === 'volume');

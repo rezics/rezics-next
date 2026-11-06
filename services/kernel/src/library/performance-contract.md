@@ -2,8 +2,6 @@
 
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
-Auth workflow-history and website-protocol retention stay with Auth; they do not retire a live signed-in Library
-session or Collection cursor.
 
 ## Collection operation costs
 
