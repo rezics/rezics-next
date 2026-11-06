@@ -23,6 +23,16 @@ covered merely by linking a kernel test.
 - **Fixture data**: Released Book with author, 1,200,001 words, light-novel form and harem tag; Recipe; game and
   distinct release; three agent kinds; 105 reverse-created, explicitly ordered targets per full view, withheld
   targets, qualified credits, competing dates and two attributed sources. Imported facts retain provider provenance.
+  The Subject binding now authors actual native relation facts and moderates linked hidden controls; editions use
+  released dates, contents use native names and credits carry released position qualifiers. Focused native projection
+  and rendering tests are separate from deferred served/browser acceptance. Competing candidate comparison and
+  private correction resumption require a current admitted signed-in reading; static public HTML is not that evidence.
+  Merged Character appearances keep the original assertion only when related.redirect names the surviving selected
+  Character; an unfollowed 308 to a subject id is a subject survivor, not an account handle.
+  Credited-work returns keep ja/en language order, role, kinds, sort and cursor on repeated query parameters through
+  the installed Character/People route; JSON language arrays are not admitted.
+  Family receiving keeps a twenty-work plus twenty-credit local preview, BookSeries inverse counterparts at limit 3
+  with eight locale titles, complete episode/person/organization catalogues, and illustrative family-story provenance.
 - **Surfaces**:
   catalogue — `subject-traversal` cases below; semantic editors/import attribution are pending served-page bindings of semantic/imports acceptance.  
   curated — shared subject links lead to the same full views; `subject-traversal` freezes destination behaviour; source-to-destination navigation binding pending.  

@@ -700,6 +700,7 @@ function sourceConceptReturn(url: URL, locale?: string): string | undefined {
   return `${url.pathname}${url.search}`;
 }
 
+/** Credited-work returns keep the executed Character/People search URL, including repeated languages. */
 function characterPersonSearchReturn(url: URL, locale?: string): string | undefined {
   const match = characterPersonDestination.exec(url.pathname);
   if (!match || (locale !== undefined && match[1] !== locale) || url.hash) return;
@@ -714,17 +715,7 @@ function characterPersonSearchReturn(url: URL, locale?: string): string | undefi
   const threshold = url.searchParams.get('threshold');
   const sort = url.searchParams.get('sort');
   const cursor = url.searchParams.get('cursor');
-  const submittedLanguages = url.searchParams.getAll('language');
-  let languages = submittedLanguages;
-  if (submittedLanguages.length === 1 && submittedLanguages[0]?.startsWith('[')) {
-    try {
-      const decoded: unknown = JSON.parse(submittedLanguages[0]);
-      if (!Array.isArray(decoded)) return;
-      languages = decoded;
-    } catch {
-      return;
-    }
-  }
+  const languages = url.searchParams.getAll('language');
   const kinds = url.searchParams.getAll('kinds');
   if (
     !name ||
@@ -733,12 +724,10 @@ function characterPersonSearchReturn(url: URL, locale?: string): string | undefi
     (threshold !== null && !['0', '1', '2'].includes(threshold)) ||
     (sort !== null && !['name', 'relevance'].includes(sort)) ||
     (cursor !== null && (!cursor || cursor.length > 4864)) ||
-    (submittedLanguages.length > 0 && languages.length < 1) ||
+    languages.length < 1 ||
     languages.length > 8 ||
     new Set(languages).size !== languages.length ||
-    languages.some(
-      (value) => typeof value !== 'string' || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(value) || value.length > 35,
-    ) ||
+    languages.some((value) => !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(value) || value.length > 35) ||
     kinds.length > 100 ||
     new Set(kinds).size !== kinds.length ||
     kinds.some((value) => !value || value.length > 128 || /[\u0000-\u001f\u007f]/u.test(value))

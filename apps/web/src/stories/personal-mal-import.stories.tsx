@@ -105,7 +105,7 @@ const row = {
   progressMeasures: [],
   scoreReviewState: 'observations-match',
   currentScoreVote: { units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' },
-} satisfies MalPreviewRow;
+} as unknown as MalPreviewRow;
 
 export const ScoreConsent: Story = {
   render: () => (

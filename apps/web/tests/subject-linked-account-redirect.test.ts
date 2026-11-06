@@ -108,6 +108,10 @@ test('a malformed identity or missing Realm cannot silently select another catal
 });
 
 test('native canonical redirects, merges, missing and unavailable outcomes retain their meaning', async () => {
+  expect(await load({ redirect: { from: subject, to: foreign } }, 308)).toEqual({
+    kind: 'redirect',
+    id: foreign,
+  });
   expect(await load({ redirect: { from: subject, to: profile.handle } }, 308)).toEqual({
     kind: 'redirect',
     id: profile.handle,

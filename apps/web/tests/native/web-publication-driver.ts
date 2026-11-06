@@ -1,3 +1,4 @@
+import { seedPublicationSubjects } from './web-publication-subjects';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import { fromPlainText } from '@rezics/document';
@@ -39,40 +40,6 @@ function responseProblem(body: string): { code?: string } | null {
   } catch {
     return null;
   }
-}
-
-const globalContext = '00000000-0000-8000-8000-000000000000';
-const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
-const minuteUnit = 'http://www.wikidata.org/entity/Q7727';
-const vegetarianDiet = 'https://schema.org/VegetarianDiet';
-// Every command performs source-fence and authorization work under the same
-// two-second request deadline. Give each creation its own native request budget.
-const fixtureBatchSize = 1;
-
-type CreatedSubject = { id: string; label: string; labels: Record<string, string>; type: string };
-type FixtureEntry = {
-  key: string;
-  type: string;
-  label: string;
-  labels: Record<string, string>;
-  descriptions?: Record<string, string>;
-};
-
-function valueStatement(property: string, content: unknown, extras?: { spoiler?: number }) {
-  return {
-    property: { id: property },
-    value: { type: 'value' as const, content },
-    ...(extras?.spoiler
-      ? {
-          qualifiers: [
-            {
-              property: { id: 'rezics:spoilerLevel' },
-              value: { type: 'value', content: { amount: `+${extras.spoiler}`, unit: '1' } },
-            },
-          ],
-        }
-      : {}),
-  };
 }
 
 type ProcessInfo = {
@@ -159,15 +126,6 @@ async function waitForProcessState(
   throw new Error(`Owned process ${pid} did not ${stopped ? 'stop' : 'resume'} in time`);
 }
 
-function accountIdFromAuthorization(authorization: string): string {
-  const token = authorization.match(/^Bearer ([^.]+)\.([^.]+)\./)?.[2];
-  if (!token) throw new Error('Native fixture account did not receive a bearer token');
-  const claims = JSON.parse(Buffer.from(token, 'base64url').toString('utf8')) as { sub?: unknown };
-  if (typeof claims.sub !== 'string' || !/^[0-9a-f-]{36}$/.test(claims.sub))
-    throw new Error('Native fixture bearer did not identify its account');
-  return claims.sub;
-}
-
 function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtures/web-publication.json')): void {
   const types = bundledRelease.types as Record<string, unknown>;
   const properties = bundledRelease.properties as Record<string, unknown>;
@@ -218,6 +176,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const interruptionRestores = new Set<() => Promise<void>>();
   const directCredentials = new Map<Persona, Awaited<ReturnType<typeof stack.credentials>>>();
   let ownerReadInterrupted = false;
+  let competingDate: (() => Promise<void>) | undefined;
   let provisioned:
     | {
         data: typeof import('../../../../specs/fixtures/web-publication.json');
@@ -290,316 +249,9 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
       );
 
-    const created = new Map<string, CreatedSubject>();
-    const entries: FixtureEntry[] = Object.entries(data.subjects).map(([key, value]) => ({
-      key,
-      type: typeByKey[key]!,
-      label: titleOf(value),
-      labels: { en: titleOf(value), ...('zhHansTitle' in value ? { 'zh-Hans': value.zhHansTitle } : {}) } as Record<
-        string,
-        string
-      >,
-      descriptions: 'description' in value ? { en: String(value.description) } : undefined,
-    }));
-    const classification: FixtureEntry[] = [
-      {
-        key: 'light-novel',
-        type: 'skos:Concept',
-        label: data.subjects.book.form,
-        labels: { en: data.subjects.book.form, [data.search.locale]: data.search.facetLabels[0]! },
-      },
-      {
-        key: 'harem',
-        type: 'skos:Concept',
-        label: data.subjects.book.tag,
-        labels: { en: data.subjects.book.tag, [data.search.locale]: data.search.facetLabels[1]! },
-      },
-      {
-        key: 'vegetarian',
-        type: 'skos:Concept',
-        label: 'VegetarianDiet',
-        labels: { en: 'VegetarianDiet' },
-      },
-      {
-        key: 'pc',
-        type: 'skos:Concept',
-        label: data.subjects.game.platform,
-        labels: { en: data.subjects.game.platform },
-      },
-      {
-        key: 'nintendo-switch',
-        type: 'skos:Concept',
-        label: data.subjects.release.platform,
-        labels: { en: data.subjects.release.platform },
-      },
-      {
-        key: 'withheld-author',
-        type: 'schema:Person',
-        label: data.withheld[0]!,
-        labels: { en: data.withheld[0]! },
-      },
-      {
-        key: 'withheld-harem',
-        type: 'skos:Concept',
-        label: data.withheld[1]!,
-        labels: { en: data.withheld[1]! },
-      },
-    ];
-    const personIndex = entries.findIndex(({ key }) => key === 'person');
-    if (personIndex > 0) entries.unshift(entries.splice(personIndex, 1)[0]!);
-    for (const view of data.traversal.views) {
-      const count = data.traversal.countPerView;
-      for (let index = 1; index <= count; index++) {
-        const key = `${view}-${String(index).padStart(3, '0')}`;
-        entries.push({
-          key,
-          type: 'schema:Book',
-          label: `${view} ${index}`,
-          labels: { en: `${view} ${index}` },
-          descriptions: undefined,
-        });
-      }
-      entries.push({
-        key: `${view}-withheld`,
-        type: 'schema:Book',
-        label: `${view} withheld`,
-        labels: { en: `${view} withheld` },
-        descriptions: undefined,
-      });
-    }
-    for (const [index, title] of [...data.search.matchingBooks].reverse().entries()) {
-      entries.push({
-        key: `search-book-${index + 1}`,
-        type: 'schema:Book',
-        label: title,
-        labels: { en: title, [data.search.locale]: title },
-        descriptions: undefined,
-      });
-    }
-    for (let index = 1; index <= 16; index++) {
-      entries.push({
-        key: `sitemap-book-${String(index).padStart(2, '0')}`,
-        type: 'schema:Book',
-        label: `Public lantern ${index}`,
-        labels: { en: `Public lantern ${index}` },
-        descriptions: { en: `A public catalogue page ${index}.` },
-      });
-    }
-    for (const [key, label] of [
-      ['excluded-withheld', data.withheld[0]!],
-      ['excluded-private', 'Private context lantern'],
-      ['excluded-taken-down', 'Taken-down lantern'],
-    ] as const) {
-      entries.push({
-        key,
-        type: 'schema:Book',
-        label,
-        labels: { en: label },
-        descriptions: undefined,
-      });
-    }
-    const writerCount = Math.ceil(entries.length / 220);
-    const writers = await Promise.all(
-      Array.from({ length: writerCount }, async (_, index) => {
-        const persona = `web-fixture-writer-${index + 1}`;
-        const credentials = await stack.credentials(persona);
-        const accountId = accountIdFromAuthorization(credentials.authorization);
-        const grantKey = crypto.randomUUID();
-        const grant = await kernel(
-          '/v1/grants',
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(grantKey) },
-            body: JSON.stringify({
-              resource: { route: 0, id: globalContext },
-              subject: { kind: 'account', id: accountId },
-              actions: ['subject:batch_write', 'subject:create'],
-              valid: '(,)',
-            }),
-          },
-          'governor',
-        );
-        if (!grant.ok)
-          throw new Error(`Could not grant native fixture writer ${persona}: ${grant.status} ${await grant.text()}`);
-        const rateTierKey = crypto.randomUUID();
-        const rateTier = await kernel(
-          `/v1/accounts/${encodeURIComponent(accountId)}:setRateTier`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(rateTierKey) },
-            body: JSON.stringify({ key: rateTierKey, tier: 'trusted' }),
-          },
-          'governor',
-        );
-        if (!rateTier.ok)
-          throw new Error(
-            `Could not set native fixture writer rate tier ${persona}: ${rateTier.status} ${await rateTier.text()}`,
-          );
-        return persona;
-      }),
-    );
-    const createOne = async (persona: string, entry: FixtureEntry, statements?: Record<string, unknown[]>) => {
-      const response = await kernel(
-        '/v1/subjects',
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(crypto.randomUUID()),
-          },
-          body: JSON.stringify({
-            type: entry.type,
-            labels: entry.labels,
-            ...(entry.descriptions ? { descriptions: entry.descriptions } : {}),
-            ...(statements ? { statements } : {}),
-          }),
-        },
-        persona,
-      );
-      if (!response.ok)
-        throw new Error(
-          `Could not create fixture subject ${entry.key} through kernel API: ${response.status} ${await response.text()}`,
-        );
-      const result = (await response.json()) as { subject?: { id: string } };
-      if (!result.subject?.id) throw new Error(`Fixture subject ${entry.key} API response lacked its created identity`);
-      created.set(entry.key, {
-        id: result.subject.id,
-        label: entry.label,
-        labels: entry.labels,
-        type: entry.type,
-      });
-    };
-    const owner = writers[0]!;
-    for (const concept of classification) {
-      await createOne(
-        owner,
-        concept,
-        concept.key === 'vegetarian'
-          ? { 'schema:sameAs': [valueStatement('schema:sameAs', vegetarianDiet)] }
-          : undefined,
-      );
-    }
-    const requireCreated = (key: string) => {
-      const subject = created.get(key);
-      if (!subject) throw new Error(`Fixture subject ${key} must be created first`);
-      return subject;
-    };
-    const statementsFor = (entry: FixtureEntry): Record<string, unknown[]> | undefined => {
-      if (entry.key === 'book') {
-        return {
-          'schema:author': [
-            valueStatement('schema:author', requireCreated('person').id),
-            valueStatement('schema:author', requireCreated('withheld-author').id, { spoiler: 1 }),
-          ],
-          'schema:wordCount': [
-            valueStatement('schema:wordCount', { amount: `+${data.subjects.book.wordCount}`, unit: '1' }),
-          ],
-          'wdt:P7937': [valueStatement('wdt:P7937', requireCreated('light-novel').id)],
-          'schema:keywords': [
-            valueStatement('schema:keywords', requireCreated('harem').id),
-            valueStatement('schema:keywords', requireCreated('withheld-harem').id, { spoiler: 1 }),
-          ],
-        };
-      }
-      if (entry.key === 'recipe') {
-        return {
-          'schema:cookTime': [
-            valueStatement('schema:cookTime', { amount: `+${data.subjects.recipe.cookTimeMinutes}`, unit: minuteUnit }),
-          ],
-          'schema:suitableForDiet': [valueStatement('schema:suitableForDiet', requireCreated('vegetarian').id)],
-          'schema:recipeIngredient': data.subjects.recipe.ingredients.map((text) =>
-            valueStatement('schema:recipeIngredient', { language: 'en', text }),
-          ),
-          'schema:recipeInstructions': [
-            valueStatement('schema:recipeInstructions', {
-              language: 'en',
-              document: fromPlainText(data.subjects.recipe.instructions.join('\n')),
-            }),
-          ],
-        };
-      }
-      if (entry.key === 'game') {
-        return { 'schema:gamePlatform': [valueStatement('schema:gamePlatform', requireCreated('pc').id)] };
-      }
-      if (entry.key === 'release') {
-        return {
-          'schema:gamePlatform': [valueStatement('schema:gamePlatform', requireCreated('nintendo-switch').id)],
-          'schema:datePublished': [
-            valueStatement('schema:datePublished', {
-              time: `+${data.subjects.release.date}T00:00:00Z`,
-              precision: 11,
-              calendarmodel: gregorianCalendar,
-            }),
-          ],
-          'schema:inLanguage': [valueStatement('schema:inLanguage', data.subjects.release.language)],
-        };
-      }
-      if (entry.key.startsWith('search-book-')) {
-        return {
-          'wdt:P7937': [valueStatement('wdt:P7937', requireCreated('light-novel').id)],
-          'schema:keywords': [valueStatement('schema:keywords', requireCreated('harem').id)],
-        };
-      }
-    };
-    const batches = Array.from({ length: writerCount }, (_, index) => {
-      const writerEntries = entries.slice(index * 220, index * 220 + 220);
-      return { persona: writers[index]!, entries: writerEntries };
-    });
-    await Promise.all(
-      batches.map(async ({ persona, entries: writerEntries }) => {
-        for (let start = 0; start < writerEntries.length; start += fixtureBatchSize) {
-          const batch = writerEntries.slice(start, start + fixtureBatchSize);
-          if (batch.length === 1) {
-            const entry = batch[0]!;
-            const statements = statementsFor(entry);
-            if (statements) {
-              await createOne(persona, entry, statements);
-              continue;
-            }
-          }
-          const commands = batch.map(({ key, type, labels, descriptions }) => {
-            return {
-              op: 'create',
-              key,
-              source: {
-                source: 'web-publication-fixture',
-                external_id: key,
-                record_revision: '1',
-                digest: '0'.repeat(64),
-                converter_revision: 'web-publication-fixture@1',
-                field_group: 'facts',
-              },
-              subject: {
-                type,
-                labels,
-                ...(descriptions ? { descriptions } : {}),
-              },
-            };
-          });
-          let response: Response;
-          response = await kernel(
-            '/v1/subjects:batchWrite',
-            { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commands }) },
-            persona,
-          );
-          if (!response.ok)
-            throw new Error(
-              `Could not batch-create fixture subjects through kernel API: ${response.status} ${await response.text()}`,
-            );
-          const result = (await response.json()) as {
-            results: { key: string; status: number; value?: { id: string }; problem?: unknown }[];
-          };
-          for (const item of result.results) {
-            const entry = batch.find(({ key }) => key === item.key)!;
-            if (item.status !== 201 || !item.value?.id)
-              throw new Error(
-                `Could not create fixture subject ${item.key}: API status ${item.status} ${JSON.stringify(item.problem)}`,
-              );
-            created.set(item.key, { id: item.value.id, label: entry.label, labels: entry.labels, type: entry.type });
-          }
-        }
-      }),
-    );
+    const seeded = await seedPublicationSubjects(kernel, stack.credentials, data);
+    const { created } = seeded;
+    competingDate = seeded.proposeCompetingDate;
 
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
@@ -611,12 +263,15 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     ) as PublicationFixture['subjects'];
     const views = Object.fromEntries(
       (['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const).map((name) => {
-        const inverse = name === 'inverse';
-        const subject = created.get(inverse ? 'person' : 'book')!;
-        return [
-          name,
-          new URL(`${subjectPath(subject.id, subject.label)}/${inverse ? 'relations' : name}`, publicOrigin).href,
-        ];
+        const source =
+          name === 'inverse'
+            ? 'person'
+            : name === 'cast' || name === 'crew' || name === 'relations'
+              ? `${name}-work`
+              : 'book';
+        const subject = created.get(source)!;
+        const view = name === 'inverse' ? 'works' : name === 'cast' ? 'characters' : name === 'crew' ? 'credits' : name;
+        return [name, new URL(`${subjectPath(subject.id, subject.label)}/${view}`, publicOrigin).href];
       }),
     ) as PublicationFixture['views'];
     const localeUrls = (key: string) =>
@@ -660,7 +315,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       subjects,
       views,
       details: new URL(`${new URL(subjects.book).pathname}/details`, publicOrigin).href,
-      qualifiedCredit: views.cast,
+      qualifiedCredit: subjects.game,
       staleBookZhHans: urlFor('book', 'zh-Hans').replace(/\/[^/]+$/, '/former-lantern-title'),
       canonicalBookZhHans: urlFor('book', 'zh-Hans'),
       verifiedSubject: community.verifiedSubjectUrl,
@@ -802,7 +457,8 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     request,
     settle,
     async proposeCompetingDate() {
-      throw new Error('proposeCompetingDate is delivered by a later task');
+      if (!competingDate) throw new Error('proposeCompetingDate requires a provisioned fixture');
+      await competingDate();
     },
     async revokeAlice() {
       throw new Error('revokeAlice is delivered by a later task');
@@ -816,7 +472,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       if (kind === 'owner-read') {
         // Cache fixture bearer credentials before stopping the stack host. The
         // served page request remains ordinary HTTP through the production web Worker.
-        for (const persona of ['alice', 'bob', 'editor', 'suspended'] as const)
+        for (const persona of ['alice', 'bob', 'editor', 'verified-agent', 'suspended'] as const)
           directCredentials.set(persona, { authorization: (await stack.authPersona(persona)).authorization });
       }
       try {

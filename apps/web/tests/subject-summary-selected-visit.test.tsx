@@ -270,6 +270,13 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       await Bun.sleep(30);
     });
   };
+  // A held refresh starts only after its native read resolves, which can outlast a fixed settle under load.
+  const until = async (ready: () => boolean) => {
+    for (let attempt = 0; attempt < 100 && !ready(); attempt++)
+      await act(async () => {
+        await Bun.sleep(20);
+      });
+  };
   const navigate = async (to: string) => {
     await act(async () => {
       await router.navigate({ to });
@@ -313,7 +320,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     const session = (subject: string, token: string) => ({ state: 'signed-in', subject, csrfToken: token });
     holdSourceRefresh = true;
     await act(async () => client.setQueryData(sessionQuery.queryKey, session(fixture.transport.reader!, 'held-a')));
-    await settle();
+    await until(() => releaseSource !== undefined);
     expect(releaseSource).toBeDefined();
     for (const subject of ['another-reader', fixture.transport.reader!]) {
       await act(async () => client.setQueryData(sessionQuery.queryKey, session(subject, 'held-a')));

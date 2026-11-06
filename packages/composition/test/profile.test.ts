@@ -5,8 +5,10 @@ import {
   MAX_PROFILE_BYTES,
   MAX_PROFILE_TEMPLATES,
   PROFILE_FORMAT,
+  UI_LOCALES,
   type CompositionDocument,
   type PresentationProfile,
+  planReads,
   platformRegistry,
   profileDigest,
   resolveTemplate,
@@ -210,6 +212,32 @@ test('the shipped platform profile validates against the shared registry and lis
     ['visual-novels', ['wd:Q689445'], 12],
     ['recipes', ['schema:Recipe'], 12],
   ]);
-  expect(resolveTemplate(value, { type: 'schema:Recipe' }).scope).toBe('generic');
+  expect(resolveTemplate(value, { type: 'schema:Recipe' }).scope).toBe('type');
   expect(resolveTemplate(value, { type: 'schema:Book', bases: ['schema:CreativeWork'] }).scope).toBe('base');
+});
+
+test('BookSeries overview plans the series counterparts inverse window of three in every launch locale', () => {
+  const value = platform as PresentationProfile;
+  const resolved = resolveTemplate(value, {
+    type: 'schema:BookSeries',
+    bases: ['schema:CreativeWorkSeries', 'schema:CreativeWork'],
+  });
+  expect({ scope: resolved.scope, key: resolved.key }).toEqual({
+    scope: 'base',
+    key: 'schema:CreativeWorkSeries',
+  });
+  const counterparts = resolved.document.content.find((node) => node.props.id === 'counterparts');
+  expect(counterparts).toMatchObject({
+    type: 'RelationGroups',
+    props: { id: 'counterparts', property: 'rezics:crossMediaCounterpart', limit: 3 },
+  });
+  expect(Object.keys(counterparts!.props.title as object).sort()).toEqual([...UI_LOCALES].sort());
+  const subject = '00000000-0000-4000-8000-000000000001';
+  const plan = planReads(platformRegistry, { root: { props: {} }, content: [counterparts!] }, { subject });
+  expect(plan.reads[plan.nodes.counterparts!]).toEqual({
+    kind: 'links',
+    id: subject,
+    property: 'rezics:crossMediaCounterpart',
+    limit: 3,
+  });
 });

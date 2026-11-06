@@ -413,6 +413,9 @@ export type DiscoveryRequest = Parameters<KernelClient['subjects']['$search']['p
   descriptions?: boolean;
   properties?: string[];
   kindPage?: { limit: number; cursor?: string };
+  kindCountLeaf?: number;
+  textField?: 'credited_creator';
+  creditQualifiers?: { property: string; value: string }[];
   collectionDirectory?: Omit<PublicCollectionDirectorySelection, 'order'> & { order: 'recent' | 'popular' };
 };
 export type DiscoveryState =

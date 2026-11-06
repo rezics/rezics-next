@@ -7151,7 +7151,8 @@ async function withOutputTreeSource(options: RemoteCheck): Promise<RemoteCheck> 
     hasOutputTreeReturn(declarations) ||
     (nested &&
       options.command.some(
-        (argument) => argument === '--emit-client' || /(?:^|\s)--emit-client(?:\s|$)/.test(argument),
+        // A combined shell command may terminate the emitter option directly with an operator.
+        (argument) => argument === '--emit-client' || /(?:^|\s)--emit-client(?=\s|[;&|]|$)/.test(argument),
       ));
   if (!requested) return options;
   if (!hasOutputTreeReturn(declarations)) {

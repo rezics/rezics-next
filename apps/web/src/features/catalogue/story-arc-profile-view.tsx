@@ -436,7 +436,7 @@ function StoryArcProfileLive({
                 transport={transport}
                 release={privateRead.release}
                 {...(work ? { work } : {})}
-                href={signInAddress}
+                href={outerAddress ?? signInAddress}
                 onCreated={setCreated}
                 navigation={({ dirty, pending, confirmed }) => (
                   <StoryArcDraftDeparture dirty={!confirmed && dirty} pending={!confirmed && pending} />

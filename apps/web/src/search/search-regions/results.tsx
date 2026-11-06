@@ -267,7 +267,8 @@ export function SearchResultsRegion({
                 <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
               </EmptyHeader>
             </Empty>
-            {executedState &&
+            {data &&
+            executedState &&
             executedState.cursor === undefined &&
             result.next === null &&
             (!data?.recovery || data.recovery.status === 'ready') &&

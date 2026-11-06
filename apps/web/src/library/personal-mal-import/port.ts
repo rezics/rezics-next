@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import { sessionCsrfToken } from '../../session/query';
-import type { MalImportPort } from './contract';
+import type { MalImportPort, MalPreviewResult } from './contract';
 
 export const MalImportPortContext = createContext<MalImportPort | null>(null);
 
@@ -21,7 +21,7 @@ const productionPort: MalImportPort = {
     const { readMalImportVote } = await import('./server');
     return readMalImportVote({ data: input });
   },
-  async preview(command) {
+  async preview(command): Promise<MalPreviewResult> {
     const { previewMalImport } = await import('./server');
     return previewMalImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },

@@ -59,8 +59,8 @@ test('the character and person journey preserves applied URL state and builds sa
   expect(request.spoilerThreshold).toBe(1);
   const url = new URL(characterPersonHref('ja', parsed.search, 'opaque-final'), 'https://rezics.test');
   expect(url.pathname).toBe('/ja/search/characters');
-  expect(JSON.parse(url.searchParams.get('work')!)).toEqual([work, secondWork]);
-  expect(JSON.parse(url.searchParams.get('language')!)).toEqual(['ja', 'en']);
+  expect(url.searchParams.getAll('work')).toEqual([work, secondWork]);
+  expect(url.searchParams.getAll('language')).toEqual(['ja', 'en']);
   expect(url.searchParams.get('cursor')).toBe('opaque-final');
   expect(url.searchParams.get('threshold')).toBe('1');
 });
@@ -297,9 +297,10 @@ test('shared operands keep exact identities through renamed or missing labels; a
   expect(labels.withheld).toEqual([secondWork]);
   expect(calls.every((url) => url.searchParams.has('id') && !url.searchParams.has('q'))).toBe(true);
   const parsed = parseCharacterPersonSearch({ work: [work, secondWork] }, 'ja');
-  expect(
-    JSON.parse(new URL(characterPersonHref('ja', parsed.search), 'https://rezics.test').searchParams.get('work')!),
-  ).toEqual([work, secondWork]);
+  expect(new URL(characterPersonHref('ja', parsed.search), 'https://rezics.test').searchParams.getAll('work')).toEqual([
+    work,
+    secondWork,
+  ]);
   let complete!: (value: Response) => void;
   globalThis.fetch = (() =>
     new Promise<Response>((resolve) => {

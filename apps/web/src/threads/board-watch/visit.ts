@@ -240,7 +240,7 @@ export class BoardWatchVisit {
       this.publish({ phase: 'conflict', command: 'conflict' });
     } else if (result.kind === 'unknown') {
       this.publish({ phase: 'unknown', command: 'unknown' });
-    } else {
+    } else if (result.kind === 'refused') {
       this.command = undefined;
       const reason = result.kind === 'refused' ? result.reason : undefined;
       this.publish({

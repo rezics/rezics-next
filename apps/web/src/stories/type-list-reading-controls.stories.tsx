@@ -29,6 +29,7 @@ function pageFor(id: string, state: State, long: boolean): SubjectPageData {
   const plan = planReads(platformRegistry, document, { subject: null, ...(continuation ? { continuation } : {}) });
   return {
     subject: null,
+    viewer: { state: 'anonymous', context: 'global', actions: { statementPropose: 'denied' } },
     profile: recorded.profile,
     template: { scope: 'route', key: target.route },
     document,
@@ -59,6 +60,7 @@ function ReadingJourney({ long = false, rtl = false }: { long?: boolean; rtl?: b
               key={state}
               {...page}
               locale={locale}
+              viewer={{ state: 'anonymous', context: 'global', actions: { statementPropose: 'denied' } }}
               {...(state === 'untargeted' ? {} : { listTarget: target })}
               messages={subjectPageMessages()}
             >

@@ -299,34 +299,38 @@ test('labelled People groups show admitted occupations, unreleased fields and re
     expect(target?.getAttribute('href')).toContain('via=');
     expect(target?.getAttribute('lang')).toBe('en');
     expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.people_biography_return())).toBe(true);
-    const withheld = structuredClone(fixture.person);
-    delete withheld.related[occupation];
-    await act(async () =>
-      root.render(
-        h(
-          CandidateReaderBoundary,
-          {
-            observed: { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'token' },
-            address: 'people-biography',
-          },
+    for (const related of [undefined, { labels: { en: 'Director' } }]) {
+      const withheld = structuredClone(fixture.person);
+      if (related) withheld.related[occupation] = related;
+      else delete withheld.related[occupation];
+      await act(async () =>
+        root.render(
           h(
-            CatalogueCurrentReading,
-            { visible: true, ready: true, revision: '2' },
-            h(PeopleBiographyGroups, {
-              read: { ok: true, public: withheld, release: fixture.release, source: null },
-              locale: 'en',
-              search: async () => [],
-              transport: {
-                propose: fixture.propose,
-                read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
-              },
-              review: fixture.review,
-            }) as ReactNode,
-          ) as ReactNode,
+            CandidateReaderBoundary,
+            {
+              observed: { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'token' },
+              address: 'people-biography',
+            },
+            h(
+              CatalogueCurrentReading,
+              { visible: true, ready: true, revision: '2' },
+              h(PeopleBiographyGroups, {
+                read: { ok: true, public: withheld, release: fixture.release, source: null },
+                locale: 'en',
+                search: async () => [],
+                transport: {
+                  propose: fixture.propose,
+                  read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+                },
+                review: fixture.review,
+              }) as ReactNode,
+            ) as ReactNode,
+          ),
         ),
-      ),
-    );
-    expect(host.textContent).toContain(m.people_biography_unreadable());
+      );
+      expect(host.textContent).toContain(m.people_biography_unreadable());
+      expect([...host.querySelectorAll('a')].some((link) => link.textContent === 'Director')).toBe(false);
+    }
   } finally {
     await act(async () => root.unmount());
     await window.happyDOM.abort();

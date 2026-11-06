@@ -595,7 +595,7 @@ export {
   canonicalRedirect,
   accountHref,
   subjectViewPaths,
-} from '../../subject/subject-href';
+} from '../../subject/load-subject';
 
 export const subjectPageQuery = (
   id: string,

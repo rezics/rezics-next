@@ -108,6 +108,13 @@ export async function createReleasedLibraryPopulation(
   if (options.version !== releasedLibraryPopulationVersion)
     throw new Error('Unsupported released Library population version');
   const base = await createReleasedDiscoveryFixture(options);
+  // Library entry, label, progress and discovery writes sit behind the released platform gates.
+  await base.setup
+    .openFeatures(['personal_library', 'reading_progress', 'search', 'search_advanced'])
+    .catch(async (error: unknown) => {
+      await base.close();
+      throw error;
+    });
   const calls: NativeCall[] = [];
   let closed = false;
   const close = async () => {

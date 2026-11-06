@@ -1,16 +1,20 @@
 import { startDevServer } from './support/dev-server.ts';
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { planReads, platformRegistry, type View, type CompositionDocument } from '@rezics/composition';
-import { holderItems } from '../src/features/pages/overview.tsx';
-import { loadViewPages, SubjectViewPage } from '../src/features/pages/subject-frame.tsx';
-import { pageContext } from '../src/features/pages/subject.tsx';
 import { validateViewCursor } from '../src/features/pages/view-cursor.ts';
+
+// The page modules reach server functions, so they load only after the workers runtime is stubbed.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { holderItems } = await import('../src/features/pages/overview.tsx');
+const { loadViewPages, SubjectViewPage } = await import('../src/features/pages/subject-frame.tsx');
+const { pageContext } = await import('../src/features/pages/subject.tsx');
 
 const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 
@@ -22,11 +26,12 @@ function clientWith(requests: RequestRecord[], listSize?: number, pageNext?: str
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
+      const body = request.method === 'POST' ? await request.clone().json() : undefined;
       requests.push({
         method: request.method,
         path: url.pathname,
         search: url.searchParams,
-        ...(request.method === 'POST' ? { body: await request.clone().json() } : {}),
+        ...(body !== undefined ? { body } : {}),
       });
       if (listSize !== undefined && request.method === 'GET' && url.pathname.endsWith('/links')) {
         return Response.json({
@@ -40,15 +45,32 @@ function clientWith(requests: RequestRecord[], listSize?: number, pageNext?: str
           next: 'next-from-owner',
         });
       }
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/v1/pages:read' &&
+        body &&
+        typeof body === 'object' &&
+        body.continuation?.cursor === 'refuse'
+      ) {
+        return Response.json({ code: 'invalid_cursor' }, { status: 400 });
+      }
       const response = await fake(request);
-      if (pageNext !== undefined && request.method === 'POST' && url.pathname === '/v1/pages:read') {
-        const target = (await new Request(request.clone()).json()).target as { view?: string };
-        if (target.view === 'editions') {
-          const body = await response.clone().json();
-          for (const read of Object.values(body.reads as Record<string, { body?: Record<string, unknown> }>)) {
-            if (read.body && Array.isArray(read.body.links)) read.body.next = pageNext;
+      if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+        const target = (body as { target?: { view?: string } } | undefined)?.target;
+        const cursor = (body as { continuation?: { cursor?: string } } | undefined)?.continuation?.cursor;
+        if (target?.view === 'editions' && (pageNext !== undefined || (listSize !== undefined && cursor))) {
+          const page = await response.clone().json();
+          for (const read of Object.values(page.reads as Record<string, { body?: Record<string, unknown> }>)) {
+            if (read.body && Array.isArray(read.body.links)) {
+              if (listSize !== undefined && cursor) {
+                read.body.links = Array.from({ length: Math.min(listSize, 24) }, (_, index) => ({
+                  subject: `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`,
+                }));
+              }
+              read.body.next = pageNext ?? 'next-from-owner';
+            }
           }
-          return Response.json(body, { status: response.status });
+          return Response.json(page, { status: response.status });
         }
       }
       return response;
@@ -56,26 +78,34 @@ function clientWith(requests: RequestRecord[], listSize?: number, pageNext?: str
   });
 }
 
-test('a cursor view keeps both page reads and sends the planned links list parameters to its owner route', async () => {
+test('a cursor view keeps both page reads and continues the selected stream on native pages.read', async () => {
   const requests: RequestRecord[] = [];
   const loaded = await loadViewPages(clientWith(requests, 30), subject, 'editions', 'en', 'opaque-next');
   expect(loaded.kind).toBe('page');
   if (loaded.kind !== 'page') return;
   const reads = requests.filter((request) => request.method === 'POST' && request.path === '/v1/pages:read');
-  expect(reads).toHaveLength(2);
+  expect(reads).toHaveLength(3);
   expect(reads.map(({ body }) => body)).toContainEqual({ target: { subject, view: 'editions' }, languages: ['en'] });
   expect(reads.map(({ body }) => body)).toContainEqual({ target: { subject }, languages: ['en'] });
-  const owner = requests.find((request) => request.path.endsWith('/links'));
-  expect(owner?.search.get('cursor')).toBe('opaque-next');
+  const continued = reads.find(
+    (request) =>
+      request.body &&
+      typeof request.body === 'object' &&
+      'continuation' in request.body &&
+      (request.body as { continuation?: { cursor?: string } }).continuation?.cursor === 'opaque-next',
+  );
+  expect(continued?.body).toMatchObject({
+    target: { subject, view: 'editions' },
+    continuation: { cursor: 'opaque-next' },
+    languages: ['en'],
+  });
+  expect(typeof (continued?.body as { stream?: string }).stream).toBe('string');
   const planned = Object.values(
     planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page)).reads,
   ).find((read) => read.kind === 'links');
   expect(planned?.kind).toBe('links');
   if (planned?.kind !== 'links') return;
-  expect(owner?.search.get('property')).toBe(planned.property);
-  expect(owner?.search.get('filter')).toBe(planned.filter ?? null);
-  expect(owner?.search.get('type')).toBe(planned.type ?? null);
-  expect(owner?.search.get('limit')).toBe(String(planned.limit));
+  expect((continued?.body as { continuation?: { node?: string } }).continuation?.node).toBe(loaded.node);
   expect(loaded.next).toBe('next-from-owner');
   expect(Object.values(loaded.page.reads).map((read) => read.body)).toContainEqual(
     expect.objectContaining({ next: 'next-from-owner' }),
@@ -123,18 +153,23 @@ test('a full view renders its next page as a plain server-rendered anchor', () =
   } as never;
   const href = `/en/subjects/${subject}/editions?cursor=next%2Bpage`;
   const html = renderToString(
-    createElement(SubjectViewPage, {
-      page,
-      locale: 'en',
-      messages: {} as never,
-      frame: null,
-      label: 'Editions',
-      nextHref: href,
-      renderJsonLd: false,
-    }),
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(SubjectViewPage, {
+        page,
+        locale: 'en',
+        messages: {} as never,
+        frame: null,
+        label: 'Editions',
+        nextHref: href,
+        renderJsonLd: false,
+      }),
+    ),
   );
   expect(html).toContain(`<a data-slot="next-page" href="${href}"`);
-  expect(html).toContain('More relations</a>');
+  expect(html).toContain(' rel="next"');
+  expect(html).toContain('Continue Editions</a>');
 });
 
 test('full list components can render the page returned by the owner read while preview limits stay at twelve', () => {
@@ -259,6 +294,7 @@ test('every full view whose list read returns next renders a next-page link to t
     const html = await response.text();
     const anchor = /<a[^>]*data-slot="next-page"[^>]*>/.exec(bodyMarkup(html))?.[0] ?? '';
     expect(anchor).toContain(`href="${path}?cursor=${encodeURIComponent(nextCursor)}"`);
+    expect(anchor).toContain(' rel="next"');
     expect(html).not.toMatch(/<meta[^>]*name="robots"[^>]*content="noindex, follow"/);
   }
 }, 300_000);
@@ -399,15 +435,19 @@ test('full CollectionList and forward fact views render every returned item whil
     }
     const render = () =>
       renderToString(
-        createElement(SubjectViewPage, {
-          page,
-          locale: 'en',
-          messages: {} as never,
-          frame: null,
-          label: view,
-          view,
-          renderJsonLd: false,
-        }),
+        createElement(
+          QueryClientProvider,
+          { client: new QueryClient() },
+          createElement(SubjectViewPage, {
+            page,
+            locale: 'en',
+            messages: {} as never,
+            frame: null,
+            label: view,
+            view,
+            renderJsonLd: false,
+          }),
+        ),
       );
     expect(render()).toContain('First item 15');
     node.props.paged = false;
@@ -417,7 +457,7 @@ test('full CollectionList and forward fact views render every returned item whil
 });
 
 test('views without a cursor-capable planned primary list keep their page read', async () => {
-  for (const view of ['characters', 'credits', 'reviews', 'discussion', 'details'] as const) {
+  for (const view of ['reviews', 'discussion', 'details'] as const) {
     const requests: RequestRecord[] = [];
     const loaded = await loadViewPages(clientWith(requests), subject, view, 'en', 'unused');
     expect(loaded.kind).toBe('page');

@@ -21,6 +21,10 @@ import {
   type NoticeInboxItem,
   type NoticeInboxPage,
   type SubjectRead,
+  type SubjectPageResponse,
+  type SubjectIdentityOperation,
+  type SubjectIdentityOperationAdmission,
+  type SubjectIdentityOperationRead,
   type UnreadNoticeSummary,
 } from '../src/index.ts';
 
@@ -120,6 +124,47 @@ test('a subject read answers like an Eden Treaty call, with the JSON as the kern
   expect(error).toBeNull();
   expect(data).toEqual({ subject, account: null, summary: null, related: {} });
   expect(typeof data?.subject.descriptions.en).toBe('string');
+});
+
+test('the mounted page response retains native stream and viewer variants', async () => {
+  const responses: SubjectPageResponse[] = [
+    {
+      subject: ID,
+      profile: 'released',
+      template: { scope: 'generic', key: null },
+      document: { type: 'text', text: 'Reading' },
+      reads: {},
+      streams: {
+        selected: 'editions',
+        entries: [{ node: 'editions', property: 'schema:hasPart', direction: 'forward' }],
+      },
+      viewer: { state: 'account', account: ID, context: ID, actions: { statementPropose: 'denied' } },
+    },
+    {
+      subject: ID,
+      profile: 'released',
+      template: { scope: 'generic', key: null },
+      document: { type: 'text', text: 'Reading' },
+      reads: {},
+      viewer: { kind: 'anonymous' },
+      actions: [{ action: 'statement:propose', operationId: 'propose', state: 'denied' }],
+    },
+  ];
+  const { fetch, sent } = kernel(responses.map((body) => () => json(200, body)));
+  const client = createKernelClient(ORIGIN, { fetch });
+  for (const expected of responses) {
+    const result = await client.pages.$read.post({ target: { subject: ID }, languages: ['en'] });
+    if (result.error) throw result.error;
+    expectTypeOf(result.data).toEqualTypeOf<SubjectPageResponse>();
+    expect(result.data).toEqual(expected);
+    if ('reads' in result.data && result.data.viewer && 'state' in result.data.viewer) {
+      expectTypeOf(result.data.viewer.actions.statementPropose).toEqualTypeOf<'allowed' | 'denied' | 'unavailable'>();
+    }
+  }
+  expect(sent.map(({ url, method }) => [url, method])).toEqual([
+    [`${ORIGIN}/v1/pages:read`, 'POST'],
+    [`${ORIGIN}/v1/pages:read`, 'POST'],
+  ]);
 });
 
 test('a problem is the error value and no data', async () => {
@@ -380,6 +425,8 @@ test('reviewed Person evidence accepts exactly the four source keys with their i
 });
 
 test('installed identity operation poll types distinguish pending from published results', async () => {
+  type Admission = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$merge']['post']>>['data']>;
+  expectTypeOf<SubjectIdentityOperationAdmission>().toEqualTypeOf<Admission>();
   const OTHER = '019a1b2c-3d4e-7f00-8a00-000000000002';
   const remote = kernel([
     () => json(200, { operation: { id: ID, done: false } }),
@@ -397,6 +444,8 @@ test('installed identity operation poll types distinguish pending from published
   expect(pending.status).toBe(200);
   expect(pending.data?.operation).toEqual({ id: ID, done: false });
   const published = await reviewed.operation(ID);
+  expectTypeOf(published.data!).toEqualTypeOf<SubjectIdentityOperationRead>();
+  expectTypeOf(published.data!.operation).toEqualTypeOf<SubjectIdentityOperation>();
   expect(published.data?.operation).toEqual({
     id: ID,
     done: true,

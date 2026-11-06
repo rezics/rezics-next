@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as v from 'valibot';
 import { DiscoveryResults } from '../src/search/discovery-results';
 import {
   characterPersonHref,
@@ -15,6 +16,17 @@ import { subjectVisitReturn, subjectVisitReturnHref } from '../src/features/page
 const work = '018f0000-0000-7000-8000-00a000000001';
 const role = '018f0000-0000-7000-8000-00a000000003';
 const person = '018f0000-0000-7000-8000-00a000000005';
+
+/** Same grammar as search_.characters validateSearch plus loaderDeps parseCharacterPersonSearch. */
+function installedSearch(href: string): Record<string, unknown> {
+  const url = new URL(href, 'https://rezics.test');
+  const raw: Record<string, unknown> = {};
+  for (const key of new Set(url.searchParams.keys())) {
+    const values = url.searchParams.getAll(key);
+    raw[key] = values.length > 1 ? values : values[0];
+  }
+  return v.parse(v.objectWithRest({}, v.unknown()), raw);
+}
 
 test('credited-name requests carry the role on one credit and refine selected kind counts', () => {
   const parsed = parseCharacterPersonSearch(
@@ -59,16 +71,6 @@ test('credited-name requests carry the role on one credit and refine selected ki
   });
 });
 
-test('credited-name hrefs round-trip through the router, which decodes JSON-looking query values', () => {
-  const search = parseCharacterPersonSearch({ mode: 'works', name: 'Mika', role, language: ['ja', 'en'] }, 'en').search;
-  const url = new URL(characterPersonHref('ja', search, 'opaque'), 'https://rezics.test');
-  expect(url.pathname).toBe('/ja/search/characters');
-  const raw = Object.fromEntries(
-    [...url.searchParams].map(([key, value]) => [key, value.startsWith('[') ? JSON.parse(value) : value]),
-  );
-  expect(parseCharacterPersonSearch(raw, 'ja').search).toEqual({ ...search, cursor: 'opaque' });
-});
-
 test('a credited work shows the matched name, language and role, and links the credited Person', () => {
   const creditedHit = {
     key: { owner: 'semantic', kind: 'schema:CreativeWork', route: 160, id: work },
@@ -92,7 +94,6 @@ test('a credited work shows the matched name, language and role, and links the c
       qualifiers: [{ property: 'wdt:P3831', value: role }],
     },
   };
-  // A hit without creditMatch is still a valid work row.
   const plainHit = { key: creditedHit.key, summary: creditedHit.summary, labels: creditedHit.labels };
   const render = (hits: unknown[], roles?: Record<string, { label: string }>) => {
     const page = parseDiscoveryPage({
@@ -170,10 +171,86 @@ test('credited share links reopen works mode and subject visits return to the ex
 
   const executed = characterPersonHref('ja', { ...replay.search, cursor: 'page-two' }, 'page-two');
   const executedUrl = new URL(executed, 'https://rezics.test');
-  expect(JSON.parse(executedUrl.searchParams.get('language')!)).toEqual(['ja', 'en']);
+  expect(executedUrl.searchParams.getAll('language')).toEqual(['ja', 'en']);
+  expect(executedUrl.searchParams.get('language')).not.toMatch(/^\[/);
   const subject = subjectVisitReturnHref({ id: work, label: 'work' }, 'ja', executed);
   const visit = new URL(subject, 'https://rezics.test');
   expect(visit.pathname).toMatch(new RegExp(`^/ja/subjects/${work}/`));
   expect(visit.searchParams.get('via')).toBe(executed);
   expect(subjectVisitReturn(visit.searchParams.get('via'), 'ja')).toBe(executed);
+});
+
+test('a credited ja/en query emits repeated languages and returns through the installed route', () => {
+  const parsed = parseCharacterPersonSearch(
+    {
+      mode: 'works',
+      name: 'Mika',
+      role,
+      language: ['ja', 'en'],
+      kinds: ['schema:Book', 'wd:Q123'],
+      sort: 'relevance',
+      threshold: '1',
+    },
+    'en',
+  );
+  expect(parsed.error).toBeUndefined();
+  const executed = characterPersonHref('ja', { ...parsed.search, cursor: 'page-two' }, 'page-two');
+  const url = new URL(executed, 'https://rezics.test');
+  expect(url.pathname).toBe('/ja/search/characters');
+  expect(url.searchParams.getAll('language')).toEqual(['ja', 'en']);
+  expect(url.searchParams.get('language')).not.toMatch(/^\[/);
+  expect(url.searchParams.get('role')).toBe(role);
+  expect(url.searchParams.getAll('kinds')).toEqual(['schema:Book', 'wd:Q123']);
+  expect(url.searchParams.get('sort')).toBe('relevance');
+  expect(url.searchParams.get('cursor')).toBe('page-two');
+  const admitted = parseCharacterPersonSearch(installedSearch(executed), 'ja');
+  expect(admitted.error).toBeUndefined();
+  expect(admitted.search).toMatchObject({
+    mode: 'works',
+    name: 'Mika',
+    role,
+    languages: ['ja', 'en'],
+    kinds: ['schema:Book', 'wd:Q123'],
+    sort: 'relevance',
+    threshold: 1,
+    cursor: 'page-two',
+  });
+
+  const page = parseDiscoveryPage({
+    hits: [
+      {
+        key: { owner: 'semantic', kind: 'schema:CreativeWork', route: 160, id: work },
+        summary: {
+          kind: 'subject',
+          value: {
+            id: work,
+            type: 'schema:CreativeWork',
+            types: ['schema:CreativeWork'],
+            label: { language: 'ja', value: '作品' },
+            creativeWork: true,
+            cover: null,
+          },
+        },
+        labels: { ja: '作品' },
+      },
+    ],
+    kinds: { values: [], next: null },
+    next: null,
+    as_of: '2026-11-04T00:00:00.000Z',
+  })!;
+  const destination = subjectVisitReturnHref({ id: work, label: '作品' }, 'ja', executed);
+  const html = renderToStaticMarkup(
+    createElement(DiscoveryResults, {
+      locale: 'ja',
+      state: { status: 'ready', page },
+      subjectHrefFor: (subject) => subjectVisitReturnHref(subject, 'ja', executed),
+    }),
+  );
+  expect(html).toContain(destination.replaceAll('&', '&amp;'));
+  const visit = new URL(destination, 'https://rezics.test');
+  expect(visit.searchParams.get('via')).toBe(executed);
+  expect(subjectVisitReturn(visit.searchParams.get('via'), 'ja')).toBe(executed);
+  const returned = parseCharacterPersonSearch(installedSearch(visit.searchParams.get('via')!), 'ja');
+  expect(returned.error).toBeUndefined();
+  expect(returned.search).toEqual(admitted.search);
 });

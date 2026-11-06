@@ -55,7 +55,7 @@ export type MalCurrentScoreVote = {
 };
 
 /** Preserve native rows and outcomes intact, adding only Web-owned source-admission presentation. */
-export type MalPreviewRow = Omit<NativeMalRow, 'review' | 'outcome'> & {
+export type MalPreviewRow = Omit<NativeMalRow, 'review' | 'outcome' | 'currentScoreVote'> & {
   review: MalReview | null;
   outcome: MalOutcome | null;
   currentScoreVote?: MalCurrentScoreVote | null;

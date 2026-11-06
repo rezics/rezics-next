@@ -272,7 +272,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Recorded native-shaped Work overviews for Book Girl, Kara no Kyoukai and anime 233. Anonymous phone and desktop reading of volume, publisher, counterpart, episode, cast and staff targets with exact und aliases and citations. No native execution is claimed.',
+          'Illustrative authored Work overviews for Book Girl, Kara no Kyoukai and anime 233. Anonymous phone and desktop reading of volume, publisher, counterpart, episode, cast and staff targets with exact und aliases and citations. Constructed responses and synthetic identities; not recorded native execution or visual review.',
       },
     },
   },
