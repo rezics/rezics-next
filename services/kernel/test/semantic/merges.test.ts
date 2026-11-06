@@ -566,7 +566,7 @@ test('reviewed Person evidence admits all four exact source keys and keeps same 
   });
   expect(batch.response.status).toBe(200);
   expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201, 201, 201]);
-  const ids = batch.body.results.map((result: any) => result.value.id as string);
+  const ids: string[] = batch.body.results.map((result: { value: { id: string } }) => result.value.id);
   const read = (id: string, claim: (typeof claims)[number]) =>
     call(
       'GET',
