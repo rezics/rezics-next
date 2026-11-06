@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 import { ConfigError } from '../commerce/config.ts';
 import { createTurnstileVerifier } from './turnstile.ts';
 import type { ContentRuntime } from './runtime.ts';
+import { readContentEditionConsent } from './edition-sale-consent.ts';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -56,10 +57,13 @@ function turnstile(env: Environment) {
 export function readContentConfig(env: Environment): ContentRuntime {
   const anonymousVerifier = turnstile(env);
   const verifier = anonymousVerifier === undefined ? {} : { anonymousVerifier };
-  if (env.CONTENT_SOURCE_HOSTS === undefined) return Object.freeze(verifier);
+  const consent = readContentEditionConsent(env);
+  const readConsent = consent === undefined ? {} : { readConsent: consent };
+  if (env.CONTENT_SOURCE_HOSTS === undefined) return Object.freeze({ ...verifier, ...readConsent });
   if (!env.CONTENT_SOURCE_HOSTS) throw new ConfigError('CONTENT_SOURCE_HOSTS');
   return Object.freeze({
     fetchConfig: Object.freeze({ allowedHosts: sourceHosts(env.CONTENT_SOURCE_HOSTS) }),
     ...verifier,
+    ...readConsent,
   });
 }

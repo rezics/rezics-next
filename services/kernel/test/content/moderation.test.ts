@@ -25,7 +25,7 @@ const context = (idempotencyKey = crypto.randomUUID()) => ({
   deadline: Date.now() + 10000,
   requestId: crypto.randomUUID(),
 });
-const deps = () => ({ pool: f.pool, access: f.access, routeKey });
+const deps = () => ({ clock: () => new Date(), pool: f.pool, access: f.access, routeKey });
 beforeAll(async () => {
   f = await standingFixture();
   actor = (await f.context()).actor;

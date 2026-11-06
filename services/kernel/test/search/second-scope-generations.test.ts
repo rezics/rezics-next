@@ -144,6 +144,7 @@ test('default native owner readers register through the canonical slots without 
   } as unknown as Pool;
   const routeKey = new Uint8Array(32);
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool,
     routeKey,
     access: {} as never,
@@ -166,6 +167,7 @@ test('default native owner readers register through the canonical slots without 
 
 test('default review population stays unready when the source has only the legacy key page', async () => {
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool: {
       connect: async () => {
         throw new Error('readiness must not open a connection');
@@ -203,6 +205,7 @@ test('the installed Space capability survives JSON and cannot bind another physi
     }),
   } as unknown as Pool;
   const entry = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool,
     routeKey: new Uint8Array(32),
     access: {} as never,
@@ -234,6 +237,7 @@ test('the installed Space capability survives JSON and cannot bind another physi
 
 test('a retired signed Review cut requests fresh population instead of retrying the opaque continuation', async () => {
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool: {} as Pool,
     routeKey: new Uint8Array(32),
     access: {} as never,

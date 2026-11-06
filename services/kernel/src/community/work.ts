@@ -158,7 +158,10 @@ export const communityWorkModule: WorkModule = {
     ]);
     registerCommunityAccountErasureWork(context);
     await registerDiscoveryWork(context);
-    context.addEffects([createPartyLocatorEffect(context.pool), createCommunityAccountErasureEffect(context)]);
+    context.addEffects([
+      createPartyLocatorEffect(context.pool, context.clock),
+      createCommunityAccountErasureEffect(context),
+    ]);
   },
 };
 

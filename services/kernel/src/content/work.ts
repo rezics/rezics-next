@@ -31,6 +31,7 @@ import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
 import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
+import { tryContentApplication } from './adapters/bind.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
 import { repairConversationActivityPage } from './conversation-activity-repair.ts';
 import { createErasureJob } from './erasure-job.ts';
@@ -104,6 +105,8 @@ type ContentWorkOptions = Readonly<{
   readConsent: CurrentConsentReader;
   routeKey: Uint8Array;
   fetchConfig: MediaImportFetchConfig;
+  /** Wall-clock budgets for durable steps. Composition supplies this; tests may freeze it. */
+  now?: () => number;
   /** Trusted operational fixture only. Production always enumerates all fixed partition numbers. */
   collectionPartitions?: readonly number[];
   /** Delay between attempts of a failed durable step. Production keeps one second; a test may pass a shorter one. */
@@ -155,6 +158,7 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
+  const now = options.now ?? tryContentApplication()?.ambient.now ?? (() => Date.now());
   registerReviewDiscoveryWork(context);
   registerReviewCensusWork(context, options.access, partitions);
   const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
@@ -174,7 +178,7 @@ async function registerWork(
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
   const realmSubjectIdentityPage = DBOS.registerStep(
-    async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, Date.now() + 30_000),
+    async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, now() + 30_000),
     { name: 'content.realmSubject.identity.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -199,9 +203,9 @@ async function registerWork(
   );
   const realmSubjectCensusPage = DBOS.registerStep(
     async () => {
-      const cursor = await realmSubject.sweepCursor(Date.now() + 30_000);
+      const cursor = await realmSubject.sweepCursor(now() + 30_000);
       if (cursor.complete) return { state: 'complete' as const };
-      return realmSubject.sweep(cursor.route, REALM_SUBJECT_CENSUS_PAGE, Date.now() + 30_000);
+      return realmSubject.sweep(cursor.route, REALM_SUBJECT_CENSUS_PAGE, now() + 30_000);
     },
     { name: 'content.realmSubject.census.page', ...retry },
   );
@@ -358,7 +362,7 @@ async function registerWork(
               context.pool,
               partition * 16 + offset,
               context.clock(),
-              () => Date.now() + 120_000,
+              () => now() + 120_000,
               <T>(name: string, action: () => Promise<T>) => purgeDeleted(name, action) as Promise<T>,
               createErasureJob(context.pool, storage),
             )
@@ -395,6 +399,10 @@ async function registerWork(
   );
   const refreshRanks = DBOS.registerStep(
     async (chunk: readonly number[]) => {
+      const application = tryContentApplication();
+      if (application) {
+        return Promise.all(chunk.map((partition) => application.refreshRanks(context.pool, [partition])));
+      }
       const at = context.clock();
       return Promise.all(chunk.map((partition) => refreshBoardRankBatch(context.pool, at, [partition])));
     },
@@ -413,7 +421,7 @@ async function registerWork(
     },
   );
   const conversationActivityRepairPage = DBOS.registerStep(
-    async (partition: number) => repairConversationActivityPage(context.pool, partition, Date.now() + 30_000),
+    async (partition: number) => repairConversationActivityPage(context.pool, partition, now() + 30_000),
     { name: 'content.conversation-activity.repair.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -462,8 +470,7 @@ async function registerWork(
     { name: NOTICE_RETENTION_WORKFLOW },
   );
   const boardSlowRecoveryPage = DBOS.registerStep(
-    async () =>
-      recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), Date.now() + 120_000),
+    async () => recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), now() + 120_000),
     { name: 'content.board-slow.recovery.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -476,7 +483,7 @@ async function registerWork(
   );
   const boardSlowRetentionPage = DBOS.registerStep(
     async (cutoff: string) =>
-      pruneBoardSlowModeHistoryPage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, cutoff, Date.now() + 120_000),
+      pruneBoardSlowModeHistoryPage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, cutoff, now() + 120_000),
     { name: 'content.board-slow.retention.page', ...retry },
   );
   DBOS.registerWorkflow(
@@ -577,7 +584,7 @@ async function registerWork(
       clearErasedPostRevisions(
         context.pool,
         { postId, accountErasure },
-        () => Date.now() + 120_000,
+        () => now() + 120_000,
         context.clock,
         <T>(name: string, action: () => Promise<T>) => clearErasedPost(name, action) as Promise<T>,
         createErasureJob(context.pool, storage),
@@ -613,7 +620,7 @@ async function registerWork(
     createSubjectThreadEffect(context.pool),
     createAuthorItemEffect(context.pool),
     createReportLocatorEffect(context.pool),
-    createCreatorEditionIndexEffect(context.pool),
+    createCreatorEditionIndexEffect(context.pool, context.clock),
     createPartyLocatorEffect(context.pool),
     createAccountUploadIndexEffect(context.pool, storage),
   ]);

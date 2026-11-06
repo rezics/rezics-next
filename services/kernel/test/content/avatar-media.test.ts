@@ -30,7 +30,7 @@ const context = () => ({
   requestId: crypto.randomUUID(),
   deadline: Date.now() + 30000,
 });
-const dependencies = () => ({ pool: db.pool, access });
+const dependencies = () => ({ clock: () => new Date(), pool: db.pool, access });
 
 beforeAll(async () => {
   db = await openGrowthDatabase();

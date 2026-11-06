@@ -161,7 +161,7 @@ export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 's
 export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUntil?: string }) | WithheldPostEntry;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
-export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same
  * source snapshot; it must not prepare authority or open a foreign checkout.
@@ -1158,11 +1158,7 @@ export async function discloseBoardPageThreads(
       if (!item) continue;
       if (context.actor.kind === 'account' && context.actor.accountId === post.author_id) {
         const until = post.deleted_at ? post.deleted_at.getTime() + 30 * 86400000 : 0;
-        if (
-          item.availability === 'erased' &&
-          post.restorable &&
-          until > (dependencies.clock?.() ?? new Date()).getTime()
-        )
+        if (item.availability === 'erased' && post.restorable && until > dependencies.clock().getTime())
           item = { ...item, restorableUntil: new Date(until).toISOString() };
         if (item.availability === 'withheld' && post.decision_id) item = { ...item, decisionId: post.decision_id };
       }
@@ -1468,7 +1464,7 @@ async function disclose(
     const post = current.posts[0];
     if (context.actor.kind === 'account' && context.actor.accountId === post.author_id) {
       const until = post.deleted_at ? post.deleted_at.getTime() + 30 * 86400000 : 0;
-      if (item.availability === 'erased' && post.restorable && until > (dependencies.clock?.() ?? new Date()).getTime())
+      if (item.availability === 'erased' && post.restorable && until > dependencies.clock().getTime())
         item = { ...item, restorableUntil: new Date(until).toISOString() };
       if (item.availability === 'withheld' && post.decision_id) item = { ...item, decisionId: post.decision_id };
     }
@@ -2081,7 +2077,7 @@ async function list(
   cursor: string | undefined,
   limit: number,
 ): Promise<Page<PostEntry>> {
-  const clock = dependencies.clock ?? (() => new Date());
+  const clock = dependencies.clock;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
   const root = await readThread(dependencies, threadId, context);
   if (!root.value) throw new ContentNotFoundError();
@@ -2209,7 +2205,7 @@ export async function listPostRevisions(
   return readNativePostRevisionPage(
     {
       tokens: dependencies.tokens,
-      now: () => (dependencies.clock?.() ?? new Date()).getTime(),
+      now: () => dependencies.clock().getTime(),
       observe,
       select: (after, selectedLimit) =>
         snapshot(dependencies, threadId, context, (client) =>
@@ -3089,7 +3085,7 @@ export async function readBoards(
 /** Edition publication enrolls just the selected source post. Ancestors keep their
  * ordinary read formula; this port cannot authorize an ordinary post route. */
 export function prepareEditionSource(
-  dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
   source: ContentEditionSource,
   context: ReadContext,
   time: AuthoritativeTime,
@@ -3104,7 +3100,7 @@ export function prepareEditionSource(
 /** Native publisher checks restore separately for every action and exact resource.
  * This never creates a workflow ReadContext or supplies a buyer identity. */
 export function prepareEditionPublisherSource(
-  dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
   source: ContentEditionSource,
   operation: DurableOperationAnchor,
   restorer: InitiatorRestorer,
@@ -3133,7 +3129,7 @@ export function prepareEditionPublisherSource(
 }
 
 async function prepareEditionSourceAuthority(
-  dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
   source: ContentEditionSource,
   time: AuthoritativeTime,
   accessContext: AccessContext,

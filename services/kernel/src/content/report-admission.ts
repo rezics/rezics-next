@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -26,7 +27,7 @@ export function reportRequestContext(
         : { kind: 'account', id: actor.accountId },
     ),
     deadline,
-    requestId: Bun.randomUUIDv7(),
+    requestId: contentRequestId(),
     ...(botToken === undefined ? {} : { botToken }),
   };
 }

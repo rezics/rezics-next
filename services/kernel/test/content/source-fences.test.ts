@@ -108,6 +108,7 @@ async function fixture(database = { pool, admin }) {
     return {
       pool: database.pool,
       routeKey,
+      clock: () => new Date(),
       access: f.permissions({
         actions: new Map([[action, { anonymous: false }]]),
         accountEvidence: () => account,

@@ -9,6 +9,7 @@ import { AuthenticationError } from '../request/access.ts';
 import type { mediaImportRoutes } from './media-import-routes.ts';
 import { strictContentSchema } from './schemas.ts';
 import { readDocument, type DocumentReadDependencies } from './document-read.ts';
+import { contentRequestId } from './adapters/bind.ts';
 import { eraseAuthoredField } from './authored-fields.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { routeOf } from '../route/route.ts';
@@ -49,7 +50,10 @@ function response() {
   );
 }
 
-export function documentRoutes(app: ReturnType<typeof mediaImportRoutes>, dependencies: DocumentReadDependencies) {
+export function documentRoutes(
+  app: ReturnType<typeof mediaImportRoutes>,
+  dependencies: DocumentReadDependencies & { clock: () => Date },
+) {
   return app
     .onRequest(({ request, set }) => {
       if (/^\/v1\/documents\/[^/]+$/.test(new URL(request.url).pathname))
@@ -118,7 +122,7 @@ export function documentRoutes(app: ReturnType<typeof mediaImportRoutes>, depend
             eraseAuthoredField(dependencies, actor, id, {
               idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
               deadline: job.deadline,
-              requestId: Bun.randomUUIDv7(),
+              requestId: contentRequestId(),
             }),
           );
           if (!result) throw new ProblemError('not_found');

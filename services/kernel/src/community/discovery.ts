@@ -150,7 +150,7 @@ import {
   type DiscoveryCandidate,
 } from './discovery-projection-read.ts';
 
-export type DiscoveryDependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: (() => Date) | undefined };
+export type DiscoveryDependencies = { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date };
 
 /** Public pages examine one rank range of at most twenty keys, including suppressed keys. */
 export async function listRealmDiscovery(
@@ -158,7 +158,7 @@ export async function listRealmDiscovery(
   deadline: number,
   input: DiscoveryQuery,
 ): Promise<DiscoveryPage> {
-  const at = (deps.clock ?? (() => new Date()))();
+  const at = deps.clock();
   const cutoff = discoveryWindow(input.sort, at).cutoff;
   const limit = discoveryLimit(input.limit);
   const page = await discoverySnapshot(deps.pool, DISCOVERY_PARTITION, deadline, async (client, epoch) => {
@@ -199,7 +199,7 @@ export async function listRealmDiscovery(
     for (const [realmId, card] of first) {
       if (card.avatarMediaId === null) continue;
       const { avatar } = await readRealmPresentationImages(
-        { pool: deps.pool, access: deps.access },
+        { pool: deps.pool, access: deps.access, clock: deps.clock },
         { realmId, avatarMediaId: card.avatarMediaId, bannerMediaId: null },
         { actor: { kind: 'anonymous' }, deadline },
       );
@@ -212,14 +212,7 @@ export async function listRealmDiscovery(
       page.rows.filter((row) => first.has(row.realm_id)),
       deadline,
     );
-    const final = await readDiscoveryCards(
-      deps.pool,
-      decisions,
-      current,
-      cutoff,
-      (deps.clock ?? (() => new Date()))().toISOString(),
-      deadline,
-    );
+    const final = await readDiscoveryCards(deps.pool, decisions, current, cutoff, deps.clock().toISOString(), deadline);
     for (const [realmId, card] of final) {
       if (first.get(realmId)?.binding !== card.binding) continue;
       cards.set(realmId, { ...card.value, avatar: avatars.get(realmId) ?? null });
@@ -234,7 +227,7 @@ export async function listRealmDiscovery(
       if (
         epoch !== page.context.partitionEpoch ||
         anchor.publication_epoch !== page.context.publicationEpoch ||
-        discoveryWindow(input.sort, (deps.clock ?? (() => new Date()))()).cutoff !== cutoff
+        discoveryWindow(input.sort, deps.clock()).cutoff !== cutoff
       )
         throw new ProblemError('stale_cursor');
     });

@@ -42,7 +42,7 @@ export type SubjectThreadPage = {
 export type SubjectThreadDependencies = SubjectThreadCardDependencies &
   Pick<ContentCommandDependencies, 'realmParticipation'> & {
     /** Trusted service configuration, independent of authentication's wall clock. */
-    cursorNow?: () => number;
+    cursorNow: () => number;
   };
 
 type SubjectThreadKey = { lastActivityAt: string; threadId: string };
@@ -178,7 +178,7 @@ export async function listSubjectThreads(
   if (!Number.isInteger(limit) || limit < 1 || limit > PAGE_LIMIT) throw new RangeError('Page limit must be 1 to 20');
   if (input.kind !== 'discussion' && input.kind !== 'review') throw new TypeError('Invalid subject thread kind');
 
-  const now = (dependencies.cursorNow ?? Date.now)();
+  const now = dependencies.cursorNow();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const scope = binding(subjectId, input, context.actor);
   const pageContext = await prepareSubjectThreadContext(dependencies, subjectId, input.place, input.kind, context);

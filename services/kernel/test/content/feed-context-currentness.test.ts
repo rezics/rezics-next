@@ -9,6 +9,7 @@ test('native context rejects mismatched observations and retires a removed or hi
   const f = await createReviewLifecycleFixture();
   try {
     const dependencies = {
+      clock: () => new Date(),
       pool: f.system.database.pool,
       routeKey: f.system.routeKey,
       access: f.system.access,

@@ -17,6 +17,7 @@ import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import {
@@ -157,6 +158,9 @@ beforeAll(async () => {
     pool: db.pool,
     access,
     routeKey,
+    now: () => Date.now(),
+    id: () => '01900000-0000-7000-8000-000000000001',
+    cursorNow: () => Date.now(),
     tokens,
     clock: () => new Date(),
     fetchConfig: { allowedHosts: ['images.example.test'] },
@@ -169,7 +173,11 @@ beforeAll(async () => {
     },
   };
   app = contentRoutes(createApp(dependencies) as unknown as ReturnType<typeof definitionRoutes>, dependencies);
-  root = createKernel({ ...dependencies, content: { fetchConfig: dependencies.fetchConfig } });
+  root = createKernel({
+    ...dependencies,
+    receiptKeys: testReceiptKeys(),
+    content: { fetchConfig: dependencies.fetchConfig },
+  });
   expect(checkMediaImportRequest(input)).toEqual([]);
 });
 afterAll(async () => {

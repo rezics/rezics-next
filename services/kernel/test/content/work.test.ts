@@ -14,7 +14,13 @@ import {
   CONTENT_COLLECTION_SCHEDULE,
   CONTENT_OPERATION_PROGRESS,
 } from '../../src/content/work.ts';
-import { contentWorkDependencies, createContentWorkAccess, registerContent } from '../../src/content/register.ts';
+import {
+  contentWorkDependencies,
+  createContentWorkAccess,
+  createContentWorkModule,
+} from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { contentEffects } from '../../src/content/relays.ts';
 import { readMembershipRouteKey } from '../../src/access/membership-work-config.ts';
 import {
@@ -41,6 +47,7 @@ import { beginAuthorErasure } from '../../src/content/operations.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { readPartition } from '../../src/partition/partition.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL!;
 const route = 0x4920;
@@ -99,7 +106,7 @@ if (process.argv.includes('--content-worker')) {
       ...(process.env.CONTENT_TEST_NOW ? { clock: () => new Date(process.env.CONTENT_TEST_NOW!) } : {}),
     },
     KERNEL_WORK_MODULES.map((module) =>
-      module === registerContent ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
+      module.name === registerContent.name ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
     ),
     workerTestEnv({
       CONTENT_R2_ENDPOINT: storageEndpoint,
@@ -356,13 +363,15 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   }
 
   test('shared kernel registers content once and effects are source-partitioned', () => {
-    expect(KERNEL_WORK_MODULES.filter((module) => module.name === registerContent.name)).toEqual([registerContent]);
+    // The composition supplies its own module instance; identity is the single registered content name.
+    expect(KERNEL_WORK_MODULES.filter((module) => module.name === registerContent.name)).toHaveLength(1);
     expect(WORK_QUEUES.effects).toMatchObject({ partitionConcurrency: 1 });
     expect(WORK_QUEUES.governance.workerConcurrency).toBeGreaterThan(0);
   });
 
   test('checkGrowth proves bounded real collection SQL with same-partition distractors at three scales', async () => {
     const db = await openGrowthDatabase();
+    configureTestReceiptKeys(db.pool);
     const store = storageFixture();
     const storage = new R2Storage({
       endpoint: store.endpoint,
@@ -480,6 +489,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('actual DBOS worker consumes prelaunch image work, recovers and deduplicates real Sharp effects', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {
@@ -530,6 +540,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('permanent image rejection keeps cleanup retryable through failure and restart', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {
@@ -573,7 +584,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         .png()
         .toBuffer();
       const reserved = await reserveMedia(
-        { pool: system.database.pool, access: system.access },
+        { clock: () => new Date(), pool: system.database.pool, access: system.access },
         system.actors.moderator.actor,
         { containerId: native.threadId, purpose: 'post-image', mediaType: 'image/png', byteCount: bytes.byteLength },
         { deadline: Date.now() + 10000, idempotencyKey: randomUUID(), requestId: randomUUID() },
@@ -594,14 +605,14 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         scopes: system.actors.moderator.actor.scopes,
       });
       const erased = await eraseStandaloneMedia(
-        { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+        { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
         moderator.actor,
         { mediaId: fixture.mediaId, reason: 'Remove bytes' },
         { requestId: randomUUID(), idempotencyKey: randomUUID(), deadline: Date.now() + 10_000 },
       );
       expect(
         await decideDownload(
-          { pool: system.database.pool, access: system.access },
+          { clock: () => new Date(), pool: system.database.pool, access: system.access },
           fixture.mediaId,
           system.actors.author.actor,
           'webp-16',
@@ -641,6 +652,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('native persistent hourly collection respects exact24h, claims, partition and pending fences after restart', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {
@@ -803,7 +815,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       visibility: 'published',
     });
     const command = await createThread(
-      { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+      { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
       person.actor,
       {
         boardId: board.id,
@@ -932,6 +944,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
   test('native URL workflow invokes the production import rejection and governance cleanup with ID-only source', async () => {
     const store = storageFixture();
     const pool = new pg.Pool({ connectionString: databaseUrl });
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl);
     let running: Awaited<ReturnType<typeof worker>> | undefined;
     try {

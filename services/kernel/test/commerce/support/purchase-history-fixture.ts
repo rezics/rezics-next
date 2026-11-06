@@ -120,7 +120,7 @@ export async function purchaseHistoryFixture() {
     credentials.set(authenticated, person.bearer);
     return authenticated;
   }
-  const commands = createCommerceCommands({ pool: db.pool, access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool: db.pool, access });
   await createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' }).create(
     { ...context(), actor: await actor(people.staff) },
     {

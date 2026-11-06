@@ -3,7 +3,9 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Pool, type Pool as PoolType } from 'pg';
-import { registerContent } from '../../src/content/register.ts';
+import { createContentWorkModule } from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { threadTarget } from '../../src/content/commands.ts';
 import { effectsRelay, effectWorkflowId, type Effect } from '../../src/events/effects.ts';
 import { readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';

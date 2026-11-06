@@ -34,7 +34,7 @@ describe('public review discovery adapter', () => {
     expect(await unavailable.count(0)).toEqual({ status: 'unavailable' });
 
     const author = (await fixture.context()).actor;
-    const dependencies = { pool: fixture.pool, access: fixture.access, tokens };
+    const dependencies = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, tokens };
     const board = (
       await fixture.reader.query<{ route: number; board_id: string }>(
         "SELECT route, board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews' AND visibility='published'",
@@ -54,7 +54,7 @@ describe('public review discovery adapter', () => {
 
     async function publish(target: string, ordinal: number): Promise<PublishedReview> {
       const result = await createThread(
-        { pool: fixture.pool, access: fixture.access, routeKey },
+        { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
         author,
         {
           kind: 'review',
@@ -203,7 +203,7 @@ describe('public review discovery adapter', () => {
     );
 
     await revisePost(
-      { pool: fixture.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
       author,
       { threadId: initial[4]!.id, itemId: initial[4]!.postId, body: fromPlainText('Revised public opening.') } as never,
       request(),
@@ -239,13 +239,18 @@ describe('public review discovery adapter', () => {
       id: initial[4]!.postId,
     });
     await softDeletePost(
-      { pool: fixture.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
       author,
       { postId: initial[4]!.postId, reason: 'Author withdrew the review opening' },
       request(),
     );
     expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'ready', value: new Map() });
-    await restorePost({ pool: fixture.pool, access: fixture.access, routeKey }, author, initial[4]!.postId, request());
+    await restorePost(
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
+      author,
+      initial[4]!.postId,
+      request(),
+    );
     expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'ready', value: new Map() });
 
     const restoredDocument = (await currentDocument(initial[4]!.id))!;

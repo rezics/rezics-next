@@ -1305,7 +1305,7 @@ function subjectRoutes(
                     input: selectedSynopsis,
                     admit: async () => {
                       const admitted = await readDocument(
-                        { pool, access: access(), routeKey },
+                        { pool, access: access(), routeKey, now: () => Date.now() },
                         selectedSynopsis.document,
                         { actor, deadline: job.deadline },
                       );
@@ -1474,7 +1474,7 @@ function subjectRoutes(
 
         const documentRead = query.includeDocuments
           ? await readCharacterPublicDocuments(
-              { pool, access: access(), routeKey },
+              { pool, access: access(), routeKey, now: () => Date.now() },
               result.subject,
               release,
               { actor, deadline: job.deadline },

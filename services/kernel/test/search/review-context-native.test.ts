@@ -20,6 +20,7 @@ test('selected mixed Search preserves the opening citation and current target, a
   const f = await createReviewLifecycleFixture();
   try {
     const deps = {
+      clock: () => new Date(),
       pool: f.system.database.pool,
       access: f.system.access,
       tokens: f.system.tokenKeys,

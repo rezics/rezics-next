@@ -52,14 +52,14 @@ export type OwnRealmClaimPage = Readonly<{
  * containers throw not_found; unavailable native authority throws its typed error.
  */
 export type ReadOwnRealmClaim = (
-  deps: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  deps: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   actor: Actor,
   input: Readonly<{ realmId: string; requestId?: string }>,
   context: Readonly<{ deadline: number }>,
 ) => Promise<RealmClaimStatus | null>;
 
 export type ReadOwnRealmClaimPage = (
-  deps: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  deps: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   actor: Actor,
   input: Readonly<{ realmId: string; requestId?: string }>,
   context: Readonly<{ deadline: number }>,

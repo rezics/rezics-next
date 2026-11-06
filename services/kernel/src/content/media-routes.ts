@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { memoizedValue } from '../memoized.ts';
 import type { OwnMediaDependencies } from './own-media.ts';
 import { withHeaders } from '@elysia/openapi';
@@ -41,7 +42,7 @@ import {
   strictContentSchema,
 } from './schemas.ts';
 
-type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
+export type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 function readFailures() {
   return memoizedValue(readFailures, () => ({
@@ -95,7 +96,7 @@ function context(request: Request, deadline: number) {
   return {
     idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
     deadline,
-    requestId: Bun.randomUUIDv7(),
+    requestId: contentRequestId(),
   };
 }
 function existing(id: string) {

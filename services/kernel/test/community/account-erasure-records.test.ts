@@ -109,10 +109,14 @@ async function erase(state: Awaited<ReturnType<typeof setup>>, ids: string[]) {
   let reasonsKeptUntil: string | null = null;
   let found = 0;
   do {
-    const page = await phase.eraseAccountCommunityRecordsPage({ pool: state.system.database.pool }, state.account.id, {
-      erasedAt: erased.at,
-      after,
-    });
+    const page = await phase.eraseAccountCommunityRecordsPage(
+      { clock: () => new Date(), pool: state.system.database.pool },
+      state.account.id,
+      {
+        erasedAt: erased.at,
+        after,
+      },
+    );
     expect(page.pending).toBe(0);
     found += page.found;
     if (page.reasonsKeptUntil && (!reasonsKeptUntil || page.reasonsKeptUntil > reasonsKeptUntil))
@@ -251,14 +255,14 @@ test.serial(
       ).rows.map((row) => row.reason);
     expect(await reasons()).toEqual(['Reason 0', 'Reason 1']);
     expect(
-      await purgeAccountBanReasonsPage({ pool: system.database.pool }, account.id, {
+      await purgeAccountBanReasonsPage({ clock: () => new Date(), pool: system.database.pool }, account.id, {
         asOf: due(times[0]!),
         after: null,
       }),
     ).toMatchObject({ found: 1, nextDueAt: due(times[1]!), next: null });
     expect(await reasons()).toEqual(['', 'Reason 1']);
     expect(
-      await purgeAccountBanReasonsPage({ pool: system.database.pool }, account.id, {
+      await purgeAccountBanReasonsPage({ clock: () => new Date(), pool: system.database.pool }, account.id, {
         asOf: due(times[1]!),
         after: null,
       }),
@@ -574,10 +578,14 @@ test.serial(
           );
         },
         async operation() {
-          const result = await phase.eraseAccountCommunityRecordsPage({ pool: db.pool }, account.id, {
-            erasedAt: erased.at,
-            after: null,
-          });
+          const result = await phase.eraseAccountCommunityRecordsPage(
+            { clock: () => new Date(), pool: db.pool },
+            account.id,
+            {
+              erasedAt: erased.at,
+              after: null,
+            },
+          );
           expect(result.found).toBe(1);
         },
       });

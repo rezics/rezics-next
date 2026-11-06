@@ -489,7 +489,13 @@ test('default discovery owns hydration languages before activeRelease', async ()
       throw new Error('Unexpected Access read');
     },
   });
-  const producers = createDiscoveryProducerEntry({ pool, routeKey: new Uint8Array(32).fill(1), access, tokens: keys });
+  const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
+    pool,
+    routeKey: new Uint8Array(32).fill(1),
+    access,
+    tokens: keys,
+  });
   const discovery = createDefaultDiscoverySearch(
     {
       pool,

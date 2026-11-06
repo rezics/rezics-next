@@ -79,6 +79,11 @@ The shared rules are owned by [architecture](../architecture.md),
 the [document package](../../packages/document/README.md) and [deletion](../deletion.md). Consumers adapt to
 producer-owned interfaces; Content does not copy another module's storage or authority.
 
+Decision: Kernel Content is split into contract/core/application/adapters; composition binds ContentAmbient;
+platform defineModule is not delivered so contentDeclaration() stays and contentHttpDeclaration() extends it with
+mount; start/stop owns the process bind; edition consent is an explicit reader with no pool WeakMap. Tests pin the
+declaration, supplied clock and request identity; no extra stories.
+
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior.
 

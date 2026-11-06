@@ -376,7 +376,7 @@ test('bounded suppression advances the signed native cursor without refilling, t
 test('an expired request deadline never discloses a family', async () => {
   const host = await space('deadline-home');
   await realm(host.id);
-  const dependencies = { pool, access, tokens, clock: () => new Date(now) };
+  const dependencies = { cursorNow: () => Date.now(), pool, access, tokens, clock: () => new Date(now) };
   for (const list of [listSitemapRealms, listSitemapSpaces]) {
     await expect(list(dependencies, Date.now() - 1)).rejects.toMatchObject({ reason: 'deadline' });
   }

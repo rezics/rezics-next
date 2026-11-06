@@ -84,10 +84,15 @@ export async function eraseAccountUploadItem(
     return 'erased';
   }
 
-  const visible = await readDocument({ pool: deps.pool, access: access(), routeKey: new Uint8Array() }, id, {
-    actor: { kind: 'anonymous' },
-    deadline: Date.now() + 30_000,
-  });
+  // Worker adapter budget: the same wall-clock source bounds this read's deadline.
+  const visible = await readDocument(
+    { pool: deps.pool, access: access(), routeKey: new Uint8Array(), now: Date.now },
+    id,
+    {
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    },
+  );
   if (visible) return 'retained';
   await runCommand(deps.pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
     await eraseField.run(tx, { route: sourceRoute, id, author_id: accountId });

@@ -13,10 +13,13 @@ const fixture = await standingFixture();
 afterAll(() => fixture.close());
 const routeKey = new Uint8Array(32).fill(73);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
-const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
-  actor: { kind: 'anonymous' },
-  deadline: Date.now() + 30_000,
-}));
+const source = createReviewDiscoverySource(
+  { clock: () => new Date(), pool: fixture.pool, access: fixture.access, tokens },
+  () => ({
+    actor: { kind: 'anonymous' },
+    deadline: Date.now() + 30_000,
+  }),
+);
 
 test('a census maintenance turn yields after bounded progress and stops when authority is preparing', async () => {
   let pages = 0;
@@ -52,7 +55,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   );
   const create = (target: string) =>
     createThread(
-      { pool: fixture.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
       author,
       {
         kind: 'review',
@@ -109,10 +112,13 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   }
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'progress', examined: 25 });
   expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'census-installation' });
-  const resumed = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
-    actor: { kind: 'anonymous' },
-    deadline: Date.now() + 30_000,
-  }));
+  const resumed = createReviewDiscoverySource(
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, tokens },
+    () => ({
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    }),
+  );
   expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 1 });
   const installed = await source.censusCoverage(partition);
   expect(installed).toMatchObject({ state: 'ready', installed: true, total: 26 });
@@ -139,7 +145,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
       eligible: true,
     });
   await revisePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     {
       itemId: written.value.itemId,
@@ -173,7 +179,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   ).toBe(26);
   const beforeRestoration = await source.censusCoverage(partition);
   const before = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
-  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const request = () => ({
     idempotencyKey: Bun.randomUUIDv7(),
     requestId: Bun.randomUUIDv7(),

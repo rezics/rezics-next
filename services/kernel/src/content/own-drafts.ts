@@ -141,7 +141,7 @@ export async function listOwnDrafts(
   const limit = input.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new RangeError('Page limit must be 1 to 20');
   const binding = scope(accountId, context, limit);
-  const now = (deps.clock?.() ?? new Date()).getTime();
+  const now = deps.clock().getTime();
   const selected = await snapshot(deps, accountId, context, async (client) => {
     // Decode uses the home epoch observed inside this same snapshot.
     const partition = await readPartition(client, partitionOf(admission.route));

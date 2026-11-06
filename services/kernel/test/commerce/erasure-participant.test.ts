@@ -154,7 +154,7 @@ beforeAll(async () => {
   targetSubjectId = (
     await accepted(personas.staff, '/v1/subjects', { type: 'schema:Book', labels: { en: 'Commerce erasure book' } })
   ).subject.id;
-  commands = createCommerceCommands({ pool, access: kernel.testAccess });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access: kernel.testAccess });
   const env = {
     ...process.env,
     ...workerTestEnv({

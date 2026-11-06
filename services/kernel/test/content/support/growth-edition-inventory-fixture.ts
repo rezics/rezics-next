@@ -6,7 +6,9 @@ import { fromPlainText } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
-import { registerContent } from '../../../src/content/register.ts';
+import { createContentWorkModule } from '../../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import type { CreatorEditionPage } from '../../../src/content/edition-index.ts';
 import type { ContentEditionView } from '../../../src/content/edition-model.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';

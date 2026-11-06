@@ -40,7 +40,7 @@ export type ErasePostDependencies = Readonly<{
   pool: Pool;
   access: Access;
   routeKey: Uint8Array;
-  clock?: () => Date;
+  clock: () => Date;
 }>;
 export type ErasePostContext = Readonly<{
   deadline: number;

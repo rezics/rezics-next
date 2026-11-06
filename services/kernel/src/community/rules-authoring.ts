@@ -115,10 +115,15 @@ export async function readRealmRulesAuthoringPage(
 
   let destinations: RulesAuthoringPage['destinations'];
   try {
-    const page = await listRealmBoards({ ...deps, tokens: deps.tokens }, realmId, context, {
-      ...(input.cursor ? { cursor: input.cursor } : {}),
-      limit: 20,
-    });
+    const page = await listRealmBoards(
+      { ...deps, tokens: deps.tokens, cursorNow: () => deps.clock().getTime() },
+      realmId,
+      context,
+      {
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        limit: 20,
+      },
+    );
     const candidates = page.items.filter(
       (board) => board.purpose === 'discussion' && board.availability === 'available',
     );

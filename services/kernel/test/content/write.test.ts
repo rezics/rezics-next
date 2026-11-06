@@ -34,7 +34,7 @@ const input = (): ThreadInput => ({
   boardId: board.id,
   visibility: 'published',
 });
-const dependencies = () => ({ pool: f.pool, access: f.access, routeKey });
+const dependencies = () => ({ clock: () => new Date(), pool: f.pool, access: f.access, routeKey });
 
 beforeAll(async () => {
   // reaction:set is a mounted standing action; without it the thread and post templates drop.

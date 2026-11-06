@@ -265,7 +265,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
   }
   const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 30_000 });
-  const commands = () => createCommerceCommands({ pool: db.pool, access });
+  const commands = () => createCommerceCommands({ clock: () => new Date(), pool: db.pool, access });
   // Grant administration is an internal command, with its management action
   // declared by this trusted composition just as in Access's governance tests.
   const grantAccess = createAccess({

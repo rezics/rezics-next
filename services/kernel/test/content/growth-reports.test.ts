@@ -246,10 +246,14 @@ test('Report inspection admission stays within its bound as report and grant his
         if (!targetId) throw new Error(`Missing fresh inspection target for run ${repetition}`);
         const deadline = Date.now() + 30_000;
         const actor = await system.access.authenticate(bearer, { pool: db.pool, deadline });
-        await requireReportInspection({ pool: db.pool, access: system.access, routeKey: system.routeKey }, targetId, {
-          actor,
-          deadline,
-        });
+        await requireReportInspection(
+          { clock: () => new Date(), pool: db.pool, access: system.access, routeKey: system.routeKey },
+          targetId,
+          {
+            actor,
+            deadline,
+          },
+        );
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);

@@ -45,7 +45,11 @@ const worker = await composeWork(
     {
       name: 'commerce',
       register() {
-        const commands = createCommerceCommands({ pool, access: createAccess({ actions: new Map() }) });
+        const commands = createCommerceCommands({
+          clock: () => new Date(),
+          pool,
+          access: createAccess({ actions: new Map() }),
+        });
         const resolve = DBOS.registerStep(
           async (ref: StripeEventRef) =>
             ref.sessionId ?? (ref.paymentIntentId ? stripe.findCheckoutSession(ref.paymentIntentId) : null),

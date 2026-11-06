@@ -153,7 +153,11 @@ import {
 export type Dependencies = ContentCommandDependencies &
   ContentBoardDependencies &
   ContentRuntime &
-  Readonly<{ viewerActionRuntime?: () => ReadingPageViewerActionRuntime }>;
+  Readonly<{
+    viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
+    now: () => number;
+    id: () => string;
+  }>;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 function readFailures() {
   return memoizedValue(readFailures, () => ({
@@ -486,11 +490,11 @@ function existingId(id: string): number {
   return route;
 }
 
-function requestContext(request: Request, deadline: number) {
+function requestContext(request: Request, deadline: number, dependencies: Pick<Dependencies, 'id'>) {
   return {
     idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
     deadline,
-    requestId: Bun.randomUUIDv7(),
+    requestId: dependencies.id(),
   };
 }
 
@@ -511,7 +515,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
   // The read/command port checks the full current chain before returning any bytes.
   async function containingThread(postId: string, context: ReadContext): Promise<string> {
     const route = existingId(postId);
-    if (Date.now() >= context.deadline) throw new ProblemError('deadline_exceeded');
+    if (dependencies.now() >= context.deadline) throw new ProblemError('deadline_exceeded');
     const row = await withConnection(dependencies.pool, (client) =>
       readContainingThread.run(client, { route, id: postId }),
     );
@@ -680,7 +684,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               actor,
               id,
               body.intervalSeconds,
-              requestContext(request, job.deadline),
+              requestContext(request, job.deadline, dependencies),
             );
             session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
             return result.value;
@@ -750,7 +754,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
       async ({ actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const context = requestContext(request, job.deadline);
+        const context = requestContext(request, job.deadline, dependencies);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             const result = await createBoard(dependencies, actor, { realmId: null, ...body }, context);
@@ -794,7 +798,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ params: { realmId }, actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         existingId(realmId);
-        const context = requestContext(request, job.deadline);
+        const context = requestContext(request, job.deadline, dependencies);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             const result = await createBoard(dependencies, actor, { realmId, ...body }, context);
@@ -925,7 +929,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
       async ({ actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const context = requestContext(request, job.deadline);
+        const context = requestContext(request, job.deadline, dependencies);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             let result: Awaited<ReturnType<typeof createThread>>;
@@ -1049,7 +1053,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ params: { id }, actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         existingId(id);
-        const context = requestContext(request, job.deadline);
+        const context = requestContext(request, job.deadline, dependencies);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             const result = await createPost(dependencies, actor, { ...body, threadId: id }, context);
@@ -1220,7 +1224,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         await contentOperation(async () => {
           const result = await admission.run('normal', job, async () => {
             try {
-              return await restorePost(dependencies, actor, id, requestContext(request, job.deadline));
+              return await restorePost(dependencies, actor, id, requestContext(request, job.deadline, dependencies));
             } catch (error) {
               if (!(error instanceof ReviewConflictError)) throw error;
               const reference = await readCurrentRestorationConflict(dependencies, id, {
@@ -1254,7 +1258,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ params: { id }, actor, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         existingId(id);
-        const context = requestContext(request, job.deadline);
+        const context = requestContext(request, job.deadline, dependencies);
         try {
           const result = await admission.run('normal', job, () =>
             softDeletePost(
@@ -1297,7 +1301,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const context = requestContext(request, job.deadline);
+        const context = requestContext(request, job.deadline, dependencies);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             const readContext = { actor, deadline: job.deadline };
@@ -1574,7 +1578,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               dependencies,
               actor,
               { boardId: id, threadId, pinned: body.pinned },
-              requestContext(request, job.deadline),
+              requestContext(request, job.deadline, dependencies),
             );
             session.record(result);
             return result.value;
@@ -2141,7 +2145,12 @@ export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, depe
         });
         const viewer = await admission.run('normal', job, () =>
           withViewerReactions(
-            { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+            {
+              pool: dependencies.pool,
+              access: dependencies.access,
+              tokens: dependencies.tokens,
+              clock: dependencies.clock,
+            },
             actor,
             [{ id }],
             job.deadline,
@@ -2168,12 +2177,12 @@ async function writeReaction(
 ) {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   existingId(targetId);
-  const context = requestContext(request, job.deadline);
+  const context = requestContext(request, job.deadline, dependencies);
   const deps = {
     pool: dependencies.pool,
     access: dependencies.access,
     ...(dependencies.realmParticipation === undefined ? {} : { realmParticipation: dependencies.realmParticipation }),
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
   };
   const target = { targetKind, targetId };
   await contentOperation(() =>

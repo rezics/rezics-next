@@ -51,7 +51,7 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     expect((await page(world.other.bearer)).value?.threads[0]).toMatchObject({ reactions: {}, viewerReaction: null });
 
     const pool = world.system.database.pool;
-    const deps = { pool, access: world.system.access, tokens: world.system.tokenKeys };
+    const deps = { clock: () => new Date(), pool, access: world.system.access, tokens: world.system.tokenKeys };
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 };
     const selected = await readSubjectThread(deps, threadId, world.conceptId, world.mainTarget.realmId, context);
     expect(selected.value).not.toBeNull();

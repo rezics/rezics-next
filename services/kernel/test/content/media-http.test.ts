@@ -268,7 +268,7 @@ test('the default media download budget is capped by the enclosing request deadl
   const started = performance.now();
   await expect(
     withRequestDeadline(requestDeadline, () =>
-      decideDownload({ pool, access }, newId(route), { kind: 'anonymous' }, 'webp-320'),
+      decideDownload({ clock: () => new Date(), pool, access }, newId(route), { kind: 'anonymous' }, 'webp-320'),
     ),
   ).rejects.toMatchObject({ reason: 'deadline' });
   expect(performance.now() - started).toBeLessThan(delayMs - budgetMs);
@@ -495,14 +495,19 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   const digestBody = new Bun.CryptoHasher('sha256').update('{}').digest();
   // 16 rows per scale unit puts every growing relation on point plans at N=32.
   const operation = async (database: typeof db) => {
-    const decision = await decideDownload({ pool: database.pool, access }, media.id, { kind: 'anonymous' }, 'webp-320');
+    const decision = await decideDownload(
+      { clock: () => new Date(), pool: database.pool, access },
+      media.id,
+      { kind: 'anonymous' },
+      'webp-320',
+    );
     expect(decision.allowed).toBe(true);
     const deadline = Date.now() + 10000;
     const authenticated = await access.authenticate(await bearer('owner'), { pool: database.pool, deadline });
     expect(
       (
         await decideDownload(
-          { pool: database.pool, access, downloadContext: { deadline } },
+          { clock: () => new Date(), pool: database.pool, access, downloadContext: { deadline } },
           media.id,
           authenticated,
           'webp-320',
