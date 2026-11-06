@@ -26,6 +26,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { DBOSExecutor } from '@dbos-inc/dbos-sdk/internal/dbos-executor';
 import { globalParams } from '@dbos-inc/dbos-sdk/internal/utils';
 import { wfQueueRunner, type WorkflowQueue } from '@dbos-inc/dbos-sdk/internal/wfqueue';
+import { installNativeHistory } from '../../src/composition/history.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';
@@ -1062,6 +1063,9 @@ async function workerHost(): Promise<RpcHost> {
     ])
       delete env[name];
     mediaStart('compose-work');
+    // Isolated children skip bun test preloads. Production startWorker installs this
+    // composition before composeWork because sharedHistoryWorkModule.name reads it.
+    installNativeHistory();
     work = await composeWork(KERNEL_WORK_MODULES, {
       databaseUrl: database.url,
       pool: database.pool,

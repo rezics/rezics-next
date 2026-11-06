@@ -13,7 +13,7 @@ import { connectionReturnHref, withSubjectVisitReturn } from '../subject-visit-n
 import { OverviewContext, holderItems, statementItems, type Section } from '../overview';
 import type { ProfileRelationWindow } from '../views';
 import { kindLabel, WorkRelation } from './relation';
-import { workDestinations, workFranchiseGroups, WORK_FRANCHISE_PREVIEW } from './model';
+import { uncoveredWorkDestinations, workDestinations, workFranchiseGroups, WORK_FRANCHISE_PREVIEW } from './model';
 import { useWorkRegionReturn } from './return';
 
 const workLink =
@@ -95,6 +95,12 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
     );
   if (windows !== undefined) {
     const groups = workFranchiseGroups(subject.id, windows, definitions, page !== undefined);
+    const extras = uncoveredWorkDestinations(
+      subject,
+      related,
+      definitions,
+      groups.flatMap((group) => group.relations),
+    );
     const Link = link;
     return (
       <section
@@ -115,7 +121,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
             </a>
           </div>
         )}
-        {!groups.length && <p role="status">{m.work_relations_unsupported({}, options)}</p>}
+        {!groups.length && !extras.length && <p role="status">{m.work_relations_unsupported({}, options)}</p>}
         {groups.map((group) => {
           const { window, stream } = group;
           const direction = window.direction === 'inverse' ? 'in' : 'out';
@@ -245,6 +251,47 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
             </section>
           );
         })}
+        {value &&
+          extras.map((destination) => {
+            const href = connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm, {
+              stream: `out:${destination.property}`,
+            });
+            const WorkLink: PageLink = (props) => (
+              <Link {...props} href={withSubjectVisitReturn(props.href, href, locale)} />
+            );
+            const title = pickText(destination.target.labels, locale);
+            return (
+              <WorkRelation
+                key={JSON.stringify([
+                  subject.id,
+                  subject.context,
+                  subject.release,
+                  subject.revision,
+                  destination,
+                  value.reader,
+                ])}
+                relation={{
+                  holder: subject.id,
+                  direction: 'out',
+                  property: destination.property,
+                  statement: destination.statement,
+                  id: destination.id,
+                  label: title.text,
+                  kind: destination.kind,
+                  related,
+                }}
+                item={{
+                  id: destination.id,
+                  label: { text: title.text, lang: title.lang ?? undefined },
+                  notes: [],
+                  gated: false,
+                }}
+                value={{ ...value, link: WorkLink }}
+                label={destination.relation.forwardLabel ?? ''}
+                returnHref={href}
+              />
+            );
+          })}
       </section>
     );
   }

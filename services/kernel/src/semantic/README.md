@@ -2064,7 +2064,9 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
 ### indexed local account erasure
 
 - Touches: actual source/provenance transaction joins and same-home keyed role locators; one pending locator and
-  exact owning row per continuation, followed by released-home account progress. The registered locator effect
+  exact owning row per continuation, followed by released-home account progress. Zone locators drain Access grant
+  pages against the committed barrier through both stores and CAS-persist the returned cursor until role cleanup
+  completes. The registered locator effect
   uses the actual participant fence, late-item and open-work protocols. No account-wide graph or payload scan.
 - Bound: one pending locator, one unsettled receipt and at most one exact Context child key, or one empty routing-home key; all count within native ceilings of 100 raw keys, 64 KiB returned and 1 KiB per locator;
   fixed 4096-home routing discovery plus work proportional to this account's source records. Subject source pages

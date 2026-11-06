@@ -392,16 +392,22 @@ export async function loadSubjectPage(
   throw pageReadError(result.error?.value ?? result.data, result.status, result.headers);
 }
 
-/** The properties the page's inverse reads follow, for the definitions that label them. */
+/** Composition relation reads plus admitted item statements, so outgoing publisher, counterpart, cast and staff keep labels. */
 export function pageRelationProperties(page: SubjectPageData): string[] {
   const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
-  return [
-    ...new Set(
-      Object.values(reads).flatMap((read) =>
-        read.kind === 'links' || read.kind === 'relations' ? [read.property] : [],
-      ),
-    ),
-  ];
+  const planned = Object.values(reads).flatMap((read) =>
+    read.kind === 'links' || read.kind === 'relations' ? [read.property] : [],
+  );
+  const statements = subjectBody(page)?.subject.statements ?? {};
+  const disclosed = Object.entries(statements).flatMap(([property, rows]) =>
+    (rows ?? []).some(
+      (statement) =>
+        isRecord(statement) && isRecord(statement.property) && statement.property.data_type === 'wikibase-item',
+    )
+      ? [property]
+      : [],
+  );
+  return [...new Set([...planned, ...disclosed])];
 }
 
 /** The subject's label, chosen with the same fallback the page heading uses. */

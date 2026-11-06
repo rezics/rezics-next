@@ -6,7 +6,6 @@ import {
   ORGANIZATION_EXECUTION_MAX_RESPONSE_BYTES,
   parseAccountOperationApprovalResponse,
   parseDeletionExecutionResponse,
-  parseDeletionOperationRefusal,
   parseOrganizationExecutionResponse,
   parseOrganizationOperationError,
 } from '@rezics/auth-contract';
@@ -202,24 +201,18 @@ async function deletionPost(path: string, body: unknown, maxBytes: number): Prom
         controller.signal,
       );
       if (response.status === 200) return { ok: true, body: value };
-      const refused = parseDeletionOperationRefusal(value, response.status);
-      if (refused)
-        return {
-          ok: false,
-          status: response.status,
-          code: refused.error,
-          effectStatus: 'not_applied',
-          retryAfter: null,
-        };
-      if (
-        response.status === 503 &&
-        value &&
-        typeof value === 'object' &&
-        Object.keys(value).join(',') === 'error' &&
-        'error' in value &&
-        value.error === 'unavailable'
-      )
-        return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+      const error = parseOrganizationOperationError(value, response.status);
+      if (error) {
+        if ('effect_status' in error)
+          return {
+            ok: false,
+            status: response.status,
+            code: error.error,
+            effectStatus: 'not_applied',
+            retryAfter: null,
+          };
+        return { ok: false, status: response.status, code: error.error, retryAfter: null };
+      }
       return unreadable;
     } catch {
       // External transport, decoding and parsing failures provide no effect evidence.
@@ -236,7 +229,12 @@ async function deletionPost(path: string, body: unknown, maxBytes: number): Prom
 async function runDeletion(
   operationKey: string,
   operation: Extract<AccountOperation, { kind: 'delete' }>,
-  browser?: { isCurrent: () => boolean; retryUncertain?: boolean; onExecutionDispatch?: () => boolean },
+  browser?: {
+    isCurrent: () => boolean;
+    retryUncertain?: boolean;
+    onExecutionDispatch?: () => boolean;
+    confirmation?: string;
+  },
 ): Promise<AccountOperationResult> {
   const current = () => !browser || browser.isCurrent();
   if (!current()) return { ok: false, reason: 'failure' };
@@ -248,7 +246,10 @@ async function runDeletion(
   if (!approved.ok) return failure(approved);
   const approval = parseAccountOperationApprovalResponse(approved.body);
   if (!approval || Date.parse(approval.expiresAt) <= Date.now()) return { ok: false, reason: 'unavailable' };
-  const executionBody = { operationKey, operation, reference: approval.reference };
+  const executionBody =
+    typeof browser?.confirmation === 'string'
+      ? { operationKey, operation, reference: approval.reference, confirmation: browser.confirmation }
+      : { operationKey, operation, reference: approval.reference };
   if (browser?.onExecutionDispatch && !browser.onExecutionDispatch()) return { ok: false, reason: 'failure' };
   if (!current()) return { ok: false, reason: 'failure' };
   const execute = () =>
@@ -385,6 +386,7 @@ export async function runAccountOperation(
     retryUncertain?: boolean;
     onExecutionDispatch?: () => boolean;
     signal?: AbortSignal;
+    confirmation?: string;
   },
 ): Promise<AccountOperationResult> {
   if (operation.kind === 'delete') return runDeletion(operationKey, operation, browser);

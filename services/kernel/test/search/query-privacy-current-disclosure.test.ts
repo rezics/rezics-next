@@ -9,6 +9,9 @@ import { selectCurrentPredicatePage } from '../../src/search/current-predicate.t
 import type { DiscoveryEngineHit, DiscoveryReadContext, DiscoveryRegistryOptions } from '../../src/search/discovery.ts';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSnapshot } from '../../src/search/source.ts';
+import { queryPrivacyCurrentness, queryPrivacyProofs } from '../../src/search/query-privacy.ts';
+import { discloseQueryPrivacyPage } from '../../src/search/query-privacy-page.ts';
+import { privacyHeads } from './support/query-privacy-heads.ts';
 
 const unused = async (): Promise<never> => {
   throw new Error('Current disclosure must not read an unrelated producer');
@@ -153,8 +156,9 @@ test('anonymous, editor and suspended readers share current public hits while hi
 
 test('taken-down and withheld facts stay out of the disclosed page and cannot certify a kind total', async () => {
   const subjects = [book(1, { visibility: 'taken_down', securityRevision: 4 }), book(2, { statements: [] })];
-  const current = await disclose(subjects, [hit(1, '4'), hit(2)]);
-  const page = selectCurrentPredicatePage([hit(1, '4'), hit(2)], current, { limit: 2, exhausted: false });
+  const candidates = [hit(1, '4'), hit(2)];
+  const current = await disclose(subjects, candidates);
+  const page = selectCurrentPredicatePage(candidates, current, { limit: 2, exhausted: false });
   expect(page.hits.map((row) => row.key.id)).toEqual([id(2)]);
   expect(page.hits[0]).not.toHaveProperty('facts');
   expect(
@@ -192,10 +196,52 @@ test('a public-to-private change during paused indexing drops the stale engine h
     selectCurrentPredicatePage(candidates, before, { limit: 3, exhausted: true }).hits.map((row) => row.key.id),
   ).toEqual([id(1), id(2), id(3)]);
   subjects[1] = book(2, { visibility: 'hidden', securityRevision: 8 });
-  const after = await disclose(subjects, [hit(1), hit(2, '8'), hit(3)]);
+  const after = await disclose(subjects, candidates);
   const page = selectCurrentPredicatePage(candidates, after, { limit: 3, exhausted: true });
   expect(page.hits.map((row) => row.key.id)).toEqual([id(1), id(3)]);
   expect(page.dropped).toBe(1);
+});
+
+test('admitted cursors, kind witnesses and exact aggregates stay distinct after current disclosure', async () => {
+  const subjects = [book(1), book(2, { visibility: 'hidden', securityRevision: 2 })];
+  const candidates = [hit(1), hit(2, '2')];
+  const current = await disclose(subjects, candidates);
+  const page = selectCurrentPredicatePage(candidates, current, { limit: 2, exhausted: true });
+  const proofs = queryPrivacyProofs({
+    currentness: queryPrivacyCurrentness(privacyHeads()),
+    cursor: { observation: 'paused-index', consumed: page.consumed },
+    kinds: ['schema:Book'],
+    witnesses: new Map([['schema:Book', page.hits.length]]),
+    continuation: false,
+    exhausted: true,
+    aggregateProof: false,
+  });
+  expect(proofs.cursor?.kind).toBe('admitted-cursor');
+  expect(proofs.kinds.get('schema:Book')?.evidence).toEqual({ kind: 'schema:Book', value: 1, exact: false });
+  expect(proofs.aggregates.size).toBe(0);
+});
+
+test('current page disclosure keeps remaining order after a paused public-to-private change', async () => {
+  const rows = [book(1), book(2), book(3)];
+  const examined = rows.map((row, index) => ({
+    key: { owner: 'semantic' as const, kind: 'schema:Book', id: row.id },
+    sort: [row.id],
+    subject: index === 1 ? book(2, { visibility: 'hidden' as const, securityRevision: 8 }) : row,
+  }));
+  const page = await discloseQueryPrivacyPage({
+    currentness: queryPrivacyCurrentness(privacyHeads()),
+    examined,
+    subjects: new Map(
+      examined.flatMap((candidate) =>
+        candidate.subject.visibility === 'visible' ? [[candidate, candidate.subject] as const] : [],
+      ),
+    ),
+    limit: 3,
+    exhausted: true,
+  });
+  expect(page.status).toBe('ready');
+  expect(page.order).toEqual([id(1), id(3)]);
+  expect(page.proofs.kinds.get('schema:Book')?.evidence).toEqual({ kind: 'schema:Book', value: 2, exact: false });
 });
 
 test('an unready owner producer is readiness, not an empty successful collection page', async () => {

@@ -148,13 +148,15 @@ test('a lost execution response retries the same approval, body and key; authent
 });
 
 test('native freshness, platform and responsibility refusals cannot execute an operation', async () => {
-  for (const [status, error, reason] of [
-    [401, 'step_up_required', 'step-up'],
-    [403, 'platform_closed', 'platform-closed'],
-    [409, 'account_operation_denied', 'denied'],
-    [503, 'account_operation_denied', 'unavailable'],
+  for (const [status, error, reason, effectStatus] of [
+    [401, 'step_up_required', 'step-up', 'not_applied'],
+    [403, 'platform_closed', 'platform-closed', 'not_applied'],
+    [409, 'account_operation_denied', 'denied', 'not_applied'],
+    [503, 'account_operation_denied', 'unavailable', undefined],
   ] as const) {
-    const calls = respond(() => Response.json({ error }, { status }));
+    const calls = respond(() =>
+      Response.json(effectStatus ? { error, effect_status: effectStatus } : { error }, { status }),
+    );
     expect(await runAccountOperation('stable-key', { kind: 'organization', handle: 'reading-group' })).toEqual({
       ok: false,
       reason,
@@ -572,6 +574,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
                 kind: 'review',
                 accountId,
                 email: accountId === 'first-native-account' ? firstEmail : secondEmail,
+                handle: 'reader',
                 action: 'available',
                 policy: 'personal-deletion',
               },

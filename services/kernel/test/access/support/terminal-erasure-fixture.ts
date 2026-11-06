@@ -1,16 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
+import { readLiveAccountHandle } from '../../support/account-deletion.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
 import { testKernel } from '../../support/test-kernel.ts';
 import { startTerminalErasureWorker, TERMINAL_ERASURE_BARRIER_TABLE } from './terminal-erasure-worker.ts';
 import { nativeFixture } from '../native-account-bindings-fixture.ts';
-import { routeOf } from '../../../src/route/route.ts';
 
 type NativeAuth = Awaited<ReturnType<typeof nativeFixture>>;
 type NativeWorker = Awaited<ReturnType<typeof startTerminalErasureWorker>>;
@@ -124,13 +124,9 @@ export async function createTerminalErasureFixture() {
     await pool.query(`INSERT INTO ${TERMINAL_ERASURE_BARRIER_TABLE} (singleton) VALUES (true)`);
 
     const accountHandle = async (persona: Persona): Promise<string> => {
-      const route = routeOf(persona.accountId)!;
-      const result = await pool!.query<{ normalized_handle: string }>(
-        `SELECT normalized_handle FROM access.handle_claim
-         WHERE route=$1 AND account_id=$2 AND state='active' ORDER BY normalized_handle LIMIT 1`,
-        [route, persona.accountId],
-      );
-      return result.rows[0]!.normalized_handle;
+      const handle = await readLiveAccountHandle(pool!, persona.accountId);
+      if (!handle) throw new Error(`No live handle for ${persona.accountId}`);
+      return handle;
     };
 
     async function subject(label: string) {
@@ -161,6 +157,7 @@ export async function createTerminalErasureFixture() {
       work,
       kernel,
       people,
+      databaseUrl,
       accountHandle,
       command,
       json,
@@ -182,5 +179,3 @@ export async function createTerminalErasureFixture() {
     throw error;
   }
 }
-
-type QueryResultRow = Record<string, unknown>;

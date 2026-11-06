@@ -113,6 +113,7 @@ test('credited facets admit the same released qualifier and bind it with the nam
   const binding = facetCursorBinding(
     {
       principal: 'anonymous',
+      identityEpoch: 'epoch-digest',
       text: parseText(input.text),
       textField: input.textField,
       creditQualifiers: qualifiers ?? [],

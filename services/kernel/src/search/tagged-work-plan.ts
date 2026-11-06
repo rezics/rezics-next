@@ -201,3 +201,25 @@ export function taggedWorkCaptureSize(plan: TaggedWorkPlan): number {
 export function taggedWorkHitScanBound(plan: TaggedWorkPlan | undefined, limit: number): number {
   return plan?.scanBound ?? Math.min(600, 6 * limit + 3);
 }
+
+/**
+ * Concept statements compile to a property superset. A prepared snapshot retains that
+ * raw set, including rejects and duplicates, so serving may walk the direct ceiling.
+ */
+export const TAGGED_WORK_PREPARED_RAW_BOUND = 600;
+
+export function taggedWorkRawBound(prepared: boolean, plan: TaggedWorkPlan | undefined, limit: number): number {
+  return prepared && plan !== undefined ? TAGGED_WORK_PREPARED_RAW_BOUND : taggedWorkHitScanBound(plan, limit);
+}
+
+/** Direct windows stay `2 × remaining hits + 1`; prepared tagged-work pages the retained superset. */
+export function taggedWorkEngineWindow(input: {
+  prepared: boolean;
+  remainingHits: number;
+  remainingRaw: number;
+}): number {
+  const remaining = Math.max(0, input.remainingRaw);
+  if (remaining < 1) return 0;
+  if (input.prepared) return Math.min(200, remaining);
+  return Math.min(200, remaining, 2 * Math.max(0, input.remainingHits) + 1);
+}

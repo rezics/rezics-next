@@ -316,7 +316,7 @@ test("bob's own data that interacted with the account is unchanged except for de
   const afterFollow = await d().request<BobFollow>('bob', f.bobFollow);
   expect(await ok(afterFollow)).toEqual({ ...follow, target: { displayName: 'Deleted account' } });
   for (let i = 0; i < f.bobSentinels.length; i++)
-    expect(await ok(await d().request('bob', f.bobSentinels[i]!))).toEqual(sentinels[i]);
+    expect(await ok(await d().request('bob', f.bobSentinels[i]!))).toEqual(sentinels[i]!);
   await clean(afterReply, [f.alice.accountId, f.alice.handle, ...privateMarkers(f)]);
   await clean(afterFollow, [f.alice.accountId, f.alice.handle, ...privateMarkers(f)]);
 });

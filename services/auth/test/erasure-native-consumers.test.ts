@@ -29,8 +29,10 @@ let originalBarrier: number;
 let restoreExpiryObservation: (() => void) | undefined;
 const originalExpiryOutputs: { source?: unknown; handle?: unknown; retired?: unknown; released?: unknown } = {};
 let expiredInput: Parameters<Awaited<ReturnType<typeof nativeFixture>>['host']['workflows']['createAutomated']>[0];
+let setup: ReturnType<typeof nativeFixture> | undefined;
 beforeAll(async () => {
-  f = await nativeFixture();
+  setup = nativeFixture();
+  f = await setup;
   governor = await f.person('native-consumer-governor');
   await f.bootstrapGovernance(governor.accountId);
   const requested = [...scopes, 'access:grant', 'organization:create', 'client:manage'];
@@ -39,7 +41,8 @@ beforeAll(async () => {
 }, 120_000);
 afterAll(async () => {
   restoreExpiryObservation?.();
-  await f?.close();
+  // A setup that outlived its hook still owns a started host; close it once it settles, never leave it running.
+  await (await setup?.catch(() => undefined))?.close();
 }, 120_000);
 
 test('a legitimate deleted creator keeps a pending registration secret-free until the real source expiry; a distinct living organization holds responsibility', async () => {
@@ -192,6 +195,107 @@ test('a legitimate deleted creator keeps a pending registration secret-free unti
   ).toBe(0);
   originalBarrier = (await f.pool.query('SELECT barrier FROM auth_erasure WHERE account_id=$1', [creator.accountId]))
     .rows[0]!.barrier;
+}, 180_000);
+
+test('native erasure groups are the scheduled store/role list value', async () => {
+  const { NATIVE_ERASURE_GROUPS } = await import('../../kernel/src/access/erasure-native.ts');
+  const groups = NATIVE_ERASURE_GROUPS();
+  expect(Array.isArray(groups)).toBe(true);
+  expect((NATIVE_ERASURE_GROUPS as { findIndex?: unknown }).findIndex).toBeUndefined();
+  const phase = groups.findIndex(([store, role]) => store === 'workflow_approval' && role === 'actor_id');
+  expect(phase).toBeGreaterThanOrEqual(0);
+  expect(groups[phase]).toEqual(['workflow_approval', 'actor_id']);
+  expect(groups.find(([store]) => store === 'lifecycle_registration_expiry')).toEqual([
+    'lifecycle_registration_expiry',
+    'account_id',
+  ]);
+  expect(groups.length).toBeGreaterThan(phase);
+});
+
+test('erase-auth-owner starts from an incomplete registration stage without Auth expiry markers', async () => {
+  const registrant = await f.person('pending-stage-registrant');
+  const actor = await f.access.authenticate(governor.bearer, f.context());
+  await f.bindings.grants.create(
+    { ...f.context(), actor },
+    {
+      resource: { route: f.routeOf(operatorId)!, id: operatorId },
+      subjectId: registrant.accountId,
+      subjectRole: '',
+      actions: ['account:manage'],
+      valid: '(,)',
+      key: randomUUID(),
+    },
+  );
+  const key = randomUUID();
+  const operation = {
+    kind: 'automated' as const,
+    registrationId: '',
+    operatorAccountId: operatorId,
+    handle: `stage_${key.replaceAll('-', '')}`,
+    operationKey: key,
+    authorization: 'approval-request',
+  };
+  const approval = await f.approvals.approve(registrant.bearer, { operationKey: key, operation }, f.context());
+  const provision = f.bindings.workflowPorts.provisioningReference;
+  let source: { accountId: string; reservationId: string } | undefined;
+  f.bindings.workflowPorts.provisioningReference = async (input) => {
+    source = input;
+    throw new Error('Lost registration caller before provisioning');
+  };
+  try {
+    await expect(
+      f.host.workflows.createAutomated({
+        key,
+        handle: operation.handle,
+        operatorAccountId: operatorId,
+        authorization: approval.reference,
+        credential: { email: `${key}@stage.test`, password },
+      }),
+    ).rejects.toThrow();
+  } finally {
+    f.bindings.workflowPorts.provisioningReference = provision;
+  }
+  expect(source).toBeDefined();
+  const stage = (
+    await f.pool.query<{
+      account_id: string;
+      handle: string;
+      reservation_id: string;
+      expires_at: Date;
+    }>(
+      'SELECT account_id,handle,reservation_id,expires_at FROM auth_registration_stage WHERE account_id=$1 AND reservation_id=$2',
+      [source!.accountId, source!.reservationId],
+    )
+  ).rows[0]!;
+  const claim = {
+    accountId: stage.account_id,
+    handle: stage.handle,
+    reservationId: stage.reservation_id,
+    expiresAt: stage.expires_at.toISOString(),
+  };
+  await f.kernel.query(
+    `UPDATE access.account SET registration_expires_at=statement_timestamp() - interval '1 second'
+     WHERE route=$1 AND account_id=$2 AND registration_id=$3 AND state='pending'`,
+    [f.routeOf(stage.account_id), stage.account_id, stage.reservation_id],
+  );
+  await f.bindings.workflowPorts.expireRegistration({ ...claim, key: `wf:${key}:expire` });
+  await f.bindings.workflowPorts.releaseExpiredRegistrationHandle({
+    ...claim,
+    key: `wf:${key}:release-expired`,
+  });
+  const account = await f.bindings.workflowPorts.readAccount(stage.account_id);
+  expect(account?.state).toBe('deleted');
+  expect(account?.fenced).toBe(true);
+  expect(
+    (
+      await f.pool.query(
+        'SELECT expired_at,erasure_release_at,completed_at FROM auth_registration_stage WHERE account_id=$1',
+        [stage.account_id],
+      )
+    ).rows[0],
+  ).toEqual({ expired_at: null, erasure_release_at: null, completed_at: null });
+  const obligation = await f.host.service.internal.startAccountErasure(stage.account_id);
+  expect(obligation.length).toBeGreaterThan(0);
 }, 180_000);
 
 test('Consume genuine original lifecycle result for terminal Auth continuation', async () => {
@@ -957,9 +1061,8 @@ test('Retire exact Access authorization witnesses after genuine complete Auth co
   // and native consumers run. Restoring the query invokes the default publisher.
   const release = failNativeQueries(f.pool, (sql) => sql.includes('SELECT 1 FROM auth_copy_coverage'));
   const native = await import('../../kernel/src/access/erasure-native.ts');
-  const phase = native
-    .NATIVE_ERASURE_GROUPS()
-    .findIndex(([store, role]) => store === 'workflow_approval' && role === 'actor_id');
+  const groups = native.NATIVE_ERASURE_GROUPS();
+  const phase = groups.findIndex(([store, role]) => store === 'workflow_approval' && role === 'actor_id');
   let progressId = '';
   const until = Date.now() + 1_800_000;
   const advanceUntil = async (done: () => Promise<boolean>) => {
@@ -1056,7 +1159,7 @@ test('Retire exact Access authorization witnesses after genuine complete Auth co
       !!(
         await f.kernel.query(
           `SELECT 1 FROM access.erasure_native_progress WHERE progress_id=$1 AND phase=$2 AND retry_phase=$3`,
-          [progressId, native.NATIVE_ERASURE_GROUPS().length, phase],
+          [progressId, groups.length, phase],
         )
       ).rowCount,
   );

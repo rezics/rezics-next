@@ -11,8 +11,10 @@ import {
   type AuthoritativeTime,
   type CommandAttempt,
 } from '../command/command.ts';
-import { readAccount, readAccountCommandState, type Account } from '../access/account-data.ts';
+import { readAccount, readAccountCommandState, readPublicAccount, type Account } from '../access/account-data.ts';
+import { contributionAttribution, type ContributionAttribution } from '../access/contribution-attribution.ts';
 import { readPublicViews } from '../access/index.ts';
+import publicGeneration from './collection-public-generation.sql';
 import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
@@ -104,6 +106,9 @@ export type CollectionView = CollectionPresentation &
     memberCount: number;
     createdAt: string;
     updatedAt: string;
+    attribution?: ContributionAttribution;
+    generation?: string;
+    subjectIds?: string[];
   };
 
 export type CuratedCollectionView = CollectionView & {
@@ -814,7 +819,7 @@ export function createCollectionReads(
       )
         throw new ProblemError('dependency_unavailable');
     }
-    return {
+    const view = {
       ...collectionView(row),
       ...collectionPresentation(row, cover),
       ...(owner
@@ -825,6 +830,37 @@ export function createCollectionReads(
           }
         : {}),
       ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
+    };
+    return { ...view, ...(await collectionContribution(row, deadline)) };
+  }
+
+  async function collectionContribution(
+    row: Parameters<typeof collectionView>[0] & { sourceGeneration: string },
+    deadline: number,
+  ) {
+    const curatorId = row.curatorAccountId;
+    const curatorRoute = curatorId ? routeOf(curatorId) : null;
+    const attribution =
+      curatorId && curatorRoute !== null
+        ? contributionAttribution(
+            await withConnection(pool, (client) =>
+              readPublicAccount(deadlineClient(client, deadline), curatorRoute, curatorId),
+            ),
+          )
+        : ({ displayName: 'Deleted account' } as const);
+    if (row.membershipKind !== 'dynamic' || (row.visibility !== 'public' && row.visibility !== 'unlisted'))
+      return { attribution };
+    const collectionRoute = routeOf(row.id);
+    if (collectionRoute === null) return { attribution };
+    const members = await withConnection(pool, (client) =>
+      client.query<{ generation: string; subjectId: string | null }>(publicGeneration.sql, [collectionRoute, row.id]),
+    );
+    const generation = members.rows[0]?.generation;
+    if (!generation) return { attribution };
+    return {
+      attribution,
+      generation,
+      subjectIds: members.rows.map((item) => item.subjectId).filter((id): id is string => typeof id === 'string'),
     };
   }
 

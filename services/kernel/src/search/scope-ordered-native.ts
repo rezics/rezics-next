@@ -38,6 +38,7 @@ import {
 import { assertCompleteSearch } from './complete-search.ts';
 import { admitHitPayload } from './query-payload.ts';
 import custodySql from './scope-ordered-custody.sql';
+import { sourceObservationIsDisclosable } from './query-privacy-observation.ts';
 
 function unavailable(): never {
   throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
@@ -152,15 +153,7 @@ export function createScopeOrderedNative(config: {
         : { kind: 'population', queried: q, start: null, context: { deadline } },
     );
     charge(observed.cost);
-    if (
-      observed.status !== 'observed' ||
-      observed.coverage !== 'all_native_homes' ||
-      !observed.routingComplete ||
-      observed.blocking.length ||
-      observed.unacknowledged.length ||
-      observed.changed.length
-    )
-      unavailable();
+    if (!sourceObservationIsDisclosable(observed)) unavailable();
     return { joined, observed };
   }
   return {

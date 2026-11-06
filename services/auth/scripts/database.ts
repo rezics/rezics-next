@@ -8,6 +8,8 @@ const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
 
 export const TEMPLATE_DATABASE = 'rezics_auth_test';
+/** Kernel schema template for native fixtures; migrated once per check beside the Auth template. */
+export const KERNEL_TEMPLATE_DATABASE = 'rezics_kernel_test';
 /** Reylo typecheck copy in the labelled Auth fixture; not a second PostgreSQL container. */
 export const COMPILER_DATABASE = 'rezics_compiler';
 export const DEFAULT_RUN_TIMEOUT = 120_000;
@@ -292,10 +294,30 @@ export function testDatabase(): TestDatabase {
     laneClaimed = true;
     return { url: lane.url, container: lane.container, close: () => {} };
   }
+  return copyLaneDatabase(lane, TEMPLATE_DATABASE);
+}
+
+/** Kernel schema for a native fixture. Under the check, the kernel template is migrated once per check and copied here;
+ * replaying every kernel migration into each file's database is what made native fixture setup outlast its hook. */
+export function kernelTestDatabase(): TestDatabase {
+  const lane = laneContext(process.env);
+  const template = process.env.AUTH_CHECK_KERNEL_TEMPLATE;
+  if (lane && template) return copyLaneDatabase(lane, template);
+  const database = testDatabase();
+  migrateKernel(database.url);
+  return database;
+}
+
+/** Migrates the kernel schema into the per-check template, which the check creates beside the Auth template. */
+export function migrateKernelTemplate(authTemplateUrl: string): void {
+  migrateKernel(authTemplateUrl.replace(`/${TEMPLATE_DATABASE}?`, `/${KERNEL_TEMPLATE_DATABASE}?`));
+}
+
+function copyLaneDatabase(lane: LaneContext, template: string): TestDatabase {
   const name = `${decodeURIComponent(new URL(lane.url).pathname.slice(1))}_copy_${++laneCopies}`;
   const copies = process.env.AUTH_CHECK_LANE_COPIES;
   if (copies) appendFileSync(copies, `${name}\n`);
-  run('docker', laneStatement(lane.container, `CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`));
+  run('docker', laneStatement(lane.container, `CREATE DATABASE ${name} TEMPLATE ${template}`));
   const url = new URL(lane.url);
   url.pathname = `/${name}`;
   let closed = false;

@@ -479,19 +479,24 @@ Query-level privacy-reduction invalidation and acknowledgement is required **in 
 Local reductions invalidate public use in their authoritative transaction. Foreign source-fence, target, consent
 and Collection reductions invalidate affected public use immediately. Acknowledgement covers actual refresh-visible
 projection repair including dependent foreign repair. Observe required current safety state before execution and
-revalidate before disclosure. Unsafe, changed, missing or pending acknowledgement means preparation/readiness,
-never stale exclusion/order/results. Ordinary checkpoints, `securityRevision`, complete ordinary generations,
-returned-ID checks and omitted counts cannot certify this seam.
+revalidate before disclosure. A relevant blocking barrier, incomplete routing or a missing observation means
+preparation. Unacknowledged or changed heads that Source did not classify as blocking are trusted stale: they
+recover ordinary permitted pages after current native membership and field checks, and they never certify
+exclusion, order or aggregates by themselves. Ordinary checkpoints, `securityRevision`, complete ordinary
+generations, returned-ID checks and omitted counts cannot certify this seam.
 
 Decision: facet pages retain each exact native execution through value validation and cursor signing, then make one
 final query-level safety decision for all siblings. An unclean final observation withholds the complete facet
 response; engine exhaustion alone never upgrades source-backed sample totals to exact counts.
 
 Withholding a harem tag must protect positive harem results and **NOT harem**: returned-row checks miss the subject
-excluded by a stale tag. Paused-indexer negative/order/count cases must stay preparing until acknowledgement covers
-the local reduction and all affected foreign repair. This is a required abstract producer/consumer contract, not a
-certificate store, safety-token ABI, new permission authority or global identity/home sweep. Current native ports
-do not yet implement the complete seam. Omit unsafe engine totals/facet counts over unchecked populations; neither
+excluded by a stale tag. Affected paused-indexer negative/order/count queries stay preparing until acknowledgement
+covers that relevant blocking reduction and all affected foreign repair. Unrelated permitted queries recover. This is a required abstract producer/consumer contract, not a
+certificate store, safety-token ABI, new permission authority or global identity/home sweep. Capture, query, repair
+and refresh-visible acknowledgement consume Source blocking as the relevant barrier (`query-privacy.ts`). Incomplete
+routing or a nonempty blocking list prepares; trusted stale heads recover ordinary permitted pages after current
+native checks. An admitted cursor, a positive kind witness and an exact aggregate stay distinct proofs; sampled hits
+never certify totals. Omit unsafe engine totals/facet counts over unchecked populations; neither
 approximate/as_of labels nor zero/row-length substitutes repair privacy.
 
 ### Scope and composed-page admission
@@ -1698,9 +1703,14 @@ revalidates current disclosure before exposing distinct positive witnesses as `N
 separate proof and are not inferred from the candidate prefix. Source census and page length are never query counts.
 Tagged-work requests (`tagged-work-plan.ts`) keep that designated kind as a direct top-level AND leaf, compile the
 remaining catalogue predicate (`tagged-work-query.ts`) and prove kind chips from those current rows (`type-facet.ts`).
-Capture overflow includes statement and same-statement qualifier properties. Name and id execute directly through a
-bounded disclosed-candidate walk; spending the scan bound without a filled page or certified exhaustion is finite
-preparation. Rating sort is finite preparation until mixed rating seek is installed. Web Concept type labels read Search
+Capture overflow includes statement and same-statement qualifier properties. Concept statements compile to a property
+superset; same-statement weight/metric/spoiler stay current native proof. Name and id execute directly through a
+bounded disclosed-candidate walk of `min(600, 6s+3)` raw rows in three `2s+1` windows. Spending that bound without a
+filled page or certified exhaustion retires the PIT and captures a prepared snapshot of the same admitted predicate
+(100-row steps, 1,000 raw-row cap, including rejects and duplicates). Prepared serving walks at most 600 retained raw
+rows in 200-row windows, revalidates current owners and the remaining predicate, and pages `s` hits. Continuations
+resume that observation; replacement and settlement close it through the existing observation path. Rating sort is
+finite preparation until mixed rating seek is installed. Web Concept type labels read Search
 kind metadata rather than substituting admission maps. Catalogue mounts Search's public weight control for the shared
 numeric grammar. Released Book word/form/weight identities come from Definitions; Concept UUIDs and crossed
 platform/language tuples stay Semantic fixture handles.

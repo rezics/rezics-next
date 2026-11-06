@@ -20,6 +20,7 @@ import { validatePublicSuggestionInput, compilePublicSuggestion } from './public
 import { assertCompleteSearch } from './complete-search.ts';
 import { admitSuggestPayload } from './query-payload.ts';
 import type { SubjectHit } from './query.ts';
+import { sourceObservationIsDisclosable } from './query-privacy-observation.ts';
 
 export type { PublicSuggestionCaptureInput, PublicSuggestionQuery } from './public-filter-consumer-contract.ts';
 export interface PublicSuggestionOperations {
@@ -143,7 +144,7 @@ export async function createPublicSuggestionOperations(
           );
           add(started.cost);
           if (started.status !== 'observed') return unavailable('source_pending');
-          if (!started.routingComplete || started.blocking.length) return preparing();
+          if (!sourceObservationIsDisclosable(started)) return preparing();
           const match = /^(.*)subjects-g([1-9][0-9]*)$/.exec(config.physicalTarget);
           if (!match) return unavailable('incarnation_changed');
           const prefix = match[1]!;
@@ -247,7 +248,7 @@ export async function createPublicSuggestionOperations(
           );
           add(final.cost);
           if (final.status !== 'observed') return unavailable('source_pending');
-          if (!final.routingComplete || final.blocking.length) return preparing();
+          if (!sourceObservationIsDisclosable(final)) return preparing();
           if (!(await sameIncarnation())) return unavailable('incarnation_changed');
           return { status: 'queried', queried, execution, start: started.start, result: hits, cost };
         } finally {

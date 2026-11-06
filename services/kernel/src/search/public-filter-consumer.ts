@@ -37,6 +37,7 @@ import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { subjectPartition } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
 import type { PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
+import { observationIsDisclosableFromUnknown } from './query-privacy-observation.ts';
 
 /** Internal compilation only. Native Source resolution, custody and disclosure remain mandatory. */
 export type CompiledPublicFilterConsumerCapture = Readonly<{
@@ -672,6 +673,11 @@ class ConsumerFailure extends Error {
     super(reason);
   }
 }
+class MixedOwnerPending extends ConsumerFailure {
+  constructor() {
+    super('source_pending');
+  }
+}
 function bootstrapBinding(binding: PublicFilterSourceBinding): binding is PublicFilterSourceBootstrapBinding {
   return ['begin', 'adopt', 'abort', 'recover', 'repairPage', 'settle'].every(
     (key) => key in binding && typeof Reflect.get(binding, key) === 'function',
@@ -716,7 +722,7 @@ type ConsumerWork = {
   bootstrap: Omit<PublicSourceBootstrap, 'definition'>;
   queried: PublicFilterQueriedObservation | null;
   materializing: PublicFilterQueriedObservation | null;
-  prepared: SearchResult['hits'];
+  prepared: (SearchResult['hits'][number] | DiscoveryEngineHit)[];
   preparedRows: { original: string; terminal: string }[];
   projectionSource: PublicSourceRepair['source'] | null;
   after: readonly (string | number | null)[] | undefined;
@@ -1057,8 +1063,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const observed = await withPublicFilterCoverageStart(page.context, id, () =>
       observe(q, null, undefined, page.m, page.context),
     );
-    if (observed.blocking.length || observed.unacknowledged.length || observed.changed.length)
-      throw new ConsumerFailure('source_pending');
+    if (!observationIsDisclosableFromUnknown(observed)) throw new ConsumerFailure('source_pending');
     page.start = observed.start;
   }
   async function reservePage(
@@ -1361,6 +1366,64 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     return { rows, accepted };
   }
+  async function ownMixedRows(hits: readonly DiscoveryEngineHit[], m: Meter, context: PublicFilterConsumerContext) {
+    const rows: { original: string; terminal: string }[] = [];
+    const accepted: number[] = [];
+    const seen = new Set<string>();
+    for (const [position, item] of hits.entries()) {
+      m.check();
+      if (item.key.owner === 'accounts') {
+        const entry = config.registry?.get(item.key.kind);
+        if (entry?.owner !== 'accounts') throw new ConsumerFailure('dependency_unavailable');
+        const partition = subjectPartition(item.key.id);
+        const snapshot = await entry.source.read(partition, [item.key.id]);
+        m.cost.inputKeys++;
+        m.cost.accessPoints++;
+        m.cost.dependencyPoints++;
+        if (
+          snapshot.partition !== partition ||
+          snapshot.position < BigInt(item.sourcePosition) ||
+          snapshot.accounts.length !== 1 ||
+          snapshot.accounts[0]!.id !== item.key.id ||
+          snapshot.accounts[0]!.revision.toString() !== item.revision
+        )
+          throw new MixedOwnerPending();
+        rows.push({ original: item.key.id, terminal: item.key.id });
+        const identity = `accounts:${item.key.id}`;
+        if (!seen.has(identity)) {
+          accepted.push(position);
+          seen.add(identity);
+        }
+        continue;
+      }
+      const revision = Number(item.revision);
+      if (!Number.isSafeInteger(revision)) throw new ConsumerFailure('source_pending');
+      const checked = await ownRows(
+        [
+          {
+            id: item.key.id,
+            index: item.index,
+            partition: subjectPartition(item.key.id),
+            securityRevision: revision,
+            matched: [...item.matched],
+            sort: [...item.sort],
+          },
+        ],
+        m,
+        context,
+      );
+      const row = checked.rows[0]!;
+      rows.push(row);
+      const identity = `${item.key.owner}:${row.terminal}`;
+      if (!seen.has(identity)) {
+        accepted.push(position);
+        seen.add(identity);
+      }
+    }
+    m.cost.rows += hits.length;
+    m.cost.bytes += Buffer.byteLength(encodeState(hits));
+    return { rows, accepted };
+  }
   async function nativeBatch(
     q: PublicFilterQueriedObservation,
     plan: PublicCanonicalCaptureInput,
@@ -1557,11 +1620,28 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           m,
           context,
         );
-        if (result.raw.some((hit) => 'key' in hit)) return m.unavailable('dependency_unavailable');
-        const raw = result.raw as SearchResult['hits'];
+        const raw = result.raw;
         m.cost.candidates += raw.length;
-        const checked = await ownRows(raw, m, context);
-        work.prepared.push(...checked.accepted.map((position) => raw[position]!));
+        m.cost.rows += raw.length;
+        m.cost.bytes += Buffer.byteLength(encodeState(raw));
+        let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
+        try {
+          checked =
+            'representation' in recovery.bootstrap.definition.capture
+              ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
+              : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+        } catch (error) {
+          if (error instanceof MixedOwnerPending) {
+            await save(work, encoded, true, m);
+            return { status: 'preparing', repair: job, cost: m.cost };
+          }
+          throw error;
+        }
+        work.prepared.push(
+          ...('representation' in recovery.bootstrap.definition.capture
+            ? raw
+            : checked.accepted.map((position) => raw[position]!)),
+        );
         work.preparedRows.push(...checked.rows);
         work.materializing = result.queried;
         work.after = raw.at(-1)?.sort ?? work.after;
@@ -1647,7 +1727,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // boundary are closed. Baseline preparation cannot manufacture that start.
       if (!page) {
         const observation = await observe(q, null, undefined, m, context);
-        if (observation.blocking.length || observation.unacknowledged.length || observation.changed.length)
+        if (!observationIsDisclosableFromUnknown(observation))
           return { status: 'preparing', repair: job, cost: m.cost };
       }
       return { status: 'captured', queried: q, repair: job, cost: m.cost };
@@ -1808,10 +1888,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let previous: RetainedWindow | undefined;
       let previousEncoded: string | null = null;
       const pageSize = 'purpose' in plan ? plan.size : (plan.pageSize ?? plan.size);
-      const allowance = Math.min(600, 6 * pageSize + 3);
-      const size = prefix?.size ?? plan.size;
-      if (!Number.isInteger(size) || size < 1 || size > Math.min(200, 2 * pageSize + 1))
-        throw new TypeError('Invalid retained refill size');
+      const preparedMixed = mixed && q.snapshot.kind === 'prepared';
+      const allowance = preparedMixed ? 600 : Math.min(600, 6 * pageSize + 3);
+      const maxWindow = preparedMixed ? Math.min(200, allowance) : Math.min(200, 2 * pageSize + 1);
+      const size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
+      if (!Number.isInteger(size) || size < 1 || size > maxWindow) throw new TypeError('Invalid retained refill size');
       let after = 'purpose' in plan ? undefined : plan.after;
       let reused: RetainedWindow['raw'] = [];
       if (prefix) {
@@ -1835,8 +1916,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
       if (page) await beginPage(page, q, use, prefix, previousEncoded, allowance);
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
-      if ('blocking' in started && (started.blocking.length || started.unacknowledged.length || started.changed.length))
-        return preparing();
+      if ('blocking' in started && !observationIsDisclosableFromUnknown(started)) return preparing();
       await physical(q, m, context);
       // Reserve this attempt before external dispatch. An uncertain engine result cannot regain allowance.
       const execution = randomUUID();
@@ -1853,11 +1933,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let exhausted: boolean;
       let total: SearchResult['total'] | undefined;
       if (q.snapshot.kind === 'prepared') {
-        if (mixed) return m.unavailable('dependency_unavailable');
         const offset = prefix ? previous!.consumed + prefix.consumed : 0;
         raw = work.prepared.slice(offset, offset + size);
         exhausted = offset + raw.length >= work.prepared.length;
-        total = { value: work.prepared.length, relation: 'exact' };
+        if (!mixed) total = { value: work.prepared.length, relation: 'exact' };
       } else if (reused.length >= size || previous?.exhausted) {
         raw = reused.slice(0, size);
         exhausted = previous!.exhausted && reused.length <= size;
@@ -1876,60 +1955,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let rows: readonly { original: string; terminal: string }[];
       let positions: number[];
       if (mixed) {
-        const seen = new Set<string>();
-        positions = [];
-        const own: { original: string; terminal: string }[] = [];
-        for (const [position, item] of raw.entries()) {
-          if (!('key' in item)) return m.unavailable('observation_lost');
-          // Account records require their own native Source proof in join; Subject cannot certify them.
-          if (item.key.owner === 'accounts') {
-            const entry = config.registry?.get(item.key.kind);
-            if (entry?.owner !== 'accounts') return m.unavailable('dependency_unavailable');
-            const snapshot = await entry.source.read(subjectPartition(item.key.id), [item.key.id]);
-            m.cost.inputKeys++;
-            m.cost.accessPoints++;
-            m.cost.dependencyPoints++;
-            if (
-              snapshot.partition !== subjectPartition(item.key.id) ||
-              snapshot.position < BigInt(item.sourcePosition) ||
-              snapshot.accounts.length !== 1 ||
-              snapshot.accounts[0]!.id !== item.key.id ||
-              snapshot.accounts[0]!.revision.toString() !== item.revision
-            )
-              return preparing();
-            own.push({ original: item.key.id, terminal: item.key.id });
-            const identity = `accounts:${item.key.id}`;
-            if (!seen.has(identity)) {
-              positions.push(position);
-              seen.add(identity);
-            }
-            continue;
-          }
-          const revision = Number(item.revision);
-          if (!Number.isSafeInteger(revision)) return m.unavailable('source_pending');
-          const checked = await ownRows(
-            [
-              {
-                id: item.key.id,
-                index: item.index,
-                partition: subjectPartition(item.key.id),
-                securityRevision: revision,
-                matched: [...item.matched],
-                sort: [...item.sort],
-              },
-            ],
-            m,
-            context,
-          );
-          const row = checked.rows[0]!;
-          own.push(row);
-          const identity = `${item.key.owner}:${row.terminal}`;
-          if (!seen.has(identity)) {
-            positions.push(position);
-            seen.add(identity);
-          }
+        if (raw.some((hit) => !('key' in hit))) return m.unavailable('observation_lost');
+        let checked: Awaited<ReturnType<typeof ownMixedRows>>;
+        try {
+          checked = await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context);
+        } catch (error) {
+          if (error instanceof MixedOwnerPending) return preparing();
+          throw error;
         }
-        rows = own;
+        rows = checked.rows;
+        positions = checked.accepted;
       } else {
         if (raw.some((hit) => 'key' in hit)) return m.unavailable('observation_lost');
         const checked = await ownRows(raw as SearchResult['hits'], m, context);
@@ -1973,7 +2008,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return m.unavailable('observation_lost');
       if (!page) {
         const final = await observe(q, started.start, execution, m, context);
-        if (final.blocking.length || final.unacknowledged.length || final.changed.length) return preparing();
+        if (!observationIsDisclosableFromUnknown(final)) return preparing();
         await physical(q, m, context);
       }
       m.cost.outputSlots += positions.length;
@@ -2717,8 +2752,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           );
           if (sealed.rowCount !== 1) throw new ConsumerFailure('observation_lost');
           const final = await observe(page.queried, page.start, page.tail, page.m, context);
-          if (final.blocking.length || final.unacknowledged.length || final.changed.length)
-            throw new ConsumerFailure('source_pending');
+          if (!observationIsDisclosableFromUnknown(final)) throw new ConsumerFailure('source_pending');
           page.m.check();
           page.finished = true;
         }),

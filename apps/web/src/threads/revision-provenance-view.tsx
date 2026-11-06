@@ -24,8 +24,8 @@ export function RevisionProvenance({
   /** False when the reader already displays this revision's licence beside its disclosure control. */
   showLicence?: boolean;
   /** The mounted page supplies recorded units separately from unavailable historical question metadata. */
-  publishedCitation?: ThreadPublishedCitation;
-  reviewTarget?: ThreadReviewContext['target'];
+  publishedCitation?: ThreadPublishedCitation | undefined;
+  reviewTarget?: ThreadReviewContext['target'] | undefined;
 }) {
   const locale = getLocale();
   const citation = publishedCitation

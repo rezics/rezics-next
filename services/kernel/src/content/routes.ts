@@ -71,6 +71,7 @@ import { InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
 import { reportRoutes } from './report-routes.ts';
+import { presentContributedPost } from './contribution-present.ts';
 import { isErasedPlaceholder } from './model.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
@@ -1160,7 +1161,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const shown = counted.items[0];
             if (!shown) throw new ProblemError('not_found');
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
-            return { post: shown };
+            return { post: await presentContributedPost(dependencies.pool, shown) };
           }),
         ),
     )

@@ -6,11 +6,14 @@ import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts'
 import { admitDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import {
   admitTaggedWorkPlan,
+  TAGGED_WORK_PREPARED_RAW_BOUND,
   taggedWorkCaptureSize,
   taggedWorkCatalogueFilter,
   taggedWorkCountFilter,
+  taggedWorkEngineWindow,
   taggedWorkHitScanBound,
   taggedWorkKindTypeFilter,
+  taggedWorkRawBound,
   taggedWorkRemainingHasConcept,
 } from '../../src/search/tagged-work-plan.ts';
 
@@ -165,4 +168,10 @@ test('direct name order admits a finite capture window and designated kind as a 
   expect(taggedWorkCaptureSize(plan)).toBe(Math.min(200, plan.scanBound));
   expect(taggedWorkHitScanBound(plan, 24)).toBe(plan.scanBound);
   expect(taggedWorkHitScanBound(undefined, 24)).toBe(Math.min(600, 6 * 24 + 3));
+  expect(taggedWorkRawBound(false, plan, 24)).toBe(plan.scanBound);
+  expect(taggedWorkRawBound(true, plan, 1)).toBe(TAGGED_WORK_PREPARED_RAW_BOUND);
+  expect(taggedWorkEngineWindow({ prepared: false, remainingHits: 1, remainingRaw: plan.scanBound })).toBe(3);
+  expect(
+    taggedWorkEngineWindow({ prepared: true, remainingHits: 1, remainingRaw: TAGGED_WORK_PREPARED_RAW_BOUND }),
+  ).toBe(200);
 });

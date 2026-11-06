@@ -7,14 +7,15 @@ export type AccountDeletionPage =
       kind: 'review';
       accountId: string;
       email: string | null;
+      handle: string | null;
       action: 'available' | 'refused';
       policy: 'personal-deletion';
     }
   | { kind: 'signed-out' | 'refused' | 'changed' | 'unavailable' };
 export type AccountDeletionPageSource = (signal: AbortSignal) => Promise<AccountDeletionPage>;
 const unavailable: AccountDeletionPage = { kind: 'unavailable' };
-// Compact native review: 93 + 128 * 6 + (252 * 6 + 2) UTF-8 bytes.
-const ACCOUNT_DELETION_PAGE_MAX_BYTES = 2375;
+// Compact native review: 105 + 128 * 6 + (252 * 6 + 2) + 64 * 6 UTF-8 bytes.
+const ACCOUNT_DELETION_PAGE_MAX_BYTES = 2771;
 
 export const loadAccountDeletionPage: AccountDeletionPageSource = async (signal) => {
   try {
@@ -39,10 +40,11 @@ export const loadAccountDeletionPage: AccountDeletionPageSource = async (signal)
       if (keys === 'accountId,kind' && row.kind === 'authentication-required')
         return { kind: 'authentication-required', accountId: row.accountId };
       if (
-        keys !== 'accountId,action,email,kind,policy' ||
+        keys !== 'accountId,action,email,handle,kind,policy' ||
         row.kind !== 'review' ||
         row.policy !== 'personal-deletion' ||
         (row.action !== 'available' && row.action !== 'refused') ||
+        (row.handle !== null && (typeof row.handle !== 'string' || row.handle.length < 1 || row.handle.length > 64)) ||
         (row.email !== null &&
           (typeof row.email !== 'string' || row.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(row.email)))
       )
@@ -51,6 +53,7 @@ export const loadAccountDeletionPage: AccountDeletionPageSource = async (signal)
         kind: 'review',
         accountId: row.accountId,
         email: row.email as string | null,
+        handle: row.handle as string | null,
         action: row.action,
         policy: 'personal-deletion',
       };

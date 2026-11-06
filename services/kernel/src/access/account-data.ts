@@ -18,6 +18,7 @@ import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
+import { contributionAttribution, type ContributionAttribution } from './contribution-attribution.ts';
 import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
@@ -159,6 +160,21 @@ export async function readPublicAccountByAgent(
   const identity = await publicIdentityForAccount(client, row);
   // Native resolution also requires the current visible graph subject.
   return pointer || identity.some((value) => 'subject' in value && value.subject?.id === subjectId) ? identity : [];
+}
+
+/** Live agent identity, or a deleted-account tombstone when only the native graph link remains. */
+export async function agentContributionAttribution(
+  client: Pool,
+  subjectId: string,
+): Promise<ContributionAttribution | null> {
+  const identities = await readPublicAccountByAgent(client, subjectId);
+  if (identities[0]) return contributionAttribution(identities[0]);
+  const accountId = (await accountAgentsForSubjects(client, [subjectId])).get(subjectId)?.account;
+  if (!accountId) return null;
+  const accountRoute = routeOf(accountId);
+  if (accountRoute === null) return null;
+  const account = await readPublicAccount(client, accountRoute, accountId);
+  return contributionAttribution(account ?? { accountId, state: 'deleted' });
 }
 
 async function publicIdentityForAccount(

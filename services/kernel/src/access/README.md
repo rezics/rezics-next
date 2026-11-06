@@ -17,6 +17,9 @@ Decision: resource-role identifier helpers are functions so circular Access comp
 
 ## Domain composition
 
+Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
+`public-identity.ts`. They do not import Access internals, Platform pool helpers or Semantic agent tables.
+
 Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
 bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.
 Use cases consume Access-owned ports in `access/application`. Native adapters in `access/adapters/native.ts` implement
@@ -27,7 +30,8 @@ original-work admission against fake ports without loading native adapters; grow
 bounded-work check.
 
 Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/application/index.ts`,
-`access/adapters/index.ts`, plus the existing Access adapter facades. Ports: `AvatarMediaPort`,
+`access/adapters/index.ts`, `access/contribution-attribution.ts`, `access/public-identity.ts`, plus the
+existing Access adapter facades. Ports: `AvatarMediaPort`,
 `RealmAdministrationPort`, `IdentitySemanticPort`, `IdentityRecoveryStorePort`, `IdentityRetentionPort`,
 `KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `ResourceAuthorizationPort`. Wiring adds no
 query, scan or extra statement; native cost stays with the existing producer declarations.
@@ -3289,7 +3293,8 @@ so nothing in Access is soft-deleted in that policy's sense; its records describ
 ## Account deletion policy
 
 Deletion is terminal. Before the deletion barrier, the person must confirm freshly after being told the
-consequences; after the barrier there is no cancellation window. A future reversible deactivation would be a
+consequences; native execute confirmation is the current handle after NFC and case-folding, and handleless
+accounts skip that field. After the barrier there is no cancellation window. A future reversible deactivation would be a
 separate state, never restoration of a deleted account. The sources discussed in the
 [deletion report, §1](../../../../docs/research/account-deletion.md#1-cooling-off-and-cancellation-matches-an-established-pattern)
 share no cooling-off rule. A committed continuation's expiry limits cleanup authority, not the person's choice.
@@ -3304,9 +3309,11 @@ account through the [Auth schema](../../../auth/db/schema.sql)'s `auth_client_us
 people's grants to those clients as well. The physical cleanup gaps below and in [Auth](../../../auth/README.md#known-retention-gaps)
 remain work to do, not exceptions to the policy.
 
-A deleted account's public identity is `{ id, state, kind }` only. Readers see “Deleted account” or
-“Deleted organization”, never the old name, handle or profile, and never a person-or-automated label. This is
-**de-identified attribution**, not anonymous data: the stable id can still link retained content. Posts and reviews
+A deleted account's public identity is `{ id, state, kind }` only. Contribution attribution on retained public
+posts, Collections and follows is `{ displayName: 'Deleted account' }` or `{ displayName: 'Deleted organization' }`
+with no account id (`contributionAttribution()`). Readers see “Deleted account” or
+“Deleted organization”, never the old name, handle or profile, and never a person-or-automated label. The HTTP ID
+form of the public identity tombstone remains a separate surface from contribution attribution. Posts and reviews
 remain subject to [Content's erasure rules](../content/README.md#subject-threads), and catalogue history to
 [Semantic's history rules](../semantic/README.md). Where those documents do not state an account-deletion retention
 rule, the owner decides; account deletion does not invent a content or catalogue erasure cascade.
@@ -3495,6 +3502,8 @@ all grants on a dispositioned Zone from only the erased account's subject grants
 `minimizeZoneGrantPage(tx, { admission, cursor, limit })` is the Access-owned paged port. `tx` is the active
 `CommandTransaction`; Semantic locks and rechecks the Zone parent and retains the returned `next` cursor with its
 existing cleanup CAS in that transaction. Access does not admit branches or persist another progress row. The
+account-erasure Zone writer pages both grant stores against the committed barrier and CAS-persists that cursor;
+discarding `next` after the resource-grant page made role cleanup unreachable. The
 opaque admission is issued by Semantic after its authentic ordinary-expiry, early-privacy, legal-order or terminal-
 account branch check. It carries the exact Zone route/id/home epoch, resource and lifecycle revisions, deletion
 generation, cleanup progress and protection revision. The terminal account-subject form also carries the exact
@@ -4413,7 +4422,8 @@ this source port does not settle unknown consumers or authorize witness deletion
 
 The default `account_erasure` module also registers `account_erasure_native` for the committed tombstone event.
 It opens an opaque `erasure_native_progress` identity before enqueueing. Native workflow inputs contain only that
-identity; step results are fixed codes. Discovery uses `discoverErasurePage` and its adopted role manifest. The
+identity; step results are fixed codes. Phase identity is the `NATIVE_ERASURE_GROUPS()` store/role list value,
+never the producer function. Discovery uses `discoverErasurePage` and its adopted role manifest. The
 native destructive checkpoint is separate from discovery: selected-key mutation, exact absence proofs and the
 checkpoint commit together. A crash between discovery and purge replays the same discovered page. Consumed page
 results are cleared in the purge transaction. Deleting DBOS history does not reset native progress.

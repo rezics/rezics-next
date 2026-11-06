@@ -99,8 +99,11 @@ function DeletionDeparture({
           {m.auth_organization_departure_description()} {m.auth_account_operation_leave_notice()}
         </AlertDialogDescription>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogCancel data-stay onClick={stay}>
+            {m.auth_organization_departure_stay()}
+          </AlertDialogCancel>
           <AlertDialogAction
+            data-leave
             onClick={() => {
               if (blocker.status !== 'blocked') return;
               leave();
@@ -523,6 +526,7 @@ export function DeleteAccountContent({
       isCurrent,
       retryUncertain: true,
       onExecutionDispatch,
+      ...(advice.handle ? { confirmation: advice.handle } : {}),
     });
     if (!isCurrent()) {
       // Retirement cannot erase evidence from this original send. Keep only

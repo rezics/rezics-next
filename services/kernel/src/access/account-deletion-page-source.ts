@@ -20,7 +20,9 @@ import { permissionEvidenceDeadline } from './permission.ts';
 import { CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';
 
-export type AccountDeletionAdvice = { kind: 'available' | 'refused' | 'changed' | 'unavailable' };
+export type AccountDeletionAdvice =
+  | { kind: 'available' | 'refused'; handle: string | null }
+  | { kind: 'changed' | 'unavailable' };
 /** Private exact-human read. No target or authority selector, and no workflow port. */
 export interface AccountDeletionPageAccess {
   readAccountDeletionAdvice(input: { human: SessionProof; deadline: number }): Promise<AccountDeletionAdvice>;
@@ -64,7 +66,8 @@ export function createAccountDeletionPageAccess(deps: {
             const home = await readPartition(client, partitionOf(route));
             if (!home) throw new CommandUnavailableError('contention', partitionOf(route));
             const homeStamp = JSON.stringify([home.node, home.epoch, home.writeState, home.movedTo]);
-            if (home.writeState !== 'active') return { admitted: false, home, homeStamp, stamp: '' };
+            if (home.writeState !== 'active')
+              return { admitted: false, home, homeStamp, stamp: '', handle: null as string | null };
             const account = await readAccount(client, route, human.account_id);
             const admitted =
               !!account &&
@@ -79,6 +82,7 @@ export function createAccountDeletionPageAccess(deps: {
               admitted,
               home,
               homeStamp,
+              handle: account?.handle ?? null,
               // Include the entire exact row: lifecycle, floor and target operands
               // must survive the released preparation, as must the home identity.
               stamp: JSON.stringify([home.node, home.epoch, account], (_, value) =>
@@ -138,7 +142,7 @@ export function createAccountDeletionPageAccess(deps: {
               // same authoritative read instant. No approval reference escapes.
               authoritativeTimeValue(time);
               requireAccessDeadline(deadline);
-              return { kind: allowed ? 'available' : 'refused' };
+              return { kind: allowed ? 'available' : 'refused', handle: after.handle };
             },
             deadline,
           );

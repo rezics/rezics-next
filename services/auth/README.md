@@ -1079,7 +1079,9 @@ The returned host exports:
   and `/account-operations/execute` when `AuthHostOptions.accountOperations`
   supplies the kernel `approve`, `resolveForCaller` and `admitGroup` ports (see
   "Public HTTP contract"); without them both routes answer 503
-  `account_operation_denied`.
+  `account_operation_denied`. Delete execute carries `confirmation` when Access binds a
+  handle reader and the account has a live handle: it must match that handle after NFC
+  and case-folding. Handleless accounts and omitted readers skip typed confirmation.
 
 Sign-up validates the case-folded handle against
 `^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$` before staging or calling Access: 3–64 ASCII
@@ -1120,6 +1122,16 @@ the first-party client `login` with no scopes when that client is absent, and
 leaves an existing `login` client unchanged. Repeated or concurrent starts
 register it once. `createAuthService` does not register it. SIGINT/SIGTERM stop
 DBOS before closing the product pool and any injected `systemDatabasePool`.
+
+Each workflow host keeps one token through startup and teardown. `start()` claims
+that token, joins an in-flight launch on the same host, and refuses when another
+host already owns DBOS. A different token is not treated as a leak and does not
+shut down a healthy executor. `close()` is idempotent: it marks the generation
+stopped, waits for that generation's launch to settle or cancel, then releases
+owned resources and the token. A later host starts only after that explicit close
+or a failed-start release. Failed-start cleanup cannot replace the first causal
+error. Late cleanup of a previous generation cannot clear or shut down a
+successor.
 
 Before resolving, `host.start()` also registers the first-party client
 `rezics-auth-account-operations` through trusted `registerClient` in
@@ -1705,7 +1717,11 @@ approvals), revokes Auth sessions, terminalizes and releases the old hold. It
 never copies resource grants. Deletion commits the authorized Access tombstone
 and fence before Auth erasure, then retires/releases responsibility and calls the
 deletion handle step to permanently retire the account's current handle without
-forwarding or reassignment. Native Access commands
+forwarding or reassignment. Pending-registration `startAccountErasure` proceeds
+from an incomplete registration stage on that deleted fenced account; it does not
+wait for Auth expiry markers the native consumer never writes. Native Access
+pages consume the `NATIVE_ERASURE_GROUPS()` store/role list value for phase
+identity, not the producer function. Native Access commands
 continue to enforce holds, operator eligibility and last-owner rules.
 
 `fenceOperator` first commits the operator fence, then enumerates native pages of
@@ -1997,6 +2013,10 @@ DBOS. Migrate two separate databases first. Supply persistent reference, routing
 staging and signing keys from host configuration; keep Auth database credentials
 and private keys out of the kernel worker. The host owns its Auth pools and
 `auth_dbos` system schema; the caller retains the kernel pool.
+
+Native fixtures take their kernel schema from `kernelTestDatabase()`. Under the Auth
+check, `rezics_kernel_test` is migrated once per run beside `rezics_auth_test`, and each
+fixture copies it; outside the check the helper migrates a fresh database instead.
 
 One trusted binding factory composes Auth and native Access, with deferred Auth construction where needed.
 Consumers use public inward imports; canonical identity extraction changes imports, never erasure, verification,

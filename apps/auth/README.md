@@ -801,14 +801,17 @@ Entry, retained-document return and deliberate read Retry each send one advice P
 private-read lifetime and no automatic retry. Admitted advice mounts one clients and one consents inventory page,
 20 rows each; further pages require navigation. Retirement aborts that lifetime and invalidates both inventories.
 Return, read Retry, focus, dismissal and navigation send no command or extra session GET.
-Advice uses `readJsonBounded` before fatal UTF-8/JSON: `93 + 128×6 + 252×6 + 2 = 2375` bytes for fixed syntax,
-account id and email. Existing bounds remain 128 UTF-16 id units and nullable 254-unit email with `@` and `.`.
+Advice uses `readJsonBounded` before fatal UTF-8/JSON: `105 + 128×6 + 252×6 + 2 + 64×6 = 2771` bytes for fixed
+syntax, account id, email and nullable handle. Existing bounds remain 128 UTF-16 id units, nullable 254-unit email
+with `@` and `.`, and a nullable 64-unit current handle used only as execute confirmation. The localized phrase
+stays a client-only gate.
 Native identities outside that browser id contract remain a separate producer/consumer qualification.
 
 Each attempt retains its original account, key and descriptor. Authentication saves an unsent continuation;
 only execution dispatch's exact stored `submitted:true` proof permits sending. Older descriptors conservatively
 imply submission. Step-up compares human/target/key, refreshes advice, clears confirmation and requires another
-explicit choice. Confirmation uses the localized phrase, trimmed, case-insensitive and NFC-normalized. Privacy
+explicit choice. Confirmation uses the localized phrase, trimmed, case-insensitive and NFC-normalized; execute sends the reviewed
+current handle, not that phrase. Privacy
 contact remains required. Stay preserves confirmation, feedback and focus; Leave retires receiving. Unresolved
 sends retain their departure warning independently of current advice; dismissal hides only generic history.
 
@@ -828,6 +831,7 @@ advice, dismissal and replacement. Restored submitted hints supply no command ev
 resolves uncertainty; it survives private retirement as generic completed history, with cleanup/downstream custody
 pending. Late results cannot complete replacement views, clear another continuation/key or reveal former identity.
 Another deliberate exact retry requires fresh review and typed confirmation; current advice grants no authority.
+Native delete execute confirmation is the current handle; this page's localized phrase remains a client-only gate.
 
 Submission costs two POSTs normally. Approval retries exact `503 unavailable` once; explicit deletion recovery may
 retry execution once while current, preserving its identical key, descriptor and reference. Malformed output,

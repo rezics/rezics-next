@@ -92,6 +92,7 @@ import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.t
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
 
+import { followContributionTarget } from './follow-contribution.ts';
 import { followResponse as serializeFollowResponse, withFollowWork } from './follow-operation-bounds.ts';
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
@@ -367,6 +368,7 @@ const followSchema = t.Object(
     state: t.Union([t.Literal('following'), t.Literal('unfollowed')]),
     reason: t.Union([t.Literal('explicit'), t.Literal('library'), t.Literal('membership')]),
     updatedAt: id,
+    ownerId: id,
   },
   closed,
 );
@@ -958,8 +960,8 @@ function loanView(
     actions: { extend: action, return: action },
   };
 }
-function followView({ targetId, targetType, state, reason, updatedAt }: Follow) {
-  return { targetId, targetType, state, reason, updatedAt };
+function followView({ targetId, targetType, state, reason, updatedAt, accountId }: Follow) {
+  return { targetId, targetType, state, reason, updatedAt, ownerId: accountId };
 }
 
 /** Private account-owned library transport. Domain commands retain authorization and receipts. */
@@ -2175,21 +2177,19 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           admission.run('normal', job, async () => {
             const follow = await command(() => follows().readFollow(actor, params.targetId, job.deadline), 'not_found');
             if (!follow) throw new ProblemError('not_found');
-            return serializeFollowResponse(
-              await fullView(
-                config(),
-                actor,
-                query.view,
-                { follow: followView(follow) },
-                {
-                  deadline: job.deadline,
-                  ...(dependencies.followingSpaceTargets
-                    ? { followingSpaces: dependencies.followingSpaceTargets }
-                    : {}),
-                  follow: true,
-                },
-              ),
+            const shown = await fullView(
+              config(),
+              actor,
+              query.view,
+              { follow: followView(follow) },
+              {
+                deadline: job.deadline,
+                ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
+                follow: true,
+              },
             );
+            const target = await followContributionTarget(dependencies.pool, follow.targetId, follow.targetType);
+            return serializeFollowResponse(target ? { follow: { ...shown.follow, target } } : shown);
           }),
         );
       },

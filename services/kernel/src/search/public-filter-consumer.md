@@ -10,7 +10,9 @@ read definition, physical UUID and original root. The Source bootstrap pre-arms 
 its real PIT with that exact cut and Source adopts the committed observation. Bootstrap uncertainty recovers
 that same identity; it never replaces the cut with current heads. Pending work stays in the existing registration
 and transfers to the immutable observation. Prepared materialization traverses that retained PIT in bounded steps
-and commits its immutable native row set before adoption. No count or ordinary checkpoint certifies completeness.
+and commits its immutable native row set before adoption. Mixed prepared rows retain every raw engine candidate,
+including duplicates and current-predicate rejects; serving revalidates native owners and may walk at most 600 of
+those retained rows. No count or ordinary checkpoint certifies completeness.
 
 Query acquires native custody, resolves the same root and records the execution's actual start and each raw
 original/terminal own row. It retains every raw candidate and native key, including duplicates, rejects and

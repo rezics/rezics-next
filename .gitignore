@@ -6,6 +6,7 @@
 !/.temp/continuation/
 /.temp/continuation/*
 !/.temp/continuation/shelf-type-observers.md
+!/.temp/continuation/commerce-financial-expiry-purge.md
 node_modules/
 /apps/web/.cache/
 /.cache/

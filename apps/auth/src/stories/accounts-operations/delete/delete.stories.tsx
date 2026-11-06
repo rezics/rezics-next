@@ -17,6 +17,7 @@ const initial: AccountDeletionPage = {
   kind: 'review',
   accountId: storyAccount,
   email: '読者.長いメールアドレス.reading-companion@example.test',
+  handle: 'reader',
   action: 'available',
   policy: 'personal-deletion',
 };
