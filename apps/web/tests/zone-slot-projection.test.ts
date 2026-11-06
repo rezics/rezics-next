@@ -5,18 +5,31 @@ import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import {
+  composedZoneCollectionFake,
   composedZoneEmptyFake,
   composedZoneMembersFake,
   composedZonePrivateMountFake,
   composedZoneSparseFake,
 } from '../src/zones/static-fakes';
 import { isolatePublicZonePage, receiveZonePage } from '../src/zones/receive';
-import { projectZoneSlots } from '../src/zones/slots';
-import { ZoneComposedPage } from '../src/zones/page';
+import { projectZoneSlots, zoneTypeListTarget } from '../src/zones/slots';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/paraglide/runtime.js', () => ({
+  locales: ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'],
+  getLocale: () => 'en',
+}));
+mock.module('../src/paraglide/messages.js', () => ({
+  m: new Proxy(
+    {},
+    {
+      get: () => () => '',
+    },
+  ),
+}));
 
 const { readZonePage } = await import('../src/zones/zone-read');
+const { ZoneComposedPage } = await import('../src/zones/page');
 
 const zoneId = composedZoneMembersFake.zone.id;
 const privateId = composedZonePrivateMountFake.zone.id;
@@ -38,6 +51,7 @@ test('routed Zone TypeList keeps native order, one canonical card and Zone conti
   expect(slots.memberHref({ id: subjectId, label: 'The Little Prince' })).toBe(
     `/en/zones/${zoneId}/subjects/${subjectId}`,
   );
+  expect(zoneTypeListTarget(received)).toBeUndefined();
 
   const html = renderToStaticMarkup(
     createElement(ZoneComposedPage, {
@@ -49,6 +63,31 @@ test('routed Zone TypeList keeps native order, one canonical card and Zone conti
   expect(html).toContain(`href="/en/zones/${zoneId}?cursor=next_members-2"`);
   expect(html).not.toContain('/search/list');
   expect(html.match(new RegExp(subjectId, 'g'))?.length).toBeGreaterThan(0);
+});
+
+test('routed Zone Members keep the first native occurrence and continue on the Zone URL', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: createFakeKernelFetch(fixtures) as typeof fetch,
+  });
+  const outcome = await readZonePage(client as never, composedZoneCollectionFake.zone.id, {
+    target: { route: '' },
+    languages: ['en'],
+  });
+  expect(outcome.kind).toBe('page');
+  if (outcome.kind !== 'page') throw new Error('expected collection page');
+  const received = receiveZonePage(outcome.page)!;
+  const slots = projectZoneSlots(received, {
+    locale: 'en',
+    zoneId: composedZoneCollectionFake.zone.id,
+    target: { kind: 'route', route: '' },
+  });
+  const body = slots.reads.r0?.body as { members: { subjectId: string }[]; next: string | null };
+  expect(body.members.map((row) => row.subjectId)).toEqual([subjectId]);
+  expect(body.next).toBe('next_collection-2');
+  expect(slots.listHref('mounted', body.next ?? undefined)).toBe(
+    `/en/zones/${composedZoneCollectionFake.zone.id}?cursor=next_collection-2`,
+  );
+  expect(zoneTypeListTarget(received)).toBeUndefined();
 });
 
 test('anonymous SSR conceals a private Zone that a session reread can admit', async () => {

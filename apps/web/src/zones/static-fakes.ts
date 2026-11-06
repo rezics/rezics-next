@@ -213,6 +213,41 @@ export const composedZoneEmptyFake = {
   },
 } satisfies ZonePageResponse;
 
+const collectionId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e18';
+
+/** Native ordered Collection members with an overlapping alias id, projected onto Members. */
+export const composedZoneCollectionFake = {
+  ...composedZoneMembersFake,
+  zone: { ...composedZoneMembersFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e17', revision: '8' },
+  document: {
+    root: { props: {} },
+    content: [
+      {
+        type: 'Members',
+        props: {
+          id: 'mounted',
+          title: typeListTitles,
+          source: { kind: 'collection', id: collectionId },
+          limit: 12,
+          paged: true,
+        },
+      },
+    ],
+  },
+  reads: {
+    r0: {
+      status: 200,
+      body: {
+        members: [
+          { kind: 'dynamic', subjectId: subject.subject.id, summary: bookSummary },
+          { kind: 'dynamic', subjectId: subject.subject.id, summary: bookSummary },
+        ],
+        next: 'next_collection-2',
+      },
+    },
+  },
+} satisfies ZonePageResponse;
+
 export const staticZoneOwnerFake = {
   ...staticZoneHomeFake,
   zone: { ...staticZoneHomeFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12', visibility: 'private' },

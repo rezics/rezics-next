@@ -59,6 +59,7 @@ function ItemCard({
   inspection,
   retireInspection,
   creditVisit,
+  destinationHref,
 }: {
   item: Item;
   value: RowValue;
