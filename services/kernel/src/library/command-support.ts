@@ -202,8 +202,14 @@ function activeAccountAuthorization(accountId: string, route: number, follow = f
 }
 
 /** Shared command boundary for account-owned library data and durable workflow steps. */
-export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelClock; access?: Access }) {
+export function createLibraryCommandRunner(config: {
+  pool: Pool;
+  clock?: KernelClock;
+  access?: Access;
+  command?: typeof runCommand;
+}) {
   const { pool, clock } = config;
+  const executeCommand = config.command ?? runCommand;
 
   class ReceiptNotFoundError extends Error {}
 
@@ -324,7 +330,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
 
     const execute = () =>
       withRequestDeadline(deadline, () =>
-        runCommand(
+        executeCommand(
           pool,
           {
             ...identity,
@@ -466,7 +472,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     return runLibraryCommand(
       () => {
         const execute = () =>
-          runCommand(
+          executeCommand(
             pool,
             {
               partition: partitionOf(route),

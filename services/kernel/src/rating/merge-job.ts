@@ -1,9 +1,10 @@
+import { nativeRatingWorkflows } from './adapters/workflows.ts';
+import { runCommand, type CommandEvent, type CommandTransaction } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import { createHash } from 'node:crypto';
-import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { runCommand, type CommandEvent, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -324,12 +325,13 @@ async function processVoterPartition(
   after: RatingMergeCursor | null,
   partition: number,
   voters: Array<{ questionId: string; voterId: string; units: number | null; revision: number; at: string }>,
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   const key = `${job.id}:${after?.questionId ?? 'start'}:${after?.voterId ?? 'start'}:${partition}`;
   const digest = createHash('sha256')
     .update(JSON.stringify([job.id, job.survivor, after, partition]))
     .digest();
-  const outcome = await runCommand(
+  const outcome = await (capabilities?.command ?? runCommand)(
     pool,
     {
       partition,
@@ -369,6 +371,7 @@ async function processVoterPartition(
 export async function processRatingSubjectMergePage(
   pool: Pool,
   input: RatingSubjectMergeJob & { after: RatingMergeCursor | null },
+  capabilities?: RatingCapabilities,
 ): Promise<RatingSubjectMergePage> {
   validateJob(input);
   validateCursor(input.after);
@@ -393,7 +396,9 @@ export async function processRatingSubjectMergePage(
     groups.set(partition, group);
   }
   await Promise.all(
-    [...groups].map(([partition, voters]) => processVoterPartition(pool, input, input.after, partition, voters)),
+    [...groups].map(([partition, voters]) =>
+      processVoterPartition(pool, input, input.after, partition, voters, capabilities),
+    ),
   );
   return { cursor, done: voterIds.length < RATING_SUBJECT_MERGE_PAGE_SIZE, voters: voterIds.length };
 }
@@ -427,13 +432,17 @@ export function createRatingSubjectMergeJobEffect(pool: Pool, context: WorkConte
   };
 }
 
-export function registerRatingSubjectMergeWork(context: WorkContext): void {
-  const processPage = DBOS.registerStep(
+export function registerRatingSubjectMergeWork(
+  context: WorkContext,
+  capabilities?: RatingCapabilities,
+  installEffect = true,
+): void {
+  const processPage = (capabilities?.workflows ?? nativeRatingWorkflows).registerStep(
     async (job: RatingSubjectMergeJob, after: RatingMergeCursor | null) =>
-      processRatingSubjectMergePage(context.pool, { ...job, after }),
+      processRatingSubjectMergePage(context.pool, { ...job, after }, capabilities),
     { name: 'rating.processSubjectMergePage', ...COMMAND_STEP_RETRIES },
   );
-  DBOS.registerWorkflow(
+  (capabilities?.workflows ?? nativeRatingWorkflows).registerWorkflow(
     async (job: RatingSubjectMergeJob) => {
       let after: RatingMergeCursor | null = null;
       for (;;) {
@@ -449,5 +458,5 @@ export function registerRatingSubjectMergeWork(context: WorkContext): void {
     },
     { name: RATING_SUBJECT_MERGE_WORKFLOW },
   );
-  context.addEffects([createRatingSubjectMergeJobEffect(context.pool, context.client)]);
+  if (installEffect) context.addEffects([createRatingSubjectMergeJobEffect(context.pool, context.client)]);
 }

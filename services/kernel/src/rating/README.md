@@ -2193,3 +2193,30 @@ The retryable dependency failure returns no partial page or replacement cursor, 
 - Touches: Three released account-home snapshots verify the active account and actor lifecycle row. The current partial ballot index selects at most 21 raw keys; the optional selected key uses one primary-key lookup, and final actor-home verification probes at most 21 supplied keys. Current Semantic association reads are grouped by subject home and capped at 21 identities; at most 84 exact resolutions cover initial own disclosure, current set advice, aggregate advice and final own disclosure. Current summaries batch at most 42 supplied Subject ids by represented home. Native contribution reads use supplied-key joins capped at 21 identities per represented association home. Each admitted aggregate uses the two-pass source witness described in Cost: read aggregate; at most 21 selected aggregates participate.
 - Bound: Raw slots stay fixed at 20 plus one continuation sentinel; one selected slot may be promoted separately. The response has at most 21 entries, at most 42 compact summaries, labels at most 2,000 characters and a 1 MiB serialized body ceiling. Cursor length remains 4,096. No actor, subject, association-history or voter scan runs on the page request. Any unavailable nested read fails the whole request and preserves the caller's cursor frontier.
 - Growth check: `test/rating/own-classification-journey.test.ts` uses production Kernel and real Access while independently growing unrelated ballots, associations, identity revisions and authority history at 256/1024/4096. The measured native prefixes, all participating SQL, backend, row and block evidence are asserted alongside empty/ready pages, selected promotion, sparse continuation, binding mismatch, read-only, withdraw-only preparation and same-key replay.
+
+## Construction
+
+Decision: native composition constructs Rating once from `createRatingDefinition` and a supplied
+`RatingCapabilities` record. HTTP route schemas, paths, operation/permission metadata, event schemas, effects,
+workflows and services are declared before mounting or starting. The HTTP and work hosts consume that definition;
+the work host starts its services after registration and stops them in reverse order before releasing its resources.
+Rating borrows its pool and work client and never shuts either down.
+
+Current reads and cursor lifetimes use the supplied clock. The native adapter supplies routed question IDs, cursor
+nonces, command execution, event projection and workflow registration. Commands retain their original transaction
+and immutable receipt authority: time is minted by the command executor and transitions use the owning transaction
+identity. Replaying a question creation does not allocate another question ID. Vote, classification, provider,
+aggregate, population-total, public-figure, membership and merge work all use the supplied execution capability.
+Authentication and execution budgets continue to use the platform's wall-clock deadline authority. Parsing stored
+dates remains pure computation. Direct adapter callers retain their existing optional-clock APIs; their native
+fallbacks do not install or replace process state.
+
+The base platform has no common module-definition/ambient-capability record. Rating therefore exposes its typed
+owner definition through the existing Kernel and WorkModule interfaces. The shared operands used here are the
+platform command executor, event projection, effect/relay contracts, work registration and deadline authority; these
+are explicit public platform entries. A future common declaration contract can accept the same owner definition.
+
+Native receiving covers vote replay and aggregate application, exact classification assessment with the five-ballot
+privacy threshold, and Question identity/replay with current management authority in one constructed module. The
+Access SQL projection supplies its existing `deadline_live` operand as `deadlineLive` to the native policy adapter;
+without this operand, registered classification action/type profiles deny even an explicitly granted current voter.

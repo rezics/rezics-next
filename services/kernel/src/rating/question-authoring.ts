@@ -1,13 +1,15 @@
+import { runCommand, authoritativeTimeValue, principalCommandIdentity } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { resourceAuthorization } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, principalCommandIdentity, runCommand } from '../command/command.ts';
 import realmRead from '../community/realm-read.sql';
 import type { Access, Actor } from '../request/access.ts';
-import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import insert from './question-authoring-insert.sql';
 
 export const QUESTION_CREATED = 'com.rezics.rating.question.created.v1';
@@ -60,7 +62,7 @@ export function validateQuestionDefinition(input: RealmQuestionInput): void {
  * One Realm-home command, receipt and event. The current native manage decision
  * precedes receipt lookup on every attempt, including an exact replay. */
 export async function createRealmRatingQuestion(
-  deps: { pool: Pool; access: Access; clock?: KernelClock },
+  deps: { pool: Pool; access: Access; capabilities?: RatingCapabilities; clock?: KernelClock },
   actor: Actor,
   input: RealmQuestionInput,
   context: { deadline: number; idempotencyKey: string },
@@ -90,7 +92,7 @@ export async function createRealmRatingQuestion(
     },
     context: { pool: deps.pool, deadline: context.deadline, partition: partitionOf(route) },
   });
-  return runCommand(
+  return (ratingCapabilities(deps).command ?? runCommand)(
     deps.pool,
     {
       ...identity,
@@ -107,7 +109,7 @@ export async function createRealmRatingQuestion(
       authorization,
     },
     async (tx) => {
-      const id = newId(route);
+      const id = ratingCapabilities(deps).id(route);
       await insert.run(tx, {
         id,
         owner_id: actor.accountId,

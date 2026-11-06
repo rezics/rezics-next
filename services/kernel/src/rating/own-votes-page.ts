@@ -1,3 +1,5 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -33,6 +35,7 @@ type Dependencies = {
   access: Access;
   tokens: KeyRing;
   routeKey: Uint8Array;
+  capabilities?: RatingCapabilities;
   clock?: KernelClock;
 };
 type CommandLinks = { clear: string; readback: string };
@@ -201,7 +204,7 @@ export function createOwnVotesReader(deps: Dependencies) {
           order: 'question-target.v1',
         },
       };
-      const now = () => (deps.clock?.() ?? new Date()).getTime();
+      const now = () => ratingCapabilities(deps).clock().getTime();
       let after: Key | null = null;
       if (input.cursor !== undefined) {
         const cursor = decodeCursor(deps.tokens, binding, input.cursor, now());

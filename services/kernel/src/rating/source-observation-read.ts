@@ -1,3 +1,5 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { t } from 'elysia';
@@ -141,6 +143,7 @@ export type SourceObservationReadDependencies = Readonly<{
   pool: Pool;
   routeKey: Uint8Array;
   tokens: KeyRing;
+  capabilities?: RatingCapabilities;
   clock?: KernelClock;
 }>;
 type MetaRow = Readonly<{
@@ -235,7 +238,7 @@ function readCursor(
   dependencies: SourceObservationReadDependencies,
   binding: CursorBinding,
 ): DecodedCursor {
-  const decoded = decodeCursor(dependencies.tokens, binding, value, (dependencies.clock?.() ?? new Date()).getTime());
+  const decoded = decodeCursor(dependencies.tokens, binding, value, ratingCapabilities(dependencies).clock().getTime());
   if (!decoded.ok || decoded.after.length !== 6 || decoded.after.some((part) => typeof part !== 'string'))
     return invalidCursor();
   const [format, kind, order, digest, nativeCeiling, legacyCeiling] = decoded.after as [
@@ -286,7 +289,7 @@ function encodeHistoryCursor(
     dependencies.tokens,
     binding,
     { epoch, after: cursorAfter(cursor) },
-    (dependencies.clock?.() ?? new Date()).getTime(),
+    ratingCapabilities(dependencies).clock().getTime(),
   );
 }
 
