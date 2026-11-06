@@ -93,6 +93,7 @@ export function CopyInventoryFilters({
   filterOptions: CopyInventoryOptions | undefined;
   current: () => boolean;
 }) {
+  if (!filterOptions && !kind && !status) return null;
   return (
     <form
       method="get"

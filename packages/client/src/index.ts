@@ -198,7 +198,24 @@ export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$
 export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
-export type KernelClient = GeneratedKernelClient;
+type CopyLoansPublished = 'copy-loans' extends keyof GeneratedKernelClient ? true : false;
+export type KernelClient = GeneratedKernelClient &
+  (CopyLoansPublished extends true ? {} : { 'copy-loans': import('./copy-contracts.ts').CopyLoansClient });
+export { COPY_CONDITION_VALUES } from './copy-contracts.ts';
+export type {
+  CopyConditionChoice,
+  CopyConditionDisplay,
+  CopyConditionEditing,
+  CopyConditionPatch,
+  CopyConditionPresentation,
+  CopyConditionValue,
+  CopyInventoryOptions,
+  Loan,
+  LoanFilter,
+  LoanMutation,
+  LoanPage,
+  LoanWrite,
+} from './copy-contracts.ts';
 export type PostHistoryPage = NativePostHistoryPage;
 export type ModerationDecisionPage = Static<ReturnType<typeof DecisionPageSchema>>;
 export type DecisionPageAppeal = NonNullable<ModerationDecisionPage['appeal']>;

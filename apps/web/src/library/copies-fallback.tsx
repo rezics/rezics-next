@@ -5,6 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { copyConditionChoices, kindAdmitsCondition } from './copy-condition';
 
 const submitTarget =
   'min-h-11 min-w-11 h-auto rounded-lg bg-primary px-4 py-3 font-medium whitespace-normal break-words text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
@@ -63,6 +64,36 @@ export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrf
                       ))}
                     </NativeSelect>
                   </Field>
+                  {kindAdmitsCondition(kind.condition) ? (
+                    <>
+                      <Field className="min-w-0">
+                        <FieldLabel htmlFor={`${kindId}-media`}>{m.library_copy_condition_media()}</FieldLabel>
+                        <NativeSelect id={`${kindId}-media`} name="mediaCondition" className="w-full [&_select]:min-h-11">
+                          <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
+                          {copyConditionChoices().map((choice) => (
+                            <NativeSelectOption key={choice.id} value={choice.id}>
+                              {choice.label}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                      </Field>
+                      <Field className="min-w-0">
+                        <FieldLabel htmlFor={`${kindId}-packaging`}>{m.library_copy_condition_packaging()}</FieldLabel>
+                        <NativeSelect
+                          id={`${kindId}-packaging`}
+                          name="packagingCondition"
+                          className="w-full [&_select]:min-h-11"
+                        >
+                          <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
+                          {copyConditionChoices().map((choice) => (
+                            <NativeSelectOption key={choice.id} value={choice.id}>
+                              {choice.label}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                      </Field>
+                    </>
+                  ) : null}
                   <button type="submit" className={submitTarget}>
                     {m.library_copy_add_submit()}
                   </button>

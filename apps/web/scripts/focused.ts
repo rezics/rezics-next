@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
+import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -31,6 +32,14 @@ export function focusedTestCommands(command: string[]): string[][] {
   const selected = new Set(files);
   const prefix = command.filter((argument) => !selected.has(argument));
   return files.map((file) => [...prefix, file]);
+}
+
+/** One exclusive Worker graph at a time in a focused 6 GiB slot when Copies and signed-in-routes both compile. */
+export function admitSerialBunTestCommand(command: string[]): string[] {
+  if (command[0] !== 'bun' || command[1] !== 'test') return command;
+  if (command.some((argument) => argument === '--max-concurrency' || argument.startsWith('--max-concurrency=')))
+    return command;
+  return ['bun', 'test', '--max-concurrency=1', ...command.slice(2)];
 }
 
 export type FocusedRunnerOptions = {
@@ -110,6 +119,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   const appDirectory = resolve(options.appDirectory ?? app);
   if (
     !hasWebCheckCustody(resolve(app, '../..'), appDirectory) &&
+    !options.place &&
     (options.prepare || options.onStart || options.onOutput)
   )
     throw new Error(
@@ -131,29 +141,34 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     { ...process.env, ...options.env },
   );
   if (routed !== null) return routed;
-  const admitted = admitExplicitHostTestCommand(command);
+  const admitted = admitSerialBunTestCommand(admitExplicitHostTestCommand(command));
+  const wrapShared =
+    commandNeedsSharedDevServer(admitted) &&
+    existsSync(join(appDirectory, 'vite.config.ts')) &&
+    existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
     ...options.env,
     REZICS_TEST_RUNTIME: '1',
+    REZICS_WEB_SERIAL_VITE: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
   };
-  const invocations = focusedTestCommands(admitted).map((command) =>
-    options.privateNetwork
-      ? [
-          'unshare',
-          '--user',
-          '--map-root-user',
-          '--net',
-          'sh',
-          '-c',
-          'ip link set lo up && exec "$@"',
-          'sh',
-          ...command,
-        ]
-      : command,
-  );
+  if (wrapShared && options.privateNetwork) childEnvironment[webTestPrivateNetworkEnvName] = '1';
+  for (const name of [
+    'AUTH_ISSUER',
+    'WEBSITE_CLIENT_ID',
+    'WEBSITE_CLIENT_KEY',
+    'API_RESOURCE',
+    'WEBSITE_SCOPES',
+    'SITE_ORIGINS',
+    'KERNEL_ORIGIN',
+  ])
+    delete childEnvironment[name];
+  const invocations = focusedTestCommands(admitted).map((command) => {
+    const hosted = wrapShared ? ['bun', 'scripts/with-dev-server.ts', '--', ...command] : command;
+    return options.privateNetwork && !wrapShared ? privateNetworkCommand(hosted) : hosted;
+  });
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;

@@ -349,6 +349,15 @@ const fake = Bun.serve({
         },
       });
     }
+    if (request.method === 'GET' && url.pathname === '/v1/copy-loans') {
+      return json({
+        filter: url.searchParams.get('filter') === 'history' ? 'history' : 'open',
+        boundary: { calendar: 'gregorian', zone: 'UTC', today: '2030-01-01' },
+        generation: 1,
+        items: [],
+        nextCursor: null,
+      });
+    }
     if (!copyRoute) return json(problem(404, 'not_found'), 404, true);
     const key = request.headers.get('idempotency-key');
     const writing = request.method === 'POST' || request.method === 'PATCH' || request.method === 'DELETE';
@@ -419,24 +428,13 @@ function site(): Promise<string> {
       warmUpPaths: ['/en/no-such-page'],
       env: {
         KERNEL_ORIGIN: fake.url.origin,
+        PUBLIC_ORIGIN: 'http://127.0.0.1:0',
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
       },
-      command: ({ port, origin }) => [
-        'env',
-        `PUBLIC_ORIGIN=${origin}`,
-        'bun',
-        'run',
-        'dev',
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        '--strictPort',
-      ],
     });
     return server.origin;
   })();

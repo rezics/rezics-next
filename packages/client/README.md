@@ -33,6 +33,11 @@ Decision: until declaration emission succeeds, the Copy list compatibility seam 
 kind/status query and filterOptions schema; Web derives its wire types only from this official client.
 The seam automatically yields to the generated method when its filterOptions envelope is published.
 
+Decision: until declaration emission succeeds, the Copy write/detail seam mirrors mounted mediaCondition and
+packagingCondition operands and FULL presentation condition display/editing; it yields when those generated
+shapes exist. The Copy-loan seam mirrors GET/POST `/v1/copy-loans` and PATCH/return on `/v1/copy-loans/:loanId`
+and yields when `copy-loans` is published.
+
 Decision: `GET /v1/accounts/{accountId}/verification` (`account.read_verification_request`) closes
 `{ verificationRequest, viewerActions }`. e9314e51 publishes that generated closure; this Settings consumer
 decodes the extra JSON field strictly and does not hand-edit declarations or emit a second client.

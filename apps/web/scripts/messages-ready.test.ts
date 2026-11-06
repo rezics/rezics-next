@@ -21,7 +21,10 @@ function makeApp(): { directory: string; cleanup: () => void; calls: string; out
       `appendFileSync(join(root, 'generate-calls.log'), 'generate\\n');\n` +
       `if ((await import('node:fs')).existsSync(join(root, 'fail-generation'))) process.exit(37);\n` +
       `mkdirSync(join(root, 'src/paraglide'), { recursive: true });\n` +
-      `writeFileSync(join(root, 'src/paraglide/messages.js'), 'generated');\n`,
+      `mkdirSync(join(root, 'src/paraglide/messages'), { recursive: true });\n` +
+      `writeFileSync(join(root, 'src/paraglide/messages.js'), 'generated');\n` +
+      `writeFileSync(join(root, 'src/paraglide/messages/_index.js'), "export * from './message.js';\\n");\n` +
+      `writeFileSync(join(root, 'src/paraglide/messages/message.js'), 'export const message = true;\\n');\n`,
   );
   return {
     directory,
@@ -72,7 +75,10 @@ test('fresh output is kept when it is newer than every message file', () => {
     ];
     for (const name of messageFiles) writeFileSync(join(app.messages, name), '{}');
     mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
+    mkdirSync(join(app.directory, 'src/paraglide/messages'), { recursive: true });
     writeFileSync(app.output, 'fresh');
+    writeFileSync(join(app.directory, 'src/paraglide/messages/_index.js'), "export * from './message.js';\n");
+    writeFileSync(join(app.directory, 'src/paraglide/messages/message.js'), 'export const message = true;\n');
     const base = Date.now() - 60_000;
     for (const [index, name] of messageFiles.entries()) setMtime(join(app.messages, name), base + index * 1000);
     setMtime(app.output, base + 10_000);
@@ -91,13 +97,39 @@ test('messages newer than the output cause generation again', () => {
     const message = join(app.messages, 'en.json');
     writeFileSync(message, '{}');
     mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
+    mkdirSync(join(app.directory, 'src/paraglide/messages'), { recursive: true });
     writeFileSync(app.output, 'stale');
+    writeFileSync(join(app.directory, 'src/paraglide/messages/_index.js'), "export * from './message.js';\n");
+    writeFileSync(join(app.directory, 'src/paraglide/messages/message.js'), 'export const message = true;\n');
     const base = Date.now() - 60_000;
     setMtime(app.output, base);
     setMtime(message, base + 10_000);
 
     expect(ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual(['generate']);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test('a fresh message entry point is regenerated when one of its generated modules is missing', () => {
+  const app = makeApp();
+  try {
+    const message = join(app.messages, 'en.json');
+    const index = join(app.directory, 'src/paraglide/messages/_index.js');
+    writeFileSync(message, '{}');
+    mkdirSync(join(app.directory, 'src/paraglide/messages'), { recursive: true });
+    writeFileSync(app.output, 'fresh');
+    writeFileSync(index, "export * from './access_account.js';\n");
+    const base = Date.now() - 60_000;
+    setMtime(message, base);
+    setMtime(app.output, base + 10_000);
+
+    expect(messagesCurrent(app.directory)).toBe(false);
+    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(recordCalls(app.calls)).toEqual(['generate']);
+    expect(existsSync(join(app.directory, 'src/paraglide/messages/message.js'))).toBe(true);
+    expect(messagesCurrent(app.directory)).toBe(true);
   } finally {
     app.cleanup();
   }
