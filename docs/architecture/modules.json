@@ -280,7 +280,8 @@
         "services/kernel/src/community/index.ts",
         "services/kernel/src/community/declaration.ts",
         "services/kernel/src/community/http-declaration.ts",
-        "services/kernel/src/community/events.ts"
+        "services/kernel/src/community/events.ts",
+        "services/kernel/src/community/access-capabilities.ts"
       ],
       "allowedDependencies": [
         "auth-contract",

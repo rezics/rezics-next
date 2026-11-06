@@ -992,7 +992,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     pool: dependencies.pool,
     access: dependencies.access(),
     tokens: dependencies.tokens,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
   });
 
   return app
@@ -1437,7 +1437,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const route = routeOf(spaceId);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: spaceId };
-        const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
+        const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource, dependencies.clock) });
         const current = await admission.run('normal', job, () =>
           readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check),
         );
@@ -1549,7 +1549,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           const route = routeOf(claim.spaceId);
           if (route === null) return null;
           const resource = { route, id: claim.spaceId };
-          const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
+          const check = await authorize({
+            ...resource,
+            eligibility: spaceReadEligibility(resource, dependencies.clock),
+          });
           return withConnection(dependencies.pool, async (client) => {
             if (!(await check(client))) return null;
             const space = await readSpace(client, claim.spaceId, observedAt());

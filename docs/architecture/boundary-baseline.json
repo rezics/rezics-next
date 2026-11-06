@@ -6012,11 +6012,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm-claim-review.ts",
-          "edge": "value import \"../access/access-clock.ts\" #1 => services/kernel/src/access/access-clock.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm-claim-review.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
         },
         {

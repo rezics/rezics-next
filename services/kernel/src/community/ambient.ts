@@ -12,3 +12,6 @@ export type CommunityAmbient = Readonly<{
 export const systemCommunityAmbient: CommunityAmbient = Object.freeze({
   deadlineNow: () => Date.now(),
 });
+
+/** Production wall clock for the optional domain-clock operands Community still accepts. Adapter-level. */
+export const systemCommunityClock = (): Date => new Date();
