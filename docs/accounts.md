@@ -491,6 +491,16 @@ ownership and operator responsibilities retain their existing deletion barriers.
 
 ## 6. Auth ownership and registration
 
+Decision: retain the native account, session and consent contracts and catalogue-derived website scopes; qualify
+the installed Auth renderer before replacing production behavior already supplied by those owners.
+
+Deployment binds the installed `/auth/callback` and sign-out return to canonical website origins through
+`createAuthDeployment`. It requires the native challenge and private recovery-delivery adapters, registers the
+catalogue-derived website ceiling and starts the native host before publishing Auth/Web configuration. Security
+uses the same catalogue for its response bounds; configured website scopes do not enlarge existing sessions.
+Startup client matching observes the current registration under its existing native lock; a concurrent insertion
+receives the same exact-match decision, and refused matches leave no pending consent transition.
+
 Auth owns credentials, login/recovery email, native sessions, refresh families, authentication evidence, signing
 keys/JWKS, client registration, consent and token issuance. Access owns handles, profiles, state, operator and
 membership relations, grants, birth dates, content preferences and private account data. Better Auth's
@@ -841,3 +851,7 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-boundary]: ../services/auth/README.md#application-boundary-and-configuration
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
+
+Native receiving keeps the compiled SQL `deadlineLive` projection as the Access deadline fact. The check
+fixtures invoke the current erasure producer-list function and define each Search service method once;
+these repairs align trusted producers without adding authorization rules or changing account custody.

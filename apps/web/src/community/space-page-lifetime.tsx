@@ -30,6 +30,7 @@ export type SpacePageSessionSource = {
   errorUpdateCount(): number;
   revision(): number;
   subscribe(listener: () => void): () => void;
+  release(): void;
 };
 
 /** Serializable loader admission. The actual reader always comes from the server read envelope. */
@@ -143,6 +144,12 @@ function expectedReader(session: SessionSnapshot, credentialMode: ReadCredential
   return { kind: 'unknown' };
 }
 
+function isCommittedCacheEvent(event: { type: string; action?: { type: string } }) {
+  if (event.type === 'removed') return true;
+  if (event.type !== 'updated' || !event.action) return false;
+  return event.action.type === 'success' || event.action.type === 'error' || event.action.type === 'setState';
+}
+
 function observeSession(client: QueryClient): SpacePageSessionSource {
   const read = () => client.getQueryData<SessionRecord>(sessionQuery.queryKey);
   const dataUpdateCount = () => client.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0;
@@ -154,17 +161,12 @@ function observeSession(client: QueryClient): SpacePageSessionSource {
   const matchesSessionQuery = (query: { queryKey: readonly unknown[] }) =>
     query.queryKey.length === sessionQuery.queryKey.length &&
     query.queryKey.every((part, index) => part === sessionQuery.queryKey[index]);
-  client.getQueryCache().subscribe((event) => {
+  const stop = client.getQueryCache().subscribe((event) => {
     if (!matchesSessionQuery(event.query)) return;
     // Only committed data replacement, failed refresh, and removal change the session
     // observation. Fetch/observer notifications and StrictMode replay do not.
     const action = 'action' in event ? event.action : undefined;
-    const changed =
-      event.type === 'removed' ||
-      (event.type === 'updated' &&
-        action &&
-        (action.type === 'success' || action.type === 'error' || action.type === 'setState'));
-    if (!changed) return;
+    if (!isCommittedCacheEvent({ type: event.type, ...(action ? { action: { type: action.type } } : {}) })) return;
     revision++;
     for (const listener of listeners) listener();
   });
@@ -181,6 +183,10 @@ function observeSession(client: QueryClient): SpacePageSessionSource {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    release() {
+      stop();
+      listeners.clear();
+    },
   };
 }
 
@@ -192,6 +198,14 @@ export function spacePageSessionSource(client: QueryClient): SpacePageSessionSou
     sources.set(client, source);
   }
   return source;
+}
+
+/** Drop the session cache subscriber so a discarded QueryClient cannot retain visit listeners. */
+export function releaseSpacePageSessionSource(client: QueryClient) {
+  const source = sources.get(client);
+  if (!source) return;
+  source.release();
+  sources.delete(client);
 }
 
 function toSnapshot(source: SpacePageSessionSource): SessionSnapshot {
@@ -792,6 +806,23 @@ export function sameNativeHomeBinding(
   return (Object.keys(original) as (keyof typeof original)[]).every((key) => original[key] === current[key]);
 }
 
+/** Heads, selected media/rules and lifecycle; a membership refresh keeps this identity. */
+export function nativeHomeSourceIdentity(page: SpacePageData) {
+  const realm = page.realm;
+  const source = realm?.nativeSource;
+  if (!realm?.nativeObservation || !source) return null;
+  return JSON.stringify([
+    page.space.id,
+    realm.id,
+    realm.credentialMode ?? null,
+    source.realm.headRevisionId,
+    source.space.headRevisionId,
+    source.realm.presentation,
+    realm.continuity?.ownershipState ?? null,
+    realm.continuity?.governanceReadOnly ?? null,
+  ]);
+}
+
 export class SpacePageLifetime {
   private connected = false;
   private disposed = false;
@@ -815,7 +846,18 @@ export class SpacePageLifetime {
 
   matchesPage = (page: SpacePageData) => {
     if (!this.nativeBinding && !page.realm?.nativeObservation) return true;
-    return this.page === page && sameNativeHomeBinding(this.nativeBinding, nativeHomeBinding(page));
+    if (!this.page) return false;
+    const current = nativeHomeBinding(page);
+    if (this.page === page) return sameNativeHomeBinding(this.nativeBinding, current);
+    const originalIdentity = nativeHomeSourceIdentity(this.page);
+    const nextIdentity = nativeHomeSourceIdentity(page);
+    // A same-source admitted refresh is a new page whose nested observation actually changed.
+    // An equal envelope, in-place mutation, or identity change still retires this visit.
+    return (
+      originalIdentity !== null &&
+      originalIdentity === nextIdentity &&
+      !sameNativeHomeBinding(this.nativeBinding, current)
+    );
   };
 
   private publish() {
@@ -907,18 +949,27 @@ export class SpacePageLifetime {
     this.connected = true;
     activeAdmissions.set(this.admission, this);
     if (!this.stopWatching && this.runtime) {
-      const onChange = () => {
-        if (!this.disposed && (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime))) this.retire();
+      const onSessionChange = () => {
+        if (this.disposed) return;
+        if (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime)) this.retire();
         else this.publish();
       };
-      const stopSession = this.runtime.source.subscribe(onChange);
+      const stopSession = this.runtime.source.subscribe(onSessionChange);
       const ownedQuery = this.runtime.queryRead?.query;
       const routeSignal = this.runtime.routeSignal;
       const onRouteAbort = () => this.retire();
       routeSignal?.addEventListener('abort', onRouteAbort, { once: true });
       const stopQuery = ownedQuery
         ? this.runtime.client.getQueryCache().subscribe((event) => {
-            if (event.query === ownedQuery) onChange();
+            if (event.query !== ownedQuery) return;
+            const action = 'action' in event ? event.action : undefined;
+            if (!isCommittedCacheEvent({ type: event.type, ...(action ? { action: { type: action.type } } : {}) }))
+              return;
+            if (event.type === 'removed' || !this.runtime || !runtimeIsCurrent(this.admission, this.runtime)) {
+              this.retire();
+              return;
+            }
+            this.publish();
           })
         : undefined;
       this.stopWatching = () => {

@@ -6,7 +6,7 @@
  */
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
 import { walkStackDirectory } from './stack-run.ts';
-import { createServer } from 'node:net';
+import { createConnection, createServer, type Server } from 'node:net';
 
 export const WALK_STACKS_DEFAULT = 6;
 const WALK_STACKS_MAXIMUM = 1000;
@@ -37,11 +37,13 @@ export function walkStackLimit(env: Record<string, string | undefined>): number 
   return Number(value);
 }
 
-/** Container and volume names carry the task. An identifier Docker cannot use as a name is refused, not altered. */
-export function walkStackNames(task: string): WalkNames {
+/** Container and volume names carry the task and slot, so a stuck container cannot block a later slot. */
+export function walkStackNames(task: string, index: number): WalkNames {
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$/.test(task))
     throw new Error(`GOAL_TASK_ID cannot name a walk stack: ${JSON.stringify(task)}`);
-  const prefix = `rezics-walk-${task}`;
+  if (!Number.isInteger(index) || index < 1)
+    throw new Error(`walk stack slot must be a positive integer, received ${index}`);
+  const prefix = `rezics-walk-${task}-${index}`;
   return { prefix, database: `${prefix}-database`, search: `${prefix}-search` };
 }
 
@@ -50,27 +52,92 @@ export function walkStackPorts(index: number): WalkPorts {
   return { web: base, issuer: base + 1, native: base + 2, kernel: base + 3, database: base + 4, search: base + 5 };
 }
 
+/** HTTP origins the walk waits on before the journey command. Kernel is included so Web's first compile is not the only signal. */
+export function walkReadyUrls(ports: WalkPorts): string[] {
+  return [`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`, `http://127.0.0.1:${ports.kernel}/`];
+}
+
+/** First Web compile can exceed a short poll; aborting that request prevents Vite from listening. */
+export const WALK_READY_DEADLINE_MS = 1_200_000;
+export const WALK_READY_FETCH_MS = 120_000;
+export const WALK_READY_POLL_MS = 2_000;
+export const WALK_DOCKER_REMOVE_MS = 120_000;
+export const WALK_PROCESS_STOP_MS = 8_000;
+
+/** Use the remaining window, never a short abort that strands Vite's first compile. */
+export function walkReadyFetchTimeoutMs(remainingMs: number): number {
+  return Math.max(WALK_READY_FETCH_MS, remainingMs);
+}
+
+/** True when something already accepts TCP on the origin; connection refused is not a hung compile. */
+export function walkOriginListening(url: string, timeoutMs = 500): Promise<boolean> {
+  const parsed = new URL(url);
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = createConnection({ host: parsed.hostname, port: Number(parsed.port) });
+    const done = (open: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(open);
+    };
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+    socket.setTimeout(timeoutMs, () => done(false));
+  });
+}
+
+type StoppableChild = {
+  kill(signal?: NodeJS.Signals): void;
+  exited: Promise<number>;
+  exitCode: number | null;
+  signalCode: number | NodeJS.Signals | null;
+};
+
+/** SIGTERM, then SIGKILL so a walk cannot wait forever on a worker that ignores shutdown. */
+export async function stopSpawned(child: StoppableChild, timeoutMs = WALK_PROCESS_STOP_MS): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill('SIGTERM');
+  const timedOut = await Promise.race([child.exited.then(() => false), Bun.sleep(timeoutMs).then(() => true)]);
+  if (timedOut && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  await child.exited;
+}
+
+/** A released lease may leave another task's containers behind; never claim their listening ports. */
+export async function walkPortsAvailable(ports: Iterable<number>): Promise<boolean> {
+  const reservations: Server[] = [];
+  try {
+    for (const port of ports) {
+      const server = createServer((socket) => socket.destroy());
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen({ host: '127.0.0.1', port, exclusive: true }, resolve);
+      });
+      reservations.push(server);
+    }
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') return false;
+    throw error;
+  } finally {
+    await Promise.all(
+      reservations.map(
+        (server) =>
+          new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+      ),
+    );
+  }
+}
+
 /** A surviving container can own a slot's ports after its launcher's flock has been released. */
 export async function walkStackPortsAvailable(ports: WalkPorts): Promise<boolean> {
-  for (const port of Object.values(ports)) {
-    const available = await new Promise<boolean>((resolve, reject) => {
-      const server = createServer();
-      server.once('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'EADDRINUSE') resolve(false);
-        else reject(error);
-      });
-      server.listen({ host: '127.0.0.1', port, exclusive: true }, () => {
-        server.close((error) => (error ? reject(error) : resolve(true)));
-      });
-    });
-    if (!available) return false;
-  }
-  return true;
+  return walkPortsAvailable(Object.values(ports));
 }
 
 /** The variables that give one admitted stack its own names, ports and origins. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
-  const names = walkStackNames(task);
+  const names = walkStackNames(task, index);
   const ports = walkStackPorts(index);
   const origin = (port: number) => `http://127.0.0.1:${port}`;
   return {
@@ -88,6 +155,19 @@ export function walkStackEnvironment(task: string, index: number): Record<string
   };
 }
 
+/** Stack processes keep check-host cgroup placement off; worker checks still run on hosts a and b. */
+export function walkProcessEnvironment(
+  task: string,
+  index: number,
+  env: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE') merged[name] = value;
+  }
+  return { ...merged, ...walkStackEnvironment(task, index) };
+}
+
 /**
  * Waits for one of the host's walk slots. The queue is the stack-lease FIFO, in the walk directory with the walk
  * capacity, so developers' stacks and check slots are not counted here.
@@ -98,7 +178,7 @@ export function admitWalkStack(
   root: string,
   signal?: AbortSignal,
 ): Promise<StackSlot> {
-  walkStackNames(task);
+  walkStackNames(task, 1);
   return acquireStackSlot(
     `walk ${task}`,
     { REZICS_STACK_LEASE_DIR: walkStackDirectory(root, env), REZICS_STACK_SLOTS: String(walkStackLimit(env)) },
@@ -106,6 +186,6 @@ export function admitWalkStack(
     undefined,
     POSITION_INTERVAL_MS,
     signal,
-    (index) => walkStackPortsAvailable(walkStackPorts(index)),
+    (index) => walkPortsAvailable(Object.values(walkStackPorts(index))),
   );
 }

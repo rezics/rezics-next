@@ -1,4 +1,11 @@
 import { DEFAULT_INBOX_SELECTION, type InboxPage, type InboxSelection, type ResolvedInboxPage } from './inbox-read';
+import { composeInboxWork, MAX_INBOX_PRIOR_ADDRESSES } from './inbox-work';
+export {
+  composeInboxWork,
+  INBOX_CONTENT_DISCLOSURE_EVIDENCE,
+  MAX_INBOX_CURSOR_LENGTH,
+  MAX_INBOX_PRIOR_ADDRESSES,
+} from './inbox-work';
 
 /** Local to the mounted viewer owner; cursors are native opaque values bound to one selection. */
 export type InboxPagination = {
@@ -20,9 +27,6 @@ export type InboxPageAddress = Readonly<{
   cursor: string | undefined;
   episode: number;
 }>;
-
-export const MAX_INBOX_PRIOR_ADDRESSES = 8;
-export const MAX_INBOX_CURSOR_LENGTH = 4096;
 
 export const emptyInboxPagination: InboxPagination = {
   selection: DEFAULT_INBOX_SELECTION,
@@ -127,6 +131,24 @@ export function receiveInboxPage(
 /** Keep native order and distinct notices, but let a fresh identical ID replace all cached details. */
 export function readableInboxPage(state: InboxPagination): ResolvedInboxPage | null {
   return state.current ?? state.earlier;
+}
+
+/** Command and read engine work for the retained window; nested disclosure cost stays with Content. */
+export function inboxPaginationWork(
+  state: InboxPagination,
+  input: { listRequests: number; countRequests: number; commandRequests?: number; visits: number },
+) {
+  const page = readableInboxPage(state);
+  return composeInboxWork({
+    listRequests: input.listRequests,
+    countRequests: input.countRequests,
+    commandRequests: input.commandRequests ?? 0,
+    hydrationRequests: 0,
+    retainedRows: page?.items.length ?? 0,
+    priorAddresses: state.history.length,
+    cursors: [...state.history.map((address) => address.cursor), state.cursor],
+    visits: input.visits,
+  });
 }
 
 /** Confirm only notices held by the deliberate attempt; a fresh current read always wins. */

@@ -485,3 +485,28 @@ test('operator fencing delegates fanout to a committed continuation and resumes 
   }).toEqual(completed);
   beforeRevoke = undefined;
 }, 30000);
+
+// The installed native host shares its database with copy custody. Exercise
+// that lane as well as the historical separate-system-store restart above.
+test('native copy registrations publish pending events across close/relaunch and concurrent callers', async () => {
+  await workflows.close();
+  for (let cycle = 0; cycle < 3; cycle++) {
+    workflows = createAccountWorkflows({ ...options, systemDatabaseUrl: fixture.url });
+    await Promise.all([workflows.start(), workflows.start()]);
+    const opened = await Promise.all(
+      [0, 1].map((index) =>
+        workflows.beginRegistration({
+          key: `native-relaunch-${cycle}-${index}`,
+          handle: `Native_Relaunch_${cycle}_${index}`,
+        }),
+      ),
+    );
+    expect(new Set(opened.map((row) => row.accountId)).size).toBe(2);
+    const rows = await pool.query('SELECT status FROM auth_dbos.workflow_status WHERE workflow_uuid=ANY($1::text[])', [
+      opened.map((row) => row.workflowId),
+    ]);
+    expect(rows.rows).toHaveLength(2);
+    expect(rows.rows.every((row) => row.status === 'PENDING')).toBe(true);
+    await workflows.close();
+  }
+}, 120_000);

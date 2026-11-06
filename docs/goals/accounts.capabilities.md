@@ -31,7 +31,26 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Native acceptance:** `sh -c 'bun run --cwd services/auth check test/workflows.test.ts && bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/session-revocation.test.ts test/access/suspension.test.ts test/access/suspended-sign-in.test.ts test/access/suspended-bearer.test.ts'`.
 
-**Worker focused evidence:** At head `7275db3bd2`, `bun test apps/auth/tests/recovery.test.ts` passed 21/21, `bun test apps/auth/tests/step-up.test.ts` passed 3/3, and `bun run --cwd apps/auth typecheck` reported no type errors in 228 files. At head `79815141d3`, `bun test apps/auth/tests/login.test.ts` passed 4/4 and `bun test apps/auth/tests/signup.test.ts` passed 8/8; Auth source and those test files are unchanged at `7275db3bd2`. Seeded persona acceptance and the full browser/native walk remain deferred to the verifier.
+**Evidence limits:** Installed `apps/auth/tests/login.test.ts`, `signup.test.ts`, `recovery.test.ts` and
+`step-up.test.ts` exercise mounted pages against fixture issuer HTTP responses. Web's
+`apps/web/tests/session.test.ts` covers callback, renewal and sign-out against a fixture OpenID provider.
+These separate fixtures do not establish one persisted native registration-to-Home journey, deployed challenge
+or recovery delivery, native browser passkey qualification, or desktop/phone evidence of that integrated journey.
+`createAuthDeployment` now binds the native host, required delivery/challenge ports, installed callback destinations
+and page configuration. `services/auth/test/auth-page-operation-client.test.ts` covers its startup and persisted
+client receiving; `website-client.test.ts` covers persisted destinations and refuses the retired callback. These
+native checks still do not qualify the controller-held seeded/browser deployment.
+A prior supported run passed native same-database concurrent registrations across three close/relaunch
+cycles. The latest combined run passed installed login receiving, startup client locking, persisted deployment
+bindings, website consent renewal and the mounted website-scope/media configuration cases. Auth Pages, Auth
+service and Kernel workspace typechecks passed. The fresh-stack browser case could not launch because neither
+supported task executable was installed. Native erasure setup timed out, and subsequent workflow setup found
+an existing process-wide DBOS owner, so that run did not repeat the registration lifecycle coverage.
+Historical separate-system-store registration failures remain unqualified; these results do not establish
+an integrated registration-to-Home completion.
+The subsequent internal service-factory move passed the architecture check against its landing base. Two
+supported remote submissions lost their connection during Auth service typing. Only Auth Pages typing
+completed on that revision; service typing and focused native tests have no completed result after the move.
 
 ## credential-session-consent
 
@@ -45,8 +64,16 @@ Human retirement retains a password or passkey; reviewed consent writes refuse c
 **Native acceptance:** `bun run --cwd services/kernel check test/access/credential-effect-outcome.test.ts test/access/credential-effect-outcome-security.test.ts test/access/auth-session-capability.test.ts test/access/auth-credential-capability.test.ts test/access/auth-consent.test.ts`.
 The Security adapter uses `createAuthHost`, issued clients, migrated isolated Auth/Kernel databases and the production
 Kernel HTTP handler. It inspects persisted credentials, sessions and consent and exercises real bearer outcomes.
-Native evidence does not establish seeded mounted journey acceptance; those journeys remain held for infrastructure
-recovery. Auth response and page transport suites pin fixed RP receiving, exact acknowledgements and unknown sends.
+Auth response and page transport suites pin fixed RP receiving, exact acknowledgements and unknown sends.
+Mounted `apps/auth/tests/security.test.ts`, `password-change-page.test.tsx` and `passkey-enrollment.test.ts`
+exercise separate page fixtures. They do not connect a real browser review to the native persisted readback,
+prove current-session replacement across Auth and Web, or supply desktop/phone evidence of that integrated cycle.
+Deployment uses the same native catalogue for Security/session/client/consent bounds and the website ceiling;
+installed password, passkey, session and consent command identities retain their existing native/page owners.
+The latest supported run passed suspension, suspended sign-in, defensive bearer, consent and ordinary website
+consent renewal cases. Session and credential capability fixtures stopped at `KERNEL_RECEIPT_KEYS is required`;
+they do not establish Security
+review/readback or credential effects. Seeded browser and promoted desktop/phone evidence remain open.
 
 ## permission-formula
 

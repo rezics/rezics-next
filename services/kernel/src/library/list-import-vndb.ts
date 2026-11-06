@@ -26,7 +26,12 @@ import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from '
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
+import {
+  createSessionCommands,
+  ProgressConflictError,
+  ProgressInvalidError,
+  type ProgressSessionJournalAdmission,
+} from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
@@ -67,6 +72,7 @@ import {
   appendListImportMetadataReview,
   assertListImportMetadataReviewAvailable,
   createListImportMetadataCoordinator,
+  type ListImportMetadataExpiredRecovery,
 } from './list-import-metadata-coordinator.ts';
 import {
   confirmListImportMetadata,
@@ -222,7 +228,7 @@ function nativeQuestionView(question: RatingQuestion): NativeQuestion {
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning,
+    meaning: question.meaning ?? question.label,
     label: question.label,
     grain: question.grain,
     scale: { min: question.minimumUnits, max: question.maximumUnits, step: question.stepUnits },
@@ -1046,8 +1052,15 @@ export function createVndbImport(config: Config) {
     actor: Actor,
     identity: VndbDateAdmissionIdentity,
   ): Promise<ProgressSessionJournalAdmission> {
+    let prepared:
+      | { matching: Awaited<ReturnType<typeof match>>; target: Awaited<ReturnType<typeof current>> }
+      | undefined;
     return {
       identity,
+      async prepare() {
+        const stored = await retainedRow(actor, identity.uploadId, identity.ordinal, true);
+        prepared = { matching: stored.matching, target: stored.target };
+      },
       assert: async (tx) => {
         const account = owner(actor),
           route = requireRoute(account.accountId),
@@ -1074,9 +1087,10 @@ export function createVndbImport(config: Config) {
           throw new LibraryConflictError();
         if (account.clientId !== identity.clientId || (account.requestedBy ?? null) !== identity.requestedBy)
           throw new LibraryConflictError();
-        const matching = await match(actor, row),
-          target = await current(actor, identity.subjectId);
+        const matching = prepared?.matching,
+          target = prepared?.target;
         if (
+          !matching ||
           entryImportMetadataDigest(matching) !== identity.matchFingerprint ||
           !target ||
           target.source !== decision.guard?.source ||
@@ -1372,7 +1386,14 @@ export function createVndbImport(config: Config) {
                   error instanceof LibraryNotFoundError ||
                   (error instanceof ProblemError &&
                     ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
-                rethrowError: (error) => error instanceof GrantDeniedError,
+                rethrowError: (error) =>
+                  !(
+                    error instanceof ProblemError ||
+                    error instanceof ProgressInvalidError ||
+                    error instanceof ProgressConflictError ||
+                    error instanceof LibraryConflictError ||
+                    error instanceof LibraryNotFoundError
+                  ),
               },
             );
           return (
@@ -1472,6 +1493,75 @@ export function createVndbImport(config: Config) {
     };
   }
 
+  async function metadataReceipt(
+    { actor, id, ordinal }: { actor: Actor; id: string; ordinal: number },
+    recovery: ListImportMetadataExpiredRecovery & {
+      confirmation: NonNullable<ListImportMetadataExpiredRecovery['confirmation']>;
+    },
+    phase: 'annotation' | 'provenance',
+    expiredOnly: boolean,
+  ) {
+    const account = owner(actor),
+      confirmation = recovery.confirmation,
+      annotation = phase === 'annotation',
+      key = annotation ? confirmation.annotationKey : confirmation.provenanceKey,
+      digest = annotation ? confirmation.annotationReceiptDigest : confirmation.provenanceReceiptDigest,
+      started = annotation ? confirmation.annotationStarted : confirmation.provenanceStarted,
+      kind = annotation
+        ? 'library.entry.annotations.put'
+        : confirmation.provenanceKind === 'admit'
+          ? 'library.entry.source-observation.admit'
+          : 'library.entry.source-observation.correct';
+    if (!started || !digest) return false;
+    const receipt = await personalEntries.readCommandReceipt(actor, {
+      kind,
+      requestKey: key,
+      digest,
+      async authorize(tx) {
+        const linked = await tx.query(
+          `SELECT 1 FROM library.vndb_import u
+           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(u.decisions->$4::text->'metadata','[]'::jsonb)) m
+           WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3
+             AND u.decisions->$4::text->>'reviewId'=$6
+             AND m->>'token'=$5 AND m->>'sourceReviewToken'=$6
+             AND m->>'subjectId'=$7 AND m->>'clientId'=$8
+             AND m->>'requestedBy' IS NOT DISTINCT FROM $9::text
+             AND m->'confirmation'->>$10='true'
+             AND m->'confirmation'->>$11=$12
+             AND m->'confirmation'->>$13=$14
+             AND m->'confirmation'->>'selectionDigest'=$15
+             AND ($16::text IS NULL OR m->'confirmation'->>'provenanceKind'=$16)
+             AND ${
+               expiredOnly
+                 ? "u.expires_at<=clock_timestamp() AND u.expires_at+interval '24 hours'>clock_timestamp()"
+                 : "(u.expires_at>clock_timestamp() OR u.expires_at+interval '24 hours'>clock_timestamp())"
+             }
+           FOR UPDATE OF u`,
+          [
+            requireRoute(account.accountId),
+            account.accountId,
+            id,
+            String(ordinal),
+            recovery.token,
+            recovery.sourceReviewToken,
+            recovery.subjectId,
+            account.clientId,
+            account.requestedBy ?? null,
+            annotation ? 'annotationStarted' : 'provenanceStarted',
+            annotation ? 'annotationKey' : 'provenanceKey',
+            key,
+            annotation ? 'annotationReceiptDigest' : 'provenanceReceiptDigest',
+            digest,
+            confirmation.selectionDigest,
+            annotation ? null : (confirmation.provenanceKind ?? null),
+          ],
+        );
+        if (!linked.rowCount) throw new LibraryNotFoundError();
+      },
+    });
+    return receipt !== null;
+  }
+
   const metadataCoordinator = createListImportMetadataCoordinator({
     provider: 'vndb',
     nativeAdmission: 'vndb-source-v1',
@@ -1529,9 +1619,75 @@ export function createVndbImport(config: Config) {
       });
     },
     async loadReview({ actor, id, ordinal }, reviewToken, reconcile) {
-      const upload = await load(actor, id, reconcile),
-        decision = upload.decisions[ordinal];
-      return decision?.metadata?.find((item) => item.token === reviewToken) ?? null;
+      const upload = await load(actor, id, reconcile);
+      if (upload.expires_at.getTime() <= Date.now()) throw new LibraryNotFoundError();
+      return upload.decisions[ordinal]?.metadata?.find((item) => item.token === reviewToken) ?? null;
+    },
+    async loadExpiredRecovery({ actor, id, ordinal }, reviewToken) {
+      const account = owner(actor);
+      await authorized(actor);
+      const found = await withReadTransaction(pool, (client) =>
+        client.query<{ recovery: ListImportMetadataExpiredRecovery | null }>(
+          `SELECT (
+             SELECT jsonb_build_object(
+               'token', m->>'token', 'sourceReviewToken', m->>'sourceReviewToken',
+               'subjectId', m->>'subjectId', 'clientId', m->>'clientId',
+               'requestedBy', m->'requestedBy',
+               'confirmation', CASE WHEN m ? 'confirmation' THEN jsonb_build_object(
+                 'fields', m->'confirmation'->'fields',
+                 'selectionDigest', m->'confirmation'->'selectionDigest',
+                 'annotationKey', m->'confirmation'->'annotationKey',
+                 'provenanceKey', m->'confirmation'->'provenanceKey',
+                 'annotationStarted', m->'confirmation'->'annotationStarted',
+                 'provenanceStarted', m->'confirmation'->'provenanceStarted',
+                 'annotationStatus', m->'confirmation'->'annotationStatus',
+                 'provenanceStatus', m->'confirmation'->'provenanceStatus',
+                 'annotationReceiptDigest', m->'confirmation'->'annotationReceiptDigest',
+                 'provenanceReceiptDigest', m->'confirmation'->'provenanceReceiptDigest',
+                 'provenanceKind', m->'confirmation'->'provenanceKind',
+                 'fieldOutcomes', m->'confirmation'->'fieldOutcomes',
+                 'outcome', CASE WHEN m->'confirmation' ? 'outcome' THEN jsonb_build_object(
+                   'reviewToken', m->'confirmation'->'outcome'->'reviewToken',
+                   'fields', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                     'field', f->'field', 'status', f->'status'
+                   ) ORDER BY f->>'field') FROM jsonb_array_elements(m->'confirmation'->'outcome'->'fields') f), '[]'::jsonb)
+                 ) END
+               ) END
+             )
+             FROM jsonb_array_elements(COALESCE(u.decisions->$4::text->'metadata','[]'::jsonb)) m
+             WHERE m->>'token'=$5 AND m->>'sourceReviewToken'=u.decisions->$4::text->>'reviewId'
+               AND m->>'clientId'=$6
+               AND m->>'requestedBy' IS NOT DISTINCT FROM $7::text
+           ) AS recovery
+           FROM library.vndb_import u
+           WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3
+             AND u.expires_at<=clock_timestamp()
+             AND u.expires_at+interval '24 hours'>clock_timestamp()`,
+          [
+            requireRoute(account.accountId),
+            account.accountId,
+            id,
+            String(ordinal),
+            reviewToken,
+            account.clientId,
+            account.requestedBy ?? null,
+          ],
+        ),
+      );
+      await authorized(actor);
+      return found.rows[0]?.recovery ?? null;
+    },
+    async recoverReceipt({ actor, id, ordinal }, recovery, phase) {
+      return metadataReceipt({ actor, id, ordinal }, recovery, phase, true);
+    },
+    async readReceipt({ actor, id, ordinal }, review, phase) {
+      if (!review.confirmation) return false;
+      return metadataReceipt(
+        { actor, id, ordinal },
+        review as typeof review & { confirmation: NonNullable<typeof review.confirmation> },
+        phase,
+        false,
+      );
     },
     async readView({ actor, id, ordinal, reconcile }, reviewToken) {
       const upload = await load(actor, id, reconcile),
@@ -1733,7 +1889,7 @@ export function createVndbImport(config: Config) {
         status = 'skipped';
       } else {
         const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
-        await mutation(
+        const started = await mutation(
           actor,
           'apply-entry-start',
           startKey,
@@ -1752,9 +1908,11 @@ export function createVndbImport(config: Config) {
             )
               throw new LibraryConflictError();
             await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+            return { ordinal: choice.ordinal, reviewId: choice.reviewId };
           },
         );
         decision = { ...decision, status: 'applying' };
+        record(started);
         try {
           const result = await entries.putEntry(
             actor,
@@ -1768,6 +1926,12 @@ export function createVndbImport(config: Config) {
             decision.commandKey,
             decision.guard!,
           );
+          decision.receipt = {
+            partition: result.partition,
+            epoch: result.epoch,
+            position: result.position.toString(),
+            transactionId: result.transactionId,
+          };
           record(result);
           status = 'applied';
         } catch (error) {
@@ -1797,6 +1961,12 @@ export function createVndbImport(config: Config) {
           decision.commandKey,
           decision.guard!,
         );
+        decision.receipt = {
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position.toString(),
+          transactionId: result.transactionId,
+        };
         record(result);
         status = 'applied';
       } catch (error) {
@@ -1999,8 +2169,7 @@ export function createVndbImport(config: Config) {
           if (
             !stored?.active ||
             stored.decision.score?.reviewId !== score.reviewId ||
-            entryImportMetadataDigest(stored.row) !== score.sourceDigest ||
-            entryImportMetadataDigest(stored.decision.score) !== entryImportMetadataDigest(score)
+            entryImportMetadataDigest(stored.row) !== score.sourceDigest
           )
             throw new LibraryConflictError();
         };
@@ -2009,22 +2178,59 @@ export function createVndbImport(config: Config) {
   }
 
   function scoreCommandInput(score: ScoreDecision): PreparedPutVote['input'] {
+    const identity = score.nativeGuard.subject.identity;
     return {
       questionId: score.question.id,
       targetId: score.targetId,
-      units: score.units,
-      guard: score.nativeGuard,
+      units: score.units === null ? null : Number(score.units),
+      guard: {
+        version: 1,
+        question: {
+          revision: Number(score.nativeGuard.question.revision),
+          lifecycleRevision: Number(score.nativeGuard.question.lifecycleRevision),
+        },
+        subject: {
+          canonicalId: score.nativeGuard.subject.canonicalId,
+          epochs: score.nativeGuard.subject.epochs.map((entry) => ({
+            partition: Number(entry.partition),
+            epoch: String(entry.epoch),
+          })),
+          ...(identity === undefined
+            ? {}
+            : {
+                identity: {
+                  version: 1,
+                  requestedOriginalId: identity.requestedOriginalId,
+                  canonicalTerminalId: identity.canonicalTerminalId,
+                  sourceIdentities: [...identity.sourceIdentities],
+                  sourceHomes: identity.sourceHomes.map((home) => Number(home)),
+                  controlLocators: identity.controlLocators.map((locator) => ({
+                    partition: Number(locator.partition),
+                    group: locator.group,
+                  })),
+                  evidence: identity.evidence,
+                },
+              }),
+        },
+        ownVote: {
+          state: score.nativeGuard.ownVote.state,
+          observation:
+            typeof score.nativeGuard.ownVote.observation === 'string'
+              ? score.nativeGuard.ownVote.observation
+              : JSON.stringify(score.nativeGuard.ownVote.observation),
+        },
+      },
       observation: {
         subjectId: score.nativeGuard.subject.canonicalId,
         question: {
           id: score.question.id,
-          revision: score.question.revision,
+          revision: Number(score.question.revision),
           grain: score.question.grain,
-          meaning: score.question.meaning!,
+          meaning: score.question.meaning ?? score.question.label,
           scale: {
-            min: score.question.scale.min,
-            max: score.question.scale.max,
-            displayStep: score.question.scale.step,
+            min: Number(score.question.scale.min),
+            max: Number(score.question.scale.max),
+            displayStep: Number(score.question.scale.step),
           },
         },
       },

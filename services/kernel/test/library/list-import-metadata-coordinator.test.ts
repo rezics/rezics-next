@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { entryImportMetadataDigest } from '../../src/library/list-import-entry-metadata.ts';
 import type {
   EntryImportMetadataConfirmation,
   EntryImportMetadataReview,
@@ -10,6 +11,15 @@ import {
 } from '../../src/library/list-import-metadata-coordinator.ts';
 
 const fields = [{ field: 'note' as const, action: 'adopt' as const }];
+
+test('retained review digests survive JSONB property ordering and preserve changed operands', () => {
+  const decoded = { pin: { provenance: 'profile', release: 'first' }, fields: ['note', 'priority'] };
+  const stored = { fields: ['note', 'priority'], pin: { release: 'first', provenance: 'profile' } };
+  expect(entryImportMetadataDigest(decoded)).toBe(entryImportMetadataDigest(stored));
+  expect(entryImportMetadataDigest(decoded)).not.toBe(
+    entryImportMetadataDigest({ ...stored, fields: ['priority', 'note'] }),
+  );
+});
 
 function confirmation(): EntryImportMetadataConfirmation {
   return {
@@ -104,6 +114,15 @@ for (const status of ['applied', 'stale', 'unsupported'] as const) {
       }),
     ).toThrow();
     expect(mergeListImportMetadataConfirmation(pending, terminal)).toEqual(terminal);
+    // JSONB reorders object keys at every checkpoint; that must preserve the sealed native operand.
+    const stored = JSON.parse(
+      JSON.stringify(terminal, (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)))
+          : value,
+      ),
+    );
+    expect(mergeListImportMetadataConfirmation(stored, pending)).toEqual(terminal);
   });
 }
 

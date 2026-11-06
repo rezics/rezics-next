@@ -71,52 +71,12 @@ async function eventually<T>(read: () => Promise<T>, accepts: (value: T) => bool
 // addEffects/addService calls in composeWork, forwarding every original effect and starter unchanged.
 const workerProgram = `
   import { startWorker, readWorkerConfig } from './src/worker.ts';
-  import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
-  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/composition/work-modules.ts';
-    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
-    );
   import { createOutcomeRpc } from './test/search/support/outcome-rpc.ts';
   import { createSearchRunnerSlot } from './test/search/support/runner-slot.ts';
   const slot = createSearchRunnerSlot();
   const registered = [];
   const replay = new Map();
   let worker, starting;
-  const modules = KERNEL_WORK_MODULES.map(module => ({
-    name: module.name,
-    async register(context) {
-      const observed = { name: module.name, effects: [] };
-      registered.push(observed);
-      await module.register({ ...context,
-        addEffects(actual) {
-          observed.effects.push(...actual.map(effect => ({ name: effect.name, types: effect.types })));
-          context.addEffects(actual.map(effect => module.name !== 'search' ? effect : {
-            ...effect,
-            async run(event) {
-              const effects = replay.get(event.data.accountId) ?? new Map();
-              effects.set(effect.name, { effect, event });
-              replay.set(event.data.accountId, effects);
-              return effect.run(event);
-            }
-          }));
-        },
-        addService(original) {
-          context.addService(async () => {
-            const service = await original();
-            return module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function'
-              ? slot.adopt(service, original)
-              : service;
-          });
-        }
-      });
-      if (module === KERNEL_WORK_MODULES.at(-1))
-        await rpc.request('registered', { defaults: KERNEL_WORK_MODULES.map(m => m.name), registered });
-    }
-  }));
   const close = async () => {
     await starting?.catch(() => {});
     if (worker) await worker.stop();
@@ -132,7 +92,37 @@ const workerProgram = `
     }
   }, { timeoutMs: ${workerControlMs}, async onRequest(method, params) {
     if (method === 'init') {
-      starting = startWorker(readWorkerConfig(params), modules, params);
+      starting = startWorker(readWorkerConfig(params), (defaults) => defaults.map(module => ({
+        name: module.name,
+        async register(context) {
+          const observed = { name: module.name, effects: [] };
+          registered.push(observed);
+          await module.register({ ...context,
+            addEffects(actual) {
+              observed.effects.push(...actual.map(effect => ({ name: effect.name, types: effect.types })));
+              context.addEffects(actual.map(effect => module.name !== 'search' ? effect : {
+                ...effect,
+                async run(event) {
+                  const effects = replay.get(event.data.accountId) ?? new Map();
+                  effects.set(effect.name, { effect, event });
+                  replay.set(event.data.accountId, effects);
+                  return effect.run(event);
+                }
+              }));
+            },
+            addService(original) {
+              context.addService(async () => {
+                const service = await original();
+                return module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function'
+                  ? slot.adopt(service, original)
+                  : service;
+              });
+            }
+          });
+          if (module === defaults.at(-1))
+            await rpc.request('registered', { defaults: defaults.map(m => m.name), registered });
+        }
+      })), params);
       worker = await starting;
       return registered;
     }

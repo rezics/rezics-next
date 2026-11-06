@@ -330,6 +330,18 @@ outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and 
 
 **User job:** operate documented OpenSearch/ICU analysis and observe converged public HTTP after real source events,
 outage/recovery and safe rebuild. **Personas:** operator, editor/acceptor and all common read personas.
+Decision: retained-stack multilingual acceptance reuses its existing source identities, node volume and native
+publication lifecycle. Isolated analyzer checks and unavailable page walks supply no positive journey evidence.
+Walk stacks prove that journey: checks stay on hosts a/b, while `dev-stack.ts walk` stays on the worker host so
+`GOAL_ACCEPTANCE_REQUIRES` is not stripped. The worktree docker wrapper omits `--cgroup-parent` for walk containers.
+Readiness probes TCP before a remaining-window first-compile fetch. Walk `start` stays up until SIGTERM and restarts
+children, so a host registration timeout or worker database blip cannot tear down a ready Web.
+Retry-After waits preserve identical server and initial hydration markup even when the deadline expires in transit;
+the mounted clock enables manual retry without dispatching a request.
+Decision: this increment's accepted cells are native CJK title/alias projection with locale-independent alias
+languages, review-producer readiness omission, Web alias-locale fallback and Retry-After hydration, and walk
+slot/cgroup/first-compile regressions. Walk regressions assert `walkStackNames(task, slot)` container names. Stack-run fixtures emit the current probe fields, including `DISK_FREE` and `MEMORY_RECLAIMABLE`. The seeded multilingual native/API/browser matrix stays unaccepted: local Web
+never listened on 20010 within 20 minutes. Shared host placement/headroom remains with the supermanager.
 **Released fixtures:** original Chinese/Kana/Latin cases, real Semantic source keys/routeKey, source chunks256 EACH
 including tails, exact source snapshot versions, checkpoints and actual physical indices.
 
@@ -354,7 +366,7 @@ These native seams are retained, without claiming complete runtime closure.
 **Native wrapper/command:** original Search/relation wrappers use
 [outcome-driver](../../services/kernel/test/search/outcome-driver.ts)→[driver client](../../services/kernel/test/search/support/driver-client.ts)
 →[supervisor](../../services/kernel/test/search/support/outcome-supervisor.ts)→[worker child](../../services/kernel/test/search/support/outcome-worker.ts).
-Worker invokes startWorker with decorated full KERNEL_WORK_MODULES, original registrations and observed real starters;
+Worker invokes startWorker with a decorator of the live `createKernelWorkModules` list (Content ambient included), original registrations and observed real starters;
 pause/resume captures only Search, rebuild uses real rebuildSubjects/subjectSource and runner refresh. Current
 source has progressed beyond [harness README](../../services/kernel/test/search/README.md)'s older captured-starter
 status; neither source nor that stale status supplies a native pass.

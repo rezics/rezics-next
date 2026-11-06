@@ -46,13 +46,7 @@ export async function classifyDiscoveryMetadataProducers(producers: DiscoveryMet
   return { availableKinds, omittedKinds, witnesses };
 }
 
-/** Preserve the native witness verbatim; neither a position nor adapter installation is an epoch. */
+/** Ready witnesses only. A preparing or unavailable producer is omitted, including when its adapter is installed. */
 export async function discoveryCapabilityWitnesses(producers: DiscoveryMetadataProducers) {
-  const classification = await classifyDiscoveryMetadataProducers(producers);
-  const unavailable = classification.omittedKinds
-    .filter(({ kind }) => producers[kind] !== undefined)
-    .map(({ kind }) => kind);
-  if (unavailable.length)
-    throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: unavailable, duplicateKinds: [] });
-  return classification.witnesses;
+  return (await classifyDiscoveryMetadataProducers(producers)).witnesses;
 }

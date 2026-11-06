@@ -108,6 +108,7 @@ test('reopening reads retained decisions without another upload or mutation and 
     baseline: null,
     replace: false,
     action: 'state',
+    progress: null,
   };
   const { journey, calls } = setup([completed, authoredRow(1)]);
   const snap = await journey.reopen(address);
@@ -129,6 +130,7 @@ test('a reopened in-flight decision reconciles the original review and freezes a
     baseline: null,
     replace: true,
     action: 'state',
+    progress: null,
   };
   const attempts: VndbCommand[] = [];
   const { journey } = setup([source], {
@@ -234,6 +236,7 @@ test('review keeps an explicit unmatched target selectable only while native rea
     baseline: null,
     replace: false,
     action: 'state',
+    progress: null,
   };
   source.target = { targetId, states: [{ id: 'playing', labels: { en: 'Playing' } }], baseline: null };
   const render = () =>
@@ -267,6 +270,7 @@ test('an explicit match refreshes the native target and vote without replacing t
     baseline: null,
     replace: false,
     action: 'state' as const,
+    progress: null,
   };
   const commands: VndbCommand[] = [];
   const { journey, page } = setup([source], {

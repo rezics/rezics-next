@@ -181,7 +181,11 @@ test('the default kernel composition declares every mounted write and installs t
     return !['GET', 'HEAD', 'OPTIONS'].includes(route.method) && !readOnly;
   });
   expect(writes.length).toBeGreaterThan(0);
-  for (const route of writes) expect(route.hooks?.detail).toHaveProperty('x-rate-limit');
+  expect(
+    writes
+      .filter((route) => !Object.hasOwn((route.hooks?.detail as object | undefined) ?? {}, 'x-rate-limit'))
+      .map((route) => `${route.method} ${route.path}`),
+  ).toEqual([]);
   // A body-valid anonymous definition write reaches shared capacity before its handler.
   const fixture = createApp({ pool, ratePeer: () => '192.0.2.1' }).post(
     '/write',
@@ -260,7 +264,14 @@ test('createKernel subject:read POST custom search authorizes without a write ch
   expect(searches).toEqual([]);
   const response = await send({ text: 'book' });
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual(result);
+  expect(await response.json()).toEqual({
+    ...result,
+    emptyRecovery: {
+      status: 'unavailable',
+      actions: [{ kind: 'edit-query' }],
+      alternatives: [],
+    },
+  });
   expect(actions).toEqual(['subject:read']);
   expect(searches).toEqual([['anonymous', { text: 'book' }]]);
   expect(spends).toBe(0);

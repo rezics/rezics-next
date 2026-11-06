@@ -10,6 +10,17 @@ through the generated VNDB preview method, seals the exact body and idempotency 
 and returns the actual native upload UUID and row count. The existing review/apply API composes each native owner;
 no second importer or Library vote writer is introduced.
 
+Decision: explicit importer review and confirmation use stable intent IDs in the common private journal. Reopening
+replays the original upload address, review body/key and selected state/Progress or score review IDs under the same
+account, client, credential and origin. A changed form cannot replace pending operands. A deadline leaves the original
+selection resumable; an acknowledgement describes command outcomes only. A separate fresh eight-row FULL Library
+read supplies actual current Entry, Progress and counted-vote values. The development persona requests the existing
+Library, Progress and vote scopes for these explicit choices; source scores never confer consent.
+
+Native review digests sort object properties recursively, preserving array order, so JSONB storage cannot change
+the identity of reviewed operands. State dispatch records its start checkpoint before sending the native command;
+an interrupted acknowledgement throws and leaves the original intent available for receipt reconciliation.
+
 Decision: the mounted Web caller carries state, explicit minute occurrences and deliberate native vote units
 through the same retained review/apply commands. Native units zero and clear stay distinct. The official client uses
 a typed compatibility binding for these already mounted additions until whole-Kernel declaration emission succeeds;
@@ -137,6 +148,8 @@ Apply uses Content’s `preparePutVote` to retain the normalized body and receip
 actor credential before dispatch. The existing native vote writer receives that frozen body, guard, observation
 and key, plus the source owner’s admission. Source operands join the native receipt digest;
 fresh execution checks the locked retained row, review, lifetime and cancellation after native receipt lookup.
+The prepared vote envelope is not that source witness. Apply rebuilds the closed Semantic identity operand from the
+retained guard so PostgreSQL JSONB key order and numeric coercions cannot fail `participant.prepare`.
 Known source or native witness changes return stale. An unexpected error propagates while preserving the original
 dispatch for exact retry. Current authorization precedes receipt disclosure. Cancellation or expiry permits only
 reconciliation of a pending original command; no later action starts. Success reads current own state through
@@ -296,3 +309,17 @@ their indexes/fences, retained receipt work and export cleanup/background partic
 remain separate from growth in unrelated owners/history. The V4 exporter uses its existing indexed evidence pages;
 it does not reinterpret V1/V2/V3 or make V4 recoverable. Independent all-pool 64/512/4096 executed measurements,
 composed V4 fidelity/recovery refusal and terminal cases remain controller acceptance, not results of this derivation.
+
+Native source consent binds the canonical identity epoch, accepting type, profile release and owner epoch. A private review write advancing the partition position does not change that source. Entry command receipt positions are retained as decimal strings so retry evidence remains JSON serializable.
+
+The native date caller preserves its prepared intent when an unexpected dispatch or acknowledgement error throws. Only known native refusal/conflict results become terminal field outcomes; a retry reconciles the original receipt. Receiving fixtures include the generated Progress result even for a state-only decision, where its value is null.
+
+Date admission prepares current matching and profile evidence before the native journal transaction checks out its owner connection. The transaction still locks and validates the retained consent, source digest and exact occurrence binding before a fresh effect. Recovery may append private coordinator receipts and events; it must preserve native Entry and Progress facts.
+
+Label-adoption review and recovery checkpoints emit the same private import-change event as other retained-source commands. Date callers take their revision from the current journal read, independently of the Progress session revision. Native acceptance retains exact failed owner-read problem details rather than inferring applied status from import acknowledgements.
+
+The seeded caller sends an explicit Accept-Language preference (English by default) on its independent FULL Library read. Metadata checkpoint comparisons use canonical object-key ordering, preserving original annotation/provenance operands through PostgreSQL JSONB round trips while still rejecting changed values. Generated state-only review fixtures and stories carry a null Progress result.
+
+After a lost metadata acknowledgement, the retained VNDB review can reconcile only its original native annotation or provenance receipt after source expiry. Receipt lookup binds the owner, client, requested-by identity, row, source review, metadata review, selection, command key and digest under the retained upload lock. It cannot dispatch a fresh effect, recover retired matching consent or disclose the expired source page; deletion or pruning removes this linkage.
+
+Decision: focused importer, Kernel HTTP/coordinator and Web reopen/return tests pin preview, sealed review/apply, JSONB operand identity, Accept-Language, generated Progress and expired metadata-receipt recovery. Keep those existing assertions; apply rebuilds the closed vote-guard identity instead of adding tests. Remaining exact-self failures stay capability repairs.

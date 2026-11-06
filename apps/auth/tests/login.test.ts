@@ -308,6 +308,7 @@ test(
       try {
         const { address, secret, submit: button } = await form(page);
         const login = page.url();
+        const document = await page.locator('html').elementHandle();
         // The enabled button validates by field and prevents invalid requests for both click and Enter.
         for (const [addressValue, secretValue] of [
           ['', ''],
@@ -328,7 +329,14 @@ test(
           await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
           expect(signIns(), `no request with an empty field (${status})`).toEqual([]);
         }
+        expect(
+          await document!.evaluate((element) => element.isConnected),
+          'validation retains the mounted document',
+        ).toBe(true);
         await submit(page);
+        expect(await document!.evaluate((element) => element.isConnected), 'refusal retains the mounted document').toBe(
+          true,
+        );
         const alert = page.getByRole('alert');
         expect(page.url()).toBe(login);
         expect(signIns().length).toBe(1);

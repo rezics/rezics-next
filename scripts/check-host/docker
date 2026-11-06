@@ -30,6 +30,9 @@ case "$1" in
     shift
     if [ -n "${REZICS_CHECK_RUN:-}" ]; then set -- --label "rezics.check.run=$REZICS_CHECK_RUN" "$@"; fi
     if [ -n "${GOAL_TASK_ID:-}" ] && [ -n "${GOAL_ATTEMPT:-}" ]; then set -- --label "rezics.worker.attempt=$GOAL_TASK_ID/$GOAL_ATTEMPT" "$@"; fi
+    if [ -n "${REZICS_WALK_STACK_SLOT:-}" ]; then
+      exec docker "$verb" "$@"
+    fi
     exec docker "$verb" --cgroup-parent="${REZICS_CHECK_SLICE:-rezics-check.slice}" "$@"
     ;;
   container)
@@ -39,6 +42,9 @@ case "$1" in
         shift 2
         if [ -n "${REZICS_CHECK_RUN:-}" ]; then set -- --label "rezics.check.run=$REZICS_CHECK_RUN" "$@"; fi
         if [ -n "${GOAL_TASK_ID:-}" ] && [ -n "${GOAL_ATTEMPT:-}" ]; then set -- --label "rezics.worker.attempt=$GOAL_TASK_ID/$GOAL_ATTEMPT" "$@"; fi
+        if [ -n "${REZICS_WALK_STACK_SLOT:-}" ]; then
+          exec docker container "$verb" "$@"
+        fi
         exec docker container "$verb" --cgroup-parent="${REZICS_CHECK_SLICE:-rezics-check.slice}" "$@"
         ;;
     esac

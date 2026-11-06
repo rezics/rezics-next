@@ -3,7 +3,13 @@ import { createKernelClient } from '@rezics/client';
 import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
-import { readShowcasePersonalListExport, seedShowcasePersonalList } from '../src/showcase-personal-list.ts';
+import {
+  applyShowcasePersonalList,
+  readShowcasePersonalLibrary,
+  readShowcasePersonalListExport,
+  reviewShowcasePersonalList,
+  seedShowcasePersonalList,
+} from '../src/showcase-personal-list.ts';
 
 const identity = {
   origin: 'https://kernel.test',
@@ -166,6 +172,122 @@ test('private exports are bounded regular owner-only UTF-8 files; the native end
       await expect(readShowcasePersonalListExport(path)).rejects.toThrow();
     }
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('explicit review and confirmation keep original operands across reopen, partial responses and changed forms', async () => {
+  await mkdir(tempRoot, { recursive: true });
+  const directory = await mkdtemp(join(tempRoot, 'personal-list-commands-'));
+  const path = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(path);
+  const uploadId = '01900000-0000-4000-8000-000000000001';
+  const targetId = '01900000-0000-4000-8000-000000000002';
+  const reviewId = '01900000-0000-4000-8000-000000000003';
+  const scoreReviewId = '01900000-0000-4000-8000-000000000004';
+  const calls: { path: string; body: unknown; key: string | null; language: string | null }[] = [];
+  let reply = () => new Response(null, { status: 503 });
+  const client = createKernelClient(identity.origin, {
+    headers: { authorization: 'Bearer owner' },
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      calls.push({
+        path: new URL(request.url).pathname,
+        body: request.method === 'POST' ? await request.json() : null,
+        key: request.headers.get('idempotency-key'),
+        language: request.headers.get('accept-language'),
+      });
+      return reply();
+    }) as typeof fetch,
+  });
+  const review = (state: string) =>
+    reviewShowcasePersonalList({
+      client,
+      journal,
+      identity,
+      uploadId,
+      intentId: 'chosen-state',
+      body: { ordinal: 0, action: 'state', targetId, state, replace: false },
+    });
+  try {
+    expect((await review('playing')).state).toBe('unknown-delivery');
+    journal.close();
+    journal = new ShowcaseJournal(path);
+    const acknowledged = {
+      reviewId,
+      targetId,
+      state: 'playing',
+      status: 'reviewed' as const,
+      action: 'state' as const,
+      replace: false,
+      baseline: null,
+      progress: null,
+    };
+    reply = () => Response.json(acknowledged);
+    expect(await review('completed')).toEqual({ state: 'acknowledged', value: acknowledged });
+    expect(calls[1]).toEqual(calls[0]);
+    const selection = {
+      rows: [
+        { ordinal: 0, reviewId },
+        { ordinal: 1, scoreReviewId },
+      ],
+    };
+    const apply = (body = selection, current = identity) =>
+      applyShowcasePersonalList({
+        client,
+        journal,
+        identity: current,
+        uploadId,
+        intentId: 'confirmed-selection',
+        body,
+      });
+    const outcome = { ordinal: 0, reviewId, status: 'applied' };
+    // A stopped page acknowledges only its returned effects; it must leave the entire original selection retryable.
+    reply = () => Response.json({ uploadId, outcomes: [outcome], stopped: 'deadline' });
+    expect((await apply()).state).toBe('acknowledged');
+    expect(journal.action('personal-list:vndb:command:confirmed-selection')?.state).toBe('prepared');
+    reply = () => Response.json({ uploadId, outcomes: [outcome], stopped: null });
+    expect(await apply({ rows: [] })).toEqual({ state: 'unknown-delivery', code: 'apply-response-changed' });
+    expect(calls.at(-1)?.body).toEqual(selection);
+    const completed = {
+      uploadId,
+      outcomes: [outcome, { ordinal: 1, scoreReviewId, status: 'unavailable' }],
+      stopped: null,
+    };
+    reply = () => Response.json(completed);
+    expect(await apply()).toEqual({ state: 'acknowledged', value: completed });
+    expect(journal.action('personal-list:vndb:command:confirmed-selection')?.state).toBe('acknowledged');
+    const sent = calls.length;
+    expect(await apply(selection, { ...identity, actor: { ...identity.actor, accountId: 'other-person' } })).toEqual({
+      state: 'unavailable',
+      code: 'sealed-identity-changed',
+    });
+    expect(calls).toHaveLength(sent);
+    const current = {
+      libraryEntries: [
+        {
+          subjectId: targetId,
+          state: 'paused',
+          revision: 9,
+          createdAt: '2026-11-06T00:00:00.000Z',
+          updatedAt: '2026-11-06T00:00:00.000Z',
+        },
+      ],
+      next: null,
+    };
+    reply = () => Response.json(current);
+    expect(await readShowcasePersonalLibrary({ client })).toEqual({ state: 'current', value: current });
+    expect(calls.at(-1)?.path).toBe('/v1/libraryEntries');
+    expect(calls.at(-1)?.language).toBe('en');
+    expect(await readShowcasePersonalLibrary({ client, language: 'ja' })).toEqual({ state: 'current', value: current });
+    expect(calls.at(-1)?.language).toBe('ja');
+    reply = () => Response.json({ detail: 'private response must not enter a journal failure' }, { status: 403 });
+    expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
+    const denied = calls.length;
+    expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
+    expect(calls).toHaveLength(denied);
+  } finally {
+    journal.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

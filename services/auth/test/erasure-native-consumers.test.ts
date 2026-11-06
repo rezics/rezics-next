@@ -957,9 +957,9 @@ test('Retire exact Access authorization witnesses after genuine complete Auth co
   // and native consumers run. Restoring the query invokes the default publisher.
   const release = failNativeQueries(f.pool, (sql) => sql.includes('SELECT 1 FROM auth_copy_coverage'));
   const native = await import('../../kernel/src/access/erasure-native.ts');
-  const phase = native.NATIVE_ERASURE_GROUPS.findIndex(
-    ([store, role]) => store === 'workflow_approval' && role === 'actor_id',
-  );
+  const phase = native
+    .NATIVE_ERASURE_GROUPS()
+    .findIndex(([store, role]) => store === 'workflow_approval' && role === 'actor_id');
   let progressId = '';
   const until = Date.now() + 1_800_000;
   const advanceUntil = async (done: () => Promise<boolean>) => {
@@ -1056,7 +1056,7 @@ test('Retire exact Access authorization witnesses after genuine complete Auth co
       !!(
         await f.kernel.query(
           `SELECT 1 FROM access.erasure_native_progress WHERE progress_id=$1 AND phase=$2 AND retry_phase=$3`,
-          [progressId, native.NATIVE_ERASURE_GROUPS.length, phase],
+          [progressId, native.NATIVE_ERASURE_GROUPS().length, phase],
         )
       ).rowCount,
   );

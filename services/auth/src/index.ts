@@ -90,7 +90,7 @@ export {
 } from './membership-workflows.ts';
 import type { Pool } from 'pg';
 import type { RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
-import { buildAuthService } from './service.ts';
+export { createAuthService } from './service.ts';
 export { WEBSITE_CLIENT_ID } from './website.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
@@ -105,6 +105,8 @@ export type {
 } from './security-inventory.ts';
 export { createAuthHost, createAuthRestoreHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
+export { createAuthDeployment, authDeploymentConfiguration, websiteDeploymentScopes } from './deployment.ts';
+export type { AuthDeploymentOptions, AuthDeploymentConfiguration, AuthWebsiteDeployment } from './deployment.ts';
 export { createInternalConsentHandler } from './internal-consent.ts';
 export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
@@ -456,15 +458,4 @@ export interface AuthService {
       mode?: 'create-or-match';
     }): Promise<void>;
   };
-}
-
-export async function createAuthService(options: AuthServiceOptions): Promise<AuthService> {
-  return buildAuthService(
-    options.restoredGeneration
-      ? {
-          ...options,
-          restoredGeneration: { ...options.restoredGeneration, receiving: options.trustedAccess },
-        }
-      : options,
-  );
 }

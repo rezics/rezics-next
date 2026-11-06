@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
 import { readyInboxPage, type InboxPage, type InboxPageQuery, type ResolvedInboxPage } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { threadLocation } from '../threads/thread-href';
 import { AppShell } from '../shell/shell';
-import { PatternStory } from './page';
+import { PageStory, PatternStory } from './page';
 
 const meta = {
   title: 'Pages/Account/Inbox watch updates',
@@ -14,7 +15,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Illustrative local watch consumer states in the actual Inbox page and AppShell. Watch categories are presentation data; no native watch kind or DTO binding exists on this base. Root approves screenshots using the locale, theme and viewport globals.',
+          'Installed Inbox page with a recorded native thread_watch notice, withheld actor context and system moderation. Root approves screenshots using the locale, theme and viewport globals. Native, runtime and visual proof remain separate.',
       },
     },
   },
@@ -22,64 +23,79 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function items(): ResolvedInboxPage['items'] {
+const watchThread = '01a17a3b-0884-721b-91ef-d7ffd7bb58f1';
+const watchPost = '01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
+const watchHref = threadLocation(getLocale(), { id: watchThread, title: 'Reading together' }, undefined, watchPost);
+
+function InboxStory({ fixture }: { fixture: string }) {
+  return <PageStory visitor="Signed In" path={`/inbox?fixture=${fixture}`} />;
+}
+
+function withheldItems(): ResolvedInboxPage['items'] {
   const base = {
-    createdAt: '2026-11-03T10:00:00.000Z',
+    createdAt: '2026-11-04T10:00:00.000Z',
     unread: true,
-    actorId: 'member',
-    actorName: 'Momo',
-    threadId: 'thread',
-    postId: 'post',
+    actorId: null,
+    actor: {
+      state: 'withheld' as const,
+      displayName: 'Former or unavailable account' as const,
+      handle: null,
+      avatar: null,
+      avatarUrl: null,
+    },
+    threadId: null,
+    postId: null,
     decisionId: null,
     reportId: null,
-    unavailable: false,
-    text: 'A current discussion',
-    href: `/${getLocale()}/threads/thread?post=post#post-post`,
+    unavailable: true,
+    text: '',
   };
   return [
-    { ...base, id: 'thread-watch-example', kind: 'illustrative-watch', watch: 'thread' },
-    {
-      ...base,
-      id: 'board-watch-example',
-      kind: 'illustrative-watch',
-      watch: 'board',
-      text: 'A newly published discussion',
-      postId: null,
-      href: `/${getLocale()}/threads/new-thread`,
-    },
-    { ...base, id: 'reply-example', kind: 'reply' },
-    { ...base, id: 'mention-example', kind: 'mention', unread: false },
-    {
-      ...base,
-      id: 'moderation-example',
-      kind: 'moderation_decision',
-      actorId: null,
-      actorName: m.inbox_actor_moderation(),
-      threadId: null,
-      postId: null,
-      decisionId: 'decision',
-      text: 'Your moderation outcome',
-      href: '/moderation/decisions/decision',
-    },
+    { ...base, id: 'thread-watch-hidden', kind: 'thread_watch' },
+    { ...base, id: 'board-watch-hidden', kind: 'board_activity' },
   ];
 }
 
-function Example({ state }: { state: 'mixed' | 'inaccessible' | 'failed' }) {
+async function mixedWatchPlay({ canvasElement }: { canvasElement: HTMLElement }) {
+  const view = within(canvasElement);
+  const list = await view.findByRole('list', { name: m.inbox_heading() });
+  const rows = within(list).getAllByRole('listitem');
+  await expect(rows).toHaveLength(4);
+  await expect(within(list).getByText(m.inbox_kind_thread_activity())).toBeVisible();
+  await expect(within(list).getByText(m.inbox_kind_board_activity())).toBeVisible();
+  await expect(within(list).getByText(m.inbox_actor_unknown())).toBeVisible();
+  await expect(within(list).getByText(m.inbox_actor_moderation())).toBeVisible();
+  await expect(within(list).getByRole('link', { name: 'A new post on a thread you watch' })).toHaveAttribute(
+    'href',
+    watchHref,
+  );
+  await expect(view.getByRole('link', { name: m.inbox_notification_preferences() })).toHaveAttribute(
+    'href',
+    `/${getLocale()}/settings#notifications`,
+  );
+}
+
+export const MixedWatch: Story = {
+  name: 'Installed thread watch notice',
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  render: () => <InboxStory fixture="thread-watch" />,
+  play: mixedWatchPlay,
+};
+
+export const MixedWatchPhone: Story = {
+  name: 'Installed thread watch notice on phone',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <InboxStory fixture="thread-watch" />,
+  play: mixedWatchPlay,
+};
+
+function Example({ state }: { state: 'inaccessible' | 'failed' }) {
   const loadPage = async (query: InboxPageQuery): Promise<InboxPage> => {
     if (state === 'failed') return { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true } };
-    if (state === 'mixed') return readyInboxPage(items(), null, 'alice', query.selection);
-    const inaccessible = items()
-      .slice(0, 2)
-      .map(({ href: _href, actorName: _actorName, ...item }) => ({
-        ...item,
-        actorId: null,
-        text: '',
-        unavailable: true,
-      }));
-    return readyInboxPage(inaccessible, null, 'alice', query.selection);
+    return readyInboxPage(withheldItems(), null, 'alice', query.selection);
   };
   return (
-    <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
+    <PatternStory visitor="Signed In" path="/inbox?fixture=thread-watch">
       <AppShell>
         <InboxPageView loadPage={loadPage} />
       </AppShell>
@@ -87,21 +103,6 @@ function Example({ state }: { state: 'mixed' | 'inaccessible' | 'failed' }) {
   );
 }
 
-export const MixedWatch: Story = {
-  name: 'Mixed watch updates',
-  render: () => <Example state="mixed" />,
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    const list = await view.findByRole('list', { name: m.inbox_heading() });
-    await expect(within(list).getAllByRole('listitem')).toHaveLength(5);
-    await expect(within(list).getByText(m.inbox_kind_thread_activity())).toBeVisible();
-    await expect(within(list).getByText(m.inbox_kind_board_activity())).toBeVisible();
-    await expect(view.getByRole('link', { name: m.inbox_notification_preferences() })).toHaveAttribute(
-      'href',
-      `/${getLocale()}/settings#notifications`,
-    );
-  },
-};
 export const InaccessibleTarget: Story = {
   name: 'Inaccessible watch targets',
   render: () => <Example state="inaccessible" />,

@@ -7,6 +7,7 @@ import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/
 import type { Statement, Subject } from '../../../../specs/semantic-driver.ts';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
+import { converter_revision as bangumiConverterRevision } from '../../../../packages/conversion/src/bangumi.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -99,7 +100,7 @@ export async function runJourney() {
           observer: {
             onCoordinator({ registration, converterModule, decoderModule }) {
               expect(registration.source).toBe('bangumi');
-              expect(registration.converter_revision).toBe('bangumi@3');
+              expect(registration.converter_revision).toBe(bangumiConverterRevision);
               expect(registration.converter_revision).toBe(createSourceRegistration('bangumi').converter_revision);
               expect(converterModule).toContain('bangumi');
               expect(decoderModule).toContain('dumps.ts');
@@ -132,7 +133,7 @@ export async function runJourney() {
                 ...owner,
                 field_group: 'facts',
                 record_revision: 'unversioned',
-                converter_revision: 'bangumi@3',
+                converter_revision: bangumiConverterRevision,
               });
               expect('rights' in command).toBe(false);
               const previous = commands.get(command.key);
@@ -294,7 +295,7 @@ export async function runJourney() {
         field_group: 'facts',
         digest: after.row.digest,
         record_revision: 'unversioned',
-        converter_revision: 'bangumi@3',
+        converter_revision: bangumiConverterRevision,
       });
       const old = original.find((candidate) => candidate.statement.property.id === fresh.statement.property.id)!;
       expect(fresh.statement.property).toEqual(old.statement.property);

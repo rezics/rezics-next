@@ -12,6 +12,7 @@ import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/
 import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
 import { Importer } from '../../../importer/src/importer.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
+import { GLOBAL_CONTEXT } from '../../../importer/src/public-bulk-client.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { createMediaResolver } from '../../../importer/src/media-resolver.ts';
 import { readDump } from '../../../importer/src/dumps.ts';
@@ -253,10 +254,6 @@ export async function openApiRuntime(
               }),
             }),
           );
-          // The isolated kernel worker and Auth provisioning are independent.
-          // Keep their real startup work inside setup, but let it overlap.
-          workerStart = time('media worker start', () => boundary!.start());
-          void workerStart.catch(() => {});
         },
         async afterStage(stage) {
           recordPhase(`identity: ${stage}`, stageStart);
@@ -265,6 +262,11 @@ export async function openApiRuntime(
       }),
     );
     ownedIdentity = identity;
+    // Auth already quiesced its process-wide executor. Launch the isolated
+    // worker against the settled application database and wait until it prints
+    // MEDIA_READY so later CLI work does not overlap a stalled child.
+    workerStart = time('media worker start', () => boundary!.start());
+    await workerStart;
     // Request the registered client's complete import scopes through the native account-key flow.
     let bulk = await time('importer account-key sign-in', () =>
       identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),
@@ -398,6 +400,22 @@ export async function openApiRuntime(
         else observerRequests--;
       }
     }
+
+    // Batch authority admits the envelope; each fact still needs its ordinary
+    // Global proposal grant. The identity-only fixture keeps its minimal scopes.
+    const proposalGrant = await request(
+      '/v1/grants',
+      {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: bulk.accountId },
+        actions: ['statement:propose'],
+        valid: '(,)',
+      },
+      identitySupport(identity).managementBearer,
+    );
+    if (proposalGrant.status !== 201)
+      throw new Error(`Importer proposal grant setup: HTTP ${proposalGrant.status}: ${await proposalGrant.text()}`);
+    await proposalGrant.body?.cancel();
 
     if (options.sourceStatistics === 'vndb') {
       const response = await request(

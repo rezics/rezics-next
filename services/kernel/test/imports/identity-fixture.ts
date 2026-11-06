@@ -7,6 +7,7 @@ import {
   type AccountWorkflowOptions,
   type AuthService,
 } from '@rezics/auth';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
@@ -281,6 +282,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   const statisticScopes = options.sourceStatistics === 'vndb' ? ['source_statistic:write'] : [];
   const managementScopes = [
     ...importerScopes,
+    'statement:propose',
     ...statisticScopes,
     ...(options.sourceStatistics === 'vndb' ? ['exposure:open'] : []),
     'access:grant',
@@ -294,16 +296,27 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   let ending: Promise<void> | undefined;
   const close = () =>
     (ending ??= (async () => {
+      const releaseCloseAuth = await beginIdentityAuthTurn();
       try {
-        await host?.stop();
+        try {
+          await host?.stop();
+        } finally {
+          // Drop this host's executor before another identity in the same
+          // process can register against its own Auth database.
+          await DBOS.shutdown({ deregister: true }).catch(() => {});
+        }
       } finally {
         try {
           await authDatabase?.close();
         } finally {
-          await namespace?.close();
-          if (namespace) {
-            owned.delete(`host:${namespace.name}`);
-            owned.delete(`pool:${namespace.name}`);
+          try {
+            await namespace?.close();
+            if (namespace) {
+              owned.delete(`host:${namespace.name}`);
+              owned.delete(`pool:${namespace.name}`);
+            }
+          } finally {
+            releaseCloseAuth();
           }
         }
       }
@@ -349,7 +362,12 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     };
     // Built-in role definitions already come from createAccess. Expose their exact
     // resolved data for observation, without attempting to redefine built-ins.
-    const access = createAccess({ actions, auth: accessConfig.auth! });
+    const access = createAccess({ actions, auth: accessConfig.auth!, clock });
+    const accountManagementReads = createAccountManagementReadAccess({
+      pool: database.pool,
+      access,
+      clock,
+    });
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool: database.pool,
@@ -376,10 +394,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const context = () => ({ pool: database.pool, deadline: Date.now() + 10000 });
       return {
         context,
-        readOperatorTransferState: createAccountManagementReadAccess({
-          pool: database.pool,
-          access,
-        }).readOperatorTransferState,
+        readOperatorTransferState: accountManagementReads.readOperatorTransferState,
         approve: (token, input, ctx) => approval.approve(token, input as never, ctx as never),
         resolveForCaller: (token, reference, operation, ctx) =>
           approval.resolveForCaller(token, reference, operation as never, ctx as never),
@@ -408,6 +423,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const registrationStagingKey = new Uint8Array(randomBytes(32));
     const releaseIdentityAuth = await beginIdentityAuthTurn();
     try {
+      // Sequential identities share one SDK executor. Drop a previous host's
+      // leftover launch so this Auth database can register and run workflows.
+      await DBOS.shutdown({ deregister: true }).catch(() => {});
       host = await createAuthHost({
         database: authPool,
         systemDatabasePool: authPool,
@@ -418,6 +436,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         trustedAccess: bindings.trustedAccess,
         access: bindings.workflowPorts,
         accountOperations,
+        accountManagementReads,
         stagingKey: registrationStagingKey,
         executorId: `identity-${randomUUID()}`,
         maintenanceSchedule: '0 0 1 1 *',
@@ -436,9 +455,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           ...IMPORT_ACTIONS,
           'statement:propose',
           'media:read_reservation',
-          ...(options.publication
-            ? ['subject:read', 'context:read', 'media:read', 'context:accept', 'context:adopt']
-            : []),
+          'subject:read',
+          ...(options.publication ? ['context:read', 'media:read', 'context:accept', 'context:adopt'] : []),
           ...statisticScopes,
         ],
       };
@@ -1021,7 +1039,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         },
       });
       // DBOS is a process singleton. Quiesce its workflows after finite setup so
-      // two live fixture services can coexist with their separate Auth pools.
+      // the isolated media worker can launch. Close later takes its own turn so
+      // the next identity relaunches against a settled executor.
       await host.workflows.close();
       return result;
     } finally {

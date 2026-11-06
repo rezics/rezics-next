@@ -99,6 +99,7 @@ test('each recorded JSON response type-checks against the kernel client', async 
     'accounts.json': 'AccountsResponse',
     'notifications-count.json': 'NotificationsCountResponse',
     'notifications-inbox-empty.json': 'NotificationsInboxResponse',
+    'notifications-inbox-thread-watch.json': 'NotificationsInboxResponse',
     'missing-subject.json': 'MissingResponse',
     'missing-subject-page.json': 'PageMissingResponse',
     'home-page.json': 'PageResponse',

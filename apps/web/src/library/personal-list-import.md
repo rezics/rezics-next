@@ -103,3 +103,5 @@ review ID, rather than offer replacement operands. Progress and vote adoption re
   and an integer offset below 5,000. Reopening never calls preview, creates an entry or changes a review.
 - Growth check: focused journey tests cover reopen, current refusal, native outcome restoration and exact retry;
   native owner/privacy, seeded browser and physical growth acceptance remain separate checks.
+
+Decision: reopen, library-return and generated Progress fixtures are the Web pins for this landing; native guard and exact-self cases remain Kernel capability repairs.

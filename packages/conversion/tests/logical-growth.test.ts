@@ -253,6 +253,6 @@ test('growth seeds retain VNDB native aliases and Wikidata dish classification',
   );
 
   const wikidata = convertWikidata(wikidataSeed(1, 1000, 1), {}, { converterRevision: wikidataRevision });
-  expect(wikidata.converter_revision).toBe('wikidata-5');
+  expect(wikidata.converter_revision).toBe(wikidataRevision);
   expect(wikidata.proposals[0]).toMatchObject({ op: 'create', subject: { type: 'schema:Recipe' } });
 });

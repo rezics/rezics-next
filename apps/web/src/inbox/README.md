@@ -49,10 +49,18 @@ failed observations are current-read recovery with a deliberate reload. They do 
 label the last loaded notices as a current page.
 
 **Decision:** Inbox list and detail share one local actor presenter for available, withheld and system labels and
-identity fallbacks; native actor disclosure remains unchanged until the additive media summary is officially installed.
+identity fallbacks. The closed native actor includes an additive avatar summary with `avatarUrl: null`; presentation
+keeps owner labels and never treats a stored profile URL as admitted media.
+
+**Decision:** Inbox decodes Content’s closed actor including that additive avatar summary, keeps presentation on owner
+labels, coalesces one count per viewer episode, and records installed `thread_watch` for phone and desktop return.
 
 **Decision:** After return, a notice absent from the freshly admitted selected page is reported at the Inbox heading;
 only a deliberate first-page refresh recovers, and no neighbor receives restored focus or acknowledgement.
+
+**Decision:** Pin this journey with the existing inbox-read, inbox-page, inbox-native-triage, inbox-notice-detail,
+inbox-session-authority, inbox-pagination, notifications-inbox and recorded-responses suites plus the consumption
+stories; landing is those tests with changed-workspace typing.
 
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. Next,
 Previous and browser return each issue a fresh native page read at the selected exact address; a query admission ID
@@ -62,8 +70,13 @@ UTF-16 code units: those eight addresses, the current address and one return rec
 payload; selection, episode and native notice-key metadata are fixed-size. At most one 20-row response body is readable,
 including during a pending or transiently failed direction; the eight prior bodies are never retained. A successful
 continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed continuation
-it retains only the prior 20-row window. A chosen or bulk acknowledgement dispatches one native command, followed by
-the existing deliberate badge/list invalidation. A completed command stays consumed when that follow-up observation
-fails; the page offers a current read, not another command. Sequential visits release the previous page and callbacks;
-the browser growth check varies unrelated list size and visits while checking request, retained-row and materialized-byte
-bounds. Native database and Access history growth are owned by Content, not inferred from browser requests.
+it retains only the prior 20-row window. Concurrent unread-count consumers for one viewer episode share one coalesced
+native observation, independently of the selected page. A chosen or bulk acknowledgement dispatches one native command,
+followed by the existing deliberate badge/list invalidation. A completed command stays consumed when that follow-up
+observation fails; the page offers a current read, not another command. Sequential visits release the previous page and
+callbacks; the browser growth check varies unrelated list size and visits while checking request, retained-row and
+materialized-byte bounds. Nested native disclosure and acknowledgement examined-work stay with Content
+([current inbox disclosure](../../../../services/kernel/src/content/README.md#cost-current-inbox-disclosure),
+[growth-notice-inbox](../../../../services/kernel/test/content/growth-notice-inbox.test.ts)); composed Inbox work keeps
+the original command and read counts in diagnostic output. Native database and Access history growth are owned by
+Content, not inferred from browser requests.

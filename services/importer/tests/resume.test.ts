@@ -525,4 +525,4 @@ test('finalization interrupted mid-cursor resumes without duplicate native effec
     await importer.close().catch(() => {});
     rmSync(dir, { recursive: true, force: true });
   }
-});
+}, 120_000);

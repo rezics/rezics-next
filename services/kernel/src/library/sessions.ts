@@ -75,6 +75,7 @@ type Page = { limit?: number; cursor?: string; origin?: string; language?: strin
 type Client = CommandTransaction;
 export type ProgressSessionJournalAdmission = {
   identity: unknown;
+  prepare?: () => Promise<void>;
   assert: (tx: CommandTransaction) => Promise<void>;
 };
 type ExpectedProgressBinding = {
@@ -582,7 +583,7 @@ export function createSessionCommands(config: Dependencies) {
     const parsed = parseProgressSessionJournalPatch(retainSessionOperands(input));
     if (!parsed.ok) throw new ProgressInvalidError(parsed.field);
     const patch = parsed.value;
-    return runner.ownAccount(
+    return runner.ownAccountPrepared(
       actor,
       {
         action: 'progress_session:update',
@@ -593,8 +594,17 @@ export function createSessionCommands(config: Dependencies) {
         // Retain the public receipt shape. Private import admission is execution
         // evidence, not part of the caller's journal command identity.
         input: { sessionId, patch, admission: null },
+        async prepare() {
+          try {
+            await admission?.prepare?.();
+            return {};
+          } catch (error) {
+            return { error };
+          }
+        },
       },
-      async (tx) => {
+      async (tx, _command, prepared) => {
+        if ('error' in prepared) throw prepared.error;
         if (admission) {
           await sessionLockPlan({ route, session_id: sessionId }).run(tx);
           const fact = await store.readSessionFact(tx, route, sessionId);

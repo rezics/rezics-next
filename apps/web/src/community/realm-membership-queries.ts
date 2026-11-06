@@ -15,7 +15,7 @@ export type RealmViewer = Awaited<ReturnType<typeof loadRealmMembership>>;
 export const realmMembershipQuery = (realmId: string, subject: string | null, caller?: RealmMembershipCaller) =>
   queryOptions({
     ...personalRead,
-    enabled: personalRead.enabled && !!subject && (!caller || caller.isReady()),
+    enabled: (personalRead.enabled || typeof window !== 'undefined') && !!subject && (!caller || caller.isReady()),
     queryKey: ['realm-membership', realmId, subject],
     queryFn: async (context) => {
       if (!caller) {
