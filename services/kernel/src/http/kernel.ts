@@ -94,6 +94,7 @@ import { searchRoutes } from '../search/http/routes.ts';
 import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { configureDefinitionCatalogue, createNativeDefinitionCatalogue } from '../semantic/definition-catalogue.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
+import type { DefinitionImportRoutes } from '../semantic/definition-import.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
@@ -1028,7 +1029,8 @@ export type ClientKernel = Elysia<
   KernelComposition['~Singleton'],
   KernelComposition['~Definitions'],
   KernelComposition['~Metadata'],
-  ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']>,
+  ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']> &
+    DefinitionImportRoutes,
   KernelComposition['~Ephemeral'],
   KernelComposition['~Volatile']
 >;

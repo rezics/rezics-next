@@ -23,6 +23,8 @@ The declarations in `src/kernel/` are generated through managed compiler placeme
 
 Decision: `POST /v1/definitions/imports` (`definitions.import`) is admitted by the generated
 `definitions.imports` route. Callers keep authenticated transport and do not hand-edit declarations.
+ClientApp SharedRoutes yields to that generated method when emission includes it and otherwise
+keeps the mounted import request/grant contract.
 
 Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
 Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.

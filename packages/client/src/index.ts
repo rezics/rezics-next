@@ -138,6 +138,37 @@ type InstalledSubjectRoutes = SharedRoutes<
 >;
 type SubjectRoutes = InstalledSubjectRoutes;
 type InstalledZoneRoutes = SharedRoutes<Routes['zones'] & ZoneSubjectListRoutes, Routes['zones']>;
+type DefinitionImportRoutes = {
+  imports: {
+    post: {
+      body: { document: unknown; context?: string; expected_head?: number | null };
+      params: {};
+      query: unknown;
+      headers: unknown;
+      response: {
+        200: {
+          operations: {
+            grant: 'definition_publication';
+            admitted: boolean;
+            publish: boolean;
+            activate: boolean;
+            build: boolean;
+          };
+        };
+        400: unknown;
+        401: unknown;
+        403: unknown;
+        404: unknown;
+        503: unknown;
+      };
+      error: never;
+    };
+  };
+};
+type InstalledDefinitionRoutes = SharedRoutes<
+  Routes['definitions'] & DefinitionImportRoutes,
+  Routes['definitions']
+>;
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.
@@ -149,7 +180,11 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects' | 'zones'> & { subjects: SubjectRoutes; zones: InstalledZoneRoutes }
+      ? Omit<Routes, 'subjects' | 'zones' | 'definitions'> & {
+          subjects: SubjectRoutes;
+          zones: InstalledZoneRoutes;
+          definitions: InstalledDefinitionRoutes;
+        }
       : KernelType['~Routes'][Prefix];
   }
 >;
