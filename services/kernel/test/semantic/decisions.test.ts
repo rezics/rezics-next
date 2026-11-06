@@ -26,6 +26,7 @@ const ACTIONS = [
   'subject:create',
   'subject:read',
   'statement:propose',
+  'context:create',
   'context:accept',
   'context:adopt',
   'context:read',
@@ -43,6 +44,7 @@ else process.env.KERNEL_WRITE_RATE_OVERRIDES = originalWriteRateOverrides;
 beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'context:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
@@ -209,13 +211,14 @@ async function expansions(id: string, property: string): Promise<number> {
   );
   return rows[0].n;
 }
-async function community(near: string, granted = true): Promise<string> {
-  const id = newId(routeOf(near)!);
-  await admin.query("INSERT INTO semantic.context (route, context_id, kind, labels) VALUES ($1, $2, 'community', $3)", [
-    routeOf(id),
-    id,
-    { en: 'Literature readers' },
-  ]);
+async function community(_near: string, granted = true): Promise<string> {
+  const created = await call('POST', '/v1/contexts', {
+    token: 'editor',
+    key: key(),
+    body: { labels: { en: 'Literature readers' } },
+  });
+  expect(created.response.status).toBe(201);
+  const id = created.body.context.id as string;
   if (granted) {
     const route = routeOf(id);
     if (route === null) throw new Error('Community Context id must carry its route');

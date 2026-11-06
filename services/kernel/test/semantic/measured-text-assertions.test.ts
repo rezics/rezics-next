@@ -268,7 +268,9 @@ test('native measured word and character assertions preserve holder text version
     const response = await propose(holder, input);
     observed.push({ property: input.property.id, status: response.status, body: response.body });
     expect(response.status, JSON.stringify(response.body)).toBe(400);
-    expect(response.body.errors.some((error: { pointer: string }) => error.pointer.includes('property/id'))).toBe(true);
+    const errors = response.body.errors as { pointer: string }[];
+    expect(Array.isArray(errors)).toBe(true);
+    expect(errors.some((error) => error.pointer.includes('property/id'))).toBe(true);
   }
   expect(observed.map(({ property }) => property)).toEqual([words, characters]);
   const word = await selected(holder, admittedWords('+6', record));
