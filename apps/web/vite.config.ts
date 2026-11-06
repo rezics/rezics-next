@@ -302,6 +302,17 @@ export default defineConfig((context) => {
       },
     },
     plugins: [
+      ...(viteCacheDir
+        ? [
+            {
+              name: 'web-vite-dep-cache-align',
+              enforce: 'pre' as const,
+              configureServer(server: { environments: Record<string, ViteDepCacheAlignEnvironment | undefined> }) {
+                return bindViteDepCacheAlign(viteCacheDir, server.environments);
+              },
+            },
+          ]
+        : []),
       {
         name: 'urlpattern-polyfill-esm',
         enforce: 'pre',
@@ -427,17 +438,6 @@ export default defineConfig((context) => {
         },
       },
       workerDeniedDependencies(),
-      ...(viteCacheDir
-        ? [
-            {
-              name: 'web-vite-dep-cache-align',
-              enforce: 'post' as const,
-              configureServer(server: { environments: Record<string, ViteDepCacheAlignEnvironment | undefined> }) {
-                return bindViteDepCacheAlign(viteCacheDir, server.environments);
-              },
-            },
-          ]
-        : []),
     ],
   };
 });
