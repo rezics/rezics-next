@@ -1791,14 +1791,21 @@ every relaunch waits for [host capacity](#host-capacity-admission); the manager 
 retry again every minute. When three distinct tasks end on the same normalized line within 20 minutes, Goal opens one
 environment incident, holds retries for those tasks and new tasks that hit the line, and sends one `blocker` to the
 supermanager with the line, count, example tasks and the first tracked source match from `git grep`. Goal retries one
-affected task every 10 minutes; a rerun that passes the blocker closes the incident and releases the other pending
-retries. Incident notices are one line; an undelivered notice is retried during the existing recovery sweep without
+affected task every 10 minutes. An affected launch recorded after the incident's trigger failure becomes its probe;
+the first provider output appended beyond that launch's saved log offset resolves the incident and releases pending
+retries immediately. The resolved state event names the probe and records the failure sequence, run sequence and
+observed log range. A probe that fails again with the same fingerprint keeps the incident open and moves its next
+probe time. Incident notices are one line; an undelivered notice is retried during the existing recovery sweep without
 reopening the incident or moving its probe cadence. `status` lists open incidents and identifies affected pending
 retries. Without a shared incident, the same
 tool blocker in two consecutive attempts parks the task and sends its manager one `environment` event, whether or not
 the worker reran the failing command; two silence stalls in a row are reported as `stalled`. Work other than product
 work on dev also stops as stalled when a tool failure follows another without a rerun of the failing command. A
 repeated environment fingerprint at landing is escalated as stalled to the owning manager.
+
+Decision: an affected worker launch recorded after the incident's trigger failure becomes its probe; the first provider
+log bytes appended beyond that launch's saved offset resolve the incident and release held retries, with the resolved
+event recording the probe, failure sequence, run sequence and observed byte range.
 
 Integration does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly.
 Quota exhaustion chooses another allowed pool. Outside product work on dev, repeating the same first assertion after a

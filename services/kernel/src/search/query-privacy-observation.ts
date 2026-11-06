@@ -1,4 +1,4 @@
-import type { PrivacyReductionHead, PrivacyReductionObservation } from '../semantic/public-filter-source-contract.ts';
+import type { PrivacyReductionHead, PrivacyReductionObservation } from '../semantic/index.ts';
 import type { PublicFilterConsumerStatus } from './public-filter-consumer-contract.ts';
 import {
   admitQueryPrivacyHeads,

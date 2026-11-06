@@ -232,27 +232,6 @@ delete of `operation_outputs` with unit cascade copies. Measured nonempty batche
 plus two control. Explicit Imports driver bindings use repo-relative paths in command argv, resolved on admitted
 remote checkouts; the frozen suite receives an absolute path.
 
-Decision: the passing Work retention series establishes its measured unit-cascade and operation-output cases.
-Complete cleanup cost acceptance remains open for independently growing admitted event, event-history,
-notification and stream copies and payload bytes. The current Work derivation records that growing those cascades
-failed its linear block assertion, then held them constant. Restore those axes in the existing native suites and
-correct the violated derivation or growth classification using native plans and a derived work envelope. Keep
-physical packing effects and raw diagnostics visible; a smaller fixture cannot establish the missing bound.
-
-Decision: Auth retirement fixtures require the real versioned terminal consumer proof before request deletion;
-synthetic maintenance requests remain recoverable. Healthy native growth evidence alone does not bound an
-invocation whose SDK closure retries connection failures indefinitely. The supported producer must expose finite
-attempt/deadline admission, count failed native attempts and backoff, and retain the original closure identity for
-resumption after uncertainty. Prove interrupted closure and lost-response recovery through the real maintenance
-consumer, separately from healthy 256/1,024/4,096 selection and deletion growth. Recovery continues from durable
-custody on a later funded invocation; a timeout cannot manufacture retirement or absence.
-
-Decision: installed Rating repair cost receiving consumes Semantic's exact mapping/retained-obligation producer
-and Content's installed composition. Complete native accounting includes producer preparation, holds, handoff,
-rollback, replay, empty completion and durable future-custody work in the original operation context. Independently
-vary unrelated voters, retained history and current input at 256/1,024/4,096. The injected seam evidence below
-remains narrower than installed composition acceptance.
-
 Decision: independently grow unrelated voters, same-voter retained withdrawal receipts and voter input at
 256/1,024/4,096 while fixing the other axes at 256 and the selected nonempty page at the owner limit of 64;
 empty completion grows later input beyond the admitted upper key.

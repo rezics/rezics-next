@@ -1,20 +1,15 @@
 import { publicNames } from '../document-names.ts';
-import {
-  analyzeInstalled,
-  CJK_ANALYZER,
-  ENGINE_ANALYSIS_LIMITS,
-  NAME_PREFIX_ANALYZER,
-  type EngineToken,
-} from '../engine-analysis.ts';
+import { analyzeInstalled, CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from '../engine-analysis.ts';
 import type { OpenSearch } from '../opensearch.ts';
 import type { IndexedSubject } from '../source.ts';
 import type { TextNode } from '../text.ts';
 
 type Analyzer = typeof CJK_ANALYZER | typeof NAME_PREFIX_ANALYZER;
 
+/** Analyzer concurrency matches ENGINE_ANALYSIS_LIMITS as a module-init literal; that owner file is not a literal leaf. */
 export const CURRENT_TEXT_LIMITS = Object.freeze({
   scanBytes: 32 * 1024,
-  concurrency: ENGINE_ANALYSIS_LIMITS.concurrency,
+  concurrency: 16,
 });
 
 function uniqueValues(subject: IndexedSubject, includeDescriptions: boolean): string[] {

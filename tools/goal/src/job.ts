@@ -89,7 +89,9 @@ import {
   recordToolBlockerFailure,
   recordTransportFailure,
   recoverUndeliveredToolIncidentNotices,
+  noteToolIncidentProbeStarted,
   resolveToolIncidentsAfterAttempt,
+  resolveToolIncidentsAfterProviderProgress,
   toolIncidentForRetry,
   toolIncidentRetryAllowed,
   transportIncidentResumeAllowed,
@@ -681,6 +683,12 @@ export class WorkerJob implements GateOutcomeSink {
     let silenceFailure: string | undefined;
     let silenceStopping: Promise<void> | undefined;
     const activity = workerActivityBaseline(store, ref);
+    noteToolIncidentProbeStarted(store, ref);
+    const releaseOnProviderProgress = () => {
+      const resolved = resolveToolIncidentsAfterProviderProgress(store, ref, task, store.attempt(ref));
+      if (resolved.length) this.resumePendingRetries();
+    };
+    releaseOnProviderProgress();
     let { lastLogSize, lastLogMtime, lastLogActivityAt, checkWaitAtLastLogActivity } = activity;
     let lastHead: string | undefined;
     let lastNewestMtime = 0;
@@ -840,6 +848,7 @@ export class WorkerJob implements GateOutcomeSink {
       watcher = watchOrPoll(
         ref.logPath,
         () => {
+          releaseOnProviderProgress();
           checkSilence();
           // Reading the measurement scans the attempt log; step limits move slowly, so they are checked once per interval.
           if (Date.now() - steppedAt < sampleEveryMs) return;

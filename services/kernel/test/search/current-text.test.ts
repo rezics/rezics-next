@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createCurrentTextDisclosure, CURRENT_TEXT_LIMITS } from '../../src/search/disclosure/current-text.ts';
-import { CJK_ANALYZER, NAME_PREFIX_ANALYZER } from '../../src/search/engine-analysis.ts';
+import { CJK_ANALYZER, ENGINE_ANALYSIS_LIMITS, NAME_PREFIX_ANALYZER } from '../../src/search/engine-analysis.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from '../../src/search/opensearch.ts';
 import { parseText } from '../../src/search/text.ts';
 import { RELEASED_NAME_ID, releasedMultilingualSubject } from './support/released-names.ts';
@@ -35,6 +35,10 @@ function analyzing(onAnalyze?: (analyzer: string, text: string) => void): OpenSe
     return { status: 200, body: { tokens: tokens(request.text) } };
   });
 }
+
+test('current-text analyzer concurrency is the installed owner limit', () => {
+  expect(CURRENT_TEXT_LIMITS.concurrency).toBe(ENGINE_ANALYSIS_LIMITS.concurrency);
+});
 
 test('current-text uses the queried generation analyzers for terms, phrases and prefixes', async () => {
   const seen: string[] = [];

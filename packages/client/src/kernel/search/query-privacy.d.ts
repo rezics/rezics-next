@@ -1,4 +1,4 @@
-import type { PrivacyReductionHead } from '../semantic/public-filter-source-contract.ts';
+import type { PrivacyReductionHead } from '../semantic/index.ts';
 import { type KindCountProof } from './kind-count-proof.ts';
 import type { KindCountEvidence } from './discovery-api.ts';
 /**
