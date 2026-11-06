@@ -659,7 +659,8 @@ Wiring adds no query, scan or extra statement; native cost stays with the existi
 Content's worker is `createContentWorkModule({ fetch, now })`, declared through `contentDeclaration()`. Production
 registers it from `composition/work-modules.ts` (`contentDeclaration().work(ambient)`); `startWorker` binds Content
 first, then supplies `fetch`, wall-clock `now` and `id`, and shares `database.pool` between `WorkClient` and
-`composeWork`. The composition root supplies `fetch` and wall-clock `now`. It consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
+`composeWork`. Registration observation uses that original client; native queue registration refuses a stub.
+The composition root supplies `fetch` and wall-clock `now`. It consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
 memoizes the actual fully mounted kernel Access and canonical Auth current-consent reader for the context.
 The same Access object goes to `createContentWork` and `contentNoticeEffects`; the same consent function goes to
 author-erasure restoration and to edition sale reads as an explicit operand. Content keeps no pool-keyed consent

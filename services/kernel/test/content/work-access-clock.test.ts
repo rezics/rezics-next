@@ -8,7 +8,7 @@ const registerContent = createContentWorkModule({ fetch: (request) => fetch(requ
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck, type Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import type { WorkClient } from '../../src/work/client.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 
 const url = process.env.DATABASE_URL;
@@ -72,14 +72,13 @@ test("the content worker's Access sees a grant written at a command's T on a clo
   process.env.AUTH_AUDIENCE = audience;
   process.env.AUTH_JWKS_URL = `${issuer}/.well-known/jwks.json`;
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   try {
+    client = await createWorkClient(url, pool);
     work = await composeWork([registerContent], {
       databaseUrl: url,
       pool,
-      client: {
-        async registerQueue() {},
-        async applySchedules() {},
-      } as unknown as WorkClient,
+      client,
       env: {
         KERNEL_ROUTE_KEY: routeKey,
         KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
@@ -88,6 +87,9 @@ test("the content worker's Access sees a grant written at a command's T on a clo
           current: 1,
           keys: { '1': Buffer.alloc(32, 19).toString('base64url') },
         }),
+        AUTH_ISSUER: issuer,
+        AUTH_AUDIENCE: audience,
+        AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
       },
       clock,
     });
@@ -152,6 +154,10 @@ test("the content worker's Access sees a grant written at a command's T on a clo
     else process.env.AUTH_AUDIENCE = previous.audience;
     if (previous.jwks === undefined) delete process.env.AUTH_JWKS_URL;
     else process.env.AUTH_JWKS_URL = previous.jwks;
-    await work?.shutdown();
+    try {
+      await work?.shutdown();
+    } finally {
+      await client?.close();
+    }
   }
 }, 30_000);

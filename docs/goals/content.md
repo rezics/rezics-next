@@ -83,8 +83,9 @@ Decision: Kernel Content is split into contract/core/application/adapters; compo
 platform defineModule is not delivered so contentDeclaration() stays and contentHttpDeclaration() extends it with
 mount; start/stop owns the process bind; edition consent is an explicit reader with no pool WeakMap. Work
 registrations compose in composition/work-modules.ts from contentDeclaration().work(ambient); startWorker binds
-Content then shares database.pool with WorkClient and composeWork. Tests pin the declaration, supplied clock,
-request identity and worker-import graph; no extra stories.
+Content then shares database.pool with WorkClient and composeWork. Registration observation uses that original
+WorkClient; native queue registration refuses a stub. Tests pin the declaration, supplied clock, request identity
+and worker-import graph; no extra stories.
 
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior.
