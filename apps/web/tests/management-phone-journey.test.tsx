@@ -84,6 +84,7 @@ test('directory, organization, account and recovery retain independent phone con
     reservationId: '01a1a000-0000-7000-8000-000000000188',
     state: 'reconciling',
     account: { ...automation, id: '01a1a000-0000-7000-8000-000000000189', handle: 'retired +/=?&' },
+    navigation: { state: 'unavailable' },
   });
   const detail = detailExample(organization.id);
   detail.members.items.push({ accountId: '01a1a000-0000-7000-8000-000000000199', account: null, role: 'member' });
@@ -289,6 +290,7 @@ test('directory, organization, account and recovery retain independent phone con
       const rows = Array.from({ length: size }, (_, index) => ({
         account: { ...organization, id: `01a1a000-0000-7000-8000-${String(index).padStart(12, '0')}` },
         role: 'owner' as const,
+        navigation: { state: 'admitted' as const },
       }));
       await mount(
         directory(

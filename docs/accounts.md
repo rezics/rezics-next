@@ -174,8 +174,11 @@ handoff. Reuse eight-locale labels; retain original phone/recovery and Settings 
 
 Settings' closed current-human viewer/navigation observations admit detail only through current membership or
 management of an active, unfenced responsibility target. Concealed targets have no destination; reconciling holds
-are coordination evidence. Optional preparation failure preserves independently readable inventory with unavailable
-navigation. Detail `authActions` retains authority. A selected URL supplies only an account identity: the existing
+are coordination evidence. Accounts illustrative directory fixtures follow that installed observation: admitted
+navigation for current visible managed targets, and concealed or unavailable navigation for reconciling
+coordination evidence; existing phone, window-navigation and read-recovery cases cover those modes. Optional
+preparation failure preserves independently readable inventory with unavailable navigation. Detail `authActions`
+retains authority. A selected URL supplies only an account identity: the existing
 session-bound native management GET establishes current admission before detail or actions are shown. Directory
 links consume native `navigation`, never membership role or a responsibility hold as authority. The existing Web
 HTTP response schemas accept the additive viewer/navigation fields until Content's serial client publication;
