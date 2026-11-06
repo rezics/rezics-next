@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createNativeContentSystem } from '../content/support/native-system.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 test('createKernel resolves Access only when a request first needs it', async () => {
   const databaseUrl = process.env.DATABASE_URL;
@@ -13,6 +14,7 @@ test('createKernel resolves Access only when a request first needs it', async ()
       pool: system.database.pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
+      receiptKeys: testReceiptKeys(),
       access: () => {
         if (!returned) throw new Error('Access resolved before createKernel returned');
         resolutions++;
