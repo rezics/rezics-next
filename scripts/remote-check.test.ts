@@ -8533,6 +8533,14 @@ test('physical run lifetime uses safe estimate arithmetic, a finite fallback and
   expect(generatedHostRun()).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 7200000');
 });
 
+test('host lifetime docker rm waits Auth run timeout; a probe timeout cannot abort labelled cleanup', () => {
+  expect(dependencyPreparationProgram).toContain('DOCKER_RM_TIMEOUT = 120');
+  expect(dependencyPreparationProgram).toContain('DOCKER_PROBE_TIMEOUT = 5');
+  expect(dependencyPreparationProgram).toContain("call(['docker', 'rm', '-f', '-v', token], DOCKER_RM_TIMEOUT)");
+  expect(dependencyPreparationProgram).toContain('try_clean_run_resources(run)');
+  expect(dependencyPreparationProgram).not.toMatch(/timeout=3, text=True/);
+});
+
 test('ordinary, multi-slot, gate and try-once callers pass the same lifetime policy to the actual host entry', async () => {
   for (const flags of [[], ['--slots', '2'], ['--gate']]) {
     const fixture = scenario({ a: { available: 40e9, slots: 4 } });

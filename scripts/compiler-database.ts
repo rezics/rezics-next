@@ -1,7 +1,7 @@
 // Reylo prepares `.sql` modules against DATABASE_URL. The root typecheck and the Auth check share this
 // preparation so those modules see the kernel schema and the Auth schema.
-import { spawnSync } from 'node:child_process';
-import { createServer, createConnection } from 'node:net';
+import { spawn, spawnSync, type SpawnSyncOptions } from 'node:child_process';
+import { createConnection } from 'node:net';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { migrate as migrateAuth } from '../services/auth/scripts/database.ts';
@@ -17,6 +17,9 @@ const READY_TIMEOUT_MS = 60_000;
 export const DOCKER_RUN_TIMEOUT_MS = 120_000;
 /** Inspect/exec/ps/port probes; the 60s readiness loop retries these. */
 export const DOCKER_PROBE_TIMEOUT_MS = 5_000;
+/** Host-lifetime Python uses seconds; keep it identical to `DOCKER_RUN_TIMEOUT_MS`. */
+export const DOCKER_RM_TIMEOUT_SECONDS = DOCKER_RUN_TIMEOUT_MS / 1000;
+export const DOCKER_PROBE_TIMEOUT_SECONDS = DOCKER_PROBE_TIMEOUT_MS / 1000;
 export const COMPILER_PID_LABEL = 'rezics.compiler.pid';
 export const COMPILER_NONCE_LABEL = 'rezics.compiler.nonce';
 /** PostgreSQL SSLRequest; a ready postmaster replies with one byte, a half-open listener EOFs. */
@@ -37,6 +40,33 @@ export function dockerTimeoutMs(args: readonly string[]): number {
   return DOCKER_PROBE_TIMEOUT_MS;
 }
 
+/** Forced `rm` is a new session so a 200ms supervisor SIGKILL of the owner group cannot abort it. */
+export function dockerSpawnSyncOptions(
+  args: readonly string[],
+  extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {},
+): SpawnSyncOptions {
+  const forcedRm = args[0] === 'rm' && args.includes('-f');
+  return {
+    encoding: 'utf8',
+    timeout: dockerTimeoutMs(args),
+    ...(forcedRm ? { detached: true } : {}),
+    ...extra,
+  };
+}
+
+/**
+ * Auth fixture pattern: issue `docker rm -f -v` in its own session and return. The host-lifetime supervisor still
+ * waits up to 120s for labelled removal; SIGTERM handlers must not block in spawnSync.
+ */
+export function beginDetachedDockerRm(
+  id: string,
+  extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {},
+): void {
+  if (!id || !CONTAINER_IDENTITY.test(id)) return;
+  const child = spawn('docker', ['rm', '-f', '-v', id], { detached: true, stdio: 'ignore', ...extra });
+  child.unref();
+}
+
 function spawnDockerError(args: readonly string[], error: NodeJS.ErrnoException): never {
   if (error.code === 'ETIMEDOUT') {
     throw Object.assign(error, {
@@ -47,7 +77,7 @@ function spawnDockerError(args: readonly string[], error: NodeJS.ErrnoException)
 }
 
 function docker(args: string[]): string {
-  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: dockerTimeoutMs(args) });
+  const result = spawnSync('docker', args, dockerSpawnSyncOptions(args));
   if (result.error) spawnDockerError(args, result.error as NodeJS.ErrnoException);
   if (result.status !== 0)
     throw new Error(
@@ -399,43 +429,6 @@ export async function startPostgresForwarder(
   }
 }
 
-/** Same-process forwarder kept only as the starvation witness; production always uses startPostgresForwarder. */
-export function startInProcessPostgresForwarder(socketPath: string, listenPort = 0): Promise<PostgresForwarder> {
-  return new Promise((resolve, reject) => {
-    const server = createServer((client) => {
-      const upstream = createConnection(socketPath);
-      const close = () => {
-        client.destroy();
-        upstream.destroy();
-      };
-      client.on('error', close);
-      upstream.on('error', close);
-      client.on('close', close);
-      upstream.on('close', close);
-      client.pipe(upstream);
-      upstream.pipe(client);
-    });
-    server.once('error', reject);
-    server.listen(listenPort, '127.0.0.1', () => {
-      const address = server.address();
-      const port = address && typeof address === 'object' ? address.port : listenPort;
-      resolve({
-        port,
-        child: {
-          killed: false,
-          exitCode: 0,
-          exited: Promise.resolve(0),
-          kill() {},
-          stdin: null,
-          stdout: null,
-          stderr: null,
-        } as unknown as ReturnType<typeof Bun.spawn>,
-        stop: () => server.close(),
-      });
-    });
-  });
-}
-
 export async function resolvePostgresListenUrl(
   container: string,
   pid = process.pid,
@@ -518,7 +511,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   let removed = false;
   let cleanupFailed = false;
   let cleanupFailure: unknown;
-  const remove = (): void => {
+  const remove = (wait = true): void => {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
     listen?.stop();
@@ -529,6 +522,10 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
       return;
     }
     removed = true;
+    if (!wait) {
+      beginDetachedDockerRm(container);
+      return;
+    }
     try {
       docker(['rm', '-f', '-v', container]);
     } catch (error) {
@@ -539,7 +536,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   };
   const onSigint = (): void => {
     try {
-      remove();
+      remove(false);
     } catch (error) {
       console.error(error);
     }
@@ -547,7 +544,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   };
   const onSigterm = (): void => {
     try {
-      remove();
+      remove(false);
     } catch (error) {
       console.error(error);
     }
