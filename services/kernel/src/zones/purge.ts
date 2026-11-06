@@ -1,8 +1,10 @@
 import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts';
 import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion/index.ts';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
-import { partitionOf } from '../route/route.ts';
+import { authoritativeTimeValue, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../history/record.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { liveCoverage, purgeIntent, retainCoveredPayload, withPurgeIntent } from './cleanup-intent.ts';
 import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-store.ts';
 
@@ -16,6 +18,7 @@ export type ZonePurgePageInput = Readonly<{
 }>;
 
 const GRANT_PAGES = 32;
+const INTERNAL_ZONE_PURGE_PRINCIPAL = '00000000-0000-8000-8000-000000000001';
 
 /** Drain Access grant stores in this command. The resource store always yields progress into the role store, so
  * a single page never means grant work is finished. Remaining keys shrink across invocations because deletes commit. */
@@ -37,6 +40,20 @@ async function drainZoneGrants(
   return 'progress';
 }
 
+/** Mechanical Zone cleanup has a native episode principal, never an active Actor. Bind the owner when present. */
+function bindZonePurgeHistoryEvidence(tx: CommandTransaction, row: ZoneHead): void {
+  const accountId = row.ownerId ?? INTERNAL_ZONE_PURGE_PRINCIPAL;
+  const accountRoute = routeOf(accountId);
+  if (accountRoute === null) throw new TypeError('Zone purge history account has no route');
+  bindCommandHistoryEvidence(tx, [
+    {
+      accountRoute,
+      accountId,
+      roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+    },
+  ]);
+}
+
 /** Bounded Zone cleanup page. Held rows, live restore and uncovered-only privacy keep remaining work explicit. */
 export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: string | null }> {
   const { pool, clock, route, zoneId, cursor, limit } = input;
@@ -50,7 +67,7 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
       partition: partitionOf(route),
       deadline,
       clock,
-      principal: { kind: 'account' as const, id: '00000000-0000-8000-8000-000000000001' },
+      principal: { kind: 'account' as const, id: INTERNAL_ZONE_PURGE_PRINCIPAL },
       basis: { clientId: 'internal-zone-purge', requestedBy: null },
     },
     async (tx, command) => {
@@ -68,6 +85,7 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
         const grants = await drainZoneGrants(tx, row, at, limit);
         if (grants === 'progress') return noEffect({ next: 'grants' });
       }
+      bindZonePurgeHistoryEvidence(tx, row);
       const next: ZoneHead = { ...row, writeFenced: true };
       if (branch === 'early_privacy' && liveCoverage(row).length > 0) {
         const kept = retainCoveredPayload(row);

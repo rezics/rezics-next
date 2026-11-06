@@ -229,7 +229,7 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
   expect(edited.status, JSON.stringify(edited.body)).toBe(200);
   expect((await f.read(zone, 'anonymous', { route: 'notes' })).status).toBe(404);
   const afterEdit = await f.raw(zone);
-  expect(Object.keys(afterEdit!.withholding)).toEqual(['/pages/1/document']);
+  expect(Object.keys(afterEdit!.withholding).filter((key) => key.startsWith('/'))).toEqual(['/pages/1/document']);
   expect(afterEdit!.withholding.custody).toEqual([
     expect.objectContaining({ pointer: '/pages/1/document', version: reordered.body.zone.revision }),
   ]);

@@ -289,5 +289,7 @@ set and Search's undelivered cleanup remain unchanged.
 Decision: platform inverse removal records erasure_source_commit and identity_epoch_native_commit in the
 same home/T; capture_erasure_source_removal and validate_erasure_source_commit accept those besides
 editorial write_basis. No fabricated basis. Retention capture names no plpgsql columns `kind`/`owner_id`.
-Page coverage rebinds by identity while routes stay in canonical order. Native kernel journeys and two
-web mapping tests pin Zone lifecycle; no Storybook stories or expanded served walks on this landing.
+Page coverage rebinds by identity while routes stay in canonical order. Live takedown keys are pointers;
+`custody` is excluded from those assertions. Internal Zone purge pages bind mechanical history evidence from
+the owner. Native kernel journeys and two web mapping tests pin Zone lifecycle; no Storybook stories or
+expanded served walks on this landing.
