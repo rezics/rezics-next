@@ -1,11 +1,13 @@
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import { Pool, type PoolClient } from 'pg';
+import type { KernelExecutionContract } from '../command/execution-contract.ts';
 import { type WorkQueueName } from './queues.ts';
 export declare const DBOS_SCHEMA = "dbos";
 export declare const WORK_APPLICATION = "rezics-kernel";
 export type WorkClient = DBOSClient & {
     close(): Promise<void>;
     discoverLegacyLeaveChild(workflowId: string): Promise<string | null>;
+    readonly executionContract?: KernelExecutionContract;
 };
 /** Private service composition binding. Matching URLs or a structural client do not enroll. */
 export declare function assertSelectedWorkClient(client: WorkClient, pool: Pool): void;

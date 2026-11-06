@@ -1,8 +1,8 @@
 import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
-import type { CustodyDefinition } from '../search/public-filter-custody-contract.ts';
-import { type DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
+import type { NativePublicFilterRepairSettlement, CustodyDefinition } from '../search/public-filter-custody-contract.ts';
+import type { DiscoveryConsumerCaptureInput } from '../search/index.ts';
 import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicCanonicalCaptureInput, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from '../search/public-filter-consumer-contract.ts';
 import type { PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning, PublicFilterSource, PublicFilterConsumer, PublicFilterProjectionObservation, PublicFilterProjectionPage, PublicFilterRepairLocator, PrivacyReductionStart, PrivacyReductionObservation, PrivacyReductionObservationRequest } from './public-filter-source-contract.ts';
 /** Agreed additive native binding handoff. The Source producer owns all implementation. */
@@ -206,6 +206,43 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         execution: string;
     }>, context: PublicFilterConsumerContext): ReturnType<PublicFilterSourceBinding['join']>;
 }>;
+/** Original Source operands retained for one Search generation job. No engine state is copied. */
+export type NativePublicFilterPublication = Readonly<{
+    job: string;
+    bootstrap: string;
+    queried: PublicFilterQueriedObservation;
+    execution: string;
+}>;
+export type NativePublicFilterPublicationRequest = NativePublicFilterPublication | Readonly<{
+    job: string;
+}>;
+export type NativePublicFilterPublicationCompletion = Readonly<{
+    status: 'pending';
+    publication: NativePublicFilterPublication;
+    reason: PublicFilterBindingFailure['reason'];
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'complete';
+    publication: NativePublicFilterPublication;
+    definition: PublicFilterSourceDefinition;
+    covered: PrivacyReductionStart;
+    execution: NonNullable<Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>, {
+        status: 'joined';
+    }>['execution']>;
+    observation: Extract<PrivacyReductionObservation, {
+        status: 'observed';
+    }>;
+    terminal: Readonly<{
+        step: string;
+        root: string;
+    }>;
+    settlement: NativePublicFilterRepairSettlement;
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+/** Resolve the persisted original job/cut, then independently read its native completion.
+ * Search calls this from its existing publication writer fence. The result grants no activation.
+ */
+export declare function readNativePublicFilterPublicationCompletion(binding: PublicFilterSourceBinding, request: NativePublicFilterPublicationRequest, context: PublicFilterConsumerContext): Promise<NativePublicFilterPublicationCompletion>;
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
 type NativePreparationInput = Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] | Readonly<{
     bootstrap: string;

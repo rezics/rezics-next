@@ -77,6 +77,12 @@ export type ReviewDiscoveryCount = Readonly<{
     partition: number;
     position: bigint;
     unavailable: true;
+}> | Readonly<{
+    partition: number;
+    position: bigint;
+    total: number;
+    coverage: 'complete';
+    generation: string;
 }>;
 export type ReviewDiscoverySource = Readonly<{
     read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;

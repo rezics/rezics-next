@@ -32,28 +32,26 @@ export type OwnerQueryDependencies = {
   search?: SearchService;
 };
 
-function OwnerQueryWork() {
-  return memoizedValue(
-    OwnerQueryWork,
-    () =>
-      class OwnerQueryWork extends ScopeWork {
-        constructor(readonly plan: OrdinaryCollectionPagePlan) {
-          super(scopeAllowance(plan.candidateLimit, crypto.randomUUID(), ordinaryPageWorkDimensions(plan.total)));
-        }
+class OwnerQueryWorkLedger extends ScopeWork {
+  constructor(readonly plan: OrdinaryCollectionPagePlan) {
+    super(scopeAllowance(plan.candidateLimit, crypto.randomUUID(), ordinaryPageWorkDimensions(plan.total)));
+  }
 
-        override consume(used: WorkDimensions): void {
-          try {
-            super.consume(used);
-          } catch (error) {
-            if (error instanceof RangeError)
-              throw new ProblemError('dependency_unavailable', {
-                detail: error.message,
-              });
-            throw error;
-          }
-        }
-      },
-  );
+  override consume(used: WorkDimensions): void {
+    try {
+      super.consume(used);
+    } catch (error) {
+      if (error instanceof RangeError)
+        throw new ProblemError('dependency_unavailable', {
+          detail: error.message,
+        });
+      throw error;
+    }
+  }
+}
+
+function OwnerQueryWork() {
+  return memoizedValue(OwnerQueryWork, () => OwnerQueryWorkLedger);
 }
 type OwnerQueryWork = InstanceType<ReturnType<typeof OwnerQueryWork>>;
 

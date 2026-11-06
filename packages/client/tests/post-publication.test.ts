@@ -59,7 +59,7 @@ test('native post authoring sends draft, published and omitted visibility', asyn
 });
 
 test('the derived publication event retains its exact required payload and creation events', () => {
-  type Published = Static<(typeof CONTENT_EVENTS)['com.rezics.content.post.published.v1']>;
+  type Published = Static<ReturnType<typeof CONTENT_EVENTS>['com.rezics.content.post.published.v1']>;
   expectTypeOf<Published>().toEqualTypeOf<{
     threadId: string;
     itemId: string;
@@ -70,8 +70,10 @@ test('the derived publication event retains its exact required payload and creat
     subjectIds: string[];
     activityAt: string;
   }>();
-  expectTypeOf<Static<(typeof CONTENT_EVENTS)['com.rezics.content.post.created.v1']>>().toEqualTypeOf<Published>();
-  type RevisionCreated = Static<(typeof CONTENT_EVENTS)['com.rezics.content.revision.created.v1']>;
+  expectTypeOf<
+    Static<ReturnType<typeof CONTENT_EVENTS>['com.rezics.content.post.created.v1']>
+  >().toEqualTypeOf<Published>();
+  type RevisionCreated = Static<ReturnType<typeof CONTENT_EVENTS>['com.rezics.content.revision.created.v1']>;
   expectTypeOf<Omit<RevisionCreated, 'previousSubjectIds'>>().toEqualTypeOf<Published>();
   expectTypeOf<RevisionCreated['previousSubjectIds']>().toEqualTypeOf<string[] | undefined>();
 });

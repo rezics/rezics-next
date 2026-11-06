@@ -37,10 +37,12 @@ const sectionOf = (choice: ArchiveReviewItem): RecoverySection => {
       return 'annotations';
     case 'journal':
       return 'journals';
+    case 'observation':
+      return 'provenance';
   }
 };
 export const supportedRecoverySection = (section: string): section is RecoverySection =>
-  ['entries', 'labels', 'assignments', 'annotations', 'journals'].includes(section);
+  ['entries', 'labels', 'assignments', 'annotations', 'journals', 'provenance'].includes(section);
 
 export class ArchiveEntryRecoveryJourney {
   readonly visit: Visit;

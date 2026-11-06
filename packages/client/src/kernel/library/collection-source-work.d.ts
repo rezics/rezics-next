@@ -7,7 +7,9 @@ export declare function bindNativeCollectionWorkLifetime(work: NativeCollectionW
  * its private target, while every operation and callback still uses that SAME object
  * and its original producer checks. No new proxy, ledger, receipt or allowance. */
 export declare function withNativeCollectionWorkAllowance<T>(work: NativeCollectionWork, allowance: WorkAllowance, operation: () => Promise<T>): Promise<T>;
-/** Private accounting only. SQL/API owners supply the proved footprint before dispatch. */
+/** Compatibility SQL observer for identity, catalogue, Search and publication callers.
+ * The Members → History → Work selected path uses documented static bounds and does not
+ * buy dispatch from this ledger. */
 export declare class NativeCollectionWork {
     private readonly allowance;
     private readonly deadline;

@@ -6,7 +6,7 @@ import type { LibraryProfileDescriptor } from './profile.ts';
 import { type AniListLabelReview, type AniListLabelWork } from './list-import-anilist-labels.ts';
 import { type AniListRow } from './list-import-anilist-parser.ts';
 import { type ImportConsumptionDateIntent, type ImportConsumptionDateReview, type ImportDateAction, type ImportDateField, type ImportDateSessionIdentity } from './import-consumption.ts';
-import { type RatingQuestion } from '../rating/votes.ts';
+import { type RatingQuestion, type VoteReviewGuard, type VoteReviewCurrentVote } from '../rating/votes.ts';
 import { type EntryImportMetadataOutcome, type EntryImportMetadataProposals, type EntryImportMetadataReview, type EntryImportMetadataView } from './list-import-entry-metadata.ts';
 import { progressResults, type ProgressAdoptionCheckpoint, type ProgressAdoptionInput, type ProgressAdoptionPlan, type ProgressProfileBinding } from './list-import-progress-adoption.ts';
 type Dependencies = {
@@ -69,8 +69,9 @@ export type AniListScoreReview = {
     units: number | null;
     conversion: 'owner-selected-native-units';
     native: {
-        availability: 'unavailable';
-        reason: 'conditional_vote_admission_missing';
+        availability: 'available' | 'unavailable';
+        reason?: string;
+        guard?: VoteReviewGuard;
         question: AniListNativeQuestion;
         target: {
             subjectId: string;
@@ -78,8 +79,11 @@ export type AniListScoreReview = {
             matchFingerprint: string;
         };
         currentVote: {
+            status: 'current';
+            vote: VoteReviewCurrentVote;
+        } | {
             status: 'unavailable';
-            reason: 'counted_vote_review_missing';
+            reason: string;
         };
         commandKey: string;
         consentKey: string;
@@ -182,6 +186,17 @@ export declare function createAniListImport(deps: Dependencies): {
             labelReview?: AniListLabelReview;
             labelWork?: Record<number, AniListLabelWork>;
             ordinal: number;
+            currentScore: {
+                status: 'current';
+                question: AniListNativeQuestion;
+                vote: VoteReviewCurrentVote;
+                reason?: never;
+            } | {
+                question?: never;
+                vote?: never;
+                status: 'unavailable';
+                reason: "atomic_guard_unavailable" | "identity_observation_unavailable" | "identity_pending" | "own_vote_observation_unavailable" | "question_observation_unavailable";
+            } | null;
             labelEvidence: {
                 membership: "available" | "empty" | "invalid" | "missing" | "oversized" | "unknown" | "unsupported";
                 grouping: string;
@@ -223,8 +238,8 @@ export declare function createAniListImport(deps: Dependencies): {
                 occurrence: ImportDateSessionIdentity;
                 journalRevision: number;
                 current: Readonly<{
-                    startDate: import("./progress-model.ts").ProgressSessionJournalDate | null;
-                    finishDate: import("./progress-model.ts").ProgressSessionJournalDate | null;
+                    startDate: import("@rezics/progress").ProgressSessionJournalDate | null;
+                    finishDate: import("@rezics/progress").ProgressSessionJournalDate | null;
                 }>;
                 actions: Readonly<Partial<Record<ImportDateField, ImportDateAction>>>;
                 fields: Readonly<Record<ImportDateField, import("./import-consumption.ts").ImportDateFieldReview>>;
@@ -233,7 +248,7 @@ export declare function createAniListImport(deps: Dependencies): {
                 version: string;
                 status: 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed' | 'unattempted';
                 fields: readonly import("./import-consumption.ts").ImportDateFieldOutcome[];
-                receipt: import("./progress-model.ts").ProgressSessionJournalWrite | null;
+                receipt: import("@rezics/progress").ProgressSessionJournalWrite | null;
             }> | null;
         }[];
         next: number | null;
@@ -245,6 +260,35 @@ export declare function createAniListImport(deps: Dependencies): {
     reviewMetadata: (actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) => Promise<{
         ordinal: number;
         reviewToken: string;
+    }>;
+    reviewConsumptionDates: (actor: Actor, id: string, input: AniListDateReviewInput, key: string) => Promise<Readonly<{
+        version: string;
+        sourceReviewToken: string;
+        sourceFingerprint: string;
+        matchFingerprint: string;
+        subjectId: string;
+        profileDigest: string;
+        profileBinding: unknown;
+        occurrenceProfileBinding: unknown;
+        occurrence: ImportDateSessionIdentity;
+        journalRevision: number;
+        current: Readonly<{
+            startDate: import("@rezics/progress").ProgressSessionJournalDate | null;
+            finishDate: import("@rezics/progress").ProgressSessionJournalDate | null;
+        }>;
+        actions: Readonly<Partial<Record<ImportDateField, ImportDateAction>>>;
+        fields: Readonly<Record<ImportDateField, import("./import-consumption.ts").ImportDateFieldReview>>;
+    }>>;
+    applyConsumptionDates: (actor: Actor, id: string, input: AniListDateApplyInput, signal?: AbortSignal, record?: (value: unknown) => void) => Promise<{
+        importId: string;
+        outcomes: {
+            version: string;
+            status: 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed' | 'unattempted';
+            fields: readonly import("./import-consumption.ts").ImportDateFieldOutcome[];
+            receipt: import("@rezics/progress").ProgressSessionJournalWrite | null;
+            ordinal: number;
+        }[];
+        complete: boolean;
     }>;
     metadata: (actor: Actor, id: string, ordinal: number, reviewToken: string) => Promise<EntryImportMetadataView>;
     applyMetadata: (actor: Actor, id: string, ordinal: number, reviewToken: string, fields: unknown, signal?: AbortSignal) => Promise<EntryImportMetadataOutcome>;

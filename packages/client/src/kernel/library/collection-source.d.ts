@@ -10,6 +10,7 @@ import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 import type { ScopeWorkContext } from '../search/scope-work-context.ts';
+export { COLLECTION_SOURCE_DRIVER_COUNT } from './canonical-source-limits.ts';
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
     readonly candidateKeys: number;
@@ -191,6 +192,7 @@ export interface CollectionSource {
     }>;
     prefix(input: CollectionSourceCall & {
         readonly afterSubjectId: string | null;
+        readonly candidateLimit?: number;
     }): Promise<CanonicalCollectionPrefix>;
     containsSubject(input: ContainsCollectionSubject): Promise<CollectionSubjectMembership>;
     readRawStoredPrefix(input: CollectionSourceCall & {
@@ -204,4 +206,9 @@ export declare function createCollectionSource(dependencies: {
     access: Access;
     clock?: KernelClock;
 }): CollectionSource;
-export {};
+/** Local bridge for one ordinary page: fixed structural limits drive Source work, receipts still admit it. */
+export declare function createOrdinaryCollectionPageSource(dependencies: {
+    pool: Pool;
+    access: Access;
+    clock?: KernelClock;
+}): CollectionSource;

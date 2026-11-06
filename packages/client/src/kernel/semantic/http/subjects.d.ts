@@ -5,7 +5,7 @@ import type { Access, AccountActor, Resource } from '../../request/access.ts';
 import { createApp } from '../../http/app.ts';
 import { type SubjectRelationCountResponse } from '../counts.ts';
 import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
-export declare const ItemSchema: import("typebox").TObject<{
+export declare function ItemSchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     type: import("typebox").TString;
     revision: import("typebox").TInteger;
@@ -463,7 +463,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 subject: string;
                                 revision: number;
                                 securityRevision: string;
-                                source: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                                 externalId: string;
                                 claimTransactionId: string;
                                 property: "wdt:P3180" | "wdt:P6298";
@@ -472,7 +472,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 subject: string;
                                 revision: number;
                                 securityRevision: string;
-                                source: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                                 externalId: string;
                                 claimTransactionId: string;
                                 property: "wdt:P3180" | "wdt:P6298";
@@ -576,6 +576,86 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     };
 } & {
     v1: {
+        subjectIdentityOperations: {
+            ":id": {
+                get: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            operation: {
+                                id: string;
+                                done: false;
+                            } | {
+                                id: string;
+                                done: true;
+                                result: {
+                                    survivor: string;
+                                    redirected: string;
+                                    revision: number;
+                                };
+                            };
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         subjects: {
             ":id": {
                 get: {
@@ -589,7 +669,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         includeViewerActions?: boolean;
                         includeDocuments?: boolean;
                         selectedSynopsis?: string;
-                        reviewIdentitySource?: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
+                        reviewIdentitySource?: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                         reviewIdentityExternalId?: string;
                     };
                     headers: unknown;
@@ -731,7 +811,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 subject: string;
                                 revision: number;
                                 securityRevision: string;
-                                source: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
+                                source: "bangumi" | "bangumi_cross_media" | "vndb" | "vndb_cross_media";
                                 externalId: string;
                                 claimTransactionId: string;
                                 property: "wdt:P3180" | "wdt:P6298";

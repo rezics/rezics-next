@@ -35,6 +35,8 @@ export interface RealmSubjectDisclosure {
     }>>;
     current(realm: string, dependency: string, context: Context): Promise<Current>;
     candidate(candidate: RealmSubjectCandidate, dependency: string, context: Context): Promise<RealmSubjectMembership>;
+    /** Production adapters prepare at most eight exact candidates with one parent observation. */
+    candidates?(candidates: readonly RealmSubjectCandidate[], dependency: string, context: Context): Promise<readonly RealmSubjectMembership[]>;
     subject(subject: string, dependency: string, context: Context): Promise<Readonly<{
         state: 'readable';
         terminal: string;

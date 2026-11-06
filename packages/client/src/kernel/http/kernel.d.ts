@@ -2,7 +2,7 @@ import { type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
-import { viewerActionsRoutes, type ViewerActionResources } from '../access/viewer-actions.ts';
+import { viewerActionsRoutes, type ViewerActionResources, type ViewerActionBindings } from '../access/viewer-actions.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
@@ -15,6 +15,8 @@ import { feedRoutes } from '../content/feed-routes.ts';
 import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
+import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
+import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
 import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
@@ -34,6 +36,7 @@ import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
 import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
 import { type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
+import { type ContentShelfTitleInputs } from '../library/shelf-title-content-source.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader } from '../request/access.ts';
@@ -41,7 +44,8 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { type WorkClient } from '../work/client.ts';
 import { recentSearchRoutes } from '../search/recent-searches.ts';
-import { searchRoutes, type SearchService } from '../search/http/routes.ts';
+import { searchRoutes } from '../search/http/routes.ts';
+import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
@@ -52,7 +56,10 @@ import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
     routeKey: Uint8Array;
     /** Trusted post-catalogue binding; runs before the host admits any request. */
-    onAccessReady?: (access: Access) => void;
+    onAccessReady?: (access: Access, viewerActions: {
+        resources: ViewerActionResources;
+        bindings: ViewerActionBindings;
+    }) => void;
     /** Dedicated durable HMAC configuration, independent of ephemeral token defaults. */
     receiptKeys?: KeyRing;
     /** Trusted modules mount declarations before composition validation. */
@@ -65,14 +72,18 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     moneyPolicy?: CommerceMoneyPolicy;
     content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & {
         readConsent?: CurrentConsentReader;
+        /** Complete-input title observations; absent until Content installs its native producer. */
+        shelfTitleInputs?: ContentShelfTitleInputs;
     };
-    search?: SearchService;
+    search?: SearchRuntime;
     /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
     shelves?: ShelfNativeReadBindings;
     /** Per-kernel private Type dictionary digest; defaults to SHA-256. */
     shelfTypeDigest?: ShelfTypeDigest;
     /** Optional entry preparation observation, after release of the source snapshots. */
     typeSourceObserved?: import('../library/type-preparation-contract.ts').TypePreparationSourceObserved;
+    /** Trusted owner for the original funded frame around each complete private loan HTTP operation. */
+    loanHttpWork?: import('../library/loan-operation-bounds.ts').LoanHttpWorkOwner;
     discovery?: import('../search/discovery-service.ts').DiscoverySearch;
     /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
     reports?: {
@@ -109,7 +120,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
         v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;
 type ClientRoutes<Routes, Base> = {
     [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {

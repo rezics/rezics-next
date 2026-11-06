@@ -31,4 +31,9 @@ export declare function grantCommand<T>(config: {
     /** A transfer's new direct holder must be a real active native account.
      * Checked on its source connection before target checkout, including replay. */
     recipientAccountId?: string;
+    /** Exact Zone grant target and identity recipient, when the mutation writes grant rows. */
+    zoneGrantTarget?: Readonly<{
+        subjectAccountId?: string;
+        addsGrant: boolean;
+    }>;
 }, mutate: (tx: CommandTransaction, transactionId: string) => Promise<T>): Promise<import("../command/command.ts").CommandOutcome<Awaited<T>>>;

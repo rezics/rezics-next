@@ -24,8 +24,10 @@ export declare function identityScopeAddress(key: S.IdentityScopeKey): {
     scope: string;
 };
 export declare function createIdentityScopedObservations(pool: Pool): S.IdentityScopedObservations;
+export declare function nextIdentityScopeRepairHomes(pool: Pool): Promise<number[]>;
+export declare function nextIdentityScopeRepairTarget(pool: Pool, partition: number): Promise<S.IdentityScopeKey | null>;
 /** Retained fair repair shares the native maintenance queue; workflow arguments contain only a home. */
-export declare function registerIdentityScopedObservationWork({ pool, client, clock }: WorkContext): Promise<void>;
+export declare function registerIdentityScopedObservationWork({ pool, client }: WorkContext): Promise<void>;
 /** Source-owned unsafe receiving, also used for exact closed-attempt cancellation reconciliation. */
 export declare function receiveScopePreparation(pool: Pool, ticket: IdentityPrearmTicketData, cancellation?: IdentityNativeReceipt): Promise<IdentityNativeReceipt>;
 /** Source-local native obligation, called only after the terminal owner has checked

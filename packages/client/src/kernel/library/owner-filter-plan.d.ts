@@ -8,9 +8,11 @@ import type { IdentityScopeObservation } from '../semantic/identity-scope-types.
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
+import { type NativeOwnerFilterCeilings } from './owner-filter-native-binding.ts';
 import { type PrepareCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { type CollectionMemberAdmission, type CollectionMemberQuery, type OwnerFilterFactLocator } from './owner-filter.ts';
+import { type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
@@ -44,7 +46,7 @@ export type OwnerFilterReadBinding = Readonly<{
 /** Bind the current native Source and scoped capture at the caller's actual authoritative time.
  * Commands retain their executor time and partition; Search transfers its existing reservation and read time.
  */
-export declare function bindOwnerFilterRead(dependencies: Omit<Dependencies, 'tokens'>, actor: Actor, collectionId: string, admission: CollectionMemberAdmission, deadline: number, attempt?: CommandAttempt): Promise<Unavailable | Readonly<{
+export declare function bindOwnerFilterRead(dependencies: Omit<Dependencies, 'tokens'>, actor: Actor, collectionId: string, admission: CollectionMemberAdmission, deadline: number, attempt?: CommandAttempt, pagePlan?: OrdinaryCollectionPagePlan, ceilings?: NativeOwnerFilterCeilings): Promise<Unavailable | Readonly<{
     status: 'bound';
     binding: OwnerFilterReadBinding;
 }>>;

@@ -1,11 +1,13 @@
-import { type CommandOutcome } from '../command/command.ts';
-import { type Actor } from '../request/access.ts';
-import { type RatingQuestion } from '../rating/votes.ts';
+import type { SessionComponent } from '../tokens/session.ts';
+import { type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
+import { type AccountActor, type Actor } from '../request/access.ts';
+import { type RatingQuestion, type VoteReview, type PreparedPutVote } from '../rating/votes.ts';
 import { createEntryCommands } from './entries.ts';
+import { type ProgressAdoptionCheckpoint, type ProgressAdoptionInput, type ProgressAdoptionPlan } from './list-import-progress-adoption.ts';
 import { type VndbEntryReview } from './list-import-vndb-admission.ts';
 import { type SourceValue, type VndbRow } from './list-import-vndb-parser.ts';
 import { type ImportConsumptionDateIntent, type ImportConsumptionDateReview, type ImportDateAction, type ImportDateField, type ImportDateSessionIdentity } from './import-consumption.ts';
-import { type EntryImportMetadataProposals, type EntryImportMetadataReview, type EntryImportMetadataView } from './list-import-entry-metadata.ts';
+import { type EntryImportMetadataProposals, type EntryImportMetadataReview } from './list-import-entry-metadata.ts';
 type Config = Parameters<typeof createEntryCommands>[0] & {
     routeKey: Uint8Array;
 };
@@ -25,6 +27,12 @@ export type VndbChoice = {
     targetId?: string;
     state: string;
     replace?: boolean;
+    progress?: ProgressAdoptionInput;
+} | {
+    ordinal: number;
+    action: 'progress';
+    targetId?: string;
+    progress: ProgressAdoptionInput;
 } | {
     ordinal: number;
     action: 'score';
@@ -63,7 +71,7 @@ type NativeVoteObservation = {
 };
 type ScoreDecision = {
     reviewId: string;
-    status: 'reviewed' | 'unavailable' | 'applied' | 'skipped' | 'stale' | 'failed';
+    status: 'reviewed' | 'applying' | 'unavailable' | 'applied' | 'skipped' | 'stale' | 'failed';
     targetId: string;
     action: 'vote' | 'clear';
     units: number | null;
@@ -75,7 +83,12 @@ type ScoreDecision = {
     targetFingerprint: string;
     commandKey: string;
     guard: VndbEntryReview;
-    nativeAdmission: 'unavailable';
+    nativeAdmission: 'conditional';
+    nativeGuard: VoteReview['guard'];
+    sourceDigest: string;
+    matchDigest: string;
+    commandActor?: AccountActor;
+    command?: PreparedPutVote;
 };
 export type VndbDateReviewInput = {
     ordinal: number;
@@ -95,7 +108,7 @@ export type VndbDateApplyInput = {
 type Decision = {
     reviewId: string;
     status: 'reviewed' | 'applying' | 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed';
-    stateAction?: 'state' | 'skip' | 'retain' | null;
+    stateAction?: 'state' | 'skip' | 'retain' | 'progress' | null;
     targetId: string | null;
     state: string | null;
     baseline: {
@@ -106,11 +119,36 @@ type Decision = {
     replace: boolean;
     commandKey: string;
     guard: VndbEntryReview | null;
+    receipt?: {
+        partition: number;
+        epoch: number;
+        position: string;
+        transactionId: string;
+    };
     matchDigest?: string;
     metadata?: EntryImportMetadataReview[];
+    progress?: {
+        plan: ProgressAdoptionPlan;
+        checkpoint?: ProgressAdoptionCheckpoint;
+        sourceFingerprint: string;
+    };
     score?: ScoreDecision;
     consumptionDateReview?: ImportConsumptionDateReview;
     consumptionDateIntent?: ImportConsumptionDateIntent;
+};
+type VndbProgressReadback = {
+    sessionId: string;
+    startedAt: string;
+    transactionId: string;
+    revision: number;
+    state: string;
+    mode: string;
+    unit: string;
+    amount: string | null;
+    measures: {
+        unit: string;
+        amount: string | null;
+    }[];
 };
 type NativeScoreReviewResult = {
     reviewId: string;
@@ -122,7 +160,7 @@ type NativeScoreReviewResult = {
     currentVote: NativeVoteObservation;
     consent: ScoreDecision['consent'];
     sourceReason: string;
-    nativeAdmission: 'unavailable';
+    nativeAdmission: 'conditional';
 } | {
     status: 'unavailable';
     reason: 'native-question-unavailable' | 'native-current-vote-unavailable';
@@ -133,8 +171,8 @@ type NativeScorePreview = {
     sourceReason: string;
     exactUnits: number | null;
     admission: {
-        status: 'unavailable';
-        reason: 'conditional-admission-unavailable' | 'native-question-unavailable' | 'native-current-vote-unavailable' | 'source-not-vn-score';
+        status: 'conditional' | 'unavailable';
+        reason: null | 'native-question-unavailable' | 'native-current-vote-unavailable' | 'source-not-vn-score';
     };
 };
 export declare function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposals;
@@ -204,6 +242,17 @@ export declare function createVndbImport(config: Config): {
                 } | null;
             } | null;
             decision: {
+                progress: {
+                    occurrence: {
+                        sessionId: string;
+                        startedAt: string;
+                        transactionId: string;
+                        revision: number;
+                    } | null;
+                    complete: boolean;
+                    measures: import("./list-import-progress-adoption.ts").ProgressAdoptionMeasureResult[];
+                    readback: VndbProgressReadback | null;
+                } | null;
                 reviewId: string;
                 status: "applied" | "applying" | "failed" | "reviewed" | "skipped" | "stale" | "unsupported";
                 targetId: string | null;
@@ -214,7 +263,7 @@ export declare function createVndbImport(config: Config): {
                     incarnationId: string | null;
                 } | null;
                 replace: boolean;
-                action: "retain" | "skip" | "state" | null;
+                action: "progress" | "retain" | "skip" | "state" | null;
             } | null;
             scoreDecision: NativeScoreReviewResult | null;
             nativeScore: NativeScorePreview;
@@ -225,8 +274,8 @@ export declare function createVndbImport(config: Config): {
                 occurrence: ImportDateSessionIdentity;
                 journalRevision: number;
                 current: Readonly<{
-                    startDate: import("./progress-model.ts").ProgressSessionJournalDate | null;
-                    finishDate: import("./progress-model.ts").ProgressSessionJournalDate | null;
+                    startDate: import("@rezics/progress").ProgressSessionJournalDate | null;
+                    finishDate: import("@rezics/progress").ProgressSessionJournalDate | null;
                 }>;
                 actions: Readonly<Partial<Record<ImportDateField, ImportDateAction>>>;
                 fields: Readonly<Record<ImportDateField, import("./import-consumption.ts").ImportDateFieldReview>>;
@@ -235,7 +284,7 @@ export declare function createVndbImport(config: Config): {
                 version: string;
                 status: 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed' | 'unattempted';
                 fields: readonly import("./import-consumption.ts").ImportDateFieldOutcome[];
-                receipt: import("./progress-model.ts").ProgressSessionJournalWrite | null;
+                receipt: import("@rezics/progress").ProgressSessionJournalWrite | null;
             }> | null;
             fieldsTreatment: {
                 state: string;
@@ -255,7 +304,18 @@ export declare function createVndbImport(config: Config): {
             incarnationId: string | null;
         } | null;
         replace: boolean;
-        action: "retain" | "skip" | "state" | null;
+        action: "progress" | "retain" | "skip" | "state" | null;
+        progress: {
+            occurrence: {
+                sessionId: string;
+                startedAt: string;
+                transactionId: string;
+                revision: number;
+            } | null;
+            complete: boolean;
+            measures: import("./list-import-progress-adoption.ts").ProgressAdoptionMeasureResult[];
+            readback: VndbProgressReadback | null;
+        } | null;
     }> | CommandOutcome<NativeScoreReviewResult>>;
     reviewConsumptionDates: (actor: Actor, id: string, input: VndbDateReviewInput, key: string) => Promise<CommandOutcome<{
         version: string;
@@ -264,8 +324,8 @@ export declare function createVndbImport(config: Config): {
         occurrence: ImportDateSessionIdentity;
         journalRevision: number;
         current: Readonly<{
-            startDate: import("./progress-model.ts").ProgressSessionJournalDate | null;
-            finishDate: import("./progress-model.ts").ProgressSessionJournalDate | null;
+            startDate: import("@rezics/progress").ProgressSessionJournalDate | null;
+            finishDate: import("@rezics/progress").ProgressSessionJournalDate | null;
         }>;
         actions: Readonly<Partial<Record<ImportDateField, ImportDateAction>>>;
         fields: Readonly<Record<ImportDateField, import("./import-consumption.ts").ImportDateFieldReview>>;
@@ -276,7 +336,7 @@ export declare function createVndbImport(config: Config): {
             version: string;
             status: 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed' | 'unattempted';
             fields: readonly import("./import-consumption.ts").ImportDateFieldOutcome[];
-            receipt: import("./progress-model.ts").ProgressSessionJournalWrite | null;
+            receipt: import("@rezics/progress").ProgressSessionJournalWrite | null;
             ordinal: number;
         }[];
         complete: boolean;
@@ -286,28 +346,31 @@ export declare function createVndbImport(config: Config): {
         ordinal: number;
         reviewToken: string;
     }>>;
-    metadata: (actor: Actor, id: string, ordinal: number, token: string) => Promise<EntryImportMetadataView>;
+    metadata: (actor: Actor, id: string, ordinal: number, token: string) => Promise<Readonly<{
+        status: 'current' | 'stale';
+        reviewToken: string;
+        sourceReviewToken: string;
+        subjectId: string;
+        personal: import("./entry-personal-model.ts").PersonalEntry;
+        proposals: EntryImportMetadataProposals;
+        outcome: import("./list-import-entry-metadata.ts").EntryImportMetadataOutcome | null;
+    }>>;
     applyMetadata: (actor: Actor, id: string, ordinal: number, reviewToken: string, fields: unknown, recordCommand?: (outcome: CommandOutcome<unknown>) => void, signal?: AbortSignal) => Promise<Readonly<{
         reviewToken: string;
         fields: readonly import("./list-import-entry-metadata.ts").EntryImportMetadataFieldOutcome[];
-    }> | {
-        reviewToken: string;
-        fields: {
-            field: import("./list-import-entry-metadata.ts").EntryImportMetadataField;
-            status: 'stale';
-        }[];
-    }>;
+    }>>;
     apply: (actor: Actor, id: string, selected: {
         ordinal: number;
         reviewId?: string;
         scoreReviewId?: string;
-    }[], record: (outcome: CommandOutcome<unknown>) => void, signal?: AbortSignal) => Promise<{
+    }[], record: (outcome: SessionComponent) => void, signal?: AbortSignal) => Promise<{
         uploadId: string;
         outcomes: {
             ordinal: number;
             reviewId?: string;
             scoreReviewId?: string;
             status: string;
+            currentVote?: NativeVoteObservation;
         }[];
         stopped: "cancelled" | "deadline" | null;
     }>;
@@ -336,6 +399,17 @@ export declare function createVndbImport(config: Config): {
                 role?: 'planned' | 'active' | 'completed' | 'paused' | 'dropped';
             }[];
             profileSupported: boolean;
+            profile: import("@rezics/definitions").LibraryProfile | null;
+            profileBinding: {
+                pin: {
+                    provenance: 'profile';
+                    releaseDigest: string;
+                    acceptingType: string;
+                    profileId: string;
+                };
+                epoch: string;
+                acceptingType: string;
+            } | null;
             baseline: {
                 state: string;
                 revision: number;
@@ -343,7 +417,7 @@ export declare function createVndbImport(config: Config): {
             } | null;
         } | null;
     }>;
-    authorized: (actor: Actor) => Promise<import("../command/command.ts").AuthoritativeTime>;
+    authorized: (actor: Actor) => Promise<AuthoritativeTime>;
     source: (actor: Actor, id: string) => Promise<{
         xml: string;
     }>;

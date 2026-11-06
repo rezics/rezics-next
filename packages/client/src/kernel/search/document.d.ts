@@ -40,6 +40,22 @@ export type SubjectDocument = {
     /** Published Global standard-question score and prior identity; absent figures omit both fields. */
     rating_score?: number | null;
     rating_prior_epoch?: number | null;
+    /** Coverage remains explicit when a bounded native projection is incomplete or unavailable. */
+    document_text_coverage?: 'complete' | 'partial' | 'unsupported' | 'preparing' | 'unavailable';
+    /** Opaque current native Subject observation chosen by the page reference selector. */
+    document_text_observation?: string;
+    /** Nested documents keep phrases inside one document and one actual language. */
+    document_texts?: {
+        candidate: string;
+        document: string;
+        digest: string;
+        language: string;
+        revision: number;
+        recipe: string;
+        extraction: string;
+        complete: boolean;
+        text: string;
+    }[];
 };
 /** Public index allowlist. Live profile/verification/avatar data is always hydrated by Accounts. */
 export type AccountDocument = {

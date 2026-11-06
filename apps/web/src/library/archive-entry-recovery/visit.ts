@@ -340,7 +340,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed;
     if (this.#phase === 'reviewed' && this.#review?.revision === this.#selection.revision) {
       this.#original = this.#review.operand;
-      this.#originalSelection = this.#selection.choices;
+      this.#originalSelection = this.#selection.choices.map((choice) => ({ ...choice }));
     } else if (!retainsOriginal(this.#phase) && !reconcilingCancellation) {
       throw new Error('fresh_review_required');
     }
@@ -374,7 +374,8 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       if (admitted !== undefined && (outcome === 'complete' || outcome === 'failed')) this.#cancelCheckpointed = true;
     } else this.#phase = outcome;
     if (admitted !== undefined) {
-      const selection = this.#originalSelection;
+      const selection =
+        this.#originalSelection === null ? null : this.#originalSelection.map((choice) => ({ ...choice }));
       const changed =
         !samePage(this.#results, admitted) ||
         (selection !== null && JSON.stringify(this.#resultSelection) !== JSON.stringify(selection));

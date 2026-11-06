@@ -124,10 +124,14 @@ export type CollectionResourceView =
     });
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
-export function collectionReadView(
-  value: CollectionResourceView,
-): CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView {
-  if ('membershipKind' in value && value.membershipKind === 'dynamic') return value;
+export function collectionReadView(value: CollectionResourceView) {
+  if ('membershipKind' in value && value.membershipKind === 'dynamic') {
+    const { allowedVisibilityActions, ...view } = value;
+    return {
+      ...view,
+      ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
+    };
+  }
   if (
     value.membershipKind !== 'curated' ||
     typeof value.orderEpoch !== 'number' ||
@@ -135,7 +139,13 @@ export function collectionReadView(
     value.orderEpoch < 0
   )
     throw new ProblemError('dependency_unavailable');
-  return { ...value, membershipKind: 'curated', orderEpoch: value.orderEpoch };
+  const { allowedVisibilityActions, ...view } = value;
+  return {
+    ...view,
+    ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
+    membershipKind: 'curated' as const,
+    orderEpoch: value.orderEpoch,
+  };
 }
 
 export type MemberView = {
