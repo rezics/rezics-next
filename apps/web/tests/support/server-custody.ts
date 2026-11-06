@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
 
 export type ProcessOutputStream = 'stdout' | 'stderr';
@@ -87,13 +88,62 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-async function waitForGroupExit(pid: number, timeoutMs: number, pollIntervalMs: number): Promise<boolean> {
+function processStat(pid: number): { state: string; pgrp: number } | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const closeParen = stat.lastIndexOf(')');
+    if (closeParen === -1) return undefined;
+    const rest = stat.slice(closeParen + 2).split(' ');
+    const state = rest[0];
+    const pgrp = Number(rest[2]);
+    if (!state || !Number.isInteger(pgrp) || pgrp <= 0) return undefined;
+    return { state, pgrp };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Live members of a process group, excluding unreaped zombies that still answer kill(-pgid, 0). */
+function liveProcessGroupMembers(pgid: number): number[] {
+  try {
+    const members: number[] = [];
+    for (const entry of readdirSync('/proc')) {
+      if (!/^[0-9]+$/.test(entry)) continue;
+      const pid = Number(entry);
+      const stat = processStat(pid);
+      if (stat && stat.pgrp === pgid && stat.state !== 'Z') members.push(pid);
+    }
+    return members;
+  } catch {
+    return processGroupExists(pgid) ? [pgid] : [];
+  }
+}
+
+function liveProcessGroup(pgid: number): boolean {
+  return liveProcessGroupMembers(pgid).length > 0;
+}
+
+async function waitUntil(
+  predicate: () => boolean,
+  timeoutMs: number,
+  pollIntervalMs: number,
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    if (!processGroupExists(pid)) return true;
+    if (predicate()) return true;
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return false;
+    if (remaining <= 0) return predicate();
     await wait(Math.min(pollIntervalMs, remaining));
+  }
+}
+
+async function completedWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
+  if (timeoutMs <= 0) return false;
+  try {
+    await bounded(promise, timeoutMs, 'completion');
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -134,29 +184,42 @@ function makeProcessCustody(
     let outputIsSettled = false;
     const signalGroup = (signal: NodeJS.Signals) => {
       if (pid === undefined) return;
+      const members = liveProcessGroupMembers(pid);
       try {
         process.kill(-pid, signal);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
       }
-      try {
-        process.kill(pid, signal);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
+      for (const member of members) {
+        try {
+          process.kill(member, signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
+        }
       }
     };
 
     if (pid !== undefined) {
+      const graceDeadline = Date.now() + termGraceMs;
       signalGroup('SIGTERM');
-      try {
-        groupSettled = await waitForGroupExit(pid, termGraceMs, pollIntervalMs);
-      } catch (error) {
-        cleanupErrors.push(error);
+      // Reap the direct child before judging the group: an unreaped zombie leader still
+      // answers kill(-pid, 0) even when every live descendant is gone.
+      childSettled = await completedWithin(childCompletion, termGraceMs);
+      const remainingGrace = graceDeadline - Date.now();
+      if (remainingGrace > 0 && liveProcessGroup(pid)) {
+        await waitUntil(() => !liveProcessGroup(pid), remainingGrace, pollIntervalMs);
       }
-      if (!groupSettled) {
+      groupSettled = !liveProcessGroup(pid) && !processGroupExists(pid);
+      if (liveProcessGroup(pid) || processGroupExists(pid)) {
         signalGroup('SIGKILL');
+        if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
         try {
-          groupSettled = await waitForGroupExit(pid, settleTimeoutMs, pollIntervalMs);
+          const gone = await waitUntil(
+            () => !liveProcessGroup(pid) && !processGroupExists(pid),
+            settleTimeoutMs,
+            pollIntervalMs,
+          );
+          groupSettled = gone;
         } catch (error) {
           cleanupErrors.push(error);
         }

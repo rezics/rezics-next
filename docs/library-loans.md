@@ -92,9 +92,10 @@ extend and return commands beside the copy form for the inspected holding, so lo
 links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
 or `date-fns`. Web's Vite plugin uses `configEnvironment` and a later `configResolved` pin so the
 Cloudflare Worker environment cannot turn SSR discovery back on at serve time. Vite concatenates
-`optimizeDeps.include`, so the pin keeps only `@inlang/paraglide-js/urlpattern-polyfill` and
-excludes the calendar packages. Generated `paraglide/runtime.js` imports that CJS polyfill;
-Workerd's export-type inspection has no `module`, so the polyfill must be prebundled to ESM.
+`optimizeDeps.include` on both the Worker environments and the root `ssr.optimizeDeps` list,
+so the pin keeps `urlpattern-polyfill` plus its ESM wrapper and excludes the calendar packages.
+Generated `paraglide/runtime.js` imports the wrapper, which re-exports CJS `urlpattern-polyfill`;
+Workerd's export-type inspection has no `module`, so that nested CJS must be prebundled to ESM.
 `react-dom/server` stays off include and off exclude: TanStack would otherwise concatenate it
 into the optimizer and hang Rolldown before Copies prints ready, while excluding it loads CJS
 into Workerd. Vite then transforms React on the first Worker evaluation.

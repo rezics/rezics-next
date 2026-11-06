@@ -123,13 +123,16 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
         import { resolveConfig } from 'vite';
         for (const command of ['serve', 'build']) {
           const config = await resolveConfig({ logLevel: 'silent' }, command, 'development');
+          const targets = [['ssr', config.ssr.optimizeDeps]];
           for (const [name, environment] of Object.entries(config.environments)) {
             if (name === 'client') continue;
-            const optimizeDeps = environment.optimizeDeps;
+            targets.push([name, environment.optimizeDeps]);
+          }
+          for (const [name, optimizeDeps] of targets) {
             assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name);
             assert.deepEqual(
               optimizeDeps.include,
-              ['@inlang/paraglide-js/urlpattern-polyfill'],
+              ['urlpattern-polyfill', '@inlang/paraglide-js/urlpattern-polyfill'],
               command + ':' + name + ':include',
             );
             for (const pkg of ['react', 'react-dom', 'react-dom/server', 'react-day-picker', 'date-fns'])

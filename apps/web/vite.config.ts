@@ -43,8 +43,14 @@ const linkedDependencyRoot = linkedDependencyAllow(
   realpathSync(join(appRoot, 'node_modules/@tanstack/react-start')),
 );
 const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
-/** Generated paraglide/runtime.js imports this CJS polyfill; Workerd export-type inspection has no `module`. */
-const workerExplicitOptimizeDeps = ['@inlang/paraglide-js/urlpattern-polyfill'] as const;
+/**
+ * Generated paraglide/runtime.js imports the ESM wrapper, which re-exports CJS `urlpattern-polyfill`.
+ * Workerd export-type inspection has no `module` condition, so that nested CJS must be prebundled.
+ */
+const workerExplicitOptimizeDeps = [
+  'urlpattern-polyfill',
+  '@inlang/paraglide-js/urlpattern-polyfill',
+] as const;
 
 function pinWorkerOptimizeDeps(optimizeDeps: {
   noDiscovery?: boolean;
@@ -54,10 +60,12 @@ function pinWorkerOptimizeDeps(optimizeDeps: {
   optimizeDeps.noDiscovery = true;
   // Vite concatenates include arrays across plugins. Cloudflare sets noDiscovery false, TanStack then
   // enqueues react-dom/server, and Rolldown hangs the Worker optimizer before Copies can print ready.
-  // Keep the polyfill in include so Workerd evaluates ESM; leave react-dom/server off include and
-  // off exclude so Vite transforms it without the hanging prebundle.
+  // Prebundle the CJS polyfill itself so Workerd evaluates ESM. Leave react-dom/server off include
+  // and off exclude so Vite transforms it without the hanging prebundle.
   optimizeDeps.include = [...workerExplicitOptimizeDeps];
-  optimizeDeps.exclude ??= [];
+  optimizeDeps.exclude = (optimizeDeps.exclude ?? []).filter(
+    (packageName) => packageName !== 'react' && packageName !== 'react-dom' && packageName !== 'react-dom/server',
+  );
   for (const packageName of calendarOptimizeDeps) {
     if (!optimizeDeps.exclude.includes(packageName)) optimizeDeps.exclude.push(packageName);
   }
@@ -204,6 +212,9 @@ export default defineConfig((context) => {
           };
         },
         configResolved(config) {
+          // TanStack concatenates react-dom/server onto the root ssr include after environment
+          // hooks; Workerd still reads that list during export-type inspection.
+          if (config.ssr.optimizeDeps) pinWorkerOptimizeDeps(config.ssr.optimizeDeps);
           for (const [name, environment] of Object.entries(config.environments)) {
             if (name === 'client') continue;
             pinWorkerOptimizeDeps(environment.optimizeDeps);
