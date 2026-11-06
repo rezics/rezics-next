@@ -248,11 +248,18 @@ function observeThreadPageCache(client: QueryClient) {
   };
 }
 
+function shareThreadPageData(previous: unknown | undefined, next: unknown) {
+  if (previous === undefined) return next;
+  const committed = replaceEqualDeep(previous, next);
+  return committed === previous ? previous : next;
+}
+
 function sourceFor(client: QueryClient) {
   let source = sources.get(client);
   if (!source) {
     source = observeThreadPageCache(client);
     sources.set(client, source);
+    client.setQueryDefaults(['thread-page'], { structuralSharing: shareThreadPageData });
   }
   return source;
 }
@@ -307,6 +314,15 @@ type PageStamp = {
 };
 const pageStamps = new WeakMap<object, Map<string, PageStamp>>();
 const visits = new WeakMap<QueryClient, Map<string, ThreadPageCaller>>();
+const pageQueryOwners = new WeakMap<object, ThreadPageCaller>();
+
+function claimPageQuery(query: object | undefined, caller: ThreadPageCaller) {
+  if (query) pageQueryOwners.set(query, caller);
+}
+
+function ownsPageQuery(query: object | undefined, caller: ThreadPageCaller) {
+  return query !== undefined && pageQueryOwners.get(query) === caller;
+}
 
 function setPageStamp(client: QueryClient, queryKey: QueryKey, stamp: PageStamp) {
   const value = stamp.query.data;
@@ -354,6 +370,26 @@ function matchingKey(left: QueryKey, right: QueryKey) {
   return keyId(left) === keyId(right);
 }
 
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return typeof value === 'object' && value !== null && typeof (value as PromiseLike<unknown>).then === 'function';
+}
+
+function isCancelledError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { name?: unknown; message?: unknown; constructor?: { name?: unknown } };
+  return (
+    value.name === 'CancelledError' ||
+    value.message === 'CancelledError' ||
+    value.constructor?.name === 'CancelledError'
+  );
+}
+
+function settleCancel(result: unknown) {
+  return Promise.resolve(result).catch((error) => {
+    if (!isCancelledError(error)) throw error;
+  });
+}
+
 type Connection = { owner: object | null; connected: boolean; generation: number; retired: boolean };
 
 /** One original route/query reader. It observes authority and cache state without starting reads of its own. */
@@ -386,6 +422,8 @@ export class ThreadPageCaller {
   private refreshGuard: (() => boolean) | undefined;
   private readonly personalResults = new WeakMap<object, PersonalReadAttempt>();
   private readonly personalCacheOwners = new Map<string, PersonalCacheOwner>();
+  private lastPersonalAttempt: PersonalReadAttempt | undefined;
+  private pendingAbandon: { cancelQuery: object | undefined; pageKey: QueryKey | undefined } | undefined;
 
   private constructor(
     private readonly client: QueryClient,
@@ -403,14 +441,20 @@ export class ThreadPageCaller {
     this.queryState = queryState;
     this.setCurrentPage(page);
     this.releaseSource = source.subscribe((event) => {
+      if (this.queryStarted && !this.inFlightQuery) this.inFlightQuery = this.source.queryStamp(this.queryKey)?.query;
       const refreshEvent = this.observeRefreshQueryEvent(event);
       const ownedResult = this.observeOwnedPageResultEvent(event);
       const currentKeyEvent = matchingKey(event.query.queryKey, this.queryKey);
-      if (isRetiringQueryEvent(event) && (refreshEvent.external || (!refreshEvent.owned && !ownedResult))) {
-        if (currentKeyEvent) this.externalQueryMutation = event;
-        if (refreshEvent.external || currentKeyEvent) this.retire();
+      const boundToPage =
+        this.queryStarted || ownsPageQuery(event.query as object, this) || ownsPageQuery(this.inFlightQuery, this);
+      if (
+        isRetiringQueryEvent(event) &&
+        (refreshEvent.external || (!refreshEvent.owned && !ownedResult)) &&
+        (refreshEvent.external || boundToPage)
+      ) {
+        if (currentKeyEvent && boundToPage) this.externalQueryMutation = event;
+        if (refreshEvent.external || (currentKeyEvent && boundToPage)) this.retire();
       }
-      if (this.queryStarted && !this.inFlightQuery) this.inFlightQuery = this.source.queryStamp(this.queryKey)?.query;
       this.check();
       const personalChanged = !this.retired && this.observePersonalCache();
       // Observer option/result notifications can be emitted by rendering useQuery itself.
@@ -509,21 +553,9 @@ export class ThreadPageCaller {
     if (this.retired) return;
     this.retired = true;
     const abandonedRead = this.ownedPageRead;
-    if (
-      abandonedRead?.started &&
-      abandonedRead.query &&
-      (this.externalQueryMutation?.query === abandonedRead.query ||
-        (!this.publicResult && !sameSession(this.ownerSession, this.source.readSession())))
-    ) {
-      const current = this.source.queryStamp(abandonedRead.queryKey);
-      if (current !== undefined && current.query === abandonedRead.query && current.fetchStatus !== 'idle') {
-        const query = abandonedRead.query as {
-          cancel?: (options: { revert: boolean; silent: boolean }) => unknown;
-        };
-        query.cancel?.({ revert: false, silent: true });
-      }
-    }
+    const cancelQuery = abandonedRead?.started ? (abandonedRead.query ?? this.inFlightQuery) : undefined;
     const refreshQueries = [...this.refreshContinuations]
+      .filter((continuation) => continuation.ownedPageRead?.started)
       .map((continuation) => continuation.sourceQuery)
       .filter((query): query is QueryStamp => query !== undefined);
     for (const continuation of this.refreshContinuations) continuation.active = false;
@@ -542,23 +574,63 @@ export class ThreadPageCaller {
       admittedQuery !== null &&
       current?.query === admittedQuery.query &&
       current.data === admittedQuery.data;
-    this.queryStarted = false;
-    this.inFlightQuery = undefined;
-    this.ownedPageRead = undefined;
     const currentWasExternallyChanged = this.externalQueryMutation?.query === current?.query;
-    if (
+    const removePage =
       !this.publicResult &&
-      current &&
+      !!current &&
       !currentWasExternallyChanged &&
       (admittedDataStillCurrent ||
         (admittedQuery !== undefined && admittedQuery !== null && sameQuery(admittedQuery, current)) ||
         (this.retirementQuery !== undefined && sameQuery(this.retirementQuery, current)) ||
         refreshQueries.some((query) => sameQuery(query, current)) ||
-        (inFlightQuery !== undefined && current.query === inFlightQuery))
-    )
-      this.client.removeQueries({ queryKey: this.queryKey, exact: true });
-    this.clearPersonalCache();
+        (inFlightQuery !== undefined && current.query === inFlightQuery));
+    const pageKey = removePage ? this.queryKey : undefined;
+    const personalOwners = [...this.personalCacheOwners.values()];
+    this.queryStarted = false;
+    this.inFlightQuery = undefined;
+    this.ownedPageRead = undefined;
+    this.personalCacheOwners.clear();
+    this.lastPersonalAttempt = undefined;
     if (notify) this.notify();
+    this.discardPersonalCache(personalOwners);
+    this.pendingAbandon = { cancelQuery, pageKey };
+    queueMicrotask(() => this.flushAbandonedPage());
+  }
+
+  private discardPersonalCache(personalOwners: readonly PersonalCacheOwner[]) {
+    for (const owner of personalOwners) this.client.removeQueries({ queryKey: owner.queryKey, exact: true });
+  }
+
+  isRetired() {
+    return this.retired;
+  }
+
+  /** Route identity left this mounted reader; notify so private disclosure hides before the successor read finishes. */
+  retireMounted() {
+    this.retire(true);
+    this.flushAbandonedPage();
+  }
+
+  private flushAbandonedPage() {
+    const pending = this.pendingAbandon;
+    if (!pending) return;
+    this.pendingAbandon = undefined;
+    this.abandonRetiredPage(pending.cancelQuery, pending.pageKey);
+  }
+
+  private abandonRetiredPage(cancelQuery: object | undefined, pageKey: QueryKey | undefined) {
+    const liveStamp = pageKey ? this.source.queryStamp(pageKey) : undefined;
+    const owned =
+      ownsPageQuery(cancelQuery, this) || ownsPageQuery(liveStamp?.query, this) || liveStamp?.query === cancelQuery;
+    if (!owned || !pageKey) return;
+    try {
+      void settleCancel(this.client.cancelQueries({ queryKey: pageKey, exact: true }, { silent: true, revert: false }));
+    } catch {
+      /* Query cancellation must not escape a cache notification. */
+    }
+    const remaining = this.source.queryStamp(pageKey);
+    if (remaining && (ownsPageQuery(remaining.query, this) || remaining.query === cancelQuery))
+      this.client.removeQueries({ queryKey: pageKey, exact: true });
   }
 
   private canJoinRefreshBoundary(owner: ThreadPageCaller, state: RefreshContinuationState) {
@@ -600,21 +672,7 @@ export class ThreadPageCaller {
 
   retireFromRouteChange() {
     this.retire(false);
-  }
-
-  private clearPersonalCache() {
-    for (const owner of this.personalCacheOwners.values()) {
-      const personal = this.source.queryStamp(owner.queryKey);
-      if (
-        personal &&
-        owner.query === personal.query &&
-        (personal.fetchStatus === 'fetching' ||
-          (owner.result !== undefined && personal.data === owner.result) ||
-          (owner.initialData !== undefined && personal.data === owner.initialData))
-      )
-        this.client.removeQueries({ queryKey: owner.queryKey, exact: true });
-    }
-    this.personalCacheOwners.clear();
+    this.flushAbandonedPage();
   }
 
   private observePersonalCache() {
@@ -654,6 +712,7 @@ export class ThreadPageCaller {
     if (this.queryStarted) {
       if (this.source.queryTerminalRevision(this.queryKey) !== this.queryStartTerminalRevision) return false;
       const current = this.source.queryStamp(this.queryKey);
+      if (!this.inFlightQuery && current) this.inFlightQuery = current.query;
       if (this.inFlightQuery)
         return (
           current?.query === this.inFlightQuery &&
@@ -698,26 +757,37 @@ export class ThreadPageCaller {
       if (!this.ownsBoundaryEvent(boundary, event)) continue;
       owned = true;
       if (boundary.continuation?.active) ownedContinuations.add(boundary.continuation);
-      if (matchingKey(event.query.queryKey, this.queryKey))
+      if (matchingKey(event.query.queryKey, this.queryKey)) {
         this.queryState = this.source.queryStamp(this.queryKey) ?? null;
+        if (this.queryStarted) this.queryStartTerminalRevision = this.source.queryTerminalRevision(this.queryKey);
+      }
     }
+    const sessionEvent = matchingKey(event.query.queryKey, sessionQuery.queryKey);
     for (const continuation of this.refreshContinuations) {
-      if (!continuation.active || !isThreadPageFor(event.query.queryKey, continuation.identity.id)) continue;
+      if (!continuation.active) continue;
       if (ownedContinuations.has(continuation)) continue;
-      if (this.isOwnedPageEvent(continuation.ownedPageRead, event)) {
+      const pageEvent = isThreadPageFor(event.query.queryKey, continuation.identity.id);
+      if (!sessionEvent && !pageEvent) continue;
+      if (pageEvent && this.isOwnedPageEvent(continuation.ownedPageRead, event)) {
         continuation.ownedPageRead!.commitObserved = true;
         owned = true;
         continue;
       }
-      if (this.isOwnedPageFailure(continuation.ownedPageRead, event)) {
+      if (pageEvent && this.isOwnedPageFailure(continuation.ownedPageRead, event)) {
         continuation.ownedPageRead = undefined;
         owned = true;
         continue;
       }
-      if (isRetiringQueryEvent(event)) {
-        continuation.queryRetired = true;
-        external = true;
-      }
+      if (!isRetiringQueryEvent(event)) continue;
+      const coveredByOpenBoundary = [...this.synchronousCacheBoundaries].some(
+        (boundary) =>
+          boundary.continuation === continuation &&
+          boundary.queries.has(event.query as object) &&
+          (boundary.kind !== 'cancel' || event.type !== 'removed'),
+      );
+      if (coveredByOpenBoundary) continue;
+      continuation.queryRetired = true;
+      external = true;
     }
     return { owned, external };
   }
@@ -788,14 +858,28 @@ export class ThreadPageCaller {
     if (!read) return false;
     if (this.isOwnedPageEvent(read, event)) {
       this.queryOwnSuccessObserved = true;
-      read!.commitObserved = true;
+      read.commitObserved = true;
       return true;
     }
     if (this.isOwnedPageFailure(read, event)) {
       this.ownedPageRead = undefined;
       return true;
     }
-    return false;
+    if (
+      !read.started ||
+      event.type !== 'updated' ||
+      event.action?.manual === true ||
+      (event.action?.type !== 'success' && event.action?.type !== 'error') ||
+      !matchingKey(event.query.queryKey, read.queryKey) ||
+      (read.query !== undefined && read.query !== event.query)
+    )
+      return false;
+    if (!read.query) read.query = event.query as object;
+    if (event.action?.type === 'success') {
+      this.queryOwnSuccessObserved = true;
+      if (read.resultReady && read.commitReady) read.commitObserved = true;
+    }
+    return true;
   }
 
   snapshot = () => {
@@ -814,17 +898,25 @@ export class ThreadPageCaller {
       this.retire();
       return () => {};
     }
+    const sameHost = this.connection.owner === owner && this.connection.connected;
+    const hadHost = this.connection.owner !== null || this.connection.generation > 0;
     this.connection.owner = owner;
     this.connection.connected = true;
-    const generation = ++this.connection.generation;
-    this.notify();
+    if (!hadHost) this.connection.generation = 1;
+    const generation = this.connection.generation;
+    if (!sameHost) this.notify();
     return () => {
-      if (!this.connection.connected || this.connection.generation !== generation) return;
+      if (this.connection.owner !== owner || this.connection.generation !== generation) return;
       this.connection.connected = false;
-      const disconnectedAt = ++this.connection.generation;
       this.notify();
       queueMicrotask(() => {
-        if (!this.connection.connected && this.connection.generation === disconnectedAt) this.retire();
+        if (
+          !this.connection.connected &&
+          this.connection.generation === generation &&
+          this.connection.owner === owner &&
+          !this.retired
+        )
+          this.retire();
       });
     };
   }
@@ -995,6 +1087,7 @@ export class ThreadPageCaller {
     if (keyId(queryKey) !== keyId(this.currentAdmission.queryKey)) throw new ThreadPageCallerRetired();
     const query = this.source.queryStamp(queryKey);
     this.inFlightQuery = query?.query;
+    claimPageQuery(query?.query, this);
     this.queryStartTerminalRevision = this.source.queryTerminalRevision(queryKey);
     this.queryStartDataUpdateCount = query?.dataUpdateCount ?? 0;
     this.queryOwnSuccessObserved = false;
@@ -1021,6 +1114,8 @@ export class ThreadPageCaller {
     const query = this.source.queryStamp(queryKey);
     if (query && !this.ownedPageRead.query) this.ownedPageRead.query = query.query;
     if (query && this.ownedPageRead.query !== query.query) throw new ThreadPageCallerRetired();
+    if (query && !this.inFlightQuery) this.inFlightQuery = query.query;
+    claimPageQuery(query?.query ?? this.ownedPageRead.query, this);
   }
 
   recordOwnedPageResult(queryKey: QueryKey, value: unknown) {
@@ -1080,6 +1175,18 @@ export class ThreadPageCaller {
           : null
         : this.currentPageViewerId;
     const ticket = this.connection.generation;
+    const last = this.lastPersonalAttempt;
+    if (
+      last &&
+      !last.owner.retired &&
+      last.target === target &&
+      last.ticket === ticket &&
+      last.pageViewerId === pageViewerId &&
+      keyId(last.queryKey) === keyId(queryKey) &&
+      sameSession(last.session, session) &&
+      this.personalCacheOwners.get(keyId(queryKey)) === last.owner
+    )
+      return last;
     const query = this.source.queryStamp(queryKey);
     const owner: PersonalCacheOwner = {
       queryKey: [...queryKey],
@@ -1091,7 +1198,7 @@ export class ThreadPageCaller {
       retired: false,
     };
     this.personalCacheOwners.set(keyId(queryKey), owner);
-    return {
+    const attempt = {
       id: ++this.personalSequence,
       idValue: identity.id,
       pageViewerId,
@@ -1104,6 +1211,8 @@ export class ThreadPageCaller {
       terminalRevision: this.source.queryTerminalRevision(queryKey),
       owner,
     } satisfies PersonalReadAttempt;
+    this.lastPersonalAttempt = attempt;
+    return attempt;
   }
 
   async readPersonal<T extends object>(attempt: PersonalReadAttempt, work: () => Promise<T> | T): Promise<T> {
@@ -1232,16 +1341,31 @@ export class ThreadPageCaller {
           cancelEvents: new Map(),
           removeEvents: new Map(),
         };
+        const release = () => {
+          for (const participant of participants) participant.synchronousCacheBoundaries.delete(boundary);
+        };
         for (const participant of participants) participant.synchronousCacheBoundaries.add(boundary);
         try {
-          return operation();
-        } finally {
-          for (const participant of participants) participant.synchronousCacheBoundaries.delete(boundary);
+          const result = operation();
+          if (isThenable(result))
+            return settleCancel(result)
+              .catch((error) => {
+                if (kind === 'cancel' && isCancelledError(error)) return undefined;
+                throw error;
+              })
+              .finally(release) as T;
+          release();
+          return result;
+        } catch (error) {
+          release();
+          if (kind === 'cancel' && isCancelledError(error)) return undefined as T;
+          throw error;
         }
       },
       beginOwnedPageRead: (queryKey) => {
         if (!state.active || state.queryRetired) throw new ThreadPageCallerRetired();
         const query = this.source.queryStamp(queryKey);
+        claimPageQuery(query?.query, this);
         state.ownedPageRead = {
           queryKey: [...queryKey],
           query: query?.query,
@@ -1264,6 +1388,7 @@ export class ThreadPageCaller {
         const query = this.source.queryStamp(queryKey);
         if (query && !read.query) read.query = query.query;
         if (query && read.query !== query.query) throw new ThreadPageCallerRetired();
+        claimPageQuery(query?.query ?? read.query, this);
       },
       recordOwnedPageResult: (queryKey, value) => {
         const read = state.ownedPageRead;
@@ -1325,7 +1450,6 @@ export class ThreadPageCaller {
     return (
       !this.retired &&
       !this.connection.retired &&
-      this.connection.connected &&
       !attempt.owner.retired &&
       this.personalCacheOwners.get(keyId(attempt.queryKey)) === attempt.owner &&
       this.source.queryTerminalRevision(attempt.queryKey) === attempt.terminalRevision &&
@@ -1393,9 +1517,10 @@ export async function runThreadPageQuery<T extends { queryKey: QueryKey }, TResu
           : typeof configuredSharing === 'function'
             ? configuredSharing(previous, next)
             : replaceEqualDeep(previous, next);
-      caller.recordOwnedPageCommit(query.queryKey, next, committed);
-      continuation?.recordOwnedPageCommit(query.queryKey, next, committed);
-      return committed;
+      const stored = committed === previous ? previous : next;
+      caller.recordOwnedPageCommit(query.queryKey, next, stored);
+      continuation?.recordOwnedPageCommit(query.queryKey, next, stored);
+      return stored;
     },
     queryFn: async (context: unknown) => {
       caller.assertReadCurrent();
@@ -1420,7 +1545,8 @@ export async function runThreadPageQuery<T extends { queryKey: QueryKey }, TResu
     caller.finishQuery(query.queryKey, result, before, beforeTerminalRevision);
     return result;
   } catch (error) {
-    caller.failQuery();
+    if (!caller.isRetired()) caller.failQuery();
+    if (isCancelledError(error)) throw new ThreadPageCallerRetired();
     throw error;
   }
 }

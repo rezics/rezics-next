@@ -36,7 +36,7 @@ import {
 } from 'react';
 import { QueryClientContext, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { m } from '../../paraglide/messages.js';
-import { getLocale } from '../../paraglide/runtime.js';
+import { deLocalizeUrl, getLocale } from '../../paraglide/runtime.js';
 import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
 import {
@@ -152,6 +152,11 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   errorComponent: (props) => {
     const { id } = Route.useParams();
     const { boardReturn } = Route.useSearch();
+    if (
+      props.error instanceof ThreadPageCallerRetired ||
+      (props.error instanceof Error && props.error.name === 'CancelledError')
+    )
+      return <ThreadPage />;
     return isThreadPageCursorError(props.error) ? (
       <ThreadPageError threadId={id} boardReturn={boardReturn} />
     ) : (
@@ -179,7 +184,16 @@ export function ThreadReadingHeader({
   const restart = origin ? boardReturnRestart(origin) : undefined;
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
-      <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
+      <BoardContext
+        realm={page.realm}
+        board={page.board}
+        boardReturn={currentOrigin ? origin : undefined}
+        reviewContext={page.reviewContext}
+        thread={page.thread}
+        posts={page.posts.posts}
+        cursor={page.composed?.query.cursor}
+        prominent
+      />
       {subjectReturn ? (
         <a
           data-slot="thread-subject-return"
@@ -304,32 +318,41 @@ export function ThreadPage() {
   const pageIsPrivate = activeAdmission.identity.credentialMode === 'session' || activePage.viewerId !== undefined;
   const currentPageUnavailable =
     !binding.current ||
+    locale !== activeAdmission.identity.locale ||
     (pageIsPrivate &&
       activePage.viewerId !== undefined &&
       (session !== 'signed-in' || activePage.viewerId !== subject));
   const page = activePage;
   const personalOptions = useMemo(() => threadPersonalQuery(id, cursor, postIds), [id, cursor, postIds]);
-  const personalAttempt = useMemo(
-    () => caller?.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds])),
-    [
-      caller,
-      personalOptions.queryKey,
-      id,
-      cursor,
-      postIds,
-      caller?.sessionRevision,
-      caller?.connectionTicket,
-      caller?.personalRevision,
-    ],
-  );
+  const personalAttempt = useMemo(() => {
+    if (!caller || caller.isRetired()) return undefined;
+    try {
+      return caller.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds]));
+    } catch (error) {
+      if (error instanceof ThreadPageCallerRetired) return undefined;
+      throw error;
+    }
+  }, [
+    caller,
+    personalOptions.queryKey,
+    id,
+    cursor,
+    postIds,
+    caller?.sessionRevision,
+    caller?.connectionTicket,
+    caller?.personalRevision,
+  ]);
+  const personalAdmitted = !!caller && !caller.isRetired();
   const personalQuery = useQuery({
     ...personalOptions,
+    queryKey: personalAdmitted ? personalOptions.queryKey : ['thread-personal', 'inactive', id],
+    gcTime: 0,
     enabled:
       session === 'signed-in' &&
-      !!caller &&
+      personalAdmitted &&
       binding.current &&
-      caller.personalSessionReady() &&
-      caller.isConnectedCurrent(),
+      !!caller?.personalSessionReady() &&
+      !!caller?.isConnectedCurrent(),
     structuralSharing: false,
     queryFn: async (context) => {
       if (!caller || !personalAttempt) throw new ThreadPageCallerRetired();
@@ -363,7 +386,13 @@ export function ThreadPage() {
   useLayoutEffect(() => {
     for (const operation of retiredReadOperations.current.splice(0)) retireObsoleteOperation(operation);
   }, [readScope]);
+  useLayoutEffect(() => {
+    if (personalAdmitted) return;
+    queryClient.removeQueries({ queryKey: personalOptions.queryKey, exact: true });
+  }, [personalAdmitted, personalOptions.queryKey, queryClient]);
   const routeRevision = useRef(0);
+  const callerRef = useRef(caller);
+  callerRef.current = caller;
   useLayoutEffect(() => {
     const unsubscribe = router.subscribe('onBeforeLoad', ({ toLocation }) => {
       const operation = currentRead.current.operation;
@@ -374,6 +403,11 @@ export function ThreadPage() {
       routeRevision.current++;
       currentRead.current.sequence++;
       operation?.retire();
+      const samePlace =
+        toLocation.pathname === router.state.location.pathname &&
+        JSON.stringify(toLocation.search) === JSON.stringify(router.state.location.search);
+      const localeChanged = getLocale() !== callerRef.current?.admission.identity.locale;
+      if (!samePlace || localeChanged) callerRef.current?.retireMounted();
     });
     return () => {
       unsubscribe();
@@ -396,7 +430,7 @@ export function ThreadPage() {
   }, [page.posts, callbackRevision, caller?.connectionTicket]);
 
   useEffect(() => {
-    if (isCallbackCurrent() && !location.hash.replace(/^#/, '')) window.scrollTo(0, 0);
+    if (isCallbackCurrent() && !location.hash.replace(/^#/, '')) window.scrollTo?.(0, 0);
   }, [location]);
 
   async function refreshThreadQueries() {
@@ -481,12 +515,12 @@ export function ThreadPage() {
       if (recovery && !routeIsCurrent()) throw new ThreadPageCallerRetired();
       await continuation.runOwnedCacheBoundary(
         'cancel',
-        () => queryClient.cancelQueries({ queryKey: ['thread-page', id] }),
+        () => queryClient.cancelQueries({ queryKey: ['thread-page', id] }, { silent: true, revert: true }),
         boundaryPeers,
       );
       if (!current()) throw new Error('Thread reader changed');
       // Retire pre-command pages as well as in-flight reads, so navigation cannot reuse their old bodies.
-      continuation.runOwnedCacheBoundary(
+      await continuation.runOwnedCacheBoundary(
         'remove',
         () => queryClient.removeQueries({ queryKey: ['thread-page', id] }),
         boundaryPeers,
@@ -523,10 +557,13 @@ export function ThreadPage() {
       if (!publicationCurrent()) throw new Error('Thread reader changed');
       rememberThreadSlug(updated.thread.id, updated.thread.title);
       if (!publicationCurrent()) throw new Error('Thread reader changed');
-      const destinationLocation = new URL(destination, window.location.origin);
-      if (destinationLocation.pathname !== location.pathname) {
+      const destinationLocation = deLocalizeUrl(new URL(destination, window.location.origin));
+      const currentLocation = deLocalizeUrl(new URL(location.pathname + location.search, window.location.origin));
+      if (destinationLocation.pathname !== currentLocation.pathname) {
         operation.navigationPath = destinationLocation.pathname;
-        await router.navigate({ to: destination });
+        await router.navigate({
+          to: `${destinationLocation.pathname}${destinationLocation.search}${destinationLocation.hash}`,
+        });
         if (
           !operation.navigationAuthorized ||
           routeRevision.current !== routeTicket ||
@@ -549,8 +586,13 @@ export function ThreadPage() {
     }
   }
 
+  useLayoutEffect(() => {
+    if (getLocale() === activeAdmission.identity.locale) return;
+    callerRef.current?.retireMounted();
+    currentRead.current.operation?.retire();
+  }, [locale, activeAdmission.identity.locale]);
   return (
-    <AuthoringDepartureProvider>
+    <AuthoringDepartureProvider sessionBound="subject">
       {currentPageUnavailable ? (
         <div role="alert" className="mx-auto max-w-3xl space-y-3 p-4">
           <p>{m.thread_post_unavailable()}</p>
@@ -629,6 +671,7 @@ export function copyThreadPostLink(post: Pick<ThreadPost, 'id' | 'threadId'>): P
 
 export function ThreadReadingPost({
   post,
+  pageIndex,
   composed,
   reactionFieldsAvailable = true,
   reactionViewerAvailable = true,
@@ -659,6 +702,7 @@ export function ThreadReadingPost({
   review,
 }: {
   post: ThreadPost;
+  pageIndex: number;
   composed?: ThreadPageObservation | undefined;
   reactionFieldsAvailable?: boolean;
   reactionViewerAvailable?: boolean;
@@ -1168,6 +1212,7 @@ export function ThreadReadingPost({
         <>
           <ThreadPostReadingBody
             post={post}
+            pageIndex={pageIndex}
             documentMedia={documentMedia}
             mentions={mentions}
             readerIdentity={lifetime}

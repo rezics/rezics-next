@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, type DocumentNode } from '@rezics/document';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import type { ReadingPage } from '../src/threads/thread-page';
 import { isThreadPageCursorError, loadThreadPage } from '../src/threads/thread-page';
+import { documentImagesForPost, receiveThreadDocumentMedia } from '../src/threads/document-media-read';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
 const boardId = '22222222-2222-4222-8222-222222222222';
@@ -33,6 +34,16 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     revisionId: '66666666-6666-4666-8666-666666666666',
     body: fromPlainText('Opening text stays local', 'blocks'),
   };
+  opening.body = {
+    ...opening.body,
+    doc: {
+      ...opening.body.doc,
+      content: [
+        ...(opening.body.doc.content ?? []),
+        { type: 'paragraph', content: [{ type: 'mention', attrs: { accountId: authorId } }] } satisfies DocumentNode,
+      ],
+    },
+  };
   const reply: typeof opening = {
     ...opening,
     id: replyId,
@@ -59,24 +70,67 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
       firstPost: opening,
     },
     [reply],
-    [{ id: authorId, displayName: 'Disclosed author', handle: null, avatar: null }],
+    [{ id: authorId, displayName: 'Disclosed author', handle: 'disclosed-author', avatar: null }],
   );
+  response.mentions = {
+    state: 'current',
+    retryable: false,
+    overflow: false,
+    sources: [
+      {
+        postId: openingId,
+        threadId,
+        revisionId: opening.revisionId,
+        sha256: opening.sha256,
+        pageIndex: 0,
+        references: [authorId],
+        overflow: false,
+      },
+    ],
+    identities: [{ id: authorId, state: 'active', handle: 'disclosed-author' }],
+  };
+  response.conversationActivity = {
+    state: 'current',
+    cohort: 'public',
+    count: { kind: 'exact', value: 0 },
+    lastActivityAt: null,
+  };
+  response.reviewContext = {
+    source: { threadId, postId: openingId, revisionId: opening.revisionId },
+    target: {
+      state: 'available',
+      subject: {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        kind: 'visualNovel',
+        label: { value: 'Reviewed work', language: 'en' },
+      },
+    },
+    citations: {
+      state: 'current',
+      items: [
+        {
+          postId: openingId,
+          sourceRevisionId: opening.revisionId,
+          citation: {
+            state: 'available',
+            questionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            units: 0,
+            voteRevision: 2,
+            metadata: { state: 'unavailable' },
+          },
+        },
+      ],
+    },
+  };
   const paths: string[] = [];
   let failed = false;
   let missingLocation = false;
   let abortRead: AbortController | undefined;
-  let abortMedia: AbortController | undefined;
-  let mediaSignal: AbortSignal | null | undefined;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const url = new URL(new Request(input, init).url);
       paths.push(`${url.pathname}${url.search}`);
       expect(new Request(input, init).headers.has('authorization')).toBe(false);
-      if (url.pathname === '/v1/media/presentations') {
-        mediaSignal = init?.signal;
-        abortMedia?.abort(new Error('Image reading visit ended'));
-        return new Response(null, { status: 503 });
-      }
       if (url.pathname.endsWith('/location'))
         return missingLocation
           ? new Response(null, { status: 404 })
@@ -117,7 +171,16 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     actions: response.actions,
     reactionsAsOf: null,
   });
+  expect(page.mentions).toEqual({ [authorId]: { handle: 'disclosed-author' } });
+  expect(page.mentionProjection).toEqual(response.mentions);
+  expect(page.reviewContext).toEqual(response.reviewContext);
+  expect(page.conversationActivity).toEqual({
+    state: 'current',
+    count: { kind: 'exact', value: 0 },
+    lastActivityAt: null,
+  });
   expect(paths.some((path) => path.startsWith('/v1/accounts'))).toBe(false);
+  expect(paths.some((path) => path.startsWith('/v1/media/presentations'))).toBe(false);
 
   // Safe native tombstones disclose no substitute author or timestamp, and sparse pages retain continuation.
   response.replies = {
@@ -223,6 +286,97 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
       },
     },
   };
+  const image = {
+    id: mediaId,
+    containerId: threadId,
+    digest: 'a'.repeat(64),
+    width: 640,
+    height: 480,
+    variants: [{ format: 'webp' as const, width: 640, height: 480 }],
+    placeholder: null,
+    focalPoint: null,
+    credit: null,
+  };
+  response.documentMedia = {
+    state: 'available',
+    documents: [
+      {
+        postId: openingId,
+        threadId,
+        revisionId: opening.revisionId,
+        sha256: opening.sha256,
+        state: 'available',
+        images: [{ id: mediaId, state: 'available', presentation: image }],
+      },
+    ],
+  };
+  expect(
+    receiveThreadDocumentMedia(response.documentMedia, [
+      {
+        id: openingId,
+        threadId,
+        route: 0,
+        parentId: null,
+        removed: true,
+        availability: 'erased',
+        body: null,
+        sha256: null,
+      },
+      reply,
+    ]),
+  ).toEqual({ kind: 'ready', images: [], documents: [] });
+  expect(
+    receiveThreadDocumentMedia(
+      {
+        state: 'available',
+        documents: [{ ...response.documentMedia.documents[0]!, state: 'unavailable', images: [] }],
+      },
+      [opening, reply],
+    ),
+  ).toEqual({ kind: 'ready', images: [], documents: [] });
+  const mixedUnavailable = {
+    id: mediaId,
+    state: 'unavailable' as const,
+  };
+  const mixedAvailable = {
+    id: mediaId,
+    state: 'available' as const,
+    presentation: image,
+  };
+  expect(
+    receiveThreadDocumentMedia(
+      {
+        state: 'available',
+        documents: [
+          {
+            ...response.documentMedia.documents[0]!,
+            images: [mixedUnavailable, mixedAvailable],
+          },
+        ],
+      },
+      [
+        {
+          ...opening,
+          mediaIds: [mediaId],
+          body: response.thread.firstPost.body,
+        },
+        reply,
+      ],
+    ),
+  ).toEqual({
+    kind: 'ready',
+    images: [image],
+    documents: [
+      {
+        pageIndex: 0,
+        postId: openingId,
+        threadId,
+        revisionId: opening.revisionId,
+        sha256: opening.sha256,
+        mediaIds: [mediaId],
+      },
+    ],
+  });
   const selectedRead = (signal?: AbortSignal) =>
     loadThreadPage(
       client,
@@ -234,17 +388,31 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     );
   const optionalFailure = await selectedRead();
   expect(optionalFailure.posts.posts[0]?.body).toEqual(response.thread.firstPost.body);
-  expect(optionalFailure.documentMedia).toEqual({ kind: 'unavailable' });
+  expect(optionalFailure.documentMedia?.kind).toBe('ready');
+  expect(optionalFailure.documentMediaProjection).toEqual(response.documentMedia);
+  expect(documentImagesForPost(optionalFailure.documentMedia, optionalFailure.posts.posts[0]!, 0)).toEqual(
+    new Map([[mediaId, image]]),
+  );
+  expect(documentImagesForPost(optionalFailure.documentMedia, optionalFailure.posts.posts[0]!, 1)).toEqual(new Map());
+  const exactPost = optionalFailure.posts.posts[0];
+  if (exactPost?.availability !== 'available') throw new Error('Expected the admitted opening post.');
+  expect(
+    documentImagesForPost(
+      optionalFailure.documentMedia,
+      {
+        ...exactPost,
+        revisionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      0,
+    ),
+  ).toEqual(new Map());
   expect(optionalFailure.posts.next).toBe('sparse-next');
   expect(optionalFailure.linkedPostUnavailable).toBe(false);
   expect(optionalFailure.posts.posts[1]?.body).toEqual(reply.body);
-  abortMedia = new AbortController();
-  await expect(selectedRead(abortMedia.signal)).rejects.toThrow('Image reading visit ended');
-  expect(mediaSignal?.aborted).toBe(true);
-  expect(paths.slice(-4)).toEqual([
+  abortRead = new AbortController();
+  await expect(selectedRead(abortRead.signal)).rejects.toThrow('Reading visit ended');
+  expect(paths.slice(-2)).toEqual([
     `/v1/threads/${threadId}/posts/${replyId}/location`,
     `/v1/threads/${threadId}/reading-page?cursor=selected-reply-cursor`,
-    `/v1/boards/${boardId}`,
-    '/v1/media/presentations',
   ]);
 });

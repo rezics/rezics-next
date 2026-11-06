@@ -1988,6 +1988,7 @@
   "thread_review_cite_vote": "Cite my current vote ({score}/10)",
   "thread_review_details_heading": "Review details",
   "thread_review_details_selected_subject": "Reviewing: {title}",
+  "thread_review_citation_absent": "No rating was cited for this post.",
   "thread_review_details_citation_help": "Optional. The cited rating stays the same if you change your vote later.",
   "thread_review_duplicate": "You already have a live review for this subject on this board.",
   "thread_review_existing": "Open your existing review",

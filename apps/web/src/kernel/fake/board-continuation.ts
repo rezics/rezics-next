@@ -53,6 +53,7 @@ export const routes: FakeRoute[] = [
         return {
           status: 200,
           board: { ...board.board, id },
+          pinRevision: '0',
           pinnedThreads: [],
           threads: cards,
           next: !continued && id === continuationBoardId ? continuationCursor : null,

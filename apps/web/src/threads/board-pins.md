@@ -42,25 +42,32 @@ frontier.
 
 Slow mode and watch keep their existing owners. Settings watch and Inbox stay Performance-owned.
 
-Decision: Production selected-advice receiving starts only after generated `@rezics/client` output includes both the observed `pinRevision` on the Board page response and the registered `pin-advice` callable. Until then, keep the production receiver unavailable and do not mirror declarations or call the route directly.
+Decision: The installed public client supplies Board `pinRevision` and `boards({ id })['pin-advice'].post`; production selected advice sends the admitted generation and exact selected sources through the private no-store server reader.
 
-`BoardPinProducer.inspectSelected` remains unavailable until that callable is published. The bounded input and
-response validators remain ready for the existing private no-store native advice route. The mounted manager now
-prepares and displays controls only from its exact selected response, and retains the original command intent
-through explicit retry and refresh while source, cohort and browser-session retirement close old controls. The Board
-page's native source supplies its observed `pinRevision` on initial and continued pages and rejects changed
-generations at final admission. Production selection remains unavailable until complete-input publication installs
-both that field and the official advice callable. Tests establish bounded selection, response validation and
-mounted consumer behavior, not installed production advice or native management/growth. The publication owner
-owns declaration generation and installation.
+`BoardPinProducer.inspectSelected` uses that callable after current session preparation and rejects a viewer mismatch
+before transport. The bounded input and response validators remain in place. The mounted manager prepares and
+displays controls only from its exact selected response, and retains the original command intent through explicit
+retry and refresh while source, cohort and browser-session retirement close old controls. The Board page's native
+source supplies its observed `pinRevision` on initial and continued pages and rejects changed generations at final
+admission. Pin/unpin and generation-change refresh continue through their installed owners.
 
-Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId` and the admitted Board page's observed `pinRevision`; production actions stay unavailable until both page metadata and advice callable are installed in the public client.
+Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId` and the admitted Board page's observed `pinRevision`. Selected advice recognizes the public `session_unavailable` problem code locally and does not import Web's private session module.
 
 Decision: Pin/unpin confirmation is an expandable in-row group tied to its toggle; cancel restores toggle focus, while completion focuses the current status or the Board's announced recovery target.
 
 Decision: Bind pin commands directly to the installed KernelClient callable. A forbidden session request returns
-`denied` before transport; only a failure during command transport can be uncertain. The installed client returns transport failures without
-an HTTP response; these preserve the original uncertain command for explicit retry. Confirmation relationships
-use per-occurrence React IDs so repeated discussions have distinct accessible groups. The mounted retry and regional
-focus journey uses installed page and command callables, while selected advice remains unavailable in production
-until publication supplies both required declarations.
+`denied` before transport; only a failure during command transport can be uncertain. The installed client returns
+transport failures without an HTTP response; these preserve the original uncertain command for explicit retry.
+Confirmation relationships use per-occurrence React IDs so repeated discussions have distinct accessible groups.
+The mounted retry and regional focus journey uses installed page, advice and command callables.
+
+### Cost: installed selected pin advice
+
+- **Touches:** one private no-store server read prepares the current session, rejects a viewer mismatch before native
+  transport, and makes one generated `pin-advice` request for the displayed selection. A successful command retains its
+  existing exact retry and performs one cursor-free Board page refresh before advice runs for the admitted generation.
+- **Bound:** at most 25 unique displayed sources per advice request; selected order and each source revision are kept.
+  No directory scan, second feed or per-row request is added.
+- **Growth check:** `board-pins-advice.test.tsx` verifies the generated callable, request generation and forbidden-session
+  boundary; `board-pins-mounted.test.tsx` covers uncertain retry, pin, admitted-generation refresh, renewed advice and
+  surviving-control focus. Native physical-growth acceptance remains in Content's existing gate.

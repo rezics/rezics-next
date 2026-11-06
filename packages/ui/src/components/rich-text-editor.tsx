@@ -377,6 +377,7 @@ export function RichTextEditor({
 
   const schedulePublish = useCallback((editor: TiptapEditor) => {
     if (editor.isDestroyed || !mounted.current) return;
+    if (lastPublishedDoc.current === editor.state.doc) return;
     latest.current.onSnapshotPending?.();
     if (editor.view.composing) return;
     if (timer.current !== null) clearTimeout(timer.current);

@@ -73,6 +73,7 @@ export function preparedPostReading(blocks = 24) {
     images: [image],
     documents: [
       {
+        pageIndex: 0,
         postId: post.id,
         threadId: post.threadId,
         revisionId: post.revisionId,

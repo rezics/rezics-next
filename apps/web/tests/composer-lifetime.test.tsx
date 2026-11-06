@@ -36,10 +36,14 @@ test('real reply and inline composers retire pending copies and submissions, whi
     window,
     document: window.document,
     navigator: window.navigator,
+    location: window.location,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
     HTMLFormElement: window.HTMLFormElement,
     Element: window.Element,
     Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -47,6 +51,7 @@ test('real reply and inline composers retire pending copies and submissions, whi
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     matchMedia: window.matchMedia.bind(window),
     createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(
@@ -54,6 +59,9 @@ test('real reply and inline composers retire pending copies and submissions, whi
   );
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  Object.defineProperty(window, 'scrollTo', { configurable: true, writable: true, value: () => {} });
+  const elementScroll = window.HTMLElement.prototype as { scrollTo?: (x?: number, y?: number) => void };
+  if (typeof elementScroll.scrollTo !== 'function') elementScroll.scrollTo = () => {};
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');

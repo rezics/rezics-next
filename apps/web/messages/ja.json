@@ -1961,6 +1961,7 @@
   "thread_review_cite_vote": "現在の投票を引用する（{score}/10）",
   "thread_review_details_heading": "レビューの詳細",
   "thread_review_details_selected_subject": "レビュー対象：{title}",
+  "thread_review_citation_absent": "この投稿には評価が引用されていません。",
   "thread_review_details_citation_help": "任意です。後で投票を変更しても、引用した評価は変わりません。",
   "thread_review_duplicate": "この対象と掲示板には、すでに公開中のレビューがあります。",
   "thread_review_existing": "既存のレビューを開く",

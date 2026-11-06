@@ -1961,6 +1961,7 @@
   "thread_review_cite_vote": "引用我当前的投票（{score}/10）",
   "thread_review_details_heading": "评价详情",
   "thread_review_details_selected_subject": "评价对象：{title}",
+  "thread_review_citation_absent": "此则帖文没有引用评分。",
   "thread_review_details_citation_help": "可选。之后更改投票不会改变已引用的评分。",
   "thread_review_duplicate": "你已经在此版块发布过该条目的有效评价。",
   "thread_review_existing": "打开已有评价",
