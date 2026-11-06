@@ -458,8 +458,10 @@ Library dimensions stay in their existing units and are never converted into
 NativeStepWork. Defaults are candidateKeys 1 for the existing one-effect page,
 identityMetadataRows 0 because this path dispatches no identity metadata sweep,
 nativeRows 8192, nativePoints 128, witnessKeys 1, statements 128 and bytes 1048576
-from the existing Collection Source one-page ceilings, and emptySeeks 2 for the page
-end and sealed-empty case. The Source frame creates one `NativeCollectionWork`; child
+from the existing Collection Source one-page ceilings, and emptySeeks 128 matching
+that statement ceiling so coordinator-wrapped Search/Library publication can fund
+readJob and participant SQL. Consumer page-end and sealed-empty probes still use two
+seeks; they do not set this frame maximum. The Source frame creates one `NativeCollectionWork`; child
 planning allowances cap its existing `compose` transfer and SQL footprints. Unknown
 footprints refuse before dispatch. A dispatched reservation is never refunded from
 result row counts.
@@ -480,7 +482,7 @@ The exact optional overrides and defaults are:
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS`           |       1 | One effect selection.                                                                                                                                    |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS`             |     128 | Existing Collection Source one-page statement ceiling.                                                                                                   |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES`                  | 1048576 | Existing Collection Source one-page byte ceiling.                                                                                                        |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |       2 | The bounded page-end and sealed-empty probes.                                                                                                            |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |     128 | Statement-axis bound so Search publication readJob and participant SQL can dispatch; page-end/sealed-empty probes still use two seeks. |
 
 Overrides are canonical non-negative safe integers no higher than the named
 existing ceilings; invalid values fail at frame creation. Required work dimensions
@@ -1160,8 +1162,10 @@ getter presence alone. Accounts' fully spent local allowance is not reused.
 
 Decision: original-source native cases install Search and Library participants, then run Accounts
 verify/unverify through `mergeVerifiedAgent` so publication and participant receipts exist before
-original-funded prepare/checkpoint/finish. Admission-only cases keep `prepareAdmission`. Library
-cutover Access retains `collection:delete` and `library.collection` owner/type metadata.
+original-funded prepare/checkpoint/finish. The independent Library emptySeeks ceiling is 128 so
+coordinator-wrapped Search publication can fund readJob and participant SQL. Admission-only cases
+keep `prepareAdmission`. Library cutover Access retains `collection:delete` and
+`library.collection` owner/type metadata.
 
 The additional fixture cases cover genuine one-original/two-attempt/overlap/reentry,
 unavailable/failure and real Core rollback, exact counter/ledger/deadline behavior,

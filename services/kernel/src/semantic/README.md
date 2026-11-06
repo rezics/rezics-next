@@ -457,7 +457,7 @@ The deployment may override these bounded defaults with the exact `KERNEL_IDENTI
 | `LIBRARY_WITNESS_KEYS`           |       1 | At most one selected effect is reconciled per invocation.                                                            |
 | `LIBRARY_STATEMENTS`             |     128 | Existing bounded Collection Source statement ceiling.                                                                |
 | `LIBRARY_BYTES`                  | 1048576 | Existing bounded Collection Source response ceiling.                                                                 |
-| `LIBRARY_EMPTY_SEEKS`            |       2 | One page-end seek and one sealed-empty seek.                                                                         |
+| `LIBRARY_EMPTY_SEEKS`            |     128 | Statement-axis bound for Search/Library publication SQL; page-end/sealed-empty probes still use two seeks.           |
 
 Configuration values must be canonical non-negative safe integers within the listed bounds. Zero is rejected for
 required work; the zero defaults are limited to dimensions with no dispatch on this path.

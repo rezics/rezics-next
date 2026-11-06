@@ -241,6 +241,16 @@ test('History-sized Source funding preserves the directory child bounds and refu
     bytes: 630784,
     engineRequests: 0,
   });
+  expect(configured.library).toEqual({
+    candidateKeys: 1,
+    identityMetadataRows: 0,
+    nativeRows: 8192,
+    nativePoints: 128,
+    witnessKeys: 1,
+    statements: 128,
+    bytes: 1048576,
+    emptySeeks: 128,
+  });
   expect(identitySourceConsumerDirectoryPlan(configured.native)).toEqual({
     envelope: { rows: 100, points: 200, statements: 36, bytes: 229376, engineRequests: 0 },
     child: { rows: 50, points: 100, statements: 18, bytes: 114688, engineRequests: 0 },

@@ -569,14 +569,20 @@ export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'poo
   });
   const config = readSearchConfig(env);
   if (!config) throw new Error('Actual default fixed Search participant needs OPENSEARCH_URL');
+  await createSubjectIndex(createOpenSearch(config.url), config.prefix, 1);
   const pool = f.pool;
+  // Commands, coordinator produce, SDK and relays share this owned pool. A second connection
+  // lets discovery relays observe NativeCollectionWork checkouts and refuse publication SQL.
+  pool.options.max = 1;
+  pool.options.idleTimeoutMillis = 0;
   pool.options.connectionTimeoutMillis = 5_000;
   const end = pool.end.bind(pool);
   let closing: Promise<void> | undefined;
   pool.end = () => (closing ??= end());
-  const worker = await startWorker(
+  return startWorker(
     {
       databaseUrl,
+      poolSize: 1,
       kernelPool() {
         return pool;
       },
@@ -584,6 +590,4 @@ export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'poo
     undefined,
     env,
   );
-  await createSubjectIndex(createOpenSearch(config.url), config.prefix, 1);
-  return worker;
 }

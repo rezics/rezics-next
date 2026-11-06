@@ -116,8 +116,11 @@ installs the Accounts declaration binder before commands; merge, replay, custody
 readback keep those original bodies. Worker-installed Search and Library participants remain
 required before Accounts verify/unverify can resume a job. Original-source native cases install
 those participants, then run Accounts verify through `mergeVerifiedAgent` so the published job
-and participant receipts exist before original-funded prepare/checkpoint/finish. Admission-only
-cases may still call `prepareAdmission` without resume. Library cutover Access keeps
+and participant receipts exist before original-funded prepare/checkpoint/finish. The independent
+Source maintenance Library emptySeeks ceiling is 128, matching its statement axis, because
+coordinator produce runs Search/Library participants inside that frame and Search `readJob`
+alone dispatches partition, job and ack seeks. Admission-only cases may still call
+`prepareAdmission` without resume. Library cutover Access keeps
 `collection:delete` with `library.collection` owner/type metadata so native grants compile.
 
 ## Concurrent control and coherent admission

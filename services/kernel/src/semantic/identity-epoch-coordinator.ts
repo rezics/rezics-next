@@ -153,7 +153,7 @@ export function registerIdentityEpochCoordinator(
       if ('kind' in dispatched) throw unavailable('Identity coordinator received a control step');
       return withIdentitySourceConsumerMaintenance(
         { pool: context.pool, env: context.env, clock: context.clock },
-        { deadline: Date.now() + 5_000 },
+        { deadline: Date.now() + 30_000 },
         async () => {
           // The producer rereads its saved frontier and commits locally. Its home has been released on return.
           const progress = await dispatched.run(context.pool, ref);
