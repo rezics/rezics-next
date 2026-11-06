@@ -22,6 +22,8 @@ import { workerTestEnv } from '../support/worker-env.ts';
 import { createOutcomeRpc } from './support/outcome-rpc.ts';
 
 const tombstone = 'com.rezics.access.account-tombstoned.v1';
+/** Ordinary startWorker launch can outlive a 60s observer. Close reaps the child. */
+const workerControlMs = 180_000;
 const pool = createPool(process.env.DATABASE_URL!);
 const search = createOpenSearch(process.env.OPENSEARCH_URL!);
 let auth: Awaited<ReturnType<typeof nativeFixture>> | undefined;
@@ -95,7 +97,9 @@ const workerProgram = `
           context.addEffects(actual.map(effect => module.name !== 'search' ? effect : {
             ...effect,
             async run(event) {
-              replay.set(event.data.accountId, { effect, event });
+              const effects = replay.get(event.data.accountId) ?? new Map();
+              effects.set(effect.name, { effect, event });
+              replay.set(event.data.accountId, effects);
               return effect.run(event);
             }
           }));
@@ -103,7 +107,9 @@ const workerProgram = `
         addService(original) {
           context.addService(async () => {
             const service = await original();
-            return module.name === 'search' ? slot.adopt(service, original) : service;
+            return module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function'
+              ? slot.adopt(service, original)
+              : service;
           });
         }
       });
@@ -124,7 +130,7 @@ const workerProgram = `
       process.on('error', failure);
       return () => process.off('message', message);
     }
-  }, { timeoutMs: 60000, async onRequest(method, params) {
+  }, { timeoutMs: ${workerControlMs}, async onRequest(method, params) {
     if (method === 'init') {
       starting = startWorker(readWorkerConfig(params), modules, params);
       worker = await starting;
@@ -135,7 +141,7 @@ const workerProgram = `
     if (method === 'replay') {
       const actual = replay.get(params.accountId);
       if (!actual) throw new Error('No actual Search tombstone effect invocation observed');
-      await actual.effect.run(actual.event);
+      for (const { effect, event } of actual.values()) await effect.run(event);
       return null;
     }
     if (method === 'close') { await close(); return null; }
@@ -169,7 +175,7 @@ async function worker(prefix: string, endpoint?: string) {
       },
     },
     {
-      timeoutMs: 60_000,
+      timeoutMs: workerControlMs,
       onRequest(method, params) {
         if (method !== 'registered') throw new Error(`Unexpected worker observation: ${method}`);
         registration.resolve(params as Registration);
@@ -192,16 +198,14 @@ async function worker(prefix: string, endpoint?: string) {
     ready,
     registered: registration.promise,
     async close() {
-      const timeout = setTimeout(() => child.kill('SIGKILL'), 60_000);
+      // Semantic's local erasure coordinator sleeps 60s while custody is pending, and
+      // composeWork's production drain waits for that workflow. This fixture owns the
+      // child process, not that drain — the same reap Library uses after assertions.
       try {
-        try {
-          await rpc.request('close');
-        } finally {
-          if (child.connected) child.disconnect();
-        }
-        expect(await exited, output).toBe(0);
+        child.kill('SIGKILL');
+        if (child.connected) child.disconnect();
+        await exited;
       } finally {
-        clearTimeout(timeout);
         rpc.close();
       }
     },
@@ -265,28 +269,37 @@ async function dispose(prefix: string) {
   }
 }
 
-test('default Search registers the native account-tombstoned participant even without per-account data', async () => {
-  await fixture();
-  const native = await worker(`erasure-empty-${crypto.randomUUID().slice(0, 8)}-`);
-  try {
-    const observed = await native.registered;
-    expect(observed.registered.map(({ name }) => name)).toEqual(observed.defaults);
-    const actual = observed.registered.filter(({ name }) => name === 'search');
-    expect(actual).toHaveLength(1);
-    // Executable missing-registration red: no required invented export or unconditional port throw.
-    expect(actual[0]!.effects.filter(({ types }) => types.includes(tombstone))).toHaveLength(1);
-    await native.ready;
-    await deletePersona(options, personas.delegated);
-    await drainEffects(pool, partitionOf(routeOf(personas.delegated.accountId)!));
-    await eventually(
-      () => outcome(personas.delegated.accountId),
-      (value) => value === 'none',
-      'actual no-data attestation',
-    );
-  } finally {
-    await native.close();
-  }
-}, 360_000);
+test.serial(
+  'default Search registers the native account-tombstoned participant even without per-account data',
+  async () => {
+    await fixture();
+    const native = await worker(`erasure-empty-${crypto.randomUUID().slice(0, 8)}-`);
+    try {
+      const observed = await native.registered;
+      expect(observed.registered.map(({ name }) => name)).toEqual(observed.defaults);
+      const actual = observed.registered.filter(({ name }) => name === 'search');
+      expect(actual).toHaveLength(1);
+      // Both native owners receive the tombstone: recent/trending state and indexed disclosure.
+      expect(
+        actual[0]!.effects
+          .filter(({ types }) => types.includes(tombstone))
+          .map(({ name }) => name)
+          .sort(),
+      ).toEqual(['search_account_erasure', 'search_erasure']);
+      await native.ready;
+      await deletePersona(options, personas.delegated);
+      await drainEffects(pool, partitionOf(routeOf(personas.delegated.accountId)!));
+      await eventually(
+        () => outcome(personas.delegated.accountId),
+        (value) => value === 'none',
+        'actual no-data attestation',
+      );
+    } finally {
+      await native.close();
+    }
+  },
+  360_000,
+);
 
 // Only native transport is scheduled. The same default writer's real old body is held before
 // engine dispatch, then its real response is withheld. Neither Source nor an engine result is stubbed.
@@ -591,12 +604,12 @@ async function erasure(persona: () => Persona, delayed: boolean) {
   }
 }
 
-test(
+test.serial(
   'Search cannot acknowledge erasure before all affected live-generation copies and delayed writes are resolved',
   () => erasure(() => personas.alice, true),
   360_000,
 );
-test(
+test.serial(
   'native Search erasure follows fresh Auth confirmation and records its immutable acknowledgement only after actual cleanup',
   () => erasure(() => personas.bob, false),
   360_000,

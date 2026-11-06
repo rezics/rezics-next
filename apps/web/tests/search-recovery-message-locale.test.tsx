@@ -1,7 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, type ComponentProps } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { act, createElement, useState, type ComponentProps } from 'react';
+import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { SearchRecovery } from '../src/search/search-recovery-view';
@@ -98,12 +98,60 @@ const previousGlobals = new Map(
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-const { createRoot } = await import('react-dom/client');
+const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { DiscoveryKinds } = await import('../src/search/discovery-kinds');
 type Props = ComponentProps<typeof DiscoveryKinds>;
 const host = document.createElement('main');
 document.body.append(host);
 let root: ReturnType<typeof createRoot>;
+
+test('Retry-After expiry during hydration preserves localized recovery and settles a fresh manual request', async () => {
+  const clock = Date.now;
+  const previousLocale = getLocale();
+  setLocale('ja', { reload: false });
+  const received = clock();
+  let requests = 0;
+  const errors: unknown[] = [];
+  function Journey() {
+    const [result, setResult] = useState<string>();
+    if (result) return <a href="/zh-Hans/search?q=kept">{result}</a>;
+    return (
+      <SearchRecovery
+        state={{ status: 'index-not-ready', retryAt: received + 1000 }}
+        retryHref={retryHref}
+        restartHref={restartHref}
+        locale="zh-Hans"
+        onRetry={async () => {
+          requests++;
+          // A fresh response settles the explicit request; expiry itself does not fetch.
+          setResult(await Promise.resolve('Book'));
+        }}
+      />
+    );
+  }
+  const element = createElement(Journey);
+  try {
+    Date.now = () => received;
+    host.innerHTML = renderToString(element);
+    expect(host.querySelector('button')!.disabled).toBe(true);
+    Date.now = () => received + 2000;
+    await act(async () => {
+      root = hydrateRoot(host, element, { onRecoverableError: (error) => errors.push(error) });
+    });
+    expect(errors).toEqual([]);
+    expect(host.querySelector('button')!.disabled).toBe(false);
+    expect(host.textContent).toContain(m.search_reader_results_unavailable({}, options['zh-Hans']));
+    expect(host.textContent).not.toContain(m.search_reader_results_unavailable({}, options.ja));
+    expect(requests).toBe(0);
+    await act(async () => host.querySelector('button')!.click());
+    expect(requests).toBe(1);
+    expect(host.querySelector('a')?.textContent).toBe('Book');
+    expect(host.querySelector('button')).toBeNull();
+  } finally {
+    Date.now = clock;
+    setLocale(previousLocale, { reload: false });
+  }
+});
 
 function kinds(): Props['initial'] {
   return {

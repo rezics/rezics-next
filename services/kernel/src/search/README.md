@@ -329,8 +329,12 @@ source suppression is not physical deletion. The independent
 [late-write-pruning acceptance](../../test/search/late-write-pruning.test.ts) retains four physical-resurrection
 reds despite API suppression; this participant contract does not replace that obligation with another fence,
 store or Source design. Runtime implementation waits for these real producer ports and their accepted native
-cases. This adoption makes no Source readiness or acknowledgement claim. `searchWorkModule` currently registers
-only the indexing service, with no tombstone effect.
+cases. This adoption makes no Source readiness or acknowledgement claim. `searchWorkModule` registers both tombstone
+effects and ordinary services; receiving controls only the indexing runner.
+After Search assertions the native harness reaps its owned worker. Production `startWorker` drain waits for other
+modules' pending erasure coordinators, including Semantic's durable 60s custody sleep, so fixture teardown does not
+use that drain as proof of Search completion. Shared-fixture native cases run one at a time.
+Kernel typecheck repairs update SearchService stubs and preparation fixtures to the current saved-catalogue members contract; they do not add behaviour tests. Rebase onto main keeps Catalogue's `catalogue` Source declaration.
 
 The [native participant acceptance](../../test/search/erasure-participant.test.ts) freezes default-module
 registration (also with no Search configuration), actual Auth step-up approve/execute through `deletePersona`
