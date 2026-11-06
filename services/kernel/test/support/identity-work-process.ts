@@ -7,7 +7,7 @@ export type IdentityWorkProcessConfig = {
   databaseUrl: string;
   routeKey: string;
   searchPrefix: string;
-  openSearchUrl?: string;
+  openSearchUrl?: string | undefined;
 };
 
 /** Starts the production kernel work executor in a child process (identity-work-child.ts). The parent keeps its

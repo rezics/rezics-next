@@ -103,7 +103,7 @@ async function seedAccount(
   const kind = options.kind ?? 'actor';
   const displayName = handle.replaceAll('_', ' ');
   if (kind === 'actor' && !options.automatedBy) {
-    // Human accounts and their claims come from production registration, so the claim emits discovery events.
+    // Human accounts and their claims come from production registration, which also installs their self grants.
     await registrar.registerActor(handle, id);
     await pool.query(`UPDATE access.account SET display_name=$3 WHERE route=$1 AND account_id=$2`, [
       accountRoute,
@@ -125,14 +125,13 @@ async function seedAccount(
      VALUES($1,$2,$3,'active',$3)`,
       [handleRoute, handle, id],
     );
-  }
-  if (kind === 'actor') {
-    await pool.query(
-      `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+    if (kind === 'actor')
+      await pool.query(
+        `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
        VALUES ($1, $2, $2, 'account:update', '(,)', $2),
               ($1, $2, $2, 'account:read', '(,)', $2)`,
-      [accountRoute, id],
-    );
+        [accountRoute, id],
+      );
   }
   return { id, handle, kind, displayName };
 }

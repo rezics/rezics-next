@@ -70,7 +70,8 @@ async function linked(handle: string | null) {
     registered: handle ? ['owner'] : [],
   });
   const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
-  await real.grant({ route: routeOf(accountId)!, id: accountId }, 'owner', 'account:update');
+  // A registered owner already holds its self grants from registration; only a handleless owner needs this raw grant.
+  if (!handle) await real.grant({ route: routeOf(accountId)!, id: accountId }, 'owner', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'reviewer', 'account:verify_agent');
   const context = async (persona: 'owner' | 'reviewer') => {
     // Approval publishes the identity through the coordinator, which needs the same budget as the page fixture.

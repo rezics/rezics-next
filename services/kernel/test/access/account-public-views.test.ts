@@ -35,12 +35,9 @@ async function account(
   const id = newId(route);
   const handle = `views_${key().replaceAll('-', '')}`;
   if (kind === 'actor' && state === 'active' && !fenced) {
-    // Production registration: its claim emits the discovery events that raw handle rows do not.
+    // Production registration: its claim emits the discovery events that raw handle rows do not, and it installs the
+    // self grants (account:update among them) that a raw resource_grant row would collide with.
     await registrar.registerActor(handle, id);
-    await pool.query(
-      "INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$2,'account:update','(,)',$2)",
-      [route, id],
-    );
     return { id, handle };
   }
   if (kind === 'organization' && state === 'active' && !fenced) {
