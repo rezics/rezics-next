@@ -23,6 +23,7 @@ import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from '
 import { trainLaneStatus } from './lease.ts';
 import { countAllowanceWaiting, poolBurnStatus } from './allowance.ts';
 import { defaultPolicy } from './policy.ts';
+import { architectureRepairStatus } from './architecture-repair.ts';
 import { readRetainedPoolReadings } from './pacing.ts';
 import { admissionProfiles, readRouting } from './routing.ts';
 import { reapedCountsLastHour } from './attempt-resources.ts';
@@ -88,6 +89,14 @@ function heldDependencies(task: Task, tasks: WorkerTasks, store: WorkerStore) {
     }
     return { id, state, ready };
   });
+}
+
+function taskStateOrUndefined(store: WorkerStore, taskId: string): string | undefined {
+  try {
+    return store.task(taskId).state;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Tests may inject individual services. Production commands always use the shared runtime. */
@@ -265,6 +274,7 @@ export async function runWorkerCommand(
                 pools,
                 reapedLastHour,
                 tasks: selectedTasks,
+                architecture: architectureRepairStatus(store.db, (id) => taskStateOrUndefined(store, id)),
               },
           null,
           2,

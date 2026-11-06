@@ -198,6 +198,10 @@ function harnessGitTemplate(): string {
       join(root, 'scripts/architecture.ts'),
       readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
     );
+    writeFileSync(
+      join(root, 'scripts/architecture-map.ts'),
+      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture-map.ts'), 'utf8'),
+    );
     mkdirSync(join(root, 'docs/architecture'), { recursive: true });
     writeFileSync(
       join(root, 'docs/architecture/modules.json'),
