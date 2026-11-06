@@ -105,6 +105,7 @@ function boardPage(
 ): BoardPageResponse {
   return {
     board: currentBoard,
+    pinRevision: '1',
     pinnedThreads: [],
     threads: values.map((thread) => ({
       thread,

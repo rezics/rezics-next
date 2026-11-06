@@ -141,11 +141,23 @@ function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
     board: _board,
     realm: _realm,
     documentMedia: _documentMedia,
+    documentMediaProjection: _documentMediaProjection,
+    mentionProjection: _mentionProjection,
+    reviewContext: _reviewContext,
     composed: _composed,
     conversationActivity: _activity,
     ...safePage
   } = page;
-  void [_board, _realm, _documentMedia, _composed, _activity];
+  void [
+    _board,
+    _realm,
+    _documentMedia,
+    _documentMediaProjection,
+    _mentionProjection,
+    _reviewContext,
+    _composed,
+    _activity,
+  ];
   return {
     ...safePage,
     thread: safeThread,
@@ -490,6 +502,7 @@ export function ThreadReading({
                   return (
                     <Post
                       anchorId={row.anchorId}
+                      pageIndex={row.index}
                       post={post}
                       readAuthority={readAuthority}
                       authors={authors}

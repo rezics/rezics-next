@@ -579,6 +579,7 @@ async function selectRecording(
       return {
         status: 200,
         board: boardRecord?.board,
+        pinRevision: '0',
         pinnedThreads: cards(boardPage?.pinnedThreads),
         threads: cards(boardPage?.threads),
         next: typeof boardPage?.next === 'string' ? boardPage.next : null,

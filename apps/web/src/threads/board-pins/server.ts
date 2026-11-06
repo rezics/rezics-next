@@ -33,9 +33,15 @@ function validateAdvice(input: unknown): BoardPinAdviceInput & { boardId: string
 
 export const readBoardPinAdvice = createServerFn({ method: 'POST' })
   .validator(validateAdvice)
-  .handler(async (): Promise<BoardPinAdviceResult> => {
+  .handler(async ({ data }): Promise<BoardPinAdviceResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readBoardPinAdviceRequest();
+    return readBoardPinAdviceRequest(
+      data,
+      getRequest(),
+      env as Partial<SessionEnv>,
+      kernelClient(),
+      kernelOriginConfigured(),
+    );
   });
 
 function validateBoardRead(input: unknown): { boardId: string; sort?: 'active' | 'hot' | 'new'; cursor?: string } {

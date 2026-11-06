@@ -179,7 +179,16 @@ export function ThreadReadingHeader({
   const restart = origin ? boardReturnRestart(origin) : undefined;
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
-      <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
+      <BoardContext
+        realm={page.realm}
+        board={page.board}
+        boardReturn={currentOrigin ? origin : undefined}
+        reviewContext={page.reviewContext}
+        thread={page.thread}
+        posts={page.posts.posts}
+        cursor={page.composed?.query.cursor}
+        prominent
+      />
       {subjectReturn ? (
         <a
           data-slot="thread-subject-return"
@@ -629,6 +638,7 @@ export function copyThreadPostLink(post: Pick<ThreadPost, 'id' | 'threadId'>): P
 
 export function ThreadReadingPost({
   post,
+  pageIndex,
   composed,
   reactionFieldsAvailable = true,
   reactionViewerAvailable = true,
@@ -659,6 +669,7 @@ export function ThreadReadingPost({
   review,
 }: {
   post: ThreadPost;
+  pageIndex: number;
   composed?: ThreadPageObservation | undefined;
   reactionFieldsAvailable?: boolean;
   reactionViewerAvailable?: boolean;
@@ -1168,6 +1179,7 @@ export function ThreadReadingPost({
         <>
           <ThreadPostReadingBody
             post={post}
+            pageIndex={pageIndex}
             documentMedia={documentMedia}
             mentions={mentions}
             readerIdentity={lifetime}

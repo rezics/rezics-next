@@ -6,12 +6,21 @@ import type {
   BoardPinProducer,
   BoardPinReadResult,
 } from './contract';
+import type { BoardPinAdviceQuery } from './advice';
 
-/** Production caller. Selected advice stays closed until the official client publication is installed. */
+/** Production caller. Selected advice uses the installed private server function and native callable. */
 export const productionBoardPinProducer: BoardPinProducer = Object.freeze({
-  async inspectSelected() {
-    // Keep the receiver closed until the official generated KernelClient publishes pin-advice.
-    return { state: 'unavailable' } as const;
+  async inspectSelected(query: BoardPinAdviceQuery) {
+    const { readBoardPinAdvice } = await import('./server');
+    return readBoardPinAdvice({
+      data: {
+        boardId: query.boardId,
+        viewerId: query.viewerId,
+        selected: query.selected,
+        ...(query.pinRevision === undefined ? {} : { pinRevision: query.pinRevision }),
+      },
+      signal: query.signal,
+    });
   },
   async readPage(): Promise<BoardPinReadResult> {
     return { state: 'unavailable' };

@@ -123,6 +123,7 @@ function recordingClient(
               realmId: null,
               community: null,
             },
+            pinRevision: '1',
             pinnedThreads: [],
             threads: data.threads.map((thread) => ({
               thread,

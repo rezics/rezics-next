@@ -8,8 +8,14 @@ import { continuationBoardId, continuationCursor } from '../src/kernel/fake/boar
 import type { BoardPinAdviceQuery, BoardPinAdviceResult } from '../src/threads/board-pins/advice';
 import type { BoardPinCommand, BoardPinProducer, BoardPinSender } from '../src/threads/board-pins/contract';
 import type { BoardFeedThread, CommunityBoardPage } from '../src/threads/board-feed-data';
+import type { SessionEnv } from '../src/session/client.ts';
+import { SESSION_COOKIE } from '../src/session/cookies';
 import { loadBoardPageWithAuthors } from '../src/identity/page-loaders';
-import { changeBoardPinRequest, readBoardPinBoardRequest } from '../src/threads/board-pins/native';
+import {
+  changeBoardPinRequest,
+  readBoardPinAdviceRequest,
+  readBoardPinBoardRequest,
+} from '../src/threads/board-pins/native';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -245,51 +251,91 @@ test('unknown retry keeps its original command and missing rows move focus to th
   const ordinary = page.threads.threads[0]!;
   const commands: BoardPinCommand[] = [];
   const inspections: BoardPinAdviceQuery[] = [];
-  const advice = async (query: BoardPinAdviceQuery): Promise<BoardPinAdviceResult> => {
-    inspections.push(query);
-    return {
-      state: 'ready',
-      viewer: { kind: 'account', id: sender.subject },
-      boardId: page.board.id,
-      pinRevision: query.pinRevision ?? '12',
-      management: 'allowed',
-      threads: query.selected.map(({ threadId }) => ({
-        threadId,
-        pinned: false,
-        actions: ['pin'] as const,
-      })),
-    };
-  };
   const requests: Request[] = [];
+  let pinAttempts = 0;
+  let pinned = false;
   const native = createKernelClient('https://kernel.test', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       requests.push(request);
-      if (request.method === 'POST') {
-        if (requests.length === 1) throw new TypeError('Connection lost after sending the original command');
-        return Response.json({ boardId: page.board.id, threadId: ordinary.id, pinned: true, pinPosition: 1 });
+      const pathname = new URL(request.url).pathname;
+      if (pathname.endsWith('/pin-advice')) {
+        const input = (await request.clone().json()) as {
+          selected: readonly { threadId: string }[];
+          pinRevision: string;
+        };
+        return Response.json({
+          state: 'ready',
+          viewer: { kind: 'account', id: sender.subject },
+          boardId: page.board.id,
+          pinRevision: input.pinRevision,
+          management: 'allowed',
+          threads: input.selected.map(({ threadId }) => ({
+            threadId,
+            pinned,
+            actions: [pinned ? 'unpin' : 'pin'],
+          })),
+        });
       }
-      return Response.json({
-        board: page.board,
-        pinnedThreads: [],
-        threads: [],
-        next: null,
-        pinRevision: '13',
-        rankRefreshedAt: null,
-        reactionsAsOf: null,
-        viewer: { participation: 'allowed' },
-        actions: { createThread: 'allowed' },
-      });
+      if (pathname.endsWith('/pin')) {
+        pinAttempts++;
+        if (pinAttempts === 1) throw new TypeError('Connection lost after sending the original command');
+        const command = (await request.clone().json()) as { pinned: boolean };
+        pinned = command.pinned;
+        return Response.json({
+          boardId: page.board.id,
+          threadId: ordinary.id,
+          pinned,
+          pinPosition: pinned ? 1 : null,
+        });
+      }
+      if (pathname === `/v1/boards/${page.board.id}/page`)
+        return Response.json({
+          board: page.board,
+          pinnedThreads: pinned ? [page.openingRows!.threads[0]!] : [],
+          threads: [],
+          next: null,
+          pinRevision: pinned ? '13' : '14',
+          rankRefreshedAt: null,
+          reactionsAsOf: null,
+          viewer: { participation: 'allowed' },
+          actions: { createThread: 'allowed' },
+        });
+      throw new Error(`Unexpected Board pin transport ${pathname}`);
     }) as typeof fetch,
   });
-  const request = new Request('https://site.test/en/boards/current', { headers: { authorization: 'Bearer original' } });
+  const sessionEnv = {
+    AUTH_ISSUER: 'http://127.0.0.1:4200',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'post:create',
+    WEBSITE_CLIENT_ID: 'rezics-website',
+    WEBSITE_CLIENT_KEY: 'test-key',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active' as const,
+          subject: sender.subject,
+          accessToken: 'native-access',
+          csrfToken: sender.csrfToken,
+        }),
+      }),
+    },
+  } as unknown as Partial<SessionEnv>;
+  const request = new Request('https://site.test/en/boards/current', {
+    headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(43)}` },
+  });
+  const advice = async (query: BoardPinAdviceQuery): Promise<BoardPinAdviceResult> => {
+    inspections.push(query);
+    return readBoardPinAdviceRequest(query, request, sessionEnv, native, true);
+  };
   const feed = await mount(page, advice, {
     async change(command) {
       commands.push(command);
-      return changeBoardPinRequest(command, request, {}, native, true);
+      return changeBoardPinRequest(command, request, sessionEnv, native, true);
     },
     async readBoard(query) {
-      return readBoardPinBoardRequest(query, request, {}, native, true);
+      return readBoardPinBoardRequest(query, request, sessionEnv, native, true);
     },
   });
   const toggles = feed.host.querySelectorAll<HTMLButtonElement>('[data-board-pin-focus="toggle"]');
@@ -309,21 +355,48 @@ test('unknown retry keeps its original command and missing rows move focus to th
   const retry = feed.host.querySelector<HTMLButtonElement>('[data-board-pin-focus="retry"]');
   expect(retry).toBeDefined();
   await act(async () => retry!.click());
-  await settle(() => feed.host.querySelector('[data-slot="board-pin-focus-recovery"]') !== null);
+  await settle(() => feed.host.querySelector('[data-board-pin-focus="toggle"]')?.textContent === m.board_pin_unpin());
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(commands[0]);
-  expect(requests.map((request) => request.method)).toEqual(['POST', 'POST', 'GET']);
-  expect(requests[1]!.url).toBe(requests[0]!.url);
-  expect(requests[1]!.headers.get('idempotency-key')).toBe(requests[0]!.headers.get('idempotency-key'));
-  expect(requests.every((request) => request.headers.get('authorization') === 'Bearer original')).toBe(true);
-  expect(await requests[1]!.json()).toEqual(await requests[0]!.json());
-  expect(new URL(requests[2]!.url).pathname).toBe(`/v1/boards/${page.board.id}/page`);
-  expect(new URL(requests[2]!.url).searchParams.has('cursor')).toBe(false);
+  expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
+    `POST /v1/boards/${page.board.id}/pin-advice`,
+    `POST /v1/boards/${page.board.id}/threads/${ordinary.id}/pin`,
+    `POST /v1/boards/${page.board.id}/threads/${ordinary.id}/pin`,
+    `GET /v1/boards/${page.board.id}/page`,
+    `POST /v1/boards/${page.board.id}/pin-advice`,
+    `POST /v1/boards/${page.board.id}/threads/${ordinary.id}/pin`,
+    `GET /v1/boards/${page.board.id}/page`,
+  ]);
+  expect(requests[0]?.headers.get('authorization')).toBe('Bearer native-access');
+  expect(requests[1]!.url).toBe(requests[2]!.url);
+  expect(requests[2]!.headers.get('idempotency-key')).toBe(requests[1]!.headers.get('idempotency-key'));
+  expect(requests.every((request) => request.headers.get('authorization') === 'Bearer native-access')).toBe(true);
+  expect(await requests[1]!.json()).toEqual(await requests[2]!.json());
+  expect(JSON.parse(await requests[0]!.clone().text())).toMatchObject({ pinRevision: '12' });
+  expect(JSON.parse(await requests[4]!.clone().text())).toMatchObject({ pinRevision: '13' });
+  expect(new URL(requests[3]!.url).searchParams.has('cursor')).toBe(false);
   expect(commands[0]).toMatchObject({ boardId: page.board.id, threadId: ordinary.id, action: 'pin', sender });
-  expect(inspections).toHaveLength(1);
+  expect(inspections).toHaveLength(2);
   expect(inspections[0]?.selected).toEqual([
     { threadId: ordinary.id, placeId: page.board.id, sourceRevisionId: sourceRevision(ordinary) },
   ]);
+  expect(inspections.map((inspection) => inspection.pinRevision)).toEqual(['12', '13']);
+  const toggle = feed.host.querySelector<HTMLElement>('[data-board-pin-focus="toggle"]');
+  expect(toggle?.textContent).toBe(m.board_pin_unpin());
+  expect(document.activeElement).toBe(toggle);
+  await act(async () => toggle!.click());
+  await settle(() => toggle?.getAttribute('aria-expanded') === 'true');
+  const unpinConfirmation = feed.host.querySelector<HTMLElement>('[data-slot="board-pin-confirmation"]');
+  expect(unpinConfirmation?.textContent).toContain(m.board_pin_confirm_title_unpin());
+  const confirmUnpin = unpinConfirmation?.querySelectorAll<HTMLButtonElement>('button').item(1);
+  expect(confirmUnpin).toBeDefined();
+  await act(async () => confirmUnpin!.click());
+  await settle(() => feed.host.querySelector('[data-slot="board-pin-focus-recovery"]') !== null);
+  expect(commands).toHaveLength(3);
+  expect(commands[2]).toMatchObject({ action: 'unpin', boardId: page.board.id, threadId: ordinary.id, sender });
+  expect(requests).toHaveLength(7);
+  expect(requests[5]?.headers.get('idempotency-key')).not.toBe(requests[1]?.headers.get('idempotency-key'));
+  expect(new URL(requests[6]!.url).pathname).toBe(`/v1/boards/${page.board.id}/page`);
   const recovery = feed.host.querySelector<HTMLElement>('[data-slot="board-pin-focus-recovery"]');
   expect(recovery?.textContent).toBe(m.board_pin_focus_recovery());
   expect(document.activeElement).toBe(recovery);

@@ -3,7 +3,6 @@ export { isThreadPageCursorError } from './thread-page-errors';
 import type { KernelClient, ReadingPageResponse } from '@rezics/client';
 import type { DocumentMentions } from '@rezics/ui/document-body';
 import { boardProblemCode } from './board-reading';
-import { readDocumentMentions } from '../kernel/mentions';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
@@ -11,7 +10,8 @@ import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
-import { readThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
+import { receiveThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
+import { receiveThreadDocumentMentions } from './thread-document-mentions';
 import { readingConversationActivity, type ConversationActivityDisplay } from './activity';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -42,7 +42,10 @@ export type LoadedThreadPage = {
   conversationActivity?: ConversationActivityDisplay;
   authors: import('../identity/read').PageAuthors;
   mentions: DocumentMentions;
+  mentionProjection?: ReadingPage['mentions'];
   documentMedia?: ThreadDocumentMedia;
+  documentMediaProjection?: ReadingPage['documentMedia'];
+  reviewContext?: ReadingPage['reviewContext'];
   viewerId?: string;
   verification: VerificationConfig;
   linkedPostUnavailable?: boolean;
@@ -177,14 +180,10 @@ export async function loadThreadPage(
     !posts.posts.some((post) => post.id === data.post && post.availability === 'available')
   )
     linkedPostUnavailable = true;
-  const [mentions, documentMedia] = await Promise.all([
-    readDocumentMentions(
-      client,
-      posts.posts.map((post) => post.body),
-    ),
-    readThreadDocumentMedia(client, posts.posts, authorization, signal),
-  ]);
-  signal.throwIfAborted();
+  const mentionProjection = readingPage.mentions;
+  const documentMediaProjection = readingPage.documentMedia;
+  const mentions = receiveThreadDocumentMentions(mentionProjection, posts.posts);
+  const documentMedia = receiveThreadDocumentMedia(documentMediaProjection, posts.posts);
   // Only identities named by readable posts can enter this page's byline map.
   const disclosed = new Set(posts.posts.flatMap((post) => (post.availability === 'available' ? [post.authorId] : [])));
   const authors =
@@ -199,7 +198,10 @@ export async function loadThreadPage(
     composed: { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf },
     conversationActivity: readingConversationActivity(readingPage),
     mentions,
+    mentionProjection,
     documentMedia,
+    documentMediaProjection,
+    reviewContext: readingPage.reviewContext,
     thread,
     ...context,
     posts,
