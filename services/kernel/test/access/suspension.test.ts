@@ -16,7 +16,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { Value } from 'typebox/value';
@@ -211,12 +211,7 @@ beforeAll(async () => {
   root = await person('grant_root');
   grantor = await person('grant_grantor');
   recipient = await person('grant_recipient');
-  const bootstrap = Bun.spawn(['bun', 'scripts/bootstrap-governance.ts', '--account', root.accountId], {
-    env: { ...process.env, DATABASE_URL: db.url },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  expect(await bootstrap.exited).toBe(0);
+  await bootstrapGovernance(db.pool, root.accountId);
 }, setupTimeout);
 afterAll(async () => {
   await host?.stop();
