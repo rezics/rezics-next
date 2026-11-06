@@ -23,7 +23,7 @@ import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { Access, AccountActor } from '../../../src/request/access.ts';
+import type { Access, AccountActor, Resource } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
@@ -251,6 +251,7 @@ export async function createProfileEntryFixture(
     const steward = await identity([
       'access:grant',
       'subject:batch_write',
+      'subject:merge',
       'offer:create',
       'subject:create',
       'statement:propose',
@@ -273,42 +274,25 @@ export async function createProfileEntryFixture(
       managementAction: 'access:grant',
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
-    // Access admits only an actor authenticated onto this command's deadline, with
-    // token scopes covering every action the grant command will check.
-    async function grantCommand(
-      operation: 'create' | 'revoke',
-      subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
-      actions: readonly string[],
-    ) {
-      const deadline = deadlineFor(30_000);
-      const actor = await authenticateAccount(
-        access,
-        { pool, deadline },
-        {
-          accountId: steward.actor.accountId,
-          clientId: steward.actor.clientId,
-          scopes: [...new Set(['access:grant', ...steward.actor.scopes, ...actions])],
-          authnEpoch: steward.actor.authnEpoch,
-          ...(steward.actor.requestedBy ? { requestedBy: steward.actor.requestedBy } : {}),
-        },
-      );
-      const body = {
-        resource: PLATFORM_RESOURCE,
-        subject,
-        actions: [...actions],
+    const platform: Resource = PLATFORM_RESOURCE;
+    const grant = (subject: string, actions: string[]) =>
+      grants.create(context(steward.actor), {
+        resource: platform,
+        subject: { kind: 'account', id: subject },
+        actions,
         valid: '(,)',
         key: entryKey(),
-      };
-      return operation === 'revoke'
-        ? grants.revoke({ pool, actor, deadline }, body)
-        : grants.create({ pool, actor, deadline }, body);
-    }
-    const grant = (subject: string, actions: string[]) =>
-      grantCommand('create', { kind: 'account', id: subject }, actions);
+      });
     await grant(steward.actor.accountId, ['definitions:publish', 'definitions:activate']);
     // Governance bootstrap installs Platform authority. Keep definition, creation
     // and exposure grants on that same native owner anchor.
-    await grantCommand('create', { kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
+    await grants.create(context(steward.actor), {
+      resource: platform,
+      subject: { kind: 'active_accounts' },
+      actions: ['subject:create', 'statement:propose'],
+      valid: '(,)',
+      key: entryKey(),
+    });
 
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
@@ -507,7 +491,13 @@ export async function createProfileEntryFixture(
         await grant(accountId, [...actions]);
       },
       async revokeLibraryGate(accountId: string) {
-        await grantCommand('revoke', { kind: 'account', id: accountId }, ['gate:personal_library']);
+        await grants.revoke(context(steward.actor), {
+          resource: platform,
+          subject: { kind: 'account', id: accountId },
+          actions: ['gate:personal_library'],
+          valid: '(,)',
+          key: entryKey(),
+        });
       },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {
