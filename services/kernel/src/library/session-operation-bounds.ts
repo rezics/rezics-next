@@ -89,7 +89,7 @@ export type SessionSqlPlan<I, R> = Readonly<{
 }>;
 
 export const SESSION_LIMITS = Object.freeze({ page: 100, ownerPage: 50, measures: 8, unitWrite: 100, units: 20_000 });
-const uuid = 'f'.repeat(36);
+const uuid = 'ffffffff-ffff-8fff-bfff-ffffffffffff';
 const timestamp = '\0'.repeat(64);
 // PostgreSQL unconstrained numeric: 131072 digits before and 16383 after the
 // decimal point, plus sign and point. Native imported/retained values can exceed

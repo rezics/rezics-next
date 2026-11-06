@@ -26,7 +26,12 @@ import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from '
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
+import {
+  createSessionCommands,
+  ProgressConflictError,
+  ProgressInvalidError,
+  type ProgressSessionJournalAdmission,
+} from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
@@ -222,7 +227,7 @@ function nativeQuestionView(question: RatingQuestion): NativeQuestion {
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning,
+    meaning: question.meaning ?? question.label,
     label: question.label,
     grain: question.grain,
     scale: { min: question.minimumUnits, max: question.maximumUnits, step: question.stepUnits },
@@ -1046,8 +1051,15 @@ export function createVndbImport(config: Config) {
     actor: Actor,
     identity: VndbDateAdmissionIdentity,
   ): Promise<ProgressSessionJournalAdmission> {
+    let matching: Awaited<ReturnType<typeof match>>;
+    let target: Awaited<ReturnType<typeof current>>;
     return {
       identity,
+      async prepare() {
+        const stored = await retainedRow(actor, identity.uploadId, identity.ordinal, true);
+        matching = stored.matching;
+        target = stored.target;
+      },
       assert: async (tx) => {
         const account = owner(actor),
           route = requireRoute(account.accountId),
@@ -1074,8 +1086,6 @@ export function createVndbImport(config: Config) {
           throw new LibraryConflictError();
         if (account.clientId !== identity.clientId || (account.requestedBy ?? null) !== identity.requestedBy)
           throw new LibraryConflictError();
-        const matching = await match(actor, row),
-          target = await current(actor, identity.subjectId);
         if (
           entryImportMetadataDigest(matching) !== identity.matchFingerprint ||
           !target ||
@@ -1372,7 +1382,14 @@ export function createVndbImport(config: Config) {
                   error instanceof LibraryNotFoundError ||
                   (error instanceof ProblemError &&
                     ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
-                rethrowError: (error) => error instanceof GrantDeniedError,
+                rethrowError: (error) =>
+                  !(
+                    error instanceof ProblemError ||
+                    error instanceof ProgressInvalidError ||
+                    error instanceof ProgressConflictError ||
+                    error instanceof LibraryConflictError ||
+                    error instanceof LibraryNotFoundError
+                  ),
               },
             );
           return (
@@ -1532,6 +1549,69 @@ export function createVndbImport(config: Config) {
       const upload = await load(actor, id, reconcile),
         decision = upload.decisions[ordinal];
       return decision?.metadata?.find((item) => item.token === reviewToken) ?? null;
+    },
+    async readReceipt({ actor, id, ordinal }, reviewed, phase) {
+      const account = owner(actor),
+        confirmation = reviewed.confirmation;
+      if (
+        !confirmation ||
+        reviewed.clientId !== account.clientId ||
+        reviewed.requestedBy !== (account.requestedBy ?? null)
+      )
+        return false;
+      const annotation = phase === 'annotation',
+        started = annotation ? confirmation.annotationStarted : confirmation.provenanceStarted,
+        key = annotation ? confirmation.annotationKey : confirmation.provenanceKey,
+        digest = annotation ? confirmation.annotationReceiptDigest : confirmation.provenanceReceiptDigest,
+        kind = annotation
+          ? 'library.entry.annotations.put'
+          : confirmation.provenanceKind === 'admit'
+            ? 'library.entry.source-observation.admit'
+            : 'library.entry.source-observation.correct';
+      if (!started || !digest) return false;
+      await authorized(actor);
+      const receipt = await personalEntries.readCommandReceipt(actor, {
+        kind,
+        requestKey: key,
+        digest,
+        async authorize(tx) {
+          const linked = await tx.query(
+            `SELECT 1 FROM library.vndb_import u
+             CROSS JOIN LATERAL jsonb_array_elements(COALESCE(u.decisions->$4::text->'metadata','[]'::jsonb)) m
+             WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3
+               AND u.decisions->$4::text->>'reviewId'=$6
+               AND m->>'token'=$5 AND m->>'sourceReviewToken'=$6
+               AND m->>'subjectId'=$7 AND m->>'clientId'=$8
+               AND m->>'requestedBy' IS NOT DISTINCT FROM $9::text
+               AND m->'confirmation'->>$10='true'
+               AND m->'confirmation'->>$11=$12
+               AND m->'confirmation'->>$13=$14
+               AND m->'confirmation'->>'selectionDigest'=$15
+               AND ($16::text IS NULL OR m->'confirmation'->>'provenanceKind'=$16)
+             FOR UPDATE OF u`,
+            [
+              requireRoute(account.accountId),
+              account.accountId,
+              id,
+              String(ordinal),
+              reviewed.token,
+              reviewed.sourceReviewToken,
+              reviewed.subjectId,
+              account.clientId,
+              account.requestedBy ?? null,
+              annotation ? 'annotationStarted' : 'provenanceStarted',
+              annotation ? 'annotationKey' : 'provenanceKey',
+              key,
+              annotation ? 'annotationReceiptDigest' : 'provenanceReceiptDigest',
+              digest,
+              confirmation.selectionDigest,
+              annotation ? null : (confirmation.provenanceKind ?? null),
+            ],
+          );
+          if (!linked.rowCount) throw new LibraryNotFoundError();
+        },
+      });
+      return receipt !== null;
     },
     async readView({ actor, id, ordinal, reconcile }, reviewToken) {
       const upload = await load(actor, id, reconcile),
@@ -1733,7 +1813,7 @@ export function createVndbImport(config: Config) {
         status = 'skipped';
       } else {
         const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
-        await mutation(
+        const started = await mutation(
           actor,
           'apply-entry-start',
           startKey,
@@ -1752,9 +1832,11 @@ export function createVndbImport(config: Config) {
             )
               throw new LibraryConflictError();
             await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+            return { ordinal: choice.ordinal, reviewId: choice.reviewId };
           },
         );
         decision = { ...decision, status: 'applying' };
+        record(started);
         try {
           const result = await entries.putEntry(
             actor,
@@ -1768,6 +1850,12 @@ export function createVndbImport(config: Config) {
             decision.commandKey,
             decision.guard!,
           );
+          decision.receipt = {
+            partition: result.partition,
+            epoch: result.epoch,
+            position: result.position.toString(),
+            transactionId: result.transactionId,
+          };
           record(result);
           status = 'applied';
         } catch (error) {
@@ -1797,6 +1885,12 @@ export function createVndbImport(config: Config) {
           decision.commandKey,
           decision.guard!,
         );
+        decision.receipt = {
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position.toString(),
+          transactionId: result.transactionId,
+        };
         record(result);
         status = 'applied';
       } catch (error) {
@@ -2020,7 +2114,7 @@ export function createVndbImport(config: Config) {
           id: score.question.id,
           revision: score.question.revision,
           grain: score.question.grain,
-          meaning: score.question.meaning!,
+          meaning: score.question.meaning ?? score.question.label,
           scale: {
             min: score.question.scale.min,
             max: score.question.scale.max,

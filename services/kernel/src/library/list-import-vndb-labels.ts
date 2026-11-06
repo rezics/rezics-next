@@ -66,7 +66,10 @@ export function createVndbLabelAdoption(config: Config) {
     return runner.ownAccount(
       actor,
       { action: 'library_entry:update', kind: `library.vndb.labels.${kind}`, requestKey: key, input },
-      async (tx) => ({ value: await body(tx, account), events: [] }),
+      async (tx) => ({
+        value: await body(tx, account),
+        events: [{ type: 'com.rezics.library.personal-import.changed.v1', subject: account.accountId, data: {} }],
+      }),
     );
   }
   async function readPlan(client: Client, account: AccountActor, id: string, lock = false) {

@@ -6,11 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactNode } from 'react';
 import { createVndbJourney } from '../src/library/personal-list-import/controller';
 import type { VndbPort, VndbPreview, VndbRow } from '../src/library/personal-list-import/contract';
-import { nativeVndbImport } from '../src/library/personal-list-import/native';
-import { VndbConfirmPage } from '../src/library/personal-list-import/confirm';
-import { VndbResultPage } from '../src/library/personal-list-import/results';
 import type { VndbVisit } from '../src/library/personal-list-import/visit';
-import { ImportLibraryView } from '../src/library/showcase-import-return/view';
 import type { ImportLibraryPage } from '../src/library/showcase-import-return/read';
 import { setLocale } from '../src/paraglide/runtime.js';
 
@@ -21,6 +17,10 @@ mock.module('../src/session/request', () => ({
   requestCsrfToken: (request: Request) => request.headers.get('x-csrf-token'),
   viewerCredential: (request: Request) => request.headers.get('authorization'),
 }));
+const { nativeVndbImport } = await import('../src/library/personal-list-import/native');
+const { VndbConfirmPage } = await import('../src/library/personal-list-import/confirm');
+const { VndbResultPage } = await import('../src/library/personal-list-import/results');
+const { ImportLibraryView } = await import('../src/library/showcase-import-return/view');
 const { VndbReviewPage } = await import('../src/library/personal-list-import/review');
 const { VndbUploadForm } = await import('../src/library/personal-list-import/upload');
 const { loadImportLibrary } = await import('../src/library/showcase-import-return/read');

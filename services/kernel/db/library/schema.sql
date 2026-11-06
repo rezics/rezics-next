@@ -2134,20 +2134,22 @@ BEGIN
         WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
     END IF;
   ELSE
-    UPDATE library.reading_insights_current_progress_group SET
-      occurrences=occurrences-1,
-      current_known=current_known-(p_current IS NOT NULL)::integer,
-      current_sum=current_sum-COALESCE(p_current,0),
-      total_known=total_known-(p_total IS NOT NULL)::integer,
-      total_sum=total_sum-COALESCE(p_total,0)
+    DELETE FROM library.reading_insights_current_progress_group
       WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning
-      RETURNING occurrences INTO remaining;
-    IF remaining IS NULL THEN RAISE EXCEPTION 'Missing current-progress receiver group'; END IF;
-    IF remaining=0 THEN
-      DELETE FROM library.reading_insights_current_progress_group
-        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning;
+        AND occurrences=1 RETURNING occurrences INTO remaining;
+    IF remaining=1 THEN
       UPDATE library.reading_insights_current_progress_scope SET group_count=group_count-1
         WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
+    ELSE
+      UPDATE library.reading_insights_current_progress_group SET
+        occurrences=occurrences-1,
+        current_known=current_known-(p_current IS NOT NULL)::integer,
+        current_sum=current_sum-COALESCE(p_current,0),
+        total_known=total_known-(p_total IS NOT NULL)::integer,
+        total_sum=total_sum-COALESCE(p_total,0)
+        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning
+        RETURNING occurrences INTO remaining;
+      IF remaining IS NULL THEN RAISE EXCEPTION 'Missing current-progress receiver group'; END IF;
     END IF;
   END IF;
   UPDATE library.reading_insights_current_progress_scope SET

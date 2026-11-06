@@ -1,3 +1,4 @@
+import { entryImportMetadataDigest } from './list-import-entry-metadata.ts';
 import type {
   EntryImportMetadataConfirmation,
   EntryImportMetadataField,
@@ -225,7 +226,7 @@ export function mergeListImportMetadataConfirmation(
 }
 
 function sameOperand(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return entryImportMetadataDigest(left) === entryImportMetadataDigest(right);
 }
 
 function mergePhaseStatus(
