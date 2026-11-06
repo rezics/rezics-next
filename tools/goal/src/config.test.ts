@@ -208,6 +208,8 @@ test('createRuntime keeps landing, control-plane and compiler runner behavior ob
 
 test('an invalid live local file keeps its last valid settings, is reported once, and config check stays strict', async () => {
   const h = harness();
+  const previousCheckout = process.env.GOAL_MAIN_CHECKOUT;
+  process.env.GOAL_MAIN_CHECKOUT = h.root;
   try {
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
     Object.assign(local, { note: 'root', $comment: 'root', silenceMs: 11_111 });
@@ -249,6 +251,8 @@ test('an invalid live local file keeps its last valid settings, is reported once
     expect(load().silenceMs).toBe(33_333);
     expect(await run(['config', 'check', h.settings.localFile])).toBe(0);
   } finally {
+    if (previousCheckout === undefined) delete process.env.GOAL_MAIN_CHECKOUT;
+    else process.env.GOAL_MAIN_CHECKOUT = previousCheckout;
     h.dispose();
   }
 });
