@@ -5,15 +5,17 @@ import { planShowcaseBooks, showcaseBooksToCrossMediaPlan } from '../src/showcas
 import pinned from '../../kernel/test/imports/showcase-books-source.json';
 
 test('pinned real book source fits bounded scans and retains both actual families', async () => {
-  const plan = await planShowcaseBooks({ tables: {
-    async *rows(provider, table, limits) {
-      expect(provider).toBe('bangumi');
-      const key = table as keyof typeof pinned.rows;
-      expect(limits!.maxRows).toBeGreaterThanOrEqual(pinned.counts[key]);
-      expect(limits!.maxBytes).toBeGreaterThanOrEqual(pinned.sizes[key]);
-      yield* pinned.rows[key];
+  const plan = await planShowcaseBooks({
+    tables: {
+      async *rows(provider, table, limits) {
+        expect(provider).toBe('bangumi');
+        const key = table as keyof typeof pinned.rows;
+        expect(limits!.maxRows).toBeGreaterThanOrEqual(pinned.counts[key]);
+        expect(limits!.maxBytes).toBeGreaterThanOrEqual(pinned.sizes[key]);
+        yield* pinned.rows[key];
+      },
     },
-  } });
+  });
   expect(plan.selected.series).toEqual(['499', '2815']);
   expect(plan.selected.volumes).toContain('10862');
   expect(plan.selected.authors).toContain('person:1466');
