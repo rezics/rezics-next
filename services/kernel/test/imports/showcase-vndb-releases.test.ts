@@ -536,7 +536,11 @@ test('cross-media CLI retains selected release classifications through later voc
           key: randomUUID(),
           source,
           subject: environmentId,
-          statement: { property: { id: 'schema:url' }, value: { type: 'value', content: environmentUri } },
+          statement: {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: environmentUri },
+            references: [],
+          },
         },
       ],
     });
