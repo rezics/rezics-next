@@ -7,7 +7,9 @@ Decision: creation acknowledgements compare scale operands by value; JSON proper
 The existing management reader and commands own admission, immutable definitions, caption compare-and-set,
 lifecycle and authorization. This consumer only navigates their current native windows.
 
-Decision: the management read calls the installed Realm management callable through the bounded client, and page and selection types derive from that installed response. Its closed management and caption-history schemas stay a named Kernel seam in [native](native.ts) until the official client publishes their runtime exports.
+Decision: the management read calls the installed Realm management callable through the bounded client, and page and selection types derive from that installed response. Its closed management and caption-history schemas stay a named Kernel seam in [native](native.ts) until the official client publishes their runtime exports. That seam imports them from `services/kernel/src/rating/question-management-schemas.ts`, outside the Content schema graph that `rating/schemas.ts` loads.
+
+Decision: a caption movement that Leave admits keeps the question visit; only a departure from the page retires it. Leave for a local caption movement does not invalidate the movement that asked for it.
 
 Decision: Previous uses admitted predecessors only; First deliberately reads the null cursor. Each independent
 stream commits its staged target only after exact admitted success. Retry reads that same failed target. A direct
