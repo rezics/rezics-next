@@ -222,6 +222,7 @@ export async function openApiRuntime(
     let stageStart = Date.now();
     const identity = await time('identity and Auth setup', () =>
       openImportIdentity({
+        publication: true,
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
         clock: () => new Date(),
@@ -586,11 +587,17 @@ export async function openApiRuntime(
             headers: response.headers,
           });
           event.status = response.status;
-          if (response.status >= 400) event.problem = await captured.clone().text();
+          if (response.status >= 400) {
+            event.problem = await captured.clone().text();
+            console.error('Import fixture HTTP refusal', req.method, event.path, response.status, event.problem);
+          }
           if (bulk && response.status === 200) {
             const body = (await captured.clone().json()) as BatchWriteResult;
             const problems = body.results.filter((result) => result.status >= 400);
-            if (problems.length) event.commandProblems = problems;
+            if (problems.length) {
+              event.commandProblems = problems;
+              console.error('Import fixture command refusals', JSON.stringify(problems));
+            }
           }
           captures.push({ request: req, body: bytes, response: captured });
           if (bulk && current) {
@@ -648,6 +655,24 @@ export async function openApiRuntime(
         }
       }) as typeof fetch,
     });
+    const readReviewedSubject = transport.readReviewedSubject;
+    transport.readReviewedSubject = async (id, signal) => {
+      try {
+        return await readReviewedSubject(id, signal);
+      } catch (error) {
+        const captured = captures.findLast(
+          (capture) =>
+            capture.request.method === 'GET' && new URL(capture.request.url).pathname === `/v1/subjects/${id}`,
+        );
+        console.error(
+          'Import fixture current read failed',
+          id,
+          error,
+          captured ? (await captured.response.clone().text()).slice(0, 4096) : 'No HTTP response captured',
+        );
+        throw error;
+      }
+    };
     directory = await mkdtemp(`${tmpdir()}/import-api-`);
     const path = `${directory}/state.sqlite`;
     function openImporter(serial = false) {

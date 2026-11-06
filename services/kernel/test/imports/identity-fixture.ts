@@ -25,7 +25,7 @@ import { GrantDeniedError, type GrantInput } from '../../src/access/grant-comman
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import {
   COMMON_ACTIONS,
@@ -59,6 +59,8 @@ export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8A
 }
 
 export interface ImportIdentityOptions {
+  /** Full proposal/publication composition; minimal identity acceptance keeps its narrow grant. */
+  readonly publication?: true;
   /** Explicit VNDB composition; other sources retain their existing authority. */
   readonly sourceStatistics?: 'vndb';
   /** Borrowed application database, including its original capture pool. */
@@ -272,9 +274,10 @@ export type IdentitySupport = {
  * The unrelated baseline history is seeded in set-based writes; measured outcomes remain native. */
 export async function openImportIdentity(options: ImportIdentityOptions): Promise<ImportIdentity> {
   const { database, clock } = options;
+  configureTestReceiptKeys(database.pool);
   const counters = { authMigrationCalls: 0, baselineWorkflowCalls: { registrations: 0, keyInstalls: 0 } };
   let countingBaselineCalls = false;
-  const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];
+  const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS, ...(options.publication ? ['statement:propose'] : [])];
   const statisticScopes = options.sourceStatistics === 'vndb' ? ['source_statistic:write'] : [];
   const managementScopes = [
     ...importerScopes,
@@ -433,6 +436,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           ...IMPORT_ACTIONS,
           'statement:propose',
           'media:read_reservation',
+          ...(options.publication
+            ? ['subject:read', 'context:read', 'media:read', 'context:accept', 'context:adopt']
+            : []),
           ...statisticScopes,
         ],
       };
@@ -607,7 +613,10 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const [governance, ordinary, bulk] = await Promise.all([
         issue(human.accountId, [...importerScopes, ...statisticScopes]),
         issue(comparison.accountId, COMMON_ACTIONS),
-        issue(robot.accountId, options.sourceStatistics === 'vndb' ? client.scopes : importerScopes),
+        issue(
+          robot.accountId,
+          options.publication || options.sourceStatistics === 'vndb' ? client.scopes : importerScopes,
+        ),
       ]);
       let bulkEnabled = true;
       let statisticEnabled = statisticScopes.length > 0;

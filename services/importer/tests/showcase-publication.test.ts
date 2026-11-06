@@ -324,9 +324,12 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       tagWeightObservations: preparedTags.tagWeightObservations,
       tagWeightRefreshes: preparedTags.tagWeightRefreshes,
     };
+    // A fresh public reader can see the native Subject before its source identifier is adopted.
+    // Publication must recover that exact original create target without rewriting seed identity evidence.
+    const firstInput = { ...result, readings: result.readings.filter((reading) => reading.externalId !== '101') };
     const first = await publishShowcase({
       plan,
-      result,
+      result: firstInput,
       aliases: crossMediaAliases,
       journal,
       review,
@@ -334,6 +337,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     expect(first.status).toBe('incomplete');
+    expect(first.manifest.records.find((record) => record.sourceKey === '101')?.subjectId).toBe(workId);
+    expect(firstInput.readings.some((reading) => reading.externalId === '101')).toBe(false);
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted.size).toBe(0);
@@ -444,6 +449,13 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     expect(replayed.status).toBe('published');
+    // Equal acceptance bodies for distinct targets must never share a receipt key.
+    const candidateKeys = new Map<string, string>();
+    for (const call of acceptanceCalls) {
+      const target = candidateKeys.get(call.idempotencyKey);
+      if (target) expect(call.candidateId).toBe(target);
+      candidateKeys.set(call.idempotencyKey, call.candidateId);
+    }
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
     for (const candidate of synopses) {
@@ -764,3 +776,35 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
+
+test('explicit 422 replaces a collided review receipt; unknown delivery keeps the sealed key', () => {
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const action = 'accept:target-a';
+    const body = { context: globalContext, expected_head: 1 };
+    journal.prepareAction(action, body, 'sealed-key');
+    expect(journal.prepareAction(action, body, 'caller-key')).toEqual(body);
+    expect(journal.action(action)).toMatchObject({
+      idempotency_key: 'sealed-key',
+      state: 'prepared',
+    });
+
+    journal.refuseAction(action, 'review-http-422');
+    expect(journal.prepareAction(action, body, 'replacement-key')).toEqual(body);
+    expect(journal.action(action)).toMatchObject({
+      idempotency_key: 'replacement-key',
+      state: 'prepared',
+      error_code: null,
+    });
+
+    journal.refuseAction(action, 'review-http-409');
+    expect(journal.prepareAction(action, body, 'ignored-key')).toEqual(body);
+    expect(journal.action(action)).toMatchObject({
+      idempotency_key: 'replacement-key',
+      state: 'refused',
+      error_code: 'review-http-409',
+    });
+  } finally {
+    journal.close();
+  }
+});

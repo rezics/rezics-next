@@ -7,6 +7,7 @@ import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   crossMediaAliases,
+  emptyCrossMediaPlan,
   planCrossMediaSeed,
   seedCrossMedia,
   type CrossMediaPort,
@@ -45,12 +46,20 @@ test('synthetic selected Person and Organization images use the common authorize
   const batchCalls: string[][] = [];
   const signal = new AbortController().signal;
   try {
-    const tables: CrossMediaTables = {
-      async *rows(provider, table) {
-        if (provider === 'bangumi' && table === 'subject') yield { id: 101, name: 'STEINS;GATE', type: 2 };
-      },
-    };
-    const rawPlan = await planCrossMediaSeed(tables);
+    const rawPlan = emptyCrossMediaPlan();
+    rawPlan.records.bangumi.push({
+      source: 'bangumi',
+      key: '101',
+      revision: null,
+      payload: { id: 101, name: 'STEINS;GATE', type: 2 },
+    });
+    rawPlan.members.push({
+      source: 'bangumi',
+      key: '101',
+      kind: 'work',
+      membership: 'family',
+      franchise: 'steins-gate',
+    });
     // Synthetic detail derivative: the selected source keys are real finite-closure observations,
     // while this native fixture does not claim to reproduce their upstream selection.
     rawPlan.entities.bangumi.push(
@@ -307,7 +316,7 @@ test('synthetic selected Person and Organization images use the common authorize
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 180_000);
 
 const characterWorkCoverSourceUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/native-10380.png';
 const characterSourceUrl = 'https://lain.bgm.tv/pic/crt/l/46/52/11546_crt_FlzuU.jpg';
@@ -334,6 +343,14 @@ test('default finite Bangumi selection imports a direct Character image through 
   const signal = new AbortController().signal;
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
+      if (provider === 'vndb') {
+        for (const id of developmentShowcaseSelection.vndb) {
+          if (table === 'vn_titles') yield { id, lang: 'en', official: 't', title: `Selected ${id}`, latin: null };
+          if (table === 'vn') yield { id, olang: 'ja', alias: null };
+          if (table === 'entry_meta') yield { id, revision: '1', lastmod: '2026-10-25 00:00:00+00' };
+        }
+        return;
+      }
       if (provider !== 'bangumi') return;
       if (table === 'subject') {
         yield { id: 10380, name: 'STEINS;GATE', name_cn: '命运石之门', type: 2 };
@@ -667,4 +684,4 @@ test('default finite Bangumi selection imports a direct Character image through 
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30_000);
+}, 180_000);
