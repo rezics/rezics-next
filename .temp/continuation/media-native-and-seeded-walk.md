@@ -139,3 +139,19 @@ Checks at hand-off: focused Web transport `0ae0e9be-72fb-4818-8bcd-588d0d6bfe38`
 `a9c06f5b-39b5-458f-a2fa-b11c2a335fd8` (`bun run --cwd services/kernel check test/content/media-parent.test.ts
 test/content/local-media-http.test.ts test/content/media-dev-stack-configuration.test.ts`). Seeded, browser and root
 stages remain owner-deferred as recorded above; no seeded stack was started in this attempt.
+
+## Wake: first Worker and native checks
+
+The web focused check `0ae0e9be-72fb-4818-8bcd-588d0d6bfe38` and the native media parent check
+`a9c06f5b-39b5-458f-a2fa-b11c2a335fd8` both ended with exit 143 at 03:57:41-43 UTC, about 3m43s after
+start. Neither record holds a stop intent, cancellation or terminal action. The web run had reached
+`scripts/generate.ts` on host b; the native run was still queued. Neither reached a test, so no startup or
+native result exists yet. The re-run replaces them with fresh check IDs.
+
+Exact handoffs were sent through the inbox: `web` receives Worker discovery-off commit `4ca087e422`, and
+`accounts` receives the Access projection commit `ef0b016806`. Neither is treated as received until its owner
+reconciles it. The mounted-scope assertions moved unchanged from `services/auth/scripts/dev-stack.test.ts` to
+`services/kernel/test/content/media-dev-stack-configuration.test.ts`. No media or Access path on this branch
+uses the public capability entries from dev commit `f2d87bf104`, which is not an ancestor of this branch, so
+none were received. The actual reserve, upload, complete, claim and read journey remains owner-deferred to a
+controller-owned seeded stack, as recorded above.
