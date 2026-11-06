@@ -45,6 +45,8 @@ test('removing a covered page retains its original and leaves no live decision t
     expect.objectContaining({ pointer: '/pages/1/document', version: '3', original: notes.document }),
   ]);
   const shown = withholdingJson(next);
+  if (shown === null || typeof shown !== 'object' || Array.isArray(shown))
+    throw new Error('withholding JSON must be an object');
   expect(Object.keys(shown)).toEqual(['custody']);
   expect(withholdingOf(shown).decisions).toEqual({});
 });

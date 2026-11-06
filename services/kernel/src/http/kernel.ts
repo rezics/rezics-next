@@ -947,9 +947,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
 
 // The module inherits definition routes. Keep their existing schemas only once: intersecting
 // another copy expands their response unions beyond the compiler's representable type size.
+// `platform` is only Zone hold/releaseHold/purge; exposure stays on exposureRoutes.
 type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
   '~Routes': {
-    v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
+    v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones' | 'platform'>;
   };
 };
 
