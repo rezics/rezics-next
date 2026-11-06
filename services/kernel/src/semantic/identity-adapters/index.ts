@@ -904,3 +904,9 @@ export type {
   IdentityRatingReviewUnavailableReason,
 } from './read.ts';
 export type * from './identity-epoch-contract.ts';
+export { bindSemanticProducerRoles, identityErasureRoles } from '../erasure-producer.ts';
+export {
+  currentIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
+} from '../identity-source-consumer-maintenance.ts';
+export { searchReceivingProductionDeclaration } from '../identity-search-receiving-statements.ts';

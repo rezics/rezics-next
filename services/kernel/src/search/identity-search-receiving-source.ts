@@ -3,27 +3,29 @@ import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { subjectSource } from './search-source.ts';
-import { createSearchIdentityReceivingNativeStore } from '../search/identity-receiving-native-store.ts';
-import type { SearchNativeReceivingPreparation } from '../search/identity-receiving-native-internal.ts';
-import { searchIdentityWriterChanged } from '../search/identity-epoch-participant-events.ts';
-import type { SearchReceivingConfiguration } from '../search/identity-receiving-native.ts';
-import { subjectPartition } from '../search/source.ts';
-import { createSearchWriterGuard, SEARCH_IDENTITY_WRITER_CHUNK } from '../search/writer-guard.ts';
+import { subjectSource } from '../semantic/search-source.ts';
 import {
   identityEpochStore,
   identityJobPartition,
   IdentityEpochStoreError,
   serializeIdentityValue as json,
-} from './identity-adapters/index.ts';
-import { withReadTransaction } from './read.ts';
+  type IdentityChange,
+  type IdentityJobRef,
+  type NativeStepWork,
+} from '../semantic/identity-adapters/index.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import {
   prepareSearchIdentityReceivingEffect,
   type SearchIdentityReceivingSelection,
-} from './identity-receiving-effects.ts';
-import type { IdentityChange, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
+} from '../semantic/identity-receiving-effects.ts';
+import { createSearchIdentityReceivingNativeStore } from './identity-receiving-native-store.ts';
+import type { SearchNativeReceivingPreparation } from './identity-receiving-native-internal.ts';
+import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
+import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
+import { subjectPartition } from './source.ts';
+import { createSearchWriterGuard, SEARCH_IDENTITY_WRITER_CHUNK } from './writer-guard.ts';
 import existingPlansSql from './identity-search-receiving-existing-plans.sql';
-import jobScopeSql from './identity-search-receiving-job-scope.sql';
+import jobScopeSql from './identity-epoch-participant-job-scope.sql';
 import enrollSql from './identity-search-receiving-enroll.sql';
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
@@ -86,21 +88,18 @@ export async function commitSearchIdentityReceivingPlans(
       await guard.write(partition, ids.slice(offset, offset + SEARCH_IDENTITY_WRITER_CHUNK), 0n);
     }
   } catch (error) {
-    if (
-      !(error instanceof IdentityEpochStoreError) ||
-      !error.message.includes('closed to writer enrollment')
-    )
+    if (!(error instanceof IdentityEpochStoreError) || !error.message.includes('closed to writer enrollment'))
       throw error;
   }
   const fences = new Map<string, Awaited<ReturnType<typeof guard.fenceOriginal>>>();
   for (const original of ids) fences.set(original, await guard.fenceOriginal(job, original));
   const barrier = await guard.closeGeneration(partition);
   const copies: Awaited<ReturnType<typeof guard.readRetainedCopies>>['copies'][number][] = [];
-  for (let after: string | null = null; ; ) {
-    const page = await guard.readRetainedCopies(barrier.locator, after);
+  for (let cursor: string | null = null; ; ) {
+    const page = await guard.readRetainedCopies(barrier.locator, cursor);
     copies.push(...page.copies);
     if (!page.next) break;
-    after = page.next;
+    cursor = page.next;
   }
   const store = createSearchIdentityReceivingNativeStore({
     pool,
@@ -111,12 +110,8 @@ export async function commitSearchIdentityReceivingPlans(
     await withReadTransaction(
       pool,
       async (tx) =>
-        (
-          await tx.query<{ scope_digest: string }>(
-            jobScopeSql.sql,
-            [home, job.jobId, job.epoch.toString()],
-          )
-        ).rows[0]?.scope_digest,
+        (await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [home, job.jobId, job.epoch.toString()])).rows[0]
+          ?.scope_digest,
       context.deadline,
     )
   );

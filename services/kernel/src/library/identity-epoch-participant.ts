@@ -11,13 +11,16 @@ import type {
   NativeStepWork,
 } from '../semantic/identity-epoch-contract.ts';
 import {
+  bindSemanticProducerRoles,
+  currentIdentitySourceConsumerMaintenance,
+  identityErasureRoles,
   identityEpochStore,
   identityJobPartition,
   IdentityEpochStoreError,
+  identitySourceConsumerLibraryWork,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
-import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import {
   lookupIdentityReceivingEffect,
   prepareIdentityReceivingEffect,
@@ -26,10 +29,6 @@ import {
   type IdentityReceivingEffect,
   type IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects.ts';
-import {
-  currentIdentitySourceConsumerMaintenance,
-  identitySourceConsumerLibraryWork,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
@@ -52,7 +51,7 @@ import stepSql from './identity-epoch-participant-step.sql';
 import coverageSql from './identity-epoch-participant-coverage.sql';
 import affectedSql from './identity-epoch-participant-affected.sql';
 import buildingSql from './identity-epoch-participant-building.sql';
-import jobScopeSql from '../semantic/identity-search-receiving-job-scope.sql';
+import jobScopeSql from './identity-epoch-participant-job-scope.sql';
 
 const step = 'library-private-follow-counts';
 const stale = (detail: string) => new IdentityEpochStoreError('identity_effect_stale', detail);

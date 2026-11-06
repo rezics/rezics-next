@@ -638,7 +638,8 @@ The existing Search binding is `searchWorkModule` -> `startSearchIndexing` -> `c
 The indexer uses 256-ID source chunks and `refresh: wait_for` bulk before its ordinary partition checkpoint.
 Those are actual subject index surfaces, not a complete epoch observation or a private/public disclosure grant.
 Search must export a real `IdentityEpochStep` adapter for its canonical index and prepared rows. The concrete producer is
-`search/identity-epoch-participant.ts`, `createSearchIdentityEpochParticipant({search,prefix,routeKey})`.
+`search/identity-epoch-participant.ts`, `createSearchIdentityEpochParticipant({search,prefix,routeKey,receiving})`.
+The composition root supplies `receiving` through `searchIdentityReceivingComposition`.
 Its current native support/receiving boundary fails unavailable; the declaration is not complete coverage. It must bind the physical target,
 incarnation and complete canonical observation at this epoch, keep one public terminal document and unique prepared
 rows per generation+canonical ID, and preserve original support and last-eligible-original behavior. This ACK is
@@ -664,7 +665,8 @@ and `WorkContext.addEffects`, `DBOS.registerStep/registerWorkflow`, `WorkClient.
 and `return-existing`. `composeWork` owns the single DBOS launch; `KERNEL_WORK_MODULES` owns default binding and
 `startWorker` owns lifecycle. No scheduler/process/second launch or independently invented maintenance engine.
 STORE and mapping import only native dependencies and these types; participant producers import STORE/types;
-only final coordinator composition imports concrete participants. Neither participant waits for or imports coordinator.
+the composition root binds concrete participants and Search receiving; the coordinator receives them as ports.
+Neither participant waits for or imports the coordinator.
 Accounts and ordinary callers bind last, after their actual response contracts and native prerequisites exist.
 
 The coordinator now exports these two functions and registers through the existing Semantic module. Each finite

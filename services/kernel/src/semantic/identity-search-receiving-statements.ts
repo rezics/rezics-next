@@ -15,10 +15,7 @@ import commandTime from '../command/time.sql';
 import commandFence from '../command/fence.sql';
 import commandNoEffect from '../command/no-effect-fence.sql';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import {
-  searchReceivingOperations,
-  type SearchReceivingWorkDeclaration,
-} from './identity-search-receiving-work.ts';
+import type { SearchReceivingWorkDeclaration } from './identity-search-receiving-work.ts';
 import { searchNativeReceivingStatements } from '../search/identity-receiving-native-store.ts';
 import { searchNativeReceivingSqlCost } from '../search/identity-receiving-native-work.ts';
 import participantNext from '../search/identity-epoch-participant-next.sql';
@@ -32,11 +29,6 @@ import {
   searchReceivingCaptureStatements,
   searchReceivingCaptureStatementCosts,
 } from './identity-search-receiving-capture.ts';
-import participantComplete from '../search/identity-epoch-participant-complete.sql';
-import participantDirectory from '../search/identity-epoch-participant-directory.sql';
-import receivingEnroll from './identity-search-receiving-enroll.sql';
-import receivingExistingPlans from './identity-search-receiving-existing-plans.sql';
-import receivingJobScope from './identity-search-receiving-job-scope.sql';
 
 /** Literal inventory used by production calls, including the private pre-COMMIT capture planner. */
 export const receivingStatements = Object.freeze({
@@ -141,11 +133,6 @@ export function commonSearchReceivingStatements(): readonly string[] {
           participantReplay.sql,
           participantJob.sql,
           participantAck.sql,
-          participantComplete.sql,
-          participantDirectory.sql,
-          receivingExistingPlans.sql,
-          receivingJobScope.sql,
-          receivingEnroll.sql,
           nativeDefinition.sql,
           'BEGIN ISOLATION LEVEL SERIALIZABLE',
           'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
@@ -260,11 +247,6 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [participantReplay.sql, [5, 5, 1, 4096, 1]],
     [participantJob.sql, [1, 1, 1, 4096, 1]],
     [participantAck.sql, [3, 1, 1, 8192, 1]],
-    [participantComplete.sql, [6, 6, 6, 4096, 0]],
-    [participantDirectory.sql, [8, 8, 1, 16384, 1]],
-    [receivingExistingPlans.sql, [100, 2, 1, 8192, 1]],
-    [receivingJobScope.sql, [1, 1, 1, 256, 1]],
-    [receivingEnroll.sql, [8, 8, 1, 16384, 1]],
     [nativeDefinition.sql, [3, 3, 1, 2048, 1]],
   ] satisfies readonly (readonly [string, Cost])[])
     add(sql, cost);
@@ -345,13 +327,22 @@ const productionNative = Object.freeze({
   }),
 }) satisfies SearchReceivingWorkDeclaration['native'];
 
+const productionOperations = [
+  'resolvePlanned',
+  'readAndHold',
+  'revalidateHold',
+  'recordApplied',
+  'reconcileOriginal',
+  'releaseHold',
+] as const satisfies readonly (keyof typeof productionNative)[];
+
 /** Trusted production composition: captured SQL inventory plus all six native operations. */
 export function searchReceivingProductionDeclaration(): SearchReceivingWorkDeclaration {
   return memoizedValue(searchReceivingProductionDeclaration, () =>
     Object.freeze({
       statements: searchReceivingCapturedStatementCosts(),
       native: Object.freeze(
-        Object.fromEntries(searchReceivingOperations.map((operation) => [operation, productionNative[operation]])),
+        Object.fromEntries(productionOperations.map((operation) => [operation, productionNative[operation]])),
       ) as SearchReceivingWorkDeclaration['native'],
     }),
   );

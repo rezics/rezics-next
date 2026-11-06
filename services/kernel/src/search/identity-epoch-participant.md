@@ -82,9 +82,10 @@ establish native preparation. No prepared array or receipt locator replaces comp
 uncertain-copy settlement.
 
 `createSearchIdentityEpochParticipant({search,prefix,routeKey,receiving}): IdentityEpochStep` preserves exactly
-`(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>`. The coordinator supplies the same-Pool Access, clock,
-generation-1 consumer/index and six-operation production declaration, and runs Source native `preparePlan` plus this
-callable inside the original live maintenance frame. It validates trusted deployment inputs and reads the
+`(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>`. `searchIdentityReceivingComposition` is the trusted
+root helper that binds same-Pool Access, clock, generation-1 consumer/index and the six-operation production
+declaration. The coordinator runs this callable inside the original live maintenance frame; the participant commits
+Source native `preparePlan` then enrolls common receiving there. It validates trusted deployment inputs and reads the
 actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. The operational
