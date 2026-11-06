@@ -5,7 +5,7 @@ import {
   currentCommandWorkAssociation,
   currentLibraryOperationAccounting,
   withNativeCommandAccounting,
-} from '../command/work-context.ts';
+} from '../command/index.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import {
