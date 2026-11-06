@@ -118,6 +118,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
+        beforeFinal?: (entries: readonly reads.PostEntry[]) => Promise<void>,
       ) => Promise<model.Page<reads.PostEntry>>
     >
   >();
@@ -337,7 +338,16 @@ function publishedModels(): void {
     >
   >();
   same<
-    Equal<reads.ContentReadDependencies, Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>>
+    Equal<
+      reads.ContentReadDependencies,
+      Readonly<{
+        pool: Pool;
+        access: Access;
+        tokens: KeyRing;
+        clock?: () => Date;
+        disclosureBarrier?: reads.DisclosureBarrier;
+      }>
+    >
   >();
   same<
     Equal<
