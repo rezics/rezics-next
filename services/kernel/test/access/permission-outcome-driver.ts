@@ -25,6 +25,7 @@ import { newId } from '../../src/route/route.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { productionActions } from '../support/production-actions.ts';
+import { currentAuthorityOperands, startCurrentAuthorityWorker } from './support/current-authority-worker.ts';
 import type {
   Authentication,
   Evidence,
@@ -350,9 +351,33 @@ export async function createPermissionDriver(): Promise<PermissionDriver> {
   let nextBoard = 0;
   let nextOrganization = 0;
   let app: ReturnType<typeof createKernel> | undefined;
+  let worker: Awaited<ReturnType<typeof startCurrentAuthorityWorker>> | undefined;
+  let authRelay: ReturnType<typeof Bun.serve> | undefined;
 
   const current = () => required(world, 'Permission driver is closed');
   const context = () => ({ pool: current().kernel, deadline: Date.now() + 20_000 });
+
+  async function currentWorker() {
+    if (worker) return worker;
+    authRelay ??= Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: (request) => current().service.handler(new Request(`${issuer}${new URL(request.url).pathname}`, request)),
+    });
+    worker = await startCurrentAuthorityWorker({
+      databaseUrl: databaseUrl(kernelName),
+      issuer,
+      audience,
+      routeKey: routeKey.toString('base64url'),
+      referenceKeys: {
+        current: referenceKeys.current,
+        keys: [...referenceKeys.keys].map(([id, key]) => [id, Buffer.from(key).toString('base64url')]),
+      },
+      authRelay: `http://127.0.0.1:${authRelay.port}`,
+      ...(controlled ? { instant: controlled.toISOString() } : {}),
+    });
+    return worker;
+  }
 
   async function request(path: string, body: unknown, cookie = ''): Promise<Response> {
     return current().host.handler(
@@ -824,6 +849,20 @@ export async function createPermissionDriver(): Promise<PermissionDriver> {
       const send = async (method: string, path: string, body?: unknown): Promise<number> => {
         const url = new URL(`http://kernel.test${path}`);
         for (const [name, value] of hostile) url.searchParams.set(name.replace('-', '_'), value);
+        const request = new Request(url, {
+          method,
+          headers: {
+            authorization: `Bearer ${bearer}`,
+            ...Object.fromEntries(hostile.map(([name, value]) => [`x-${name}`, value])),
+            ...(body === undefined
+              ? {}
+              : {
+                  'content-type': 'application/json',
+                  [IDEMPOTENCY_HEADER]: JSON.stringify(`request-${randomUUID()}`),
+                }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
         const response = await (app ??= createKernel({
           pool,
           routeKey,
@@ -832,23 +871,44 @@ export async function createPermissionDriver(): Promise<PermissionDriver> {
           access: () => access,
           writeRate: createWriteRateLimiter({ secret: hostSecret }),
           rateAttribution: { trustedProxyPeers: [], clientIpHeader: 'cf-connecting-ip' },
-        })).handle(
-          new Request(url, {
-            method,
-            headers: {
-              authorization: `Bearer ${bearer}`,
-              ...Object.fromEntries(hostile.map(([name, value]) => [`x-${name}`, value])),
-              ...(body === undefined
-                ? {}
-                : {
-                    'content-type': 'application/json',
-                    [IDEMPOTENCY_HEADER]: JSON.stringify(`request-${randomUUID()}`),
-                  }),
-            },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          }),
-        );
+        })).handle(request.clone());
         lastBody = await response.text();
+        // The exact same credential, target and request key reaches the actual
+        // worker composition. A write is an ordinary receipt replay, so this
+        // also pins current authorization before stored-result disclosure.
+        const child = await (
+          await currentWorker()
+        ).send({
+          kind: 'http',
+          url: request.url,
+          method,
+          headers: [...request.headers],
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          ...(controlled ? { instant: controlled.toISOString() } : {}),
+        });
+        if (child.status !== response.status) {
+          const target =
+            operation.kind === 'resource'
+              ? resourceFor(operation.resourceId, operation.action)
+              : resourceFor(operation.grant.resourceId, operation.grant.actions[0]!);
+          const operands = await currentAuthorityOperands(pool, access, bearer, target);
+          const childOperands = await (
+            await currentWorker()
+          ).send({
+            kind: 'operands',
+            bearer,
+            resource: target,
+            ...(controlled ? { instant: controlled.toISOString() } : {}),
+          });
+          throw new Error(
+            `Parent/worker permission differs: ${JSON.stringify({
+              parent: { status: response.status, body: lastBody },
+              child,
+              operands,
+              childOperands: JSON.parse(childOperands.body),
+            })}`,
+          );
+        }
         return response.status;
       };
       // Only the product's own answers are decisions: a refusal, a concealed resource, or retryable
@@ -912,18 +972,34 @@ export async function createPermissionDriver(): Promise<PermissionDriver> {
           await client.query('ROLLBACK');
         }
       });
+      const child = await (
+        await currentWorker()
+      ).send({
+        kind: 'check',
+        bearer,
+        action: productOf(operation.action),
+        resource,
+        ...(controlled ? { instant: controlled.toISOString() } : {}),
+      });
+      if ((child.status === 200) !== allowed) throw new Error(`Parent/worker Access decision differs: ${child.status}`);
       return allowed ? 'permitted' : 'denied';
     },
 
     async failEvidence(source, failure) {
       failures.set(source, failure);
+      await (await currentWorker()).send({ kind: 'failure', source, failure });
     },
 
     async close() {
       if (closed) return;
       closed = true;
       try {
-        await world?.stop();
+        try {
+          await worker?.close();
+        } finally {
+          authRelay?.stop(true);
+          await world?.stop();
+        }
       } finally {
         world = undefined;
         for (const name of [kernelName, authName]) {

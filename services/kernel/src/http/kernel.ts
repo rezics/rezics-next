@@ -359,6 +359,15 @@ export function createKernelAccessResolver(options: {
         >,
       },
     );
+  if (options.realmRoleReader === undefined) {
+    // Forward the native invocation receipts with the reader. A callable proxy
+    // alone loses the owner's work declaration and makes metered authority
+    // unavailable even when the current membership itself is readable.
+    Object.defineProperties(realmRoleReader, {
+      work: { get: () => membershipReader().work },
+      batchWork: { get: () => membershipReader().batchWork },
+    });
+  }
   const resolveAccess = (config: AccessConfig): Access => {
     if (typeof factory !== 'function') return (access = factory);
     if (access) return access;

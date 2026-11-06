@@ -1168,6 +1168,23 @@ kernel resolver supplies current Realm roles and native edition buyer facts; act
 come from mounted declarations. This constructs no listener, request, extra pool/client or DBOS launch. The getter
 and configuration confer no authority. Accounts uses this same Access and reader for its existing membership
 restorer; Content edition sale restoration receives the identical reader through the pool's existing registry.
+Decision: the lazy Kernel Realm-role reader forwards `work` and `batchWork` from the same native
+membership reader as its scalar and batch calls. The work producers retain their exact invocation context and result
+identities; a callable-only wrapper drops the declaration and makes metered membership authority unavailable before
+its current rows can establish permission. Forwarding adds no Pool, checkout, statement, time source, cache or allowance.
+The native owner keeps its bounded membership probes and consumes each receipt once.
+
+Verification choice: retain every original permission-outcome assertion and send the identical request, credential,
+command key and trusted instant through parent Kernel and isolated `createWorkerAuthorization` composition. Auth
+still issues credentials and serves its genuine JWKS; each process owns a separate Pool on the same application
+database with the same route/reference keys. A disagreement reports both actor/account/resource/catalogue and keyed
+grant projections, including actual database identity. Faults stay at the actual database or Auth boundary.
+`test/access/current-authority-permission.test.ts` adds a genuine protected-board publisher and current Auth consent,
+compares strict native edition sale authority, then exercises ordinary grant/revoke and Realm bans before the next
+read. It also pins scalar/batch work receipt forwarding. Historical publication and command replay confer no current
+sale or read authority. These are implemented native fixtures, not evidence of promoted or browser acceptance;
+Financial's complete order/retention/expiry journey remains its receiving acceptance.
+
 Consent configuration is read once for this composition. An absent group installs a reader that throws typed,
 retryable `AccessUnavailableError('overloaded')` when invoked; partial configuration still throws `ConfigError`.
 Current restoration, grants, scopes, floors, assignments and denials remain the durable initiator and Access formula's
