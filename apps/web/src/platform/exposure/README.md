@@ -1,10 +1,15 @@
 # Platform exposure management
 
 Route: `/{locale}/platform/exposure`, private and no-store. This slice consumes native discovery and commands;
-it does not install a writer, grant, flag engine or wider website scope.
+it reuses the ordinary resource-access screen for tester grants and installs no parallel writer or flag engine.
 
 Decision: When native management is refused or unavailable, retain only the generated viewer-filtered group names as
 partial context with unknown status and no controls; they never imply a complete inventory or current authority.
+
+The admitted management view links to the existing localized Global resource-access route. That page independently
+checks current `access:grant`, client/principal authority and delegable gate actions before review or write. Opening
+and closing retain tester grants; the operator explicitly revokes a grant through Resource access. A link is
+navigation, not grant advice. Unavailable or denied management retains no tester-grant link or private inventory.
 
 ## Closed native declaration and Accounts owner handoff
 

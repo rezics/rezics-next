@@ -11182,5 +11182,7 @@
   "library_archive_recovery_restart_original": "使用原始归档",
   "library_archive_entry_open_library": "打开书库",
   "library_archive_progress_open_session": "打开当前的 Session",
-  "library_archive_progress_restart": "用原始归档再开始一次恢复"
+  "library_archive_progress_restart": "用原始归档再开始一次恢复",
+  "exposure_grants_link": "Review tester grants",
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
 }
