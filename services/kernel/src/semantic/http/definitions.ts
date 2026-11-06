@@ -16,6 +16,7 @@ import {
 import { LeafNativeWork, LeafReservationUnavailable } from '../scope-leaf-selection.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { OpenAPIV3 } from 'openapi-types';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { withReadTransaction } from '../read.ts';
@@ -650,7 +651,9 @@ export function definitionRoutes(
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: importRequest } },
+            content: {
+              'application/json': { schema: importRequest as unknown as OpenAPIV3.SchemaObject },
+            },
           },
         },
       },

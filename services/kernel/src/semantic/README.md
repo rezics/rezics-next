@@ -168,8 +168,9 @@ requirements. Ordinary provider imports do not auto-seed them.
 Decision: fewest tests pin publication, named stories and the emitted import contract
 (`test/openapi.test.ts` definitions.import, `packages/client/tests/definitions-import.test.ts`,
 and the existing closed-controls operation-map); `expansion.test.ts` remains the ten-Type and
-one-hundred-manifest measurement. Authored import requestBody plus a finite route type keep
-the mounted schema in the generated OpenAPI document and client declaration.
+one-hundred-manifest measurement. Authored import requestBody uses the OpenAPIV3 SchemaObject
+cast from subject.batch_write so TypeBox TNull compiles; a finite route type keeps the client
+method when emission drops it.
 
 ### Definition publication admission cost
 
