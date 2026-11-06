@@ -46,8 +46,19 @@ export type ConditionId = (typeof CONDITION_IDS)[number];
 
 const PLACEHOLDER = /\{\{(policy|task)\.([A-Za-z0-9_.]+)\}\}/g;
 const RETRY_WORDS = ['zero', 'one', 'two'] as const;
-const WRAPPER_RESULT =
-  'If the wrapper prints a check id before the check ends, end the turn at once with `{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID. Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say), status polls, log or process reads. The controller wakes this session with the result: use it exactly (missing, unknown or nonzero is not a pass) and do not return waiting again for those ids; success uses `"checks":[]`. A failure after the wrapper\'s own infrastructure rerun is final: a `tool` blocker. ';
+/** The wrapper's waiting protocol; `pass` says what a result must be to count, `infrastructure` what is final. */
+function wrapperResult(pass: string, infrastructure: string): string {
+  return `If the wrapper prints a check id before the check ends, end the turn at once with \`{"status":"waiting","checks":["<bare UUID>"]}\` in the exit object, using that bare UUID. Never wait for it yourself: no \`--wait\` (obsolete, whatever older sessions say), status polls, log or process reads. The controller wakes this session with the result: use it exactly (${pass}) and do not return waiting again for those ids; success uses \`"checks":[]\`. ${infrastructure} `;
+}
+const WRAPPER_RESULT = wrapperResult(
+  'missing, unknown or nonzero is not a pass',
+  "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker.",
+);
+// Under the combined check a nonzero exit is decided by the type-error and money-code rules, not by the generic pass test.
+const MINIMAL_WRAPPER_RESULT = wrapperResult(
+  'missing or unknown is not a pass; a nonzero exit is judged by the type-error and money-code rules above',
+  "A transport or infrastructure failure that survives the wrapper's own rerun is final: a `tool` blocker; type and test failures are not infrastructure failures.",
+);
 const OWNED_ONCE =
   'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.';
 const SCARCE_ONCE = 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
@@ -67,10 +78,9 @@ const REGRESSION = `Do not run the root typecheck or other regression suites you
 const MINIMAL_SESSION_COMMANDS =
   'Commands that finish locally in under a minute (`bun test` of a few plain unit files, oxfmt, tsc on tools/goal) still run in the session.';
 // The result rule travels with the wrapper result protocol in the footer; the condition body states the check itself.
-const MINIMAL_RESULT =
-  'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.';
+const MINIMAL_RESULT = `Then commit and return success (blocker null, \`"checks":[]\`) once every changed workspace type-checks, naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started. A failing test blocks success only when the outcome changes payment, payout, order settlement, points or balance code. Otherwise name each changed test file the check still reports failing under a 'failing tests' label in the summary, with its first error line from the check output or its full log (write none when none fails); that list is not counted in the 120-word summary limit. Such a failing test need not be repaired, even when a check wake asks you to fix the cause.`;
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
-  'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${WRAPPER_RESULT}`.trimEnd(),
+  'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${MINIMAL_WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
   wrapper: `${WAIT} ${REGRESSION}`,
   'no-wrapper': `${WAIT} ${REGRESSION}`,

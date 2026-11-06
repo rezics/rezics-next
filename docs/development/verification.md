@@ -46,6 +46,8 @@ so dev compiles and boots. Payment, payout, order settlement, points and balance
 
 Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
 
+Decision: under minimal verification a type error blocks a worker's success, and a failing test blocks it only in payment, payout, order settlement, points or balance code. Other failing test files are named under `failing tests` in the worker's summary for the owning manager to repair; landing and the dev verifier still check every candidate.
+
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 
