@@ -81,3 +81,9 @@ session for reaction recovery and cover session loss separately.
 Composition slots invoke Puck's render callbacks instead of mounting those newly created functions as component
 types. Pending session fetches and current private readback therefore retain the same action elements and queue;
 the reaction caller still retires them on a committed session replacement through its existing admission.
+
+Mounted regression transports supply the configured definition origin as well as the native client, so Library
+choices come from the recorded release through its production reader. Follow cost assertions compare with the
+settled StrictMode mount baseline and require one fresh read after session replacement; reaction-only fetch
+notifications preserve that baseline. Public Zone route fixtures provide the Worker's declared startup secret
+without authenticating a persona; they remain separate from seeded browser/native acceptance.
