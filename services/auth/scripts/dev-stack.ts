@@ -1008,6 +1008,43 @@ async function untilReady(
 }
 
 /**
+ * Starts Auth pages and Web for a journey that has already seeded its admitted stack. An admitted `start` leaves them
+ * out, so Vite never compiles while the seed runs. Children are killed on exit, so a failed journey cannot leave the
+ * slot's ports listening; `stop` is the normal teardown.
+ */
+export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }> {
+  const children = ['pages', 'web'].map((action) =>
+    Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
+      cwd: root,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }),
+  );
+  const killOnExit = () => {
+    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  };
+  process.once('exit', killOnExit);
+  try {
+    await untilReady(
+      [`${origins.issuer}/.well-known/openid-configuration`, `${origins.web}/en`],
+      children,
+    );
+  } catch (error) {
+    await Promise.all(children.map((child) => stopSpawned(child)));
+    process.off('exit', killOnExit);
+    throw error;
+  }
+  return {
+    stop: async () => {
+      process.off('exit', killOnExit);
+      await Promise.all(children.map((child) => stopSpawned(child)));
+    },
+  };
+}
+
+/**
  * Runs `command` against one walk stack: admission, the stack `dev:infra` and `dev` start, then teardown when the
  * command ends or the attempt is signalled. Only a worker whose brief lists native or browser acceptance may start one.
  */

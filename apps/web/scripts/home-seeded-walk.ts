@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/home-walk');
@@ -253,6 +254,8 @@ async function main() {
   await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
   const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
   await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
+  // Auth pages and Web start after the seed, as an admitted stack requires; `stop` runs before evidence is written.
+  const frontends = await startSeededFrontends();
   const showcase = await readShowcase();
   steps.push({
     name: 'seed',
@@ -367,6 +370,7 @@ async function main() {
     await browser.close();
   }
 
+  await frontends.stop();
   await writeFile(
     join(evidenceDir, 'evidence.json'),
     JSON.stringify(

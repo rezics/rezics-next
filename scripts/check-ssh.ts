@@ -15,8 +15,11 @@ import { join, resolve } from 'node:path';
 export const CONTROL_MASTER = 'auto';
 export const CONTROL_PERSIST = '10m';
 export const SSH_CONTROL_DIR_MODE = 0o700;
-/** Longer than OpenSSH's 15s ConnectTimeout: a shorter probe kills a handshake that is still progressing. */
-export const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 20_000;
+/**
+ * ConnectTimeout bounds only the TCP connect; banner exchange, key exchange and authentication run unbounded. A cold
+ * master on a loaded check host took 57 s on 2026-11-06, so the probe waits well past that before it gives up.
+ */
+export const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 90_000;
 /** Bounds a local `-O check`; a timeout is not evidence that the master is gone. */
 const CONTROL_CHECK_TIMEOUT_MS = 5_000;
 /** Linux `sockaddr_un.sun_path` length, including the trailing NUL OpenSSH writes. */

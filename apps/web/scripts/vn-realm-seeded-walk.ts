@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fromPlainText } from '@rezics/document';
+import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/vn-realm-walk');
@@ -527,6 +528,8 @@ evidence.native.push({
   showcaseBoardRealmId: evidence.seed.showcaseBoardRealmId,
   works: works.map((work) => ({ source: work.source, externalId: work.externalId })),
 });
+// Auth pages and Web start after the seed, as an admitted stack requires; `stop` follows the persona walk.
+const frontends = await startSeededFrontends();
 
 const bearer = await websiteToken(stack);
 let created: Omit<Identities, 'discoveryListed'>;
@@ -582,6 +585,7 @@ evidence.native.push({
 await writeFile(join(evidenceDir, 'identities.json'), `${JSON.stringify(identities, null, 2)}\n`);
 evidence.pages.push(...(await localeLabels(stack, identities.realmId)));
 await walkPersonas(stack, identities, evidence);
+await frontends.stop();
 const members = await kernel(stack, 'GET', `/v1/realms/${identities.realmId}/members`, {
   bearer,
   query: { limit: '20' },
