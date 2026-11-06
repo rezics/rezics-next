@@ -103,8 +103,10 @@ describe('native genuine-order retention', () => {
     return value;
   }
   async function grantAccess(subjectId: string, resource: { route: number; id: string }, actions: string[]) {
+    const deadline = deadlineFor(90_000);
+    const actor = await access.authenticate(governance.bearer, { pool, deadline });
     await grants.create(
-      { pool, actor: governance.actor, deadline: deadlineFor(90_000) },
+      { pool, actor, deadline },
       {
         resource,
         subject: { kind: 'account', id: subjectId },
@@ -651,9 +653,9 @@ describe('historical operator commerce custody', () => {
   test('historical acting-human and operator responsibilities cannot be attested as native no-data', async () => {
     const kernelPool = pool.current!;
     await deletePersona({ version: 1, pool: kernelPool, auth }, personas.software, { actingHuman: personas.operator });
-    await drainEffects(kernelPool, partitionOf(routeOf(personas.software.accountId)!));
+    await drainEffects(kernelPool, partitionOf(routeOf(personas.software.accountId)!), { deadlineMs: 90_000 });
     const barrier = await deletePersona({ version: 1, pool: kernelPool, auth }, personas.operator);
-    await drainEffects(kernelPool, partitionOf(routeOf(personas.operator.accountId)!));
+    await drainEffects(kernelPool, partitionOf(routeOf(personas.operator.accountId)!), { deadlineMs: 90_000 });
     const id = commerceErasureWorkflowId(personas.operator.accountId);
     await waitUntil(
       () => client.getWorkflow(id),

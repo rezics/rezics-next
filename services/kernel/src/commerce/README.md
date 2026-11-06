@@ -998,7 +998,9 @@ Decision: genuine-order native acceptance uses Content's isolated native system 
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
 Decision: one native purchase/retention/expiry journey plus the unused-actor operator-history case. Board and offer
 grants, edition publication and Commerce HTTP share one composed kernel whose Access is compiled from that kernel's
-catalogue and Score `nativeAuth.handler`. The board-read current-role projection stays with Accounts.
+catalogue and Score `nativeAuth.handler`. `grant.create` authenticates the governance bearer on that Access so
+command admission sees the same actor snapshot; a Content-issued actor object is not reused. The board-read
+current-role projection stays with Accounts.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Preserve the unused-account test's `none`
