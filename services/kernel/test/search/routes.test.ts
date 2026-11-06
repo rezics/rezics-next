@@ -83,6 +83,9 @@ const asOf = '2026-10-25T00:00:00.000Z';
 const calls: unknown[][] = [];
 let failure: ProblemError | null = null;
 const service: SearchService = {
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
