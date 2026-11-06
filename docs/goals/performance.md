@@ -138,7 +138,7 @@ Decision: pin this increment's user-visible check-infrastructure behaviour with 
 compiler-database, Kernel script and page-data unit files rather than a second suite, including the 120s host-lifetime
 `docker rm` and detached SIGTERM cleanup. Observed bounds: one OpenSSH
 ControlMaster per configured host under a short owned `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when
-unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `docker run`/`rm -f` spawn 120s (Auth
+unix_listener would overflow), recovered from a hung placement probe at most once per host per minute; throwaway PostgreSQL `--rm` plus owner-pid cleanup; `docker run`/`rm -f` spawn 120s (Auth
 `DEFAULT_RUN_TIMEOUT`) and exec/ps/port probes 5s, because a 10s cap timed out a live host-b `database-image` at 10.012s
 and a 3s host-lifetime `docker rm -f` timed out on SIGTERM cleanup; signal-path removal is detached so the 200ms
 supervisor SIGKILL cannot abort it;

@@ -39,7 +39,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
   acquireHostControl,
+  clearPlacementProbeTimeout,
   DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
+  notePlacementProbeTimeout,
+  recoverHungHostMaster,
   releaseHostControl,
   rsyncRemoteShell,
   sshControlDirectory,
@@ -806,6 +809,8 @@ const DEFAULT_PLACEMENT_MOVE_MS = 120_000;
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
 // Shared DEFAULT_CONTROL_PROBE_TIMEOUT_MS is check-ssh.ts. A 5 s probe failed 109 checks with exit 75 before any
 // command ran; a 20 s probe still lost a 57 s cold master whose ConnectTimeout had already succeeded.
+/** Placement probes wait this long through the host ControlMaster before checking and recovering it. */
+export const DEFAULT_PLACEMENT_PROBE_TIMEOUT_MS = 16_000;
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
@@ -858,6 +863,10 @@ function controlProbeTimeout(options: RemoteCheck): number {
     'REMOTE_CHECK_CONTROL_PROBE_TIMEOUT_MS',
     DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   );
+}
+
+function placementProbeTimeoutMs(): number {
+  return configuredTimeout(undefined, 'REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS', DEFAULT_PLACEMENT_PROBE_TIMEOUT_MS);
 }
 
 /** Shell guard for installed package files changed in place after installation. */
@@ -1052,7 +1061,7 @@ async function withSshControl<T>(workspace: string, work: () => Promise<T>): Pro
   try {
     return await sshControlContext.run(store, work);
   } finally {
-    for (const lease of store.leases.splice(0)) releaseHostControl(lease);
+    for (const lease of store.leases.splice(0)) await releaseHostControl(lease);
   }
 }
 
@@ -4582,7 +4591,7 @@ function probeErrorLine(stdout: string, stderr: string, code: number | null): st
   return `exit ${code}`;
 }
 
-async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostProbeAttempt> {
+async function runPlacementProbe(host: Host, uploadedDirectory: string | undefined): Promise<HostProbeAttempt> {
   const placementHeartbeat = uploadedDirectory
     ? `# Keep this uploaded placement alive while admission waits; a missing workspace must be uploaded again.
 [ -d ${quote(uploadedDirectory)} ] || exit 75
@@ -4601,7 +4610,7 @@ touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
     new Response(child.stdout).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
   ]);
-  const code = await within(16_000, child.exited);
+  const code = await within(placementProbeTimeoutMs(), child.exited);
   if (code === null) {
     await stopAndReap(child);
     const [stdout, stderr] = await output;
@@ -4611,6 +4620,30 @@ touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
   if (code !== 0) return { probe: null, error: probeErrorLine(stdout, stderr, code) };
   const probe = parseProbe(stdout);
   return probe ? { probe } : { probe: null, error: probeErrorLine(stdout, stderr, code) };
+}
+
+async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostProbeAttempt> {
+  const directory = boundSshDirectory();
+  let result = await runPlacementProbe(host, uploadedDirectory);
+  if (result.probe) {
+    await clearPlacementProbeTimeout(directory, host.name);
+    return result;
+  }
+  if (result.error === 'probe timed out') {
+    if (await recoverHungHostMaster(host, directory)) {
+      console.error(`remote-check: recovered hung ControlMaster on ${host.name}`);
+      result = await runPlacementProbe(host, uploadedDirectory);
+      if (result.probe) {
+        await clearPlacementProbeTimeout(directory, host.name);
+        return result;
+      }
+    }
+    const event = await notePlacementProbeTimeout(directory, host.name, result.error ?? 'probe timed out');
+    if (event) console.error(event);
+    return result;
+  }
+  await clearPlacementProbeTimeout(directory, host.name);
+  return result;
 }
 
 function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore'>): SessionLease {

@@ -468,7 +468,7 @@ if (options.filter((argument) => argument === '-O').length > 1) reject('duplicat
 if (positionals.length !== (controlOperation ? 1 : 2)) reject('expected host and optional command positionals');
 const address = positionals[0]!;
 if (!/^ops@[^:]+\.test$/.test(address)) reject('invalid host position');
-let script = controlOperation === 'exit' ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
+let script = controlOperation === 'exit' ? 'REMOTE_CHECK_CONTROL_CLOSE' : (positionals[1] ?? '');
 const launchCommand = script;
 if (script.startsWith('python3 -c ') && script.includes('truncated launch')) {
   const bytes = Buffer.from(await Bun.stdin.text());
@@ -518,6 +518,7 @@ if (controlOperation === 'exit') {
 }
 if (controlOperation === 'check') {
   log({ kind: 'control-check' });
+  if (config.controlCheckFail) process.exit(255);
   process.exit(0);
 }
 if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
@@ -552,6 +553,15 @@ if (script.includes('REMOTE_CHECK_MEMORY_RECLAIM')) {
   process.exit(0);
 }
 if (script.includes('/proc/loadavg')) {
+  const probeAttempt = count('placement-probe');
+  if (probeAttempt < (config.stalledProbes ?? 0)) {
+    log({ kind: 'probe', stalled: true, attempt: probeAttempt });
+    process.on('SIGTERM', () => {
+      log({ kind: 'probe-stopped', attempt: probeAttempt });
+      process.exit(143);
+    });
+    await new Promise(() => setInterval(() => {}, 1000));
+  }
   if (!knownHost || config.down) {
   if (config.probeError) console.error(config.probeError);
   process.exit(255);
@@ -724,11 +734,11 @@ if (script.includes('/proc/loadavg')) {
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
   if (call < (config.stallSlotTakes ?? 0)) {
-    log({ kind: 'slot-take-stalled', call, slotHeld: slotHeld(), script });
     process.on('SIGTERM', () => {
       log({ kind: 'slot-take-stopped', call });
       process.exit(143);
     });
+    log({ kind: 'slot-take-stalled', call, slotHeld: slotHeld(), script });
     await new Promise<void>(() => setInterval(() => {}, 1000));
   }
   if (call < (config.busy ?? 0)) {
@@ -806,11 +816,12 @@ if (script.includes('/proc/loadavg')) {
   const occupied = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
   const expressOccupied = existsSync(dir + '/' + hostKey + '.slot.express');
   const taking = dir + '/' + hostKey + '.taking';
-  if (existsSync(taking)) {
+  try {
+    mkdirSync(taking);
+  } catch {
     log({ kind: 'slot', granted: false, reason: 'reserved', requested, call, slotClass, script });
     process.exit(75);
   }
-  mkdirSync(taking);
   const hasBusyCountPass = script.includes('# REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS');
   const selected: Array<number | 'express'> = [];
   let occupiedCount = hasBusyCountPass ? occupied.length : 0;
@@ -1010,7 +1021,6 @@ if (args.includes('--version')) {
   console.log('rsync version 3.3.0\\nCapabilities: zstd zlib');
   process.exit(0);
 }
-const input = await Bun.stdin.text();
 const remote = args.find((argument) => /ops@[^:]+\\.test:/.test(argument));
 const address = remote?.slice(0, remote.indexOf(':'));
 const config = address ? JSON.parse(readFileSync(process.env.FAKE_DIR + '/config.json', 'utf8'))[address] ?? {} : {};
@@ -1018,25 +1028,14 @@ const rshIndex = args.indexOf('-e');
 const isBack = args.at(-1)?.endsWith('/') && !args.at(-1)?.startsWith('ops@');
 const hostKey = (address ?? '').replace(/[^a-z0-9]/gi, '_');
 const attemptFile = process.env.FAKE_DIR + '/' + hostKey + '.rsync-attempt';
-const attempt = Number((await import('node:fs')).existsSync(attemptFile) ? readFileSync(attemptFile, 'utf8') : '0');
-const { writeFileSync } = await import('node:fs');
+const { existsSync, writeFileSync } = await import('node:fs');
+const attempt = Number(existsSync(attemptFile) ? readFileSync(attemptFile, 'utf8') : '0');
 writeFileSync(attemptFile, String(attempt + 1));
 const code = isBack
   ? (config.rsyncBackExit ?? 0)
   : attempt < (config.rsyncFailures ?? 0)
     ? (config.rsyncFailureCode ?? 12)
     : (config.rsyncExit ?? 0);
-appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
-  kind: 'rsync',
-  step: isBack ? 'returns copy' : 'workspace upload',
-  pid: process.pid,
-  args,
-  destination: args.at(-1),
-  rsh: rshIndex >= 0 ? args[rshIndex + 1] : undefined,
-  files: input.split('\\0').filter(Boolean),
-  code,
-  slotHeld: readdirSync(process.env.FAKE_DIR!).some((name) => name.startsWith(hostKey + '.slot.')),
-}) + '\\n');
 const stalled = isBack ? config.stallReturnsCopy : config.stallUpload;
 const progressMode = isBack ? (config.returnsProgressMode ?? 'increasing') : (config.uploadProgressMode ?? 'increasing');
 const stopped = () => {
@@ -1048,6 +1047,23 @@ const stopped = () => {
   process.exit(143);
 };
 process.on('SIGTERM', stopped);
+const recordRsync = (files) => appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
+  kind: 'rsync',
+  step: isBack ? 'returns copy' : 'workspace upload',
+  pid: process.pid,
+  args,
+  destination: args.at(-1),
+  rsh: rshIndex >= 0 ? args[rshIndex + 1] : undefined,
+  files,
+  code,
+  slotHeld: readdirSync(process.env.FAKE_DIR!).some((name) => name.startsWith(hostKey + '.slot.')),
+}) + '\\n');
+if (stalled) {
+  recordRsync([]);
+  await new Promise<void>(() => setInterval(() => {}, 1000));
+}
+const input = await Bun.stdin.text();
+recordRsync(input.split('\\0').filter(Boolean));
 const writeProgress = async (value, tick) => {
   const record = String(value) + ' 10%';
   if (progressMode === 'fragmented') {
@@ -1067,9 +1083,6 @@ const writeProgress = async (value, tick) => {
 };
 if (progressMode === 'progress-then-stall') {
   await writeProgress(1_024, 0);
-  await new Promise<void>(() => setInterval(() => {}, 1000));
-}
-if (stalled) {
   await new Promise<void>(() => setInterval(() => {}, 1000));
 }
 const slowFor = isBack ? (config.slowReturnsMs ?? 0) : (config.slowUploadMs ?? 0);
@@ -1170,6 +1183,8 @@ type HostConfig = {
   holdLandingGrant?: boolean;
   down?: boolean;
   probeError?: string;
+  stalledProbes?: number;
+  controlCheckFail?: boolean;
   exit?: number;
   lifetimeFailure?: boolean;
   transportFailures?: number;
@@ -3754,6 +3769,72 @@ test('every ssh and rsync path uses one host ControlMaster under a short shared 
   expect(repeatedPath).toBe(selectedControlPath);
 });
 
+test('a placement probe timeout recovers a hung ControlMaster and probes again before skipping', async () => {
+  const { env, events } = scenario({
+    a: { available: 4.5e9, slots: 2 },
+    b: { available: 8e9, slots: 10, stalledProbes: 1 },
+  });
+  env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+  const result = await remote(env, workspace());
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('recovered hung ControlMaster on b');
+  expect(result.stderr).not.toContain('environment: check host b skipped for probe timeouts');
+  const seen = events().filter((event) => event.address === 'ops@b.test');
+  const probes = seen.filter((event) => event.kind === 'probe');
+  expect(probes[0]).toMatchObject({ stalled: true });
+  expect(probes.some((event) => event.stalled !== true)).toBe(true);
+  const stalledAt = seen.findIndex((event) => event.kind === 'probe' && event.stalled === true);
+  const checkAt = seen.findIndex((event) => event.kind === 'control-check');
+  const closeAt = seen.findIndex((event) => event.kind === 'control-close');
+  const recoveredAt = seen.findIndex(
+    (event, index) => event.kind === 'probe' && event.stalled !== true && index > closeAt,
+  );
+  expect(stalledAt).toBeGreaterThanOrEqual(0);
+  expect(checkAt).toBeGreaterThan(stalledAt);
+  expect(closeAt).toBeGreaterThan(checkAt);
+  expect(recoveredAt).toBeGreaterThan(closeAt);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
+});
+
+test('concurrent placement probes recover one hung master at most once per host per minute', async () => {
+  const { env, events } = scenario({
+    a: { available: 4.5e9, slots: 2 },
+    b: { available: 8e9, slots: 10, stalledProbes: 99 },
+  });
+  env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+  env.REMOTE_CHECK_POLL_MS = '200';
+  const directory = workspace();
+  const first = startRemote(env, directory);
+  const second = startRemote(env, directory);
+  expect(await first.child.exited).toBe(0);
+  expect(await second.child.exited).toBe(0);
+  expect(events().filter((event) => event.kind === 'control-close' && event.address === 'ops@b.test')).toHaveLength(1);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
+});
+
+test('a host skipped for probe timeouts for five minutes reports one environment event', async () => {
+  const { env, events } = scenario({
+    a: { available: 4.5e9, slots: 2 },
+    b: { available: 8e9, slots: 10, stalledProbes: 99, controlCheckFail: true },
+  });
+  env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+  const directory = workspace();
+  const control = sshControlDirectory(directory, env);
+  mkdirSync(control, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(control, 'b.probe-timeouts'),
+    JSON.stringify({ firstAt: Date.now() - 5 * 60_000, reported: false }),
+  );
+  const result = await remote(env, directory);
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('environment: check host b skipped for probe timeouts: probe timed out');
+  expect(result.stderr.match(/environment: check host b skipped for probe timeouts/g)).toHaveLength(1);
+  expect(
+    events().filter((event) => event.kind === 'control-close' && event.address === 'ops@b.test').length,
+  ).toBeGreaterThan(0);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
+});
+
 test('a completed run leaves the host ControlMaster for a concurrent caller', async () => {
   const { env, events } = scenario({ a: { available: 8e9, slots: 4, runDurationMs: 100 } });
   const directory = workspace();
@@ -5926,7 +6007,7 @@ test('success, command failure, verified transport loss and abort release the re
 
 test('stalled upload and return transfers fail as transport, reap rsync and leave no execution slot', async () => {
   const upload = scenario({ a: { available: 8e9, stallUpload: true } });
-  upload.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  upload.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '250';
   upload.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
   const uploadResult = await remote(upload.env, workspace(), ['true']);
   expect(uploadResult.code).toBe(75);
@@ -5954,7 +6035,7 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
   expect(slotMarkers(upload.env, 'a')).toEqual([]);
 
   const returns = scenario({ a: { available: 8e9, present: ['.temp/output'], stallReturnsCopy: true } });
-  returns.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  returns.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '250';
   const returnsResult = await remote(returns.env, workspace(), ['true'], ['--returns', '.temp/output']);
   expect(returnsResult.code).toBe(75);
   expect(returnsResult.stderr).toContain('connection to a failed during returns copy');
@@ -5974,7 +6055,7 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
   expect(slotMarkers(returns.env, 'a')).toEqual([]);
 
   const returnsProbe = scenario({ a: { available: 8e9, present: ['.temp/output'], stallReturnsProbe: true } });
-  returnsProbe.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  returnsProbe.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '250';
   const probeResult = await remote(returnsProbe.env, workspace(), ['true'], ['--returns', '.temp/output']);
   expect(probeResult.code).toBe(75);
   expect(probeResult.stderr).toContain('connection to a failed during returns probe');
@@ -5985,7 +6066,7 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
 
 test('slot take is stopped and reaped when its control session makes no progress', async () => {
   const { env, events } = scenario({ a: { available: 8e9, stallSlotTakes: 3 } });
-  env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '250';
   env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
   const result = await remote(env, workspace(), ['true']);
   expect(result.code).toBe(75);
@@ -6564,7 +6645,9 @@ test('missing or unreadable remote configuration never starts a local kernel che
   expect(seen.some((event) => event.kind === 'docker')).toBe(false);
   expect(seen).toEqual([]);
 
-  // An unreadable hosts file does not fall back and does not hand off.
+  // An unreadable hosts file does not fall back and does not hand off. Already on an approved
+  // check-host run, placement returns before the hosts file is read and the in-process check may
+  // start Docker, matching KERNEL_CHECK_ON_REMOTE below.
   const missing = scenario({ a: { available: 4.5e9 } });
   const unavailable = await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
   expect(unavailable.code).not.toBe(0);

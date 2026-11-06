@@ -92,7 +92,9 @@ waking the model for “still running”. Worker admission and heavy-check admis
 Remote-check stderr splits connection work, Git snapshot staging, GitHub fetch and rsync; overlay rsync after a
 successful fetch is the expected upload. Remaining command-time cost is `bun install` and the admitted command.
 Connection count is bounded by configured hosts, not by polls or concurrent runs: one ControlMaster socket per host
-under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow).
+under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow); a hung
+placement probe recovers that master once per host per minute and five minutes of probe-timeout skips report one
+environment event.
 Throwaway Kernel/compiler PostgreSQL uses `--rm` plus labelled owner-pid cleanup so a killed owner or failed startup
 leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout, including host-lifetime Python
 cleanup; inspect/exec/ps/port probes use 5 seconds. Signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
