@@ -226,18 +226,8 @@ async function openWorld(
 async function register(world: World, label: string): Promise<Person> {
   const handle = `${label.replaceAll(/[^a-z0-9_-]/gi, '_').toLowerCase()}_${randomUUID().slice(0, 8)}`;
   const email = `${randomUUID().replaceAll('-', '')}@permission.test`;
-  try {
-    const account = await world.host.workflows.register({ key: `registration-${randomUUID()}`, handle, email, password });
-    return { id: account.accountId, email, handle };
-  } catch (error) {
-    // DIAG temporary: record the DBOS workflow status behind the registration refusal.
-    const rows = await world.auth
-      .query("SELECT function_name, left(error, 600) AS error FROM auth_dbos.operation_outputs WHERE error IS NOT NULL ORDER BY function_id DESC LIMIT 4")
-      .then((result) => result.rows)
-      .catch((failure) => String(failure));
-    console.error('DIAG_DBOS_REGISTER', JSON.stringify(rows).slice(0, 6000));
-    throw error;
-  }
+  const account = await world.host.workflows.register({ key: `registration-${randomUUID()}`, handle, email, password });
+  return { id: account.accountId, email, handle };
 }
 
 async function ensureClient(
