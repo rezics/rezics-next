@@ -445,13 +445,13 @@ all-type native producer proof. [JSON-LD serializer tests](../../apps/web/tests/
 proof. Web owns publication command/evidence; none run/claimed here. Bind released verticals and native upstream
 composition before closing; keep Puck render and aggregate-derived JSON-LD evidence separate.
 
-| Stage                                   | Evidence                                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| specification validated red             | Six original assertions present; measured red not recorded; all-vertical/native cost expansion not frozen. |
-| native driver registered                | Six-case native pages wrapper registered; Workers publication tests separately present.                    |
+| Stage                                   | Evidence                                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| specification validated red             | Six original assertions present; measured red not recorded; all-vertical/native cost expansion not frozen.                                                                                       |
+| native driver registered                | Six-case native pages wrapper registered; Workers publication tests separately present.                                                                                                          |
 | implementation exposed                  | Profile publish/activation/page read, Workers renderer, TypeList raw-limit admission, ReactionSummary public totals and mixed sibling Retry-After exist; full native consumer matrix incomplete. |
-| user-case native pass at named revision | None recorded for this capability, including publication.                                                  |
-| promoted                                | No main closure evidence.                                                                                  |
+| user-case native pass at named revision | None recorded for this capability, including publication.                                                                                                                                        |
+| promoted                                | No main closure evidence.                                                                                                                                                                        |
 
 ## subject-context-and-traversal
 

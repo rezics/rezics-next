@@ -105,10 +105,9 @@ async function posted(
 test('malformed native website metadata uses the protocol projection, not a consumed body', async () => {
   const { publicJwks } = await clientKeys();
   for (const body of ['not-object', null, [issuer]]) {
-    const response = await routes(
-      async () => Response.json(body),
-      publicJwks,
-    ).handler(new Request(`${issuer}/.well-known/openid-configuration`));
+    const response = await routes(async () => Response.json(body), publicJwks).handler(
+      new Request(`${issuer}/.well-known/openid-configuration`),
+    );
     expect(response?.status).toBe(503);
     expect(response?.headers.get('cache-control')).toBe('no-store');
     expect(await response?.json()).toEqual({ error: 'temporarily_unavailable' });

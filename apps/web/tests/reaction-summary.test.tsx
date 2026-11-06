@@ -75,7 +75,13 @@ test('a mismatched producer or malformed counts leaf is unavailable as a whole',
   const malformed = render({
     ok: true,
     read,
-    body: { counts: [{ kind: 'like', count: 42 }, { kind: 'like', count: 1 }], watermark: recording.watermark },
+    body: {
+      counts: [
+        { kind: 'like', count: 42 },
+        { kind: 'like', count: 1 },
+      ],
+      watermark: recording.watermark,
+    },
   });
   expect(malformed).toContain('role="alert"');
   expect(malformed).not.toContain('Like 42');
