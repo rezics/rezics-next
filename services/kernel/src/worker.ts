@@ -9,6 +9,7 @@ import { workExecutionPort } from './work/selected-runtime.ts';
 import { createKernelWorkModules } from './work/modules.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
+import { composeAccessApplication } from './composition/access.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
@@ -68,6 +69,7 @@ export async function startWorker(
   modules: readonly WorkModule[] = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults),
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
+  composeAccessApplication();
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   const pool = config.kernelPool

@@ -9,141 +9,36 @@ import {
   withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { AccessWorkDimensions as WorkDimensions } from './contract/index.ts';
 import type { HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import { routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { tryAccessApplication } from './adapters/bind.ts';
+import { admitOriginalWorkDeclaration, composeOriginalWorkAdmission } from './core/index.ts';
 
-// This selected original has always had an absolute five-second lifetime.
-export const IDENTITY_ORIGINAL_DEADLINE_MS = 5000;
-
-export const ORIGINAL_AXES = Object.freeze([
-  'candidateKeys',
-  'nativeRows',
-  'identityMetadataRows',
-  'nativePoints',
-  'witnessKeys',
-  'statements',
-  'bytes',
-  'emptySeeks',
-] as const satisfies readonly (keyof WorkDimensions)[]);
-
-/** A local SQL declaration. An absent child declaration is represented separately, never by zero. */
-export function originalControlWork(
-  rows: number,
-  points: number,
-  statements: number,
-  bytes: number,
-  emptySeeks = 0,
-): WorkDimensions {
-  const work = {
-    candidateKeys: 0,
-    nativeRows: rows,
-    identityMetadataRows: 0,
-    nativePoints: points,
-    witnessKeys: 0,
-    statements,
-    bytes,
-    emptySeeks,
-  };
-  originalWorkVector(work);
-  return Object.freeze(work);
-}
-
-export function originalWorkVector(work: WorkDimensions): readonly number[] {
-  if (
-    !work ||
-    typeof work !== 'object' ||
-    Reflect.ownKeys(work).length !== ORIGINAL_AXES.length ||
-    ORIGINAL_AXES.some((axis) => !Object.hasOwn(work, axis))
-  )
-    throw new RangeError('Invalid identity original work dimensions');
-  // Validate the exact snapshot that will be encoded. Accessors must not substitute a
-  // different value between validation and the durable bigint[] parameter.
-  const values = ORIGINAL_AXES.map((axis) => work[axis]);
-  if (values.some((value) => !Number.isSafeInteger(value) || value < 0))
-    throw new RangeError('Invalid identity original work dimensions');
-  return Object.freeze(values);
-}
-
-export function sumOriginalControl(...parts: readonly WorkDimensions[]): WorkDimensions {
-  const values = ORIGINAL_AXES.map(() => 0);
-  for (const part of parts)
-    originalWorkVector(part).forEach((value, index) => {
-      values[index]! += value;
-      if (!Number.isSafeInteger(values[index])) throw new RangeError('Identity original work overflow');
-    });
-  return Object.freeze(
-    Object.fromEntries(ORIGINAL_AXES.map((axis, index) => [axis, values[index]!])) as unknown as WorkDimensions,
-  );
-}
-
-// runCommand(noEffect), no Actor, receipt, authorization, callbacks, events or internal retry.
-// BEGIN, settings x2, time, final setting, no-effect native fence, COMMIT, failure ROLLBACK.
-export const ORIGINAL_NATIVE_CONTROL = originalControlWork(3, 1, 8, 256);
-export const HISTORY_ORIGINAL_CONTROL = Object.freeze({
-  discovery: originalControlWork(1, 1, 1, 64, 1),
-  native: ORIGINAL_NATIVE_CONTROL,
-  registry: originalControlWork(1, 1, 1, 128, 1),
-  select: originalControlWork(1, 1, 1, 2048, 1),
-  barrier: originalControlWork(1, 1, 1, 128, 1),
-  previous: originalControlWork(1, 1, 1, 4096, 1),
-  insert: originalControlWork(1, 1, 1, 4096),
-  lease: originalControlWork(1, 1, 1, 0),
-});
-// This is ONLY admission/selection. It deliberately does not purport to price advanceSharedHistory.
-export const HISTORY_ORIGINAL_SELECTION = sumOriginalControl(...Object.values(HISTORY_ORIGINAL_CONTROL));
-export const HISTORY_ORIGINAL_VALIDATION = sumOriginalControl(
-  ORIGINAL_NATIVE_CONTROL,
-  originalControlWork(1, 1, 1, 4096, 1),
-  originalControlWork(1, 1, 1, 2048, 1),
-  originalControlWork(1, 1, 1, 128, 1),
-  originalControlWork(1, 1, 1, 128, 1),
-);
-export const HISTORY_ORIGINAL_SETTLEMENT = sumOriginalControl(
-  ORIGINAL_NATIVE_CONTROL,
-  originalControlWork(1, 1, 1, 2048, 1),
-  originalControlWork(1, 1, 1, 0),
-  originalControlWork(1, 1, 1, 0),
-);
-
-/** Closed local part of advanceSharedHistory, ending BEFORE any minimizer/readiness/receiving
- * child. Alternative local branches are reserved inclusively. The eight-row page still selects
- * only its first artifact. History seal's family trigger has its own fixed nine-family bound. */
-export const HISTORY_SELECTED_LOCAL_CONTROL = Object.freeze({
-  transaction: originalControlWork(0, 0, 5, 0), // BEGIN, settings x2, COMMIT, failed ROLLBACK
-  job: originalControlWork(1, 1, 1, 4096, 1),
-  dispatchPosition: originalControlWork(2, 2, 1, 4224, 2),
-  barrier: originalControlWork(1, 1, 1, 128, 1),
-  partition: originalControlWork(1, 1, 1, 128, 1),
-  // erasure SELECT + seal upsert + two native FK points; scope_changed -> family_touch:
-  // erasure point, fence upsert/FK, nine coverage rows. No artifact trigger on this table.
-  seal: sumOriginalControl(originalControlWork(4, 4, 3, 0), originalControlWork(12, 12, 4, 0)),
-  progressInsert: originalControlWork(3, 3, 3, 0), // insert plus partition/erasure FK checks
-  progressLock: originalControlWork(1, 1, 1, 128, 1),
-  epochReset: originalControlWork(2, 2, 2, 0),
-  gapReset: originalControlWork(1, 1, 1, 0),
-  page: originalControlWork(8, 1, 1, 4096, 1),
-  applicable: originalControlWork(2, 2, 2, 0),
-  classify: originalControlWork(1, 1, 1, 128, 1),
-  unavailableHome: originalControlWork(2, 2, 2, 0),
-  emptyProgress: originalControlWork(1, 1, 1, 0),
-  emptySeal: sumOriginalControl(originalControlWork(2, 2, 1, 0), originalControlWork(12, 12, 4, 0)),
-  nextHome: originalControlWork(1, 1, 1, 0),
-  phaseChange: originalControlWork(1, 1, 1, 0),
-  verifyHome: originalControlWork(2, 2, 1, 4096, 1),
-  verifyTransition: originalControlWork(1, 1, 1, 0),
-  authProof: originalControlWork(1, 1, 1, 128, 1),
-  pending: originalControlWork(1, 1, 1, 0),
-});
-export const HISTORY_ORIGINAL_LOCAL_ALLOWANCE = sumOriginalControl(
+export { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
+export {
+  ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+  HISTORY_ORIGINAL_CONTROL,
+  HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
   HISTORY_ORIGINAL_SELECTION,
-  HISTORY_ORIGINAL_VALIDATION,
   HISTORY_ORIGINAL_SETTLEMENT,
-  ...Object.values(HISTORY_SELECTED_LOCAL_CONTROL),
-);
+  HISTORY_ORIGINAL_TRANSFER_CONTROL,
+  HISTORY_ORIGINAL_VALIDATION,
+  HISTORY_SELECTED_LOCAL_CONTROL,
+  ORIGINAL_NATIVE_CONTROL,
+  originalControlWork,
+  originalWorkVector,
+  sumOriginalControl,
+} from './core/index.ts';
+import {
+  ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+  HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
+  originalWorkVector,
+} from './core/index.ts';
+import { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
 
 export const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = 'identity-history-original-source-transfer-unavailable';
 
@@ -608,40 +503,6 @@ async function settleSelectedHistoryOriginal(
   });
 }
 
-/** The additive controls are separate from every retained local component. All branches
- * are inclusive: even a refused/failed callback retains its entire prepaid reservation.
- * Reads use full original/job keys; the only fanout is the four fixed vector partitions.
- * Zero candidate/identity-metadata/witness axes mean these SQL bodies have none of those
- * operations; they are not conversions from the legacy five-axis child declarations. */
-export const HISTORY_ORIGINAL_TRANSFER_CONTROL = Object.freeze({
-  discoveryControls: originalControlWork(0, 0, 5, 0), // BEGIN, settings x2, COMMIT, failed ROLLBACK
-  allocationInsert: originalControlWork(3, 3, 3, 4096), // INSERT + original FK point
-  entryBarrier: originalControlWork(1, 1, 1, 128, 1),
-  progress: sumOriginalControl(originalControlWork(1, 1, 1, 2048, 1), originalControlWork(1, 1, 1, 64)),
-  settlementAllocation: originalControlWork(1, 1, 1, 2048, 1),
-  // pre-grant and post-callback: native controls, original/allocation, selected job,
-  // registry, immutable account barrier, and the irreversible state transition.
-  grant: sumOriginalControl(
-    ORIGINAL_NATIVE_CONTROL,
-    originalControlWork(2, 2, 1, 8192, 2),
-    originalControlWork(1, 1, 1, 2048, 1),
-    originalControlWork(1, 1, 1, 128, 1),
-    originalControlWork(1, 1, 1, 128, 1),
-    originalControlWork(1, 1, 1, 0),
-  ),
-  finish: sumOriginalControl(
-    ORIGINAL_NATIVE_CONTROL,
-    originalControlWork(2, 2, 1, 8192, 2),
-    originalControlWork(1, 1, 1, 2048, 1),
-    originalControlWork(1, 1, 1, 128, 1),
-    originalControlWork(1, 1, 1, 128, 1),
-    originalControlWork(1, 1, 1, 0),
-  ),
-});
-export const ADDITIONAL_ORIGINAL_TRANSFER_CONTROL = sumOriginalControl(
-  ...Object.values(HISTORY_ORIGINAL_TRANSFER_CONTROL),
-);
-
 type HistoryOriginalAllocation = Readonly<{
   local: WorkDimensions;
   source: WorkDimensions | null;
@@ -660,40 +521,26 @@ export type IdentityHistoryOriginalBodyDeclaration = Readonly<{
   engineRequests: 0;
 }>;
 
-function installedDeclaration(module: object, name: string): WorkDimensions | null {
-  const descriptor = Object.getOwnPropertyDescriptor(module, name);
-  if (!descriptor) return null;
-  if (!('value' in descriptor) || !descriptor.value || typeof descriptor.value !== 'object')
-    throw new IdentityOriginalUnavailable('identity-history-original-child-declaration-invalid');
-  const declaration = descriptor.value as IdentityHistoryOriginalBodyDeclaration;
-  if (
-    declaration.engineRequests !== 0 ||
-    Reflect.ownKeys(declaration).length !== 2 ||
-    !Object.hasOwn(declaration, 'work') ||
-    !Object.hasOwn(declaration, 'engineRequests')
-  )
-    throw new IdentityOriginalUnavailable('identity-history-original-child-declaration-invalid');
-  const vector = originalWorkVector(declaration.work);
-  return Object.freeze(
-    Object.fromEntries(ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!])) as unknown as WorkDimensions,
-  );
-}
-
 async function installedHistoryOriginalAllocation(): Promise<HistoryOriginalAllocation> {
-  const sourceModule = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const libraryModule = await import('../library/collection-source-work.ts');
-  const source = installedDeclaration(sourceModule, 'IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION');
-  const library = installedDeclaration(libraryModule, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
+  const ports = tryAccessApplication()?.ports.originalWork;
+  let source: WorkDimensions | null = null;
+  let library: WorkDimensions | null = null;
+  try {
+    source = ports ? admitOriginalWorkDeclaration(await ports.readHistoryOriginalSourceDeclaration()) : null;
+    library = ports ? admitOriginalWorkDeclaration(await ports.readHistoryOriginalLibraryDeclaration()) : null;
+  } catch {
+    throw new IdentityOriginalUnavailable('identity-history-original-child-declaration-invalid');
+  }
   return Object.freeze({
     local: HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
     source,
     library,
     transfer: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
-    total: sumOriginalControl(
+    total: composeOriginalWorkAdmission(
       HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
+      source,
+      library,
       ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
-      ...(source === null ? [] : [source]),
-      ...(library === null ? [] : [library]),
     ),
   });
 }

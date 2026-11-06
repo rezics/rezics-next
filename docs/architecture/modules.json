@@ -199,18 +199,26 @@
       "kind": "adapter",
       "owner": "accounts",
       "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
+      "excludes": [
+        "services/kernel/src/access/contract/**",
+        "services/kernel/src/access/core/**",
+        "services/kernel/src/access/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/access/index.ts",
         "services/kernel/src/access/account-discovery-source.ts",
         "services/kernel/src/access/handle-policy.ts",
         "services/kernel/src/access/authenticate.ts",
         "services/kernel/src/access/write-rate.ts",
-        "services/kernel/src/access/write-rate-stage.ts"
+        "services/kernel/src/access/write-rate-stage.ts",
+        "services/kernel/src/access/adapters/index.ts"
       ],
       "allowedDependencies": [
         "access-policy",
         "auth-contract",
         "auth-service",
+        "kernel-access-contract",
+        "kernel-access-core",
         "kernel-commerce",
         "kernel-community",
         "kernel-content",
@@ -221,6 +229,36 @@
       ],
       "capabilities": ["access"],
       "postgresPaths": ["services/kernel/src/access/**"]
+    },
+    {
+      "id": "kernel-access-contract",
+      "kind": "contract",
+      "owner": "accounts",
+      "paths": ["services/kernel/src/access/contract/**"],
+      "publicEntries": [
+        "services/kernel/src/access/contract/index.ts",
+        "services/kernel/src/access/contract/bounds.ts"
+      ],
+      "allowedDependencies": [],
+      "capabilities": ["access-vocabulary"]
+    },
+    {
+      "id": "kernel-access-core",
+      "kind": "core",
+      "owner": "accounts",
+      "paths": ["services/kernel/src/access/core/**"],
+      "publicEntries": ["services/kernel/src/access/core/index.ts"],
+      "allowedDependencies": ["kernel-access-contract"],
+      "capabilities": ["access-domain-rules"]
+    },
+    {
+      "id": "kernel-access-application",
+      "kind": "application",
+      "owner": "accounts",
+      "paths": ["services/kernel/src/access/application/**"],
+      "publicEntries": ["services/kernel/src/access/application/index.ts"],
+      "allowedDependencies": ["kernel-access-contract", "kernel-access-core"],
+      "capabilities": ["access-use-cases"]
     },
     {
       "id": "kernel-commerce",
@@ -242,7 +280,8 @@
         "services/kernel/src/content/document-public.ts",
         "services/kernel/src/content/realm-board-home.ts",
         "services/kernel/src/content/index.ts",
-        "services/kernel/src/content/review-discovery.ts"
+        "services/kernel/src/content/review-discovery.ts",
+        "services/kernel/src/content/access-capabilities.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -276,7 +315,10 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
-      "publicEntries": ["services/kernel/src/community/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/community/index.ts",
+        "services/kernel/src/community/access-capabilities.ts"
+      ],
       "allowedDependencies": [
         "auth-contract",
         "document",
@@ -318,7 +360,8 @@
       "publicEntries": [
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
-        "services/kernel/src/library/collection-discovery-summaries.ts"
+        "services/kernel/src/library/collection-discovery-summaries.ts",
+        "services/kernel/src/library/access-capabilities.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -366,7 +409,8 @@
         "services/kernel/src/search/rated-source.ts",
         "services/kernel/src/search/space-discovery.ts",
         "services/kernel/src/search/work.ts",
-        "services/kernel/src/search/discovery-filter.ts"
+        "services/kernel/src/search/discovery-filter.ts",
+        "services/kernel/src/search/access-capabilities.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -397,7 +441,8 @@
         "services/kernel/src/semantic/index.ts",
         "services/kernel/src/semantic/identity-adapters/index.ts",
         "services/kernel/src/semantic/identity-adapters/read.ts",
-        "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+        "services/kernel/src/semantic/access-capabilities.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -507,6 +552,9 @@
       "allowedDependencies": [
         "definitions",
         "kernel-access",
+        "kernel-access-application",
+        "kernel-access-contract",
+        "kernel-access-core",
         "kernel-commerce",
         "kernel-content",
         "kernel-community",

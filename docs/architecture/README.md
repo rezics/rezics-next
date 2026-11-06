@@ -4,6 +4,13 @@ Decision: Keep the current workspace and capability boundaries, assign each modu
 
 Decision: Register Access, Bounds, and Operations as pure core modules with only their exported package entries; grant dependencies to the concrete Kernel adapter modules that actually import them, and keep native implementation choice in composition roots.
 
+Decision: Split Kernel Access into `kernel-access-contract`, `kernel-access-core`, `kernel-access-application` and
+the existing `kernel-access` adapter. Contract, core and application have no downstream behaviour imports. Native
+Access ports are bound at the Kernel composition root; Content, Community, Semantic, Library and Search publish
+`access-capabilities.ts` public entries for those adapters. After wiring, kernel-access baseline rule 2/3 counts are
+389/368 (from 403/376), current 391/365; Access outgoing behaviour edges 61 (from 69); Kernel files in value cycles
+403 (from 405); largest value SCC 386 (from 388).
+
 Decision: The client declaration closure depends on the public Access, Bounds, Money, Operations, Progress and
 Search Text packages used by mounted contracts. Register those dependencies alongside the client's existing package
 dependencies; generated declarations retain the native package identities and the boundary baseline does not grow.

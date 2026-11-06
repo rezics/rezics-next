@@ -68,3 +68,11 @@ Root, module and native evidence retain separate meaning. Root SQL acceptance us
 the affected Web/root checks; fast copy-on-write preparation does not establish SQL closure. Infrastructure failure
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
 for evidence and check-host placement.
+
+## Kernel Access domain inversion
+
+Decision: Compact causal tests pin Access allow/deny, identity recovery with the original actor/request/deadline, and
+original-work admission against fake ports; the existing native membership growth check remains the bounded-work
+proof. Contract/core/application load no downstream implementations. Native adapters are bound by ordinary
+`createKernel`/`server`/`worker` composition. The split adds no query or extra statement; cost stays the existing
+producer declarations composed through `admitOriginalWork` and Kind-audience work vectors.
