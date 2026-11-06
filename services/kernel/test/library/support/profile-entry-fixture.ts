@@ -28,17 +28,25 @@ import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
+import { noEffect, runCommand } from '../../../src/command/command.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
 import { accessCheck, type Access, type AccountActor } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { identityEpochStore } from '../../../src/semantic/identity-adapters/index.ts';
+import {
+  identityEpochStore,
+  identityJobPartition,
+  IdentityEpochStoreError,
+} from '../../../src/semantic/identity-adapters/index.ts';
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
 import type { IdentityJobRef } from '../../../src/semantic/identity-epoch-contract.ts';
 import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-mapping.ts';
+import storeUpdateControl2 from '../../../src/semantic/identity-epoch-store-update-control-2.sql';
+import storeUpdateGroup2 from '../../../src/semantic/identity-epoch-store-update-group-2.sql';
+import storeUpdateJob from '../../../src/semantic/identity-epoch-store-update-job.sql';
 import { subjectTarget } from '../../../src/semantic/subject.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
@@ -287,19 +295,16 @@ export async function createProfileEntryFixture(
       const drained = new Set<string>();
       const keyOf = (job: IdentityJobRef) => `${job.jobId}:${job.epoch.toString()}`;
       for (let n = 0; n < 1000; n++) {
+        // Birth mappings and already-installed epochs stay current. Another bootstrap
+        // generation would rewrite published_epoch and invalidate reviewed identity.
+        if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
         const held = await heldPrearmJobs(home);
         for (const job of held) {
+          if (drained.has(keyOf(job))) continue;
           await drainIdentityJob(job);
-          if (
-            !(await heldPrearmJobs(home)).some(
-              (heldJob) => heldJob.jobId === job.jobId && heldJob.epoch === job.epoch,
-            )
-          )
-            drained.add(keyOf(job));
+          drained.add(keyOf(job));
         }
-        const remaining = await heldPrearmJobs(home);
-        const untried = remaining.filter((job) => !drained.has(keyOf(job)));
-        if (untried.length) continue;
+        if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
         try {
           const progress = await stepIdentityEpochBootstrap(pool, home);
           if (
@@ -312,7 +317,11 @@ export async function createProfileEntryFixture(
           if (!isIdentityPrearmHold(error)) throw error;
           const retry = await heldPrearmJobs(home);
           if (retry.length) {
-            for (const job of retry) await drainIdentityJob(job);
+            for (const job of retry) {
+              if (drained.has(keyOf(job))) continue;
+              await drainIdentityJob(job);
+              drained.add(keyOf(job));
+            }
             continue;
           }
           if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
@@ -586,66 +595,50 @@ export async function createProfileEntryFixture(
         )
       ).rows[0];
       const resolved: IdentityJobRef = saved ? { jobId: job.jobId, epoch: BigInt(saved.epoch) } : job;
-      if (saved && saved.state !== 'published' && saved.state !== 'cancelled') {
-        let admitted = saved.state === 'pending';
-        if (!admitted) {
-          for (let attempt = 0; attempt < 16; attempt++) {
-            const progress = await stepIdentityEpochAdmission(pool, resolved);
-            if (progress.state === 'pending' || progress.state === 'published') {
-              admitted = true;
-              break;
-            }
-            expect(progress.state).toBe('preparing');
+      if (!saved || saved.state === 'published' || saved.state === 'cancelled') return;
+      let admitted = saved.state === 'pending';
+      if (!admitted) {
+        for (let attempt = 0; attempt < 16; attempt++) {
+          const progress = await stepIdentityEpochAdmission(pool, resolved);
+          if (progress.state === 'pending' || progress.state === 'published') {
+            admitted = true;
+            break;
           }
-          expect(admitted).toBe(true);
+          expect(progress.state).toBe('preparing');
         }
-        if (saved.state !== 'published') {
-          let mapped = false;
-          for (let attempt = 0; attempt < 512; attempt++) {
-            const progress = await stepIdentityEpochMapping(pool, resolved);
-            if (progress.state === 'complete') {
-              mapped = true;
-              break;
-            }
-          }
-          if (!mapped) throw new Error('Native identity mapping did not finish');
+        expect(admitted).toBe(true);
+      }
+      let mapped = false;
+      for (let attempt = 0; attempt < 512; attempt++) {
+        const progress = await stepIdentityEpochMapping(pool, resolved);
+        if (progress.state === 'complete') {
+          mapped = true;
+          break;
         }
       }
-      // Mapping already installed this job's epoch. Search/Library ACK is unavailable, so
-      // drop every pin for this job id — prearm, groups, gates and control — by id.
-      // Home capacity, not mapping-complete pending classification, is what later
-      // Progress, Rating and merge writes need before they can start.
+      if (!mapped) throw new Error('Native identity mapping did not finish');
+      const partition = identityJobPartition(resolved);
       const epoch = resolved.epoch.toString();
-      await pool.query(
-        `UPDATE semantic.identity_epoch_prearm_bridge
-            SET job_id=NULL, job_epoch=NULL, scope_digest=NULL, bridge_version=bridge_version+1
-          WHERE job_id=$1::uuid`,
-        [job.jobId],
-      );
-      await pool.query(
-        `UPDATE semantic.identity_epoch_job SET state='published' WHERE job_id=$1::uuid AND state<>'published' AND state<>'cancelled'`,
-        [job.jobId],
-      );
-      await pool.query(
-        `UPDATE semantic.identity_epoch_group
-            SET pending_job=NULL, pending_epoch=NULL, published_epoch=GREATEST(published_epoch,$2::bigint)
-          WHERE pending_job=$1::uuid`,
-        [job.jobId, epoch],
-      );
-      await pool.query(
-        `UPDATE semantic.identity_epoch_home_gate
-            SET pending_job=NULL, pending_epoch=NULL
-          WHERE pending_job=$1::uuid`,
-        [job.jobId],
-      );
-      await pool.query(
-        `UPDATE semantic.identity_epoch_control
-            SET pending_job=NULL, pending_epoch=NULL,
-                published_epoch=GREATEST(published_epoch,$2::bigint),
-                prepare_job=NULL, prepare_epoch=NULL
-          WHERE pending_job=$1::uuid OR prepare_job=$1::uuid`,
-        [job.jobId, epoch],
-      );
+      try {
+        await runCommand(pool, { partition }, (tx) => identityEpochStore.publish(tx, resolved));
+      } catch (error) {
+        if (!(error instanceof IdentityEpochStoreError) || error.code !== 'identity_participants_incomplete')
+          throw error;
+        // Mapping installed this job's epoch. Search/Library ACK is not bound yet; publish
+        // the same control/group pins the store uses so later merge and vote jobs can start.
+        await runCommand(pool, { partition }, async (tx) => {
+          await tx.query(storeUpdateJob.sql, [partition, resolved.jobId]);
+          await tx.query(storeUpdateControl2.sql, [partition, epoch]);
+          await tx.query(storeUpdateGroup2.sql, [partition, epoch, resolved.jobId]);
+          await tx.query(
+            `UPDATE semantic.identity_epoch_home_gate
+                SET pending_job=NULL, pending_epoch=NULL
+              WHERE pending_job=$1::uuid`,
+            [resolved.jobId],
+          );
+          return noEffect(resolved);
+        });
+      }
     }
     async function drainIdentityMerge(jobId: string) {
       const found = (

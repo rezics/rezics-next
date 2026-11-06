@@ -1505,7 +1505,7 @@ export function createAniListImport(deps: Dependencies) {
               reviewed.commandKey,
               { subjectId: observed.subjectId, pin: observed.pin, epoch: observed.epoch },
             );
-            if (status !== 'stale' && status !== 'failed' && status !== 'unavailable') status = 'applied';
+            if (status !== 'unavailable') status = 'applied';
           } catch (e) {
             if (e instanceof GrantDeniedError) throw e;
             status = e instanceof LibraryConflictError ? 'stale' : 'failed';

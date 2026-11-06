@@ -57,7 +57,7 @@ guarded path apply. Partition 0 identity bootstrap waits until the first Library
 that home so the first scan includes it; sealing the empty question/control home first leaves later creations
 past the cursor. Native import tests recapture identity dirty after each Subject write, after link drain on
 each HTTP send once a Subject is mapped on that home, and before direct Rating apply, so Entry, Progress and
-vote writes cannot leave Mapping pending. They drain held prearm after mapping completes; unpublished
+vote writes cannot leave Mapping pending. A mapped home with no dirty originals and empty control pending/prepare pins stays current; recapture does not start another bootstrap generation or republish an installed epoch. They drain held prearm after mapping completes; unpublished
 Search/Library acknowledgements do not pin the group against later Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed;
 native import tests then publish that job so later bootstrap can recapture dirty and a later merge or vote job can start.
 A home is current for later Progress, Rating and merge only after those jobs are published and control pending/prepare pins are empty; mapping-complete pending classification alone does not free home capacity.
