@@ -157,7 +157,7 @@ async function observeContainer(deps: RealmHomeDependencies, realmId: string, co
  * keep their existing routes and reauthorize independently.
  */
 export function createRealmHomeReader(deps: RealmHomeDependencies) {
-  const boards = createRealmHomeBoardObservationReader(deps);
+  const boards = createRealmHomeBoardObservationReader({ ...deps, cursorNow: () => deps.clock().getTime() });
   const publications = createRealmHomePublicationObservationReader(deps);
   const observeViewer = createRealmViewerObservation(deps);
   return async (realmId: string, context: ReadContext, query: RealmHomeQuery = {}): Promise<RealmHomePage | null> => {
@@ -215,7 +215,7 @@ export function createRealmHomeReader(deps: RealmHomeDependencies) {
  * continuation likewise preserves the original raw cursor and never reads the
  * sibling shelf or community presentation. */
 export function createRealmHomeBoardReader(deps: RealmHomeDependencies) {
-  const boards = createRealmHomeBoardObservationReader(deps);
+  const boards = createRealmHomeBoardObservationReader({ ...deps, cursorNow: () => deps.clock().getTime() });
   return async (realmId: string, context: ReadContext, query: { cursor?: string } = {}) => {
     requireAccessDeadline(context.deadline);
     const container = await observeContainer(deps, realmId, context);

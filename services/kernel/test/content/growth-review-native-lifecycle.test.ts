@@ -233,6 +233,7 @@ test('Joined review lifecycle retains current authority, one live slot and stric
   };
 
   const commandDependencies = (pool: GrowthDatabase['pool']) => ({
+    clock: () => new Date(),
     pool,
     access: f.system.access,
     routeKey: f.system.routeKey,
@@ -260,11 +261,7 @@ test('Joined review lifecycle retains current authority, one live slot and stric
   const refusedRestore = async (pool: GrowthDatabase['pool']) => {
     try {
       await restorePost(
-        {
-          pool,
-          access: f.system.access,
-          routeKey: f.system.routeKey,
-        },
+        { clock: () => new Date(), pool, access: f.system.access, routeKey: f.system.routeKey },
         actor,
         original.postId,
         context('growth-review-refused-restore'),

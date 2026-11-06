@@ -1,6 +1,13 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import {
+  isBoardCursorKey,
+  isBoardPinRevision,
+  isBoardRankCursorKey,
+  isUtcTimestamp,
+  normalizeBoardQuery,
+} from './core/index.ts';
 
 export type BoardCursorSort = 'newest' | 'oldest' | 'active' | 'hot';
 export type BoardCursorViewer = { kind: 'account'; accountId: string } | { kind: 'anonymous' };
@@ -27,57 +34,14 @@ export type BoardRankCursorResult =
 
 const OPERATION = 'board.threads.list';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const UTC_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/;
 
-/** Board listing queries strip surrounding whitespace and preserve all remaining authored text. */
-export function normalizeBoardQuery(query: string): string {
-  if (typeof query !== 'string') throw new TypeError('Board query must be a string');
-  return query.trim();
-}
-
-function isTimestamp(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  const match = UTC_TIMESTAMP.exec(value);
-  if (!match) return false;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return false;
-
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  date.setUTCHours(hour, minute, second, 0);
-  return date.toISOString().slice(0, 19) === value.slice(0, 19);
-}
-
-function isBoardCursorKey(value: unknown): value is BoardCursorKey {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const key = value as Record<string, unknown>;
-  return isTimestamp(key.createdAt) && typeof key.threadId === 'string' && UUID.test(key.threadId);
-}
-
-function isBoardRankCursorKey(value: unknown): value is BoardRankCursorKey {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const key = value as Record<string, unknown>;
-  return (
-    typeof key.rank === 'number' &&
-    Number.isFinite(key.rank) &&
-    key.rank >= 0 &&
-    typeof key.threadId === 'string' &&
-    UUID.test(key.threadId)
-  );
-}
+export { normalizeBoardQuery };
 
 function coreBinding(binding: BoardCursorBinding): CursorBinding {
   if (binding === null || typeof binding !== 'object' || Array.isArray(binding))
     throw new TypeError('Invalid board cursor binding');
   if (typeof binding.boardId !== 'string') throw new TypeError('Invalid board id');
-  if (typeof binding.pinRevision !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(binding.pinRevision))
-    throw new TypeError('Invalid board pin revision');
+  if (!isBoardPinRevision(binding.pinRevision)) throw new TypeError('Invalid board pin revision');
   if (typeof binding.query !== 'string') throw new TypeError('Invalid board query');
   if (!['newest', 'oldest', 'active', 'hot'].includes(binding.sort)) throw new TypeError('Invalid board sort');
 
@@ -156,7 +120,7 @@ export function encodeBoardCursor(
   binding: BoardCursorBinding,
   epoch: number,
   after: BoardCursorKey,
-  now = Date.now(),
+  now: number,
 ): string {
   if (binding.sort !== 'newest' && binding.sort !== 'oldest') throw new TypeError('Invalid board sort');
   if (!isBoardCursorKey(after)) throw new TypeError('Invalid board cursor key');
@@ -169,7 +133,7 @@ export function decodeBoardCursor(
   binding: BoardCursorBinding,
   token: string,
   expectedEpoch: number,
-  now = Date.now(),
+  now: number,
 ): BoardCursorResult {
   try {
     if (binding.sort !== 'newest' && binding.sort !== 'oldest') return { ok: false, reason: 'invalid' };
@@ -178,7 +142,7 @@ export function decodeBoardCursor(
     if (!decoded.ok) return decoded;
     if (
       decoded.after.length !== 2 ||
-      !isTimestamp(decoded.after[0]) ||
+      !isUtcTimestamp(decoded.after[0]) ||
       typeof decoded.after[1] !== 'string' ||
       !UUID.test(decoded.after[1])
     )
@@ -199,7 +163,7 @@ export function encodeBoardRankCursor(
   binding: BoardCursorBinding,
   epoch: number,
   after: BoardRankCursorKey,
-  now = Date.now(),
+  now: number,
 ): string {
   if (binding.sort !== 'active' && binding.sort !== 'hot') throw new TypeError('Invalid ranked board sort');
   if (!isBoardRankCursorKey(after)) throw new TypeError('Invalid board rank cursor key');
@@ -212,7 +176,7 @@ export function decodeBoardRankCursor(
   binding: BoardCursorBinding,
   token: string,
   expectedEpoch: number,
-  now = Date.now(),
+  now: number,
 ): BoardRankCursorResult {
   try {
     if (binding.sort !== 'active' && binding.sort !== 'hot') return { ok: false, reason: 'invalid' };

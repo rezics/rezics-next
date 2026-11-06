@@ -19,7 +19,11 @@ test('Following feed projects native counts and only the current viewer slot for
     const realm = await world.call('GET', `/v1/realms/${world.mainTarget.realmId}`);
     expect(realm.response.status, realm.text).toBe(200);
     const spaceId = realm.value!.realm.spaceId as string;
-    const store = createFeedActivityStore({ pool: world.system.database.pool, tokens: world.system.tokenKeys });
+    const store = createFeedActivityStore({
+      clock: () => new Date(),
+      pool: world.system.database.pool,
+      tokens: world.system.tokenKeys,
+    });
     const reply = await world.command<{ post: { id: string } }>(
       'POST',
       `/v1/threads/${world.mainTarget.threadId}/posts`,
@@ -193,7 +197,12 @@ test('Following feed projects native counts and only the current viewer slot for
     const rebound = { ...card, destination: { ...card.destination, id: world.mainTarget.threadId } } as typeof card;
     await expect(
       projectFeedReactions(
-        { pool: world.system.database.pool, access: world.system.access, tokens: world.system.tokenKeys },
+        {
+          clock: () => new Date(),
+          pool: world.system.database.pool,
+          access: world.system.access,
+          tokens: world.system.tokenKeys,
+        },
         { kind: 'anonymous' },
         [rebound],
         Date.now() + 30_000,
@@ -203,6 +212,7 @@ test('Following feed projects native counts and only the current viewer slot for
     try {
       const anonymous = await projectFeedReactions(
         {
+          clock: () => new Date(),
           pool: world.system.database.pool,
           access: world.system.access,
           tokens: world.system.tokenKeys,

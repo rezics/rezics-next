@@ -44,7 +44,7 @@ async function react(
   targetKind: 'subject' | 'thread' | 'post' = 'subject',
 ) {
   return commands.setReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     await f.verified(actorId),
     { targetId, targetKind, kind },
     request(),
@@ -82,7 +82,7 @@ test("the Liked version increases on every change of the actor's like and love s
   await react(id, 'love', f.managerId);
   expect(await version()).toBe(before + 4n);
   await commands.clearReaction(
-    { pool: f.db.pool, access: f.access },
+    { clock: () => new Date(), pool: f.db.pool, access: f.access },
     await f.verified(),
     { targetKind: 'subject', targetId: id },
     request(),

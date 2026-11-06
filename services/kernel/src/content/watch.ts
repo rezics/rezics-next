@@ -9,7 +9,7 @@ import { withConnection } from '../database/pool.ts';
 import { readThread, ContentNotFoundError } from './reads.ts';
 import { withWritableNoticeRoute } from './notices.ts';
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }>;
 type ThreadAnchor = Awaited<ReturnType<typeof readThread>>['anchor'];
 
 async function readableThread(dependencies: Dependencies, actor: Actor, threadId: string, deadline: number) {
@@ -62,7 +62,7 @@ export async function watchThread(
       `INSERT INTO content.thread_watch(route,thread_id,watcher_account_id,watch_id,created_at)
        VALUES ($1,$2,$3,$4,$5::timestamptz)
        ON CONFLICT (route,thread_id,watcher_account_id) DO NOTHING`,
-      [ownerRoute, threadId, actor.accountId, newId(ownerRoute), (dependencies.clock?.() ?? new Date()).toISOString()],
+      [ownerRoute, threadId, actor.accountId, newId(ownerRoute), dependencies.clock().toISOString()],
     );
   });
   return thread.anchor;

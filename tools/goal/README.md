@@ -99,8 +99,9 @@ them: `bun test <files>`, the kernel check for kernel tests and the focused Web 
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
 call with a yield of at least 300 seconds, except under minimal verification: after the whole outcome is written the
 worker runs one wrapper invocation of a `sh -c` script that runs the typecheck of each changed workspace and the
-changed test files in turn, never joined with `&&`, so every failure is reported at once; it fixes every reported
-failure and may rerun that command once after a fixed failure. Host-placing commands use the wrapper parking protocol
+changed test files in turn, never joined with `&&`, so every failure is reported at once; it fixes every type error and
+may rerun that command once after a fixed failure. A failing test blocks its success only in payment, payout, order
+settlement, points or balance code. Host-placing commands use the wrapper parking protocol
 above, and the worker ends the turn with `waiting` and the printed check id instead of holding the live session.
 Commands that finish locally in under a minute still run in the session. A supplied acceptance command defines the
 worker's check. For an ordinary
@@ -255,9 +256,11 @@ attempt log are not used as substitutes.
 When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
 receives the current source-completion policy alongside its canonical contract. Workers finish their contract, then
 run one combined check (workspace typechecks and the changed test files in one wrapper invocation running every
-command), fix every failure it reports, rerun it once after a fixed failure, then commit and return
-`success`, `blocker:null`, `checks:[]`, naming the code completed and the original acceptance/native obligations
-deferred until after integration. This source result does not claim whole-feature, native or Goal completion.
+command), fix every type error it reports, rerun it once after a fixed failure, then commit and return
+`success`, `blocker:null`, `checks:[]`, naming the code completed, the original acceptance/native obligations
+deferred until after integration, and each still-failing test file with its first error line under a `failing tests`
+label. A failing test blocks success only in payment, payout, order settlement, points or balance code. This source
+result does not claim whole-feature, native or Goal completion.
 Unfinished work is not a blocker: a worker whose contract does not fit commits a coherent working part and returns
 success with the remainder listed as follow-up (for product work on dev, a continuation brief). Deferred acceptance
 alone is neither blocked nor waiting. Waiting requires running registered bare UUID checks owned by that task and
@@ -277,7 +280,7 @@ the same attempt before it reserves a host. The refusal decides nothing about co
 dev verifier still check every candidate.
 Decision: a live worker slot holds a session that is writing code; check-host placement parks on the wrapper the way
 acceptance already does.
-Decision: the minimal combined check runs every command in one `sh -c` script and never joins them with `&&`, so a typecheck failure cannot hide test results; the worker fixes every reported failure before its one rerun. Its result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
+Decision: the minimal combined check runs every command in one `sh -c` script and never joins them with `&&`, so a typecheck failure cannot hide test results. Product outcomes land when they type-check: a type error blocks a minimal worker, a failing test does so only in payment, payout, order settlement, points or balance code, and other failing test files go to the owning manager as repairs. Its result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
 
 Ordinary contracts can be amended before their first worker starts:
 

@@ -142,7 +142,7 @@ test('Original documented privacy, replay and raw growth bounds remain strict', 
       if (!prepared) throw new Error('Native author page was not prepared');
       const page = prepared;
       const result = await erasePostLogicalPageAsInitiator(
-        { pool: measured.pool, access: f.system.access },
+        { clock: () => new Date(), pool: measured.pool, access: f.system.access },
         page.initiator,
         {
           threadId: scope.threadId,
@@ -243,7 +243,7 @@ test('Original documented privacy, replay and raw growth bounds remain strict: n
       const mediaId = await f.claimMedia(scope, post);
       const operationId = await requested(f, scope);
       const result = await erasePostLogicalPageAsInitiator(
-        { pool: f.pool, access: f.system.access },
+        { clock: () => new Date(), pool: f.pool, access: f.system.access },
         nativeInitiator(f, measured, scope, operationId),
         {
           threadId: scope.threadId,

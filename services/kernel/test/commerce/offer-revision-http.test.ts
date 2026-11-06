@@ -89,7 +89,7 @@ test('seller price revision through HTTP binds target intent preserves captured 
   for (const group of ['selling', 'purchases']) {
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   }
-  const commands = createCommerceCommands({ pool: f.pool, access: f.access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool: f.pool, access: f.access });
   const publisher = (bearer: string) =>
     createNativeEditionFixture((method, path, body, headers) => f.sendWithHeaders(bearer, method, path, body, headers));
   const sellerPublisher = await publisher(seller.bearer);

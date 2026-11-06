@@ -636,12 +636,36 @@ provide viewer action advice; mounted resource readers and the current-thread ca
 - Bound: R <= 20; P + M <= 40 distinct exact post keys in an observation and at most 2(P + M) <= 80 `readPost` calls for a composition without reusable initial posts. Each `readPost` is bounded by its native 33-entry ancestry check, so charge up to 2,640 ancestry entries in addition to the two thread-observation rounds (at most 2 * 20 * 33 entries); supplied initial ThreadViews/Posts reduce those calls. A body can reach the existing 2 MiB native admission limit. These are input/ancestry ceilings, not a physical SQL, Access, history or total-byte ceiling: every nested native reader, partition, transaction, full-body copy, serialization copy and retry remains charged. No ancestor chain is returned in the preview.
 - Growth check: `test/content/feed-context.test.ts` creates a native standard-question review and a two-level reply chain, then verifies exact zero citation units, the current question revision, opening-versus-reply shape, immediate-parent-only preview and Subject-thread parity. Independent 256/1024/4096 growth of unrelated feed, Subject, author, ancestry and authority rows; strict route/identity and cursor-prefix plans; every participating pool/runner phase; and empty, withheld, stale and retry measurements remain in the continuation.
 
+## Domain composition
+
+Decision: Kernel Content is split into `contract`, `core`, `application` and adapter modules. Vocabulary, finite
+bounds and the `ContentAmbient` operand live in `content/contract`. Pure ranking, cursor, document-deadline,
+authored-field and work-source rules live in `content/core`. Use cases consume Content-owned ports in
+`content/application`. Native adapters in `content/adapters/native.ts` implement those ports, and
+`createKernel`/`server`/`worker` bind them through `composition/content.ts`. Contract, core and application import no
+downstream domain behaviour. Tests pin document deadline admission, ranking, authored-field rejection and worker
+budgets against fake ports without loading native adapters.
+
+Public entries: `content/contract/index.ts`, `content/core/index.ts`, `content/application/index.ts`,
+`content/adapters/index.ts`, `content/adapters/bind.ts`, `content/adapters/ambient.ts`, plus the existing Content
+adapter facades. Platform `defineModule` is not delivered;
+Content keeps `contentDeclaration()` on the existing composition interfaces. Missing shared operands: platform
+`defineModule` / shared Ambient contract, and Semantic public facades for `disclosure.ts` and `eligibility.ts`.
+
+Wiring adds no query, scan or extra statement; native cost stays with the existing producer declarations.
+
 ## Worker authorization composition
 
-Default `registerContent` consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
+Content's worker is `createContentWorkModule({ fetch, now })`, declared through `contentDeclaration()`. Production
+registers it from `composition/work-modules.ts` (`contentDeclaration().work(ambient)`); `startWorker` binds Content
+first, then supplies `fetch`, wall-clock `now` and `id`, and shares `database.pool` between `WorkClient` and
+`composeWork`. Registration observation uses that original client; native queue registration refuses a stub.
+The composition root supplies `fetch` and wall-clock `now`. It consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
 memoizes the actual fully mounted kernel Access and canonical Auth current-consent reader for the context.
 The same Access object goes to `createContentWork` and `contentNoticeEffects`; the same consent function goes to
-author-erasure restoration and is mounted in Content's pool registry by the kernel. Mounted action metadata,
+author-erasure restoration and to edition sale reads as an explicit operand. Content keeps no pool-keyed consent
+registry: `readContentConfig` builds `ContentRuntime.readConsent` from Auth configuration and the HTTP composition
+passes it to content and commerce dependencies. Mounted action metadata,
 resource roles, grant constructors and current authorization facts remain owned by that kernel.
 Missing or invalid configuration and unavailable current consent retain the shared port's typed failures.
 
@@ -651,6 +675,17 @@ roles and consent, evidence no older than 1,000 ms, and known-nonce/current-oper
 `createContentWorkAccess(clock, pool?)` remains available for standalone fixtures and callers.
 Image processing, URL imports, collection and purge retain their committed source, state, ownership and hold
 checks and existing queues, retention and page bounds. These mechanical jobs do not restore a person initiator.
+
+Declared surfaces: `contentDeclaration()` (`register.ts`) names Content's events (including locator events), operations,
+permissions, effects and worker factory. `contentHttpDeclaration()` (`http.ts`) is that same value plus `mount`, so HTTP
+and the worker consume one declaration. `createKernel` and `startWorker` call `ensureContentApplication` /
+`startContentApplication`; `stop` unbinds the process. Ambient operands are explicit: composition supplies `now`, `id`,
+`clock` and `fetch`. Board cursors take `cursorNow` (the composition defaults it to the domain clock). Document reads
+take the wall-clock `now` that request budgets use. HTTP request ids come from the bound identity factory. The worker
+takes `fetch` and `now` and throws if they are absent at register. Edition consent is the reader that
+`readContentEditionConsent` builds from Auth configuration; nothing mounts a reader onto a pool. Authored-field
+transactions take the command's transaction id. Request budgets stay on wall time per the kernel clock policy.
+Platform `defineModule` is not delivered.
 
 Cost per operation: authorization composition adds one memoized context-port lookup and passes existing object
 references. It adds no source SQL, pool checkout, permission allowance or per-step work; the existing Access,

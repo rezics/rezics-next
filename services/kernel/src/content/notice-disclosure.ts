@@ -62,6 +62,7 @@ export type NoticeDisclosureDependencies = Readonly<{
   access: Access;
   tokens: KeyRing;
   routeKey: Uint8Array;
+  clock: () => Date;
   actor: Actor;
   deadline: number;
 }>;
@@ -176,6 +177,7 @@ export async function discloseNoticeCandidates(
           pool: dependencies.pool,
           access: dependencies.access,
           routeKey: dependencies.routeKey,
+          clock: dependencies.clock,
         },
         candidate.report_id as ReportId,
         { actor: dependencies.actor, deadline: dependencies.deadline },
@@ -268,12 +270,22 @@ export async function discloseNoticeCandidates(
   }
 
   const contexts = await readNoticePostContexts(
-    { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+    {
+      pool: dependencies.pool,
+      access: dependencies.access,
+      tokens: dependencies.tokens,
+      clock: dependencies.clock,
+    },
     [...refs.values()],
     { actor: dependencies.actor, deadline: dependencies.deadline },
   );
   const boardContexts = await readNoticeBoardContexts(
-    { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+    {
+      pool: dependencies.pool,
+      access: dependencies.access,
+      tokens: dependencies.tokens,
+      clock: dependencies.clock,
+    },
     [...boardRefs],
     { actor: dependencies.actor, deadline: dependencies.deadline },
   );
@@ -315,6 +327,7 @@ export async function discloseNoticeCandidates(
           pool: dependencies.pool,
           access: dependencies.access,
           routeKey: dependencies.routeKey,
+          clock: dependencies.clock,
         },
         candidate.report_id as ReportId,
         { actor: dependencies.actor, deadline: dependencies.deadline },
@@ -379,12 +392,22 @@ export async function discloseNoticeCandidates(
     }
   }
   const currentContexts = await readNoticePostContexts(
-    { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+    {
+      pool: dependencies.pool,
+      access: dependencies.access,
+      tokens: dependencies.tokens,
+      clock: dependencies.clock,
+    },
     [...refs.values()],
     { actor: dependencies.actor, deadline: dependencies.deadline },
   );
   const currentBoardContexts = await readNoticeBoardContexts(
-    { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+    {
+      pool: dependencies.pool,
+      access: dependencies.access,
+      tokens: dependencies.tokens,
+      clock: dependencies.clock,
+    },
     [...boardRefs],
     { actor: dependencies.actor, deadline: dependencies.deadline },
   );

@@ -1,3 +1,4 @@
+import { contentRequestId } from './adapters/bind.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -129,7 +130,7 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
               {
                 idempotencyKey: idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]),
                 deadline: job.deadline,
-                requestId: Bun.randomUUIDv7(),
+                requestId: contentRequestId(),
               },
             ),
           );
@@ -198,7 +199,7 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
             {
               idempotencyKey: idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]),
               deadline: job.deadline,
-              requestId: Bun.randomUUIDv7(),
+              requestId: contentRequestId(),
             },
           ),
         );

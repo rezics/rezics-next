@@ -22,7 +22,7 @@ export type OwnRealmsDependencies = {
   pool: Pool;
   tokens: KeyRing;
   access: Access;
-  clock?: () => Date;
+  clock: () => Date;
 };
 export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & {
   epoch: number;
@@ -187,7 +187,7 @@ export async function listOwnRealms(
   // Disclosure does not refill selection, even when every selected row conceals.
   const items = await hydrateOwnRealms(dependencies, viewer, selected, context);
   requireSameViewer();
-  const at = (dependencies.clock ?? (() => new Date()))().toISOString();
+  const at = dependencies.clock().toISOString();
   for (const member of selected) {
     const current = await observeOwnRealmMembership(dependencies, viewer, member.realmId, { ...context, at });
     if (!sameOwnRealmMembership(member, current)) throw new ProblemError('transaction_retry_exhausted');

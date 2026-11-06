@@ -273,6 +273,7 @@ beforeAll(async () => {
         }),
         routeKey,
         fetchConfig: { allowedHosts: ['images.example.org'] },
+        now: () => Date.now(),
         collectionPartitions: [workPartition],
       }).register(workContext);
       workContext.addEffects(contentEffects(workContext.pool, workContext.client));
@@ -625,7 +626,7 @@ async function clearOneReaction(
 ): Promise<void> {
   const targetId = targetKind === 'thread' ? keys.threadId : targetKind === 'post' ? keys.postId : keys.subjectId;
   const outcome = await clearReaction(
-    { pool: fixture.db.pool, access: fixture.access },
+    { clock: () => new Date(), pool: fixture.db.pool, access: fixture.access },
     actor,
     { targetKind, targetId },
     request(),

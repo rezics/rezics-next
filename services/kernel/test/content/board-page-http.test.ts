@@ -225,11 +225,13 @@ test.serial(
     const actor = await access.authenticate(world.owner.bearer, { pool: world.db.pool, deadline });
     let changed = false;
     const read = createBoardPageReader({
+      cursorNow: () => Date.now(),
+      clock: () => new Date(),
       pool: world.db.pool,
       access,
       tokens: testTokens(),
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
       async readConversationActivityBatch() {
         if (!changed) {
           changed = true;

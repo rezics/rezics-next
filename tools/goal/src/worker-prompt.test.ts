@@ -307,7 +307,11 @@ test('minimal verification asks for one combined check after the outcome is writ
     expect(prompt).toContain('After the whole outcome is written, run one check');
     expect(prompt).toContain('never joins them with `&&`');
     expect(prompt).toContain("`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`");
-    expect(prompt).toContain('Fix every failure the check reports before the rerun');
+    expect(prompt).toContain('Fix every type error it reports before the rerun');
+    expect(prompt).toContain(
+      'A failing test blocks success only when the outcome changes payment, payout, order settlement, points or balance code',
+    );
+    expect(prompt).toContain("under a 'failing tests' label in the summary");
     expect(prompt).toContain('Rerun it once after a fixed failure');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
@@ -578,7 +582,11 @@ const MINIMAL_RULES = [
   'After the whole outcome is written, run one check',
   'never joins them with `&&`',
   "`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`",
-  'Fix every failure the check reports before the rerun',
+  'Fix every type error it reports before the rerun',
+  'A failing test blocks success only when the outcome changes payment, payout, order settlement, points or balance code',
+  "under a 'failing tests' label in the summary",
+  'missing or unknown is not a pass; a nonzero exit is judged by the type-error and money-code rules above',
+  'a `tool` blocker; type and test failures are not infrastructure failures',
   'typecheck of each changed workspace',
   'the changed test files',
   'services/kernel and services/auth may use the compiler database or a check host',

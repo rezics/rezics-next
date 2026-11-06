@@ -147,7 +147,7 @@ export async function createRulesFixture() {
       // Native command admission, creation manifest, receipt and registered event writers;
       // no SQL-created selected claims and no HTTP limiter budget override.
       const result = await createPost(
-        { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+        { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
         author.actor,
         {
           threadId: target.threadId,
@@ -161,9 +161,9 @@ export async function createRulesFixture() {
       return { realmId: target.realmId, postId: result.value.itemId, revisionId: result.value.revisionId };
     }
     const exact = (refs: readonly Pin[], access = system.access, pool = database.pool) =>
-      readExactPublishedRules({ pool, access }, refs, readContext());
+      readExactPublishedRules({ clock: () => new Date(), pool, access }, refs, readContext());
     const presentations = (ids: readonly string[], access = system.access) =>
-      readCommunityPresentations({ pool: database.pool, access }, ids, readContext());
+      readCommunityPresentations({ clock: () => new Date(), pool: database.pool, access }, ids, readContext());
     async function adopt(pin: Pin) {
       return patchRealm(pin.realmId, {
         presentation: {

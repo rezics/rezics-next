@@ -96,7 +96,7 @@ async function paid(offerId: string): Promise<Entitlement> {
   const created = await order(offerId);
   const current = (await store.readOrder(db.pool, routeOf(created.id)!, created.id))!;
   fake.pay(current.checkoutSessionId!);
-  await createCommerceCommands({ pool: db.pool, access }).applyCheckoutSnapshot(
+  await createCommerceCommands({ clock: () => new Date(), pool: db.pool, access }).applyCheckoutSnapshot(
     await stripe.readCheckout(current.checkoutSessionId!),
     key(),
   );

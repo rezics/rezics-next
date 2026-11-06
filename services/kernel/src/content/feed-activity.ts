@@ -62,8 +62,8 @@ export function validateActivity(activity: ActivityRef): void {
 
 /** Candidate inventories carry no body, title, account permission or disclosure grant.
  * tokens is additive: exposed inventory/inbox cursors use the composed native ring. */
-export function createFeedActivityStore(deps: { pool: Pool; clock?: KernelClock; tokens: KeyRing }) {
-  const clock = deps.clock ?? systemClock;
+export function createFeedActivityStore(deps: { pool: Pool; clock: KernelClock; tokens: KeyRing }) {
+  const clock = deps.clock;
   async function page(
     anchor: FeedActivityTarget | { accountId: string },
     query: ActivityPageQuery & { boundary?: string },

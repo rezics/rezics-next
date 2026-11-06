@@ -169,8 +169,8 @@ beforeAll(async () => {
       201,
     )
   ).subject.id;
-  commands = createCommerceCommands({ pool, access: kernel.testAccess });
-  scheduled = createCommerceCommands({ pool: servicePool, access: kernel.testAccess });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access: kernel.testAccess });
+  scheduled = createCommerceCommands({ clock: () => new Date(), pool: servicePool, access: kernel.testAccess });
   const selectedOffer = (
     await post(
       first.staff,

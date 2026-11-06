@@ -461,7 +461,7 @@ beforeAll(async () => {
     }),
   );
   if (!access) throw new Error('Kernel access was not installed');
-  membership = createRealmMembership({ pool, access });
+  membership = createRealmMembership({ clock: () => new Date(), pool, access });
   roleReader = membership.roleReader;
   service = await createAuthService({
     database: authPool,
@@ -541,7 +541,7 @@ test('Realm participation preparation uses the enclosing request deadline', asyn
       return false;
     },
   };
-  const check = createRealmParticipationCheck({ pool: {} as Pool, access });
+  const check = createRealmParticipationCheck({ clock: () => new Date(), pool: {} as Pool, access });
   const requestDeadline = Date.now() + budgetMs;
   const started = performance.now();
   await expect(
@@ -713,7 +713,7 @@ test.serial('native participation preparation uses one bounded connection and th
     const resource = { route, id: realmId };
     const observed: { action: string; at: string | null; client: AccessClient }[] = [];
     const checkedAccess = accessObservingTime(observed, singleAccess);
-    const check = createRealmParticipationCheck({ pool: singlePool, access: checkedAccess });
+    const check = createRealmParticipationCheck({ clock: () => new Date(), pool: singlePool, access: checkedAccess });
     let proof: RealmParticipationResult | undefined;
     let commandAt: string | undefined;
     let committed = false;

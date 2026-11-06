@@ -9,23 +9,31 @@ import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
 import type { ContentShelfTitleInputs } from '../../src/library/shelf-title-content-source.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 type KernelContent = ContentRuntime &
-  Pick<ContentBoardDependencies, 'cursorNow'> & {
+  Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
     readConsent?: CurrentConsentReader;
     shelfTitleInputs?: ContentShelfTitleInputs;
+    now?: () => number;
+    id?: () => string;
   };
-test('trusted optional content runtime types retain exactly the three native ports', () => {
+test('trusted optional content runtime types retain exactly the native ports and the Auth consent reader', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
     Readonly<{
       fetchConfig?: MediaImportFetchConfig;
       workflows?: NativeAuthorErasureWorkflows;
       anonymousVerifier?: TurnstileVerifier;
+      readConsent?: CurrentConsentReader;
     }>
   >();
-  expectTypeOf<keyof ContentRuntime>().toEqualTypeOf<'fetchConfig' | 'workflows' | 'anonymousVerifier'>();
+  expectTypeOf<keyof ContentRuntime>().toEqualTypeOf<
+    'fetchConfig' | 'workflows' | 'anonymousVerifier' | 'readConsent'
+  >();
   expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
-  expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<(() => number) | undefined>();
+  expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<() => number>();
+  expectTypeOf<routes.Dependencies['id']>().toEqualTypeOf<() => string>();
+  expectTypeOf<routes.Dependencies['now']>().toEqualTypeOf<() => number>();
   expectTypeOf<Pick<routes.Dependencies, keyof ContentRuntime>>().toEqualTypeOf<ContentRuntime>();
   expectTypeOf<Parameters<typeof routes.contentRoutes>[1]>().toEqualTypeOf<routes.Dependencies>();
   expectTypeOf<KernelDependencies['clock']>().toEqualTypeOf<(() => Date) | undefined>();
@@ -47,7 +55,15 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
   const cursorNow = forbidden;
   const runtime: ContentRuntime = Object.freeze({ fetchConfig, workflows, anonymousVerifier });
   const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) };
-  const base: KernelDependencies = { pool, routeKey: new Uint8Array(32), tokens, access: forbidden, clock: forbidden };
+  const receiptKeys = testReceiptKeys();
+  const base: KernelDependencies = {
+    pool,
+    routeKey: new Uint8Array(32),
+    tokens,
+    receiptKeys,
+    access: forbidden,
+    clock: forbidden,
+  };
   try {
     const baseline = JSON.stringify(
       createKernel(base).routes.map(({ method, path, hooks }) => ({ method, path, hooks })),
@@ -76,13 +92,25 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.fetchConfig).toBe(content.fetchConfig);
       expect(received.workflows).toBe(content.workflows);
       expect(received.anonymousVerifier).toBe(content.anonymousVerifier);
-      expect(received.cursorNow).toBe(content.cursorNow);
+      expect(received.cursorNow).toBe(content.cursorNow!);
       expect(received.pool).toBe(pool);
       expect(received.tokens).toBe(tokens);
       expect(received.routeKey).toBe(base.routeKey);
       expect(typeof received.clock).toBe('function');
       expect(Object.keys(received).sort()).toEqual(
-        ['pool', 'routeKey', 'clock', 'tokens', 'access', 'realmParticipation', ...Object.keys(content)].sort(),
+        [
+          'pool',
+          'routeKey',
+          'clock',
+          'now',
+          'id',
+          'readConsent',
+          'tokens',
+          'access',
+          'realmParticipation',
+          'viewerActionRuntime',
+          ...Object.keys(content),
+        ].sort(),
       );
       expect(JSON.stringify(kernel.routes.map(({ method, path, hooks }) => ({ method, path, hooks })))).toBe(baseline);
     }
@@ -104,7 +132,15 @@ test('content composition retains lazy access resolution and the validated kerne
   const instant = new Date('2026-01-01T00:00:00Z');
   const clock = mock(() => instant);
   try {
-    createKernel({ pool, routeKey: new Uint8Array(32), access: factory, clock, content: {} });
+    createKernel({
+      pool,
+      routeKey: new Uint8Array(32),
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) },
+      receiptKeys: testReceiptKeys(),
+      access: factory,
+      clock,
+      content: {},
+    });
     const received = compose.mock.calls.at(-1)![1];
     expect(factory).not.toHaveBeenCalled();
     expect(clock).not.toHaveBeenCalled();

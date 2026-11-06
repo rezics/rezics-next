@@ -68,7 +68,7 @@ function reviewInput(board: Board, subject: string, extras: Record<string, unkno
 
 async function createReview(board = reviewsBoard, subject = subjectId, extras: Record<string, unknown> = {}) {
   return createThread(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     reviewInput(board, subject, extras),
     context(),
@@ -140,7 +140,7 @@ test('a review is a one-subject thread on the reviews board and indexes as a rev
   await expect(createReview(reviewsBoard, newId(0x6b31), { subjectIds: [subjectId, newId(0x6b32)] })).rejects.toThrow();
   await expect(
     createThread(
-      { pool: fixture.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
       author,
       { ...reviewInput(reviewsBoard, subjectId), kind: 'discussion' } as never,
       context(),
@@ -148,7 +148,7 @@ test('a review is a one-subject thread on the reviews board and indexes as a rev
   ).rejects.toThrow();
   await expect(
     createThread(
-      { pool: fixture.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
       author,
       { ...reviewInput(discussionBoard, subjectId), kind: 'review' } as never,
       context(),
@@ -162,7 +162,7 @@ test('one live review per author, subject and board is released by erasure and t
 
   await fixture.grant(author.accountId, 'post:erase', { route: routeOf(first.value.itemId)!, id: first.value.itemId });
   await erasePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     { postId: first.value.itemId, reason: 'Author removed the review' },
     context(),
@@ -174,7 +174,7 @@ test('one live review per author, subject and board is released by erasure and t
     id: second.value.threadId,
   });
   await takedown(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     { target: { kind: 'thread', id: second.value.threadId }, reason: 'Removed after review' },
     context(),
@@ -202,7 +202,7 @@ test('a review stores only the author’s cited vote revision and preserves prio
 
   const nextCitation = { questionId: STANDARD_QUESTION_ID, units: 18, revision: 4 };
   const revised = await revisePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     {
       threadId: created.value.threadId,

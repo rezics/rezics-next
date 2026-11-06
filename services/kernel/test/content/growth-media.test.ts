@@ -197,7 +197,7 @@ async function makeAnchor(options: { partition?: number; tag?: string } = {}): P
 }
 
 function dependencies(fixture: Fixture) {
-  return { pool: db!.pool, access: fixture.access };
+  return { clock: () => new Date(), pool: db!.pool, access: fixture.access };
 }
 
 type MediaAnchor = { id: string; request: ReturnType<typeof context> };

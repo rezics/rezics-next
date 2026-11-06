@@ -176,7 +176,7 @@ test('native Edition sale authority reads stay indexed across independent publis
 
     await expect(
       readContentEditionMechanicalSaleAuthority(
-        { pool: fixture.app.pool, access: fixture.native.access },
+        { clock: () => new Date(), pool: fixture.app.pool, access: fixture.native.access },
         fixture.editionId,
         { deadline: Date.now() - 1 },
       ),
@@ -204,7 +204,7 @@ test('native Edition sale authority reads stay indexed across independent publis
     try {
       await expect(
         readContentEditionMechanicalSaleAuthority(
-          { pool: fixture.native.database.pool, access: fixture.native.access },
+          { clock: () => new Date(), pool: fixture.native.database.pool, access: fixture.native.access },
           fixture.editionId,
           { deadline: Date.now() + 1000 },
         ),

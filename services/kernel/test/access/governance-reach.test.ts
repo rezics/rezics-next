@@ -146,13 +146,13 @@ beforeAll(async () => {
   }
 
   const space = await createSpace(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     owner,
     { title: 'Governance fixture space' },
     commandContext(),
   );
   const realm = await createRealm(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     owner,
     {
       spaceId: space.value.spaceId,
@@ -165,13 +165,13 @@ beforeAll(async () => {
   spaceResource = { route: routeOf(space.value.spaceId)!, id: space.value.spaceId };
   realmResource = { route: routeOf(realm.value.realmId)!, id: realm.value.realmId };
   await setBoardScheme(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     owner,
     { realmId: realm.value.realmId, schemeId: scheme.subject.id, expectedHead: realm.value.revisionId },
     commandContext(),
   );
   const createdBoard = await createBoard(
-    { pool: fixture.pool, access: fixture.access },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access },
     owner,
     {
       realmId: realm.value.realmId,
@@ -182,7 +182,7 @@ beforeAll(async () => {
     commandContext(),
   );
   board = { route: routeOf(createdBoard.value.boardId)!, id: createdBoard.value.boardId };
-  const content = { pool: fixture.pool, access: fixture.access, routeKey };
+  const content = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const thread = await createThread(
     content,
     owner,
@@ -212,7 +212,7 @@ beforeAll(async () => {
   );
   secondPostId = post.value.itemId;
   const media = await reserveMedia(
-    { pool: fixture.pool, access: fixture.access },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access },
     owner,
     { containerId: threadId, purpose: 'post-image', mediaType: 'image/png', byteCount: 12 },
     commandContext(),
@@ -360,7 +360,7 @@ test.serial(
     const clientCheck = await accessCheck(fixture.access, clientContext.actor, action, postOne, clientContext);
     expect(await clientCheck(fixture.pool)).toBe(false);
 
-    const context = { pool: fixture.pool, access: fixture.access, routeKey };
+    const context = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
     const recordsBeforeFloors = await reachRows();
     staff = (await fixture.context(staff.accountId)).actor;
     const accountRoute = routeOf(staff.accountId)!;

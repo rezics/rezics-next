@@ -85,7 +85,7 @@ test('a current native curator creates, replays, selects and votes on an immutab
     expect(
       (
         await resolveRatingQuestionSelection(
-          { pool: system.database.pool, access: system.access, tokens: system.tokenKeys },
+          { clock: () => new Date(), pool: system.database.pool, access: system.access, tokens: system.tokenKeys },
           created.id,
           { actor, deadline: Date.now() + 30_000 },
         )

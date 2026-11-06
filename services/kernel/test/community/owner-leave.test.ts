@@ -244,6 +244,7 @@ test.serial(
       const { system } = communityFixtureRuntime();
       const consent = createCurrentConsentReader({ database: system.database.authPool });
       const membership = createRealmMembership({
+        clock: () => new Date(),
         pool: system.database.pool,
         access: system.access,
         referenceKeys: system.tokenKeys,

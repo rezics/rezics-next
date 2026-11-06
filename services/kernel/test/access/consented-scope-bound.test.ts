@@ -227,7 +227,7 @@ test('the full default website catalogue commits membership and content actor sn
       [routeOf(resource!), resource, actor.accountId, action],
     );
   await enqueueRealmJoin(
-    { pool, access: site.access, tokens: site.tokenKeys, client },
+    { clock: () => new Date(), pool, access: site.access, tokens: site.tokenKeys, client },
     {
       actor,
       realmId: realm,

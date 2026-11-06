@@ -35,7 +35,18 @@ snapshots support review by eye. The development publication is `https://storybo
 
 ## Check selection and failures
 
+Dev's floor, in order: development continues, and dev runs, so problems can be debugged. A broken dev never holds
+landings. The dev verifier's boot smoke catches a dev that does not start and dispatches an urgent repair to the commit
+that broke it.
+
+Decision: product outcomes land first and are repaired after. A worker attempt returns success when its outcome is
+written and every changed workspace type-checks, even if some of its own tests fail. Its summary names each failing
+test and its first error, and the owning manager briefs those repairs as complete outcomes. Type errors always block,
+so dev compiles and boots. Payment, payout, order settlement, points and balance code also needs its tests passing.
+
 Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
+
+Decision: under minimal verification a type error blocks a worker's success, and a failing test blocks it only in payment, payout, order settlement, points or balance code. Other failing test files are named under `failing tests` in the worker's summary for the owning manager to repair; landing and the dev verifier still check every candidate.
 
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.

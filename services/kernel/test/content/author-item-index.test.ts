@@ -210,7 +210,7 @@ test('every post.erased event names its post as subject, and an author erasure p
       idempotencyKey: randomUUID(),
       requestId: randomUUID(),
     });
-    const deps = { pool: fixture.pool, access: fixture.access };
+    const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access };
     const operation = await beginAuthorErasure(
       {
         ...deps,

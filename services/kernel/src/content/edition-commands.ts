@@ -28,7 +28,7 @@ import {
 } from './edition-store.ts';
 import { EDITION_PUBLISH, publicationSourceDigest } from './edition-initiator.ts';
 
-export type EditionCommandDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+export type EditionCommandDependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date }>;
 export type EditionCommandContext = Readonly<{ idempotencyKey: string; deadline: number }>;
 type SourceGuard = NonNullable<Awaited<ReturnType<typeof prepareEditionSource>>>;
 

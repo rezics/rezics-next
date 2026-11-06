@@ -2524,6 +2524,7 @@ export async function runWorker() {
     readConsent,
     routeKey: Buffer.from(config.routeKey, 'base64url'),
     fetchConfig: { allowedHosts: [] },
+    now: () => Date.now(),
   });
   const client = await createWorkClient(config.databaseUrl, pool);
   const contentOperations = createContentOperationClient({ pool, client, clock });

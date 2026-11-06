@@ -157,7 +157,12 @@ test('a terminal source CAS excludes late application, retries retain their own 
       .update(canonicalize([identity, point])!)
       .digest(),
   };
-  const deps = { pool: f.system.database.pool, access: f.system.access, routeKey: f.system.routeKey };
+  const deps = {
+    clock: () => new Date(),
+    pool: f.system.database.pool,
+    access: f.system.access,
+    routeKey: f.system.routeKey,
+  };
   const authorization = await accessCommandAuthorization(
     deps.access,
     actor,
@@ -275,7 +280,7 @@ test('appeal reversal prepares its Realm fence outside the target transaction an
   try {
     const input = { outcome: 'reverse' as const, statement: 'Independent review' };
     const context = { idempotencyKey: randomUUID(), deadline: Date.now() + 30_000, requestId: randomUUID() };
-    const deps = { pool: single, access: f.system.access };
+    const deps = { clock: () => new Date(), pool: single, access: f.system.access };
     const resolved = await resolveAppeal(deps, credential.actor, appeal.id, input, context);
     expect(resolved.value).toEqual({ id: appeal.id });
     const replay = await resolveAppeal(deps, credential.actor, appeal.id, input, {
@@ -317,7 +322,7 @@ test('committed discovery changes retain native predecessors, fact and gate atom
 
   const key = randomUUID();
   await softDeletePost(
-    { pool, access: f.system.access, routeKey: f.system.routeKey },
+    { clock: () => new Date(), pool, access: f.system.access, routeKey: f.system.routeKey },
     f.system.actors.author.actor,
     { postId: target.postId, reason: 'Deleted by author' },
     { idempotencyKey: key, deadline: Date.now() + 30_000, requestId: randomUUID() },

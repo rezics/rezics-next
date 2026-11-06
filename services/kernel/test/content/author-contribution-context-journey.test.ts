@@ -93,6 +93,7 @@ test('mounted public author pages retain exact review citations and anonymous im
       protectedParent.id,
     );
     const dependencies = {
+      clock: () => new Date(),
       pool: f.system.database.pool,
       access: f.system.access,
       tokens: f.system.tokenKeys,

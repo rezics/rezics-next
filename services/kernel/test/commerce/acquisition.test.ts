@@ -63,7 +63,7 @@ beforeAll(async () => {
       readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
     },
   });
-  commands = createCommerceCommands({ pool, access: native.access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access: native.access });
   const scheme = await value<{ subject: { id: string } }>(
     wire('/v1/subjects', {
       type: 'skos:ConceptScheme',

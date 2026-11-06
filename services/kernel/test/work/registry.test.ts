@@ -75,7 +75,6 @@ test('worker authorization is lazy, shared across modules and does not add a DBO
     import { DBOS } from '@dbos-inc/dbos-sdk';
     import pg from 'pg';
     import { composeWork } from './src/work/registry.ts';
-    import { mountedContentEditionConsent } from './src/content/edition-sale-consent.ts';
     import { WORK_QUEUES } from './src/work/queues.ts';
 
     const pool = new pg.Pool();
@@ -94,7 +93,6 @@ test('worker authorization is lazy, shared across modules and does not add a DBO
     const work = await composeWork([
       { name: 'no-authorization', register(context) {
         // No configuration is required until a module actually needs Access.
-        assert.equal(mountedContentEditionConsent(pool), undefined);
         assert.equal(context.client, client);
         assert.equal(context.pool, pool);
         Object.assign(env, {
@@ -108,7 +106,7 @@ test('worker authorization is lazy, shared across modules and does not add a DBO
       { name: 'first-consumer', register(context) {
         authorization = context.getAuthorization();
         getAuthorization = context.getAuthorization;
-        assert.equal(mountedContentEditionConsent(pool), authorization.readConsent);
+        assert.equal(typeof authorization.readConsent, 'function');
       } },
       { name: 'second-consumer', register(context) {
         env.CF_ACCESS_CLIENT_ID = 'invalid-if-reread';

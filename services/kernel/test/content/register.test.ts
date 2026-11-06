@@ -7,19 +7,28 @@ import { createImageJob } from '../../src/content/image-job.ts';
 import {
   contentWorkDependencies,
   ContentDependencyUnavailableError,
-  registerContent,
+  createContentWorkModule,
 } from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
 import {
   CONTENT_BOARD_RANK_SCHEDULE,
   BOARD_SLOW_RECOVERY_SCHEDULE,
   BOARD_SLOW_RETENTION_SCHEDULE,
   CONTENT_COLLECTION_SCHEDULE,
+  CONTENT_CONVERSATION_ACTIVITY_REPAIR_SCHEDULE,
   CONTENT_NOTICE_RETENTION_SCHEDULE,
 } from '../../src/content/work.ts';
+import { OWN_DRAFT_REPAIR_WORKFLOW } from '../../src/content/own-drafts-index.ts';
+import { REVIEW_CENSUS_SCHEDULE, REVIEW_CENSUS_WORKFLOW } from '../../src/content/review-census-work.ts';
+import {
+  REALM_SUBJECT_CENSUS_SCHEDULE,
+  REALM_SUBJECT_CENSUS_WORKFLOW,
+} from '../../src/content/realm-subject-lifecycle.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import type { WorkClient } from '../../src/work/client.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 
@@ -55,9 +64,19 @@ type Registration = {
 };
 
 function workEnvironment(mode: 'empty' | 'full'): Record<string, string | undefined> {
+  // The worker kernel that supplies Access needs its trusted receipt, session and membership-reference rings.
   return {
     DATABASE_URL: databaseUrl,
     KERNEL_ROUTE_KEY: routeKey,
+    KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
+    KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 17).toString('base64url')}`,
+    KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({
+      current: 1,
+      keys: { '1': Buffer.alloc(32, 19).toString('base64url') },
+    }),
+    AUTH_ISSUER: 'https://worker-auth.test',
+    AUTH_AUDIENCE: 'https://worker-api.test',
+    AUTH_JWKS_URL: 'https://worker-auth.test/jwks',
     CONTENT_CANARY: canary,
     ...(mode === 'full' ? contentEnv : {}),
   };
@@ -69,7 +88,7 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
   const queues: Registration['queues'] = [];
   const schedules: Registration['schedules'] = [];
   const effects: Registration['effects'] = [];
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 4 });
   const registerWorkflow = DBOS.registerWorkflow.bind(DBOS);
   const registerStep = DBOS.registerStep.bind(DBOS);
   const dbos = DBOS as unknown as {
@@ -84,7 +103,19 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
     steps.push(config?.name ?? func.name);
     return registerStep(func, config);
   }) as typeof DBOS.registerStep;
+  let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   try {
+    client = await createWorkClient(databaseUrl!, pool);
+    const registerQueue = client.registerQueue.bind(client);
+    const applySchedules = client.applySchedules.bind(client);
+    client.registerQueue = (async (name: string, parameters?: object) => {
+      queues.push({ name, parameters: parameters ?? {} });
+      return registerQueue(name, parameters);
+    }) as typeof client.registerQueue;
+    client.applySchedules = (async (items: Registration['schedules']) => {
+      schedules.push(...items);
+      return applySchedules(items);
+    }) as typeof client.applySchedules;
     await composeWork(
       [
         {
@@ -105,14 +136,7 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
       {
         databaseUrl: databaseUrl!,
         pool,
-        client: {
-          async registerQueue(name: string, parameters: object) {
-            queues.push({ name, parameters });
-          },
-          async applySchedules(items: Registration['schedules']) {
-            schedules.push(...items);
-          },
-        } as unknown as WorkClient,
+        client,
         env: workEnvironment(mode),
       },
     );
@@ -120,7 +144,11 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
   } finally {
     dbos.registerWorkflow = registerWorkflow;
     dbos.registerStep = registerStep;
-    await pool.end();
+    try {
+      await client?.close();
+    } finally {
+      await pool.end();
+    }
   }
 }
 
@@ -190,12 +218,21 @@ if (process.argv.includes('--content-registration')) {
       ]),
     );
     expect(registration.effects.map((effect) => effect.name)).toEqual([
+      'content_review_discovery_source',
+      'content_review_discovery_dispatch',
+      'content_account_erasure',
       'content_post_erased',
+      'content_realm_discovery_source',
       'content_reaction_count',
       'content_subject_thread',
       'content_author_item',
       'content_report_reporter',
+      'content_creator_edition',
       'content_party_locator',
+      'content_account_upload_index',
+      'content_report_locator_installation',
+      'content_moderation_directory',
+      'content_conversation_activity',
       'content_board_thread',
       'content_report_target',
       'content_report_outcome',
@@ -205,8 +242,12 @@ if (process.argv.includes('--content-registration')) {
       'content_author_erasure',
       'content_url_import',
       'content_subject_reaction_merge',
+      'content_realm_subject_lifecycle',
       'content_mention_notice',
       'content_reply_notice',
+      'content_thread_watch_notice',
+      'content_board_watch_notice',
+      'content_feed_activity',
     ]);
     expect(absenceLines(output)).toEqual([
       'content storage group is absent: CONTENT_R2_ENDPOINT, CONTENT_R2_BUCKET, CONTENT_R2_ACCESS_KEY_ID, CONTENT_R2_SECRET_ACCESS_KEY',
@@ -231,6 +272,30 @@ if (process.argv.includes('--content-registration')) {
     expect(empty.registration.queues.map((queue) => queue.name)).toEqual(Object.keys(WORK_QUEUES));
     expect(empty.registration.schedules).toEqual([
       {
+        scheduleName: REVIEW_CENSUS_SCHEDULE,
+        workflowName: REVIEW_CENSUS_WORKFLOW,
+        schedule: '0 * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: 'content.ownDrafts.every-minute',
+        workflowName: OWN_DRAFT_REPAIR_WORKFLOW,
+        schedule: '* * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: REALM_SUBJECT_CENSUS_SCHEDULE,
+        workflowName: REALM_SUBJECT_CENSUS_WORKFLOW,
+        schedule: '* * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
         scheduleName: CONTENT_COLLECTION_SCHEDULE,
         workflowName: CONTENT_WORKFLOWS.collect,
         schedule: '0 * * * *',
@@ -242,6 +307,14 @@ if (process.argv.includes('--content-registration')) {
         scheduleName: CONTENT_BOARD_RANK_SCHEDULE,
         workflowName: 'content.board-rank.refresh',
         schedule: '*/10 * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: CONTENT_CONVERSATION_ACTIVITY_REPAIR_SCHEDULE,
+        workflowName: 'content.conversation-activity.repair',
+        schedule: '* * * * *',
         queueName: 'maintenance',
         cronTimezone: 'UTC',
         automaticBackfill: false,
@@ -267,6 +340,14 @@ if (process.argv.includes('--content-registration')) {
         workflowName: 'content.board-slow.retention',
         schedule: '0 2 * * *',
         queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: 'content.feedRetention',
+        workflowName: 'content.feedRetentionSweep',
+        schedule: '0 * * * *',
+        queueName: 'workflows',
         cronTimezone: 'UTC',
         automaticBackfill: false,
       },

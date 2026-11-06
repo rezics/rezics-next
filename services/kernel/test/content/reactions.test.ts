@@ -245,7 +245,7 @@ if (Bun.main === import.meta.path) {
   afterAll(async () => {
     await f?.close();
   });
-  const deps = () => ({ pool: f.db.pool, access: f.access });
+  const deps = () => ({ clock: () => new Date(), pool: f.db.pool, access: f.access });
   test('one actor slot sets, changes and clears on readable thread and post, emitting exact actor-partition changes', async () => {
     const target = await f.target();
     const actor = await f.verified();

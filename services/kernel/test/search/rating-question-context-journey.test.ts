@@ -24,7 +24,12 @@ afterAll(async () => fixture?.close());
 // witnesses. Retained Source population and the three feed lanes are separate.
 test('exact question witnesses follow current published citations, disclosure and retirement', async () => {
   const f = (fixture = await createReviewLifecycleFixture());
-  const deps = { pool: f.system.database.pool, access: f.system.access, tokens: f.system.tokenKeys };
+  const deps = {
+    clock: () => new Date(),
+    pool: f.system.database.pool,
+    access: f.system.access,
+    tokens: f.system.tokenKeys,
+  };
   const context: ReadContext = { actor: { kind: 'anonymous' }, deadline: Date.now() + 120_000 };
   const selected = await resolveRatingQuestionConditions(
     deps,
