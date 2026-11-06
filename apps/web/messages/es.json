@@ -2013,6 +2013,7 @@
   "zone_preparing_message": "Esta página se está preparando. Vuelve a intentarlo dentro de un momento.",
   "zone_unavailable_heading": "Esta página de zona no está disponible temporalmente",
   "zone_unavailable_message": "No se pudo cargar esta página de zona. Vuelve a intentarlo dentro de un momento.",
+  "zone_return": "Volver a esta zona",
   "inbox_heading": "Notificaciones",
   "inbox_sign_in": "Inicia sesión para ver tus notificaciones.",
   "inbox_loading": "Cargando notificaciones…",

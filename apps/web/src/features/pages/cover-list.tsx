@@ -72,6 +72,7 @@ function ItemCard({
   inspection?: ReactNode;
   retireInspection?: () => void;
   creditVisit?: CreditVisit | undefined;
+  destinationHref?: string;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
@@ -99,7 +100,7 @@ function ItemCard({
     suitability: value.reader.suitability,
     labels: value.labels.cover,
   };
-  const destination = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
+  const destination = destinationHref ?? relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
   const creditHref = (href: string) =>
     creditVisit && item.credit ? creditDestinationHref(href, creditVisit, item.credit, value.locale) : href;
   const href = creditHref(destination);
@@ -209,7 +210,9 @@ export function CoverList({
   value: RowValue & { subject?: string | null };
   label: string;
   /** Optional per-row destination and disclosed assertion focus for bounded visit adapters. */
-  itemVisit?: (item: Item) => { link?: RowValue['link']; holder?: string; details?: ReactNode } | undefined;
+  itemVisit?: (
+    item: Item,
+  ) => { link?: RowValue['link']; holder?: string; details?: ReactNode; href?: string } | undefined;
   preview?: boolean;
   /** Optional adapter for a presentation already resolved from the current released Type hierarchy. */
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
@@ -291,6 +294,7 @@ export function CoverList({
         item={item}
         value={value}
         {...(visit?.link ? { link: visit.link } : {})}
+        {...(visit?.href ? { destinationHref: visit.href } : {})}
         credit={credits}
         {...(item.credit && creditVisit
           ? {

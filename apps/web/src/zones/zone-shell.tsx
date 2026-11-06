@@ -7,6 +7,8 @@ import type { ZonePublic } from '../../../../services/kernel/src/zones/contract.
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../features/pages/subject-frame';
 import { SubjectPage, subjectPageTitle, subjectPageType, type SubjectPageData } from '../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
+import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
+import type { PageLink } from '../features/pages/shared';
 import { SubjectHeaderActions } from '../features/pages/subject-reactions-view';
 import { useSubjectReactionReader } from '../features/pages/subject-reaction-reader';
 import { loadSubjectReactions } from '../features/pages/subject-reactions';
@@ -29,6 +31,7 @@ import {
   type ZonePageRouteOutcome,
 } from './zone-read';
 import { zoneAppearanceAttributes, zonePageDocument } from './appearance';
+import { zoneVisitReturn } from './visit';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
 import { metaText } from '@rezics/ui/meta-line';
@@ -127,11 +130,17 @@ export function ZoneReadBoundary({
   children,
 }: {
   initial: ZonePageRouteOutcome;
-  request: Omit<ZonePageInput, 'cursor'>;
+  request: ZonePageInput;
   children: (page: Extract<ZonePageRouteOutcome, { kind: 'page' }>) => ReactNode;
 }) {
   const targetKey = JSON.stringify(request.target);
-  const requestKey = JSON.stringify([request.id, request.locale, targetKey, request.credentialMode ?? null]);
+  const requestKey = JSON.stringify([
+    request.id,
+    request.locale,
+    targetKey,
+    request.credentialMode ?? null,
+    request.cursor ?? null,
+  ]);
   const visitRef = useRef({ requestKey, initial, revision: 0 });
   if (visitRef.current.requestKey !== requestKey || visitRef.current.initial !== initial) {
     visitRef.current = {
@@ -431,7 +440,14 @@ function ZoneSubjectPage({
     session: browserSession,
     enabled: Boolean(subjectId && view === 'overview'),
   });
-  const returnTo = useLocation().publicHref.split(/[?#]/, 1)[0] ?? '';
+  const publicHref = useLocation().publicHref.split(/[?#]/, 1)[0] ?? '';
+  const returnTo = zoneVisitReturn(publicHref, locale) ?? publicHref;
+  const subjectLink: PageLink = (props) => {
+    const href = props.href.startsWith(`/${locale}/subjects/`)
+      ? withSubjectVisitReturn(props.href, returnTo, locale)
+      : props.href;
+    return <SubjectLink {...props} href={href} />;
+  };
   const nonce = useRouter().options.ssr?.nonce;
   const subjectType = common?.overview ? subjectPageType(common.overview) : undefined;
 
@@ -544,7 +560,7 @@ function ZoneSubjectPage({
                 {...(type.label ? { typeLabel: type.label } : {})}
                 {...(type.ratio ? { ratio: type.ratio } : {})}
                 relations={relations}
-                link={SubjectLink}
+                link={subjectLink}
                 tabs={tabs}
                 tabLabels={tabLabels}
                 base={base}
@@ -567,14 +583,14 @@ function ZoneSubjectPage({
               {...(type.label ? { typeLabel: type.label } : {})}
               {...(type.ratio ? { ratio: type.ratio } : {})}
               relations={relations}
-              link={SubjectLink}
+              link={subjectLink}
               view={view}
               label={tabLabels.names[view]}
               frame={
                 <SubjectFrame
                   frame={frame}
                   locale={locale}
-                  link={SubjectLink}
+                  link={subjectLink}
                   reader={personal?.reader ?? defaultReader}
                   coverLabels={{
                     withheld: m.subject_cover_withheld(),

@@ -120,6 +120,99 @@ export const staticZoneGuideFake = {
   },
 } satisfies ZonePageResponse;
 
+const bookSummary = {
+  id: subject.subject.id,
+  type: 'schema:Book',
+  types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+  label: { value: subject.subject.labels.en, language: 'en' },
+  creativeWork: true,
+  cover: null,
+};
+
+const typeListTitles = {
+  en: 'Books',
+  'zh-Hant': '書籍',
+  'zh-Hans': '书籍',
+  ja: '本',
+  ko: '책',
+  de: 'Bücher',
+  fr: 'Livres',
+  es: 'Libros',
+};
+
+/** Native ordered members for a routed Zone TypeList, including an overlapping duplicate id. */
+export const composedZoneMembersFake = {
+  ...staticZoneHomeFake,
+  zone: { ...staticZoneHomeFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e13', revision: '4' },
+  document: {
+    root: { props: { appearance: { cover: 'portrait' } } },
+    content: [
+      {
+        type: 'TypeList',
+        props: {
+          id: 'books',
+          title: typeListTitles,
+          types: ['schema:Book'],
+          sort: 'name',
+          limit: 12,
+          paged: true,
+        },
+      },
+    ],
+  },
+  reads: {
+    r0: {
+      status: 200,
+      body: {
+        subjects: [
+          {
+            id: subject.subject.id,
+            type: 'schema:Book',
+            labels: subject.subject.labels,
+            summary: bookSummary,
+          },
+          {
+            id: subject.subject.id,
+            type: 'schema:Book',
+            labels: subject.subject.labels,
+            summary: bookSummary,
+          },
+        ],
+        next: 'next_members-2',
+      },
+    },
+  },
+} satisfies ZonePageResponse;
+
+export const composedZonePrivateMountFake = {
+  ...composedZoneMembersFake,
+  zone: { ...composedZoneMembersFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e14', visibility: 'private' },
+} satisfies ZonePageResponse;
+
+/** Empty current window with a later native continuation. */
+export const composedZoneSparseFake = {
+  ...composedZoneMembersFake,
+  zone: { ...composedZoneMembersFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e15', revision: '6' },
+  reads: {
+    r0: {
+      status: 200,
+      body: { subjects: [], next: 'next_sparse-2' },
+    },
+  },
+} satisfies ZonePageResponse;
+
+/** Exhausted TypeList window: empty members and no continuation. */
+export const composedZoneEmptyFake = {
+  ...composedZoneMembersFake,
+  zone: { ...composedZoneMembersFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e16', revision: '7' },
+  reads: {
+    r0: {
+      status: 200,
+      body: { subjects: [], next: null },
+    },
+  },
+} satisfies ZonePageResponse;
+
 export const staticZoneOwnerFake = {
   ...staticZoneHomeFake,
   zone: { ...staticZoneHomeFake.zone, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12', visibility: 'private' },

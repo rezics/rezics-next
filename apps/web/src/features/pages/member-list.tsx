@@ -458,7 +458,17 @@ export function MemberList({
         {title}
       </h2>
       {unique.size > 0 && (
-        <CoverList items={[...unique.values()]} value={value} label={title} memberFacts={memberFacts} />
+        <CoverList
+          items={[...unique.values()]}
+          value={value}
+          label={title}
+          memberFacts={memberFacts}
+          itemVisit={
+            value.memberHref
+              ? (item) => ({ href: value.memberHref!({ id: item.id, label: item.label.text }) })
+              : undefined
+          }
+        />
       )}
       {failed && failed.status !== 202 ? (
         <p role="alert">
@@ -501,23 +511,37 @@ export function MemberList({
           {m.subject_relation_end({ label: title }, options)}
         </p>
       )}
-      {target && continuationEnabled && (restart || failed || (paged && cursor)) && (
-        <button
-          type="button"
-          onClick={more}
-          aria-disabled={pending || waiting}
-          aria-describedby={`${instance}-status`}
+      {value.listHref && paged && cursor && !failed && !restart ? (
+        <a
+          href={value.listHref(node, cursor)}
           className={cn(
             buttonVariants({ variant: 'outline' }),
-            'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
           )}
         >
-          {restart
-            ? m.member_window_restart({}, options)
-            : failed
-              ? m.subject_section_retry({}, options)
-              : m.subject_section_more({ label: title }, options)}
-        </button>
+          {m.subject_section_more({ label: title }, options)}
+        </a>
+      ) : (
+        target &&
+        continuationEnabled &&
+        (restart || failed || (paged && cursor)) && (
+          <button
+            type="button"
+            onClick={more}
+            aria-disabled={pending || waiting}
+            aria-describedby={`${instance}-status`}
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            )}
+          >
+            {restart
+              ? m.member_window_restart({}, options)
+              : failed
+                ? m.subject_section_retry({}, options)
+                : m.subject_section_more({ label: title }, options)}
+          </button>
+        )
       )}
     </section>
   );

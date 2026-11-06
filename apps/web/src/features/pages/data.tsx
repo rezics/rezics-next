@@ -829,6 +829,8 @@ export function PageData({
   releaseDigest,
   propertyLabels,
   listTarget,
+  listHref,
+  memberHref,
   fullList,
   listCursor,
   realm,
@@ -866,6 +868,8 @@ export function PageData({
   releaseDigest?: string;
   propertyLabels?: Record<string, { labels?: Record<string, string> }> | undefined;
   listTarget?: TypeListTarget | undefined;
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  memberHref?: (subject: { id: string; label: string }) => string;
   fullList?: string | undefined;
   listCursor?: string | undefined;
   realm?: string | undefined;
@@ -1059,6 +1063,8 @@ export function PageData({
       : {}),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),
     ...(ratio ? { frameRatio: ratio } : {}),
+    ...(listHref ? { listHref } : {}),
+    ...(memberHref ? { memberHref } : {}),
   };
   return (
     <SubjectArtworkBoundary
@@ -1082,6 +1088,8 @@ export function PageData({
             ...(listTarget ? { target: listTarget } : {}),
             ...(fullList ? { full: fullList } : {}),
             ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+            ...(listHref ? { listHref } : {}),
+            ...(memberHref ? { memberHref } : {}),
           }}
         >
           <PageContext.Provider

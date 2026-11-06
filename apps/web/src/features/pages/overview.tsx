@@ -166,6 +166,10 @@ export type OverviewValue = {
   relationDirections?: ReleasedRelationDirectionResult[];
   /** Every `RelationGroups` node of the page in document order; the first one renders all of them by group. */
   relationNodes: { id: string; props: Record<string, unknown> }[];
+  /** Zone lists continue on the Zone reader; Search TypeList keeps `{ route }` targets. */
+  listHref?: (node: string, cursor?: string) => string | undefined;
+  /** Zone member rows keep the localized Zone Subject URL. */
+  memberHref?: (subject: { id: string; label: string }) => string;
 };
 
 export const OverviewContext = createContext<OverviewValue | null>(null);

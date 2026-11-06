@@ -56,6 +56,9 @@ ordinary related-subject links may leave the Zone. There are no custom domains o
 Decision: Zone Subject visits keep their localized Zone URL and render only after the current native `readPage`
 admits the exact subject and view; Global Subject paths remain canonical metadata destinations, and visible facts
 continue to come from the admitted Zone page.
+Decision: Routed Zone lists project native `readPage` slots onto the common TypeList/Members renderer, continue on
+the Zone URL, and keep Search TypeList on Global configured pages. Canonical Subject readers carry a bounded Zone
+visit return. Session, upload and download use the existing personal BFF driver on each request.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured

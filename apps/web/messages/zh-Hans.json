@@ -2013,6 +2013,7 @@
   "zone_preparing_message": "此页面正在准备中，请稍后重试。",
   "zone_unavailable_heading": "此专区页面暂时无法使用",
   "zone_unavailable_message": "暂时无法加载此专区页面，请稍后重试。",
+  "zone_return": "返回此专区",
   "inbox_heading": "收件箱",
   "inbox_sign_in": "登录后查看收件箱。",
   "inbox_loading": "正在加载收件箱…",
