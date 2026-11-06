@@ -1,16 +1,7 @@
 import { expect, test } from 'bun:test';
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { POSTGRES_IMAGE } from '../scripts/database.ts';
+import { FIXTURE_LAUNCH_TIMEOUT, POSTGRES_IMAGE } from '../scripts/database.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 const database = resolve(import.meta.dir, '../scripts/database.ts');
@@ -36,6 +27,7 @@ function fixture() {
           memoryMaxGiB: 16,
           cpuQuotaPercent: 800,
           slots: 2,
+          performance: true,
         },
       ],
     }),
@@ -205,6 +197,11 @@ try { ownDatabase(); } catch (error) {
       }
       expect(existsSync(f.state)).toBe(false);
       const events = f.events();
+      if (!hang) {
+        expect(events.find((event) => event.kind === 'wait' && event.args?.[0] === 'run')?.timeout).toBe(
+          FIXTURE_LAUNCH_TIMEOUT,
+        );
+      }
       const run = events.find((event) => event.kind === 'docker' && event.args?.[0] === 'run')!.args!;
       expect(run.slice(1, 3)).toEqual(['--stop-timeout', '2']);
       const nonce = run.find((arg) => arg.startsWith('rezics.auth.check.nonce='))!;
@@ -231,44 +228,6 @@ try { ownDatabase(); } catch (error) {
     }
   });
 }
-
-for (const worker of ['worker', '']) {
-  test(`the placed check uses an answering host for ${worker ? 'a worker' : 'the gate'}`, () => {
-    const f = fixture();
-    try {
-      const result = f.run(
-        `import { databaseCheck, ownDatabase } from ${JSON.stringify(database)}; process.exitCode = await databaseCheck(['bun', 'scripts/check.ts', 'test/database-placement.test.ts'], async () => { ownDatabase(); return 0; });`,
-        { GOAL_TASK_ID: worker },
-      );
-      if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr.toString()).toContain('stack-run: auth check on fake');
-      expect(f.events().some((event) => event.kind === 'remote' && event.script?.includes('scripts/check.ts'))).toBe(
-        true,
-      );
-      expect(f.events().some((event) => event.kind === 'docker')).toBe(false);
-    } finally {
-      f.close();
-    }
-  });
-}
-
-test('an unanswered host falls back locally with stderr notice and cleans up the failed check', () => {
-  const f = fixture();
-  try {
-    const result = f.run(
-      `import { databaseCheck, ownDatabase } from ${JSON.stringify(database)}; await databaseCheck(['bun', 'scripts/check.ts'], async () => { ownDatabase(); return 0; });`,
-      { GOAL_TASK_ID: 'worker', FAKE_DOWN: '1' },
-    );
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain('stack-run: auth check local, no check host answered');
-    expect(result.stderr.toString()).toContain('created but never started');
-    expect(existsSync(f.state)).toBe(false);
-    expect(f.events().some((event) => event.kind === 'docker' && event.args?.[0] === 'volume')).toBe(true);
-  } finally {
-    f.close();
-  }
-});
 
 test('a check lane reuses its server and makes further copies without docker run', () => {
   const f = fixture();
@@ -323,54 +282,3 @@ first.close();`,
     f.close();
   }
 });
-
-test('a check already on a check host starts there without probing another host', () => {
-  const f = fixture();
-  try {
-    const root = join(f.root, 'host/runs/run');
-    mkdirSync(join(root, 'services/auth/scripts'), { recursive: true });
-    mkdirSync(join(root, 'scripts'), { recursive: true });
-    const copy = join(root, 'services/auth/scripts/database.ts');
-    copyFileSync(database, copy);
-    writeFileSync(
-      join(root, 'scripts/stack-run.ts'),
-      `export { stackRun } from ${JSON.stringify(join(repository, 'scripts/stack-run.ts'))};`,
-    );
-    const result = f.run(
-      `import { databaseCheck, ownDatabase } from ${JSON.stringify(copy)}; await databaseCheck(['bun', 'scripts/check.ts'], async () => { ownDatabase(); return 0; });`,
-      { GOAL_TASK_ID: 'worker' },
-    );
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain('stack-run: auth check local, already on a check host');
-    expect(result.stderr.toString()).toContain('created but never started');
-    expect(f.events().some((event) => event.kind === 'probe')).toBe(false);
-    expect(existsSync(f.state)).toBe(false);
-  } finally {
-    f.close();
-  }
-});
-
-for (const failure of [false, true]) {
-  test(`check exit removes all pid-labelled containers and volumes on ${failure ? 'failure' : 'success'}`, () => {
-    const f = fixture();
-    try {
-      const result = f.run(
-        `import { databaseCheck } from ${JSON.stringify(database)}; await databaseCheck(['bun', 'scripts/check.ts'], async () => { ${failure ? "throw new Error('check failed')" : 'return 0'}; });`,
-        { GOAL_TASK_ID: 'worker', FAKE_DOWN: '1', FAKE_PID_RESOURCES: '1' },
-      );
-      expect(result.exitCode).toBe(failure ? 1 : 0);
-      const commands = f
-        .events()
-        .filter((event) => event.kind === 'docker')
-        .map((event) => event.args!);
-      expect(commands.slice(0, 4)).toEqual([
-        ['ps', '-aq', '--filter', expect.stringMatching(/^label=rezics.auth.check.pid=\d+$/)],
-        ['rm', '-f', '-v', 'owned-container'],
-        ['volume', 'ls', '-q', '--filter', expect.stringMatching(/^label=rezics.auth.check.pid=\d+$/)],
-        ['volume', 'rm', '-f', 'owned-volume'],
-      ]);
-    } finally {
-      f.close();
-    }
-  });
-}

@@ -144,14 +144,17 @@ compares the normalized schema dump, checks the schema against the installed
 Better Auth migration API, runs strict root TypeScript, root lint/format tools
 and the frozen Bun tests. Containers use `rezics.auth.check.pid` labels and disk-backed volumes;
 normal exit and SIGINT/SIGTERM remove them, and later checks remove stale fixtures.
-Auth test databases run through `scripts/stack-run.ts` on a check host when one answers (otherwise locally with a stderr notice), reuse the check lane's container, and remove leftover containers on failure.
+Auth test databases run through `scripts/stack-run.ts` on a performance-approved check host.
+Workers do not start a second local PostgreSQL container when no host answers; that placement is unavailable.
+An admitted check reuses the lane's labelled fixture and removes leftover owned containers on failure.
 Docker is required; a missing database URL never skips tests. Direct database tests must use
 `bun run --cwd services/auth check <file>` so the whole test can be placed.
 `AUTH_TEST_DATABASE_URL` is reserved for the check's fixture, never a development database.
 `testDatabase` consumes that URL and `AUTH_CHECK_CONTAINER` at module import, including bun-test workers whose
 parent pid is not the check; it does not start another labelled PostgreSQL container. A spawnSync timeout names
-the exact owned `docker` argv, including `rezics.auth.check.pid` and nonce labels. The check's `ownDatabase`
-launch waits until `pg_isready` on that same owned identity before migrate.
+the exact owned `docker` argv, including `rezics.auth.check.pid` and nonce labels. Fixture `docker run -d` uses a
+ten-minute allocation budget, distinct from the 120-second default for other commands. The check's `ownDatabase`
+launch then waits until `pg_isready` on that same owned identity before migrate.
 
 Create an Auth-only database and apply migrations before starting an application:
 
@@ -2489,9 +2492,11 @@ through `bun run --cwd services/auth check <file>`. `testDatabase` consumes the
 check lane's `AUTH_TEST_DATABASE_URL` and labelled fixture; it does not start
 another PostgreSQL container at module import. A spawnSync timeout names the
 exact owned `docker` argv, including `rezics.auth.check.pid` and nonce labels.
-Keep those causal assertions unchanged; a live session remains usable after
-expired protocol history is retired. The seeded API and page walk supplies
-separate consumer acceptance.
+Fixture allocation uses a ten-minute `docker run -d` budget; readiness probes stay
+short. Keep those causal assertions unchanged; a live session remains usable after
+expired protocol history is retired. Native API and Auth-app page sign-in (phone
+and desktop, denied-then-repaired password, keyboard/focus, locale) pin that
+session after the drain. The seeded Web walk supplies the same cookie contract.
 
 ### Erasure cursor deployment
 

@@ -27,7 +27,9 @@ protocol retention (`services/auth/test/website-protocol-retention.test.ts`) use
 4,096 independently grown workflow and request histories, and at 1/8/64 for protocol kinds. They run through
 `bun run --cwd services/auth check <file>` so `testDatabase` consumes the check lane's `AUTH_TEST_DATABASE_URL`.
 Zero-eligible and repeated-empty batches keep constant rows/statements and logarithmic blocks. A live signed-in
-session remains readable after expired protocol rows retire.
+session remains readable after expired protocol rows retire. Decision: pin that session in those two native suites
+plus one Auth-app page sign-in after the drain; do not add a second growth suite. Fixture `docker run -d` uses a
+ten-minute allocation budget so a busy check host can finish the labelled container.
 
 A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
 shared blocks and statements, never time. An optional `byteBounds` can also bound `requestBytes` and/or `responseBytes`

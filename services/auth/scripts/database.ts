@@ -8,6 +8,8 @@ export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad47
 
 export const TEMPLATE_DATABASE = 'rezics_auth_test';
 export const DEFAULT_RUN_TIMEOUT = 120_000;
+/** Fixture `docker run -d` may pull or wait on a busy daemon; keep other commands at DEFAULT_RUN_TIMEOUT. */
+export const FIXTURE_LAUNCH_TIMEOUT = 600_000;
 
 type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
 
@@ -94,7 +96,12 @@ export function run(
       ...args.slice(1),
     ];
   }
-  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout });
+  const result = spawnSync(program, args, {
+    cwd: directory,
+    env,
+    encoding: 'utf8',
+    timeout: fixture && timeout === DEFAULT_RUN_TIMEOUT ? FIXTURE_LAUNCH_TIMEOUT : timeout,
+  });
   if (nonce && (result.error || result.status !== 0)) {
     // docker run can create a container without starting it or returning its id.
     // Reap it synchronously before propagating either a timeout or a non-zero exit.
@@ -263,23 +270,32 @@ export function testDatabase(): TestDatabase {
 
 function waitUntilReady(container: string): void {
   const deadline = Date.now() + READY_TIMEOUT;
+  const format = `{{.State.Status}} {{.Id}} {{index .Config.Labels "${OWNER_LABEL}"}} {{index .Config.Labels "${NONCE_LABEL}"}}`;
   let last = '';
   while (Date.now() < deadline) {
-    const inspect = run('docker', [
-      'inspect',
-      '-f',
-      `{{.State.Status}} {{.Id}} {{index .Config.Labels "${OWNER_LABEL}"}} {{index .Config.Labels "${NONCE_LABEL}"}}`,
-      container,
-    ]);
-    last = inspect;
-    const [status] = inspect.split(' ');
-    if (status === 'running') {
-      const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE], {
-        cwd: directory,
-        encoding: 'utf8',
-        timeout: 5_000,
-      });
-      if (!ready.error && ready.status === 0) return;
+    const inspect = spawnSync('docker', ['inspect', '-f', format, container], {
+      cwd: directory,
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    if (inspect.error?.code === 'ETIMEDOUT') {
+      last = `inspect timeout ${container}`;
+    } else if (inspect.error) {
+      spawnError('docker', ['inspect', '-f', format, container], inspect.error);
+    } else {
+      last = (inspect.stdout ?? inspect.stderr ?? '').trim();
+      const [status] = last.split(' ');
+      if (status === 'running') {
+        const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE], {
+          cwd: directory,
+          encoding: 'utf8',
+          timeout: 5_000,
+        });
+        if (!ready.error && ready.status === 0) return;
+        if (ready.error && ready.error.code !== 'ETIMEDOUT') {
+          spawnError('docker', ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE], ready.error);
+        }
+      }
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;

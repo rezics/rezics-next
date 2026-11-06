@@ -1,6 +1,10 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
+import { join, resolve } from 'node:path';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, WEBSITE_CLIENT_ID, type AccessAccount, type AuthService } from '../src/index.ts';
 import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
@@ -198,3 +202,166 @@ test('ordinary protocol retention leaves the signed-in Auth session readable', a
     viewer: { kind: 'signed-in', account_id: id, email: `${id}@example.test` },
   });
 }, 60000);
+
+function freePort(): Promise<number> {
+  return new Promise((done, fail) => {
+    const probe = createServer();
+    probe.once('error', fail);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => done(port));
+    });
+  });
+}
+
+test('Auth app sign-in survives ordinary protocol retention on phone and desktop', async () => {
+  const password = 'correct horse battery staple';
+  const pagesPort = await freePort();
+  const pagesOrigin = `http://127.0.0.1:${pagesPort}`;
+  const pageService = await createAuthService({
+    database: db.pool,
+    issuer: pagesOrigin,
+    secret: 'retention-only-secret-with-at-least-32-bytes',
+    audience: 'https://retention.api.test',
+    signing: { activeKid: 'retention-signing', privateKeys: [] },
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
+      async readAccount(id) {
+        return accounts.get(id) ?? null;
+      },
+      async authorizeProvisioning(accountId) {
+        if (!approvals.delete(accountId)) throw new Error('Missing trusted provisioning approval');
+        return { accountId };
+      },
+    }),
+  });
+  const adapter = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      return pageService.handler(new Request(`${pagesOrigin}${url.pathname}${url.search}`, request));
+    },
+  });
+  let child: ChildProcess | undefined;
+  const { chromium } = createRequire(resolve(import.meta.dir, '../../../apps/web/package.json'))('playwright');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    let output = '';
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(pagesPort), '--strictPort'], {
+      cwd: join(import.meta.dir, '../../../apps/auth'),
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, AUTH_ORIGIN: adapter.url.origin },
+    });
+    child.stdout?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000)));
+    child.stderr?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000)));
+    const deadline = Date.now() + 150_000;
+    for (;;) {
+      if (child.exitCode !== null) throw new Error(`Auth app exited: ${output}`);
+      try {
+        const response = await fetch(`${pagesOrigin}/login`, {
+          redirect: 'manual',
+          signal: AbortSignal.timeout(3_000),
+        });
+        if (response.status === 200) break;
+      } catch {}
+      if (Date.now() > deadline) throw new Error(`Auth app did not serve /login:\n${output}`);
+      await Bun.sleep(250);
+    }
+    for (const [index, viewport] of [
+      { width: 390, height: 844, locale: 'en' },
+      { width: 1280, height: 860, locale: 'ja' },
+    ].entries()) {
+      const id = `retention-page-member-${index}`;
+      const email = `${id}@example.test`;
+      const account: AccessAccount = {
+        accountId: id,
+        kind: 'actor',
+        state: 'pending',
+        authnEpoch: 1,
+        automated: false,
+      };
+      accounts.set(id, account);
+      approvals.add(id);
+      await pageService.internal.provisionPassword({ authorization: id, email, password });
+      account.state = 'active';
+      const context = await browser.newContext({
+        viewport,
+        locale: viewport.locale,
+        extraHTTPHeaders: { 'accept-language': viewport.locale },
+        reducedMotion: 'reduce',
+      });
+      const page = await context.newPage();
+      page.setDefaultTimeout(15_000);
+      try {
+        const opened = await page.goto(`${pagesOrigin}/login`, { waitUntil: 'domcontentloaded' });
+        expect(opened?.status()).toBe(200);
+        await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+        const address = page.getByLabel(/email|メール/i);
+        const secret = page.locator('input[name="password"]');
+        await address.waitFor({ state: 'visible' });
+        await address.click();
+        expect(await address.evaluate((element) => element === document.activeElement)).toBe(true);
+        await page.keyboard.type(email);
+        await page.keyboard.press('Tab');
+        expect(await secret.evaluate((element) => element === document.activeElement)).toBe(true);
+        await page.keyboard.type('wrong password');
+        await page.keyboard.press('Enter');
+        const alert = page.getByRole('alert');
+        await alert.waitFor({ state: 'visible' });
+        expect(page.url()).toContain('/login');
+        expect(await address.inputValue()).toBe(email);
+        expect(await secret.inputValue()).toBe('');
+        await secret.fill(password);
+        await Promise.all([
+          page.waitForResponse(
+            (response) => new URL(response.url()).pathname === '/signin' && response.status() === 200,
+          ),
+          secret.press('Enter'),
+        ]);
+        await page.waitForURL((url) => new URL(url).pathname === '/security');
+        expect((await context.cookies()).some((cookie: { name: string }) => cookie.name.includes('session'))).toBe(
+          true,
+        );
+        const tag = `page-${index}`;
+        await seed(`${tag}-due`, 1, batch, true);
+        await seed(`${tag}-live`, 1, 8, false);
+        expect(await pageService.internal.pruneExpiredProtocolState(batch)).toBe(kinds.length * batch);
+        expect(await counts(`${tag}-due`)).toEqual(Object.fromEntries(kinds.map((kind) => [kind, 0])));
+        expect(await counts(`${tag}-live`)).toEqual(Object.fromEntries(kinds.map((kind) => [kind, 8])));
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+        expect(new URL(page.url()).pathname).toBe('/security');
+        const readback = await pageService.handler(
+          new Request(`${pagesOrigin}/signin/page`, {
+            method: 'POST',
+            headers: {
+              origin: pagesOrigin,
+              'content-type': 'application/json',
+              cookie: (await context.cookies())
+                .map((cookie: { name: string; value: string }) => `${cookie.name}=${cookie.value}`)
+                .join('; '),
+            },
+            body: JSON.stringify({ query: '' }),
+          }),
+        );
+        expect(readback.status).toBe(200);
+        expect(await readback.json()).toMatchObject({
+          viewer: { kind: 'signed-in', account_id: id, email },
+        });
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+    adapter.stop(true);
+    if (child?.pid)
+      try {
+        process.kill(-child.pid, 'SIGTERM');
+      } catch {}
+  }
+}, 180000);
