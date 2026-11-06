@@ -1079,6 +1079,7 @@ Once per UTC day the manager host dispatches the research brief at
 reviews failure prevention, recorded catch counts, time and allowance cost for each step from dispatch through
 promotion, includes the prior day's flow report, and recommends one measured structural change. Unknown telemetry is
 reported as unknown rather than inferred.
+Decision: Daily audits use a half-open previous-UTC-day window for counts and costs, preserving the complete since-only flow export separately because its lifecycle and guard windows differ.
 
 ### Host-capacity admission
 
