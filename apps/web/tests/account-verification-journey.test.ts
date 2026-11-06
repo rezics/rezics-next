@@ -315,6 +315,8 @@ test('an applicant reads current status, keeps original operands through uncerta
 });
 
 test('signed-in safety destinations, admitted subject request, revisit, withdraw and return stay under one viewer', async () => {
+  let now = Date.parse('2026-10-31T00:00:00Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
   const issuer = 'https://auth.example.test';
   const pendingAdvice = [{ action: 'account:update', operations: ['account.withdraw_verification'] }];
   const requestAdvice = [{ action: 'account:update', operations: ['account.request_verification'] }];
@@ -423,6 +425,7 @@ test('signed-in safety destinations, admitted subject request, revisit, withdraw
     draft.statement = 'Later draft';
     await controller.retry();
     expect(sent).toHaveLength(1);
+    now += 5000;
     await controller.reload();
     expect(controller.snapshot()).toMatchObject({
       phase: 'review',
@@ -443,6 +446,7 @@ test('signed-in safety destinations, admitted subject request, revisit, withdraw
     expect(controller.snapshot()).toBe(retired);
     expect(calls.filter((call) => call.endsWith('/verification') || call.includes('Verification')).length).toBe(6);
   } finally {
+    clock.mockRestore();
     controller.deactivate();
   }
 });
