@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { decodeJwt } from 'jose';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import type { MediaBoundaryDriver } from '../../../../specs/imports-media-boundary-driver.ts';
@@ -33,66 +35,104 @@ import type { Envelope } from '../../src/events/log.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
-// SQL compilation depends on the unchanged migrated schema, not on a fixture's
-// accounts or rows. Retain only the real compiler's output between isolated
-// application processes; each child owns and removes its private loader files.
-const compiledSql = new Map<string, { source: string; code: string }>();
-async function sqlLoader() {
-  // A host has already compiled the same migrated SQL before it starts its
-  // worker. Carry only that compiler output into the child's private loader.
-  if (process.env.MEDIA_SQL_CACHE) {
-    const entries = (await readFile(process.env.MEDIA_SQL_CACHE, 'utf8'))
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line)) as [string, { source: string; code: string }][];
-    for (const [file, value] of entries) compiledSql.set(file, value);
-  }
+// Isolated children must not load bun test preloads. They still inherit the
+// check's REYLO_CONFIG so SQL is served from the shared analysis, never
+// re-described against the throwaway copy (kernel README Check).
+async function mediaChildConfig() {
   const directory = await mkdtemp(resolve(import.meta.dir, '../../../../.temp/media-sql-'));
-  const cache = `${directory}/compiled.jsonl`;
-  const loader = `${directory}/loader.ts`;
   const config = `${directory}/bunfig.toml`;
   try {
-    await writeFile(config, '');
-    await writeFile(cache, [...compiledSql].map((entry) => JSON.stringify(entry) + '\n').join(''));
     await writeFile(
-      loader,
-      `import { appendFileSync, readFileSync } from 'node:fs';
-import compiler from ${JSON.stringify(import.meta.resolve('reylo/jest'))};
-const path = ${JSON.stringify(cache)};
-const compiled = new Map(readFileSync(path, 'utf8').split('\\n').filter(Boolean).map((line) => JSON.parse(line)));
-Bun.plugin({ name: 'native-reylo-cache', setup(build) {
-  build.onLoad({ filter: /\\.sql$/ }, ({ path: file }) => {
-    const source = readFileSync(file, 'utf8');
-    const previous = compiled.get(file);
-    if (previous?.source === source) return { loader: 'js', contents: previous.code };
-    const { code } = compiler.process(source, file, { supportsStaticESM: true, configString: '' });
-    compiled.set(file, { source, code });
-    // Persist each new compilation once, without rewriting the growing cache.
-    appendFileSync(path, JSON.stringify([file, { source, code }]) + '\\n');
-    return { loader: 'js', contents: code };
-  });
-} });
-`,
+      config,
+      `preload = [${JSON.stringify(fileURLToPath(import.meta.resolve('reylo/register')))}]\n`,
     );
     return {
-      loader,
       config,
-      cache,
       async close() {
-        try {
-          const entries = (await readFile(cache, 'utf8'))
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => JSON.parse(line)) as [string, { source: string; code: string }][];
-          for (const [file, value] of entries) compiledSql.set(file, value);
-        } finally {
-          await rm(directory, { recursive: true, force: true });
-        }
+        await rm(directory, { recursive: true, force: true });
       },
     };
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;
+  }
+}
+
+function mediaStart(stage: string) {
+  process.stderr.write(`MEDIA_START ${stage}\n`);
+}
+
+async function reapChild(spawned: ReturnType<typeof Bun.spawn>, graceMs = 2_000) {
+  if (spawned.exitCode !== null || spawned.signalCode !== null) return;
+  spawned.kill();
+  const exited = await Promise.race([
+    spawned.exited.then(() => true).catch(() => true),
+    Bun.sleep(graceMs).then(() => false),
+  ]);
+  if (!exited && spawned.exitCode === null && spawned.signalCode === null) {
+    spawned.kill('SIGKILL');
+    await Promise.race([spawned.exited.catch(() => {}), Bun.sleep(1_000)]);
+  }
+}
+
+async function startupFailure(
+  spawned: ReturnType<typeof Bun.spawn>,
+  reason: string,
+  stdout: string,
+  collectedErrors: Promise<string>,
+  stderrSnapshot = '',
+) {
+  await reapChild(spawned);
+  const stderr = await Promise.race([collectedErrors, Bun.sleep(1_000).then(() => stderrSnapshot)]);
+  return new Error(
+    [
+      reason,
+      `pid=${spawned.pid} exit=${spawned.exitCode ?? 'none'} signal=${spawned.signalCode ?? 'none'}`,
+      'awaited MEDIA_READY http://127.0.0.1:<port> on stdout after workerHost/applicationHost and Bun.serve',
+      `stdout:\n${stdout || '(empty)'}`,
+      `stderr:\n${stderr || '(empty)'}`,
+    ].join('\n'),
+  );
+}
+
+/** Check files launch isolated workers in parallel; only one child compiles and
+ * launches DBOS at a time so the fixture ready deadline measures that child. */
+const MEDIA_LAUNCH_LOCK = resolve(import.meta.dir, '../../../../.temp/media-boundary-launch.lock');
+async function withExclusiveMediaLaunch<T>(action: () => Promise<T>): Promise<T> {
+  mkdirSync(resolve(MEDIA_LAUNCH_LOCK, '..'), { recursive: true });
+  const pidFile = resolve(MEDIA_LAUNCH_LOCK, 'pid');
+  const waitingSince = Date.now();
+  for (;;) {
+    try {
+      mkdirSync(MEDIA_LAUNCH_LOCK);
+      writeFileSync(pidFile, String(process.pid));
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      try {
+        const pid = Number(readFileSync(pidFile, 'utf8'));
+        if (Number.isInteger(pid) && pid > 0) {
+          try {
+            process.kill(pid, 0);
+          } catch {
+            rmSync(MEDIA_LAUNCH_LOCK, { recursive: true, force: true });
+            continue;
+          }
+        } else {
+          rmSync(MEDIA_LAUNCH_LOCK, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        // The holder is still writing its pid, or the directory is empty.
+      }
+      if (Date.now() - waitingSince > 600_000) throw new Error('Media launch lock wait exceeded');
+      await Bun.sleep(50);
+    }
+  }
+  try {
+    return await action();
+  } finally {
+    rmSync(MEDIA_LAUNCH_LOCK, { recursive: true, force: true });
   }
 }
 
@@ -119,72 +159,84 @@ function unwire(value: any): any {
 
 /** One OS process per application runtime, with an owned graceful teardown. */
 export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record<string, string | undefined> = {}) {
-  const sql = await sqlLoader();
-  const child = await (async () => {
-    try {
-      return Bun.spawn(
-        [process.execPath, `--config=${sql.config}`, '--preload', sql.loader, import.meta.path, `--media-${mode}`],
-        {
-          cwd: process.cwd(),
-          env: { ...process.env, ...env, MEDIA_SQL_CACHE: sql.cache },
-          stdin: 'pipe',
-          stdout: 'pipe',
-          stderr: 'pipe',
-        },
-      );
-    } catch (error) {
-      await sql.close();
-      throw error;
-    }
-  })();
-  // The parent owns process lifetime through its RPC streams. Detaching the
-  // process handle lets Bun close stdin on test-file exit, which the fixture
-  // host uses to tear down its identity and worker databases.
-  child.unref();
-  let output = '';
-  let errorOutput = '';
-  const errors = (async () => {
-    for await (const chunk of child.stderr) {
-      const text = new TextDecoder().decode(chunk);
-      errorOutput = (errorOutput + text).slice(-8192);
-      if (process.env.MEDIA_DEBUG) process.stderr.write(text);
-    }
-    return errorOutput;
-  })();
-  const ready = Promise.withResolvers<string>();
-  const reading = (async () => {
-    for await (const chunk of child.stdout) {
-      output = (output + new TextDecoder().decode(chunk)).slice(-8192);
-      const address = output.match(/^MEDIA_READY (http:\/\/127\.0\.0\.1:\d+)$/m)?.[1];
-      if (address) ready.resolve(address);
-    }
-    ready.reject(new Error(`Media ${mode} exited before startup: ${output}\n${await errors}`));
-  })();
+  const sql = await mediaChildConfig();
+  let child: ReturnType<typeof Bun.spawn>;
   let origin: string;
-  let startupTimer: ReturnType<typeof setTimeout> | undefined;
+  let reading: Promise<void>;
+  let errors: Promise<string>;
   try {
-    origin = await Promise.race([
-      ready.promise,
-      new Promise<never>((_, reject) => {
-        startupTimer = setTimeout(
-          () => reject(new Error(`Media ${mode} startup exceeded its fixture deadline\n${errorOutput}\n${output}`)),
-          110_000,
+    ({ child, origin, reading, errors } = await withExclusiveMediaLaunch(async () => {
+      const spawned = Bun.spawn([process.execPath, `--config=${sql.config}`, import.meta.path, `--media-${mode}`], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          ...env,
+          ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
+        },
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      // The parent owns process lifetime through its RPC streams. Detaching the
+      // process handle lets Bun close stdin on test-file exit, which the fixture
+      // host uses to tear down its identity and worker databases.
+      spawned.unref();
+      let output = '';
+      let errorOutput = '';
+      const collectedErrors = (async () => {
+        for await (const chunk of spawned.stderr) {
+          const text = new TextDecoder().decode(chunk);
+          errorOutput = (errorOutput + text).slice(-8192);
+          if (process.env.MEDIA_DEBUG) process.stderr.write(text);
+        }
+        return errorOutput;
+      })();
+      const ready = Promise.withResolvers<string>();
+      const collectedOutput = (async () => {
+        for await (const chunk of spawned.stdout) {
+          output = (output + new TextDecoder().decode(chunk)).slice(-8192);
+          const address = output.match(/^MEDIA_READY (http:\/\/127\.0\.0\.1:\d+)$/m)?.[1];
+          if (address) ready.resolve(address);
+        }
+        ready.reject(
+          new Error(
+            [
+              `Media ${mode} exited before startup`,
+              `pid=${spawned.pid} exit=${spawned.exitCode ?? 'none'} signal=${spawned.signalCode ?? 'none'}`,
+              'awaited MEDIA_READY http://127.0.0.1:<port> on stdout after workerHost/applicationHost and Bun.serve',
+              `stdout:\n${output || '(empty)'}`,
+              `stderr:\n${(await collectedErrors) || '(empty)'}`,
+            ].join('\n'),
+          ),
         );
-      }),
-    ]);
+      })();
+      let startupTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const readyOrigin = await Promise.race([
+          ready.promise,
+          new Promise<never>((_, reject) => {
+            startupTimer = setTimeout(() => {
+              void startupFailure(
+                spawned,
+                `Media ${mode} startup exceeded its fixture deadline`,
+                output,
+                collectedErrors,
+                errorOutput,
+              ).then(reject, reject);
+            }, 110_000);
+          }),
+        ]);
+        return { child: spawned, origin: readyOrigin, reading: collectedOutput, errors: collectedErrors };
+      } catch (error) {
+        await reapChild(spawned);
+        throw error;
+      } finally {
+        clearTimeout(startupTimer);
+      }
+    }));
   } catch (error) {
-    child.kill();
-    const timer = setTimeout(() => child.kill('SIGKILL'), 10_000);
-    try {
-      await child.exited;
-      await reading;
-    } finally {
-      clearTimeout(timer);
-      await sql.close();
-    }
+    await sql.close();
     throw error;
-  } finally {
-    clearTimeout(startupTimer);
   }
   const call = async <T = unknown>(method: string, input?: unknown, signal?: AbortSignal): Promise<T> => {
     const response = await fetch(`${origin}/rpc`, {
@@ -471,6 +523,7 @@ async function mediaGrowthSeedStep(
 }
 
 async function applicationHost(): Promise<RpcHost> {
+  mediaStart('application-modules');
   const { COMMON_ACTIONS, IMPORT_ACTIONS } = await import('../../../../specs/imports-identity-driver.ts');
   // The worker process loads the registered application modules, but has no
   // application HTTP/identity host to install. Keep those host-only dependencies
@@ -826,9 +879,9 @@ async function mediaGrowth(
 }
 
 async function workerHost(): Promise<RpcHost> {
-  console.error('MEDIA_STARTUP loading worker modules');
+  mediaStart('load-work-modules');
   const { KERNEL_WORK_MODULES } = await import('../support/default-work-modules.ts');
-  console.error('MEDIA_STARTUP opening worker database');
+  mediaStart('open-database');
   const database = await openGrowthDatabase();
   const observer = await observeMediaPool(database.pool);
   const client = await createWorkClient(database.url, database.pool);
@@ -937,7 +990,7 @@ async function workerHost(): Promise<RpcHost> {
       'OPENSEARCH_URL',
     ])
       delete env[name];
-    console.error('MEDIA_STARTUP composing worker');
+    mediaStart('compose-work');
     work = await composeWork(KERNEL_WORK_MODULES, {
       databaseUrl: database.url,
       pool: database.pool,
@@ -949,14 +1002,15 @@ async function workerHost(): Promise<RpcHost> {
     DBOS.registerWorkflow = registerWorkflow;
     // Persist the SDK's real polling configuration before launch discovers its
     // queues and schedules their first polls in this isolated runtime.
+    mediaStart('queues');
     const effectsQueue = await client.retrieveQueue('effects');
     const importQueue = await client.retrieveQueue('import');
     if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
     await effectsQueue.setMinPollingIntervalMs(1);
     await importQueue.setMinPollingIntervalMs(1);
-    console.error('MEDIA_STARTUP launching worker');
+    mediaStart('launch-work');
     await work.launch();
-    console.error('MEDIA_STARTUP worker launched');
+    mediaStart('worker-launched');
     const executor = DBOSExecutor.globalInstance;
     if (!executor) throw new Error('Missing work executor');
     // The timeout sweep issues a statement on a one-second timer. Leaving it on
@@ -1093,24 +1147,34 @@ async function workerHost(): Promise<RpcHost> {
 }
 
 if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) {
+  const mode = process.argv.includes('--media-worker') ? 'worker' : 'host';
+  mediaStart(mode);
   let host: RpcHost | undefined;
-  const initialized = Promise.withResolvers<RpcHost | undefined>();
-  const parentClosed = async () => {
-    const owner = await initialized.promise;
-    await owner?.close();
-    process.exit(0);
-  };
-  void new Response(Bun.stdin.stream()).text().then(parentClosed);
+  let tearingDown: Promise<void> | undefined;
+  const ownedTeardown = (code: number) =>
+    (tearingDown ??= (async () => {
+      const timer = setTimeout(() => process.exit(code), 2_000);
+      try {
+        await host?.close();
+      } catch {
+        // Owned teardown still exits when close is unfinished or refused.
+      } finally {
+        clearTimeout(timer);
+        process.exit(code);
+      }
+    })());
+  void new Response(Bun.stdin.stream()).text().then(() => ownedTeardown(0));
   process.once('SIGTERM', () => {
-    void parentClosed();
+    void ownedTeardown(0);
   });
   process.once('SIGINT', () => {
-    void parentClosed();
+    void ownedTeardown(0);
   });
   try {
-    host = process.argv.includes('--media-worker') ? await workerHost() : await applicationHost();
-    initialized.resolve(host);
+    mediaStart(mode === 'worker' ? 'workerHost' : 'applicationHost');
+    host = mode === 'worker' ? await workerHost() : await applicationHost();
     const owner = host;
+    mediaStart('listen');
     const server = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
@@ -1122,7 +1186,7 @@ if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) 
           if (method === 'close')
             setTimeout(async () => {
               await server.stop(true);
-              process.exit(0);
+              void ownedTeardown(0);
             }, 25);
           return Response.json(wire(result ?? null));
         } catch (error) {
@@ -1130,11 +1194,10 @@ if (import.meta.main && process.argv.some((arg) => arg.startsWith('--media-'))) 
         }
       },
     });
-    console.log(`MEDIA_READY ${server.url.origin}`);
+    mediaStart(`ready ${server.url.origin}`);
+    process.stdout.write(`MEDIA_READY ${server.url.origin}\n`);
   } catch (error) {
-    initialized.resolve(host);
     console.error(error);
-    await host?.close();
-    process.exitCode = 1;
+    await ownedTeardown(1);
   }
 }

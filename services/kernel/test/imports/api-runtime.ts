@@ -249,10 +249,6 @@ export async function openApiRuntime(
               }),
             }),
           );
-          // The isolated kernel worker and Auth provisioning are independent.
-          // Keep their real startup work inside setup, but let it overlap.
-          workerStart = time('media worker start', () => boundary!.start());
-          void workerStart.catch(() => {});
         },
         async afterStage(stage) {
           recordPhase(`identity: ${stage}`, stageStart);
@@ -261,6 +257,11 @@ export async function openApiRuntime(
       }),
     );
     ownedIdentity = identity;
+    // Auth already quiesced its process-wide executor. Launch the isolated
+    // worker against the settled application database, overlapping only the
+    // remaining credential and kernel composition work.
+    workerStart = time('media worker start', () => boundary!.start());
+    void workerStart.catch(() => {});
     // Request the registered client's complete import scopes through the native account-key flow.
     let bulk = await time('importer account-key sign-in', () =>
       identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),

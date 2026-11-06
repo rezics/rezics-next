@@ -2,6 +2,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
 import { Importer } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
@@ -66,7 +67,7 @@ test('source-only Bangumi change publishes fresh digest without inventing a fiel
     if (!after) throw new Error('Missing refreshed baseline');
     expect(after.digest).not.toBe(before.digest);
     expect(after.recordRevision).toBe('unversioned');
-    expect(after.converter_revision).toBe('bangumi@15');
+    expect(after.converter_revision).toBe(bangumiRevision);
     expect(importer.session.bindings.claim(owner)).toEqual(claim);
     const fresh = sent
       .slice(offset)

@@ -7,6 +7,7 @@ import {
   type AccountWorkflowOptions,
   type AuthService,
 } from '@rezics/auth';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
@@ -346,7 +347,12 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     };
     // Built-in role definitions already come from createAccess. Expose their exact
     // resolved data for observation, without attempting to redefine built-ins.
-    const access = createAccess({ actions, auth: accessConfig.auth! });
+    const access = createAccess({ actions, auth: accessConfig.auth!, clock });
+    const accountManagementReads = createAccountManagementReadAccess({
+      pool: database.pool,
+      access,
+      clock,
+    });
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool: database.pool,
@@ -373,10 +379,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const context = () => ({ pool: database.pool, deadline: Date.now() + 10000 });
       return {
         context,
-        readOperatorTransferState: createAccountManagementReadAccess({
-          pool: database.pool,
-          access,
-        }).readOperatorTransferState,
+        readOperatorTransferState: accountManagementReads.readOperatorTransferState,
         approve: (token, input, ctx) => approval.approve(token, input as never, ctx as never),
         resolveForCaller: (token, reference, operation, ctx) =>
           approval.resolveForCaller(token, reference, operation as never, ctx as never),
@@ -405,6 +408,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const registrationStagingKey = new Uint8Array(randomBytes(32));
     const releaseIdentityAuth = await beginIdentityAuthTurn();
     try {
+      // Sequential identities share one SDK executor. Drop a previous host's
+      // leftover launch so this Auth database can register and run workflows.
+      await DBOS.shutdown({ deregister: true }).catch(() => {});
       host = await createAuthHost({
         database: authPool,
         systemDatabasePool: authPool,
@@ -415,6 +421,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         trustedAccess: bindings.trustedAccess,
         access: bindings.workflowPorts,
         accountOperations,
+        accountManagementReads,
         stagingKey: registrationStagingKey,
         executorId: `identity-${randomUUID()}`,
         maintenanceSchedule: '0 0 1 1 *',
