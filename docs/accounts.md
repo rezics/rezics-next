@@ -57,6 +57,9 @@ After forwarding expires, [reservation SQL][handle-reserve] keeps the former spe
 Another account cannot claim it through expiry or cleanup. The owner may reclaim it through the native handle
 transition. Privacy unlinking and dispute/reassignment procedures in the research remain proposals.
 
+Rename approval responses retain the sealed ASCII reference format at the HTTP boundary.
+An arbitrary unsealed reference cannot dispatch execution, even with a canonical future expiry.
+
 ### Editable profile
 
 `GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) reads editable source by immutable ID,
@@ -170,10 +173,11 @@ handoff. Reuse eight-locale labels; retain original phone/recovery and Settings 
 Settings' closed current-human viewer/navigation observations admit detail only through current membership or
 management of an active, unfenced responsibility target. Concealed targets have no destination; reconciling holds
 are coordination evidence. Optional preparation failure preserves independently readable inventory with unavailable
-navigation. Detail `authActions` retains authority. Content's serial publisher derives the generated envelope
-and installed callable/root from mounted Kernel; no handwritten mirrors or overrides. Until installation, directory
-identities stay unlinked. Then finish independent replacement, cursor-free restart and admitted detail/back navigation;
-transport/rendering/growth acceptance remains deferred. First duplicate wins; Next replaces its selected feed;
+navigation. Detail `authActions` retains authority. A selected URL supplies only an account identity: the existing
+session-bound native management GET establishes current admission before detail or actions are shown. Directory
+links consume native `navigation`, never membership role or a responsibility hold as authority. The existing Web
+HTTP response schemas accept the additive viewer/navigation fields until Content's serial client publication;
+no handwritten client declaration or authority override is introduced. First duplicate wins; Next replaces its selected feed;
 failed cursor-free restart retries exactly. Settings inventory exposes Next, Previous and First for each feed;
 its mounted reader retains only eight admitted predecessors and the current coordinate. Failed movement leaves
 accepted rows and coordinates intact; full inventory refresh resets coordinates only on admission and fences older
@@ -189,9 +193,8 @@ An automated actor has exactly one operator: a human actor without an operator, 
 cannot operate another account or join an organization; an operator chain cannot grow recursively. Public
 identity, account pages and attribution must mark automation and identify its operator, for example
 “Automated · operated by @handle”. The [operator commands][operator], [membership inverse][membership-inverse]
-and [public projection][account-data] carry the relation and public fields. The website's
-[profile reader][web-profile-reader] currently drops `automated` and `operatorId`, and its
-[profile header][web-profile-header] does not render that marking; this is a presentation gap.
+and [public projection][account-data] carry the relation and public fields. The website preserves the native
+automation marker when an operator label cannot be hydrated; only a readable operator address becomes a link.
 
 The operator creates the account and controls whether it has independent credentials. Opening sessions,
 changing credentials and managing it require current management authority: the human operator holds that
@@ -220,10 +223,23 @@ actor. The platform importer is an ordinary operated actor and follows the same 
 paths: [Auth session issuance][auth-service] and the [importer credential client][importer-credentials] provide
 no service bypass.
 
+Decision: compose the bounded native transfer acknowledgement with retained exact-attempt recovery. Approval
+expiry uses the native canonical timestamp; execution acknowledges the exact subject UUID. Protocol fixtures
+retain immutable snapshots through the persistence callback, separately from native and browser acceptance.
+Native public-disclosure fixtures populate software private profile fields through the operator's management
+session; the software session does not inherit that authority. Public absence assertions remain unchanged.
+Explicit transfer step-up starts a fresh read lifetime after retiring the former view; successful sign-in restores
+readiness only. The retained command still requires a separate review and confirmation before exact retry.
+Unknown-result handoff inputs stay concealed until an explicit current recovery review; review never sends a command.
+
 Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source
 relation nor its approval or execution; those require the original native source and exact-intent commands.
 
 ## 3. Credentials, sessions and tokens
+
+After an operator opening, continuing to Web starts its ordinary sign-in renewal at the configured website origin;
+the website receives the newly selected actor through its usual Auth exchange. Navigation carries no management
+command or approval.
 
 Credentials belong to actors, never organizations. A session can be established only by the actor's own
 credential or an approved operator opening; the session owner and token subject remain the operated actor.
@@ -834,3 +850,4 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-boundary]: ../services/auth/README.md#application-boundary-and-configuration
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
+

@@ -1,6 +1,16 @@
-import { isOperatorPageVersion } from '@rezics/auth-contract';
-import { authPost, type AuthPostResult } from './api';
+import {
+  isOperatorPageVersion,
+  TRANSFER_APPROVAL_MAX_RESPONSE_BYTES,
+  TRANSFER_MAX_ERROR_BYTES,
+  TRANSFER_EXECUTION_MAX_RESPONSE_BYTES,
+  parseAccountOperationApproval,
+  parseTransferOperationRefusal,
+  parseTransferExecution,
+} from '@rezics/auth-contract';
+import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
 import { submitSignIn } from './sign-in-transport';
+import type { AuthPostResult } from './api';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
 import { managementOperationProfile } from '@rezics/auth-contract';
 import {
@@ -116,8 +126,8 @@ function failure(result: Exclude<AuthPostResult, { ok: true }>, mutation = false
               : 'unavailable',
   };
 }
-async function boundSession(accountId: string): Promise<TransferFailure | null> {
-  const session = await loadAccountSession();
+async function boundSession(accountId: string, signal?: AbortSignal): Promise<TransferFailure | null> {
+  const session = await loadAccountSession(signal);
   if (session.kind === 'failure') return { kind: 'failure', reason: 'unavailable' };
   if (session.kind !== 'ready' || session.accountId !== accountId)
     return { kind: 'failure', reason: 'account-changed' };
@@ -168,8 +178,9 @@ export function isTransferFailure(value: OperatorTransferPageResponse | Transfer
 export async function reviewDestinationTransfer(
   request: TransferRequest,
   accountId: string,
+  signal?: AbortSignal,
 ): Promise<TransferFailure | null> {
-  const page = await readOperatorTransferPage({ kind: 'destination', request }, accountId);
+  const page = await readOperatorTransferPage({ kind: 'destination', request }, accountId, signal);
   if (isTransferFailure(page)) return page;
   const denied = pageFailure(page);
   if (denied) return denied;
@@ -184,12 +195,15 @@ export async function reviewDestinationTransfer(
     return { kind: 'failure', reason: 'denied' };
   return { kind: 'failure', reason: page.review.kind === 'missing' ? 'invalid' : 'unavailable' };
 }
-export async function refreshTransferAdvice(attempt: TransferAttempt): Promise<TransferFailure | null> {
+export async function refreshTransferAdvice(
+  attempt: TransferAttempt,
+  signal?: AbortSignal,
+): Promise<TransferFailure | null> {
   const input: OperatorTransferPageInput =
     attempt.side === 'source'
       ? { kind: 'source', subjectAccountId: attempt.request.previous.subjectAccountId }
       : { kind: 'destination', request: attempt.request };
-  const page = await readOperatorTransferPage(input, attempt.accountId);
+  const page = await readOperatorTransferPage(input, attempt.accountId, signal);
   if (isTransferFailure(page)) return page;
   const denied = pageFailure(page);
   if (denied) return denied;
@@ -214,12 +228,13 @@ export async function refreshTransferAdvice(attempt: TransferAttempt): Promise<T
 export async function readOperatorTransferPage(
   input: OperatorTransferPageInput,
   accountId?: string,
+  signal?: AbortSignal,
 ): Promise<OperatorTransferPageResponse | TransferFailure> {
   if (accountId) {
-    const denied = await boundSession(accountId);
+    const denied = await boundSession(accountId, signal);
     if (denied) return denied;
   }
-  const result = await requestOperatorTransferPage(input);
+  const result = await requestOperatorTransferPage(input, signal);
   if (!result.ok) return failure(result);
   if (!pageResponse(result.body)) return { kind: 'failure', reason: 'unavailable' };
   if (
@@ -237,8 +252,12 @@ export async function readOperatorTransferPage(
     return { kind: 'failure', reason: 'unavailable' };
   return result.body;
 }
-export async function readOperatorRelation(subjectAccountId: string, accountId: string): Promise<RelationResult> {
-  const result = await readOperatorTransferPage({ kind: 'source', subjectAccountId }, accountId);
+export async function readOperatorRelation(
+  subjectAccountId: string,
+  accountId: string,
+  signal?: AbortSignal,
+): Promise<RelationResult> {
+  const result = await readOperatorTransferPage({ kind: 'source', subjectAccountId }, accountId, signal);
   if (isTransferFailure(result)) return result;
   const denied = pageFailure(result);
   if (denied) return denied;
@@ -258,9 +277,10 @@ export async function prepareTransfer(
   subjectAccountId: string,
   operatorAccountId: string,
   accountId: string,
+  signal?: AbortSignal,
 ): Promise<TransferRequest | TransferFailure> {
   if (!text(subjectAccountId) || !text(operatorAccountId)) return { kind: 'failure', reason: 'invalid' };
-  const page = await readOperatorTransferPage({ kind: 'source', subjectAccountId }, accountId);
+  const page = await readOperatorTransferPage({ kind: 'source', subjectAccountId }, accountId, signal);
   if (isTransferFailure(page)) return page;
   const denied = pageFailure(page);
   if (denied) return denied;
@@ -331,19 +351,63 @@ export function restoreTransferAttempt(): TransferAttempt | null | 'invalid' {
   }
 }
 
-/** Explicit submit only. Saved references are opaque locators, never assertions
- * of authority. Native approve/resolve recheck each initiating human, assignment,
- * floor, exact scopes, current relationship/version and both approvals. */
+/** A command owns five seconds through headers and bounded body, even if fetch ignores abort. */
+async function transferPost(path: 'approve' | 'execute', body: unknown, caller?: AbortSignal): Promise<AuthPostResult> {
+  try {
+    return await privateAuthRead(async (signal): Promise<AuthPostResult> => {
+      const response = await fetch(`/account-operations/${path}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      });
+      const value = await readJsonBounded(
+        response,
+        response.status === 200
+          ? path === 'approve'
+            ? TRANSFER_APPROVAL_MAX_RESPONSE_BYTES
+            : TRANSFER_EXECUTION_MAX_RESPONSE_BYTES
+          : TRANSFER_MAX_ERROR_BYTES,
+        signal,
+      );
+      if (response.status === 200) return { ok: true, body: value };
+      const code = parseTransferOperationRefusal(value, response.status);
+      return code
+        ? { ok: false, status: response.status, code, effectStatus: 'not_applied', retryAfter: null }
+        : { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+    }, caller);
+  } catch {
+    return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+  }
+}
+
+/** Explicit submit only. Approval and execution remain independently authorized by native. */
 export async function submitTransferAttempt(
   attempt: TransferAttempt,
   save: (attempt: TransferAttempt) => boolean = storeTransferAttempt,
   isCurrent: () => boolean = () => true,
+  signal?: AbortSignal,
 ): Promise<TransferResult> {
-  if (!isAttempt(attempt) || (attempt.side === 'source' && !text(attempt.acceptance, 4096)))
-    return { kind: 'failure', reason: 'invalid' };
-  const denied = await boundSession(attempt.accountId);
+  // Capture the exact command and installed storage, not a mutable phase alias.
+  attempt = structuredClone(attempt);
+  let retained = JSON.stringify(restoreTransferAttempt());
+  const current = () => !signal?.aborted && isCurrent() && JSON.stringify(restoreTransferAttempt()) === retained;
+  const unavailable = (): TransferFailure => ({ kind: 'failure', reason: 'unavailable' });
+  const uncertain = (): TransferFailure => ({ kind: 'failure', reason: 'uncertain' });
+  const persist = (next: TransferAttempt) => {
+    if (!current() || !save(next)) return false;
+    retained = JSON.stringify(restoreTransferAttempt());
+    attempt = next;
+    return current();
+  };
+  if (!current()) return unavailable();
+  const denied = await boundSession(attempt.accountId, signal);
+  if (!current()) return unavailable();
   if (denied) return denied;
-  if (!save(attempt)) return { kind: 'failure', reason: 'unavailable' };
+  if (!persist(attempt)) return unavailable();
   const { request } = attempt;
   if (attempt.phase === 'accepted') return { kind: 'accepted', reference: attempt.reference! };
   const operation =
@@ -363,67 +427,61 @@ export async function submitTransferAttempt(
           acceptance: attempt.acceptance!,
         };
   if (attempt.phase === 'approve') {
-    const advice = await refreshTransferAdvice(attempt);
+    const advice = await refreshTransferAdvice(attempt, signal);
+    if (!current()) return unavailable();
     if (advice) return advice;
-    if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
-    const approved = await authPost<unknown>('/account-operations/approve', {
-      operationKey: request.sourceOperationKey,
-      operation,
-    });
-    if (!isCurrent()) return { kind: 'failure', reason: 'uncertain' };
+    const approved = await transferPost('approve', { operationKey: request.sourceOperationKey, operation }, signal);
+    if (!current()) return uncertain();
     if (!approved.ok) return failure(approved, true);
+    const approval = parseAccountOperationApproval(approved.body);
+    if (!approval || Date.parse(approval.expiresAt) <= Date.now()) return uncertain();
     if (
-      !record(approved.body) ||
-      !fields(approved.body, ['reference', 'expiresAt']) ||
-      !text(approved.body.reference, 4096) ||
-      typeof approved.body.expiresAt !== 'string' ||
-      !Number.isFinite(Date.parse(approved.body.expiresAt))
+      !persist({
+        ...attempt,
+        reference: approval.reference,
+        phase: attempt.side === 'destination' ? 'accepted' : 'execute',
+      })
     )
-      return { kind: 'failure', reason: 'uncertain' };
-    attempt.reference = approved.body.reference;
-    attempt.phase = attempt.side === 'destination' ? 'accepted' : 'execute';
-    if (!save(attempt)) return { kind: 'failure', reason: 'uncertain' };
-    const currentCaller = await boundSession(attempt.accountId);
+      return uncertain();
+    const currentCaller = await boundSession(attempt.accountId, signal);
+    if (!current()) return uncertain();
     if (currentCaller) return currentCaller;
-    if (attempt.side === 'destination') return { kind: 'accepted', reference: attempt.reference };
+    if (attempt.side === 'destination') return { kind: 'accepted', reference: attempt.reference! };
   }
   if (attempt.phase === 'execute') {
-    const currentCaller = await boundSession(attempt.accountId);
+    const currentCaller = await boundSession(attempt.accountId, signal);
+    if (!current()) return unavailable();
     if (currentCaller) return currentCaller;
-    if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
-    const executed = await authPost<unknown>('/account-operations/execute', {
-      operationKey: request.sourceOperationKey,
-      operation,
-      reference: attempt.reference,
-    });
+    const executed = await transferPost(
+      'execute',
+      {
+        operationKey: request.sourceOperationKey,
+        operation,
+        reference: attempt.reference,
+      },
+      signal,
+    );
+    if (!current()) return uncertain();
     if (!executed.ok) return failure(executed, true);
-    if (
-      !record(executed.body) ||
-      executed.body.accountId !== request.previous.subjectAccountId ||
-      executed.body.error ||
-      executed.body.expired
-    )
-      return { kind: 'failure', reason: 'uncertain' };
-    attempt.phase = 'readback';
-    if (!save(attempt)) return { kind: 'failure', reason: 'uncertain' };
+    if (!parseTransferExecution(executed.body, request.previous.subjectAccountId)) return uncertain();
+    // Acknowledgement is already evidence even when persistence fails. It cannot authorize another read.
+    if (!persist({ ...attempt, phase: 'readback' }))
+      return { kind: 'acknowledged', reference: attempt.reference!, readback: unavailable() };
   }
-  const current = await readOperatorRelation(request.previous.subjectAccountId, attempt.accountId);
-  if (current.kind !== 'ready') return { kind: 'acknowledged', reference: attempt.reference!, readback: current };
-  // An acknowledgement never substitutes for this independently authorized read.
-  if (
-    current.relation.previous.operatorAccountId !== request.operatorAccountId ||
-    BigInt(current.relation.expectedVersion) <= BigInt(request.expectedVersion) ||
-    current.relation.previous.reservationId === request.previous.reservationId
-  )
-    return {
-      kind: 'acknowledged',
-      reference: attempt.reference!,
-      readback: { kind: 'failure', reason: 'conflict' },
-    };
+  if (!current()) return { kind: 'acknowledged', reference: attempt.reference!, readback: unavailable() };
+  const relation = await readOperatorRelation(request.previous.subjectAccountId, attempt.accountId, signal);
+  if (!current()) return { kind: 'acknowledged', reference: attempt.reference!, readback: unavailable() };
+  if (relation.kind !== 'ready') return { kind: 'acknowledged', reference: attempt.reference!, readback: relation };
+  const observed = relation.relation;
   return {
     kind: 'acknowledged',
     reference: attempt.reference!,
-    readback: { kind: 'current', relation: current.relation },
+    readback:
+      observed.previous.operatorAccountId === request.operatorAccountId &&
+      BigInt(observed.expectedVersion) > BigInt(request.expectedVersion) &&
+      observed.previous.reservationId !== request.previous.reservationId
+        ? { kind: 'current', relation: observed }
+        : { kind: 'failure', reason: 'conflict' },
   };
 }
 
@@ -434,8 +492,9 @@ export async function reauthenticateTransfer(
   email: string,
   password: string,
   isCurrent: () => boolean = () => true,
+  signal?: AbortSignal,
 ): Promise<TransferFailure | null> {
-  const current = await loadAccountSession();
+  const current = await loadAccountSession(signal);
   if (current.kind !== 'ready' || current.accountId !== accountId)
     return { kind: 'failure', reason: 'account-changed' };
   if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
@@ -446,5 +505,5 @@ export async function reauthenticateTransfer(
   );
   if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
   if (!result.ok) return failure(result);
-  return boundSession(accountId);
+  return boundSession(accountId, signal);
 }

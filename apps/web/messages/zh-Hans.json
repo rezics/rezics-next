@@ -11183,5 +11183,7 @@
   "library_archive_recovery_restart_original": "使用原始归档",
   "library_archive_entry_open_library": "打开书库",
   "library_archive_progress_open_session": "打开当前的 Session",
-  "library_archive_progress_restart": "用原始归档再开始一次恢复"
+  "library_archive_progress_restart": "用原始归档再开始一次恢复",
+  "managed_create_automation": "创建软件账号",
+  "managed_open_automation": "打开软件账号"
 }

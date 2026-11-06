@@ -11171,5 +11171,7 @@
   "library_archive_recovery_restart_original": "원래 아카이브 사용",
   "library_archive_entry_open_library": "라이브러리 열기",
   "library_archive_progress_open_session": "현재 Session 열기",
-  "library_archive_progress_restart": "원래 아카이브로 복구를 다시 시작"
+  "library_archive_progress_restart": "원래 아카이브로 복구를 다시 시작",
+  "managed_create_automation": "소프트웨어 계정 만들기",
+  "managed_open_automation": "소프트웨어 계정 열기"
 }

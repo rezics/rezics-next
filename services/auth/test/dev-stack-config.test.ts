@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+// The full scope composition imports Kernel SQL, so run its existing assertions in the native database lane.
+import '../scripts/dev-stack.test.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -255,6 +257,17 @@ test('generated Web bindings preserve literal JWK JSON and the selected deployme
       WEBSITE_CONFIGURATION_FILE: file,
     });
     expect(developmentWebsiteBindings({ website: key }, selected).WEBSITE_CONFIGURATION_FILE).toBe(file);
+    const routes = JSON.stringify([
+      '/account/rename',
+      '/organizations/members',
+      '/operators/transfer',
+      '/organizations/delete',
+    ]);
+    expect(developmentWebsiteBindings({ website: key }, selected, {}).AUTH_MANAGEMENT_PAGE_ROUTES).toBe(routes);
+    expect(
+      developmentWebsiteBindings({ website: key }, selected, { AUTH_MANAGEMENT_PAGE_ROUTES: '[]' })
+        .AUTH_MANAGEMENT_PAGE_ROUTES,
+    ).toBe('[]');
     expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
   } finally {
     await rm(directory, { recursive: true, force: true });

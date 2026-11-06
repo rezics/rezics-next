@@ -11285,5 +11285,7 @@
   "library_archive_recovery_restart_original": "使用原始封存檔",
   "library_archive_entry_open_library": "開啟書庫",
   "library_archive_progress_open_session": "開啟目前的 Session",
-  "library_archive_progress_restart": "用原始封存檔再開始一次復原"
+  "library_archive_progress_restart": "用原始封存檔再開始一次復原",
+  "managed_create_automation": "建立軟體帳號",
+  "managed_open_automation": "開啟軟體帳號"
 }

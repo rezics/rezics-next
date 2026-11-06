@@ -11280,5 +11280,7 @@
   "library_archive_recovery_restart_original": "元のアーカイブを使う",
   "library_archive_entry_open_library": "ライブラリを開く",
   "library_archive_progress_open_session": "現在の Session を開く",
-  "library_archive_progress_restart": "元のアーカイブで別の復元を始める"
+  "library_archive_progress_restart": "元のアーカイブで別の復元を始める",
+  "managed_create_automation": "ソフトウェアアカウントを作成",
+  "managed_open_automation": "ソフトウェアアカウントを開く"
 }

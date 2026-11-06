@@ -11171,5 +11171,7 @@
   "library_archive_recovery_restart_original": "Usar el archivo original",
   "library_archive_entry_open_library": "Abrir la biblioteca",
   "library_archive_progress_open_session": "Abrir la Session actual",
-  "library_archive_progress_restart": "Empezar otra recuperación con el archivo original"
+  "library_archive_progress_restart": "Empezar otra recuperación con el archivo original",
+  "managed_create_automation": "Crear una cuenta de software",
+  "managed_open_automation": "Abrir una cuenta de software"
 }

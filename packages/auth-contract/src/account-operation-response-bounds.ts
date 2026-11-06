@@ -1,3 +1,4 @@
+import { isOperatorPageId, OPERATOR_PAGE_ID_BYTES } from './operator-page-response-bounds';
 import { AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH } from './automated-page-response-bounds.ts';
 
 /** Browser projections of native account-operation approval and workflow results.
@@ -82,7 +83,10 @@ export const parseRenameOperationRefusal = parseAccountOperationRefusal;
 export const DELETION_APPROVAL_MAX_RESPONSE_BYTES =
   JSON.stringify({ reference: '', expiresAt: '' }).length + 6 * ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH + 27;
 export const DELETION_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPONSE_BYTES;
-export const parseRenameApprovalResponse = parseAccountOperationApprovalResponse;
+export function parseRenameApprovalResponse(value: unknown): RenameApprovalResponse | null {
+  const approval = parseAccountOperationApprovalResponse(value);
+  return approval && isAccountOperationReference(approval.reference) ? approval : null;
+}
 export const parseDeletionExecutionResponse = parseRenameExecutionResponse;
 export const parseDeletionOperationRefusal = parseRenameOperationRefusal;
 
@@ -201,4 +205,56 @@ export function parseOrganizationOperationError(value: unknown, status: number):
   )
     return { error: 'platform_closed', effect_status: 'not_applied' };
   return null;
+}
+
+/** Access seals a locator and emits Date.toISOString(), including extended years.
+ * Opaque locators retain the installed 4,096 UTF-16-unit allowance. */
+export const ACCOUNT_OPERATION_REFERENCE_MAX_UNITS = 4096;
+export type AccountOperationApproval = { reference: string; expiresAt: string };
+const approvalSkeleton = JSON.stringify({ reference: '', expiresAt: '' }).length;
+export const TRANSFER_APPROVAL_MAX_RESPONSE_BYTES = approvalSkeleton + 6 * ACCOUNT_OPERATION_REFERENCE_MAX_UNITS + 27;
+export const TRANSFER_EXECUTION_MAX_RESPONSE_BYTES = JSON.stringify({ accountId: '' }).length + OPERATOR_PAGE_ID_BYTES;
+const deniedStatuses = [400, 401, 403, 409, 413, 415, 503];
+export const TRANSFER_MAX_ERROR_BYTES = Math.max(
+  ...['account_operation_denied', 'step_up_required', 'platform_closed'].map(
+    (error) => JSON.stringify({ error, effect_status: 'not_applied' }).length,
+  ),
+  JSON.stringify({ error: 'account_operation_unavailable' }).length,
+);
+function keys(value: Record<string, unknown>, expected: string): boolean {
+  return Object.keys(value).sort().join(',') === expected;
+}
+export function parseAccountOperationApproval(value: unknown): AccountOperationApproval | null {
+  if (
+    !object(value) ||
+    !keys(value, 'expiresAt,reference') ||
+    typeof value.reference !== 'string' ||
+    !value.reference.length ||
+    value.reference.length > ACCOUNT_OPERATION_REFERENCE_MAX_UNITS ||
+    /[\u0000-\u0020\u007f]/.test(value.reference) ||
+    typeof value.expiresAt !== 'string' ||
+    !/^(?:[0-9]{4}|[+-][0-9]{6})-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(value.expiresAt)
+  )
+    return null;
+  const expiry = Date.parse(value.expiresAt);
+  if (!Number.isFinite(expiry) || new Date(expiry).toISOString() !== value.expiresAt) return null;
+  return { reference: value.reference, expiresAt: value.expiresAt };
+}
+/** Native transfer has no receipt, operator, expiry or pending fields. */
+export function parseTransferExecution(value: unknown, subjectAccountId: string): { accountId: string } | null {
+  return object(value) &&
+    keys(value, 'accountId') &&
+    isOperatorPageId(value.accountId) &&
+    value.accountId === subjectAccountId
+    ? { accountId: value.accountId }
+    : null;
+}
+/** Only these exact native pre-effect envelopes establish a known refusal. */
+export function parseTransferOperationRefusal(value: unknown, status: number): string | null {
+  if (!object(value) || !keys(value, 'effect_status,error') || value.effect_status !== 'not_applied') return null;
+  return (value.error === 'account_operation_denied' && deniedStatuses.includes(status)) ||
+    (value.error === 'step_up_required' && status === 401) ||
+    (value.error === 'platform_closed' && status === 403)
+    ? (value.error as string)
+    : null;
 }

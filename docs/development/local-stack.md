@@ -239,6 +239,10 @@ A walk stack is admitted only while the slot lock its launch holds is held: the 
 name alone does not admit a container. Walk stacks do not change check placement; the worker's checks still run on
 hosts a and b.
 
+Local Web bindings advertise the four installed Auth management review pages (rename, membership, transfer and
+organization deletion). An explicit `AUTH_MANAGEMENT_PAGE_ROUTES` deployment value is preserved. These links
+select review; native current authority and explicit confirmation still own every command.
+
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
 
