@@ -165,7 +165,9 @@ Diagnostic7: published board, current `content.board.owner`, board/subject read 
 the board projection. Shared-database board-read current-role projection repair stays with Accounts.
 `grant.create` re-authenticates the governance bearer on that Access so command admission binds the same actor
 snapshot; Content's `native.auth.issue` actor object is not admitted there.
-`prepareNativeRetainedOrder` is the Accounts terminal-graph export.
+`prepareNativeRetainedOrder` is the Accounts terminal-graph export. Fresh `POST /v1/offers` sends only
+`contentEditionId` and ordinary commercial terms; `targetSubjectId` is the historical-replay body and is rejected
+on the same object. The native journey is one purchase/retention/expiry case plus unused-actor operator history.
 
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using
 actual `startWorker`/`readWorkerConfig` against the same owned database and loopback Stripe endpoint. The child
@@ -180,3 +182,26 @@ identities already install `subject:create`. Positive purchase targets are real 
 API from released metadata. Business assertions, including unused-actor History-coverage `pending`, replay, private
 concealment and late paid/refund money outcomes, remain required. The independent terminal-benefit cases remain
 unchanged. Neither topology correction nor local pure settlement tests prove the missing custody outcome.
+
+## Cost
+
+### Attach native order-retention policy
+
+- Touches: lock the active buyer and the exact order, insert one policy row with the fixed fields, purpose and expiry.
+- Bound: constant statements and rows; logarithmic blocks as unrelated orders grow.
+- Growth check: deferred with the parent financial erasure measurements; this fixture does not add a second growth suite.
+
+### Minimize retained Checkout fields
+
+- Touches: one buyer-home keyset of at most 100 orders, copy of the declared Checkout fields, source URL/expiry
+  clearing, policy removal and progress checkpoint in one command.
+- Bound: at most 100 raw keys and 1,600 UUID key bytes per page; constant statements per page.
+- Growth check: deferred with the parent financial erasure measurements.
+
+### Purge expired retained Checkout rows
+
+- Touches: one buyer-home keyset of at most 100 retained rows whose deadline has arrived, physical delete, then Access
+  `resolveRetention` in a separate platform command after that purge commits.
+- Bound: at most 100 keys per page; resolution is one keyed update in the account partition.
+- Growth check: Access `test/access/growth-erasure-coordinator.test.ts` covers resolution; Commerce page growth is
+  deferred with the parent financial erasure measurements.

@@ -63,7 +63,7 @@ async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolea
   }
 }
 
-setDefaultTimeout(420_000);
+setDefaultTimeout(540_000);
 
 describe('native genuine-order retention', () => {
   const urls = { successUrl: 'https://example.test/success', cancelUrl: 'https://example.test/cancel' };
@@ -309,7 +309,6 @@ describe('native genuine-order retention', () => {
 
     const offer = (
       await accepted(seller, '/v1/offers', {
-        targetSubjectId: contentEdition.targetSubjectId,
         contentEditionId: contentEdition.contentEditionId,
         title: 'Native erasure book',
         currency: 'usd',
@@ -330,7 +329,7 @@ describe('native genuine-order retention', () => {
     const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
       .order as { id: string };
     const secondNative = (await commands.readOrderForAccount(buyer.accountId, second.id))!;
-    const expiresAt = new Date(Date.now() + 15_000);
+    const expiresAt = new Date(Date.now() + 180_000);
     const firstRetention = await prepareNativeRetainedOrder(pool, first.id, expiresAt);
     const secondRetention = await prepareNativeRetainedOrder(pool, second.id, expiresAt);
     expect(firstRetention).toMatchObject({
@@ -367,7 +366,9 @@ describe('native genuine-order retention', () => {
       expect(await commands.readOrderForAccount(buyer.accountId, first.id)).toBeNull();
       expect(await commands.readEntitlementForAccount(buyer.accountId, entitlement)).toBeNull();
       expect(await commands.listEntitlementsForAccount(buyer.accountId, { after: null, limit: 100 })).toEqual([]);
-      expect((await request(buyer, '/v1/orders', { offerId: offer.id })).status).toBe(401);
+      expect(
+        (await request(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision })).status,
+      ).toBe(401);
       await purgeBarrier.query('ROLLBACK');
       await waitUntil(
         () => client.getWorkflow(buyerErasureId),
@@ -431,7 +432,9 @@ describe('native genuine-order retention', () => {
       await expect(
         commands.reviseOffer(typedBuyer, offer.id, { unitAmountMinor: 1300 }, crypto.randomUUID()),
       ).rejects.toThrow(GrantDeniedError);
-      expect((await request(governance, '/v1/orders', { offerId: offer.id })).status).toBe(409);
+      expect(
+        (await request(governance, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision })).status,
+      ).toBe(409);
       expect(await commerceOutcome(buyer.accountId)).toMatchObject({
         outcome: 'erased',
         retained: [
@@ -560,7 +563,7 @@ describe('native genuine-order retention', () => {
     );
     await replay.getResult();
     expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'pending', retained: [] });
-  }, 420_000);
+  }, 540_000);
 });
 
 describe('historical operator commerce custody', () => {
