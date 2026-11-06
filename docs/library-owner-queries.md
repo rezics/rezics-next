@@ -552,6 +552,10 @@ A separate NOT-state control includes complete no-entry cases and must not repla
 
 ## Delivery boundary and required native evidence
 
+Decision: a saved rule stays on the owner's private population unless its stored Source explicitly selects the
+catalogue; private working reads follow current membership, while public readers consume only the last complete
+explicit publication until it is replaced or removed.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.
