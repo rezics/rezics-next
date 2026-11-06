@@ -18,6 +18,7 @@ import {
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
+import { OwnerCurrentRestartRequired } from './disclosure/owner-current.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
 import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { checkHits } from './disclosure/check.ts';
@@ -574,17 +575,22 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   }
   if (ownerCandidates.length) {
     if (!registry.ownerAdapters || !registry.ownerKey || !registry.getOwnerAdapter) unavailable();
-    const ownerHits = await hydrateOwnerDiscoveryHits(
-      registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
-      ownerCandidates,
-      context,
-    );
-    for (let index = 0; index < ownerHits.length; index++) {
-      const ownerHit = ownerHits[index];
-      if (!ownerHit) continue;
-      const hit = { ...ownerHit, matchEvidence: { state: 'unsupported' as const } };
-      admitDiscoveryHit(hit);
-      passed.set(ownerOriginals[index]!, hit);
+    try {
+      const ownerHits = await hydrateOwnerDiscoveryHits(
+        registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+        ownerCandidates,
+        context,
+      );
+      for (let index = 0; index < ownerHits.length; index++) {
+        const ownerHit = ownerHits[index];
+        if (!ownerHit) continue;
+        const hit = { ...ownerHit, matchEvidence: { state: 'unsupported' as const } };
+        admitDiscoveryHit(hit);
+        passed.set(ownerOriginals[index]!, hit);
+      }
+    } catch (error) {
+      if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
+      throw error;
     }
   }
   return passed;

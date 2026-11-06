@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util';
-import { ProblemError } from '../../http/problem.ts';
 import type {
   DiscoveryOwnerKind,
   DiscoveryOwnerMetadataSummary,
@@ -9,7 +8,8 @@ import type {
 
 /**
  * Re-read owner current rows after nested hydration I/O. A withheld row drops the candidate;
- * any other change restarts so the page is one observation.
+ * any other change restarts so the page is one observation. Disclosure does not import HTTP
+ * problems; Search HTTP maps `OwnerCurrentRestartRequired` to `search_restart_required`.
  *
  * Cost
  * - Touches: one `readCurrent` per owner kind for the accepted identities of that kind,
@@ -25,6 +25,16 @@ export type OwnerCurrentAccepted<Candidate> = Readonly<{
   id: string;
   value: DiscoveryOwnerMetadataSummary;
 }>;
+
+/** Owner rows changed during nested hydration; the page is not one observation. */
+export class OwnerCurrentRestartRequired extends Error {
+  readonly code = 'search_restart_required' as const;
+
+  constructor() {
+    super('search_restart_required');
+    this.name = 'OwnerCurrentRestartRequired';
+  }
+}
 
 export function ownerSummaryUnchanged(
   kind: DiscoveryOwnerKind,
@@ -63,7 +73,7 @@ export async function revalidateOwnerCurrentSummaries<Candidate>(
     if (!entry) return undefined;
     const after = current.get(`${entry.kind}:${entry.id}`);
     if (!after) return undefined;
-    if (!ownerSummaryUnchanged(entry.kind, entry.value, after)) throw new ProblemError('search_restart_required');
+    if (!ownerSummaryUnchanged(entry.kind, entry.value, after)) throw new OwnerCurrentRestartRequired();
     return entry;
   });
 }

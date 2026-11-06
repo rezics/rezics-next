@@ -48,7 +48,7 @@ import type {
   PublicFilterConsumerRefill,
 } from './public-filter-consumer-contract.ts';
 import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
-import { revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
+import { OwnerCurrentRestartRequired, revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import { kindWitnessCounts, selectCurrentPredicatePage } from './current-predicate.ts';
 import { projectKindDirectoryCounts } from './kind-count-proof.ts';
@@ -734,6 +734,7 @@ function executeDiscoverySearch(
             aggregateProof = window.exhausted;
           } catch (error) {
             countFailed = true;
+            if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
             if (error instanceof ProblemError && error.code === 'search_restart_required') throw error;
             kindWitnesses = new Map();
             kindExhausted = false;
@@ -848,6 +849,7 @@ function executeDiscoverySearch(
       return await execute(...args);
     } catch (error) {
       if (error instanceof ProblemError) throw error;
+      if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
       if (error instanceof CollectionDiscoveryReadinessError) throw error;
       // Owner source/native decoder failures are readiness for the whole response, never absence.
       throw ready();
