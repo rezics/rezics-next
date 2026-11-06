@@ -222,11 +222,6 @@ beforeAll(async () => {
   ).filter((fact) => fact.kind === 'statement');
   const seededRoute = routeOf(work)!;
   await runCommand(pool, { partition: partitionOf(seededRoute) }, async (tx, { transactionId }) => {
-    await tx.query(
-      `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
-       VALUES ($1,$2,2,'adopt',$3,$4)`,
-      [seededRoute, work, digest, transactionId],
-    );
     await tx.query('UPDATE semantic.subject SET current_release=$3 WHERE route=$1 AND subject_id=$2', [
       seededRoute,
       work,
@@ -253,11 +248,11 @@ beforeAll(async () => {
     return {
       value: null,
       events: [
-        { type: SUBJECT_REVISED, subject: work, data: { id: work, revision: 2, kind: 'adopt' } },
+        { type: SUBJECT_REVISED, subject: work, data: { id: work, revision: 1, kind: 'create' } },
         {
           type: LINKS_CHANGED,
           subject: work,
-          data: { subject: work, revision: 2, security_revision: 0, changes },
+          data: { subject: work, revision: 1, security_revision: 0, changes },
         },
       ],
     };
@@ -353,10 +348,12 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
     })
   ).subject.id;
   partitions.add(partitionOf(routeOf(extra)!));
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await real.grant({ route: routeOf(work)!, id: work }, 'editor', 'statement:propose');
   const proposed = await handle('POST', `/v1/subjects/${work}/candidates`, 'editor', {
     statement: appearance(extra, 17),
   });
-  expect(proposed.status).toBe(201);
+  expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
   publishedAppearance = proposed.body.candidate;
   const accepted = await handle('POST', `/v1/subjects/${work}/candidates/${publishedAppearance}:accept`, 'acceptor', {
     context: GLOBAL_CONTEXT,
