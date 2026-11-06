@@ -3,7 +3,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isProtectedRiskPath, matchesPath } from './briefs.ts';
-import { choosePool } from './allowance.ts';
+import { choosePoolWithFallback, type PoolSelectionOptions } from './allowance.ts';
+import { readRouting, retryFallbacks, type RoutingTable } from './routing.ts';
 import { agentAdapter } from './agents.ts';
 import type { AttemptRef, LandingRequest } from './contracts.ts';
 import { recordFlow } from './flow.ts';
@@ -13,7 +14,7 @@ import { processIdentity, terminateProcessGroup, type ProcessIdentity } from './
 import { measureLog } from './records.ts';
 import type { WorkerTasks } from './tasks.ts';
 import type { WorkerStore } from './store.ts';
-import type { Profile } from './types.ts';
+import type { Pool, PoolReading, Profile } from './types.ts';
 import type { Tokens } from './types.ts';
 import { defaultPolicy } from './policy.ts';
 
@@ -35,7 +36,27 @@ export type TrainConflict = AttemptRef & {
   allowTargetMove?: boolean;
 };
 export class TrainResolverInfrastructureError extends Error {}
-const profile: Profile = { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'codex' };
+/** Resolution keeps dev moving, so its first profile is never held back by a pool's burn ceiling. */
+export const resolverProfile: Profile = { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'codex' };
+/**
+ * The routed implementation profiles after the codex profile, in route order. A codex route shares the pool that
+ * refused the resolver, so only the other CLIs follow it.
+ */
+export function resolverFallbacks(table: RoutingTable): Profile[] {
+  return retryFallbacks(table, 'implementation').filter((candidate) => candidate.cli !== resolverProfile.cli);
+}
+/** The pool for one resolver pass: a burn ceiling never refuses it, while reserve, exhaustion and concurrency still do. */
+export function chooseResolverPool(
+  table: RoutingTable,
+  pools: readonly Pool[],
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions,
+): { profile: Profile; pool: Pool } {
+  return choosePoolWithFallback(resolverProfile, resolverFallbacks(table), pools, readings, {
+    ...options,
+    ignoreBurnCeiling: true,
+  });
+}
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const conflictHunkCharacters = 8_000;
 const conflictHunkLineCharacters = 1_000;
@@ -466,9 +487,16 @@ export class TrainResolver {
     const started = events
       .filter((event) => event.kind === 'train-resolver-started')
       .map((event) => JSON.parse(event.body) as Pass);
-    const prior = started.find((pass) => pass.phase === phase && pass.key === conflict.key);
+    const prior = started.findLast((pass) => pass.phase === phase && pass.key === conflict.key);
+    // Only a pass that recorded its exit spends the bounded budget. A pass without one was killed with its controller:
+    // its process group is stopped below, and the pass runs again.
+    const completion = events.findLast(
+      (event) =>
+        event.kind === 'train-resolver-completed' &&
+        JSON.parse(event.body).key === conflict.key &&
+        JSON.parse(event.body).phase === phase,
+    );
     if (prior) {
-      // A started pass spends the budget even if its controller crashed before recording an exit.
       const processEvent = events.findLast(
         (event) =>
           event.kind === 'train-resolver-process' &&
@@ -487,10 +515,10 @@ export class TrainResolver {
           this.tasks?.settings.terminationGraceMs ?? defaultPolicy.process.resolverTerminationGraceMs,
           this.tasks?.settings.policy?.process,
         );
-      if (phase !== 'repair') {
-        conflict.detail = `The bounded ${phase} pass was already spent; preserving source for its owner`;
-        return false;
-      }
+    }
+    if (completion && phase !== 'repair') {
+      conflict.detail = `The bounded ${phase} pass was already spent; preserving source for its owner`;
+      return false;
     }
     if (!this.tasks)
       throw new TrainResolverInfrastructureError('Train resolver requires the configured AgentAdapter runtime');
@@ -597,16 +625,10 @@ export class TrainResolver {
     const before = snapshot(tree, paths, this.store.policy.merge),
       head = this.git(tree, 'rev-parse', 'HEAD');
     const index = this.git(tree, 'ls-files', '--stage', '-z');
-    if (prior) {
-      const completed = events.findLast(
-        (event) =>
-          event.kind === 'train-resolver-completed' &&
-          JSON.parse(event.body).key === conflict.key &&
-          JSON.parse(event.body).phase === phase,
-      );
-      const receipt = completed ? (JSON.parse(completed.body) as Pass) : undefined;
+    if (completion) {
+      const receipt = JSON.parse(completion.body) as Pass;
       if (
-        receipt?.ok &&
+        receipt.ok &&
         receipt.commit &&
         receipt.head === head &&
         receipt.inputHash === hash(prompt) &&
@@ -626,19 +648,19 @@ export class TrainResolver {
       conflict.detail = 'The bounded repair pass was already spent on different or incomplete inputs';
       return false;
     }
-    let pool;
+    let chosen: { profile: Profile; pool: Pool };
     try {
       const { pools, readings, history, now, spanMs, running } = this.tasks.resolverPools();
-      pool = choosePool(profile, pools, readings, {
-        policy: this.tasks.settings.policy?.provider,
-        history,
-        now,
-        spanMs,
-        running,
-      });
+      chosen = chooseResolverPool(
+        readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing),
+        pools,
+        readings,
+        { policy: this.tasks.settings.policy?.provider, history, now, spanMs, running },
+      );
     } catch (error) {
       throw new TrainResolverInfrastructureError(String(error));
     }
+    const { profile, pool } = chosen;
     const identityPath = join(
       this.tasks.settings.stateDirectory,
       'train-resolver',
@@ -661,14 +683,17 @@ export class TrainResolver {
     const directory = join(this.tasks.settings.stateDirectory, 'train-resolver', conflict.key);
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, `${phase}.input.json`), JSON.stringify(data));
+    // Only an adapter with a sandboxed resolver session gets that mode and the stdin prompt. Any other routed CLI runs
+    // its ordinary fresh session; the Git and file checks after it still bound what it may change.
+    const resolverMode = agentAdapter(profile.cli).supportsResolver === true;
     const [command, args] = launchCommand({
       profile,
       pool,
       worktree: tree,
       prompt,
-      promptViaStdin: true,
-      consultation: true,
-      resolver: true,
+      promptViaStdin: resolverMode,
+      consultation: resolverMode,
+      resolver: resolverMode,
       codex: this.tasks.settings.codex,
     });
     let child: ReturnType<typeof spawn> | undefined;
@@ -700,7 +725,7 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         child.stdin!.on('error', (error) => {
           failure ??= `Train resolver prompt input failed: ${error.message}`;
         });
-        child.stdin!.end(prompt);
+        child.stdin!.end(resolverMode ? prompt : undefined);
         identity = child.pid ? processIdentity(child.pid) : null;
         this.event(request, 'train-resolver-process', { ...run, process: identity });
       });

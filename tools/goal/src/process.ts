@@ -142,6 +142,15 @@ function matches(current: ProcessIdentity | null, identity: ProcessIdentity): bo
 export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
   return matches(processIdentity(identity.pid, procRoot), identity);
 }
+/** A recorded process is live while its leader or a member of its detached group runs in the same incarnation. */
+export function identityLive(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+  return (
+    sameProcess(identity, procRoot) ||
+    groupMembers(identity.group, procRoot).some(
+      (member) => member.boot === identity.boot && BigInt(member.start) >= BigInt(identity.start),
+    )
+  );
+}
 /** Whether a visible live process is inside a directory; null means /proc scanning failed. */
 export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): boolean | null {
   const root = resolve(directory);

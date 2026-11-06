@@ -10,6 +10,8 @@ export type PoolSelectionOptions = {
   spanMs?: number;
   /** Live worker sessions on each pool name: pending start and running. Waiting attempts do not occupy the cap. */
   running?: Readonly<Record<string, number>>;
+  /** Skip only the pool's burn ceiling; reserve, exhaustion and concurrency still refuse. */
+  ignoreBurnCeiling?: boolean;
 };
 
 export type PoolBurnStatus = {
@@ -155,6 +157,7 @@ function assessPool(
   policy: ControlPolicy['provider'] | undefined,
   spanMs: number,
   running: Readonly<Record<string, number>>,
+  ignoreBurnCeiling: boolean,
 ): PoolAllowance {
   if (pool.policy.maxConcurrent !== undefined && (running[pool.name] ?? 0) >= pool.policy.maxConcurrent) return null;
   const shared = indexedReadings.get(pool.allowanceKey) ?? [];
@@ -174,7 +177,12 @@ function assessPool(
     return null;
   if (!fresh.length && !pool.policy.allowUnknown) return null;
   const rates = fresh.map(({ reading, history }) => burnPerHour(reading, history, { now, spanMs }));
-  if (pool.policy.maxBurnPerHour !== undefined && rates.some((rate) => rate > pool.policy.maxBurnPerHour!)) return null;
+  if (
+    !ignoreBurnCeiling &&
+    pool.policy.maxBurnPerHour !== undefined &&
+    rates.some((rate) => rate > pool.policy.maxBurnPerHour!)
+  )
+    return null;
   const used = Math.max(0, ...fresh.flatMap(({ reading }) => reading.windows.map((window) => window.usedPercent)));
   return { score: (100 - used) * pool.policy.weight };
 }
@@ -197,7 +205,15 @@ function selectPool(
       if (!allowanceByPool.has(pool))
         allowanceByPool.set(
           pool,
-          assessPool(pool, indexedReadings, now, options.policy, spanMs, options.running ?? {}),
+          assessPool(
+            pool,
+            indexedReadings,
+            now,
+            options.policy,
+            spanMs,
+            options.running ?? {},
+            options.ignoreBurnCeiling === true,
+          ),
         );
       const allowance = allowanceByPool.get(pool);
       return allowance ? { pool, score: allowance.score, preferred: pool.name === options.preferred } : null;
