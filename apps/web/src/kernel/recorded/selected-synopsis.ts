@@ -10,7 +10,7 @@ export const RECORDED_SELECTED_SYNOPSIS_LANGUAGE = 'en';
 type Matched = Extract<NonNullable<SubjectRead['selectedSynopsis']>, { kind: 'matched' }>;
 type SelectedFact = Matched['fact'];
 
-const subject = structuredClone(recording.subject) as SubjectRead['subject'];
+const subject = structuredClone(recording.subject) as unknown as SubjectRead['subject'];
 
 export const recordedSelectedSynopsisSelection = {
   candidateId: '0494501a-36af-8cc7-95c9-d7ffe4728201',

@@ -85,7 +85,9 @@ export function catalogueSourcesFixture(
     }
     const recorded = recordedSelectedSynopsisRead(exact);
     read.subject.statements['schema:abstract'] = structuredClone(recorded.subject.statements['schema:abstract'] ?? []);
-    read.selectedSynopsis = recorded.selectedSynopsis;
+    const selected = recorded.selectedSynopsis;
+    if (selected === undefined) delete read.selectedSynopsis;
+    else read.selectedSynopsis = selected;
   };
   applyExact();
   const calls: { path: string; authorization: string | null; session: string | null }[] = [];

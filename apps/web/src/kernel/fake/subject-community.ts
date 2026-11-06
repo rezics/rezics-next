@@ -40,7 +40,7 @@ export function communityThread(
   kind: CommunityKind,
   later = false,
   subject: typeof communitySubject = communitySubject,
-): Omit<NativeCommunityThread, 'card'> {
+): NativeCommunityThread {
   const threadId = id(kind === 'review' ? (later ? '84' : '81') : later ? '94' : '91');
   const boardId = id(kind === 'review' ? '80' : '90');
   const createdAt = '2026-10-24T00:00:00.000Z';
