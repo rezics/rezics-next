@@ -38,3 +38,5 @@ Forced retirement continues to remove private presentation synchronously through
 Empty first, sparse continuing and empty terminal windows have separate copy in every launch locale. Illustrative
 stories and focused consumer tests do not establish installed native or signed-in browser acceptance; the original
 controller retains native, command acknowledgement/current-reader/focus, classification and browser checks.
+
+Decision: the installed package still publishes declarations only for the management and label-history callables, so their closed runtime schemas remain the Kernel seam in [native](native.ts) until the official publisher ships runtime exports. The persona walk for this page has not reached a manager step: the walk stack stopped mid-run in each attempt.
