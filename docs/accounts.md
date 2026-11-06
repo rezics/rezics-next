@@ -157,6 +157,8 @@ identity in the full profile. Its incoming-count destination requires a successf
 profile-edit advice on a software operator never substitutes for count authority on the actual account.
 Platform-closure recognition uses the public Kernel client transport entry, shared by native follow fixtures and
 Web consumers without importing private Web modules.
+Native profile/follow fixtures prepare Definitions through its owner bootstrap; governance never self-grants
+publication actions that its current role does not hold.
 
 ### Managed-account detail presentation
 
