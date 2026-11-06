@@ -264,7 +264,11 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
     'PUT',
     `${path}/configuration`,
     {
-      configuration: { ...current, pages: [home, { ...middle, route: 'zzz' }], labels: { en: `Renamed ${randomUUID()}` } },
+      configuration: {
+        ...current,
+        pages: [home, { ...middle, route: 'zzz' }],
+        labels: { en: `Renamed ${randomUUID()}` },
+      },
       mounts: [],
     },
     f.conditional(removed.body.zone.revision),
