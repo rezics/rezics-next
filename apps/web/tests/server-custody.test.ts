@@ -2,8 +2,10 @@ import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
   cleanupAll,
+  liveProcessGroupMemberIds,
   ownBunProcess,
   ownNodeProcess,
+  reapExitedProcessGroupMembers,
   withCleanup,
   type ProcessCustody,
 } from './support/server-custody.ts';
@@ -30,15 +32,6 @@ function processGroupExists(pid: number): boolean {
   }
 }
 
-async function waitUntilGone(pid: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (!processGroupExists(pid)) return true;
-    await Bun.sleep(10);
-  }
-  return !processGroupExists(pid);
-}
-
 async function drainFixtureOutput(stream: ReadableStream<Uint8Array> | null): Promise<void> {
   if (!stream) return;
   for await (const _chunk of stream) {
@@ -48,14 +41,21 @@ async function drainFixtureOutput(stream: ReadableStream<Uint8Array> | null): Pr
 
 async function safetyCleanup(fixture: Fixture): Promise<void> {
   if (fixture.pid !== undefined) {
-    if (processGroupExists(fixture.pid)) {
+    if (processGroupExists(fixture.pid) || liveProcessGroupMemberIds(fixture.pid).length > 0) {
       try {
         process.kill(-fixture.pid, 'SIGKILL');
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
     }
-    if (!(await waitUntilGone(fixture.pid, 2500)))
+    const deadline = Date.now() + 2500;
+    while (Date.now() < deadline) {
+      reapExitedProcessGroupMembers(fixture.pid);
+      if (liveProcessGroupMemberIds(fixture.pid).length === 0) break;
+      await Bun.sleep(10);
+    }
+    reapExitedProcessGroupMembers(fixture.pid);
+    if (liveProcessGroupMemberIds(fixture.pid).length > 0)
       throw new Error(`Independent fixture safety cleanup could not remove process group ${fixture.pid}`);
   }
   await Promise.race([
@@ -192,7 +192,7 @@ test('Node process custody escalates from TERM to KILL for a resistant descendan
   await fixture.custody.close();
   expect(Date.now() - began).toBeGreaterThanOrEqual(40);
   expect(fixture.custody.settled).toBe(true);
-  expect(fixture.pid === undefined ? false : processGroupExists(fixture.pid)).toBe(false);
+  expect(fixture.pid === undefined ? [] : liveProcessGroupMemberIds(fixture.pid)).toEqual([]);
 });
 
 test('Bun process custody settles a parent-exited group whose descendant still holds output pipes', async () => {
@@ -214,7 +214,7 @@ test('Bun process custody settles a parent-exited group whose descendant still h
   expect(process.kill(descendant, 0)).toBe(true);
   await fixture.custody.close();
   expect(fixture.custody.settled).toBe(true);
-  expect(processGroupExists(fixture.pid!)).toBe(false);
+  expect(liveProcessGroupMemberIds(fixture.pid!)).toEqual([]);
   expect(outputSettled).toBe(true);
 });
 

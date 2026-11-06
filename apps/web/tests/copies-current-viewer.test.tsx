@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CopiesCurrentRead, CopyDetailCurrentRead, CopySubjectCurrentRead } from '../src/library/copies-actions';
-import type { CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
+import type { CopiesPageData, CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
 import type { SessionEnv } from '../src/session/client';
 
 // UNRUN at this source boundary. Installed DOM, real route, CopyForm and UndoNotice;
@@ -169,6 +169,54 @@ mock.module('@rezics/ui/menu', () => ({
     </>
   ),
 }));
+mock.module('../src/kernel/exposure', () => ({
+  Exposure: ({ children }: { children: ReactNode }) => <>{children}</>,
+  operationIsAdmitted: (operation: string, admitted?: readonly string[]) => {
+    if (operation === 'library_entry.delete' || operation === 'library_entry.restore')
+      return admitted?.includes(operation) ?? false;
+    const groups: Record<string, string> = {
+      'copy.list': 'personal_library',
+      'copy.create': 'personal_library',
+      'copy.delete': 'personal_library',
+      'copy.get': 'personal_library',
+      'copy.update': 'personal_library',
+    };
+    return admitted?.includes(groups[operation] ?? operation) ?? false;
+  },
+  operationGroups: {
+    'copy.list': 'personal_library',
+    'copy.create': 'personal_library',
+    'copy.delete': 'personal_library',
+    'copy.get': 'personal_library',
+    'copy.update': 'personal_library',
+  },
+  prepareExposure: () => undefined,
+  useOperation: () => true,
+  useOperationAdmission: () => 'available',
+  readAdmitted: async () => [],
+  readAdmittedResult: async () => ({ state: 'ready', admitted: [] }),
+}));
+const editionHandlers: {
+  onChange: (subject: { id: string; title: string; types: string[] } | null) => void;
+}[] = [];
+mock.module('../src/library/loans-actions', () => ({
+  readOpenCopyLoan: async () => ({
+    sessionSubject: 'A',
+    copyId: id(1),
+    page: {
+      signedIn: true,
+      filter: 'open',
+      requestedCursor: null,
+      boundary: { today: '2026-11-06' },
+      items: [],
+      next: null,
+    },
+    item: null,
+  }),
+  createLoan: async () => ({ ok: false, reason: 'unavailable' }),
+  updateLoanDue: async () => ({ ok: false, reason: 'unavailable' }),
+  completeLoan: async () => ({ ok: false, reason: 'unavailable' }),
+}));
 mock.module('../src/library/copy-edition-picker', () => ({
   CopyEditionPicker: ({
     disabled,
@@ -176,18 +224,21 @@ mock.module('../src/library/copy-edition-picker', () => ({
   }: {
     disabled: boolean;
     onChange: (subject: { id: string; title: string; types: string[] } | null) => void;
-  }) => (
-    <select
-      aria-label="Edition"
-      disabled={disabled}
-      defaultValue=""
-      onChange={(event) => onChange({ id: event.currentTarget.value, title: 'Selected edition', types: ['Book'] })}
-    >
-      <option value="" />
-      <option value={id(10)}>First</option>
-      <option value={id(11)}>Second</option>
-    </select>
-  ),
+  }) => {
+    editionHandlers.push({ onChange });
+    return (
+      <select
+        aria-label="Edition"
+        disabled={disabled}
+        defaultValue=""
+        onChange={(event) => onChange({ id: event.currentTarget.value, title: 'Selected edition', types: ['Book'] })}
+      >
+        <option value="" />
+        <option value={id(10)}>First</option>
+        <option value={id(11)}>Second</option>
+      </select>
+    );
+  },
 }));
 const actions = await import('../src/library/copies-actions');
 const definitions = await import('../src/subject/definitions');
@@ -318,12 +369,28 @@ test('Actual server exports certify only the exact native preparation, preserve 
     ).toBe(true);
     expect(JSON.stringify(value)).not.toContain('credential-A');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
-    expect(value.page.filterOptions).toBeUndefined(); // Undeclared extra wire fields grant no capability.
+    expect(value.page.filterOptions).toEqual(filterOptions);
     refuseAfterPreparation = false;
-    for (const filters of [{ kind: 'old.print' }, { status: 'retired' }, { kind: 'print', status: 'shelf' }]) {
+    native.mockImplementation(async (input, init) => {
+      const call = new Request(input, init);
+      calls.push(call);
+      const url = new URL(call.url);
+      if (url.pathname === '/v1/copies') {
+        if (url.searchParams.get('kind') === 'old.print' || url.searchParams.get('status') === 'retired')
+          return Response.json({ code: 'unsupported_filter' }, { status: 400 });
+        if (url.searchParams.has('cursor')) return Response.json({ code: 'invalid_cursor' }, { status: 400 });
+        return Response.json({ copies: [{ ...copy('A'), subject: null }], next: 'next-A', filterOptions });
+      }
+      if (url.pathname === `/v1/copies/${id(1)}`) return Response.json({ copy: { ...copy('A'), subject: null } });
+      if (url.pathname === `/v1/subjects/${id(10)}`)
+        return Response.json({ subject: { id: id(10), type: 'Book', labels: { en: 'Prepared A edition' } } });
+      throw new Error(`Unexpected native read: ${url}`);
+    });
+    for (const filters of [{ kind: 'old.print' }, { status: 'retired' }]) {
       preparation = 'active';
       currentRequest = request();
       const before = prepareCalls;
+      const copiesBefore = calls.filter((call) => new URL(call.url).pathname === '/v1/copies').length;
       const unavailable = await actions.readCopiesCurrent({
         data: { subjectId: id(10), ...filters, cursor: 'exact/selected+cursor' },
       });
@@ -334,8 +401,20 @@ test('Actual server exports certify only the exact native preparation, preserve 
       });
       expect(unavailable.page.filterOptions).toBeUndefined();
       expect(prepareCalls - before).toBe(1);
-      expect(calls.filter((call) => new URL(call.url).pathname === '/v1/copies')).toHaveLength(2);
+      expect(calls.filter((call) => new URL(call.url).pathname === '/v1/copies')).toHaveLength(copiesBefore + 1);
     }
+    preparation = 'active';
+    currentRequest = request();
+    const admitted = await actions.readCopiesCurrent({
+      data: { subjectId: id(10), kind: 'print', status: 'shelf' },
+    });
+    expect(admitted).toMatchObject({
+      sessionSubject: 'A',
+      requested: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: null, locale: 'en' },
+      page: { kind: 'print', status: 'shelf', copies: [{ id: id(1) }], next: 'next-A', csrfToken: 'csrf-A' },
+    });
+    expect(admitted.page.filterOptions).toEqual(filterOptions);
+    expect(admitted.page.inventoryState).toBeUndefined();
 
     // Real retained WeakMap credential, followed by real refusal on the original Request.
     refuseAfterPreparation = false;
@@ -467,6 +546,11 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
       return <CopiesCurrent initial={routeState.initial} search={routeState.search} locale="en" />;
     },
   });
+  const loansRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/library/loans',
+    component: () => <p>Loans</p>,
+  });
   const subjectRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/subject',
@@ -488,7 +572,7 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     },
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([copiesRoute, subjectRoute]),
+    routeTree: rootRoute.addChildren([copiesRoute, loansRoute, subjectRoute]),
     history: createMemoryHistory({ initialEntries: [`/library/copies?subjectId=${id(10)}`] }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -645,7 +729,7 @@ test('The actual Copies route retires retained private rows and editor state on 
   const { createRoot, hydrateRoot } = await import('react-dom/client');
   const { renderToString } = await import('react-dom/server');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createRouter, createRootRoute, createMemoryHistory, RouterContextProvider } =
+  const { createRouter, createRootRoute, createRoute, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
   const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { Route } = await import('../src/routes/library/copies');
@@ -724,9 +808,13 @@ test('The actual Copies route retires retained private rows and editor state on 
   const releaseAdmission = exposureLifetime.subscribe(admitCurrent);
   // Foreign unpartitioned private data is never a fallback.
   client.setQueryData(['copies'], response('FOREIGN').page);
+  const rootRoute = createRootRoute();
   const router = createRouter({
-    routeTree: createRootRoute(),
-    history: createMemoryHistory({ initialEntries: ['/en/library/copies'] }),
+    routeTree: rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/copies' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/loans' }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/library/copies'] }),
   });
   const host = document.createElement('main');
   document.body.append(host);
@@ -1128,6 +1216,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(nextAddress.searchParams.get('cursor')).toBe('next-B');
 
     // Explicit edition reads carry both source address and exact selected id; A IO never gates B.
+    search = {};
     await show(viewer('A'));
     await acceptList('A');
     await click(m.library_copy_add());
@@ -1139,15 +1228,13 @@ test('The actual Copies route retires retained private rows and editor state on 
       });
     await choose(id(10));
     const oldEdition = editions.at(-1)!;
-    const oldSelection = Object.entries(form().querySelector('select[aria-label="Edition"]')!).find(([key]) =>
-      key.startsWith('__reactProps$'),
-    )![1] as { onChange: (event: { currentTarget: { value: string } }) => void };
+    const oldSelection = editionHandlers.at(-1)!;
     await show(viewer('B'));
     await acceptList('B');
     await click(m.library_copy_add());
     await choose(id(11));
     const lookups = editions.length;
-    await act(async () => oldSelection.onChange({ currentTarget: { value: id(11) } }));
+    await act(async () => oldSelection.onChange({ id: id(11), title: 'Selected edition', types: ['Book'] }));
     expect(editions).toHaveLength(lookups);
     await act(async () =>
       oldEdition.resolve({
@@ -1202,7 +1289,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(removals.at(-1)!.input.data).toEqual({ id: id(1), revision: 7, idempotencyKey: id(101) });
     const uncertainRemoval = removals.at(-1)!;
     await act(async () => uncertainRemoval.reject(new Error('Uncertain native deletion')));
-    await click(m.library_copy_delete(), form());
+    await click(m.library_copy_editor_retry_delete(), form());
     await click(m.library_copy_delete_confirm(), form());
     expect(removals.at(-1)!.input.data).toEqual(uncertainRemoval.input.data);
     await act(async () => removals.at(-1)!.resolve({ ok: true, undo: { deletionId: id(80), revision: 8 } }));
@@ -1244,6 +1331,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     initial.page = { ...initial.page, copies: [], next: null, inventoryState: 'unavailable' };
     await show(viewer('B'));
     await act(async () => lists.at(-1)!.resolve(initial));
+    await tick();
     expect(host.textContent).toContain(m.library_copy_inventory_unavailable());
     expect(host.textContent).not.toContain(m.library_copy_matching_empty());
     expect(host.querySelector<HTMLSelectElement>('[name="kind"]')!.value).toBe('old.print');
