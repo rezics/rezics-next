@@ -5,8 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { parseMal, malDate, MAL_LIMITS } from '../../src/library/list-import-mal-parser.ts';
 import { createMalImport } from '../../src/library/list-import-mal.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 const anime = (id: string, extra = '', status = 'Completed') =>
@@ -733,16 +731,7 @@ test('native redirect requires a deliberate review of the canonical MAL target',
   const canonical = subjects[0]!;
   const selected = subjects[1]!;
   const merger = await native.identity(['subject:merge']);
-  await createGrantCommands({ pool: native.pool, access: native.access, managementAction: 'access:grant' }).create(
-    { pool: native.pool, actor: native.steward.actor, deadline: Date.now() + 30000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: merger.actor.accountId },
-      actions: ['subject:merge'],
-      valid: '(,)',
-      key: randomUUID(),
-    },
-  );
+  await native.grantAccountActions(merger.actor.accountId, ['subject:merge']);
   const votes = createVoteCommands({ pool: native.pool, access: native.access });
   let redirected = false;
   const service = createMalImport({

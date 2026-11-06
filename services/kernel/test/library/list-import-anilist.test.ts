@@ -1,9 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { parseAniList, AniListInputError } from '../../src/library/list-import-anilist-parser.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createAniListImport } from '../../src/library/list-import-anilist.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
@@ -86,16 +83,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     'progress_session:update',
   ]);
   await f.grantLibraryGate(importer.actor.accountId);
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: importer.actor.accountId },
-      actions: ['subject:batch_write'],
-      valid: '(,)',
-      key: entryKey(),
-    },
-  );
+  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
   const mediaId = Math.floor(Math.random() * 1_000_000_000) + 1;
   const subjects: string[] = [];
   for (const source of ['anilist', 'myanimelist']) {
@@ -456,16 +444,7 @@ test('native redirect requires a deliberate review of the canonical AniList targ
   const canonical = subjects[0]!;
   const selected = subjects[1]!;
   const merger = await f.identity(['subject:merge']);
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: merger.actor.accountId },
-      actions: ['subject:merge'],
-      valid: '(,)',
-      key: crypto.randomUUID(),
-    },
-  );
+  await f.grantAccountActions(merger.actor.accountId, ['subject:merge']);
   const votes = createVoteCommands({ pool: f.pool, access: f.access });
   let redirected = false;
   const service = createAniListImport({

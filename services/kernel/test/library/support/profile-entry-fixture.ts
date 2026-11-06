@@ -269,9 +269,20 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
-    const grant = (resource: Resource, subject: string, actions: string[]) =>
-      grants.create(context(steward.actor), {
+    const grants = createGrantCommands({
+      pool,
+      access,
+      managementAction: 'access:grant',
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
+    async function grantor(actions: readonly string[]) {
+      return authenticateAccount(access, context(steward.actor), {
+        ...steward.actor,
+        scopes: [...new Set(['access:grant', ...steward.actor.scopes, ...actions])],
+      });
+    }
+    const grant = async (resource: Resource, subject: string, actions: string[]) =>
+      grants.create(context(await grantor(actions)), {
         resource,
         subject: { kind: 'account', id: subject },
         actions,
@@ -281,7 +292,7 @@ export async function createProfileEntryFixture(
     await grant(global, steward.actor.accountId, ['definitions:publish', 'definitions:activate']);
     // Governance bootstrap already performed the Global parent's one-time installation.
     // Extend its standing creation authority through ordinary, fully authorized grants.
-    await grants.create(context(steward.actor), {
+    await grants.create(context(await grantor(['subject:create', 'statement:propose'])), {
       resource: global,
       subject: { kind: 'active_accounts' },
       actions: ['subject:create', 'statement:propose'],
@@ -482,8 +493,11 @@ export async function createProfileEntryFixture(
       async grantLibraryGate(accountId: string) {
         await grant(global, accountId, ['gate:personal_library']);
       },
+      async grantAccountActions(accountId: string, actions: readonly string[]) {
+        await grant(global, accountId, [...actions]);
+      },
       async revokeLibraryGate(accountId: string) {
-        await grants.revoke(context(steward.actor), {
+        await grants.revoke(context(await grantor(['gate:personal_library'])), {
           resource: global,
           subject: { kind: 'account', id: accountId },
           actions: ['gate:personal_library'],
