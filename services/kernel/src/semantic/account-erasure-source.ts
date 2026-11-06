@@ -24,13 +24,16 @@ import type {
 import type {
   SubjectErasurePageReceipt,
   SubjectErasureSourceFactory,
+  SubjectErasureSourceOverflow,
   SubjectErasureSourcePage,
   SubjectErasureSourceRecord,
   SubjectErasureSourceProof,
 } from './account-erasure-source-contract.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
+import observeOriginalSql from './account-erasure-source-observe.sql';
+import mappingRecheckSql from './account-erasure-source-mapping.sql';
 
-export type { SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
+export type { SubjectErasureSourceOverflow, SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
 
 /** Advance a separate Source-owned cursor. Search discovery/consumption cannot mint this proof.
  * Each call transfers at most one native role or one sealed home under the same 100-input budget.
@@ -95,64 +98,53 @@ class BudgetEnded extends Error {
 }
 
 const WIRE_BYTES = 65536;
+/** Hidden fence children: partition advance, outbox append, write_basis insert, fence result. */
+const COMMAND_EFFECT_CHILDREN = 4;
+/** no-effect fence shares the partition row and writes no basis or outbox. */
+const COMMAND_NO_EFFECT_CHILDREN = 1;
+/** Double-collected mapping: owners+sources then owners+pending+current, twice. */
+const MAPPING_CHILDREN = 10;
+const MAPPING_RECHECK_CHILDREN = 1;
+const READ_CHILDREN = 1;
+const SELECT_BODY_CHILDREN = 2;
+const SEEK_BODY_CHILDREN = 2;
+const HOLD_BODY_CHILDREN = 4;
+const TRANSFER_BODY_CHILDREN = 2;
+const COMMAND_BYTES = 4096;
+const MAPPING_BYTES = 8192;
+const READ_BYTES = 2048;
 
-/** Precheck the statement minimum, then charge returned rows and wire bytes. Empty pages get no extra
- * allowance: a statement that cannot afford its floor does not start. ROLLBACK stays possible after.
- */
-function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline: number): Pool {
-  let bytes = 0;
-  const mutable = cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] };
-  const ended = (
-    bound: 'keys' | 'bytes' | 'deadline',
-    count: number,
-    funding = bound === 'bytes' ? WIRE_BYTES : limit,
-  ) => new BudgetEnded(bound, count, funding, deadline);
-  return new Proxy(pool, {
-    get(target, key) {
-      if (key !== 'connect') {
-        const value = Reflect.get(target, key);
-        return typeof value === 'function' ? value.bind(target) : value;
+class PageBudget {
+  bytes = 0;
+  constructor(
+    readonly cost: { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] },
+    readonly funding: number,
+    readonly deadline: number,
+  ) {}
+  afford(keys: number, bytes: number) {
+    if (Date.now() >= this.deadline) throw new BudgetEnded('deadline', Date.now(), this.funding, this.deadline);
+    if (this.cost.inputKeys + keys > this.funding)
+      throw new BudgetEnded('keys', this.cost.inputKeys + keys, this.funding, this.deadline);
+    if (this.bytes + bytes > WIRE_BYTES) throw new BudgetEnded('bytes', this.bytes + bytes, WIRE_BYTES, this.deadline);
+  }
+  reserve(keys: number, bytes: number) {
+    this.afford(keys, bytes);
+    this.cost.inputKeys += keys;
+    this.cost.dependencyPoints++;
+    this.bytes += bytes;
+  }
+}
+
+function pendingPage(budget: PageBudget, ended?: BudgetEnded): SubjectErasureSourcePage {
+  return ended
+    ? {
+        status: 'pending',
+        cost: budget.cost,
+        count: ended.count,
+        error: ended.bound,
+        funding: ended.funding,
       }
-      return async () => {
-        if (Date.now() >= deadline) throw ended('deadline', Date.now());
-        if (mutable.inputKeys >= limit) throw ended('keys', mutable.inputKeys);
-        const client = await target.connect();
-        return new Proxy(client, {
-          get(native, field) {
-            if (field !== 'query') {
-              const value = Reflect.get(native, field);
-              return typeof value === 'function' ? value.bind(native) : value;
-            }
-            return async (...args: [string, unknown[]?]) => {
-              const sql = typeof args[0] === 'string' ? args[0] : '';
-              const rollback = sql === 'ROLLBACK';
-              const control = /^(BEGIN|COMMIT|ROLLBACK|SET\b)/.test(sql);
-              // A native commit writes partition/outbox/basis as well as its returned fence row.
-              const minimum = control || rollback ? 0 : sql.includes('basis_write AS') ? 4 : 1;
-              if (!rollback) {
-                if (Date.now() >= deadline) throw ended('deadline', Date.now());
-                if (mutable.inputKeys + minimum > limit) throw ended('keys', mutable.inputKeys + minimum);
-              }
-              const requestBytes = Buffer.byteLength(JSON.stringify(args));
-              if (!rollback && bytes + requestBytes > WIRE_BYTES) throw ended('bytes', bytes + requestBytes);
-              mutable.dependencyPoints++;
-              bytes += requestBytes;
-              const result = await native.query(args[0], args[1]);
-              const returned = control ? 0 : Math.max(result.rows.length, result.rowCount ?? 0);
-              if (!control) mutable.inputKeys += returned;
-              bytes += Buffer.byteLength(JSON.stringify(result.rows));
-              if (!rollback) {
-                if (Date.now() >= deadline) throw ended('deadline', Date.now());
-                if (mutable.inputKeys > limit) throw ended('keys', mutable.inputKeys);
-                if (bytes > WIRE_BYTES) throw ended('bytes', bytes);
-              }
-              return result;
-            };
-          },
-        });
-      };
-    },
-  });
+    : { status: 'pending', cost: budget.cost, count: budget.cost.inputKeys, error: null, funding: budget.funding };
 }
 
 type NativeCustody = { epoch: number; position: bigint; transactionId: string };
@@ -428,27 +420,35 @@ function sourceFactory(
         return { status: 'unavailable', cost };
       const { barrier } = input;
       const accountHome = partitionOf(barrier.accountRoute);
-      const pool = meteredPool(config.pool, cost, input.inputLimit, deadline);
+      const pool = config.pool;
+      const budget = new PageBudget(cost, input.inputLimit, deadline);
       const command = <T>(
         partition: number,
+        children: number,
         run: (tx: CommandTransaction) => Promise<import('../command/command.ts').CommandResult<T>>,
       ) => {
-        if (Date.now() >= deadline) throw new BudgetEnded('deadline', Date.now(), input.inputLimit, deadline);
-        if (cost.inputKeys + 1 > input.inputLimit)
-          throw new BudgetEnded('keys', cost.inputKeys + 1, input.inputLimit, deadline);
+        budget.reserve(children, COMMAND_BYTES);
         return runCommand(pool, { partition, basis: platform, clock: config.clock, deadline }, run);
       };
       const mappingOf = async (original: string) => {
-        if (cost.inputKeys + 1 > input.inputLimit)
-          throw new BudgetEnded('keys', cost.inputKeys + 1, input.inputLimit, deadline);
-        const mapping = (await readIdentityMappings(config.pool, [original]))[0];
-        (cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] }).inputKeys += 1;
-        return mapping;
+        budget.reserve(MAPPING_CHILDREN, MAPPING_BYTES);
+        return (await readIdentityMappings(pool, [original]))[0];
+      };
+      const mappingStill = async (original: string, expected: NonNullable<Awaited<ReturnType<typeof mappingOf>>>) => {
+        if (expected.state !== 'mapped') return false;
+        budget.reserve(MAPPING_RECHECK_CHILDREN, READ_BYTES);
+        const current = await withReadTransaction(
+          pool,
+          async (tx) =>
+            (await tx.query<{ terminal: string; epoch: string }>(mappingRecheckSql.sql, [routeOf(original), original]))
+              .rows[0],
+        );
+        return current?.terminal === expected.terminal && current.epoch === expected.epoch.toString();
       };
       return withRequestDeadline(deadline, async () => {
         try {
           // Raw seek precedes all eligibility, visibility, role and current-state filtering.
-          const selected = await command(accountHome, async (tx) => {
+          const selected = await command(accountHome, COMMAND_NO_EFFECT_CHILDREN + SELECT_BODY_CHILDREN, async (tx) => {
             cost.accessPoints++;
             if (!(await root(tx, barrier))) return noEffect(null);
             const page = (
@@ -471,7 +471,7 @@ function sourceFactory(
             if (page?.complete) return noEffect({ previous: page, next: undefined });
             return noEffect({ previous: page, next: undefined });
           });
-          if (!selected.value) return { status: 'pending', cost };
+          if (!selected.value) return pendingPage(budget);
           const { previous } = selected.value;
           // Old transfers did not identify an origin. A current physical locator
           // cannot reconstruct their custody, even when its role name still agrees.
@@ -491,7 +491,7 @@ function sourceFactory(
           const after = previous?.store
             ? [previous.store, previous.record_key, previous.role, previous.delivery_position, previous.origin_key]
             : ['', '0', '', '0', ''];
-          const sought = await command(sourceHome, async (tx) => {
+          const sought = await command(sourceHome, COMMAND_NO_EFFECT_CHILDREN + SEEK_BODY_CHILDREN, async (tx) => {
             const seal = await tx.query(
               `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
               [sourceHome, barrier.accountId, barrier.version, barrier.at],
@@ -508,7 +508,7 @@ function sourceFactory(
             ).rows[0];
             return noEffect({ raw });
           });
-          if (!sought.value) return { status: 'pending', cost };
+          if (!sought.value) return pendingPage(budget);
           const raw = sought.value.raw;
           const next: Cursor = raw ?? {
             source_partition: sourceHome,
@@ -538,6 +538,7 @@ function sourceFactory(
           const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
           if (raw) {
             // Exact native role/body proof. Read and release this home before any identity control home.
+            budget.reserve(READ_CHILDREN, READ_BYTES);
             const detail = await withReadTransaction(
               pool,
               async (tx) =>
@@ -566,7 +567,7 @@ function sourceFactory(
                   )
                 ).rows[0],
             );
-            if (!detail?.native_present) return { status: 'pending', cost };
+            if (!detail?.native_present) return pendingPage(budget);
             const refresh = () =>
               refreshSemanticErasureSourceRecord(pool, barrier.accountId, next.source_partition, {
                 store: next.store,
@@ -577,30 +578,30 @@ function sourceFactory(
               });
             if (detail.state !== 'minimized' || detail.custody_pending) {
               await refresh();
-              return { status: 'pending', cost };
+              return pendingPage(budget);
             }
-            const mapping = detail.original ? await mappingOf(detail.original) : null;
-            if (detail.original && mapping?.state !== 'mapped') return { status: 'pending', cost };
             const originalHome = detail.original ? partitionOf(routeOf(detail.original)!) : next.source_partition;
+            const cross = !!detail.original && originalHome !== next.source_partition;
+            const holdChildren = COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN;
+            budget.afford(
+              (detail.original ? MAPPING_CHILDREN + MAPPING_RECHECK_CHILDREN : 0) +
+                holdChildren * (cross ? 2 : 1) +
+                READ_CHILDREN * (cross ? 2 : 1) +
+                COMMAND_EFFECT_CHILDREN +
+                TRANSFER_BODY_CHILDREN,
+              COMMAND_BYTES * (cross ? 3 : 2) +
+                (detail.original ? MAPPING_BYTES + READ_BYTES : 0) +
+                READ_BYTES * (cross ? 2 : 1),
+            );
+            const mapping = detail.original ? await mappingOf(detail.original) : null;
+            if (detail.original && mapping?.state !== 'mapped') return pendingPage(budget);
             const observeOriginal = async (
               tx: CommandTransaction,
               home: number,
             ): Promise<SubjectErasureSourceRecord | null> => {
               if (!detail.original || mapping?.state !== 'mapped') return null;
               const source = (
-                await tx.query<SourceState>(
-                  `SELECT p.epoch,p.position::text,s.subject_id::text,s.visibility,s.security_revision::text,s.current_release,
-                  s.projection_pending,r.revision,m.terminal::text,m.epoch::text AS identity_epoch,m.origin,m.owner_epoch,
-                  g.pending_job::text,coalesce(d.revision,0)::text AS dirty_revision,coalesce(d.captured_revision,0)::text AS captured_revision
-                 FROM semantic.subject s
-                 JOIN core.partition p ON p.partition_no=$1 AND p.write_state='active'
-                 JOIN semantic.identity_epoch_mapping m ON m.route=s.route AND m.original=s.subject_id
-                 LEFT JOIN semantic.identity_epoch_home_gate g ON g.route=s.route AND g.destination=s.subject_id AND g.original=s.subject_id
-                 LEFT JOIN semantic.identity_epoch_dirty d ON d.route=s.route AND d.original=s.subject_id
-                 JOIN LATERAL(SELECT revision FROM semantic.revision WHERE route=s.route AND subject_id=s.subject_id ORDER BY revision DESC LIMIT 1) r ON true
-                 WHERE s.route=$2 AND s.subject_id=$3`,
-                  [home, routeOf(detail.original), detail.original],
-                )
+                await tx.query<SourceState>(observeOriginalSql.sql, [home, routeOf(detail.original), detail.original])
               ).rows[0];
               if (
                 !source ||
@@ -732,13 +733,16 @@ function sourceFactory(
                 );
               });
             };
-            const held = await command<HeldRecord>(next.source_partition, async (tx) => {
-              const seal = await tx.query(
-                `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
-                [next.source_partition, barrier.accountId, barrier.version, barrier.at],
-              );
-              const local = await tx.query(
-                `SELECT 1 FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
+            const held = await command<HeldRecord>(
+              next.source_partition,
+              COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN,
+              async (tx) => {
+                const seal = await tx.query(
+                  `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
+                  [next.source_partition, barrier.accountId, barrier.version, barrier.at],
+                );
+                const local = await tx.query(
+                  `SELECT 1 FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
                   USING(partition_no,account_id,role,store,record_key)
                 WHERE d.partition_no=$1 AND d.account_id=$2 AND d.role=$3 AND d.store=$4
                   AND d.record_key=$5 AND l.state='minimized' AND d.source_transaction_id IS NOT DISTINCT FROM $6::uuid
@@ -748,49 +752,54 @@ function sourceFactory(
                     WHERE c.partition_no=d.partition_no AND c.account_id=d.account_id AND c.role=d.role
                       AND c.transaction_id=d.source_transaction_id AND c.outbox_position IS NOT DISTINCT FROM d.source_position))
                 FOR SHARE OF d,l`,
-                [
-                  next.source_partition,
-                  barrier.accountId,
-                  next.role,
-                  next.store,
-                  next.record_key,
-                  detail.source_transaction_id,
-                  detail.source_position,
-                  next.origin_key,
-                  next.delivery_position,
-                ],
-              );
-              if (!seal.rowCount || !local.rowCount) return noEffect({ ready: false as const, record: null });
-              if (!(await readSemanticSourceDisposition(tx, next.store, next.record_key)))
-                return noEffect({ ready: false as const, record: null, stale: true });
-              let output: SubjectErasureSourceRecord | null = null;
-              if (detail.original && originalHome === next.source_partition) {
-                output = await observeOriginal(tx, originalHome);
-                if (!output) return noEffect({ ready: false as const, record: null });
-              }
-              // The held record is an exact native disposition, not permission to read a terminal's body.
-              hold(tx, next.source_partition, output);
-              return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
-            });
+                  [
+                    next.source_partition,
+                    barrier.accountId,
+                    next.role,
+                    next.store,
+                    next.record_key,
+                    detail.source_transaction_id,
+                    detail.source_position,
+                    next.origin_key,
+                    next.delivery_position,
+                  ],
+                );
+                if (!seal.rowCount || !local.rowCount) return noEffect({ ready: false as const, record: null });
+                if (!(await readSemanticSourceDisposition(tx, next.store, next.record_key)))
+                  return noEffect({ ready: false as const, record: null, stale: true });
+                let output: SubjectErasureSourceRecord | null = null;
+                if (detail.original && originalHome === next.source_partition) {
+                  output = await observeOriginal(tx, originalHome);
+                  if (!output) return noEffect({ ready: false as const, record: null });
+                }
+                // The held record is an exact native disposition, not permission to read a terminal's body.
+                hold(tx, next.source_partition, output);
+                return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
+              },
+            );
             if (!held.value.ready) {
               if ('stale' in held.value) await refresh();
-              return { status: 'pending', cost };
+              return pendingPage(budget);
             }
             roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
             let sourceHeld = held;
             if (detail.original && originalHome !== next.source_partition) {
-              sourceHeld = await command<HeldRecord>(originalHome, async (tx) => {
-                const seal = await tx.query(
-                  `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
-                  [originalHome, barrier.accountId, barrier.version, barrier.at],
-                );
-                if (!seal.rowCount) return noEffect({ ready: false as const, record: null });
-                const output = await observeOriginal(tx, originalHome);
-                if (!output) return noEffect({ ready: false as const, record: null });
-                hold(tx, originalHome, output);
-                return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
-              });
-              if (!sourceHeld.value.ready) return { status: 'pending', cost };
+              sourceHeld = await command<HeldRecord>(
+                originalHome,
+                COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN,
+                async (tx) => {
+                  const seal = await tx.query(
+                    `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
+                    [originalHome, barrier.accountId, barrier.version, barrier.at],
+                  );
+                  if (!seal.rowCount) return noEffect({ ready: false as const, record: null });
+                  const output = await observeOriginal(tx, originalHome);
+                  if (!output) return noEffect({ ready: false as const, record: null });
+                  hold(tx, originalHome, output);
+                  return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
+                },
+              );
+              if (!sourceHeld.value.ready) return pendingPage(budget);
             }
             record = sourceHeld.value.record;
             custody = {
@@ -803,18 +812,19 @@ function sourceFactory(
                 ...record,
                 source: { ...record.source, position: sourceHeld.position, epoch: sourceHeld.epoch },
               };
-            if (detail.original && mapping?.state === 'mapped') {
-              const current = await mappingOf(detail.original);
-              if (
-                current?.state !== 'mapped' ||
-                current.terminal !== mapping.terminal ||
-                current.epoch !== mapping.epoch
-              )
-                return { status: 'pending', cost };
-            }
+            if (detail.original && mapping?.state === 'mapped' && !(await mappingStill(detail.original, mapping)))
+              return pendingPage(budget);
           } else {
             // A real native sealed EOF also needs held custody; it is not a caller's empty array.
-            const held = await command(sourceHome, async (tx) => {
+            budget.afford(
+              COMMAND_EFFECT_CHILDREN +
+                HOLD_BODY_CHILDREN +
+                READ_CHILDREN +
+                COMMAND_EFFECT_CHILDREN +
+                TRANSFER_BODY_CHILDREN,
+              COMMAND_BYTES * 2 + READ_BYTES,
+            );
+            const held = await command(sourceHome, COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN, async (tx) => {
               const seal = await tx.query(
                 `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                 [sourceHome, barrier.accountId, barrier.version, barrier.at],
@@ -831,13 +841,14 @@ function sourceFactory(
               });
               return { value: true, events: events(barrier.accountId) };
             });
-            if (!held.value) return { status: 'pending', cost };
+            if (!held.value) return pendingPage(budget);
             custody = roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
           }
           // Resolve actual durable hold/commit rows while still in their respective homes. The
           // transfer below owns this released custody; account verification never joins homes.
-          const resolveHold = async (home: number, native: NativeCustody) =>
-            withReadTransaction(
+          const resolveHold = async (home: number, native: NativeCustody) => {
+            budget.reserve(READ_CHILDREN, READ_BYTES);
+            return withReadTransaction(
               pool,
               async (tx) =>
                 (
@@ -866,6 +877,7 @@ function sourceFactory(
                   )
                 ).rowCount === 1,
             );
+          };
           const observedHome = record?.source?.partition ?? next.source_partition;
           if (
             !custody ||
@@ -873,7 +885,7 @@ function sourceFactory(
             !(await resolveHold(next.source_partition, roleCustody)) ||
             (observedHome !== next.source_partition && !(await resolveHold(observedHome, custody)))
           )
-            return { status: 'pending', cost };
+            return pendingPage(budget);
           if (
             Buffer.byteLength(
               JSON.stringify(record, (_key, value) => (typeof value === 'bigint' ? value.toString() : value)),
@@ -882,7 +894,7 @@ function sourceFactory(
             return { status: 'unavailable', cost };
           // Only this private producer can transfer a just-committed native hold. No public boolean,
           // arbitrary receipt constructor, copied body, or current-role count can enter this path.
-          const accepted = await command(accountHome, async (tx) => {
+          const accepted = await command(accountHome, COMMAND_EFFECT_CHILDREN + TRANSFER_BODY_CHILDREN, async (tx) => {
             cost.accessPoints++;
             if (!(await root(tx, barrier))) return noEffect(false);
             const current = (
@@ -942,7 +954,7 @@ function sourceFactory(
             });
             return { value: true, events: events(barrier.accountId) };
           });
-          if (!accepted.value) return { status: 'pending', cost };
+          if (!accepted.value) return pendingPage(budget);
           const records = record ? [record] : [];
           cost.outputSlots += records.length;
           const receipt = { id } as SubjectErasurePageReceipt;
@@ -951,7 +963,7 @@ function sourceFactory(
             : { status: 'complete', records, frontier: null, receipt, cost };
           return result;
         } catch (error) {
-          if (error instanceof BudgetEnded) return { status: 'pending', cost };
+          if (error instanceof BudgetEnded) return pendingPage(budget, error);
           if (classifyUnavailability(error)) return { status: 'unavailable', cost };
           // An unavailable native home is never evidence of absence. Preserve the real failure for
           // the caller/worker rather than converting arbitrary SQL or infrastructure errors to EOF.

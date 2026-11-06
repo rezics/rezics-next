@@ -305,5 +305,5 @@ without worker composition. Internal Zone purge pages carry a unique `zone.purge
 history on no-effect paths so COMMIT can match enrolled event pages. Account-agent authorized reads prepare
 Access evidence at authorize time. Native cleanup/hold commit fences, erasure effects, independent public
 readback and the original browser journeys remain acceptance obligations after landing.
-Decision: Subject source pages precheck each statement minimum then charge returned rows; identity mapping
-uses the unmetered pool and one original key so tombstone homes cannot overflow the caller limit.
+Decision: Subject source pages reserve mapping and command children, including hidden basis and outbox
+writes, before effects, and persist continuation so an affordable call finishes the native all-home walk.

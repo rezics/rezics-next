@@ -14,6 +14,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { readSemanticErasure } from '../../src/semantic/account-erasure.ts';
 import {
+  createSubjectErasureSource,
   readSubjectErasureSourceProof,
   verifySubjectErasureSourceProof,
 } from '../../src/semantic/account-erasure-source.ts';
@@ -28,6 +29,7 @@ import {
   seed,
   type Cost,
 } from '../support/growth.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 import { createBody } from '../zones/resource-fixture.ts';
 import { unrelatedSemanticPopulation } from './planner-graph-fixtures.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
@@ -286,6 +288,22 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     expect([...native.sourceKeys].some((key) => key.includes(':context:') && key.includes(':owner:'))).toBe(true);
     expect([...native.sourceKeys].some((key) => key.includes(':zone:'))).toBe(true);
 
+    const boundary = await createSubjectErasureSource({
+      pool: f.db.pool,
+      routeKey: testRouteKey(),
+      access: f.native.access,
+      clock: () => new Date(),
+    }).readPage({
+      barrier,
+      frontier: null,
+      inputLimit: 4,
+      context: context(),
+    });
+    expect(boundary.cost.inputKeys).toBeLessThanOrEqual(4);
+    if (boundary.status === 'pending') {
+      expect(boundary.error).toBe('keys');
+      expect(boundary.count).toBeGreaterThan(boundary.funding);
+    }
     // The independent Source-owned cursor must transfer every home and historical role.
     // Advancing it is real work: count every command, failed point, byte and background query.
     let proof: Awaited<ReturnType<typeof readSubjectErasureSourceProof>> = null;

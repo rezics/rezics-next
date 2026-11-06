@@ -225,10 +225,17 @@ test('Search receives sealed role-complete Subject source disposition and actual
   ).toBe(false);
 }, 360_000);
 
-test('tombstone Source pages precheck the caller minimum and charge returned rows without overflowing', async () => {
-  const person = await f.person();
-  await f.tombstone(person);
-  const b = await barrier(person.accountId);
+test('Original funded Subject erasure pages account for every mapping and command child and resume to independent all-home tombstone readback within declared bounds', async () => {
+  const author = await f.author();
+  const moderator = await f.author();
+  await f.grant(GLOBAL_CONTEXT, moderator, ['subject:merge', 'moderation:hide']);
+  const left = await subject(author, 'Mapped original A');
+  const right = await subject(author, 'Mapped original B');
+  const merged = await f.call(moderator, 'POST', '/v1/subjects:merge', { subjects: [left, right] });
+  expect(merged.status, JSON.stringify(merged.body)).toBe(200);
+  const original = merged.body.redirected as string;
+  await f.tombstone(author);
+  const b = await barrier(author.accountId);
   await local(b);
   const tight = await createSubjectErasureSource(config()).readPage({
     barrier: b,
@@ -237,23 +244,16 @@ test('tombstone Source pages precheck the caller minimum and charge returned row
     context: context(),
   });
   expect(tight.cost.inputKeys).toBeLessThanOrEqual(4);
-  expect(['pending', 'progress', 'complete', 'unavailable']).toContain(tight.status);
-  let advanced = false;
-  for (let step = 0; step < 8; step++) {
-    const page = await createSubjectErasureSource(config()).readPage({
-      barrier: b,
-      frontier: null,
-      inputLimit: 100,
-      context: context(),
-    });
-    expect(page.cost.inputKeys).toBeLessThanOrEqual(100);
-    if ('receipt' in page) {
-      advanced = true;
-      break;
-    }
+  expect(tight.status).toBe('pending');
+  if (tight.status === 'pending') {
+    expect(tight.error).toBe('keys');
+    expect(tight.funding).toBe(4);
+    expect(tight.count).toBeGreaterThan(tight.funding);
   }
-  expect(advanced).toBe(true);
-}, 180_000);
+  const result = await complete(b);
+  expect(result.records.some((r) => r.original === original)).toBe(true);
+  expect(result.records.every((r) => r.disposition !== 'pending')).toBe(true);
+}, 360_000);
 
 test('sealed empty native role homes advance before filters while a hidden original never borrows visible terminal disposition', async () => {
   const author = await f.author();

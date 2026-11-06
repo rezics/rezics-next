@@ -75,8 +75,28 @@ hidden source ordinals are read or retained.
 
 Search has native ordered preparation and orderedPrefix bodies. They restore/capture complete observations, validate privacy-reduction coverage and currentness, read bounded ordered rows, verify native hits and revalidate before return. Collection input additionally requires a complete bounded population and current membership. Missing source or privacy evidence and unaffordable work still produce readiness; this implementation does not prove every ordered journey.
 
-Ordinary `createKernel` binds the native Content cover/tuple lifecycle so Zone summary reads work without identity participants. `GET /v1/zones/{id}/subjects` is mounted from `page-runtime.ts`. It reuses `createZoneReads().page`, `zone_sources` admission, `createZoneMembership`/`advanceZoneUnion`/`revalidateZoneUnion` and `readSubjectSummaryObservation`, with the default list-cursor profile, predecessor replay and `409 stale_cursor` for expired or incompatible tokens. The Zone reader restarts that stale token once under current authority. Missing current summaries are unavailable, never omitted. TypeList membership and `zoneObservedReadKey` stay in that same runtime so Search does not import Zones and restricted observations cannot leak into a global Search dispatch. Generated OpenAPI and the installed client remain promotion outputs. Zone cleanup follows the [adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup). Proposed prepareZoneCleanup and lockZoneCleanup are not callable exports. Native six-surface, source publication, physical/growth, privacy repair, withholding, purge, account cleanup and default-world outcomes are not established by helper setup or type evidence.
-The native Subject GET design is owned by [Zones](../../../../docs/zones.md#routes-and-native-declarations) and [Zone membership](../../../../docs/zone-membership.md). It is not mounted; sparse preparation, replay, generated installed client, native API and growth acceptance remain pending. Native takedown and release (`:takedown`, `:releaseTakedown`) withhold and restore exact configuration pointers under `moderation:takedown`; configuration edits rebind live decisions to moved elements and retain superseded or removed originals in restricted custody; configuration reads with a live decision are owner-only (`takedown.ts`). Platform `:hold`/`:releaseHold`/`:purge` commit hold and cleanup intent on Global Context (`zone:purge`); `purgeZonePage` is the bounded worker. Account-erasure Zone payload and ordinary retention's final purged marker use `lockZoneHead`/`compareAndSetZone`; a live hold defers the locator and does not clear withholding. Proposed prepareZoneCleanup and lockZoneCleanup are not callable exports; the current ordinary record authority remains unchanged. Access grant minimization, Content order-scope, History durable-work, physical/growth and default-world outcomes are not established by helper setup or type evidence.
+Ordinary `createKernel` binds the native Content cover/tuple lifecycle so Zone summary reads work without identity
+participants. `GET /v1/zones/{id}/subjects` is mounted from `page-runtime.ts`. It reuses `createZoneReads().page`,
+`zone_sources` admission, `createZoneMembership`/`advanceZoneUnion`/`revalidateZoneUnion` and
+`readSubjectSummaryObservation`, with the default list-cursor profile, predecessor replay and `409 stale_cursor`
+for expired or incompatible tokens. The Zone reader restarts that stale token once under current authority.
+Missing current summaries are unavailable, never omitted. TypeList membership and `zoneObservedReadKey` stay in
+that same runtime so Search does not import Zones and restricted observations cannot leak into a global Search
+dispatch. Generated OpenAPI and the installed client remain promotion outputs. The native Subject GET design is
+owned by [Zones](../../../../docs/zones.md#routes-and-native-declarations) and
+[Zone membership](../../../../docs/zone-membership.md).
+
+Native takedown and release (`:takedown`, `:releaseTakedown`) withhold and restore exact configuration pointers
+under `moderation:takedown`; configuration edits rebind live decisions to moved elements and retain superseded or
+removed originals in restricted custody; configuration reads with a live decision are owner-only (`takedown.ts`).
+Platform `:hold`/`:releaseHold`/`:purge` commit hold and cleanup intent on Global Context (`zone:purge`);
+`purgeZonePage` is the bounded worker. Account-erasure Zone payload and ordinary retention's final purged marker
+use `lockZoneHead`/`compareAndSetZone`; a live hold defers the locator and does not clear withholding. Proposed
+prepareZoneCleanup and lockZoneCleanup are not callable exports; the current ordinary record authority remains
+unchanged. Zone cleanup follows the [adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
+Native, growth and browser acceptance for six-surface walks, source publication, privacy repair, withholding,
+purge, account cleanup and default-world outcomes remain unproved; helper setup and type evidence do not establish
+them. Access grant minimization, Content order-scope and History durable-work remain open.
 
 ## Authored names
 
