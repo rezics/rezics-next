@@ -421,7 +421,7 @@ export type TerminationIntent = {
   operation: 'stop' | 'cancel';
   requestedAt: string;
   state: 'requested' | 'unknown' | 'complete';
-  processIdentity: 'known' | 'not-started' | 'unknown';
+  processIdentity: 'known' | 'not-started' | 'waiting' | 'unknown';
   process: ProcessIdentity | null;
   auxiliaryProcesses: ProcessIdentity[];
   error?: string;

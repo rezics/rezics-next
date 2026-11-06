@@ -1997,14 +1997,17 @@ export class WorkerStore implements AttemptFence {
         const attempt = this.attempt(ref);
         const at = new Date().toISOString();
         let intent = attempt.terminationIntent;
+        const waitingWithoutWorker = attempt.state === 'waiting' && attempt.process == null;
         if (!intent) {
           const auxiliaryProcesses = [...(attempt.auxiliaryProcesses ?? [])];
           const started = this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started');
           const processIdentity = attempt.process
             ? 'known'
-            : !started && !auxiliaryProcesses.length && runPidFilePresence(attempt.logPath) === 'absent'
-              ? 'not-started'
-              : 'unknown';
+            : waitingWithoutWorker
+              ? 'waiting'
+              : !started && !auxiliaryProcesses.length && runPidFilePresence(attempt.logPath) === 'absent'
+                ? 'not-started'
+                : 'unknown';
           intent = {
             operation,
             requestedAt: at,
@@ -2018,6 +2021,14 @@ export class WorkerStore implements AttemptFence {
           this.db
             .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
             .run(ref.taskId, ref.attempt, 'termination-requested', at, JSON.stringify({ operation, processIdentity }));
+        } else if (waitingWithoutWorker && intent.processIdentity === 'unknown' && intent.state !== 'complete') {
+          intent.processIdentity = 'waiting';
+          intent.state = 'requested';
+          delete intent.error;
+          if (operation === 'cancel') {
+            intent.operation = 'cancel';
+            delete intent.settledAt;
+          }
         } else if (operation === 'cancel' && intent.operation !== 'cancel') {
           intent.operation = 'cancel';
           delete intent.settledAt;

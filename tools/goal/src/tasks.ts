@@ -16,6 +16,7 @@ import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   devProductBrief,
@@ -38,9 +39,11 @@ import { completeRebaseConflictContext } from './conflict-progress.ts';
 import {
   hasLiveProcessUnder,
   inspectProcessIdentity,
+  processIdentity,
   runPidFilePresence,
   sameProcess,
   terminateProcessGroup,
+  type ProcessIdentity,
 } from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -185,6 +188,93 @@ function checkHasTerminalExit(worktree: string, id: string): boolean {
 }
 function unresolvedCheckIds(task: Task, attempt: Attempt): string[] {
   return (attempt.checks ?? []).filter((id) => !checkHasTerminalExit(task.worktree, id));
+}
+
+const WAITING_CHECK_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+function waitingCheckResultPath(worktree: string, id: string): string {
+  return join(worktree, '.temp/goal/checks/results', `${id}.json`);
+}
+
+function readWaitingCheckRecord(worktree: string, id: string): Record<string, unknown> | null {
+  if (!WAITING_CHECK_ID.test(id)) return null;
+  try {
+    const document = JSON.parse(readFileSync(waitingCheckResultPath(worktree, id), 'utf8')) as unknown;
+    if (!document || typeof document !== 'object' || Array.isArray(document)) return null;
+    const record = document as Record<string, unknown>;
+    return record.result && typeof record.result === 'object' && !Array.isArray(record.result)
+      ? (record.result as Record<string, unknown>)
+      : record;
+  } catch {
+    return null;
+  }
+}
+
+function parseRecordedRunnerIdentity(value: unknown): ProcessIdentity | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const identity = value as Record<string, unknown>;
+  if (
+    !Number.isSafeInteger(identity.pid) ||
+    Number(identity.pid) < 1 ||
+    typeof identity.start !== 'string' ||
+    !/^\d+$/.test(identity.start) ||
+    typeof identity.boot !== 'string' ||
+    !identity.boot.length ||
+    !Number.isSafeInteger(identity.group) ||
+    Number(identity.group) < 1
+  )
+    return null;
+  return { pid: Number(identity.pid), start: identity.start, boot: identity.boot, group: Number(identity.group) };
+}
+
+function waitingCheckRunnerIdentity(record: Record<string, unknown>): ProcessIdentity | null {
+  if (record.runnerIdentity !== undefined) return parseRecordedRunnerIdentity(record.runnerIdentity);
+  const pid = Number(record.runnerPid ?? record.runner_pid);
+  if (!Number.isSafeInteger(pid) || pid < 1) return null;
+  return processIdentity(pid);
+}
+
+function waitingCheckAlreadySettled(record: Record<string, unknown>): boolean {
+  const status = String(record.status ?? '').toLowerCase();
+  return status === 'finished' || status === 'abandoned';
+}
+
+function markWaitingCheckAbandoned(
+  worktree: string,
+  id: string,
+  operation: 'stop' | 'cancel',
+  record: Record<string, unknown>,
+): void {
+  writeFileSync(
+    waitingCheckResultPath(worktree, id),
+    JSON.stringify({
+      ...record,
+      id,
+      status: 'abandoned',
+      abandonedBy: operation,
+      abandonedAt: new Date().toISOString(),
+    }),
+  );
+}
+
+async function terminateWaitingCheckRunners(
+  worktree: string,
+  checks: readonly string[],
+  operation: 'stop' | 'cancel',
+  graceMs: number,
+  processPolicy: Parameters<typeof terminateProcessGroup>[2],
+): Promise<void> {
+  const localHost = hostname();
+  for (const id of checks) {
+    const record = readWaitingCheckRecord(worktree, id);
+    if (!record || waitingCheckAlreadySettled(record)) continue;
+    const host = record.runnerHost;
+    if (host === undefined || host === '' || host === localHost) {
+      const identity = waitingCheckRunnerIdentity(record);
+      if (identity) await terminateProcessGroup(identity, graceMs, processPolicy);
+    }
+    markWaitingCheckAbandoned(worktree, id, operation, record);
+  }
 }
 export type RetryOptions = {
   brief?: string;
@@ -2013,6 +2103,19 @@ export class WorkerTasks {
             throw new Error(
               `${intent.operation} request retained with never-launched identity for task ${taskId} attempt ${ref.attempt} until current PID absence and worktree clearance are confirmed`,
             );
+        } else if (intent.processIdentity === 'waiting') {
+          try {
+            await terminateWaitingCheckRunners(
+              task.worktree,
+              this.store.attempt(ref).checks ?? [],
+              intent.operation,
+              this.settings.terminationGraceMs,
+              this.settings.policy?.process,
+            );
+          } catch (error) {
+            this.store.finishTermination(ref, String(error));
+            throw error;
+          }
         } else {
           try {
             const owned = new Map(
@@ -2042,6 +2145,17 @@ export class WorkerTasks {
     const ref = { taskId, attempt: task.currentAttempt };
     const intent = this.store.attempt(ref).terminationIntent;
     if (!intent) return;
+    const attempt = this.store.attempt(ref);
+    if (
+      attempt.state === 'waiting' &&
+      attempt.process == null &&
+      intent.processIdentity === 'unknown' &&
+      !intent.settledAt
+    ) {
+      if (intent.operation === 'cancel') await this.cancel(taskId);
+      else await this.stop(taskId);
+      return;
+    }
     if (
       intent.processIdentity === 'unknown' ||
       (intent.processIdentity === 'not-started' && intent.state !== 'complete')
