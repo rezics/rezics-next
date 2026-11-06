@@ -22,12 +22,6 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
-import associationRead from '../../src/semantic/classification-association-read.sql';
-import { effectiveGlobalSlotFacts } from '../../src/semantic/slots.ts';
-import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
-import { accessCheck } from '../../src/request/access.ts';
-import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
 
 const route = 0x5ab1;
 const accountId = newId(route);
@@ -258,33 +252,6 @@ test('classification commands and projector use supplied execution without chang
     await access.grant({ route: routeOf(target.id)!, id: target.id }, 'voter', action);
   }
   const ballots = application().classifications;
-  const association = await associationRead.run(database.admin, {
-    route: routeOf(target.id)!,
-    subject_id: target.id,
-    candidate_id: associationId,
-  });
-  const check = await accessCheck(
-    applicationAccess,
-    actor,
-    'classification_ballot:set',
-    {
-      route: routeOf(target.id)!,
-      id: target.id,
-      eligibility: subjectReadEligibility({ route: routeOf(target.id)!, id: target.id }, 'classification_ballot:set'),
-    },
-    { pool: database.pool, deadline: Date.now() + 30_000 },
-  );
-  console.info(
-    'classification receiving',
-    JSON.stringify(
-      await withReadTransaction(database.pool, async (tx) => ({
-        association,
-        selected: await effectiveGlobalSlotFacts(tx, target.id, 'schema:gender', association!.slotId),
-        disclosure: await readCandidateDisclosure(tx, { subject: target.id, candidate: associationId }),
-        authorized: await check(tx),
-      })),
-    ),
-  );
   const first = await ballots.set(
     actor,
     {

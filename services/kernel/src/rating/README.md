@@ -2215,3 +2215,8 @@ The base platform has no common module-definition/ambient-capability record. Rat
 owner definition through the existing Kernel and WorkModule interfaces. The shared operands used here are the
 platform command executor, event projection, effect/relay contracts, work registration and deadline authority; these
 are explicit public platform entries. A future common declaration contract can accept the same owner definition.
+
+Native receiving covers vote replay and aggregate application, exact classification assessment with the five-ballot
+privacy threshold, and Question identity/replay with current management authority in one constructed module. The
+Access SQL projection supplies its existing `deadline_live` operand as `deadlineLive` to the native policy adapter;
+without this operand, registered classification action/type profiles deny even an explicitly granted current voter.
