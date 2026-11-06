@@ -840,8 +840,9 @@ only if the stored source must change.
 
 Decision: confidential Search continuations also bind the published identity-epoch digest; a changed epoch
 restarts the executed query. Canonical pages emit one terminal after original AND terminal admission.
-Search reads that digest through Semantic's public identity-adapters/read entry and owns generation publication
-pins without importing Semantic internals.
+Search reads that digest through Semantic's public identity-adapters/read entry, which serves the digest from the
+mapping-read module rather than identity-basis.ts, and owns generation publication pins without importing Semantic
+internals.
 
 The Search cursor contract uses the shared encrypted list-cursor Search profile with AES-GCM. Its authenticated
 binding covers the route/operation, canonical request hash and viewer. The viewer is a real lowercase account UUID

@@ -354,6 +354,8 @@ identity meaning changes retain `409 search_restart_required`; pending identity/
 Decision: confidential Search continuations bind the published identity-epoch digest with principal, operands,
 operation and physical generation; canonical pages emit one terminal per maintained original-and-terminal path.
 Search consumes published identity meaning and native publication types only through Semantic public entries.
+Decision: published identity-basis digest reads live on identity-adapters/read via the mapping-read module so Search
+does not import identity-basis or close a value-import cycle through semantic/read.
 Re-resolve current resource heads, release and authority on every continuation within the fixed budget.
 
 Preserve the confidential [Search cursor profile](../services/kernel/src/search/README.md#confidential-cursor-and-bounded-name-sort):
