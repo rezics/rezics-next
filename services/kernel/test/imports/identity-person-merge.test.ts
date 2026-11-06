@@ -55,7 +55,7 @@ test('a reviewed Person pair merges once through the native contract and both or
     const grant = await editor.http('/v1/grants', {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: runtime.identity.bulk.accountId },
-      actions: ['context:accept', 'context:adopt', 'subject:merge'],
+      actions: ['context:accept', 'context:adopt', 'subject:merge', 'gate:subject_identity'],
       valid: '(,)',
     });
     expect(grant.status).toBe(201);

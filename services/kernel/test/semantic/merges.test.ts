@@ -38,6 +38,7 @@ const actions = [
   'context:accept',
   'context:adopt',
   'subject:merge',
+  'gate:subject_identity',
 ];
 const realAccess = await createRealAccess(admin, accounts, actions);
 beforeAll(async () => {
@@ -47,6 +48,8 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  // The subject_identity exposure gate is closed by default; a reviewer opens it with its gate authority.
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'gate:subject_identity');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
 
@@ -114,10 +117,21 @@ const edition = (title: string, workId: string) =>
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)] },
   });
 const byId = (a: Record<string, any>, b: Record<string, any>) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+// A link carries its holder's label, type and authorized summary, as the current link contract returns them.
 const linkOf = (source: Record<string, any>, property: string) => ({
   subject: source.id as string,
   property,
   statement: source.statements[property][0].id as string,
+  label: source.labels.en as string,
+  type: source.type as string,
+  summary: {
+    id: source.id as string,
+    type: source.type as string,
+    types: expect.any(Array),
+    label: { value: source.labels.en as string, language: 'en' },
+    creativeWork: expect.any(Boolean),
+    cover: null,
+  },
 });
 const sorted = (links: { subject: string }[]) =>
   [...links].sort((a, b) => (a.subject < b.subject ? -1 : a.subject > b.subject ? 1 : 0));
@@ -387,31 +401,67 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
   expect(sources[1]!.externalId).not.toBe('');
   const properties = ['wdt:P6298', 'wdt:P3180'];
   const values = [number, sources[1]!.externalId];
+  const tuple = (source: { source: string; externalId: string }) => ({
+    source: source.source,
+    external_id: source.externalId,
+    record_revision: '1',
+    digest: 'c'.repeat(64),
+    converter_revision: 'review@1',
+    field_group: 'facts',
+  });
+  // Creation takes labels and the claim only; each identifier is a sourced candidate until it is accepted and adopted.
   const batch = await call('POST', '/v1/subjects:batchWrite', {
     as: 'editor',
     body: {
-      commands: sources.map((source, index) => ({
+      commands: sources.map((source) => ({
         op: 'create',
         key: randomUUID(),
-        source: {
-          source: source.source,
-          external_id: source.externalId,
-          record_revision: '1',
-          digest: 'c'.repeat(64),
-          converter_revision: 'review@1',
-          field_group: 'facts',
-        },
-        subject: {
-          type: 'schema:Person',
-          labels: { en: 'Reviewed Person' },
-          statements: { [properties[index]!]: [statement(properties[index]!, values[index])] },
-        },
+        source: tuple(source),
+        subject: { type: 'schema:Person', labels: { en: 'Reviewed Person' } },
       })),
     },
   });
   expect(batch.response.status).toBe(200);
   expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201]);
   const subjects = batch.body.results.map((result: any) => result.value.id) as [string, string];
+  const proposed = await call('POST', '/v1/subjects:batchWrite', {
+    as: 'editor',
+    body: {
+      commands: sources.map((source, index) => ({
+        op: 'propose',
+        key: randomUUID(),
+        source: tuple(source),
+        subject: subjects[index],
+        statement: {
+          property: { id: properties[index]! },
+          value: { type: 'value', content: values[index] },
+          references: [reference],
+        },
+      })),
+    },
+  });
+  expect(proposed.response.status).toBe(200);
+  const candidates = proposed.body.results.map((result: any) => result.value.candidate) as [string, string];
+  for (const [index, candidate] of candidates.entries()) {
+    const accepted = await call('POST', `/v1/subjects/${subjects[index]}/candidates/${candidate}:accept`, {
+      as: 'acceptor',
+      key: key(),
+      body: { context: GLOBAL_CONTEXT, expected_head: null },
+    });
+    expect(accepted.response.status).toBe(200);
+    const adopted = await call('POST', `/v1/subjects/${subjects[index]}:adopt`, {
+      as: 'acceptor',
+      key: key(),
+      body: {
+        context: GLOBAL_CONTEXT,
+        property: properties[index],
+        mode: 'replace',
+        expected_head: null,
+        selection: [{ candidate, rank: 'normal' }],
+      },
+    });
+    expect(adopted.response.status).toBe(200);
+  }
   const query = (index: number) =>
     new URLSearchParams({
       reviewIdentitySource: sources[index]!.source,
@@ -424,7 +474,7 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
     expect(read.response.headers.get('cache-control')).toBe('private, no-store');
     expect(read.body.reviewedIdentity).toEqual({
       subject: subjects[index],
-      revision: 1,
+      revision: expect.any(Number),
       securityRevision: expect.stringMatching(/^[1-9][0-9]*$/),
       ...sources[index],
       property: properties[index],
@@ -448,7 +498,11 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
   for (const field of ['revision', 'securityRevision', 'claimTransactionId'] as const) {
     const stale = structuredClone(body);
     stale.expectedIdentity.endpoints[0][field] =
-      field === 'revision' ? 2 : field === 'securityRevision' ? '9999999999999999999' : randomUUID();
+      field === 'revision'
+        ? body.expectedIdentity.endpoints[0]!.revision + 1
+        : field === 'securityRevision'
+          ? '9999999999999999999'
+          : randomUUID();
     expect((await merge(stale)).response.status).toBe(409);
   }
   const swapped = structuredClone(body);

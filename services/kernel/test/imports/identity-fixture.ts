@@ -274,7 +274,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   const { database, clock } = options;
   const counters = { authMigrationCalls: 0, baselineWorkflowCalls: { registrations: 0, keyInstalls: 0 } };
   let countingBaselineCalls = false;
-  const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];
+  // The review transport publishes reviewed Person merges through the importer client's native scope.
+  const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS, 'subject:merge'];
   const statisticScopes = options.sourceStatistics === 'vndb' ? ['source_statistic:write'] : [];
   const managementScopes = [
     ...importerScopes,
@@ -428,7 +429,14 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const client = {
       clientId: `importer-${randomUUID()}`,
       firstParty: true,
-      scopes: [...COMMON_ACTIONS, ...IMPORT_ACTIONS, 'statement:propose', 'media:read_reservation', ...statisticScopes],
+      scopes: [
+        ...COMMON_ACTIONS,
+        ...IMPORT_ACTIONS,
+        'subject:merge',
+        'statement:propose',
+        'media:read_reservation',
+        ...statisticScopes,
+      ],
     };
     const managementClient = `governance-${randomUUID()}`;
     await auth.internal.registerClient(client);

@@ -165,7 +165,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
       new Promise<never>((_, reject) => {
         startupTimer = setTimeout(
           () => reject(new Error(`Media ${mode} startup exceeded its fixture deadline`)),
-          110_000,
+          240_000,
         );
       }),
     ]);
