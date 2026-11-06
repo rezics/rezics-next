@@ -17,6 +17,9 @@ let authentications = 0;
 const searches: unknown[] = [];
 const suggestions: unknown[] = [];
 const search: SearchService = {
+  async savedCatalogueMembers() {
+    throw new Error('saved membership is not used by this fixture');
+  },
   async search(_principal, request) {
     searches.push(request);
     return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };

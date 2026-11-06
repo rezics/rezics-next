@@ -199,6 +199,9 @@ test('createKernel subject:read POST custom search authorizes without a write ch
       },
     },
     search: {
+      async savedCatalogueMembers() {
+        throw new Error('saved membership is not used by this fixture');
+      },
       async search(principal, body) {
         searches.push([principal, body]);
         return result;
