@@ -1,13 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CandidateReaderBoundary, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
-import { browserObservation } from '../../../session';
-import {
-  normalizeSessionObservation,
-  sessionStateSnapshot,
-  unknownSession,
-  type BrowserSession,
-} from '../../../session/browser-state';
+import { browserObservation, cachedBrowserSession, type BrowserSession } from '../../../session';
 import { csrfHeaders } from '../../../threads/composer';
 import { editorRequest } from '../editor-request';
 import { relationTargetSearch } from '../relation-editor-search';
@@ -15,12 +9,6 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 import { loadCreditRevision } from './actions';
 import { CreditInspection } from './view';
 import type { CreditAssertion, CreditVisit } from './model';
-
-function cachedSession(client: ReturnType<typeof useQueryClient>): BrowserSession {
-  const state = sessionStateSnapshot(client);
-  if (!state || state.status !== 'success') return unknownSession;
-  return normalizeSessionObservation(state.data);
-}
 
 function CreditInspectionBody({
   credit,
@@ -111,7 +99,7 @@ export function CreditInspectionSession({
   const client = useQueryClient();
   const store = browserObservation(client);
   const revision = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
-  const observed = cachedSession(client);
+  const observed = cachedBrowserSession(client);
   const admission = useMemo(
     () => ({ reader: observed.subject ?? '', live: () => store.getSnapshot() === revision }),
     [observed.subject, revision, store],

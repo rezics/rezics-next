@@ -143,6 +143,13 @@ export function sessionStateSnapshot(client: QueryClient) {
   return client.getQueryState(sessionQueryKey);
 }
 
+/** Read the prepared session cache. Does not start a session fetch. */
+export function cachedBrowserSession(client: QueryClient): BrowserSession {
+  const state = sessionStateSnapshot(client);
+  if (!state || state.status !== 'success') return unknownSession;
+  return normalizeSessionObservation(state.data);
+}
+
 function currentOwnedSession(): BrowserSession | null {
   const owner = owners[owners.length - 1];
   if (!owner) return null;

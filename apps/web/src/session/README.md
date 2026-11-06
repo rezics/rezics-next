@@ -45,6 +45,7 @@ Decision: outage recovery retains only a bounded, query-free local return path i
 ## Public module entry
 
 `session/index.ts` is the public browser adapter entry for observation and read/operation/address leases.
+Public catalogue inspect reads the prepared cache through `cachedBrowserSession` and does not start a session fetch.
 `session/reader.ts` exposes workspace admission and current-response/address composition without eagerly loading
 those React/Query adapters for observation-only consumers. `reader/` contains its existing implementations;
 these are Web runtime adapters, not Library infrastructure. Lease descriptors in `reader/lease.ts` have no
