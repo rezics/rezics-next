@@ -1,10 +1,8 @@
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import type { IdentityJobRef, IdentityNativeReceipt, IdentityReceipt, NativeStepWork } from './identity-epoch-contract.ts';
-import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
-import type { LibraryScopeEffectsPage, LibraryScopeEffectsKey } from '../library/identity-scope-effects.ts';
-import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effects.ts';
-import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions } from '../library/contract/work-dimensions.ts';
+import type { LibraryExpectedEffectAfter, LibraryScopeEffectsPage, LibraryScopeEffectsKey } from '../library/identity-scope-effects.ts';
 import type { DBOSClient } from '@dbos-inc/dbos-sdk';
 import { type SdkWriterState } from '../work/sdk-retirement-fence.ts';
 import type { IdentitySourceConsumerMaintenanceWork } from './identity-source-consumer-maintenance.ts';

@@ -5,6 +5,7 @@ import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingRoutes } from './routes.ts';
 import { sourceStatisticRoutes } from './source-statistics.ts';
 import { createRatingWorkModule } from './work-module.ts';
+import { type RatingIdentityProducer } from './segment-identity-guard.ts';
 import { createRealmRatingQuestion } from './question-authoring.ts';
 import { updateQuestionLabel } from './question-label.ts';
 import { retireRealmRatingQuestion, restoreRealmRatingQuestion } from './question-lifecycle.ts';
@@ -12,6 +13,7 @@ import { readQuestionManagementPage } from './question-management.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
 export { createNativeRatingCapabilities } from './adapters/native.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
+export { bindRatingIdentityProducer, ratingIdentityProducer } from './segment-identity-guard.ts';
 export type RatingHttpApp = ReturnType<typeof ratingRoutes> & ReturnType<typeof sourceStatisticRoutes>;
 type HttpDependencies = Omit<Parameters<typeof ratingRoutes>[1], 'pool' | 'capabilities'>;
 type ApplicationDependencies = Omit<HttpDependencies, 'access'> & {
@@ -9352,6 +9354,7 @@ export declare function createRatingModule(options: {
     pool: Pool;
     capabilities: RatingCapabilities;
     definition?: RatingDefinition;
+    producer?: RatingIdentityProducer;
 }): {
     definition: {
         name: 'rating';

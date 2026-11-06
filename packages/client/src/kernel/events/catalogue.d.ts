@@ -1611,6 +1611,13 @@ export declare function EVENT_TYPES(): Readonly<{
         partition: Type.TInteger;
         generation: Type.TString;
     }>;
+    readonly "com.rezics.semantic.identity-rating-repair.continuation.v1": Type.TObject<{
+        partition: Type.TInteger;
+        voterPartition: Type.TInteger;
+        obligationId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"prepare">, Type.TLiteral<"drain">]>;
+        originals: Type.TArray<Type.TString>;
+    }>;
     readonly "com.rezics.semantic.identity-epoch.bootstrap.v1": Type.TObject<{
         partition: Type.TInteger;
         generation: Type.TString;

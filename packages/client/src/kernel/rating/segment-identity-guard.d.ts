@@ -31,6 +31,7 @@ export type RatingIdentityProducer = Readonly<{
     }>): Promise<boolean>;
 }>;
 export declare const unavailableRatingIdentityProducer: RatingIdentityProducer;
+/** Composition installs the Semantic producer. Rating never constructs that factory. */
 export declare function bindRatingIdentityProducer(producer: RatingIdentityProducer): void;
 export declare function ratingIdentityProducer(): RatingIdentityProducer;
 export declare function validIdentityAuthority(page: IdentityRepairPage, authority: Extract<RatingIdentityAuthority, {

@@ -116,4 +116,4 @@ export declare function probeAccountIdentityPublication(pool: Pool, receipt: Acc
 export declare function acceptAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<IdentityNativeReceipt | null>;
 /** Re-lock the durable receiver in the enclosing source-home command. */
 export declare function verifyAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference, receiving: IdentityNativeReceipt): Promise<boolean>;
-export { readAccountIdentityReversalSettlement, verifyAccountIdentityReversalSettlement, type AccountIdentityReversalSettlement, } from './agent-verification-identity-reversal.ts';
+export { ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION, readAccountIdentityReversalSettlement, verifyAccountIdentityReversalSettlement, type AccountIdentityReversalSettlement, } from './agent-verification-identity-reversal.ts';

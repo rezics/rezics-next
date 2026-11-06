@@ -21,6 +21,8 @@ export { prepareRecordPurgeAuthority, readRecordPurgeAuthoritySource, lockRecord
 export type { RecordPurgeReference, RecordPurgeAuthority, RecordPurgeSource } from './record-purge-authority.ts';
 export type { FacetPopulationRequest, FacetPopulationPage, ReadFacetPopulationPage, FacetPopulationSource, FacetPopulationSourceFactory, } from './facet-population-contract.ts';
 export { createFacetPopulationSource } from './facet-population.ts';
+export { bindIdentitySourceConsumerRuntime, identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
+export type { IdentitySourceConsumerRuntime, IdentitySourceWorkDeclaration } from './identity-source-consumer-ports.ts';
 export { createIdentitySourceSupportReader } from './identity-source-support.ts';
 export type { IdentitySourceSupportRequest, IdentitySourceSupportRecord, IdentitySourceSupportPage, IdentitySourceSupportReader, IdentitySourceSupportReaderFactory, } from './identity-source-support-contract.ts';
 export { createPublicFilterSourceBinding, readNativePublicFilterPublicationCompletion, } from './public-filter-source-binding.ts';

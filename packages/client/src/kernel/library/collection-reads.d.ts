@@ -185,10 +185,10 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         next: string | null;
     }>;
     readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<import("../search/service-saved-collection.ts").SavedCatalogueMembersPage | {
-        preparing: true;
-    } | {
         members: MemberView[];
         next: string | null;
+    } | {
+        preparing: true;
     }>;
     withViewerFacts: <T extends {
         members: readonly {
