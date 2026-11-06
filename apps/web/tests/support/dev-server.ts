@@ -12,6 +12,45 @@ import {
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
+let serialViteChain = Promise.resolve();
+
+function acquireSerialViteSlot(options: DevServerOptions): Promise<() => void> {
+  if (options.serial !== true && process.env.REZICS_WEB_SERIAL_VITE !== '1') return Promise.resolve(() => {});
+  let released = false;
+  let releaseHeld!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseHeld = resolve;
+  });
+  const previous = serialViteChain;
+  serialViteChain = previous.then(() => held);
+  const release = () => {
+    if (released) return;
+    released = true;
+    releaseHeld();
+  };
+  const signal = options.signal;
+  return new Promise<() => void>((resolve, reject) => {
+    const abort = () => {
+      release();
+      reject(new DOMException('The dev server startup was aborted', 'AbortError'));
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    const onAbort = () => abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    void previous.then(() => {
+      signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      resolve(release);
+    });
+  });
+}
+
 type Phase = 'ready' | 'first response' | 'warm-up';
 type PhaseTiming = { phase: Phase; path: string; elapsedMs: number };
 export type DevServerOptions = {
@@ -28,6 +67,8 @@ export type DevServerOptions = {
   onPhase?: (timing: PhaseTiming) => void;
   /** A clock seam for deterministic budget tests; timers still use the remaining phase budget. */
   now?: () => number;
+  /** Hold the in-process Vite slot until stop(). Focused checks also set REZICS_WEB_SERIAL_VITE. */
+  serial?: boolean;
 };
 
 function freePort(): Promise<number> {
@@ -48,6 +89,7 @@ export async function startDevServer(
   const port = await freePort();
   if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
   const origin = `http://127.0.0.1:${port}`;
+  const releaseSerialVite = await acquireSerialViteSlot(options);
   const now = options.now ?? Date.now;
   const spawnedAt = now();
   const command = options.command?.({ port, origin }) ?? [
@@ -121,11 +163,15 @@ export async function startDevServer(
       settleTimeoutMs: 5_000,
     });
   } catch (error) {
+    releaseSerialVite();
     throw new Error(
       `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${captured()}`,
     );
   }
-  if (!child || !custody) throw new Error(`dev server ready failed for ${path}; child was not started\n${captured()}`);
+  if (!child || !custody) {
+    releaseSerialVite();
+    throw new Error(`dev server ready failed for ${path}; child was not started\n${captured()}`);
+  }
   const pollMs = options.pollIntervalMs ?? 25;
   const started = child;
   const processCustody = custody;
@@ -159,10 +205,14 @@ export async function startDevServer(
   const stop = () =>
     (stopped ??= (async () => {
       options.signal?.removeEventListener('abort', abortServer);
-      await cleanupAll([
-        { label: 'dev-server browser', run: () => browser?.close(), timeoutMs: 5000 },
-        { label: 'dev-server process group', run: () => processCustody.close(), timeoutMs: 16_000 },
-      ]);
+      try {
+        await cleanupAll([
+          { label: 'dev-server browser', run: () => browser?.close(), timeoutMs: 5000 },
+          { label: 'dev-server process group', run: () => processCustody.close(), timeoutMs: 16_000 },
+        ]);
+      } finally {
+        releaseSerialVite();
+      }
     })());
   abortServer = () => {
     void stop().catch((error) => {

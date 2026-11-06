@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { admitExplicitHostTestCommand, runFocusedCommand } from '../scripts/focused.ts';
+import { admitExplicitHostTestCommand, admitSerialBunTestCommand, runFocusedCommand } from '../scripts/focused.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-web-focused-test-'));
 const workspace = resolve(import.meta.dir, '../..');
@@ -59,6 +59,18 @@ function outputGate(token: string) {
 }
 
 test('named host files use the host-runner path-ignore override', () => {
+  expect(admitSerialBunTestCommand(['bun', 'test', 'tests/page-stories.test.ts'])).toEqual([
+    'bun',
+    'test',
+    '--max-concurrency=1',
+    'tests/page-stories.test.ts',
+  ]);
+  expect(admitSerialBunTestCommand(['bun', 'test', '--max-concurrency=2', 'tests/page-stories.test.ts'])).toEqual([
+    'bun',
+    'test',
+    '--max-concurrency=2',
+    'tests/page-stories.test.ts',
+  ]);
   expect(admitExplicitHostTestCommand(['bun', 'test', 'tests/pages-workers.host.test.ts'])).toEqual([
     'bun',
     'test',
@@ -137,6 +149,7 @@ test('forwards the focused command, uses owned test state, and never requests a 
   expect(status).toBe(0);
   expect(output.output).toContain('ARGUMENTS:["one argument","two"]');
   expect(preparationEnvironment?.REZICS_TEST_RUNTIME).toBe('1');
+  expect(preparationEnvironment?.REZICS_WEB_SERIAL_VITE).toBe('1');
   expect(preparationEnvironment?.WEB_TEST_STATE_DIR).toBe(stateDirectory);
   expect(stateDirectory.startsWith(`${tmpdir()}/`)).toBe(true);
   expect(existsSync(stateDirectory)).toBe(false);

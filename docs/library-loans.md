@@ -101,9 +101,14 @@ exclude; calendar packages stay on exclude. Serve reuses current Paraglide outpu
 `messagesCurrent`, skips generate under `REZICS_TEST_RUNTIME` unless a test supplies
 `REZICS_PARAGLIDE_COMPILER_MODULE`, and takes a `.temp` lock when it does generate. Return uses
 the mounted `POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method.
+signed-in-routes uses the same `startDevServer` ready and `/en` first-response path as Copies.
+A focused check sets `REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` so Copies and
+signed-in-routes never compile two Worker graphs in one 6 GiB slot. Isolation tests that need
+overlapping helpers leave that variable unset.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
-page/browser cases. No extra page stories.
+page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and
+five custody suites; do not add page stories.
 
 The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
 concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases
