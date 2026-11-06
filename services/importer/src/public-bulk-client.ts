@@ -27,6 +27,7 @@ export function createPublicBulkClient(options: { origin: string; fetch?: typeof
           headers: { accept: 'application/json' },
           ...(signal ? { signal } : {}),
           redirect: 'manual',
+          cache: 'no-store',
         });
         if (response.status === 308) {
           const body = (await response.json()) as { redirect?: { from?: unknown; to?: unknown } };

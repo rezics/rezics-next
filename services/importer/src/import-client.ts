@@ -709,7 +709,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     while (!visited.has(current)) {
       visited.add(current);
       const reply = await client.subjects({ id: current }).get({
-        fetch: { ...(signal === undefined ? {} : { signal }), redirect: 'manual' },
+        fetch: { ...(signal === undefined ? {} : { signal }), redirect: 'manual', cache: 'no-store' },
       });
       if (reply.status !== 308) {
         const result = await response(async () => reply, 200, signal);

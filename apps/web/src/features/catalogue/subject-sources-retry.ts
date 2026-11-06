@@ -119,12 +119,15 @@ export function useSourcesRetry({
       // Invalidation rereads this address; only navigation leaves the retry's visit.
       if (fromLocation?.href !== toLocation.href) retire();
     });
+    // A later pointer press is deliberate departure; its body focus must not pull focus back to the heading.
     document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', cancelFocus, true);
     document.addEventListener('keydown', tabbed, true);
     document.defaultView?.addEventListener('blur', cancelFocus);
     intent.dispose = () => {
       leave();
       document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', cancelFocus, true);
       document.removeEventListener('keydown', tabbed, true);
       document.defaultView?.removeEventListener('blur', cancelFocus);
     };
