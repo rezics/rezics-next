@@ -55,7 +55,7 @@ test("the compiler and each test file's processes use the check's explicit analy
     expect(first.REYLO_CONFIG).toBe(reyloConfig);
     expect(second.REYLO_CONFIG).toBe(reyloConfig);
     expect(compilerInvocations.map(({ args }) => args)).toEqual([
-      ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+      ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
       ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
     ]);
     expect(compilerInvocations.map(({ environment }) => environment.REYLO_CONFIG)).toEqual([reyloConfig, reyloConfig]);

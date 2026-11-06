@@ -42,6 +42,18 @@ Observation: the preceding labelled-volume Kernel typecheck on host a recorded 3
 
 Cache-aware admission (`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`) is on current dev and is not an ancestor of `main`. `main`'s `scripts/remote-check.ts` blob is `7d324057c430665feaf0c05d75ab1137c4cbe00b`; this tree's blob is `adf74d4a2321dd56bcea95279339f42dfd3c33f4`. Source integration is not live producer identity. Reclaim-stopgap state on the hosts is unobserved. Nested compiler markers exist so a later like-class b-host receipt can separate client emit, `tsc`, construct and OpenAPI without timing assertions. File-cache pressure remains a correlation until that receipt exists. Supermanager handoff: publish the live remote-check producer and confirm or remove the reclaim stopgap; do not treat this outcome as that deployment.
 
+## Check quality and tests
+
+`bun run --cwd services/kernel check` still prepares one throwaway database, analyses SQL, then runs TypeScript, lint, formatting and the selected test files. Owned TypeScript and Reylo file diagnostics, lint, formatting, module CREATE EXTENSION policy failures and other reachable product failures no longer stop the run before tests. Every selected test file still executes; Bun can transpile those files without type checking. The check then fails once with the owned and global diagnostics, lint and format failures, the exact failed test files, and the full compiler output for diagnosis. Foreign-file TS and Reylo diagnostics are filtered in file mode, including multiline details; global `error TS` / `error reylo` lines stay. A compiler exit with no file/line diagnostic, a spawn failure, future or duplicate migration versions, schema dump mismatch, and database/search/docker failures remain infrastructure: they return that stage, keep any diagnostics already collected visible, and still run cleanup. Module CREATE EXTENSION migrations are executable, so they are collected as a product failure and selected tests still run.
+
+Decision: One Kernel check and its permitted rerun report every reached product failure together. Selected tests run after owned type, Reylo, lint, format and module CREATE EXTENSION product failures; infrastructure still stops at the failing stage. Future/duplicate migration versions stay infrastructure because they are refused before apply; schema dump mismatch stays infrastructure because later stages assume the committed schema identity. A named `*.test.ts` argument runs, including `scripts/check.test.ts`; full-module discovery stays `test/**/*.test.ts`. Pin that behaviour with the existing runner tests in `scripts/check.test.ts`, `test/check-file-mode.test.ts`, `test/check-reylo.test.ts` and `test/check.test.ts`, plus changed-workspace typing in one worker-check, rather than a second suite.
+
+### Cost: Kernel check quality and tests
+
+- Touches: one compiler capture, one lint capture, one format capture, then each selected test file.
+- Bound: linear in compiler output lines plus the selected test files; quality commands do not multiply with test count.
+- Growth check: `scripts/check.test.ts` pins one capture-backed invocation with owned TS and Reylo diagnostics, lint, format, module CREATE EXTENSION, a passing test and a failing test, plus foreign-file Reylo filtering, type-only and test-only failures, the full-module branch and infrastructure before tests that still shows collected product failures.
+
 ### Cost: Kernel typecheck phases
 
 - Touches: one phase-file append per start/end, one optional cgroup `memory.stat` and `io.pressure` read, one `git rev-parse`.

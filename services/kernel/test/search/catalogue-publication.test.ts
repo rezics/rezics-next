@@ -25,6 +25,10 @@ const second = '018f0000-0000-7000-8000-00a000000002';
 const third = '018f0000-0000-7000-8000-00a000000003';
 const digest = releaseDigest(bundledRelease);
 
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function allowance(keys = 32): WorkAllowance {
   return {
     reservationId: 'catalogue-publication',

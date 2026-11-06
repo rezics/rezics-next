@@ -41,7 +41,13 @@ test('every check test process gets a 2000 ms pool acquisition timeout', () => {
 });
 
 test('a focused check runs the named test files and checks only the named files', () => {
-  const files = ['src/search/a.ts', 'src/search/a.sql', 'test/search/a.test.ts', 'test/search/b.test.ts'];
+  const files = [
+    'scripts/check.test.ts',
+    'src/search/a.ts',
+    'src/search/a.sql',
+    'test/search/a.test.ts',
+    'test/search/b.test.ts',
+  ];
   withModule([...files, 'test/search/support/c.ts'], (directory) => {
     expect(
       checkPlan(
@@ -57,6 +63,10 @@ test('a focused check runs the named test files and checks only the named files'
     ).toEqual({
       files: ['src/search/a.sql', 'src/search/a.ts', 'test/search/a.test.ts', 'test/search/support/c.ts'],
       tests: ['test/search/a.test.ts'],
+    });
+    expect(checkPlan(['scripts/check.test.ts'], directory)).toEqual({
+      files: ['scripts/check.test.ts'],
+      tests: ['scripts/check.test.ts'],
     });
     for (const wrong of ['src/search/missing.ts', '../outside.ts', '/etc/hostname', 'src/search']) {
       expect(() => checkPlan([wrong], directory)).toThrow(wrong);
@@ -113,13 +123,20 @@ test('a focused typecheck reports only diagnostics in the named files', () => {
     'src/access/other.ts(9,1): error TS2769: No overload matches this call.',
     "  Overload 1 of 2, '(value: number): void', gave the following error.",
     "error TS5083: Cannot read file 'tsconfig.base.json'.",
+    'src/search/a.sql(1,1): error reylo1: column "missing" does not exist',
+    '  Detail: relation items has columns id, name.',
+    'src/access/other.sql(1,1): error reylo14: relation "other" does not exist',
+    'error reylo5: CONNECTION_CLOSED at 127.0.0.1:34646/rezics',
     '',
   ].join('\n');
-  expect(ownDiagnostics(output, ['src/search/a.ts', 'test/search/a.test.ts'])).toEqual([
+  expect(ownDiagnostics(output, ['src/search/a.ts', 'src/search/a.sql', 'test/search/a.test.ts'])).toEqual([
     "src/search/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.",
     "test/search/a.test.ts(30,9): error TS2769: No overload matches this call.\n  Overload 1 of 2, '(value: number): void', gave the following error.",
     "error TS5083: Cannot read file 'tsconfig.base.json'.",
+    'src/search/a.sql(1,1): error reylo1: column "missing" does not exist\n  Detail: relation items has columns id, name.',
+    'error reylo5: CONNECTION_CLOSED at 127.0.0.1:34646/rezics',
   ]);
+  expect(ownDiagnostics(output, null).join('\n')).toContain('src/access/other.sql(1,1): error reylo14');
   const elsewhere = output
     .split('\n')
     .filter((line) => !line.startsWith('error'))

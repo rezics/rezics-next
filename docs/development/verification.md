@@ -173,6 +173,10 @@ the landing acceptance records those durations; this worker did not run that def
 Root typecheck outcomes distinguish compiler diagnostics from infrastructure. Database setup or cleanup failures,
 host loss, timeout and compiler startup without file/line diagnostics produce an infrastructure result; a type failure
 includes the compiler's complete file/line diagnostics.
+Kernel check runs selected tests after owned TypeScript, Reylo, lint, format and module CREATE EXTENSION product
+failures, then fails once with those diagnostics and the exact failed files; named `*.test.ts` arguments run,
+including `scripts/check.test.ts`. Compiler startup without file/line diagnostics, future or duplicate migration
+versions, schema dump mismatch and other infrastructure failures still return that stage and run cleanup.
 
 Kernel typecheck and kernel check command phases are `database-image`, `migrations`, `sql-schema`, `compiler` and
 `cleanup`, written to `REZICS_CHECK_PHASES`. Kernel typecheck nests `client-emit`, `tsc`, `construct` and `openapi`
