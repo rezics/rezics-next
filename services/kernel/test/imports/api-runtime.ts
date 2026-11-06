@@ -337,6 +337,8 @@ export async function openApiRuntime(
           response = await send();
         }
         return response;
+      } catch (error) {
+        throw new Error(`Native API ${body === undefined ? 'GET' : 'POST'} ${path} failed`, { cause: error });
       } finally {
         const next = observerWaiting.shift();
         if (next) next();

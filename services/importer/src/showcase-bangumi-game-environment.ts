@@ -212,10 +212,12 @@ export function createShowcaseBangumiGameEnvironmentLookup(input: {
   bindings: readonly BangumiGameEnvironmentBinding[];
   read: (id: string) => Promise<ReviewedSubjectRead | null>;
 }): ImportIdentifierLookup & { diagnostics: () => BangumiGameEnvironmentDiagnostic[] } {
-  const cache = new Map<string, Promise<ReviewedSubjectRead | null>>();
+  // Importer supplies a distinct signal for each run (including resume). Keep
+  // bounded sharing within that run, while rereading current adoption next run.
+  const caches = new WeakMap<AbortSignal, Map<string, Promise<ReviewedSubjectRead | null>>>();
   const diagnostics = new Map<string, BangumiGameEnvironmentDiagnostic>();
   const lookup: ImportIdentifierLookup = {
-    async resolve({ owner, conversion }) {
+    async resolve({ owner, conversion, signal }) {
       if (owner.source !== input.sourceAlias || conversion.source !== 'bangumi') return {};
       const record = conversion.normalized as { type?: unknown; infobox?: unknown };
       if (record.type !== 4) return {};
@@ -227,6 +229,11 @@ export function createShowcaseBangumiGameEnvironmentLookup(input: {
       const needed = input.bindings.filter((binding) =>
         projection.items.some((item) => item.kind === binding.kind && item.item === binding.item),
       );
+      let cache = caches.get(signal);
+      if (!cache) {
+        cache = new Map();
+        caches.set(signal, cache);
+      }
       const current = await readBangumiGameEnvironmentBindings(needed, input.read, cache);
       for (const item of projection.items) {
         const key = `${owner.external_id}\0${item.pointer}`;

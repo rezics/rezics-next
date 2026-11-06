@@ -81,6 +81,7 @@ for (const scale of [1, 8, 64])
       },
     });
     const registration = createSourceRegistration('bangumi');
+    const signal = new AbortController().signal;
     for (let id = 1; id <= scale; id++) {
       const conversion = registration.convert(
         {
@@ -93,7 +94,7 @@ for (const scale of [1, 8, 64])
       const input = {
         owner: { source: 'bangumi', external_id: String(id) },
         conversion,
-        signal: new AbortController().signal,
+        signal,
       };
       expect(await lookup.resolve(input)).toEqual({ [reference]: pc });
     }
@@ -110,19 +111,18 @@ test('unchanged Game source resolves a dependency again on the next seed pass', 
     { source: 'bangumi' },
   );
   const input = { owner: { source: 'bangumi', external_id: '1' }, conversion, signal: new AbortController().signal };
-  const first = createShowcaseBangumiGameEnvironmentLookup({
+  let page: ReviewedSubjectRead | null = null;
+  const lookup = createShowcaseBangumiGameEnvironmentLookup({
     sourceAlias: 'bangumi',
     bindings: [binding],
-    read: async () => null,
+    read: async () => page,
   });
-  expect(mergeIdentifierResolutions([{}, await first.resolve(input)])).toEqual({
+  expect(mergeIdentifierResolutions([{}, await lookup.resolve(input)])).toEqual({
     status: 'unavailable',
     preserveProperties: ['schema:gamePlatform', 'wdt:P408'],
   });
-  const next = createShowcaseBangumiGameEnvironmentLookup({
-    sourceAlias: 'bangumi',
-    bindings: [binding],
-    read: async () => current(),
-  });
-  expect(await next.resolve(input)).toEqual({ [reference]: pc });
+  page = current();
+  expect(await lookup.resolve({ ...input, signal: new AbortController().signal })).toEqual({ [reference]: pc });
+  page = { subject: { id: pc, type: 'skos:Concept', statements: {} } } as unknown as ReviewedSubjectRead;
+  expect(await lookup.resolve({ ...input, signal: new AbortController().signal })).toEqual({});
 });
