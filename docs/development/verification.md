@@ -39,14 +39,11 @@ Dev's floor, in order: development continues, and dev runs, so problems can be d
 landings. The dev verifier's boot smoke catches a dev that does not start and dispatches an urgent repair to the commit
 that broke it.
 
-Decision: product outcomes land first and are repaired after. A worker attempt returns success when its outcome is
-written and every changed workspace type-checks, even if some of its own tests fail. Its summary names each failing
-test and its first error, and the owning manager briefs those repairs as complete outcomes. Type errors always block,
-so dev compiles and boots. Payment, payout, order settlement, points and balance code also needs its tests passing.
+Decision: an ordinary product attempt proves that every changed workspace type-checks, plus the tests of payment, payout, order settlement, points and balance code when it changed them. All other tests, including native, browser and growth suites, run after landing in the dev verifier, which batches dev heads, runs acceptance and sibling tests, and attributes failures by bisection. A failing test there is a repair for the owning manager, not a revert.
 
 Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
 
-Decision: under minimal verification a type error blocks a worker's success, and a failing test blocks it only in payment, payout, order settlement, points or balance code. Other failing test files are named under `failing tests` in the worker's summary for the owning manager to repair; landing and the dev verifier still check every candidate.
+Decision: under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
 
 Decision: private follow native/browser/growth capability stays open until the installed controller-owned driver and
 Auth-persona walk pass after integration; typed transport, FULL withhold, frozen command frame and list-frontier

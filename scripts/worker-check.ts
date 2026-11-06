@@ -46,6 +46,7 @@ import { hostsLocation } from './stack-run.ts';
 import { classifyCheck, isCheckHostRun, performanceHosts, splitEnvironmentCommand } from './check-placement.ts';
 import {
   refuseExcessWorkerCheckHostRun,
+  refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
   workerCheckHostCommandReached,
 } from '../tools/goal/src/worker-check-budget.ts';
@@ -2358,7 +2359,9 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
   const root = resolve(cwd);
   const ownership = ownershipFromEnvironment(process.env);
   registryForStart(process.env, ownership);
-  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(wrapperExecutionArgv(argv), root));
+  const execution = wrapperExecutionArgv(argv);
+  refuseOrdinaryProductTestCheck(process.env, execution, root);
+  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(execution, root));
   const id = randomUUID();
   const physicalRunId = randomUUID();
   const file = logPath(root, id);

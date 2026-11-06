@@ -10,8 +10,12 @@ import { runWorkerCommand } from './worker-commands.ts';
 import type { WorkerTasks } from './tasks.ts';
 import {
   admitWorkerCheckHostRun,
+  classifyOrdinaryProductCommand,
+  ordinaryProductCheckRefusal,
   refuseExcessWorkerCheckHostRun,
+  refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
+  verifierFailureRevertsLanding,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
   workerCheckHostCommandReached,
@@ -19,6 +23,7 @@ import {
   WORKER_CHECK_HOST_BUDGET_REFUSAL,
   WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
   WORKER_CHECK_HOST_RUN_LIMIT,
+  WORKER_CHECK_TESTS_AFTER_LANDING,
 } from './worker-check-budget.ts';
 
 const product = { brief: { goal: 'web', kind: 'implementation' as const } };
@@ -189,7 +194,7 @@ test('the wrapper refuses a third check-host request before it writes a check re
     mkdirSync(budget, { recursive: true });
     writeFileSync(join(budget, '1'), '');
     writeFileSync(join(budget, '2'), '');
-    const command = ['make', 'check'];
+    const command = ['bun', 'scripts/typecheck.ts'];
     expect(workerCheckNeedsStack(command, directory.path)).toBe(true);
     process.env.GOAL_WORKER_CHECK_BUDGET = '2';
     process.env.GOAL_WORKER_CHECK_BUDGET_DIR = budget;
@@ -256,4 +261,96 @@ test('runs that reached the check command keep counting, whatever their exit cod
   } finally {
     directory.close();
   }
+});
+
+test('an ordinary product check is the typecheck of changed workspaces; test, native, browser and growth commands are refused', () => {
+  expect(classifyOrdinaryProductCommand(['bun', 'run', '--cwd', 'tools/goal', 'typecheck'])).toBe('typecheck');
+  expect(classifyOrdinaryProductCommand(['bun', 'scripts/typecheck.ts'])).toBe('typecheck');
+  expect(ordinaryProductCheckRefusal(['bun', 'run', '--cwd', 'apps/web', 'typecheck'], false)).toBeUndefined();
+  expect(
+    ordinaryProductCheckRefusal(
+      ['sh', '-c', 'bun run --cwd tools/goal typecheck; s=$?; bun scripts/typecheck.ts || s=1; exit $s'],
+      false,
+    ),
+  ).toBeUndefined();
+  expect(ordinaryProductCheckRefusal(['bun', 'test', 'apps/web/tests/library.test.ts'], false)).toBe(
+    WORKER_CHECK_TESTS_AFTER_LANDING,
+  );
+  expect(ordinaryProductCheckRefusal(['bun', 'apps/auth/scripts/isolated.ts', 'bun', 'test'], false)).toBe(
+    WORKER_CHECK_TESTS_AFTER_LANDING,
+  );
+  expect(ordinaryProductCheckRefusal(['npx', 'playwright', 'test'], false)).toBe(WORKER_CHECK_TESTS_AFTER_LANDING);
+  expect(ordinaryProductCheckRefusal(['env', 'GROWTH_PROFILE=profiles/x', 'bun', 'test', 'x.test.ts'], false)).toBe(
+    WORKER_CHECK_TESTS_AFTER_LANDING,
+  );
+});
+
+test('payment, payout, order settlement, points and balance tests stay in the same check when those paths changed', () => {
+  const money = ['bun', 'test', 'services/kernel/test/commerce/work.test.ts'];
+  const kernel = ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/commerce/payouts.test.ts'];
+  expect(classifyOrdinaryProductCommand(money)).toBe('money-test');
+  expect(classifyOrdinaryProductCommand(kernel)).toBe('money-test');
+  expect(ordinaryProductCheckRefusal(money, true)).toBeUndefined();
+  expect(ordinaryProductCheckRefusal(kernel, true)).toBeUndefined();
+  expect(
+    ordinaryProductCheckRefusal(
+      [
+        'sh',
+        '-c',
+        'bun run --cwd services/kernel typecheck; s=$?; bun test services/kernel/test/commerce/work.test.ts || s=1; exit $s',
+      ],
+      true,
+    ),
+  ).toBeUndefined();
+  expect(ordinaryProductCheckRefusal(money, false)).toBe(WORKER_CHECK_TESTS_AFTER_LANDING);
+  expect(
+    ordinaryProductCheckRefusal(
+      ['bun', 'test', 'apps/web/tests/library.test.ts', 'services/kernel/test/commerce/work.test.ts'],
+      true,
+    ),
+  ).toBe(WORKER_CHECK_TESTS_AFTER_LANDING);
+});
+
+test('verification, proof-run, control-plane, urgent and requires briefs keep their declared checks', () => {
+  expect(workerCheckHostBudgetLimit({ brief: { goal: 'web', kind: 'verification' }, proofAuthorization: {} }, 1)).toBe(
+    'off',
+  );
+  expect(workerCheckHostBudgetLimit({ brief: { goal: 'control-plane', kind: 'implementation' } }, 1)).toBe('off');
+  expect(workerCheckHostBudgetLimit({ brief: { goal: 'web', kind: 'implementation', urgent: true } }, 1)).toBe('off');
+  expect(
+    workerCheckHostBudgetLimit({
+      brief: { goal: 'web', kind: 'implementation', acceptance: { requires: ['native'] } },
+    }),
+  ).toBe('off');
+  const directory = temporaryDirectory();
+  try {
+    const budget = workerCheckBudgetDirectory(directory.path, 'exempt', 1);
+    expect(() =>
+      refuseOrdinaryProductTestCheck(
+        { GOAL_WORKER_CHECK_BUDGET: 'off', GOAL_WORKER_CHECK_BUDGET_DIR: budget },
+        ['bun', 'test', 'apps/web/tests/library.test.ts'],
+        directory.path,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      refuseOrdinaryProductTestCheck(
+        { GOAL_WORKER_CHECK_BUDGET: '2', GOAL_WORKER_CHECK_BUDGET_DIR: budget },
+        ['bun', 'test', 'apps/web/tests/library.test.ts'],
+        directory.path,
+      ),
+    ).toThrow(WORKER_CHECK_TESTS_AFTER_LANDING);
+  } finally {
+    directory.close();
+  }
+});
+
+test('the verifier reverts typecheck and payment-path failures and repairs other test failures', () => {
+  expect(verifierFailureRevertsLanding({ command: ['bun', 'scripts/typecheck.ts'], closure: ['**'] })).toBe(true);
+  expect(
+    verifierFailureRevertsLanding({
+      command: ['bun', 'test', 'services/kernel/test/commerce/work.test.ts'],
+      closure: ['services/kernel/src/commerce/**'],
+    }),
+  ).toBe(true);
+  expect(verifierFailureRevertsLanding({ command: ['affected-check'], closure: ['services/kernel/**'] })).toBe(false);
 });
