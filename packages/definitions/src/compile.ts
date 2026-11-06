@@ -6,6 +6,13 @@ import { safePattern } from './pattern-safety.ts';
 import releaseSchema from '../schema/release.json';
 import { compileLibraryProfiles } from './compile-library-profiles.ts';
 import {
+  catalogueErrorDiagnostics,
+  inspectImportedDocument,
+  releaseDiagnostics,
+  type CatalogueSourceInput,
+  type ImportedCatalogueDocument,
+} from './import-document.ts';
+import {
   DATA_TYPES,
   RELEASE_FORMAT,
   RELEASE_LIMITS,
@@ -20,6 +27,8 @@ import {
   type SavedFilter,
   type TypeDefinition,
 } from './index.ts';
+
+export type { CatalogueSourceInput, ImportedCatalogueDocument };
 
 export type CatalogueViolation = {
   file: string;
@@ -1128,4 +1137,20 @@ export async function compileCatalogue(input: {
   const defects = validateRelease(release);
   if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);
   return release;
+}
+
+/** Compile or admit one imported catalogue document. Source compilation stays native. */
+export async function admitImportedDocument(value: unknown): Promise<ImportedCatalogueDocument> {
+  const inspected = inspectImportedDocument(value);
+  if (inspected.kind !== 'sources') return inspected;
+  try {
+    const release = await compileCatalogue(inspected.sources);
+    const diagnostics = releaseDiagnostics(release);
+    return diagnostics.length
+      ? { kind: 'invalid', diagnostics }
+      : { kind: 'sources', release, sources: inspected.sources, diagnostics: [] };
+  } catch (error) {
+    if (error instanceof CatalogueError) return { kind: 'invalid', diagnostics: catalogueErrorDiagnostics(error) };
+    throw error;
+  }
 }

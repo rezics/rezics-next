@@ -313,7 +313,6 @@ export type {
   ReviewedPersonAdmission,
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
-
 export type {
   SubjectIdentityOperation,
   SubjectIdentityOperationAdmission,
@@ -324,3 +323,14 @@ export type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
 export type OwnVoteEntry = OwnVotesPage['votes'][number];
+export type {
+  ActivationReconciliation,
+  EditorialHead,
+  ExtensionComparison,
+  PublicationDiagnostic,
+  PublicationDocumentKind,
+  PublicationIdentity,
+  PublicationOperations,
+  ReleaseComparison,
+} from '@rezics/definitions';
+export { PUBLICATION_GRANT, classifyImportedDocument, compareReleases, compareExtensions } from '@rezics/definitions';

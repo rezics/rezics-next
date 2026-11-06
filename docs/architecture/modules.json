@@ -973,7 +973,10 @@
         "apps/web/src/features/contexts/**",
         "apps/web/src/zones/**"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "apps/web/src/features/catalogue/definition-publication/actions.ts",
+        "apps/web/src/features/catalogue/definition-publication/workspace.tsx"
+      ],
       "allowedDependencies": [
         "client",
         "composition",
@@ -1041,8 +1044,14 @@
       ],
       "publicEntries": [
         "apps/web/src/kernel/client.ts",
+        "apps/web/src/kernel/exposure.ts",
+        "apps/web/src/session/client.ts",
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
+        "apps/web/src/session/request.ts",
+        "apps/web/src/shell/head-context.ts",
+        "apps/web/src/shell/head.ts",
+        "apps/web/src/shell/page-heading.tsx",
         "apps/web/src/subject/reader.ts",
         "apps/web/src/subject/definitions.ts",
         "apps/web/src/subject/quantity-presentation.ts",
