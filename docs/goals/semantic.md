@@ -61,7 +61,8 @@ enrollment. Internal Zone purge pages use a unique `zone.purge` receipt and idle
 paths. Account-agent tests use a wall-clock request budget and prepare Access evidence at authorize time.
 Decision: Subject source pages compose mapping source/control collects and Source fence children, including
 hidden write_basis and outbox writes, before effects, and persist continuation so an affordable call finishes
-the native all-home walk.
+the native all-home walk. Empty sealed homes charge a page/seek read then one hold and one transfer command;
+the independent terminal proof is walked after the page cursor.
 
 ## Ownership
 

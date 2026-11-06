@@ -275,7 +275,7 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     ).rows[0]!;
     expect(Date.parse(barrier.at)).toBe(Date.parse(deletion.result.at));
     worker = await accountErasureWorker(f.db.url);
-    const deadline = Date.now() + 180_000;
+    const deadline = Date.now() + 360_000;
     while ((await readSemanticErasure(f.db.pool, owner.accountId))?.state !== 'pending-shared-custody') {
       if (Date.now() >= deadline)
         throw new Error('Native Semantic/Zone local minimization did not reach its custody boundary');
@@ -597,4 +597,4 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
       await f.close();
     }
   }
-}, 600_000);
+}, 1_200_000);

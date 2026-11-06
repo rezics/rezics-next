@@ -134,7 +134,6 @@ const effectFence = () => ({
     FENCE.eventSerialization.work.bytes +
     FENCE.eventValidation.work.bytes,
 });
-const idleFence = () => ({ keys: FENCE.noEffectFence.work.nativeRows, bytes: FENCE.noEffectFence.work.bytes });
 const bodyBytes = (keys: number) => keys * STATEMENT_BYTES;
 const wireBytes = (...values: unknown[]) => Math.max(STATEMENT_BYTES, Buffer.byteLength(JSON.stringify(values)));
 
@@ -448,11 +447,10 @@ function sourceFactory(
       const budget = new PageBudget(cost, input.inputLimit, deadline);
       const command = <T>(
         partition: number,
-        effect: boolean,
         body: number,
         run: (tx: CommandTransaction) => Promise<import('../command/command.ts').CommandResult<T>>,
       ) => {
-        const fence = effect ? effectFence() : idleFence();
+        const fence = effectFence();
         budget.reserve(fence.keys + body, fence.bytes + bodyBytes(body));
         return runCommand(pool, { partition, basis: platform, clock: config.clock, deadline }, run);
       };
@@ -496,7 +494,7 @@ function sourceFactory(
         const last = await collect();
         if (comparableIdentityEvidence(first) !== comparableIdentityEvidence(last))
           return { state: 'unavailable', reason: 'bootstrap' };
-        return classifyIdentityMappings([{ original, sourceHome }], last, identitySourceSupportJob() ?? null)[0];
+        return classifyIdentityMappings([{ original, sourceHome }], last, identitySourceSupportJob())[0];
       };
       const mappingStill = async (original: string, expected: NonNullable<IdentityMapping>) => {
         if (expected.state !== 'mapped') return false;
@@ -512,10 +510,24 @@ function sourceFactory(
       };
       return withRequestDeadline(deadline, async () => {
         try {
-          // Raw seek precedes all eligibility, visibility, role and current-state filtering.
-          const selected = await command(accountHome, false, SELECT_BODY, async (tx) => {
-            cost.accessPoints++;
-            if (!(await root(tx, barrier))) return noEffect(null);
+          // Snapshot the transferred cursor as a read. Transfer re-takes the account-home share lock.
+          budget.reserve(
+            SELECT_BODY,
+            wireBytes([barrier.accountRoute, barrier.accountId, barrier.version, barrier.at, accountHome]),
+          );
+          cost.accessPoints++;
+          const selected = await withReadTransaction(pool, async (tx) => {
+            const rooted = (
+              await tx.query(
+                `SELECT 1 FROM access.erasure e JOIN semantic.erasure_progress p USING(route,account_id)
+                 JOIN semantic.erasure_fence f USING(route,account_id)
+                 WHERE e.route=$1 AND e.account_id=$2 AND e.version=$3 AND e.at=$4::timestamptz
+                   AND p.at=e.at AND f.at=e.at AND p.source_protocol=1 AND p.source_version=e.version
+                   AND p.partition_no=4096 AND p.state='pending-shared-custody'`,
+                [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at],
+              )
+            ).rowCount;
+            if (!rooted) return null;
             const page = (
               await tx.query<PageRow>(
                 `SELECT id::text,previous_id::text,complete,consumed,source_partition,store,record_key::text,role,delivery_position::text,origin_key,
@@ -527,21 +539,21 @@ function sourceFactory(
                 [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at, accountHome],
               )
             ).rows[0];
-            if (terminalProof) input = { ...input, frontier: page?.consumed ? page.id : (page?.previous_id ?? null) };
-            if (page && !page.consumed && input.frontier === page.previous_id)
-              return noEffect({ previous: page, next: undefined, replay: true });
-            if (input.frontier !== null && (!page || input.frontier !== page.id || !page.consumed))
-              return noEffect(null);
-            if (input.frontier === null && page) return noEffect(null);
-            if (page?.complete) return noEffect({ previous: page, next: undefined });
-            return noEffect({ previous: page, next: undefined });
+            let frontier = input.frontier;
+            if (terminalProof) frontier = page?.consumed ? page.id : (page?.previous_id ?? null);
+            if (page && !page.consumed && frontier === page.previous_id)
+              return { previous: page, frontier, replay: true as const };
+            if (frontier !== null && (!page || frontier !== page.id || !page.consumed)) return null;
+            if (frontier === null && page) return null;
+            return { previous: page, frontier, replay: false as const };
           });
-          if (!selected.value) return pendingPage(budget);
-          const { previous } = selected.value;
+          if (!selected) return pendingPage(budget);
+          if (terminalProof) input = { ...input, frontier: selected.frontier };
+          const { previous } = selected;
           // Old transfers did not identify an origin. A current physical locator
           // cannot reconstruct their custody, even when its role name still agrees.
           if (previous && typeof previous.origin_key !== 'string') return { status: 'unavailable', cost };
-          if (('replay' in selected.value && selected.value.replay && previous) || previous?.complete) {
+          if ((selected.replay && previous) || previous?.complete) {
             const record = storedRecord(previous!, barrier);
             const records = record ? [record] : [];
             cost.outputSlots += records.length;
@@ -556,12 +568,18 @@ function sourceFactory(
           const after = previous?.store
             ? [previous.store, previous.record_key, previous.role, previous.delivery_position, previous.origin_key]
             : ['', '0', '', '0', ''];
-          const sought = await command(sourceHome, false, SEEK_BODY, async (tx) => {
+          const eofFence = effectFence();
+          budget.afford(
+            SEEK_BODY + eofFence.keys + HOLD_EOF_BODY + READ_BODY + eofFence.keys + TRANSFER_BODY,
+            eofFence.bytes * 2 + bodyBytes(SEEK_BODY + HOLD_EOF_BODY + TRANSFER_BODY + READ_BODY),
+          );
+          budget.reserve(SEEK_BODY, wireBytes([sourceHome, barrier.accountId, ...after]));
+          const sought = await withReadTransaction(pool, async (tx) => {
             const seal = await tx.query(
               `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
               [sourceHome, barrier.accountId, barrier.version, barrier.at],
             );
-            if (!seal.rowCount) return noEffect(null);
+            if (!seal.rowCount) return null;
             const raw = (
               await tx.query<Cursor>(
                 `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
@@ -571,10 +589,10 @@ function sourceFactory(
                 [sourceHome, barrier.accountId, ...after],
               )
             ).rows[0];
-            return noEffect({ raw });
+            return { raw };
           });
-          if (!sought.value) return pendingPage(budget);
-          const raw = sought.value.raw;
+          if (!sought) return pendingPage(budget);
+          const raw = sought.raw;
           const next: Cursor = raw ?? {
             source_partition: sourceHome,
             store: '',
@@ -802,7 +820,7 @@ function sourceFactory(
                 );
               });
             };
-            const held = await command<HeldRecord>(next.source_partition, true, holdBody, async (tx) => {
+            const held = await command<HeldRecord>(next.source_partition, holdBody, async (tx) => {
               const seal = await tx.query(
                 `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                 [next.source_partition, barrier.accountId, barrier.version, barrier.at],
@@ -849,7 +867,7 @@ function sourceFactory(
             roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
             let sourceHeld = held;
             if (detail.original && originalHome !== next.source_partition) {
-              sourceHeld = await command<HeldRecord>(originalHome, true, HOLD_CROSS_BODY, async (tx) => {
+              sourceHeld = await command<HeldRecord>(originalHome, HOLD_CROSS_BODY, async (tx) => {
                 const seal = await tx.query(
                   `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                   [originalHome, barrier.accountId, barrier.version, barrier.at],
@@ -882,12 +900,22 @@ function sourceFactory(
               eofFence.keys + HOLD_EOF_BODY + READ_BODY + eofFence.keys + TRANSFER_BODY,
               eofFence.bytes * 2 + bodyBytes(HOLD_EOF_BODY + TRANSFER_BODY + READ_BODY),
             );
-            const held = await command(sourceHome, true, HOLD_EOF_BODY, async (tx) => {
+            const held = await command(sourceHome, HOLD_EOF_BODY, async (tx) => {
               const seal = await tx.query(
                 `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                 [sourceHome, barrier.accountId, barrier.version, barrier.at],
               );
               if (!seal.rowCount) return noEffect(false);
+              const still = (
+                await tx.query<Cursor>(
+                  `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
+             FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
+             AND (store,record_key,role,delivery_position,origin_key)>($3,$4::bigint,$5,$6::bigint,$7)
+             ORDER BY store,record_key,role,delivery_position,origin_key LIMIT 1`,
+                  [sourceHome, barrier.accountId, ...after],
+                )
+              ).rows[0];
+              if (still) return noEffect(false);
               registerCommandCallback(tx, async (transactionId) => {
                 await recordSemanticSourceCommit(tx, transactionId);
                 await tx.query(
@@ -952,7 +980,7 @@ function sourceFactory(
             return { status: 'unavailable', cost };
           // Only this private producer can transfer a just-committed native hold. No public boolean,
           // arbitrary receipt constructor, copied body, or current-role count can enter this path.
-          const accepted = await command(accountHome, true, TRANSFER_BODY, async (tx) => {
+          const accepted = await command(accountHome, TRANSFER_BODY, async (tx) => {
             cost.accessPoints++;
             if (!(await root(tx, barrier))) return noEffect(false);
             const current = (

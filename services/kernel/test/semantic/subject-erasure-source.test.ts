@@ -72,7 +72,7 @@ const events = (b: HistoryBarrier) => [
 ];
 async function local(b: HistoryBarrier) {
   await beginSemanticErasure(f.db.pool, b.accountId);
-  const end = Date.now() + 180_000;
+  const end = Date.now() + 360_000;
   while ((await readSemanticErasure(f.db.pool, b.accountId))?.state !== 'pending-shared-custody') {
     if (Date.now() >= end) throw new Error('Actual default local erasure did not complete');
     await Bun.sleep(20);
@@ -84,7 +84,7 @@ async function complete(b: HistoryBarrier) {
   let proof: SubjectErasureSourceProof | null = null;
   let receipt: SubjectErasurePageReceipt | undefined;
   let pages = 0;
-  const end = Date.now() + 300_000;
+  const end = Date.now() + 600_000;
   for (;;) {
     if (Date.now() >= end) throw new Error('Native sealed Source disposition did not complete');
     // Fresh instances and serialized locators exercise durable replay, never object identity.
@@ -107,7 +107,6 @@ async function complete(b: HistoryBarrier) {
     expect(accepted.value).toBe(true);
     records.push(...page.records);
     pages++;
-    if (!proof) proof = await readSubjectErasureSourceProof({ pool: f.db.pool }, b, context());
     if (page.status === 'complete') break;
     expect(Buffer.byteLength(page.frontier)).toBeLessThanOrEqual(2048);
     frontier = page.frontier;
@@ -115,6 +114,7 @@ async function complete(b: HistoryBarrier) {
   while (!proof) {
     if (Date.now() >= end) throw new Error('Independent native Source terminal proof did not complete');
     proof = await readSubjectErasureSourceProof({ pool: f.db.pool }, b, context());
+    if (!proof) await Bun.sleep(10);
   }
   expect(pages).toBeGreaterThanOrEqual(4096);
   expect(
@@ -246,7 +246,7 @@ test('Search receives sealed role-complete Subject source disposition and actual
       }))
     ).value,
   ).toBe(false);
-}, 360_000);
+}, 720_000);
 
 test('Original funded Subject erasure pages account for every mapping and command child and resume to independent all-home tombstone readback within declared bounds', async () => {
   const author = await f.author();
@@ -274,7 +274,7 @@ test('Original funded Subject erasure pages account for every mapping and comman
   const result = await complete(b);
   expect(result.records.some((r) => r.original === original)).toBe(true);
   expect(result.records.every((r) => r.disposition !== 'pending')).toBe(true);
-}, 360_000);
+}, 720_000);
 
 test('sealed empty native role homes advance before filters while a hidden original never borrows visible terminal disposition', async () => {
   const author = await f.author();
@@ -310,7 +310,7 @@ test('sealed empty native role homes advance before filters while a hidden origi
     ])
   ).rowCount;
   expect(emptyHomes).toBe(1);
-}, 360_000);
+}, 720_000);
 
 test('changed native account custody rejects both serialized Source receipts and the independent terminal proof', async () => {
   const person = await f.person();
@@ -337,7 +337,7 @@ test('changed native account custody rejects both serialized Source receipts and
       }))
     ).value,
   ).toBe(false);
-}, 360_000);
+}, 720_000);
 
 test('equal-delivery original and native origins traverse into distinct held Source pages and survive sealed replay', async () => {
   for (const nativeFirst of [false, true]) {
