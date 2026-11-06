@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PublicationHead } from '../../src/community/publication.ts';
 import { listPublications, publish, readPublication, reject, withdraw } from '../../src/community/publication.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
 import { seed, type Population } from '../support/growth.ts';
 import {
@@ -12,7 +12,6 @@ import {
   type ContainerGrowthFixture,
 } from './growth-container-fixture.ts';
 
-const scales = [256, 1024, 4096] as const;
 const pageSize = 2;
 const deadline = () => Date.now() + 60_000;
 const commandContext = () => ({ idempotencyKey: crypto.randomUUID(), deadline: deadline() });

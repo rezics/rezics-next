@@ -78,7 +78,6 @@ function realmMediaPopulation(fixture: GrowthRealmImageDownloadFixture): Populat
       const spaceRevisionId = newId(route);
       const realmId = newId(route);
       const realmRevisionId = newId(route);
-      const transactionId = newId(route);
       const media = mediaRow(route, realmId, fixture.alice.accountId);
       return {
         'community.space': [
