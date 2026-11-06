@@ -5,6 +5,7 @@ const original = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const moved = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
 const deleted = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
 const missing = '0192f3a0-6c1e-7b2a-9d4e-000000000004';
+const liveDeletedName = '0192f3a0-6c1e-7b2a-9d4e-000000000005';
 const resolutions: string[] = [];
 let observationCurrent = true;
 const attributions = new Map<
@@ -112,6 +113,7 @@ test('FULL published-log attribution keeps live identity, an id-free deletion la
   observationCurrent = true;
   attributions.set(deleted, { displayName: 'Deleted account' });
   attributions.set(missing, null);
+  attributions.set(liveDeletedName, { id: liveDeletedName, kind: 'actor', displayName: 'Deleted account' });
   const log = (accountId: string) => ({
     id: accountId,
     accountId,
@@ -122,18 +124,30 @@ test('FULL published-log attribution keeps live identity, an id-free deletion la
     note: 'kept',
     publishedAt: '2026-11-06T01:00:00.000Z',
   });
-  resolutions.splice(0, resolutions.length, original, original, original, original, original, original);
+  resolutions.splice(
+    0,
+    resolutions.length,
+    original,
+    original,
+    original,
+    original,
+    original,
+    original,
+    original,
+    original,
+  );
   const page = await fullView(
     deps,
     actor,
     'FULL',
-    { publishedLogs: [log(original), log(deleted), log(missing)] },
+    { publishedLogs: [log(original), log(deleted), log(missing), log(liveDeletedName)] },
     { withholdChangedSource: true },
   );
   expect(page.publishedLogs.map((row) => row.attribution)).toEqual([
     { id: original, kind: 'actor', displayName: 'Owner' },
     { displayName: 'Deleted account' },
     null,
+    { id: liveDeletedName, kind: 'actor', displayName: 'Deleted account' },
   ]);
 });
 
