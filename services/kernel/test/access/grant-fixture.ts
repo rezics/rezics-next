@@ -9,6 +9,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function grantFixture(
@@ -18,6 +19,7 @@ export async function grantFixture(
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
+  configureTestReceiptKeys(pool);
   pool.options.max = 1;
   const reader = new Pool({ connectionString: url, max: 1 });
   const authDatabase = `grant_auth_${process.pid}`;
