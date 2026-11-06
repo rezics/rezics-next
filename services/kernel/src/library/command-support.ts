@@ -27,6 +27,7 @@ import {
   currentLibraryOperationAccounting,
   withLibraryOperationAccounting,
 } from '../command/work-context.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
   consumeSessionWork,
   sessionCommandPlan,
@@ -44,8 +45,7 @@ import {
   withFollowCommandWork,
 } from './follow-operation-bounds.ts';
 
-export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
-import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+export { WORK_STEP_DEADLINE_MS };
 
 /** Bind a closed Library SQL declaration to the caller's existing accounting frame. */
 export function runLibraryBoundedStep<T>(operation: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {

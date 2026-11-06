@@ -1,13 +1,15 @@
 import { memoizedValue } from '../memoized.ts';
 /** Static bounds for the retained finite selected-set publication command. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-native.ts';
-import { CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
-import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import {
   OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT,
   OWNER_FILTER_CLOSURE_REFERENCE_LIMIT,
-} from './owner-filter-native-closure.ts';
+} from './canonical-source-limits.ts';
+import {
+  COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST,
+  COLLECTION_SOURCE_WORK_COST,
+  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
+} from './collection-source-work-cost.ts';
 import { MEMBERS_PREPARATION_SOURCE_COST } from '../search/scope-members-source-declaration.ts';
 import { WORK_EXECUTION_ATTEMPT_BOUND } from '../work/selected-runtime-cost.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
@@ -98,13 +100,13 @@ function compareHeaderRule() {
 }
 
 function sourcePrepare() {
-  return memoizedValue(sourcePrepare, () => CANONICAL_SOURCE_RECEIVING_COST().state);
+  return memoizedValue(sourcePrepare, () => COLLECTION_SOURCE_WORK_COST().state);
 }
 function sourceMembership() {
   return memoizedValue(sourceMembership, () =>
     sumBounds(
       repeatBound(sourcePrepare(), 2),
-      CANONICAL_SOURCE_RECEIVING_COST().group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+      COLLECTION_SOURCE_WORK_COST().group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
       repeatBound(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(), COLLECTION_SOURCE_WORK_GROUP_LIMIT),
     ),
   );
@@ -113,7 +115,7 @@ function closureAndOwnerFacts() {
   return memoizedValue(closureAndOwnerFacts, () =>
     sumBounds(
       MEMBERS_PREPARATION_SOURCE_COST(),
-      CANONICAL_SOURCE_RECEIVING_COST().group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
+      COLLECTION_SOURCE_WORK_COST().group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
     ),
   );
 }

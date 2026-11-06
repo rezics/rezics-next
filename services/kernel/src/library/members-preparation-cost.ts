@@ -1,6 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import type { WorkDimensions } from './collection-source.ts';
-import { OPERATIONAL_WORK_REGISTRATION, OPERATIONAL_WORK_TRANSFER_COST } from '../history/operational-work.ts';
+/** Budget module only. The History runtime re-export cycles through Members preparation at init. */
+import { OPERATIONAL_WORK_REGISTRATION, OPERATIONAL_WORK_TRANSFER_COST } from '../history/operational-work-budget.ts';
 
 /** Members-owned SQL ceilings, not funding and not a quote for Core, Access, Search or History.
  * All eight axes are named: History and Source use different tuple orders.

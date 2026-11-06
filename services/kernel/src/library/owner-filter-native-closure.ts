@@ -8,6 +8,10 @@ import { zeroScopeWork } from '../search/scope-execution.ts';
 import { currentOwnerClauseKey } from '../search/current-filter-plan.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { readScopeLeafEvidence, type LeafEvidence, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
+import {
+  OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT,
+  OWNER_FILTER_CLOSURE_REFERENCE_LIMIT,
+} from './canonical-source-limits.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalRawKey } from './canonical-source-store.ts';
 import type { PreparedCollectionSource } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
@@ -31,10 +35,7 @@ import populationQuery from './owner-filter-native-closure-population.sql';
 
 type NativeFactKey = { driver: number; factId: string; labelId: string | null };
 
-/** Actual cap enforced while collecting one canonical group's complete original closure. */
-export const OWNER_FILTER_CLOSURE_REFERENCE_LIMIT = 100;
-/** Each retained original is represented by a reference plus at most the requested terminal. */
-export const OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT = Math.floor(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT / 2);
+export { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT, OWNER_FILTER_CLOSURE_REFERENCE_LIMIT };
 
 /** A prepared answer must reauthorize its complete structural population, including exclusions/order.
  * LIMIT bounds raw references before hydration. A full window is unavailable, never fabricated coverage.

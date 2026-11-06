@@ -77,7 +77,8 @@ export type AgentIdentityRetirementResult =
   | Readonly<{ state: 'verified'; gap: null; custodyId: string; workflowId: string }>;
 
 /** Semantic terminal custody and the SDK writer fence are separate prerequisites to
- * retiring the retained receiving work. */
+ * retiring the retained receiving work. Gap matches AGENT_IDENTITY_SDK_FENCE_CONSUMER;
+ * do not read that binding here or History module init hits TDZ in the fence cycle. */
 export const AGENT_IDENTITY_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.5.3-preview',
   futureWriters: 'native-sdk-fence-requires-source-transfer',

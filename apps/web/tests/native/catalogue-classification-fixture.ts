@@ -1,5 +1,4 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack, type AuthJourney, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -18,6 +17,7 @@ export type NativeClassificationFixture = {
   close(): Promise<void>;
 };
 
+const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const writeRateOverrides = JSON.stringify({
   'new-account': { write: { maximum: 1000, seconds: 60 } },
   member: { write: { maximum: 1000, seconds: 60 } },
@@ -75,8 +75,20 @@ async function waitForSuggestion(stack: NativeWebStack, subject: NativeClassific
   throw new Error(`Native suggestions did not include ${subject.type} ${subject.id} for ${subject.label}`);
 }
 
-export async function startCatalogueClassificationFixture(): Promise<NativeClassificationFixture> {
-  const stack = await startNativeWebStack({ writeRateOverrides });
+export async function startCatalogueClassificationFixture(
+  options: { ready?: Promise<void> } = {},
+): Promise<NativeClassificationFixture> {
+  const stackPromise = startNativeWebStack({ writeRateOverrides });
+  const stack = await (async () => {
+    try {
+      if (options.ready) await options.ready;
+      return await stackPromise;
+    } catch (error) {
+      const started = await stackPromise.catch(() => undefined);
+      await started?.stop().catch(() => {});
+      throw error;
+    }
+  })();
   let auth: NativeAuthStack | undefined;
   try {
     const active = await json<{ digest: string }>(

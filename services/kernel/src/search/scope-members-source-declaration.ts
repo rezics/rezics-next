@@ -1,8 +1,10 @@
 import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
-import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../library/canonical-source-limits.ts';
+import {
+  COLLECTION_SOURCE_WORK_COST,
+  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
+} from '../library/collection-source-work-cost.ts';
 import {
   MEMBERS_PREPARATION_BRANCH_COST,
   MEMBERS_PREPARATION_STEP_CEILING,
@@ -89,15 +91,15 @@ function searchBody() {
 }
 function collectionState() {
   return memoizedValue(collectionState, () =>
-    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, sourceStatesPerInvocation),
+    repeatBound(COLLECTION_SOURCE_WORK_COST().state, sourceStatesPerInvocation),
   );
 }
 function collectionPrefix() {
   return memoizedValue(collectionPrefix, () =>
     repeatBound(
       sumBounds(
-        CANONICAL_SOURCE_RECEIVING_COST().seek,
-        CANONICAL_SOURCE_RECEIVING_COST().group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
+        COLLECTION_SOURCE_WORK_COST().seek,
+        COLLECTION_SOURCE_WORK_COST().group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
       ),
       MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
     ),

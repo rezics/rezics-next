@@ -23,6 +23,9 @@ retain local amount or clear choices by measure unit.
 - A Subject reader inspects public Collections that contain that Subject with the native exact total and opaque
   continuation, opens a disclosed Collection, returns to the same reader, and adds the Subject to a later owned
   curated Collection through the existing member command. Details: [Subject Collection journey](../../apps/web/src/library/subject-collection-journey.md).
+- A Concept page keeps the existing hierarchy receiver and Search-backed tagged Works. A person applies a supplied
+  filter, continues, recovers the exact failed page, opens a Work and returns to that concept/filter; a locale
+  change does not mix Concept identities. Decision: visit return restores the concept and filter, not the work cursor.
 - Checkout start/return and entitlements expose the commerce outcomes without treating a redirect as fulfilment.
   Creator Sales extends that existing visit with one supplied-sale inspection, canonical localized offer and Subject
   readers, and browser return to the same opaque sales cursor. Exact charged unit price, captured unit/tax meaning,

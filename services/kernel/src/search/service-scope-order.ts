@@ -4,6 +4,13 @@ import type { Pool } from 'pg';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem.ts';
+import { COLLECTION_SOURCE_WORK_COST } from '../library/collection-source-work-cost.ts';
+// Static Source costs first. Later Collection imports cycle through this file before native IO finishes.
+import {
+  MEMBERS_PREPARATION_SOURCE_COST,
+  MEMBERS_PREPARATION_SOURCE_PATHS,
+  MEMBERS_PREPARATION_SOURCE_TERMS,
+} from './scope-members-source-declaration.ts';
 import {
   createCollectionSource,
   type CollectionSourceObservation,
@@ -14,7 +21,6 @@ import {
   type CollectionSourceContext,
 } from '../library/collection-source.ts';
 import { nativeCollectionOrdinalPageBound } from '../library/collection-source-native.ts';
-import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
 import type {
   NativeOrdinalFrontier,
   NativeOrdinalKey,
@@ -24,11 +30,6 @@ import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { readScopeWorkDefinition } from './scope-work-context.ts';
-import {
-  MEMBERS_PREPARATION_SOURCE_COST,
-  MEMBERS_PREPARATION_SOURCE_PATHS,
-  MEMBERS_PREPARATION_SOURCE_TERMS,
-} from './scope-members-source-declaration.ts';
 
 const sourceBound = (work: Readonly<WorkReceipt['used']>): Bound => declareBound({ ...work, engineRequests: 0 });
 function ordinalPath() {
@@ -45,7 +46,7 @@ function ordinalTerms() {
       metadataPrefix: MEMBERS_PREPARATION_SOURCE_TERMS().metadataPrefix,
       searchBody: MEMBERS_PREPARATION_SOURCE_TERMS().searchBody,
       collectionState: repeatBound(
-        sourceBound(CANONICAL_SOURCE_RECEIVING_COST().state),
+        sourceBound(COLLECTION_SOURCE_WORK_COST().state),
         ordinalPath().membersSnapshots,
       ),
       nativeOrdinal: repeatBound(sourceBound(nativeOrdinal().work), ordinalPath().rawOrdinalRowsMaximum),

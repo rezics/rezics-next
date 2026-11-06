@@ -7,7 +7,7 @@ import {
   MEMBERS_PREPARATION_SOURCE_PATHS,
   MEMBERS_PREPARATION_SOURCE_TERMS,
 } from '../../src/search/scope-members-source-declaration.ts';
-import { CANONICAL_SOURCE_RECEIVING_COST } from '../../src/library/canonical-source-bounds.ts';
+import { COLLECTION_SOURCE_WORK_COST } from '../../src/library/collection-source-work-cost.ts';
 import { MEMBERS_DEFINITION_QUERY_BOUNDS } from '../../src/search/scope-members-work-cost.ts';
 import { MEMBERS_SELECTED_CHILDREN } from '../../src/library/members-preparation-work.ts';
 import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
@@ -31,7 +31,7 @@ test('the selected Members Source has a complete static bound for the declared c
     sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS())),
   );
   expect(MEMBERS_PREPARATION_SOURCE_TERMS().collectionState).toEqual(
-    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
+    repeatBound(COLLECTION_SOURCE_WORK_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
   );
   expect(MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots).toBe(8);
   expect(MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.membersSnapshots).toBe(4);
