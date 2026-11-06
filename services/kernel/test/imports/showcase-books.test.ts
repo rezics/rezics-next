@@ -19,9 +19,11 @@ import {
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
+import pinned from './showcase-books-source.json';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const origin = 'https://kernel.import.test';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const series = {
   id: 499,
   type: 1,
@@ -175,3 +177,118 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     await runtime.close();
   }
 }, 600_000);
+
+type ReadStatement = { value?: { content?: unknown } };
+type ReadSubject = { type: string; statements?: Record<string, ReadStatement[]> };
+function contentsOf(subject: ReadSubject, property: string): unknown[] {
+  return (subject.statements?.[property] ?? []).map((row) => row.value?.content);
+}
+function pinnedTables() {
+  const rows = pinned.rows as Record<string, Record<string, unknown>[]>;
+  return {
+    async *rows(provider: 'bangumi' | 'vndb', table: string) {
+      if (provider === 'bangumi') yield* rows[table] ?? [];
+    },
+  };
+}
+
+test('pinned light-novel families publish a native graph with separate acceptance and independent reads', async () => {
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-light-novel-native-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const editor = await openApiObserver(runtime);
+    const grant = await editor.http('/v1/grants', {
+      resource: { route: 0, id: globalContext },
+      subject: { kind: 'account', id: runtime.identity.bulk.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    });
+    expect(grant.status).toBe(201);
+    const publicClient = createPublicBulkClient({
+      origin,
+      fetch: fixtureFetch(async (input) => {
+        const url = new URL(String(input));
+        return runtime.request(`${url.pathname}${url.search}`);
+      }),
+    });
+    const input = {
+      tables: pinnedTables(),
+      path: join(directory, 'import.sqlite'),
+      port: captureShowcaseCommands(runtime.importTransport, journal),
+      destination: { origin },
+      journal,
+      review: runtime.importTransport,
+      publicClient,
+    };
+    const first = await importShowcaseBooks(input);
+    expect(first.selected).toMatchObject({
+      series: ['499', '2815'],
+      volumes: expect.arrayContaining(['26', '5329', '10862']),
+      authors: expect.arrayContaining(['person:6023', 'person:1466']),
+      illustrators: expect.arrayContaining(['person:1467']),
+      publishers: expect.arrayContaining(['person:128']),
+      anime: ['233'],
+    });
+    const keys = ['499', '26', '2815', '5329', '10862', '233', 'person:1466', 'person:1467', 'person:128'];
+    for (const key of keys) expect(first.identities[key]?.id).toMatch(uuidPattern);
+    const publication = await publishShowcase({
+      plan: showcaseBooksToCrossMediaPlan(first.planned),
+      result: first,
+      aliases: crossMediaAliases,
+      journal,
+      review: runtime.importTransport,
+      publicClient,
+      ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
+    });
+    for (const [key, type] of [
+      ['2815', 'schema:BookSeries'],
+      ['5329', 'schema:Book'],
+      ['233', 'schema:TVSeries'],
+    ] as const)
+      expect(publication.published.some((row) => row.sourceKey === key && row.nativeType === type)).toBe(true);
+
+    const read = async (key: string) =>
+      (await publicClient.readSubject(first.identities[key]!.id)).subject as unknown as ReadSubject;
+    const series = await read('2815');
+    expect(series.type).toBe('schema:BookSeries');
+    // A BookSeries admits publisher but not author or illustrator; those credits stay exact gaps.
+    expect(first.creditGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: '/subject-persons/2815/1466/position', reason: 'property_not_admitted' }),
+        expect.objectContaining({ path: '/subject-persons/2815/1467/position', reason: 'property_not_admitted' }),
+      ]),
+    );
+    expect(contentsOf(series, 'schema:publisher')).toContain(first.identities['person:128']!.id);
+    // Bangumi archive aliases stay exact und names beside the admitted zh name.
+    expect(contentsOf(series, 'schema:name')).toContainEqual({ language: 'und', text: 'THE GARDEN OF SINNERS' });
+    for (const key of ['5329', '10862'])
+      expect(contentsOf(await read(key), 'wdt:P179')).toContain(first.identities['2815']!.id);
+    const anime = await read('233');
+    expect(anime.type).toBe('schema:TVSeries');
+    expect(contentsOf(anime, 'schema:name')).toContainEqual({
+      language: 'und',
+      text: '劇場版 空の境界 第一章 俯瞰風景',
+    });
+    // The counterpart is one canonical statement, read from the series side through its inverse links.
+    const links = await runtime.request(
+      `/v1/subjects/${first.identities['2815']!.id}/links?property=${encodeURIComponent('rezics:crossMediaCounterpart')}`,
+    );
+    expect(links.status).toBe(200);
+    const linked = (await links.json()) as { links: { summary: { id: string } }[] };
+    expect(linked.links.some((link) => link.summary.id === first.identities['233']!.id)).toBe(true);
+
+    const again = await importShowcaseBooks({
+      ...input,
+      port: captureShowcaseCommands(runtime.importTransport, journal),
+      prior: publication,
+    });
+    expect(again.selected).toEqual(first.selected);
+    for (const key of [...keys, '27', '78', '79', '80', '81', '82', '852'])
+      expect(again.identities[key]?.id).toBe(first.identities[key]?.id);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+    await runtime.close();
+  }
+}, 900_000);

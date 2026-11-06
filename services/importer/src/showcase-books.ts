@@ -47,9 +47,9 @@ const CREATOR_CAP = 16;
 const CREDIT_CAP = 64;
 const BOOK_TABLE_SCAN_LIMITS = {
   'subject-relations': { maxRows: 1_000_000, maxBytes: 512 * 1024 * 1024 },
-  subject: { maxRows: 500_000, maxBytes: 512 * 1024 * 1024 },
-  'subject-persons': { maxRows: 500_000, maxBytes: 256 * 1024 * 1024 },
-  person: { maxRows: 100_000, maxBytes: 128 * 1024 * 1024 },
+  subject: { maxRows: 1_000_000, maxBytes: 1024 * 1024 * 1024 },
+  'subject-persons': { maxRows: 3_000_000, maxBytes: 256 * 1024 * 1024 },
+  person: { maxRows: 150_000, maxBytes: 128 * 1024 * 1024 },
 } satisfies Record<string, CrossMediaTableScanLimits>;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 

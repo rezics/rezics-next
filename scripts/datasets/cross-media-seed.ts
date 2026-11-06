@@ -202,6 +202,7 @@ export async function runDevelopmentSeed(
   });
   const request = createDevelopmentShowcaseRequest({ origin: api, token: creatorToken });
   const importedResult = await (options.runSeed ?? runCrossMediaSeedCli)(args, {
+    includeBooks: true,
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
     reviewedCatalogueSubjects: reviewedCatalogue.subjects,
     selection: developmentShowcaseSelection,

@@ -202,7 +202,8 @@ export function extractBangumiTVAnimeEvidence(
 
   addTopLevel('schema:name', 'und', record.name);
   if (record.name_cn?.trim()) addTopLevel('schema:name', 'zh', record.name_cn);
-  const book = record.type === 1 && nativeType === 'schema:Book';
+  // Books and book series share one name grammar: exact und aliases and admitted zh names.
+  const book = record.type === 1 && (nativeType === 'schema:Book' || nativeType === 'schema:BookSeries');
   const tvAnime = record.type === 2 && nativeType === 'schema:TVSeries';
   if (!book && !tvAnime)
     return {
@@ -234,12 +235,7 @@ export function extractBangumiTVAnimeEvidence(
     }
     candidate = iterator.next();
   }
-  if (
-    !header ||
-    (book
-      ? !isBangumiBookTemplateHead(header.line) && header.line.trim() !== '{{Infobox animanga/Manga'
-      : !isBangumiTVAnimeTemplateHead(header.line))
-  ) {
+  if (!header || (book ? !isBangumiBookTemplateHead(header.line) : !isBangumiTVAnimeTemplateHead(header.line))) {
     omit('/infobox', 'unsupported_infobox_template');
     return {
       names: names.sort(compareNames),

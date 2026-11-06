@@ -114,7 +114,7 @@ test('selected PersonDetail requests preserve archive careers, fill missing fiel
     ).request({
       owner: { source: 'bangumi_cross_media', external_id: 'person:8101' },
       subject: '00000000-0000-4000-8000-000000000001',
-      conversion: { normalized: person.payload, converter_revision: 'cross-media-entities@15+bangumi@16' },
+      conversion: { normalized: person.payload, converter_revision: 'cross-media-entities@15+bangumi@17' },
     });
     expect(request?.rows).toEqual(
       expect.arrayContaining([

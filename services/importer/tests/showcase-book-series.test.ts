@@ -2,6 +2,25 @@ import { expect, test } from 'bun:test';
 import { convertBangumi } from '@rezics/conversion/bangumi';
 import type { CrossMediaTables } from '../src/cross-media-seed.ts';
 import { planShowcaseBooks, showcaseBooksToCrossMediaPlan } from '../src/showcase-books.ts';
+import pinned from '../../kernel/test/imports/showcase-books-source.json';
+
+test('pinned real book source fits bounded scans and retains both actual families', async () => {
+  const plan = await planShowcaseBooks({ tables: {
+    async *rows(provider, table, limits) {
+      expect(provider).toBe('bangumi');
+      const key = table as keyof typeof pinned.rows;
+      expect(limits!.maxRows).toBeGreaterThanOrEqual(pinned.counts[key]);
+      expect(limits!.maxBytes).toBeGreaterThanOrEqual(pinned.sizes[key]);
+      yield* pinned.rows[key];
+    },
+  } });
+  expect(plan.selected.series).toEqual(['499', '2815']);
+  expect(plan.selected.volumes).toContain('10862');
+  expect(plan.selected.authors).toContain('person:1466');
+  expect(plan.selected.illustrators).toContain('person:1467');
+  expect(plan.selected.publishers).toContain('person:128');
+  expect(plan.selected.anime).toEqual(['233']);
+});
 
 type Row = Record<string, unknown>;
 
