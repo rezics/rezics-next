@@ -399,13 +399,10 @@ test('the mounted Concept list and type control receive native Search kind label
   expect(conceptWorksTypeLabel({ id: 'schema:Book', labels: { en: 'Book' } }, page.kinds.values, 'en')).toBe(
     'Bound volume (2+)',
   );
-  expect(conceptWorksTypeLabel({ id: 'schema:Movie', labels: { en: 'Movie' } }, page.kinds.values, 'en')).toBe(
-    'Movie',
-  );
+  expect(conceptWorksTypeLabel({ id: 'schema:Movie', labels: { en: 'Movie' } }, page.kinds.values, 'en')).toBe('Movie');
   const markup = renderToStaticMarkup(
     createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: 'en' }),
   );
   expect(markup).toContain('Mira’s Atlas');
   expect(markup).toContain('Bound volume');
 });
-

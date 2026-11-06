@@ -30,6 +30,7 @@ function descendantValues(
 ): readonly string[] | undefined {
   if (!clause.concept?.includeChildren) return clause.values;
   const selected = clause.values[0];
+  if (typeof selected !== 'string' || !selected) return;
   const cut = membership?.find(
     (entry) =>
       entry.property === clause.property && entry.scheme === clause.concept!.scheme && entry.concept === selected,

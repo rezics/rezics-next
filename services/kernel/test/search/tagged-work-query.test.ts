@@ -22,11 +22,7 @@ const quantity = (property: string, amount: number, unit = '1'): IndexedStatemen
   value: String(amount),
   facet: { kind: 'quantity', amount, unit },
 });
-const item = (
-  property: string,
-  value: string,
-  qualifiers?: IndexedStatement['qualifiers'],
-): IndexedStatement => ({
+const item = (property: string, value: string, qualifiers?: IndexedStatement['qualifiers']): IndexedStatement => ({
   property,
   value,
   facet: { kind: 'item' },
@@ -118,9 +114,24 @@ test('inclusive word-count grammar selects only B-long; pages and characters do 
   expect(bookWordsGreaterThanOneMillion(999_999, '1')).toBe(false);
   expect(bookWordsGreaterThanOneMillion(1_200_001, 'Q7727')).toBe(false);
   expect(names(currentTaggedWorkSubjects(books, words))).toEqual(['B-long']);
-  expect(evaluateTaggedWorkPredicate(books.find((book) => book.name === 'B-pages')!, words)).toBe(false);
-  expect(evaluateTaggedWorkPredicate(books.find((book) => book.name === 'B-characters')!, words)).toBe(false);
-  expect(evaluateTaggedWorkPredicate(books.find((book) => book.name === 'B-edge')!, words)).toBe(false);
+  expect(
+    evaluateTaggedWorkPredicate(
+      books.find((book) => book.name === 'B-pages')!,
+      words,
+    ),
+  ).toBe(false);
+  expect(
+    evaluateTaggedWorkPredicate(
+      books.find((book) => book.name === 'B-characters')!,
+      words,
+    ),
+  ).toBe(false);
+  expect(
+    evaluateTaggedWorkPredicate(
+      books.find((book) => book.name === 'B-edge')!,
+      words,
+    ),
+  ).toBe(false);
   const compiled = compileTaggedWorkFilter(words);
   expect(JSON.stringify(compiled.query)).toContain('"facts.amount"');
   expect(JSON.stringify(compiled.query)).toContain('1000001');
@@ -133,8 +144,18 @@ test('adopted form and tag fixtures intersect as LN+HAREM and combine with words
 
 test('weight, metric and spoiler constrain the same concept statement', () => {
   expect(names(currentTaggedWorkSubjects(books, tagged))).toEqual(['B-long']);
-  expect(evaluateTaggedWorkPredicate(books.find((book) => book.name === 'B-split')!, tagged)).toBe(false);
-  expect(evaluateTaggedWorkPredicate(books.find((book) => book.name === 'B-edge')!, tagged)).toBe(false);
+  expect(
+    evaluateTaggedWorkPredicate(
+      books.find((book) => book.name === 'B-split')!,
+      tagged,
+    ),
+  ).toBe(false);
+  expect(
+    evaluateTaggedWorkPredicate(
+      books.find((book) => book.name === 'B-edge')!,
+      tagged,
+    ),
+  ).toBe(false);
 });
 
 test('descendant membership expands exact tags through the retained concept cut', () => {
@@ -153,6 +174,15 @@ test('descendant membership expands exact tags through the retained concept cut'
     { property: 'schema:genre', scheme, concept: fantasy, values: new Set([child]) },
   ]);
   expect(names(withCut).sort()).toEqual(['B-child', 'B-edge', 'B-long', 'B-movie', 'B-split']);
+});
+
+test('id order continues the remaining form/tag page after the first current row', () => {
+  const matched = currentTaggedWorkSubjects(books, formHarem).sort((left, right) => left.id.localeCompare(right.id));
+  expect(matched.map((row) => row.id)).toEqual([id(1), id(2), id(4)]);
+  const cursor = matched[0]!.id;
+  expect(matched.filter((row) => row.id > cursor).map((row) => books.find((book) => book.id === row.id)?.name)).toEqual(
+    ['B-edge', 'B-characters'],
+  );
 });
 
 test('kind chips prove current remaining-predicate membership as N+ and never infer zero', () => {

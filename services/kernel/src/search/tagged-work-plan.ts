@@ -1,9 +1,4 @@
-import type {
-  DiscoveryFilterDocument,
-  FilterDocument,
-  FilterQualifier,
-  FilterRange,
-} from '@rezics/filter';
+import type { DiscoveryFilterDocument, FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
 import { compileFilter } from './filter.ts';
 
 export type TaggedWorkOrder = 'name' | 'id' | 'rating';
@@ -76,10 +71,7 @@ function conceptSelection(node: DiscoveryFilterDocument): TaggedWorkConceptSelec
   };
 }
 
-function quantityLeaf(
-  node: DiscoveryFilterDocument,
-  onConceptStatement: boolean,
-): TaggedWorkQuantityLeaf | undefined {
+function quantityLeaf(node: DiscoveryFilterDocument, onConceptStatement: boolean): TaggedWorkQuantityLeaf | undefined {
   if (!('statement' in node)) return;
   if ('range' in node.statement && node.statement.range.type !== 'time')
     return { property: node.statement.property, range: node.statement.range, onConceptStatement };
@@ -107,16 +99,13 @@ function nodeHasConcept(node: DiscoveryFilterDocument): boolean {
     if ('and' in child) pending.push(...child.and);
     else if ('or' in child) pending.push(...child.or);
     else if ('not' in child) pending.push(child.not);
-    else if ('statement' in child && child.statement.concept) return true;
+    else if ('statement' in child && 'in' in child.statement && child.statement.concept) return true;
   }
   return false;
 }
 
 /** True when the remaining conjuncts after the designated kind leaf include a scheme-bound concept. */
-export function taggedWorkRemainingHasConcept(
-  filter: DiscoveryFilterDocument,
-  kindCountLeaf: number,
-): boolean {
+export function taggedWorkRemainingHasConcept(filter: DiscoveryFilterDocument, kindCountLeaf: number): boolean {
   if (!('and' in filter) || !Number.isInteger(kindCountLeaf) || kindCountLeaf < 0 || kindCountLeaf >= filter.and.length)
     return false;
   return filter.and.some((child, position) => position !== kindCountLeaf && nodeHasConcept(child));
@@ -145,7 +134,11 @@ export function admitTaggedWorkPlan(input: {
   registeredKinds: ReadonlySet<string>;
 }): TaggedWorkPlan {
   if (!('and' in input.filter)) throw new RangeError('Tagged work plans require a top-level AND');
-  if (!Number.isInteger(input.kindCountLeaf) || input.kindCountLeaf < 0 || input.kindCountLeaf >= input.filter.and.length)
+  if (
+    !Number.isInteger(input.kindCountLeaf) ||
+    input.kindCountLeaf < 0 ||
+    input.kindCountLeaf >= input.filter.and.length
+  )
     throw new RangeError('Tagged work kindCountLeaf must name a top-level AND child');
   const kindLeaf = kindOperand(input.filter.and[input.kindCountLeaf]);
   if (!kindLeaf) throw new RangeError('Tagged work kindCountLeaf must be a kind leaf');
