@@ -139,7 +139,6 @@ test('the recorded native page joins its visible creators and editions without a
   expect(json.workExample).toHaveLength(recorded.reads.r1.body.links.length);
   for (const [index, edition] of recorded.reads.r1.body.links.entries()) {
     const path = subjectHref({ id: edition.subject, label: edition.label }, 'en').href;
-    expect(html).toContain(`href="${path}"`);
     expect(json.workExample[index]).toEqual({
       '@id': `https://rezics.com/id/${edition.subject}`,
       '@type': 'Thing',

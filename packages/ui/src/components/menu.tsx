@@ -192,19 +192,28 @@ export function Menu({
   const radioName = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
   const historyDepth = useRef(0);
+  const formRef = useRef(form);
+  const openingRef = useRef(false);
+  formRef.current = form;
   const page = stack.at(-1);
   const customContent = content !== undefined;
-  const openMenu = (event?: { preventDefault?: () => void }) => {
-    event?.preventDefault?.();
+  const openMenu = () => {
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
-    setForm(sheet ? 'sheet' : 'dropdown');
+    const next = sheet ? 'sheet' : 'dropdown';
+    openingRef.current = true;
+    formRef.current = next;
+    setForm(next);
     setOpen(true);
+    queueMicrotask(() => {
+      openingRef.current = false;
+    });
     if (sheet && historyDepth.current === 0 && !closeOnNavigation) {
       window.history.pushState({ rezicsMenu: true }, '', window.location.href);
       historyDepth.current = 1;
     }
   };
   const close = (fromHistory = false, restoreFocus = true) => {
+    if (openingRef.current) return;
     setOpen(false);
     setStack([]);
     if (historyDepth.current && !fromHistory) window.history.go(-historyDepth.current);
@@ -244,12 +253,18 @@ export function Menu({
   );
   const slot = triggerSlot ? (
     form === 'dropdown' ? (
-      <D.DropdownMenu open={open} onOpenChange={(value) => (value ? openMenu() : close())}>
+      <D.DropdownMenu
+        open={open}
+        onOpenChange={(value) => {
+          if (value) openMenu();
+          else if (formRef.current === 'dropdown') close();
+        }}
+      >
         <D.DropdownMenuTrigger
           render={trigger}
           onClick={(event) => {
             triggerRef.current = event.currentTarget as HTMLElement;
-            openMenu(event);
+            openMenu();
           }}
         />
         <D.DropdownMenuContent>
@@ -302,12 +317,18 @@ export function Menu({
             </PopoverContent>
           </Popover>
         ) : (
-          <D.DropdownMenu open={open && form === 'dropdown'} onOpenChange={(value) => (value ? openMenu() : close())}>
+          <D.DropdownMenu
+            open={open && form === 'dropdown'}
+            onOpenChange={(value) => {
+              if (value) openMenu();
+              else if (formRef.current === 'dropdown') close();
+            }}
+          >
             <D.DropdownMenuTrigger
               render={trigger}
               onClick={(event) => {
                 triggerRef.current = event.currentTarget as HTMLElement;
-                openMenu(event);
+                openMenu();
               }}
             />
             {form === 'dropdown' && (
