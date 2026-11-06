@@ -37,7 +37,9 @@ async function finish(binding: ShelfMaintenanceBinding) {
   throw new Error('Quiescent empty native shelf did not finish');
 }
 
-test('default native empty owner initializes, drains, fences a late writer and atomically publishes with exact Core replay', async () => {
+test.serial(
+  'default native empty owner initializes, drains, fences a late writer and atomically publishes with exact Core replay',
+  async () => {
   const person = f.people.alice,
     as = await actor(person),
     account = owner(person.accountId);
@@ -67,16 +69,24 @@ test('default native empty owner initializes, drains, fences a late writer and a
     (await f.db.admin.query('SELECT kind FROM library.shelf_maintenance_run WHERE run_id=$1', [requested.runId]))
       .rows[0].kind,
   ).toBe('backfill');
+  // An uncommitted future locator has neither a durable header nor receipt authority.
+  await expect(ops().page({ ...requested, sequence: '1' })).rejects.toThrow();
   const recovered = await ops().recover({ after: null, limit: 100 });
   expect(recovered.enqueued.some((binding) => binding.runId === requested.runId)).toBe(true);
   expect((await f.client.getWorkflow(`shelf:${account.accountId}:${requested.runId}:0:0:0:0`))?.workflowName).toBe(
     'library.shelfMaintenance',
   );
-  // An uncommitted future locator has neither a durable header nor receipt authority.
-  await expect(ops().page({ ...requested, sequence: '1' })).rejects.toThrow();
   const drained = await ops().page(requested);
   expect(await ops().page(requested)).toEqual(drained);
   expect(drained.next?.epoch).toBe('1');
+  expect(
+    (
+      await f.db.admin.query('SELECT mode FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2', [
+        account.route,
+        account.accountId,
+      ])
+    ).rows[0].mode,
+  ).toBe('rebuilding');
   await expect(
     runner.ownAccount(
       as,
@@ -167,8 +177,10 @@ test('default native empty owner initializes, drains, fences a late writer and a
   ).toEqual({ retired: true, reservations_retired: true });
 }, 30000);
 
-test('source change before type work preserves the native boundary and advanced replay has no fresh source dependency', async () => {
-  const person = f.people.alice,
+test.serial(
+  'source change before type work preserves the native boundary and advanced replay has no fresh source dependency',
+  async () => {
+  const person = f.people.orgOwner,
     as = await actor(person),
     account = owner(person.accountId);
   const subjectId = await f.subject();
@@ -248,7 +260,9 @@ test('source change before type work preserves the native boundary and advanced 
   expect(await replayOnly.page(binding)).toEqual(retried);
 }, 60000);
 
-test('terminal native tombstone rejects fabricated envelopes and late writers; private completion leaves shared erasure pending', async () => {
+test.serial(
+  'terminal native tombstone rejects fabricated envelopes and late writers; private completion leaves shared erasure pending',
+  async () => {
   const person = f.people.bob,
     as = await actor(person),
     account = owner(person.accountId);
@@ -283,7 +297,9 @@ test('terminal native tombstone rejects fabricated envelopes and late writers; p
   expect(recovered.enqueued.some((b) => b.runId === requested.runId)).toBe(false);
 }, 30000);
 
-test('counter-only rebuild serves the last complete generation while field backfill withholds until publication', async () => {
+test.serial(
+  'counter-only rebuild serves the last complete generation while field backfill withholds until publication',
+  async () => {
   const person = f.people.operator;
   const as = await actor(person),
     account = owner(person.accountId);

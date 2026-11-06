@@ -745,8 +745,14 @@ assignment frontier. Counter-only rebuilds keep last-complete FULL tiles; field 
 publication, after which the original Label and Shelf actions return the published generation.
 Fewest tests: one native maintenance journey covers last-complete, field-backfill preparing, and those original
 actions after publication; served HTTP uses own-account admission, open personal_library, and listEntries standing.
-Own-account Label routes declare the bundled Definition types as `x-authority-resource-types`, matching other
-personal Library writes; viewer-action compile refuses own-account without that array.
+The empty-owner drain/late-writer, source-change, purge and last-complete journeys are serial; source-change uses
+`orgOwner` so it cannot share Alice's rebuilding gate. Own-account Label routes declare the bundled Definition types
+as `x-authority-resource-types`, matching other personal Library writes; viewer-action compile refuses own-account
+without that array.
+
+The Library command runner keeps Content's injectable `command` executor and prices each Label attempt at prepare,
+consumed again on Core retry. Import identity stays in the Label command plan; incomplete-plan notes from cancelled
+label composition are superseded by this complete attempt unit.
 
 The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after

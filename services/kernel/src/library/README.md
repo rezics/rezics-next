@@ -38,7 +38,8 @@ becomes ready zero counts. The consumer aliases the published maintenance types 
 Served HTTP in the native maintenance journey uses the owner's token, own-account `library_entry` admission, and
 the open `personal_library` group. Shelf reads admit that owner as listEntries does. Label routes declare the same
 own-account anchor and bundled Definition `x-authority-resource-types` as other personal Library writes. Empty-owner
-and purge cases stay on the shared erasure fixture.
+and purge cases stay on the shared erasure fixture. Native shelf-maintenance journeys in
+`test/library/shelf-maintenance.test.ts` run serially; the source-change case uses `orgOwner`.
 
 ## Bounded viewer facts
 
