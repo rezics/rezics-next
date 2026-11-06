@@ -51,7 +51,6 @@ import { validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
-import { readSubjectCreditMappingFormatForIndex } from './indices.ts';
 
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{
@@ -844,11 +843,8 @@ export function createSearchWriterGuard(options: {
   const match = /subjects-g([1-9][0-9]*)$/.exec(options.index);
   const generation = Number(match?.[1]);
   if (!Number.isSafeInteger(generation) || generation < 1) throw new TypeError('Invalid physical generation');
-  let resolvedCreditFormat: Promise<1 | null> | undefined;
   const indexObservation = async (partition: number, ids: readonly string[]) => {
-    const creditFormat =
-      options.creditFormat ??
-      (await (resolvedCreditFormat ??= readSubjectCreditMappingFormatForIndex(options.search, options.index)));
+    const creditFormat = options.creditFormat;
     const snapshot =
       creditFormat === 1
         ? await readCreditIndexSnapshot(options.source, partition, ids)

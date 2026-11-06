@@ -10,7 +10,7 @@ import {
 import { editCharacterPersonSelection } from '../src/search/character-person-selection/model';
 import { parseDiscoveryPage } from '../src/search/discovery';
 import { queryShareUrl } from '../src/search/query-share';
-import { subjectVisitReturn, withSubjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { subjectVisitReturn, subjectVisitReturnHref } from '../src/features/pages/subject-visit-navigation';
 
 const work = '018f0000-0000-7000-8000-00a000000001';
 const role = '018f0000-0000-7000-8000-00a000000003';
@@ -171,8 +171,9 @@ test('credited share links reopen works mode and subject visits return to the ex
   const executed = characterPersonHref('ja', { ...replay.search, cursor: 'page-two' }, 'page-two');
   const executedUrl = new URL(executed, 'https://rezics.test');
   expect(JSON.parse(executedUrl.searchParams.get('language')!)).toEqual(['ja', 'en']);
-  const subject = withSubjectVisitReturn(`/ja/subjects/${work}/work`, executed, 'ja');
+  const subject = subjectVisitReturnHref({ id: work, label: 'work' }, 'ja', executed);
   const visit = new URL(subject, 'https://rezics.test');
+  expect(visit.pathname).toMatch(new RegExp(`^/ja/subjects/${work}/`));
   expect(visit.searchParams.get('via')).toBe(executed);
   expect(subjectVisitReturn(visit.searchParams.get('via'), 'ja')).toBe(executed);
 });

@@ -19,8 +19,7 @@ import { characterPersonWindowFacts } from './character-person-window';
 import { SearchWindowControls, useSearchWindow } from './search-window';
 import { DiscoveryKinds } from './discovery-kinds';
 import { QuerySharePreview } from './query-share-preview';
-import { subjectHref } from '../subject/subject-href';
-import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
+import { subjectVisitReturnHref } from '../features/pages/subject-visit-navigation';
 export { characterPersonQueryOptions } from './character-person-window-query';
 import { DiscoveryResults } from './discovery-results';
 import {
@@ -399,9 +398,7 @@ export function CharacterPersonSearchPage({
             state={state}
             locale={locale}
             creditRoleLabels={roleLabels.data?.labels}
-            subjectHrefFor={({ id, label }) =>
-              withSubjectVisitReturn(subjectHref({ id, label }, locale).href, executedHref, locale)
-            }
+            subjectHrefFor={(subject) => subjectVisitReturnHref(subject, locale, executedHref)}
             {...(state.status === 'restart' ? { restartHref: facts.firstHref } : {})}
           />
         )}

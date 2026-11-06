@@ -26,7 +26,7 @@ import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-
 import { compileFilter } from './filter.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
-import { subjectIndexName, discoveryIndexName } from './indices.ts';
+import { subjectIndexName, discoveryIndexName, readSubjectCreditMappingFormatForIndex } from './indices.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { admitSearchPayload, requireSearchOverflow } from './query-payload.ts';
 import { SCOPE_HIT_TEMPLATE, type SearchPlan, type SearchResult } from './query.ts';
@@ -2393,6 +2393,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       guard = await mixedRepairWriter(q, m);
     } else {
       if (!subjectTarget) throw new ConsumerFailure('source_pending');
+      const creditFormat = await readSubjectCreditMappingFormatForIndex(m.native, target);
       guard = createSearchWriterGuard({
         pool: m.pool,
         search: m.native,
@@ -2400,6 +2401,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         consumer: subjectConsumer(subjectTarget[1]!, Number(subjectTarget[2])),
         source: createRatedSubjectSource(m.pool, origin.routeKey, config.creditSearch).source,
         listing: subjectListingSource(m.pool),
+        ...(creditFormat === null ? {} : { creditFormat }),
       });
     }
     const locator = encodeNative({

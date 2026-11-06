@@ -2272,6 +2272,8 @@ Decision: the fewest focused tests pin credited request/facet/share agreement, s
 incomplete cuts, subject-family credit writes and works-mode role selection.
 Decision: kind-count credited admission fixtures a discovery registry that lists the selected kind; text-only
 admission does not consult entries. Works mode consumes published KernelClient credit request and hit fields.
+Decision: Search consumes the Semantic producer through `createKernelCreditSearchSource` and `semantic/credit-search.ts`,
+never the Semantic barrel; writer-guard receives `creditFormat` from callers so it does not import mapping readers.
 
 ## Public document text consumer
 

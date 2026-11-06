@@ -1093,3 +1093,11 @@ export function withSubjectVisitReturn(href: string, value: string, locale: stri
   url.searchParams.set('via', via);
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+export function subjectVisitReturnHref(
+  subject: { id: string; label: string },
+  locale: string,
+  returnHref: string,
+): string {
+  return withSubjectVisitReturn(subjectHref(subject, locale).href, returnHref, locale);
+}

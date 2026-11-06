@@ -244,6 +244,8 @@ evidence remains readiness ([Search](../services/kernel/src/search/README.md#cre
 Search composition injects `createKernelCreditSearchSource(pool, routeKey)` into its rated Subject source. Semantic's
 `subjectSource` remains independent of Search, and the rated decorator only forwards the supplied producer to HTTP
 and default-worker consumers; no second credit producer is introduced.
+Decision: Search consumes that producer through `semantic/credit-search.ts`, never the Semantic barrel; writer-guard
+receives `creditFormat` from callers; works-mode return hrefs stay in subject-visit-navigation.
 Decision: credited works place selected kinds in AND leaf 0 so remaining-predicate kind counts keep the nested
 same-credit text; a bare kind filter is not an admitted count leaf.
 Decision: the fewest focused tests pin credited request/facet/share agreement, same-credit qualifiers, current
