@@ -8,7 +8,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -535,6 +535,62 @@ test.serial(
     ]);
     expect(applied.outcomes[0]).toMatchObject({ status: 'applied', score: { status: 'applied' } });
     expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, canonical)).toMatchObject({ units: 13 });
+  },
+  120000,
+);
+test.serial(
+  'AniList adopts an explicitly selected ANIME episode occurrence on the owner home',
+  async () => {
+    await f.grantLibraryGate(f.owner.actor.accountId);
+    expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
+    const ownerHome = partitionOf(routeOf(f.owner.actor.accountId)!);
+    expect(ownerHome).toBe(0);
+    const target = await f.createHomeSubject('game', f.owner, ownerHome);
+    const mediaId = Math.floor(Math.random() * 1_000_000_000) + 1;
+    const preview = await f.send('owner', 'POST', base + ':preview', {
+      upload: JSON.stringify([{ mediaId, media: { id: mediaId, type: 'ANIME' }, status: 'CURRENT', progress: 3 }]),
+    });
+    expect(preview.status).toBe(200);
+    const path = `${base}/${(await preview.json()).id}`;
+    const page = await (await f.send('owner', 'GET', path)).json();
+    expect(page.rows[0].progressMeasures[0]).toMatchObject({
+      field: 'progress',
+      unit: 'episode',
+      state: 'value',
+      amount: '3',
+    });
+    const reviewed = await f.send('owner', 'POST', path + ':review', {
+      ordinal: 0,
+      subjectId: target,
+      fields: ['status'],
+      progress: {
+        occurrence: { kind: 'start', primaryUnit: 'episode' },
+        measures: [{ field: 'progress', action: 'adopt' }],
+      },
+    });
+    expect(reviewed.status).toBe(200);
+    const applied = await f.send('owner', 'POST', path + ':apply', {
+      confirmations: [{ ordinal: 0, reviewId: (await reviewed.json()).review.id }],
+    });
+    expect(applied.status).toBe(200);
+    const outcome = (await applied.json()).outcomes[0];
+    expect(outcome.status).toBe('applied');
+    expect(outcome.progress).toMatchObject({
+      complete: true,
+      measures: [{ status: 'applied', sourceAmount: '3', currentAmount: '3' }],
+    });
+    const sessionId = outcome.progress.occurrence.sessionId as string;
+    const opened = await (await f.send('owner', 'GET', `/v1/progressSessions/${sessionId}`)).json();
+    expect(opened.progressSession).toMatchObject({
+      mode: 'scalar_amount',
+      unit: 'episode',
+      amount: '3',
+      state: 'active',
+    });
+    const entry = await (await f.send('owner', 'GET', `/v1/libraryEntries/${target}`)).json();
+    expect(entry.libraryEntry.state).toBe('active');
+    expect((await f.send('other', 'GET', `/v1/progressSessions/${sessionId}`)).status).toBe(404);
+    expect((await f.send('anonymous', 'GET', path)).status).toBeGreaterThanOrEqual(401);
   },
   120000,
 );
