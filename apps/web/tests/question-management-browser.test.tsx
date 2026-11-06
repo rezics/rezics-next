@@ -16,7 +16,6 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   IS_REACT_ACT_ENVIRONMENT: true,
-  requestAnimationFrame: (callback: FrameRequestCallback) => callback(0),
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
