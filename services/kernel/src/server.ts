@@ -14,7 +14,12 @@ import { readContentConfig } from './content/config.ts';
 import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
-import { createKernelRuntimeDefaults, decodeKey, required } from './composition/runtime-defaults.ts';
+import {
+  createKernelCreditSearchSource,
+  createKernelRuntimeDefaults,
+  decodeKey,
+  required,
+} from './composition/runtime-defaults.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -34,7 +39,7 @@ import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './sea
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 
-export { createKernelRuntimeDefaults };
+export { createKernelCreditSearchSource, createKernelRuntimeDefaults };
 export type { KernelRuntimeDefaults, KernelRuntimeOverrides } from './composition/runtime-defaults.ts';
 
 export type ServerConfig = {

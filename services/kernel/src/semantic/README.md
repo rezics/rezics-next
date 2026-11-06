@@ -644,7 +644,8 @@ without a native work receipt refuses before IO rather than manufacturing an Act
 Decision: credit-search observation is the work header plus `search_canonical_generation`, so paging stays
 stable without expanding omitted creators; `nameRevision` hashes public labels/aliases and identity/security;
 pages admit 32 selected credits before nested name and identity reads; an incomplete fourth page or name
-coverage keeps selection ready.
+coverage keeps selection ready. Identity `absent` uses the public redirect chain; pending identity is
+preparing; a moved identity home is unavailable.
 
 `createCreditSearchSource` in `credit-search.ts` is the native `CreditSearchSource` for Search's credited-name
 consumer. Production attaches it on `subjectSource`, preserves it through rated composition, and exposes
