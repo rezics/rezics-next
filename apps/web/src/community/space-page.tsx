@@ -215,6 +215,7 @@ export function RealmShelf({
   returnTo,
   onReadingChange,
   onCompleted,
+  shelfGeneration = 0,
 }: {
   returnTo?: string;
   onReadingChange?: (href: string) => void;
@@ -223,6 +224,7 @@ export function RealmShelf({
   transport?: RealmShelfTransport;
   frozen?: boolean;
   search?: EntityPickerSearch | undefined;
+  shelfGeneration?: number;
 }) {
   const { state, csrfToken, subject: reader } = useSession();
   const lifetime = useSpacePageLifetime();
@@ -265,6 +267,7 @@ export function RealmShelf({
     transport?.boards ?? ((input) => readRealmBoards({ data: { realmId: realm.id, ...input } })),
     lifetime,
     !transport?.boards,
+    shelfGeneration,
   );
   const publications = useShelfList(
     {
@@ -276,6 +279,7 @@ export function RealmShelf({
     transport?.publications ?? ((input) => readRealmPublications({ data: { realmId: realm.id, ...input } })),
     lifetime,
     !transport?.publications,
+    shelfGeneration,
   );
   const boardFocus = useShelfContinuationFocus(boards, m.realm_boards_heading());
   const publicationFocus = useShelfContinuationFocus(publications, m.realm_published_heading());
@@ -294,12 +298,15 @@ export function RealmShelf({
   });
   if (restore.current.visit !== visit) restore.current = { visit, started: false, focused: false };
   useEffect(() => {
+    restore.current = { visit, started: false, focused: false };
+  }, [shelfGeneration]);
+  useEffect(() => {
     queueMicrotask(() => {
       if (!current() || frozen || restore.current.started) return;
       restore.current.started = true;
       if (selection.cursor) void (selection.node === 'boards' ? boards : publications).restore(selection.cursor);
     });
-  }, [lease]);
+  }, [lease, shelfGeneration]);
   useEffect(() => {
     if (!selection.node) return;
     const cancel = () => {
@@ -368,6 +375,7 @@ export function RealmShelf({
     (input) => (transport?.prepare ? transport.prepare(input) : readRealmPublicationPreparation({ data: input })),
     [transport?.prepare],
   );
+  const publicationSource = useMemo(() => ({ realmId: realm.id }), [realm.id]);
   const control = usePublicationControls(
     realm.id,
     sendPublication,
@@ -407,7 +415,7 @@ export function RealmShelf({
     !frozen && state === 'signed-in' && Boolean(csrfToken),
     reader ?? '',
     preparePublication,
-    realm,
+    publicationSource,
   );
   currentControl.current = control;
   useEffect(() => {
@@ -801,6 +809,7 @@ function SpaceHome({
           spaceId={page.space.id}
           returnTo={readingReturn}
           onCompleted={onRealmCompleted}
+          sourceIdentity={nativeHomeSourceIdentity(page)}
           {...(nativeObservation ? { nativeObservation } : {})}
         />
       ) : null}
@@ -870,12 +879,12 @@ function SpaceHome({
       />
       {page.realm && !realmRemoved && readable ? (
         <RealmShelf
-          key={`${page.realm.id}:${shelfGeneration}`}
           realm={page.realm}
           frozen={frozen}
           returnTo={initialReturn}
           onReadingChange={updateReadingReturn}
           onCompleted={onRealmCompleted}
+          shelfGeneration={shelfGeneration}
           {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
         />
       ) : null}

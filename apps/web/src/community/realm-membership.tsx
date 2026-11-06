@@ -55,6 +55,7 @@ export function RealmMembership({
   memberLabel,
   admittedAction,
   nativeObservation,
+  sourceIdentity,
   onCompleted,
 }: {
   realm: Pick<RealmHome, 'id' | 'viewer'> & { visibility: RealmHome['visibility'] | 'unknown' };
@@ -63,6 +64,7 @@ export function RealmMembership({
   memberLabel?: string;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
   nativeObservation?: NativeRealmHomeObservation;
+  sourceIdentity?: string | null;
   onCompleted?: RealmCompleted<RealmMembershipCompletion>;
 }) {
   const { state: session, csrfToken, subject } = useSession();
@@ -74,6 +76,7 @@ export function RealmMembership({
         returnTo={returnTo}
         {...(spaceId ? { spaceId } : {})}
         observation={nativeObservation}
+        sourceIdentity={sourceIdentity ?? null}
         session={session}
         subject={subject ?? null}
         csrfToken={csrfToken}
@@ -133,6 +136,7 @@ function NativeMembership({
   returnTo,
   spaceId,
   observation,
+  sourceIdentity,
   session,
   subject,
   csrfToken,
@@ -143,6 +147,7 @@ function NativeMembership({
   returnTo: string;
   spaceId?: string;
   observation: NativeRealmHomeObservation;
+  sourceIdentity: string | null;
   session: ReturnType<typeof useSession>['state'];
   subject: string | null;
   csrfToken: string | null;
@@ -207,7 +212,7 @@ function NativeMembership({
     staleTime: 0,
     gcTime: 0,
     retry: false,
-    refetchOnMount: 'always',
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -233,19 +238,27 @@ function NativeMembership({
     if (!accepted && !caller.store.nativeCommandAcknowledged(attempt)) return;
     // A same-source remount can paint before the replacement lifetime connects; wait rather than retire.
     if (!current() || !caller.isCurrent()) return;
-    acknowledged.current = null;
     const owner = accepted?.caller ?? caller;
-    if (
-      source.viewer.state !== 'member' ||
-      !(attempt.body.action === 'join'
-        ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
-        : source.viewer.membership === 'none') ||
-      !owner.isCurrent()
-    ) {
+    if (attempt.source && attempt.source !== sourceIdentity) {
+      acknowledged.current = null;
       accepted?.focus.cancel();
       caller.store.retireNativeCommandAcknowledgement(attempt);
       return;
     }
+    const membershipMatches =
+      source.viewer.state === 'member' &&
+      (attempt.body.action === 'join'
+        ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
+        : source.viewer.membership === 'none') &&
+      owner.isCurrent();
+    if (!membershipMatches) {
+      if (attempt.source) return;
+      acknowledged.current = null;
+      accepted?.focus.cancel();
+      caller.store.retireNativeCommandAcknowledgement(attempt);
+      return;
+    }
+    acknowledged.current = null;
     caller.store.discardNativeCommand(realmId, subject, attempt);
     setAttemptRevision((revision) => revision + 1);
     setBusy(null);
@@ -268,7 +281,7 @@ function NativeMembership({
       },
       focus,
     });
-  }, [attempt, caller, observationVersion, realmId, source, subject]);
+  }, [attempt, caller, observationVersion, realmId, source, sourceIdentity, subject]);
 
   useEffect(() => {
     if (!completed || attempt || !completed.receipt.current() || delivered.current.has(completed.receipt)) return;
@@ -321,6 +334,7 @@ function NativeMembership({
         credential: csrfToken,
         body: { realmId, action: action!, idempotencyKey: crypto.randomUUID() },
         observation: observationVersion,
+        source: sourceIdentity,
       });
     if (retry && caller.store.nativeCommand(realmId, subject) !== retry) return;
     const focus = captureFocus(event);
@@ -337,12 +351,9 @@ function NativeMembership({
       if (result.outcome === 'accepted') {
         caller.store.acknowledgeNativeCommand(command);
         acknowledged.current = { command, caller, focus };
-        if (spaceId) await client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
-        if (!stillCurrent()) return;
-        await client.invalidateQueries({ queryKey: ['my-realms'] });
-        if (!stillCurrent()) return;
-        await router.invalidate();
-        if (!stillCurrent()) return;
+        if (spaceId) void client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
+        void client.invalidateQueries({ queryKey: ['my-realms'] });
+        void router.invalidate();
       }
     } catch {
       // Keep the exact attempt available for a deliberate same-key retry or discard.

@@ -832,7 +832,18 @@ export class SpacePageLifetime {
 
   matchesPage = (page: SpacePageData) => {
     if (!this.nativeBinding && !page.realm?.nativeObservation) return true;
-    return this.page === page && sameNativeHomeBinding(this.nativeBinding, nativeHomeBinding(page));
+    if (!this.page) return false;
+    const current = nativeHomeBinding(page);
+    if (this.page === page) return sameNativeHomeBinding(this.nativeBinding, current);
+    const originalIdentity = nativeHomeSourceIdentity(this.page);
+    const nextIdentity = nativeHomeSourceIdentity(page);
+    // A same-source admitted refresh is a new page whose nested observation actually changed.
+    // An equal envelope, in-place mutation, or identity change still retires this visit.
+    return (
+      originalIdentity !== null &&
+      originalIdentity === nextIdentity &&
+      !sameNativeHomeBinding(this.nativeBinding, current)
+    );
   };
 
   private publish() {

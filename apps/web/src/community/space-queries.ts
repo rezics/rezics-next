@@ -48,6 +48,7 @@ export function useShelfList<T extends { id: string }>(
   }) => Promise<ShelfPage<T> & { readerOrigin?: ReaderOrigin }>,
   lifetime?: SpacePageLifetime | null,
   requireReaderOrigin = false,
+  resetKey = 0,
 ) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState({
@@ -62,6 +63,9 @@ export function useShelfList<T extends { id: string }>(
   const active = useRef<{ token: object; generation: number } | null>(null);
   const latestRead = useRef<object | null>(null);
   const visit = useRef(lifetime);
+  const reset = useRef(resetKey);
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -71,18 +75,20 @@ export function useShelfList<T extends { id: string }>(
     };
   }, []);
   useEffect(() => {
-    if (visit.current === lifetime) return;
+    if (visit.current === lifetime && reset.current === resetKey) return;
     visit.current = lifetime;
+    reset.current = resetKey;
+    const start = initialRef.current;
     generation.current++;
     active.current = null;
     setPage({
-      ...initial,
-      cursors: new Map(initial.items.map((item) => [item.id, null as string | null])),
+      ...start,
+      cursors: new Map(start.items.map((item) => [item.id, null as string | null])),
       continuation: null,
     });
     setFailedRead(null);
     setBusy(false);
-  }, [lifetime]);
+  }, [lifetime, resetKey]);
   const canPublish = () => mounted.current && (!lifetime || lifetime.current());
   async function requestPage({ restart, cursor }: ShelfRead, intent?: object) {
     const previous = active.current;

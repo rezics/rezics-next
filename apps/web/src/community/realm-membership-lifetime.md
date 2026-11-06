@@ -25,9 +25,11 @@ An accepted current command keeps the existing four-read settlement cycle at del
 authority transition retires that cycle without restarting it. A fresh standing read is required before current
 controls or Board admission are exposed again. None of these reads changes Space following.
 
-Native Home commands store acknowledgement on the original attempt. A remounted controller may complete once when the
-admitted membership result follows that acknowledgement directly; a first paint before the replacement lifetime
-connects waits instead of retiring. An intervening source replacement retires the acknowledgement and keeps the
-uncertain command for exact retry or discard.
+Native Home commands store acknowledgement on the original attempt together with the visit's source identity. A
+same-source admitted refresh may complete once when that membership result follows the acknowledgement; a first paint
+before the replacement lifetime connects, or a same-identity Home that has not yet admitted the result, waits instead
+of retiring. The original host invalidates sibling lists and the route once and does not refetch advice or renew the
+command. An intervening source replacement retires the acknowledgement and keeps the uncertain command for exact retry
+or discard.
 
 An explicit keyboard membership operation hands focus to the named membership summary only after its current caller settles into admitted standing and its control disappears; a surviving control keeps focus, and pointer use, focus movement or caller retirement cancels the handoff.
