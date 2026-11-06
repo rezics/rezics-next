@@ -9212,54 +9212,54 @@ test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'faile
   },
 );
 
-test('nested official placement admits the named profile and physically receives its artifact envelope before legacy replay', async () => {
-  const { artifactRunRelativePath, restoreArtifactReturns } = await import('./check-artifacts.ts');
-  const caller = workspace(true);
-  const producer = mkdtempSync('/dev/shm/rezics-remote-nested-');
-  try {
-    mkdirSync(join(caller, PROFILE.root), { recursive: true });
-    writeFileSync(join(caller, PROFILE.root, 'obsolete.d.ts'), 'old');
-    writeFileSync(join(caller, 'packages/client/src/sibling.ts'), 'untouched');
-    for (let i = 0; i < 282; i++) {
-      const file = join(producer, PROFILE.root, `nested/row${i}.d.ts`);
-      mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, `export type Row${i} = ${i};\n`);
+test.each(['direct', 'shell'] as const)(
+  'nested official %s placement admits the named profile and physically receives its artifact envelope before legacy replay',
+  async (mode) => {
+    const { artifactRunRelativePath, restoreArtifactReturns } = await import('./check-artifacts.ts');
+    const caller = workspace(true);
+    const producer = mkdtempSync('/dev/shm/rezics-remote-nested-');
+    try {
+      mkdirSync(join(caller, PROFILE.root), { recursive: true });
+      writeFileSync(join(caller, PROFILE.root, 'obsolete.d.ts'), 'old');
+      writeFileSync(join(caller, 'packages/client/src/sibling.ts'), 'untouched');
+      for (let i = 0; i < 282; i++) {
+        const file = join(producer, PROFILE.root, `nested/row${i}.d.ts`);
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, `export type Row${i} = ${i};\n`);
+      }
+      const physicalId = randomUUID();
+      const stage = artifactRunRelativePath(physicalId);
+      const source = await currentCheckSourceManifest(caller, [stage, PROFILE.transport]);
+      const bytes = encodeOutputTree(producer, { host: 'a', run: 'template-run', sourceSha256: source.sourceSha256 });
+      const physical = scenario({
+        a: { treeArtifact: physicalId, treeBundle: bytes.toString('base64'), treeSource: source.sourceSha256 },
+      });
+      const result = await remote(
+        physical.env,
+        caller,
+        [
+          'env',
+          `REZICS_CHECK_ARTIFACTS_DIR=${stage}`,
+          `REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID=${physicalId}`,
+          ...(mode === 'direct'
+            ? ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client']
+            : ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client; result=$?; exit $result']),
+        ],
+        ['--returns', stage],
+      );
+      expect(result.code, result.stderr).toBe(0);
+      expect(physical.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+      expect(collectOutputTree(caller).members).toEqual(collectOutputTree(producer).members);
+      const restored = restoreArtifactReturns(caller, stage, physicalId);
+      expect(restored.rejected).toEqual([]);
+      expect(restored.restored).toHaveLength(1);
+      expect(existsSync(join(caller, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
+      expect(readFileSync(join(caller, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
+    } finally {
+      rmSync(producer, { recursive: true, force: true });
     }
-    const physicalId = randomUUID();
-    const stage = artifactRunRelativePath(physicalId);
-    const source = await currentCheckSourceManifest(caller, [stage, PROFILE.transport]);
-    const bytes = encodeOutputTree(producer, { host: 'a', run: 'template-run', sourceSha256: source.sourceSha256 });
-    const physical = scenario({
-      a: { treeArtifact: physicalId, treeBundle: bytes.toString('base64'), treeSource: source.sourceSha256 },
-    });
-    const result = await remote(
-      physical.env,
-      caller,
-      [
-        'env',
-        `REZICS_CHECK_ARTIFACTS_DIR=${stage}`,
-        `REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID=${physicalId}`,
-        'bun',
-        'run',
-        '--cwd',
-        'services/kernel',
-        'typecheck',
-        '--emit-client',
-      ],
-      ['--returns', stage],
-    );
-    expect(result.code, result.stderr).toBe(0);
-    expect(physical.events().filter((event) => event.kind === 'run')).toHaveLength(1);
-    expect(collectOutputTree(caller).members).toEqual(collectOutputTree(producer).members);
-    const restored = restoreArtifactReturns(caller, stage, physicalId);
-    expect(restored.rejected).toEqual([]);
-    expect(restored.restored).toHaveLength(1);
-    expect(existsSync(join(caller, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
-    expect(readFileSync(join(caller, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
-  } finally {
-    rmSync(producer, { recursive: true, force: true });
-  }
-});
+  },
+);
 
 test('publication cleanup cannot replace a result or a primary failure when its manifest is lost', async () => {
   const directory = workspace();

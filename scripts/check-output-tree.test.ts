@@ -70,7 +70,7 @@ function put(root: string, path: string, value: string | Buffer): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), value);
 }
-function generated(root: string, count = 282): Map<string, Buffer> {
+function generated(root: string, count = 543): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
   mkdirSync(join(root, PROFILE.root), { recursive: true });
   for (let index = 0; index < count; index++) {
@@ -125,11 +125,11 @@ const member = (path: string, bytes = Buffer.from('x')): OutputTreeMember => ({
   sha256: outputTreeDigest(bytes),
 });
 
-test('official-sized 282-member tree returns exact nested bytes and hashes, deletes obsolete output, preserves siblings and repeats one terminal receipt', () => {
+test('543-member generated closure returns exact nested bytes and hashes, deletes obsolete output, preserves siblings and repeats one terminal receipt', () => {
   const { producer, consumer, bytes, proof, expected } = fixture();
   expect(encodeOutputTree(producer, source)).toEqual(bytes);
   const members = restoreOutputTree(consumer, bytes, proof);
-  expect(members).toHaveLength(282);
+  expect(members).toHaveLength(543);
   expect(existsSync(join(consumer, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
   for (const item of members) {
     const content = readFileSync(join(consumer, PROFILE.root, item.path));
@@ -287,7 +287,7 @@ test.each(['backed-up', 'published'] as const)(
       }),
     ).toThrow('interruption');
     expect(() => restoreOutputTree(consumer, bytes, { ...proof, run: 'another-run' })).toThrow();
-    expect(restoreOutputTree(consumer, bytes, proof)).toHaveLength(282);
+    expect(restoreOutputTree(consumer, bytes, proof)).toHaveLength(543);
     expect(existsSync(join(consumer, 'packages/client/src/.kernel-output-tree/backup'))).toBe(false);
     expect(readFileSync(join(consumer, 'packages/client/src/unrelated.ts'), 'utf8')).toBe('untouched');
   },
@@ -321,7 +321,7 @@ test('a dead publication owner permits only exact-terminal recovery; replay neve
   );
   expect(() => restoreOutputTree(consumer, bytes, { ...proof, run: 'foreign-run' })).toThrow();
   const members = restoreOutputTree(consumer, bytes, proof);
-  expect(members).toHaveLength(282);
+  expect(members).toHaveLength(543);
   const changed = `${PROFILE.root}/${members[0]!.path}`;
   put(consumer, changed, 'later edit');
   expect(() => restoreOutputTree(consumer, bytes, proof)).toThrow('same-terminal destination changed');
@@ -374,7 +374,7 @@ test('official capture requires physical prepared custody, runs once, and never 
       expect(runs).toBe(mode === 'stale' ? 0 : 1);
       if (mode === 'complete' || mode === 'empty') {
         const bytes = readOutputTreeFile(root, PROFILE.transport);
-        expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(mode === 'empty' ? 0 : 282);
+        expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(mode === 'empty' ? 0 : 543);
       } else if (mode !== 'stale') expect(existsSync(join(root, PROFILE.transport))).toBe(false);
     }
     const root = workspace();
@@ -429,7 +429,7 @@ test.each([0, 23])('official capture stages mixed schema output with honest term
     );
     if (code === 0) {
       const bytes = readOutputTreeFile(root, PROFILE.transport);
-      expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(282);
+      expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(543);
     } else expect(existsSync(join(root, PROFILE.transport))).toBe(false);
   }),
 );

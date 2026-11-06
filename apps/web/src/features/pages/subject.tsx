@@ -1,5 +1,6 @@
 import { cataloguePageBody, PageReadError, pageReadError, type NativePageBody } from './page-read-failure';
 export { PageReadError, pageReadError } from './page-read-failure';
+import { selectedStreamDocument, type SubjectStreams } from './subject-streams';
 import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
@@ -173,6 +174,7 @@ export type SubjectPageData = {
   /** BFF cache identity of this reading; never native read authority. */
   requestedReader?: string | null | undefined;
   continuation?: PageContinuation | undefined;
+  streams?: SubjectStreams | undefined;
   community?: SubjectCommunity;
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
@@ -188,18 +190,9 @@ export type SubjectPageData = {
     directions?: ReleasedRelationDirectionResult[];
   };
   /** Caller-bound native action state; page responses containing it are private and no-store. */
-  viewer?: {
-    state: 'anonymous' | 'account';
-    account?: string;
-    context: string;
-    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
-  };
+  viewer?: NativePageBody['viewer'];
   /** Native Access envelope for the selected subject; private and no-store with viewer. */
-  actions?:
-    | { status: 'ready'; viewerActions: { action: string; operations: string[] }[] }
-    | { status: 'withheld' }
-    | { status: 'unavailable' }
-    | { status: 'denied' };
+  actions?: NativePageBody['actions'];
   /** Optional current Terms operation advice, independent of public names and subject-level actions. */
   termsAuthority?: import('../catalogue/subject-terms').TermsPageAuthority;
   reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
@@ -293,6 +286,7 @@ export async function loadSubjectPage(
   options: {
     realm?: string | undefined;
     continuation?: PageContinuation | undefined;
+    stream?: string | undefined;
     authorization?: string | undefined;
     signal?: SubjectPageReadLifetime | undefined;
   } = {},
@@ -305,6 +299,7 @@ export async function loadSubjectPage(
       {
         target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
         ...(options.continuation ? { continuation: options.continuation } : {}),
+        ...(options.stream ? { stream: options.stream } : {}),
         languages: requestLanguages(locale),
       },
       {
@@ -1380,7 +1375,8 @@ export function SubjectPage({
       </Empty>
     ) : null;
   const header = placesSlot(page.document.content, 'header');
-  const composition = overview && !framed ? splitHeaderDocument(page.document) : { remaining: page.document };
+  const renderedDocument = selectedStreamDocument(page.document, page.streams);
+  const composition = overview && !framed ? splitHeaderDocument(renderedDocument) : { remaining: renderedDocument };
   const afterHeader = overview ? (
     <>
       {bar}
@@ -1440,7 +1436,7 @@ export function SubjectPage({
             reads={page.reads}
             context={page.context}
             {...(realm !== undefined ? { realm } : {})}
-            {...(page.viewer ? { viewer: page.viewer } : {})}
+            {...(page.viewer && 'state' in page.viewer ? { viewer: page.viewer } : {})}
             {...(page.catalogue?.digest ? { releaseDigest: page.catalogue.digest } : {})}
             cacheReader={page.requestedReader}
             continuation={page.continuation}

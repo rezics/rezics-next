@@ -60,6 +60,7 @@ import {
 } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
+import { subjectStreams, selectSubjectStream } from '../subject-streams.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 
 function resource() {
@@ -113,7 +114,7 @@ function targetOf(body: unknown): PageTarget {
   const errors: FieldError[] = [];
   if (!isRecord(body)) reject([{ pointer: '', code: 'invalid_type' }]);
   for (const key of Object.keys(body)) {
-    if (key !== 'target' && key !== 'languages' && key !== 'continuation')
+    if (key !== 'target' && key !== 'languages' && key !== 'continuation' && key !== 'stream')
       errors.push({ pointer: `/${segment(key)}`, code: 'unknown_field' });
   }
   if (!Object.hasOwn(body, 'target')) {
@@ -196,6 +197,14 @@ function continuationOf(body: unknown): PageContinuation | undefined {
   if (errors.length) reject(errors);
   if (typeof value.node !== 'string' || typeof value.cursor !== 'string') throw new Error('Invalid continuation');
   return { node: value.node, cursor: value.cursor };
+}
+
+/** A selector is an address in this response's immutable composition, never a read descriptor. */
+function streamOf(body: unknown): string | undefined {
+  if (!isRecord(body) || !Object.hasOwn(body, 'stream')) return;
+  if (typeof body.stream !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/u.test(body.stream))
+    reject([{ pointer: '/stream', code: 'invalid_format' }]);
+  return body.stream as string;
 }
 
 function languagesOf(body: unknown): readonly string[] | undefined {
@@ -371,6 +380,11 @@ function nativePageRoute<App, const Path extends string>(
       );
       const languages = languagesOf(body);
       const continuation = continuationOf(body);
+      const stream = streamOf(body);
+      if (stream && (!('view' in target) || !target.view || target.view === 'overview'))
+        reject([{ pointer: '/stream', code: 'unsupported' }]);
+      if (stream && continuation && stream !== continuation.node)
+        reject([{ pointer: '/stream', code: 'invalid_format' }]);
       const check = await authorize({
         ...resource(),
         ...(!draftPreview && includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
@@ -638,6 +652,7 @@ function nativePageRoute<App, const Path extends string>(
             }
           : {}),
         ...(continuation ? { continuation } : {}),
+        ...(stream ? { stream } : {}),
         resolveBuiltin: async (key) => {
           if (actor.kind !== 'account' || (account !== null && account.id !== actor.accountId)) return null;
           return admission.run('normal', job, () => createBuiltinRuntime({ pool }).resolve(actor, key, job.deadline));
@@ -698,6 +713,7 @@ async function pageAnswer(input: {
   languages?: readonly string[];
   context?: SelectedContext;
   continuation?: PageContinuation;
+  stream?: string;
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
   catalogue?: ReturnType<typeof cataloguePageMetadata>;
@@ -751,7 +767,28 @@ async function pageAnswer(input: {
   if (Object.values(plan.reads).reduce((cost, read) => cost + readCost(read), 0) > MAX_PAGE_COST)
     reject([{ pointer: '/reads', code: 'out_of_range' }]);
   const observed = new Map(input.probes);
-  const continuedKey = input.continuation ? plan.nodes[input.continuation.node] : undefined;
+  const context = input.context ? { context: input.context.id } : {};
+  const observation = observed.get(canonicalize({ kind: 'subject', id: input.subject, ...context })!);
+  const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
+  const streams = !input.continuationOnlyLists
+    ? selectSubjectStream(
+        subjectStreams(input.resolved.document, {
+          subject: input.subject,
+          account: input.account,
+          ...(input.context ? { context: input.context } : {}),
+        }),
+        input.stream,
+        input.continuation?.node,
+        isRecord(subjectBody) ? (subjectBody.relationCounts as Record<string, number> | undefined) : undefined,
+      )
+    : undefined;
+  if (input.stream && !streams?.entries.some(({ node }) => node === input.stream))
+    reject([{ pointer: '/stream', code: 'invalid_format' }]);
+  const continuedKey = streams?.selected
+    ? plan.nodes[streams.selected]
+    : input.continuation
+      ? plan.nodes[input.continuation.node]
+      : undefined;
   for (const [readKey, descriptor] of Object.entries(plan.reads)) {
     const key = canonicalize(descriptor)!;
     if (
@@ -775,9 +812,6 @@ async function pageAnswer(input: {
     )
       observed.set(canonicalize(descriptor)!, { status: 503, body: { code: 'dependency_unavailable' } });
   }
-  const context = input.context ? { context: input.context.id } : {};
-  const observation = observed.get(canonicalize({ kind: 'subject', id: input.subject, ...context })!);
-  const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
   const documents = recipePageDocuments(
@@ -932,6 +966,7 @@ async function pageAnswer(input: {
       ...(input.account === null ? {} : { account: input.account.id }),
       ...(input.context ? { context: input.context } : {}),
       ...(input.continuation ? { continuation: input.continuation } : {}),
+      ...(streams ? { streams } : {}),
       profile: input.digest,
       ...(input.draft ? { draft: input.draft } : {}),
       template: { scope: input.resolved.scope, key: input.resolved.key },

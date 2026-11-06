@@ -189,13 +189,15 @@ export function explicitShelfDisplay(display: ShelfDisplay): Partial<ShelfPresen
 /** The address of a shelf view. Defaults stay out of it, and the layout and size are kept unless the caller changes them. */
 export function shelfHref(
   locale: string,
-  view: Omit<ShelfPresentationIntent, 'state'> & {
+  view: Omit<ShelfPresentationIntent, 'state' | 'cursor'> & {
     state?: LibraryEntryStateWrite | null;
     orderBy?: ShelfSort['orderBy'];
     direction?: ShelfSort['direction'];
     layout?: ShelfLayout;
     size?: ShelfSize;
     columns?: string;
+    /** `undefined` clears an inherited cursor, so the first page's address carries no cursor. */
+    cursor?: string | undefined;
   },
 ): string {
   const params = new URLSearchParams();

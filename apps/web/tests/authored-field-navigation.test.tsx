@@ -33,6 +33,8 @@ test('same-tab and browser-back departures can stay with every retained field or
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
+    // Router scroll restoration calls the bare global; these assertions do not depend on scroll position.
+    scrollTo: () => undefined,
     Text: window.Text,
     NodeFilter: window.NodeFilter,
     DocumentFragment: window.DocumentFragment,

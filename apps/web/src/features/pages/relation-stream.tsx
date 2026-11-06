@@ -768,6 +768,7 @@ function StreamState({
         <a
           data-slot="continue-group"
           href={href}
+          rel="next"
           onClick={more}
           aria-disabled={visiblePending}
           aria-describedby={`${node}-status`}

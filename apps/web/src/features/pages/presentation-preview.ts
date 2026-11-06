@@ -200,11 +200,10 @@ export async function loadPresentationPreview(
     }
     // An aggregate transport may ignore abort. Retirement still forbids starting later control reads.
     signal?.throwIfAborted();
+    const controlFetch = { ...(signal ? { signal } : {}), cache: 'no-store' as const };
     const [pinned, active] = await Promise.all([
-      client.presentation
-        .profiles({ digest: page.profile })
-        .get({ fetch: { ...(signal ? { signal } : {}), cache: 'no-store' } }),
-      client.presentation.active.get({ fetch: { ...(signal ? { signal } : {}), cache: 'no-store' } }),
+      client.presentation.profiles({ digest: page.profile }).get({ fetch: controlFetch }),
+      client.presentation.active.get({ fetch: controlFetch }),
     ]);
     if (pinned.status !== 200 || !pinned.data) return failure(pinned.status);
     if (active.status !== 200 || !active.data) return failure(active.status);

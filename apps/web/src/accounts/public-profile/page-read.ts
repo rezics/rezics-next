@@ -40,7 +40,7 @@ function overviewFallback(locale: string, handle: string, search = ''): string {
 export { pageProfile };
 
 /** Keep the relationship's existence without returning its raw operator identifier. */
-function hideUnavailableOperatorIds(page: SubjectPageData, accountId: string): SubjectPageData {
+function hideUnavailableOperatorIds<T extends SubjectPageData>(page: T, accountId: string): T {
   let changed = false;
   const reads = Object.fromEntries(
     Object.entries(page.reads).map(([key, read]) => {
@@ -55,7 +55,7 @@ function hideUnavailableOperatorIds(page: SubjectPageData, accountId: string): S
       return [key, changedRead ? { ...read, body: { ...read.body, accounts } } : read];
     }),
   );
-  return changed ? { ...page, reads } : page;
+  return changed ? ({ ...page, reads } as T) : page;
 }
 
 /** Public reads always use anonymous authority, including continuations and optional operator hydration. */

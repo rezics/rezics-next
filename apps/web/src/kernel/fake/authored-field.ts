@@ -121,9 +121,38 @@ export function authoredFixture(
         'rezics-session-token': 'authored-session',
       },
     });
+  /** The closed native selected-slot component: a redacted fact with its Context and release, or a closed refusal. */
+  const selectedSynopsisComponent = (supplied: string) => {
+    const selected = JSON.parse(supplied) as {
+      statement: string;
+      document: string;
+      digest: string;
+      language: string;
+      context: string;
+      release: string;
+    };
+    const live = base.publicRead.subject.statements[authoredProperty]?.find((row) => row.id === selected.statement);
+    const content = live?.value.type === 'value' ? live.value.content : undefined;
+    const matched =
+      live &&
+      content &&
+      content.document === selected.document &&
+      content.digest === selected.digest &&
+      content.language === selected.language &&
+      selected.release === base.publicRead.subject.release;
+    if (!live || !matched) return { kind: 'changed' };
+    const { id, rank, property, qualifiers, references } = live;
+    return {
+      kind: 'matched',
+      fact: { id, rank, property, value: { type: 'somevalue' }, qualifiers, references },
+      context: selected.context,
+      release: selected.release,
+    };
+  };
   const fetcher = (async (input, init) => {
     const request = input instanceof Request ? input : new Request(String(input), init);
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     const key = request.headers.get('idempotency-key');
     const body: unknown = request.method === 'POST' ? await request.clone().json() : null;
     calls.push({
@@ -212,6 +241,11 @@ export function authoredFixture(
       }
       return json(receipt, 201);
     }
+    if (request.method === 'GET' && path === `/v1/subjects/${base.id}` && url.searchParams.has('selectedSynopsis'))
+      return json({
+        ...base.publicRead,
+        selectedSynopsis: selectedSynopsisComponent(url.searchParams.get('selectedSynopsis')!),
+      });
     return base.fetcher(request);
   }) as typeof fetch;
   const client = createKernelClient('https://authored.test', { fetch: fetcher });

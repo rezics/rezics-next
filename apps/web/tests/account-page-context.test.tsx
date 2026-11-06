@@ -62,5 +62,8 @@ test('an unreadable operator keeps the relationship label and omits its raw iden
   const result = await loadPublicAccountJourney(client, { handle: 'reader', locale: 'en' });
   if (result.kind !== 'page') throw new Error(`Expected page, received ${result.kind}`);
   expect(pageProfile(result.page)?.operated).toBe(true);
+  expect(pageProfile(result.page)?.operatorId).toBeNull();
+  expect(pageProfile(result.overview)?.operatorId).toBeNull();
+  expect(JSON.stringify(result.page.reads)).not.toContain(operatorId);
   expect(JSON.stringify(result)).not.toContain(operatorId);
 });

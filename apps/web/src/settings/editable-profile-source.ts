@@ -163,17 +163,17 @@ export function closedProfileEditing(
   viewerAccountId = target.id,
 ): ProfileEditing {
   const identity = {
-    displayName: { applicable: true, maxLength: 4096 as const },
-    biography: { applicable: true, maxLength: 4096 as const },
-    avatar: { applicable: true },
+    displayName: { applicable: true as const, maxLength: 4096 as const },
+    biography: { applicable: true as const, maxLength: 4096 as const },
+    avatar: { applicable: true as const },
     links: {
-      applicable: true,
+      applicable: true as const,
       maxItems: 5 as const,
       labelMaxLength: 64 as const,
       urlMaxLength: 2048 as const,
     },
     publicViews: {
-      applicable: true,
+      applicable: true as const,
       flags: ['posts', 'reviews', 'collections', 'realms'] as Array<'posts' | 'reviews' | 'collections' | 'realms'>,
     },
   };
@@ -181,7 +181,7 @@ export function closedProfileEditing(
     ? {
         viewer: { accountId: viewerAccountId },
         target: { accountId: target.id, kind: 'organization' },
-        fields: { ...identity, speakersListed: { applicable: true } },
+        fields: { ...identity, speakersListed: { applicable: true as const } },
       }
     : {
         viewer: { accountId: viewerAccountId },

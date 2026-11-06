@@ -4,6 +4,8 @@ import { act, createElement as h, useState } from 'react';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
 import type { RelationGroupRequest } from '../src/features/pages/relation-stream-query';
 
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
 // Exercise the mounted reader through its existing BFF seam, retaining the real query keys and owner guards.
 test('Relation window replaces pages, retries transport, stops cycles and bounds each private traversal', async () => {
   const { Window } = await import(
@@ -17,6 +19,8 @@ test('Relation window replaces pages, retries transport, stops cycles and bounds
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
+    // Router scroll restoration calls the bare global; these assertions do not depend on scroll position.
+    scrollTo: () => undefined,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
@@ -135,6 +139,7 @@ test('Relation window replaces pages, retries transport, stops cycles and bounds
   try {
     await render();
     const href = more().getAttribute('href')!;
+    expect(more().getAttribute('rel')).toBe('next');
     expect(new URL(href, window.location.href).searchParams.get('cursor')).toBe('opaque:/+?=&% 日本語#');
     expect(new URL(href, window.location.href).searchParams.get('realm')).toBe(realm);
     await click({ ctrlKey: true });

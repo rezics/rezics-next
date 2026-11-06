@@ -11,7 +11,7 @@ import { classificationHandoffSearch } from '../../features/catalogue/classifica
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { candidateContext } from '../../subject/candidates';
-import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
+import { canonicalRedirect, keepSearch } from '../../subject/load-subject';
 
 const canonicalCharacter = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; slug: string; locale: string; search: string }) => {

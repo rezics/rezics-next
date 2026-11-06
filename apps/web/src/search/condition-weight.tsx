@@ -87,7 +87,12 @@ export function ConceptWeightRange({
         ))}
         <Field>
           <FieldLabel htmlFor={`${id}-unit`}>{m.refinement_unit({}, options)}</FieldLabel>
-          <NativeSelect id={`${id}-unit`} name="unit" defaultValue={range?.unit ?? definition.units[0]}>
+          <NativeSelect
+            id={`${id}-unit`}
+            name="unit"
+            defaultValue={range?.unit ?? definition.units[0]}
+            className="w-full min-w-0 max-w-full [&_select]:h-auto [&_select]:min-h-11 [&_select]:max-w-full"
+          >
             {definition.units.map((unit) => (
               <NativeSelectOption key={unit} value={unit}>
                 {searchQuantityUnitText(unit, definition.units ?? [], locale, unitMessages)}
@@ -96,7 +101,7 @@ export function ConceptWeightRange({
           </NativeSelect>
         </Field>
       </div>
-      <Button type="submit" variant="outline">
+      <Button type="submit" variant="outline" className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2">
         {m.search_apply({}, options)}
       </Button>
     </form>

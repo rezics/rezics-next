@@ -83,6 +83,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 node: import("typebox").TString;
                 cursor: import("typebox").TString;
             }>>;
+            streams: import("typebox").TOptional<import("typebox").TObject<{
+                selected: import("typebox").TOptional<import("typebox").TString>;
+                entries: import("typebox").TArray<import("typebox").TObject<{
+                    node: import("typebox").TString;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                }>>;
+            }>>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
                 scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
@@ -291,6 +299,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 node: string;
                 cursor: string;
             };
+            streams?: {
+                selected?: string;
+                entries: {
+                    node: string;
+                    property: string;
+                    direction: "forward" | "inverse";
+                }[];
+            };
             profile: string;
             template: {
                 scope: "base" | "generic" | "route" | "type";
@@ -452,6 +468,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             continuation?: {
                 node: string;
                 cursor: string;
+            };
+            streams?: {
+                selected?: string;
+                entries: {
+                    node: string;
+                    property: string;
+                    direction: "forward" | "inverse";
+                }[];
             };
             profile: string;
             template: {
@@ -619,6 +643,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 continuation: import("typebox").TOptional<import("typebox").TObject<{
                     node: import("typebox").TString;
                     cursor: import("typebox").TString;
+                }>>;
+                streams: import("typebox").TOptional<import("typebox").TObject<{
+                    selected: import("typebox").TOptional<import("typebox").TString>;
+                    entries: import("typebox").TArray<import("typebox").TObject<{
+                        node: import("typebox").TString;
+                        property: import("typebox").TString;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    }>>;
                 }>>;
                 profile: import("typebox").TString;
                 template: import("typebox").TObject<{
@@ -867,6 +899,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             continuation: import("typebox").TOptional<import("typebox").TObject<{
                 node: import("typebox").TString;
                 cursor: import("typebox").TString;
+            }>>;
+            streams: import("typebox").TOptional<import("typebox").TObject<{
+                selected: import("typebox").TOptional<import("typebox").TString>;
+                entries: import("typebox").TArray<import("typebox").TObject<{
+                    node: import("typebox").TString;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                }>>;
             }>>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
@@ -1124,6 +1164,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 node: import("typebox").TString;
                 cursor: import("typebox").TString;
             }>>;
+            streams: import("typebox").TOptional<import("typebox").TObject<{
+                selected: import("typebox").TOptional<import("typebox").TString>;
+                entries: import("typebox").TArray<import("typebox").TObject<{
+                    node: import("typebox").TString;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                }>>;
+            }>>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
                 scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
@@ -1332,6 +1380,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 node: string;
                 cursor: string;
             };
+            streams?: {
+                selected?: string;
+                entries: {
+                    node: string;
+                    property: string;
+                    direction: "forward" | "inverse";
+                }[];
+            };
             profile: string;
             template: {
                 scope: "base" | "generic" | "route" | "type";
@@ -1493,6 +1549,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             continuation?: {
                 node: string;
                 cursor: string;
+            };
+            streams?: {
+                selected?: string;
+                entries: {
+                    node: string;
+                    property: string;
+                    direction: "forward" | "inverse";
+                }[];
             };
             profile: string;
             template: {
@@ -1660,6 +1724,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 continuation: import("typebox").TOptional<import("typebox").TObject<{
                     node: import("typebox").TString;
                     cursor: import("typebox").TString;
+                }>>;
+                streams: import("typebox").TOptional<import("typebox").TObject<{
+                    selected: import("typebox").TOptional<import("typebox").TString>;
+                    entries: import("typebox").TArray<import("typebox").TObject<{
+                        node: import("typebox").TString;
+                        property: import("typebox").TString;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                    }>>;
                 }>>;
                 profile: import("typebox").TString;
                 template: import("typebox").TObject<{
@@ -1908,6 +1980,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             continuation: import("typebox").TOptional<import("typebox").TObject<{
                 node: import("typebox").TString;
                 cursor: import("typebox").TString;
+            }>>;
+            streams: import("typebox").TOptional<import("typebox").TObject<{
+                selected: import("typebox").TOptional<import("typebox").TString>;
+                entries: import("typebox").TArray<import("typebox").TObject<{
+                    node: import("typebox").TString;
+                    property: import("typebox").TString;
+                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"forward">, import("typebox").TLiteral<"inverse">]>;
+                }>>;
             }>>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{

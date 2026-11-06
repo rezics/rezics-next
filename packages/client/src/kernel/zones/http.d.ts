@@ -7994,6 +7994,14 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     node: string;
                                     cursor: string;
                                 };
+                                streams?: {
+                                    selected?: string;
+                                    entries: {
+                                        node: string;
+                                        property: string;
+                                        direction: "forward" | "inverse";
+                                    }[];
+                                };
                                 profile: string;
                                 template: {
                                     scope: "base" | "generic" | "route" | "type";

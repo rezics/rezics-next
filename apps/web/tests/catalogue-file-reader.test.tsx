@@ -124,7 +124,7 @@ function renderSubject(
     type: read.subject.type,
     ...(supported ? { digest, definitions: { types: release.types, properties: release.properties } } : {}),
   };
-  page.viewer = {
+  page.viewer ??= {
     state: 'account',
     account: '019a1b2c-3d4e-7f00-8a00-ed170e000195',
     context: read.subject.context,
@@ -258,6 +258,16 @@ test('native page action decisions keep denied and unavailable correction contro
   expect(unavailable).toContain('Episode 1 file A');
   expect(denied).toContain('No current correction is allowed for this reader.');
   expect(unavailable).toContain('Current proposal permission could not be confirmed.');
+});
+
+test('a viewer identity without catalogue action advice does not admit a correction', async () => {
+  const result = await catalogueFileProfileFixture('ready').read();
+  if (!result.ok) throw new Error('Expected the current recorded catalogue definitions');
+  const page = ordinaryPage(result.public);
+  page.viewer = { kind: 'account', account: catalogueFile };
+  const html = renderSubject(page, result.public, result.release, result.digest);
+  expect(html).toContain('Episode 1 file A');
+  expect(html).not.toContain('data-slot="catalogue-file-reader-correction"');
 });
 
 test('return destinations stay in the same locale and accept only a subject path', () => {

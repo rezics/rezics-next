@@ -40,6 +40,7 @@ export const nativePermissionProjectionBound = Object.freeze({
   explicitGlobalPrincipalResourceRoleGrant: false,
   explicitGlobalPrincipalOwnAccountGrant: false,
   explicitGlobalPrincipalAuthenticatedBenefitGrant: false,
+  /** The statement's final database-clock check, `observed_at < deadline`, returned as `live`. */
   live: false,
 });
 

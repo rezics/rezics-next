@@ -1,13 +1,13 @@
 import { notFound } from '@tanstack/react-router';
 
-/** A subject view cursor stays opaque and bounded before it reaches a server read. */
+/** A subject view cursor stays opaque and at most 2048 characters before it reaches a server read. */
 export function validateViewCursor(cursor: unknown): string | undefined {
   if (cursor === undefined) return;
-  if (typeof cursor !== 'string' || cursor.length === 0) throw notFound();
+  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > 2048) throw notFound();
   return cursor;
 }
 
-/** Realm and node are selectors, never editorial Context overrides. Native routes own cursor size admission. */
+/** Realm and node are selectors, never editorial Context overrides. */
 export function validatePageRealm(value: unknown): string | undefined {
   if (value === undefined) return;
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value))

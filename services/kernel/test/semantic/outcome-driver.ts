@@ -10,10 +10,11 @@ import { compileCatalogue } from '@rezics/definitions/compile';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
-import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -47,7 +48,6 @@ export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number
 
 const password = 'semantic outcome registration password with enough entropy';
 const clientId = 'semantic-outcomes';
-const kernelRoot = resolve(import.meta.dir, '../..');
 
 function required<T>(value: T | null | undefined, message: string): T {
   if (value == null) throw new Error(message);
@@ -116,6 +116,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authJwksUrl: string;
     };
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
+    verifiedAutomated(name: string, operator: Account): Promise<Account>;
     signIn(account: Account): Promise<HttpResponse>;
     authenticatedAccount(account: Account): Promise<AccountActor>;
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
@@ -232,6 +233,12 @@ async function startDriver(
     pool = createPool(kernelUrl);
     configureTestReceiptKeys(pool);
     runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
+    const receiptKeyEnv = [...testReceiptKeys().keys]
+      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+      .join(',');
+    process.env.KERNEL_RECEIPT_KEYS = receiptKeyEnv;
+    configureTestReceiptKeys(pool);
+    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool);
     timer.mark('kernel database');
 
     const routeKey = randomBytes(32);
@@ -275,13 +282,18 @@ async function startDriver(
     });
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
-    const governanceScopes = [...scopes, 'gate:any'];
+    for (const action of LIFECYCLE_ACTIONS.keys()) if (!scopes.includes(action)) scopes.push(action);
+    if (!scopes.includes('access:grant')) scopes.push('access:grant');
+    const governanceScopes = [...new Set([...scopes, 'gate:any', 'access:grant'])];
     const knownScopes = new Set(governanceScopes);
     // Kernel Access is lazy. Resolve it through an ordinary public read after
     // composition, retaining exactly the instance returned by access(config).
     // The empty migrated template may have no active release yet.
     await (await app.handle(new Request('http://kernel.test/v1/definitions/active'))).arrayBuffer();
     required(access, 'Kernel did not construct its native Access');
+    let createAutomated:
+      | ((name: string, operator: Account, email: string) => Promise<{ accountId: string }>)
+      | undefined;
     if ('bind' in auth) {
       const bindingPool = runtimePool;
       const actions = accessActionCatalogue(actionCatalogue(app));
@@ -307,6 +319,30 @@ async function startDriver(
         referenceKeys: sessionKeys,
         creationBinding: proofs.creationBinding,
       });
+      createAutomated = async (name, operator, email) => {
+        const key = `${name}-${suffix}`;
+        const handle = `${name}_${suffix}`;
+        const operation = {
+          kind: 'automated' as const,
+          registrationId: '',
+          operationKey: key,
+          operatorAccountId: operator.accountId,
+          handle,
+          authorization: 'approval-request',
+        };
+        const approval = await approvals.approve(
+          operator.bearer,
+          { operationKey: key, operation },
+          { pool: bindingPool, deadline: Date.now() + 10_000 },
+        );
+        return auth.host.workflows.createAutomated({
+          key,
+          handle,
+          operatorAccountId: operator.accountId,
+          authorization: approval.reference,
+          credential: { email, password },
+        });
+      };
       const kernelContext = (context: { pool: unknown; deadline: number }) => {
         if (context.pool !== bindingPool) throw new Error('Account operation context belongs to another Kernel');
         return { pool: bindingPool, deadline: context.deadline };
@@ -344,12 +380,13 @@ async function startDriver(
     await auth.registerClient(clientId, governanceScopes);
     timer.mark('auth side');
 
-    async function issue(email: string, scopes: readonly string[]): Promise<string> {
+    type Login = { email: string } | { account_id: string };
+    async function issue(login: Login, scopes: readonly string[]): Promise<string> {
       const signed = await service.handler(
         new Request(`${issuer}/signin`, {
           method: 'POST',
           headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ email, password, client_id: clientId, scope: scopes }),
+          body: JSON.stringify({ ...login, password, client_id: clientId, scope: scopes }),
         }),
       );
       if (signed.status !== 200) throw new Error(`Semantic fixture sign-in failed: ${signed.status}`);
@@ -368,7 +405,7 @@ async function startDriver(
       return ((await issued.json()) as { access_token: string }).access_token;
     }
 
-    const credentials = new WeakMap<Account, { email: string; scopes: readonly string[] }>();
+    const credentials = new WeakMap<Account, { login: Login; scopes: readonly string[] }>();
     async function signIn(account: Account): Promise<HttpResponse> {
       if (completion) throw new Error('Semantic outcome fixture is closed');
       const original = credentials.get(account);
@@ -378,7 +415,7 @@ async function startDriver(
           new Request(`${issuer}/signin`, {
             method: 'POST',
             headers: { origin: issuer, 'content-type': 'application/json' },
-            body: JSON.stringify({ email: original.email, password, client_id: clientId, scope: original.scopes }),
+            body: JSON.stringify({ ...original.login, password, client_id: clientId, scope: original.scopes }),
           }),
         ),
       );
@@ -409,11 +446,63 @@ async function startDriver(
           email,
           password,
         });
-        const account = { accountId: result.accountId, bearer: await issue(email, chosen) };
-        credentials.set(account, { email, scopes: chosen });
+        const account = { accountId: result.accountId, bearer: await issue({ email }, chosen) };
+        credentials.set(account, { login: { email }, scopes: chosen });
         return account;
       });
       people.set(name, { scopes: canonical, account });
+      return account;
+    }
+
+    const automatedAccounts = new Map<string, Promise<Account>>();
+    function verifiedAutomated(name: string, operator: Account): Promise<Account> {
+      const identity = `${operator.accountId}:${name}`;
+      let account = automatedAccounts.get(identity);
+      if (!account) {
+        account = Promise.resolve().then(async () => {
+          const create = required(createAutomated, 'Automated fixture creation needs the native Auth workflow host');
+          const result = await create(name, operator, `${name}-${suffix}@semantic.test`);
+          const login = { account_id: result.accountId };
+          const account = { accountId: result.accountId, bearer: await issue(login, scopes) };
+          credentials.set(account, { login, scopes });
+          const subject = await send(
+            governor,
+            'POST',
+            '/v1/subjects',
+            { type: 'schema:SoftwareApplication', labels: { en: name } },
+            { 'Idempotency-Key': key() },
+          );
+          if (subject.status !== 201)
+            throw new Error(`Automated fixture subject failed: ${subject.status}: ${JSON.stringify(subject.body)}`);
+          const verification = await send(
+            account,
+            'POST',
+            `/v1/accounts/${account.accountId}:requestVerification`,
+            {
+              subject: (subject.body.subject as { id: string }).id,
+              statement: 'This catalogue identity belongs to this automated reader.',
+              links: [{ label: 'Evidence', url: 'https://semantic.test/stream-reader' }],
+            },
+            { 'Idempotency-Key': key() },
+          );
+          if (verification.status !== 201)
+            throw new Error(
+              `Automated fixture verification failed: ${verification.status}: ${JSON.stringify(verification.body)}`,
+            );
+          const requestId = (verification.body.verificationRequest as { id: string }).id;
+          const approved = await send(
+            governor,
+            'POST',
+            `/v1/verification-requests/${requestId}:approve`,
+            {},
+            { 'Idempotency-Key': key() },
+          );
+          if (approved.status !== 200)
+            throw new Error(`Automated fixture approval failed: ${approved.status}: ${JSON.stringify(approved.body)}`);
+          return account;
+        });
+        automatedAccounts.set(identity, account);
+      }
       return account;
     }
 
@@ -427,7 +516,7 @@ async function startDriver(
           throw new Error(`Scope variant must be a known subset of the original scopes: ${String(scope)}`);
       }
       const chosen = [...new Set(requested)].sort();
-      const bearer = await issue(original.email, chosen);
+      const bearer = await issue(original.login, chosen);
       const actor = await access.authenticate(bearer, { pool: pool!, deadline: Date.now() + 10_000 });
       if (
         actor.kind !== 'account' ||
@@ -436,7 +525,7 @@ async function startDriver(
       )
         throw new Error('Native scope variant changed account identity or requested scopes');
       const variant = { accountId: actor.accountId, bearer };
-      credentials.set(variant, { email: original.email, scopes: chosen });
+      credentials.set(variant, { login: original.login, scopes: chosen });
       return variant;
     }
 
@@ -448,33 +537,10 @@ async function startDriver(
       person('suspended'),
     ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
-
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);
-
-    const bootstrap = Bun.spawn(
-      [process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.accountId],
-      {
-        cwd: kernelRoot,
-        env: {
-          ...process.env,
-          DATABASE_URL: kernelUrl,
-          KERNEL_RECEIPT_KEYS: [...testReceiptKeys().keys]
-            .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
-            .join(','),
-        },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
-    );
-    const [bootstrapCode, bootstrapOut, bootstrapErr] = await Promise.all([
-      bootstrap.exited,
-      new Response(bootstrap.stdout).text(),
-      new Response(bootstrap.stderr).text(),
-    ]);
-    if (bootstrapCode !== 0)
-      throw new Error(`Governance bootstrap exited ${bootstrapCode}: ${bootstrapOut}${bootstrapErr}`);
+    await bootstrapGovernance(pool, governor.accountId);
 
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
@@ -513,17 +579,20 @@ async function startDriver(
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId: string = GLOBAL_CONTEXT,
+      resourceId: string = PLATFORM_RESOURCE.id,
       grantor: Account = governor,
     ) {
-      const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
-      if (route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
+      const resource =
+        resourceId === PLATFORM_RESOURCE.id || resourceId === GLOBAL_CONTEXT
+          ? PLATFORM_RESOURCE
+          : { route: routeOf(resourceId), id: resourceId };
+      if (resource.route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
       const response = await send(
         grantor,
         'POST',
         '/v1/grants',
         {
-          resource: { route, id: resourceId },
+          resource,
           subject: { kind: 'account', id: account.accountId },
           actions,
           valid: '(,)',
@@ -592,7 +661,8 @@ async function startDriver(
       },
       async grant(persona, actions, resourceId) {
         if (persona === 'anonymous') throw new Error('Anonymous is not an account grant recipient');
-        const grantor = (resourceId ?? GLOBAL_CONTEXT) === GLOBAL_CONTEXT ? governor : editor;
+        const target = resourceId ?? PLATFORM_RESOURCE.id;
+        const grantor = target === GLOBAL_CONTEXT || target === PLATFORM_RESOURCE.id ? governor : editor;
         await grantAccount(accounts[persona], actions, resourceId, grantor);
       },
       async projection(state) {
@@ -650,6 +720,7 @@ async function startDriver(
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
         },
         person,
+        verifiedAutomated,
         signIn,
         scopeVariant,
         async openFeatures(groups) {

@@ -18,6 +18,7 @@ import {
   readCollectionPublicationRule,
 } from './collection-publication-episodes.ts';
 import { readCollectionPublicationNativeSource } from './collection-publication-native-source.ts';
+import type { CollectionRuleSource } from './collection-rules.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type {
@@ -49,6 +50,8 @@ export type CollectionPublicationDefinition = Readonly<{
   filter: FilterDocument;
   sort: 'id';
   release: Readonly<{ digest: string; value: FilterRelease }>;
+  /** The stored Source selects the population: the owner's private Library, or Search's public catalogue. */
+  source: CollectionRuleSource;
 }>;
 
 /** Data on the SAME live Core client after independent native admission, not a completion receipt.
@@ -236,6 +239,7 @@ async function currentPublicationInput(tx: OperationalTransaction, locator: Coll
     filter: expanded,
     sort: 'id',
     release: { digest: rule.releaseDigest, value: release as FilterRelease },
+    source: { kind: rule.source.kind },
   };
   if (!current()) return null;
   return { episode, rule, definition };
