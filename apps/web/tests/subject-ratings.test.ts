@@ -457,7 +457,7 @@ test('a vote write quotes its command key and treats 503 atomic_guard_unavailabl
       idempotencyKey: key,
     }),
   ).toBe('successful');
-  expect(calls[0]!.headers['idempotency-key']).toBe(JSON.stringify(key));
+  expect(calls[0]!.headers['idempotency-key']).toBe(key);
   expect(
     await writeRatingVote(voteClient(503, { code: 'atomic_guard_unavailable', retryable: true }), {
       subjectId,

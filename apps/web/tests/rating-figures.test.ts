@@ -94,7 +94,7 @@ test('question-driven save and clear include zero, enforce the live scale and pr
         return stored === null
           ? Response.json({ code: 'not_found' }, { status: 404 })
           : Response.json({ units: stored, revision: 1, at: '2026-10-31T00:00:00Z' });
-      expect(JSON.parse(request.headers.get('idempotency-key')!)).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(request.headers.get('idempotency-key')).toMatch(/^[0-9a-f-]{36}$/i);
       stored = request.method === 'DELETE' ? null : (await request.json()).units;
       return stored === null
         ? new Response(null, { status: 204 })
