@@ -232,10 +232,7 @@ export function RealmShelf({
   const selection = realmReadingSelection(returnTo);
   const returnAddress = returnTo?.split('#', 1)[0];
   const visit = `${realm.id}:${returnAddress ?? ''}:${selection.node ?? ''}:${selection.cursor ?? ''}`;
-  const lease = useMemo(
-    () => ({ active: true, connected: false }),
-    [visit, lifetime, locale, frozen],
-  );
+  const lease = useMemo(() => ({ active: true, connected: false }), [visit, lifetime, locale, frozen]);
   const latestLease = useRef(lease);
   if (latestLease.current !== lease) latestLease.current.active = false;
   latestLease.current = lease;

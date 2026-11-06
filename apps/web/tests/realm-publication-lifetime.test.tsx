@@ -153,9 +153,8 @@ mock.module('../src/community/publication-controls-view', () => ({
     return shelfControl;
   },
 }));
-const { usePublicationControls, releasePublicationSessionSource } = await import(
-  '../src/community/publication-controls-view'
-);
+const { usePublicationControls, releasePublicationSessionSource } =
+  await import('../src/community/publication-controls-view');
 const { releaseSpacePageSessionSource } = await import('../src/community/space-page-lifetime');
 const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
 const { RealmShelf } = await import('../src/community/space-page');

@@ -266,8 +266,7 @@ function NativeMembership({
     const focus = accepted?.focus ?? {
       eligible: () => document.activeElement === document.body,
       restore(fallback: HTMLElement | null) {
-        if (document.activeElement === document.body && fallback?.isConnected)
-          fallback.focus({ preventScroll: true });
+        if (document.activeElement === document.body && fallback?.isConnected) fallback.focus({ preventScroll: true });
       },
       cancel() {},
     };

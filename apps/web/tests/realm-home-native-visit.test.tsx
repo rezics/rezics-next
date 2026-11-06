@@ -51,22 +51,20 @@ mock.module('../src/session/query', () => ({
   sessionCsrfToken: () => session.csrfToken,
   useSession: () => {
     const client = useQueryClient();
-    return (
-      useSyncExternalStore(
-        (notify) =>
-          client.getQueryCache().subscribe((event) => {
-            if (event.query.queryKey[0] !== 'session') return;
-            const action = 'action' in event ? event.action : undefined;
-            if (
-              event.type === 'removed' ||
-              (event.type === 'updated' &&
-                action &&
-                (action.type === 'success' || action.type === 'error' || action.type === 'setState'))
-            )
-              notify();
-          }),
-        () => client.getQueryData(sessionModule.sessionQuery.queryKey) ?? session,
-      )
+    return useSyncExternalStore(
+      (notify) =>
+        client.getQueryCache().subscribe((event) => {
+          if (event.query.queryKey[0] !== 'session') return;
+          const action = 'action' in event ? event.action : undefined;
+          if (
+            event.type === 'removed' ||
+            (event.type === 'updated' &&
+              action &&
+              (action.type === 'success' || action.type === 'error' || action.type === 'setState'))
+          )
+            notify();
+        }),
+      () => client.getQueryData(sessionModule.sessionQuery.queryKey) ?? session,
     );
   },
 }));
@@ -982,7 +980,9 @@ test('acknowledged native membership refresh keeps the selected Board visit curr
   expect(shelfCursorReads).toEqual(['selected-window']);
   expect(host.querySelector('[data-slot="realm-community-boards"]')).not.toBeNull();
 
-  const join = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === m.realm_join())!;
+  const join = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === m.realm_join(),
+  )!;
   await settle(() => {
     join.focus();
     join.click();
@@ -1000,7 +1000,9 @@ test('acknowledged native membership refresh keeps the selected Board visit curr
 
   expect(membershipActionCalls).toEqual([`${id(1)}:join`]);
   expect(host.querySelector('[data-slot="realm-membership"]')?.getAttribute('data-member-state')).toBe('member');
-  expect(host.querySelector('[data-slot="community-members"]')?.textContent).toBe(m.board_community_members({ count: 7 }));
+  expect(host.querySelector('[data-slot="community-members"]')?.textContent).toBe(
+    m.board_community_members({ count: 7 }),
+  );
   expect(host.textContent).not.toContain(m.realm_membership_command_uncertain());
   expect(document.activeElement?.id).toBe('realm-boards-heading');
   await settle(() => {});
