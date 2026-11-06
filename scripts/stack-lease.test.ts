@@ -335,7 +335,9 @@ test('remote commands run with the lease off', async () => {
   mkdirSync(workspace);
   writeFileSync(
     join(workspace, 'package.json'),
-    JSON.stringify({ packageManager: JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager }),
+    JSON.stringify({
+      packageManager: JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager,
+    }),
   );
   expect(Bun.spawnSync(['git', 'init', '-q', workspace]).exitCode).toBe(0);
   const bin = join(directory, 'bin');
@@ -365,7 +367,15 @@ test('remote commands run with the lease off', async () => {
     hosts,
     JSON.stringify({
       hosts: [
-        { name: 'test', performance: true, address: 'ops@test', identity: '/unused', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
+        {
+          name: 'test',
+          performance: true,
+          address: 'ops@test',
+          identity: '/unused',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 2,
+        },
       ],
     }),
   );

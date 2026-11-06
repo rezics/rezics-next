@@ -18,10 +18,16 @@ test('walk admission preserves an occupied slot and reuses it after its listener
     try {
       expect(second.index).toBe(2);
       expect(listener.listening).toBe(true);
-    } finally { await second.release(); }
+    } finally {
+      await second.release();
+    }
     await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
     const first = await acquireStackSlot('walk recovery', env, 1, undefined, 60_000, undefined, available);
-    try { expect(first.index).toBe(1); } finally { await first.release(); }
+    try {
+      expect(first.index).toBe(1);
+    } finally {
+      await first.release();
+    }
   } finally {
     if (listener.listening) listener.close();
     await rm(directory, { recursive: true, force: true });
