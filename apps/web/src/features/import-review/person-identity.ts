@@ -93,19 +93,26 @@ export function personComparison(
       : null,
   };
 }
+/** A merged subject answers 308 with its survivor in the body; one hop reads that survivor, never a chain. */
+function survivorHop(id: string, response: { status: number; data?: unknown; error?: { value?: unknown } | null }) {
+  if (response.status !== 308) return null;
+  const body = (response.data ?? response.error?.value) as { redirect?: { from?: unknown; to?: unknown } } | undefined;
+  const to = body?.redirect?.from === id ? body.redirect.to : undefined;
+  return typeof to === 'string' && uuid.test(to) && to !== id ? to : null;
+}
 export async function readPersonComparison(
   client: KernelClient,
   authorization: string,
   pair: PersonReviewPair,
   signal?: AbortSignal,
 ): Promise<PersonComparison> {
+  const options = { headers: { authorization }, ...(signal === undefined ? {} : { fetch: { signal } }) };
   const responses = await Promise.all(
-    pair.map((original) =>
-      reviewedPersonRequests(client).read(original.subject, original, {
-        headers: { authorization },
-        ...(signal === undefined ? {} : { fetch: { signal } }),
-      }),
-    ),
+    pair.map(async (original) => {
+      const response = await reviewedPersonRequests(client).read(original.subject, original, options);
+      const survivor = survivorHop(original.subject, response);
+      return survivor ? reviewedPersonRequests(client).read(survivor, original, options) : response;
+    }),
   );
   for (const response of responses)
     if (response.status !== 200 || !response.data) return providerFailure(response.status, response.headers);
@@ -153,12 +160,14 @@ export async function readPersonPublication(
     observed.result.survivor === observed.result.redirected
   )
     throw new TypeError('Invalid native Person publication');
+  const getSubject = (id: string) =>
+    client.subjects({ id }).get({ fetch: { redirect: 'manual', ...(signal === undefined ? {} : { signal }) } });
   const responses = await Promise.all(
-    originals.map((id) =>
-      client.subjects({ id }).get({
-        fetch: { redirect: 'follow', ...(signal === undefined ? {} : { signal }) },
-      }),
-    ),
+    originals.map(async (id) => {
+      const response = await getSubject(id);
+      const survivor = survivorHop(id, response);
+      return survivor ? getSubject(survivor) : response;
+    }),
   );
   for (const read of responses)
     if (read.status !== 200 || !read.data) return providerFailure(read.status, read.headers);

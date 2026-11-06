@@ -10,14 +10,19 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { readItemTypes, readLabels } from './subject.ts';
+import { loadRelated, readItemTypes, readLabels } from './subject.ts';
 import { languageRanges } from './language.ts';
 import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
 import { factDataTypes, resolveItem, type Statement, type FactRow } from './item.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { contextSnapshot } from './context.ts';
-import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
+import {
+  readSubjectSummaries,
+  type RelatedSubjectSummary,
+  type SubjectSummary,
+  type SummaryDependencies,
+} from './summaries.ts';
 import { matchesTarget } from './targets.ts';
 import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
@@ -959,6 +964,32 @@ async function currentRelationStatements(
   return result;
 }
 
+/** Visible merged originals and the survivor each one redirects to; a hidden original names nothing. */
+async function relatedSurvivors(pool: Pool, ids: readonly string[]): Promise<Map<string, string>> {
+  const subjects = ids.filter((id) => routeOf(id) !== null);
+  const survivors = new Map<string, string>();
+  if (subjects.length === 0) return survivors;
+  for (const [id, state] of await loadRelated(pool, subjects))
+    if (state.visibility === 'visible' && state.redirect) survivors.set(id, state.redirect);
+  return survivors;
+}
+
+/** A merged original keeps its id and carries the survivor's authorized summary, naming that survivor. */
+function relatedEntries(
+  ids: readonly string[],
+  summaries: ReadonlyMap<string, SubjectSummary | null>,
+  survivors: ReadonlyMap<string, string>,
+): Record<string, RelatedSubjectSummary> {
+  return Object.fromEntries(
+    ids.flatMap((id): [string, RelatedSubjectSummary][] => {
+      const survivor = survivors.get(id);
+      const summary = summaries.get(survivor ?? id);
+      if (!summary) return [];
+      return [[id, survivor === undefined ? summary : { ...summary, redirect: survivor }]];
+    }),
+  );
+}
+
 function statementItems(statement: Statement): string[] {
   return [statement, ...statement.qualifiers, ...statement.references.flatMap((reference) => reference.parts)].flatMap(
     (snak) =>
@@ -1016,7 +1047,7 @@ export type SubjectLink = {
   assertion?: Statement;
   /** Exact current slot identity, without authority or a correction payload. */
   creditSlot?: { property: string; target: string; key?: string };
-  related?: Record<string, SubjectSummary>;
+  related?: Record<string, RelatedSubjectSummary>;
   type?: string;
   label?: string;
   summary?: SubjectSummary | null;
@@ -1315,6 +1346,11 @@ export async function listSubjectLinks(
     includeLabels || options.type || options.authorizeSummary
       ? (options.release ?? (await activeRelease(pool))?.release)
       : undefined;
+  const relatedIds = [
+    ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
+  ].slice(0, 256);
+  const survivors = summaryRelease ? await relatedSurvivors(pool, relatedIds) : new Map<string, string>();
+  const summaryIds = [...new Set(relatedIds.map((id) => survivors.get(id) ?? id))];
   const summaries = summaryRelease
     ? await readSubjectSummaries(
         {
@@ -1325,12 +1361,11 @@ export async function listSubjectLinks(
           release: summaryRelease,
           authorize: options.authorizeSummary ?? (async () => false),
         },
-        [
-          ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
-        ].slice(0, 256),
+        summaryIds,
         { languages },
       )
     : new Map<string, SubjectSummary | null>();
+  for (const [id, survivor] of survivors) summaries.set(id, summaries.get(survivor) ?? null);
   requireAccessDeadline(deadline);
   const links = page.links.flatMap((link): SubjectLink[] => {
     const current = statements.get(`${link.subject}/${link.statement}`);
@@ -1349,7 +1384,7 @@ export async function listSubjectLinks(
           !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       return [];
-    const summary = summaries.get(link.subject) ?? null;
+    const summary = summaries.get(survivors.get(link.subject) ?? link.subject) ?? null;
     if (options.authorizeSummary && !summary) return [];
     const type = summary?.type ?? link.type;
     if (options.type && !matches(type ?? '')) return [];
@@ -1368,12 +1403,7 @@ export async function listSubjectLinks(
           !assertion.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       return [];
-    const related = Object.fromEntries(
-      statementItems(assertion).flatMap((id) => {
-        const summary = summaries.get(id);
-        return summary ? [[id, summary]] : [];
-      }),
-    );
+    const related = relatedEntries(statementItems(assertion), summaries, survivors);
     // A requested work-membership window needs the exact assertion even without qualifiers:
     // release navigation binds its holder and original selection to the disclosed work target.
     // Keep the same current-statement and related-target disclosure checks above.
@@ -1428,7 +1458,7 @@ export type SubjectRelation = {
   statement: Statement;
   target: string | null;
   external: string | null;
-  related?: Record<string, SubjectSummary>;
+  related?: Record<string, RelatedSubjectSummary>;
   type?: string;
   label?: string;
   summary?: SubjectSummary | null;
@@ -1681,6 +1711,14 @@ export async function listSubjectRelations(
       },
     ];
   });
+  const relatedIds = [
+    ...new Set([
+      ...currentRelations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+      ...currentRelations.flatMap((entry) => statementItems(entry.statement)),
+    ]),
+  ].slice(0, 256);
+  const survivors = await relatedSurvivors(pool, relatedIds);
+  const summaryIds = [...new Set(relatedIds.map((id) => survivors.get(id) ?? id))];
   const summaries = await readSubjectSummaries(
     {
       client: { query: pool.query.bind(pool) },
@@ -1690,14 +1728,10 @@ export async function listSubjectRelations(
       release: options.release,
       authorize: options.authorizeSummary ?? (async () => false),
     },
-    [
-      ...new Set([
-        ...currentRelations.flatMap((entry) => (entry.target ? [entry.target] : [])),
-        ...currentRelations.flatMap((entry) => statementItems(entry.statement)),
-      ]),
-    ].slice(0, 256),
+    summaryIds,
     { languages },
   );
+  for (const [id, survivor] of survivors) summaries.set(id, summaries.get(survivor) ?? null);
   requireAccessDeadline(deadline);
   const relations: SubjectRelation[] = [];
   for (const raw of currentRelations) {
@@ -1708,12 +1742,7 @@ export async function listSubjectRelations(
         !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       continue;
-    const related = Object.fromEntries(
-      statementItems(statement).flatMap((id) => {
-        const summary = summaries.get(id);
-        return summary ? [[id, summary]] : [];
-      }),
-    );
+    const related = relatedEntries(statementItems(statement), summaries, survivors);
     const entry = { ...raw, statement, ...(statement.qualifiers.length ? { related } : {}) };
     if (!entry.target) {
       relations.push({ ...entry, summary: null });

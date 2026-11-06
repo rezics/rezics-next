@@ -17,3 +17,7 @@ across works and media.
 Both profiles use the shared retiring observation. A source, reader, locale or disclosure change discards revealed
 facts and pending definition responses. Refresh requires a fresh page source. Correction entries remain ordinary
 navigation to the existing command hosts; displaying facts grants no command authority.
+
+Visible merged Person and Character URLs redirect to the canonical subject while preserving the active subpage,
+search and hash. Credit and appearance statements keep their original source IDs; receiving readers resolve them only
+when Semantic supplies the exact visible one-hop survivor.

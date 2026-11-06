@@ -6,6 +6,7 @@ import {
   type ReviewedPersonSource,
   type ReviewedPersonMerge,
   type ReviewedPersonAdmission,
+  type ReviewedPersonOperation,
   type KernelClient,
 } from '@rezics/client';
 import {
@@ -770,6 +771,21 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
     return result;
   }
+  /** Admission is not completion: callers observe the native job until its survivor and redirect are final. */
+  async function readReviewedPersonOperation(id: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {
+    mediaId(id);
+    const reply = await response(() => reviewedPersonRequests(client).operation(id, fetchOptions(signal)), 200, signal);
+    const observed = (reply.body as { operation?: ReviewedPersonOperation } | null)?.operation;
+    ensure(observed?.id === id && typeof observed.done === 'boolean');
+    if (observed.done)
+      ensure(
+        typeof observed.result?.survivor === 'string' &&
+          typeof observed.result.redirected === 'string' &&
+          Number.isSafeInteger(observed.result.revision) &&
+          observed.result.revision > 0,
+      );
+    return observed;
+  }
   async function reviewedCandidates(
     id: string,
     query: { property: string; target?: string; sameAs?: string; context: string; limit: number },
@@ -1027,6 +1043,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     readReviewedSubject,
     readReviewedPersonIdentity,
     mergeReviewedPersons,
+    readReviewedPersonOperation,
     reviewedCandidates,
     acceptReviewedCandidate,
     adoptReviewedCandidates,

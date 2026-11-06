@@ -1,3 +1,12 @@
+import { createHash } from 'node:crypto';
+import type {
+  ReviewedPersonAdmission,
+  ReviewedPersonEndpoint,
+  ReviewedPersonMerge,
+  ReviewedPersonOperation,
+  ReviewedPersonRead,
+  ReviewedPersonSource,
+} from '@rezics/client';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { Provider } from './cross-media-bindings.ts';
 import type { SourceRecord } from '@rezics/conversion';
@@ -121,4 +130,165 @@ export function observePersonIdentity(identity: PersonIdentity, read: ReviewedSu
   const unique = new Set(values);
   if (unique.size !== 1 || !unique.has(identity.value)) return { state: 'conflicting', identity };
   return { state: 'current', currentSubjectId: subject.id, identity };
+}
+
+/** Native paired merge and operation surface; the import transport satisfies it structurally. */
+export type ReviewedPersonMergeTransport = Readonly<{
+  readReviewedPersonIdentity(
+    id: string,
+    source: ReviewedPersonSource,
+    signal?: AbortSignal,
+  ): Promise<ReviewedPersonRead>;
+  mergeReviewedPersons(body: ReviewedPersonMerge, key: string, signal?: AbortSignal): Promise<ReviewedPersonAdmission>;
+  readReviewedPersonOperation(id: string, signal?: AbortSignal): Promise<ReviewedPersonOperation>;
+}>;
+
+/** Sealed action journal. A send that may have reached Kernel keeps its exact body and key for replay. */
+export type ReviewedPersonMergeJournal = Readonly<{
+  prepareAction(actionKey: string, body: unknown, idempotencyKey: string): unknown;
+  action(actionKey: string): Readonly<{
+    state: 'prepared' | 'acknowledged' | 'refused';
+    body_json: string;
+    idempotency_key: string;
+    result_id: string | null;
+    error_code: string | null;
+  }> | null;
+  acknowledgeAction(actionKey: string, resultId?: string): void;
+  refuseAction(actionKey: string, errorCode: string): void;
+}>;
+
+export type ReviewedPersonPublication =
+  | Readonly<{
+      state: 'published';
+      operation: string;
+      survivor: string;
+      redirected: string;
+      revision: number;
+      identities: readonly Readonly<{ boundSubjectId: string; identity: PersonIdentity; currentSubjectId: string }>[];
+    }>
+  | Readonly<{ state: 'pending' | 'unconfirmed'; operation: string }>
+  | Readonly<{ state: 'withheld'; reason: string }>;
+
+/** A native job may take minutes under load; the journal keeps its admitted operation for a later run. */
+const MERGE_POLLS = 120;
+const MERGE_POLL_MS = 1_000;
+const MERGE_READ_ATTEMPTS = 10;
+
+/** Version-8 UUID shape derived from the sealed body, so every replay presents the same idempotency key. */
+function mergeKey(digest: string): string {
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-8${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+}
+
+/**
+ * Publish a selected Bangumi and VNDB Person pair through the released paired merge. The sealed body is
+ * sent once; the native operation is observed until done; then both original bindings are read through the
+ * public reader. Only the same survivor carrying both exact identifiers counts as published.
+ */
+export async function publishReviewedPersonMerge(input: {
+  pair: readonly [PersonReviewSource, PersonReviewSource];
+  transport: ReviewedPersonMergeTransport;
+  readPublic: (id: string) => Promise<ReviewedSubjectRead>;
+  journal: ReviewedPersonMergeJournal;
+  pause?: (ms: number) => Promise<void>;
+  polls?: number;
+}): Promise<ReviewedPersonPublication> {
+  const [bangumi, vndb] = input.pair;
+  if (
+    bangumi.identity.source !== 'bangumi' ||
+    vndb.identity.source !== 'vndb' ||
+    bangumi.boundSubjectId === vndb.boundSubjectId
+  )
+    throw new TypeError('Reviewed Person pair must be one Bangumi original and one VNDB original');
+  const subjects: [string, string] = [bangumi.boundSubjectId, vndb.boundSubjectId];
+  const actionKey = `reviewed-person-merge:${[...subjects].sort().join(':')}`;
+  // A journaled intent is the authority: resume its sealed body and key. Originals may already be redirected
+  // by the merge, so their reviewed identities are read only when the intent is new.
+  let intent = input.journal.action(actionKey);
+  if (!intent) {
+    const endpoints: ReviewedPersonEndpoint[] = [];
+    for (const source of input.pair) {
+      const read = await input.transport.readReviewedPersonIdentity(source.boundSubjectId, {
+        source: source.sourceAlias as ReviewedPersonSource['source'],
+        externalId: source.identity.externalId,
+      });
+      const endpoint = read.reviewedIdentity;
+      if (!endpoint)
+        return { state: 'withheld', reason: `${source.identity.externalId} has no coherent reviewed identity` };
+      if (
+        endpoint.subject !== source.boundSubjectId ||
+        endpoint.property !== source.identity.property ||
+        endpoint.value !== source.identity.value
+      )
+        return { state: 'withheld', reason: `${source.identity.externalId} observed a different identity` };
+      endpoints.push(endpoint);
+    }
+    const body: ReviewedPersonMerge = {
+      subjects,
+      expectedIdentity: { endpoints: [endpoints[0]!, endpoints[1]!] },
+    };
+    const digest = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+    input.journal.prepareAction(actionKey, body, mergeKey(digest));
+    intent = input.journal.action(actionKey)!;
+  }
+  const sealed = JSON.parse(intent.body_json) as ReviewedPersonMerge;
+  if (intent.state === 'refused') return { state: 'withheld', reason: intent.error_code ?? 'refused' };
+  let operation: string | null = intent.result_id;
+  if (operation === null) {
+    try {
+      const admission = await input.transport.mergeReviewedPersons(sealed, intent.idempotency_key);
+      operation = admission.operation.id;
+    } catch (error) {
+      // A definite client refusal is terminal. Other failures may have reached Kernel: resume replays this exact intent.
+      const status = (error as { status?: unknown }).status;
+      if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        input.journal.refuseAction(actionKey, `review-http-${status}`);
+        return { state: 'withheld', reason: `Native merge refused with HTTP ${status}` };
+      }
+      throw error;
+    }
+    input.journal.acknowledgeAction(actionKey, operation);
+  }
+  const pause = input.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const polls = input.polls ?? MERGE_POLLS;
+  let done: Extract<ReviewedPersonOperation, { done: true }> | undefined;
+  for (let attempt = 0; attempt < polls && !done; attempt += 1) {
+    const observed = await input.transport.readReviewedPersonOperation(operation);
+    if (observed.done) done = observed;
+    else if (attempt + 1 < polls) await pause(MERGE_POLL_MS);
+  }
+  if (!done) return { state: 'pending', operation };
+  const { survivor, redirected, revision } = done.result;
+  if (
+    !subjects.includes(survivor) ||
+    !subjects.includes(redirected) ||
+    survivor === redirected ||
+    !Number.isSafeInteger(revision) ||
+    revision < 1
+  )
+    throw new TypeError('Invalid native Person publication');
+  // The completed operation is final; a public read may still lag behind its visibility, so re-read briefly.
+  for (let attempt = 0; attempt < MERGE_READ_ATTEMPTS; attempt += 1) {
+    const reads = await Promise.all(input.pair.map((source) => input.readPublic(source.boundSubjectId)));
+    const bothIdentitiesCurrentOnBothReads = input.pair.every((source) =>
+      reads.every((read) => {
+        const observed = observePersonIdentity(source.identity, read);
+        return observed.state === 'current' && observed.currentSubjectId === survivor;
+      }),
+    );
+    if (bothIdentitiesCurrentOnBothReads)
+      return {
+        state: 'published',
+        operation,
+        survivor,
+        redirected,
+        revision,
+        identities: input.pair.map((source) => ({
+          boundSubjectId: source.boundSubjectId,
+          identity: source.identity,
+          currentSubjectId: survivor,
+        })),
+      };
+    if (attempt + 1 < MERGE_READ_ATTEMPTS) await pause(MERGE_POLL_MS);
+  }
+  return { state: 'unconfirmed', operation };
 }

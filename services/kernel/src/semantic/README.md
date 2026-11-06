@@ -33,6 +33,8 @@ selection reader. The route-leading fact index is installed in the normal semant
 
 Decision: compact relation facts use route, Subject, slot and statement key seeks; inverse keys without a slot use the existing route/Subject/statement index, and the core schema dump remains core-only.
 
+Related link and relation summaries retain the statement's original item key while using the authorized survivor summary and a one-hop `redirect` for visible merged subjects. The reader uses Semantic's existing `loadRelated` resolver; concealed and missing originals disclose no redirect.
+
 The derived read budget, SQL controls, byte inputs, partition checkouts and plan-evidence case are documented in
 [current-relations-cost.md](current-relations-cost.md). This source-level declaration does not claim native plan
 acceptance; the controller runs that acceptance after integration.

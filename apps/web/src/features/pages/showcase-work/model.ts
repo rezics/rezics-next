@@ -96,7 +96,9 @@ export function relationRelated(value: unknown): Related {
         : typeof label === 'string'
           ? { en: label }
           : {};
-    related[id] = { labels };
+    // A merged subject's summary names its survivor, so an assertion that still names the original resolves.
+    const redirect = typeof summary.redirect === 'string' ? summary.redirect : undefined;
+    related[id] = { labels, ...(redirect ? { redirect } : {}) };
   }
   return related;
 }

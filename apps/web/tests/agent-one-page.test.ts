@@ -67,6 +67,15 @@ test('an unfollowed 308 page response uses the handle in its redirect descriptor
   expect(result).toEqual({ kind: 'redirect', id: 'helper', target: 'account' });
 });
 
+test('an unfollowed 308 page response to a subject id redirects to that subject', async () => {
+  const survivor = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e81';
+  const client = {
+    pages: { $read: { post: async () => ({ status: 308, data: { redirect: { from: 'subject', to: survivor } } }) } },
+  } as never;
+  const result = await loadSubjectPage(client, '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80', 'reviews', 'zh-Hans');
+  expect(result).toEqual({ kind: 'redirect', id: survivor });
+});
+
 test('a redirected subject document keeps its locale, view, and query on the handle URL with status 308', () => {
   expect(subjectAccountRedirect('zh-Hans', 'helper', 'reviews', '?sort=recent&tag=a%20b')).toEqual({
     statusCode: 308,

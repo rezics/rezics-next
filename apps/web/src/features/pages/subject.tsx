@@ -322,8 +322,11 @@ export async function loadSubjectPage(
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 308) {
     const body = result.data ?? result.error?.value;
+    // A merged subject names its survivor id; a moved account names its handle.
     if (isRecord(body) && 'redirect' in body && isRecord(body.redirect) && typeof body.redirect.to === 'string')
-      return { kind: 'redirect', id: body.redirect.to, target: 'account' };
+      return subjectIdPattern.test(body.redirect.to)
+        ? { kind: 'redirect', id: body.redirect.to }
+        : { kind: 'redirect', id: body.redirect.to, target: 'account' };
   }
   if (result.status === 200 && result.data) {
     if (typeof result.data.account === 'string') {

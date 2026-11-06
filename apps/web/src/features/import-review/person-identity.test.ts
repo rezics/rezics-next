@@ -95,6 +95,26 @@ test('mounted caller uses paired native observations; stale, denied and synchron
   expect(sent[4]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
 });
 
+test('a merged original is compared through its survivor exactly once and cannot forge a merge', async () => {
+  const native = reads();
+  const seen: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const url = new URL(new Request(input, init).url);
+      seen.push(url.pathname);
+      if (url.pathname.endsWith(uuid(8)))
+        return Response.json({ redirect: { from: uuid(8), to: uuid(7) } }, { status: 308 });
+      return Response.json(native[1]);
+    }) as typeof fetch,
+  });
+  expect(await readPersonComparison(client, 'Bearer reviewer', originals)).toMatchObject({
+    ok: true,
+    merge: null,
+    reads: [{ subject: { id: uuid(7) } }, { subject: { id: uuid(7) } }],
+  });
+  expect(seen).toHaveLength(3);
+});
+
 test('a current Person page reflects withdrawn and conflicting identifiers even when old credits remain', () => {
   const read = reads()[0];
   const statement = (value: string) => ({ value: { type: 'value', content: value } });
@@ -181,4 +201,42 @@ test('original showcase claims enable admission; publication waits for the nativ
   });
   ineligible = true;
   expect(await readPersonComparison(client, 'Bearer reviewer', pair)).toMatchObject({ ok: true, merge: null });
+});
+
+test('publication reads a merged original through its body-named survivor exactly once', async () => {
+  const comparison = personComparison(originals, reads());
+  if (!comparison.ok || !comparison.merge) throw new Error('Missing comparison');
+  const command = { body: comparison.merge, key: uuid(99) };
+  const survivor = {
+    subject: {
+      id: uuid(7),
+      type: 'schema:Person',
+      labels: {},
+      statements: {
+        'wdt:P6298': [{ value: { type: 'value', content: '8' } }],
+        'wdt:P3180': [{ value: { type: 'value', content: 's7' } }],
+      },
+    },
+    related: {},
+  };
+  const seen: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const url = new URL(new Request(input, init).url);
+      seen.push(url.pathname);
+      if (url.pathname.includes('subjectIdentityOperations'))
+        return Response.json({
+          operation: { id: uuid(100), done: true, result: { survivor: uuid(7), redirected: uuid(8), revision: 10 } },
+        });
+      if (url.pathname.endsWith(uuid(8)))
+        return Response.json({ redirect: { from: uuid(8), to: uuid(7) } }, { status: 308 });
+      return Response.json(survivor);
+    }) as typeof fetch,
+  });
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation: uuid(100) })).toMatchObject({
+    ok: true,
+    state: 'published',
+    read: { subject: { id: uuid(7) } },
+  });
+  expect(seen).toHaveLength(4);
 });

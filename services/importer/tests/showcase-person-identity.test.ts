@@ -355,39 +355,89 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
     ],
   ]);
   const commands: Extract<BatchCommand, { op: 'propose' }>[] = [];
-  const result = await deliverBangumiCreatorCredits({
-    alias: 'bangumi_cross_media',
-    drafts: [bangumiVoiceDraft({ subject_id: 1, person_id: 8, character_id: 3 }, 2)],
-    bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
-    claim: ({ external_id }) => ({ state: 'bound', subject: bound[external_id as keyof typeof bound]! }),
-    async batch(request) {
-      for (const command of request.commands) if (command.op === 'propose') commands.push(command);
-      return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value: { candidate: currentPersonId, revision: 1 },
-        })),
-      };
-    },
-    async fence() {
-      return { fenced: false };
-    },
-    async read(id) {
-      return current.get(id) as ReviewedSubjectRead;
-    },
-    expectedNativeType(externalId) {
-      return externalId === '1' ? 'schema:TVSeries' : externalId.startsWith('person:') ? 'schema:Person' : 'wd:Q95074';
-    },
-    metadataFor() {
-      return { digest: 'a'.repeat(64), recordRevision: 'authored', recordUrl: 'https://bgm.tv/subject/1' };
-    },
-  });
+  let metadata = { digest: 'a'.repeat(64), recordRevision: 'authored', recordUrl: 'https://bgm.tv/subject/1' };
+  const deliver = () =>
+    deliverBangumiCreatorCredits({
+      alias: 'bangumi_cross_media',
+      drafts: [bangumiVoiceDraft({ subject_id: 1, person_id: 8, character_id: 3 }, 2)],
+      bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+      claim: ({ external_id }) => ({ state: 'bound', subject: bound[external_id as keyof typeof bound]! }),
+      async batch(request) {
+        for (const command of request.commands) if (command.op === 'propose') commands.push(command);
+        return {
+          results: request.commands.map((command) => ({
+            key: command.key,
+            status: 201 as const,
+            value: { candidate: currentPersonId, revision: 1 },
+          })),
+        };
+      },
+      async fence() {
+        return { fenced: false };
+      },
+      async read(id) {
+        return current.get(id) as ReviewedSubjectRead;
+      },
+      expectedNativeType(externalId) {
+        return externalId === '1'
+          ? 'schema:TVSeries'
+          : externalId.startsWith('person:')
+            ? 'schema:Person'
+            : 'wd:Q95074';
+      },
+      metadataFor() {
+        return metadata;
+      },
+    });
+  const result = await deliver();
 
   expect(result.gaps).toEqual([]);
   expect(result.identities['person:8']).toMatchObject({ id: bound['person:8'], type: 'schema:Person' });
+  expect(result.canonicalPersons['person:8']).toBe(canonicalPerson);
   expect(commands).toHaveLength(1);
+  expect(commands[0]!.source).toMatchObject({
+    source: 'bangumi_cross_media',
+    external_id: '1',
+    record_revision: 'authored',
+    digest: 'a'.repeat(64),
+  });
   expect(commands[0]!.statement.value).toMatchObject({ type: 'value', content: bound['person:8'] });
+  expect(
+    commands[0]!.statement.references
+      ?.flatMap((reference) => reference.parts)
+      .some(
+        (part) =>
+          part.property.id === 'schema:url' &&
+          part.value.type === 'value' &&
+          part.value.content === 'https://bgm.tv/subject/1#/person-characters/1/8/3',
+      ),
+  ).toBe(true);
+
+  metadata = {
+    digest: 'b'.repeat(64),
+    recordRevision: 'refreshed',
+    recordUrl: 'https://bgm.tv/subject/1?refresh=1',
+  };
+  const refreshed = await deliver();
+  expect(refreshed.identities['person:8']).toMatchObject({ id: bound['person:8'], type: 'schema:Person' });
+  expect(refreshed.canonicalPersons['person:8']).toBe(canonicalPerson);
+  expect(commands).toHaveLength(2);
+  expect(commands[1]!.source).toMatchObject({
+    source: 'bangumi_cross_media',
+    external_id: '1',
+    record_revision: 'refreshed',
+    digest: 'b'.repeat(64),
+  });
+  expect(
+    commands[1]!.statement.references
+      ?.flatMap((reference) => reference.parts)
+      .some(
+        (part) =>
+          part.property.id === 'schema:url' &&
+          part.value.type === 'value' &&
+          part.value.content === 'https://bgm.tv/subject/1?refresh=1#/person-characters/1/8/3',
+      ),
+  ).toBe(true);
 });
 
 test('VNDB Person credits stay unresolved when the current exact provider identity is withdrawn', async () => {
