@@ -78,9 +78,11 @@ describe('native genuine-order retention', () => {
   let provider: ReturnType<typeof startWorkStripe>;
   let stripe: ReturnType<typeof createStripePort>;
   let commands: ReturnType<typeof createCommerceCommands>;
-  let contentEdition: NativeContentEdition;
+  let paidEdition: NativeContentEdition;
+  let lateEdition: NativeContentEdition;
   let seller: { accountId: string; bearer: string };
   let buyer: { accountId: string; bearer: string };
+  let living: { accountId: string; bearer: string };
   let unused: { accountId: string; bearer: string };
   let governance: Awaited<ReturnType<NativeContentSystem['auth']['issue']>>;
 
@@ -120,6 +122,20 @@ describe('native genuine-order retention', () => {
         key: crypto.randomUUID(),
       },
     );
+  }
+  async function listedOffer(edition: NativeContentEdition, title: string, buyers: { accountId: string }[]) {
+    const offer = (
+      await accepted(seller, '/v1/offers', {
+        contentEditionId: edition.contentEditionId,
+        title,
+        currency: 'usd',
+        unitAmountMinor: 1200,
+        taxCode: 'txcd_10302000',
+      })
+    ).offer as { id: string; revision: number };
+    for (const subject of buyers)
+      await grantAccess(subject.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
+    return offer;
   }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
@@ -245,6 +261,7 @@ describe('native genuine-order retention', () => {
     governance = await native.auth.issue({ accountId: governanceId, ...ordinary });
     seller = { accountId: native.actors.author.actor.accountId, bearer: native.actors.author.bearer };
     buyer = { accountId: native.actors.other.actor.accountId, bearer: native.actors.other.bearer };
+    living = { accountId: native.actors.moderator.actor.accountId, bearer: native.actors.moderator.bearer };
     unused = await accountDeletionRuntime(native).person();
     await bootstrapLocalShowcaseBoardCreation(pool, governance.actor.accountId);
     for (const group of ['personal_library', 'purchases', 'selling'])
@@ -261,10 +278,15 @@ describe('native genuine-order retention', () => {
         }),
       );
     });
-    contentEdition = await editions.publish({
+    paidEdition = await editions.publish({
       title: 'Native erasure book',
       subjectTitle: 'Native erasure source',
       body: 'Exact native content edition bytes',
+    });
+    lateEdition = await editions.publish({
+      title: 'Native erasure sequel',
+      subjectTitle: 'Native erasure sequel source',
+      body: 'Second exact native content edition bytes',
     });
     commands = createCommerceCommands({
       pool,
@@ -307,27 +329,20 @@ describe('native genuine-order retention', () => {
     ]);
     await expect(advanceCommerceErasure(pool, seller.accountId)).rejects.toThrow('committed native');
 
-    const offer = (
-      await accepted(seller, '/v1/offers', {
-        contentEditionId: contentEdition.contentEditionId,
-        title: 'Native erasure book',
-        currency: 'usd',
-        unitAmountMinor: 1200,
-        taxCode: 'txcd_10302000',
-      })
-    ).offer as { id: string; revision: number };
-    await grantAccess(governance.actor.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
-    await grantAccess(buyer.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
+    const paidOffer = await listedOffer(paidEdition, 'Native erasure book', [buyer, living]);
+    const lateOffer = await listedOffer(lateEdition, 'Native erasure sequel', [buyer, living]);
     const typedBuyer = await access.authenticate(buyer.bearer, { pool, deadline: Date.now() + 90_000 });
-    const first = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
-      .order as { id: string };
+    const first = (
+      await accepted(buyer, '/v1/orders', { offerId: paidOffer.id, expectedOfferRevision: paidOffer.revision })
+    ).order as { id: string };
     const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;
     provider.fake.pay(firstNative.checkoutSessionId!);
     await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
     await drainPartition(pool, buyer.accountId);
     const entitlement = (await entitlementRows(buyer.accountId))[0]!.entitlement_id as string;
-    const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
-      .order as { id: string };
+    const second = (
+      await accepted(buyer, '/v1/orders', { offerId: lateOffer.id, expectedOfferRevision: lateOffer.revision })
+    ).order as { id: string };
     const secondNative = (await commands.readOrderForAccount(buyer.accountId, second.id))!;
     const expiresAt = new Date(Date.now() + 180_000);
     const firstRetention = await prepareNativeRetainedOrder(pool, first.id, expiresAt);
@@ -367,7 +382,8 @@ describe('native genuine-order retention', () => {
       expect(await commands.readEntitlementForAccount(buyer.accountId, entitlement)).toBeNull();
       expect(await commands.listEntitlementsForAccount(buyer.accountId, { after: null, limit: 100 })).toEqual([]);
       expect(
-        (await request(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision })).status,
+        (await request(buyer, '/v1/orders', { offerId: paidOffer.id, expectedOfferRevision: paidOffer.revision }))
+          .status,
       ).toBe(401);
       await purgeBarrier.query('ROLLBACK');
       await waitUntil(
@@ -424,16 +440,26 @@ describe('native genuine-order retention', () => {
         ).rows,
       ).toEqual([]);
       expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
-      await expect(commands.createOrder(typedBuyer, offer.id, offer.revision, crypto.randomUUID())).rejects.toThrow(
+      await expect(
+        commands.createOrder(typedBuyer, paidOffer.id, paidOffer.revision, crypto.randomUUID()),
+      ).rejects.toThrow(GrantDeniedError);
+      const livingOrder = (
+        await accepted(living, '/v1/orders', {
+          offerId: paidOffer.id,
+          expectedOfferRevision: paidOffer.revision,
+        })
+      ).order as { id: string };
+      expect(livingOrder.id).not.toBe(first.id);
+      await erase(seller);
+      await expect(commands.delistOffer(typedBuyer, paidOffer.id, crypto.randomUUID())).rejects.toThrow(
         GrantDeniedError,
       );
-      await erase(seller);
-      await expect(commands.delistOffer(typedBuyer, offer.id, crypto.randomUUID())).rejects.toThrow(GrantDeniedError);
       await expect(
-        commands.reviseOffer(typedBuyer, offer.id, { unitAmountMinor: 1300 }, crypto.randomUUID()),
+        commands.reviseOffer(typedBuyer, paidOffer.id, { unitAmountMinor: 1300 }, crypto.randomUUID()),
       ).rejects.toThrow(GrantDeniedError);
       expect(
-        (await request(governance, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision })).status,
+        (await request(living, '/v1/orders', { offerId: lateOffer.id, expectedOfferRevision: lateOffer.revision }))
+          .status,
       ).toBe(409);
       expect(await commerceOutcome(buyer.accountId)).toMatchObject({
         outcome: 'erased',

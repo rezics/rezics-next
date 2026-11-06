@@ -168,7 +168,9 @@ the board projection. Shared-database board-read current-role projection repair 
 snapshot; Content's `native.auth.issue` actor object is not admitted there.
 `prepareNativeRetainedOrder` is the Accounts terminal-graph export. Fresh `POST /v1/offers` sends only
 `contentEditionId` and ordinary commercial terms; `targetSubjectId` is the historical-replay body and is rejected
-on the same object. The native journey is one purchase/retention/expiry case plus unused-actor operator history.
+on the same object. The native journey is one purchase/retention/expiry case on two quantity-one editions, so refund
+and late paid keep distinct genuine orders, plus unused-actor operator history. A living buyer still acquires the
+paid edition after the deleted buyer's entitlement is gone; seller termination then refuses a new order.
 
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using
 actual `startWorker`/`readWorkerConfig` against the same owned database and loopback Stripe endpoint. The child
