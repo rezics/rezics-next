@@ -1,11 +1,9 @@
-import { createKernelClient } from '@rezics/client';
-import { Value } from 'typebox/value';
-// Temporary Kernel seam: the official client publishes the management and label-history callables, but not yet their
-// closed runtime schemas. Replace these two imports with the installed exports when they are published.
 import {
+  createKernelClient,
   QuestionManagementResponseSchema,
   RatingQuestionLabelHistorySchema,
-} from '../../../../../services/kernel/src/rating/question-management-schemas.ts';
+} from '@rezics/client';
+import { Value } from 'typebox/value';
 import { requestLanguages } from '../../kernel/languages';
 import { parseQuestionManagementIntent } from './intent';
 import type {

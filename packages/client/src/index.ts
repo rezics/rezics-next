@@ -97,6 +97,11 @@ export type BanReviewIdentity = BanReviewPageItem['account'];
 type QuestionManagementRoute = Routes['realms'][':realmId']['rating-questions']['management']['get'];
 export type QuestionManagementQuery = QuestionManagementRoute['query'];
 export type QuestionManagementPage = QuestionManagementRoute['response'][200];
+// Closed runtime schemas the official generator ships beside the declarations (services/kernel/scripts/client.ts).
+export {
+  QuestionManagementResponseSchema,
+  RatingQuestionLabelHistorySchema,
+} from './kernel/rating/question-management-schemas.ts';
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }

@@ -7,7 +7,7 @@ Decision: creation acknowledgements compare scale operands by value; JSON proper
 The existing management reader and commands own admission, immutable definitions, caption compare-and-set,
 lifecycle and authorization. This consumer only navigates their current native windows.
 
-Decision: the management read calls the installed Realm management callable through the bounded client, and page and selection types derive from that installed response. Its closed management and caption-history schemas stay a named Kernel seam in [native](native.ts) until the official client publishes their runtime exports. That seam imports them from `services/kernel/src/rating/question-management-schemas.ts`, outside the Content schema graph that `rating/schemas.ts` loads.
+Decision: the management read calls the installed Realm management callable through the bounded client, and page and selection types derive from that installed response. Its closed management and caption-history schemas are runtime exports of `@rezics/client`: the official generator emits them as byte copies of their Kernel source (`CLIENT_RUNTIME_ENTRIES` in `services/kernel/scripts/client.ts`), so [native](native.ts) validates with the installed package and no Kernel path.
 
 Decision: a caption movement that Leave admits keeps the question visit; only a departure from the page retires it. Leave for a local caption movement does not invalidate the movement that asked for it.
 
@@ -38,7 +38,5 @@ Forced retirement continues to remove private presentation synchronously through
 Empty first, sparse continuing and empty terminal windows have separate copy in every launch locale. Illustrative
 stories and focused consumer tests do not establish installed native or signed-in browser acceptance; the original
 controller retains native, command acknowledgement/current-reader/focus, classification and browser checks.
-
-Decision: the installed package still publishes declarations only for the management and label-history callables, so their closed runtime schemas remain the Kernel seam in [native](native.ts) until the official publisher ships runtime exports. The persona walk for this page has not reached a manager step: the walk stack stopped mid-run in each attempt.
 
 Decision: the six-persona walk for this page runs as the seeded question-management walk under worker-check, so the check owns the walk stack, its startup and its cleanup. Its acceptance stays open until a check passes every recorded step.
