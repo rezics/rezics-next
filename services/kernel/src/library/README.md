@@ -89,8 +89,8 @@ Collection read module.
 
 Measured with `bun scripts/architecture.ts` against the Kernel value-import graph (base, then candidate): the largest
 value SCC has 388 then 385 files, of which Library has 90 then 88; all value-cycle files are 405 then 402, Library
-98 then 96. Architecture errors are 1020 then 1017, none new. The boundary baseline drops 145 entries that no longer
-match a violation.
+98 then 96. Architecture errors are 1020 then 1017, none new. The boundary baseline drops 178 entries (9,714 to 9,536)
+that no longer match a violation.
 
 Not yet done: application ports and composition bindings for Search preparation, identity/disclosure, authorization
 and Content publication. Porting only `builtin-runtime-query.ts`'s foreign value calls (Search scope preparation and
