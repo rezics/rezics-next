@@ -54,10 +54,7 @@ function SourcesStoryPage({
 }) {
   const router = useRouter();
   const locale = getLocale();
-  const fixture = useMemo(
-    () => catalogueSourcesFixture(scenario, exact ? { exact } : {}),
-    [scenario, locale, exact],
-  );
+  const fixture = useMemo(() => catalogueSourcesFixture(scenario, exact ? { exact } : {}), [scenario, locale, exact]);
   const selection = exact
     ? { ...recordedSelectedSynopsisSelection, locale, context: fixture.read.subject.context }
     : undefined;

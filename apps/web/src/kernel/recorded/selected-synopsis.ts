@@ -89,7 +89,6 @@ export function recordedSelectedSynopsisRead(kind: RecordedSelectedSynopsisKind 
     matched.fact.references = [];
   }
   read.subject.statements['schema:abstract'] = [statement];
-  read.selectedSynopsis =
-    kind === 'matched' || kind === 'matched-empty' ? matched : closedSelectedSynopsis(kind);
+  read.selectedSynopsis = kind === 'matched' || kind === 'matched-empty' ? matched : closedSelectedSynopsis(kind);
   return read;
 }

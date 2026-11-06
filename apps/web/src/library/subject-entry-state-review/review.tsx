@@ -180,13 +180,7 @@ function LibraryStateSelect({
   );
 }
 
-function ReceivedValue({
-  entry,
-  label,
-}: {
-  entry: { subjectId: string } | null;
-  label: string;
-}) {
+function ReceivedValue({ entry, label }: { entry: { subjectId: string } | null; label: string }) {
   return <span data-entry-state-received-value>{entry ? label : m.library_entry_review_absent()}</span>;
 }
 
