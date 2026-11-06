@@ -115,6 +115,9 @@ boundaries. A command that needs the shared dev server is wrapped per runtime by
 reuses the warmed dependency cache; `--private-network` applies inside that wrapper, not outside it. Each focused
 invocation runs one Worker graph at a time (`--max-concurrency=1`).
 
+Decision: Copies' native and browser journeys compose the shared dev-server and process custody in `tests/support`.
+Their acceptance evidence is recorded from the composed landing check; a local focused run is not that evidence.
+
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
