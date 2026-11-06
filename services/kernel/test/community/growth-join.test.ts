@@ -34,6 +34,7 @@ import {
   type GrowthReport,
 } from '../support/growth.ts';
 import { createProductionAccess } from './membership-fixture.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const probeRoute = 0x2130;
 const hotPartition = partitionOf(probeRoute);
@@ -359,6 +360,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     workClient: work,
     access: production.access,
     writeRate: createWriteRateLimiter({ secret: 'realm-growth-check-write-rate-secret-32' }),

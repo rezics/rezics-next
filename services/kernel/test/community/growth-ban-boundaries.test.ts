@@ -20,6 +20,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import resourceRoles from '../../src/access/resource-roles.json';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { createProductionAccess, type ProductionAccess } from './membership-fixture.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 
 const route = 0x2130;
@@ -383,6 +384,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens: sessionKeys,
+    receiptKeys: testReceiptKeys(),
     workClient: work,
     access: production.access,
     writeRate: createWriteRateLimiter({ secret: 'realm-ban-boundaries-write-rate-secret-32' }),

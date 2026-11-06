@@ -25,6 +25,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createProductionAccess, type ProductionAccess } from './membership-fixture.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = Buffer.alloc(32, 59).toString('base64url');
 const actions = [
@@ -149,7 +150,8 @@ beforeAll(async () => {
   pool = createPool(url);
   pool.options.max = 10;
   pool.options.connectionTimeoutMillis = 10_000;
-  client = await createWorkClient(url);
+  configureTestReceiptKeys(pool);
+  client = await createWorkClient(url, pool);
   // The reader is installed before publication so a later member grant can use it.
   let roleReader: RealmMembership['roleReader'] = async () => null;
   // Production composition: its authenticator and command admission refuse every actor it did not produce.
@@ -188,6 +190,7 @@ beforeAll(async () => {
     pool,
     client,
     env: { KERNEL_ROUTE_KEY: routeKey },
+    receiptKeys: testReceiptKeys(),
   });
   await runtime.launch();
 }, 120_000);

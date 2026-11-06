@@ -23,6 +23,7 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -274,6 +275,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     workClient: work,
     access: (config) =>
       (access = createAccess({

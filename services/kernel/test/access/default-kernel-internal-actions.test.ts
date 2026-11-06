@@ -25,6 +25,7 @@ import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const key = () => crypto.randomUUID();
 const password = 'default kernel internal action password';
@@ -114,7 +115,7 @@ beforeAll(async () => {
   process.env.AUTH_JWKS_URL = `${issuer}/.well-known/jwks.json`;
   process.env.KERNEL_WRITE_RATE_SECRET = 'default-kernel-native-rate-secret-at-least-32-bytes';
   // No Access factory, action or rate override: exercise the default kernel.
-  kernel = createKernel({ pool: db.pool, routeKey, tokens: referenceKeys });
+  kernel = createKernel({ pool: db.pool, routeKey, tokens: referenceKeys, receiptKeys: testReceiptKeys() });
   const mounted = actionCatalogue(kernel);
   expect(mounted.has('account:manage')).toBe(false);
   // Auth's native bindings use the same default resolver and complete mounted catalogue.

@@ -16,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
@@ -150,6 +151,7 @@ let publication: typeof import('../../src/community/publication.ts');
 beforeAll(async () => {
   pool = createPool(process.env.DATABASE_URL!);
   pool.options.max = 1;
+  configureTestReceiptKeys(pool);
   admin = new Pool({ connectionString: process.env.DATABASE_URL });
   f = await fixture(pool, admin);
   space = await import('../../src/community/space.ts');

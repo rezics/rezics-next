@@ -38,6 +38,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-participation.auth.test';
@@ -433,6 +434,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     access: (config) => {
       installedAccessConfig = config;
       access = createAccess({
@@ -505,6 +507,7 @@ beforeAll(async () => {
       pool,
       client: workClient,
       env: { KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') },
+      receiptKeys: testReceiptKeys(),
     },
   );
   await workRuntime.launch();

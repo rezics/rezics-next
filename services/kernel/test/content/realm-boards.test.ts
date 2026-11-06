@@ -16,6 +16,7 @@ import { createCommunityWorkModule } from '../../src/community/work.ts';
 const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
@@ -415,6 +416,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,
