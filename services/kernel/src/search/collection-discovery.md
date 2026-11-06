@@ -79,6 +79,9 @@ It carries an explicit presentation Type ID or `mixed`, canonical curator and Su
 registry advertises `collectionDirectory`. Without that native capability it returns `index_not_ready` before
 enumeration. The identity-ordered `source.page` remains the indexing frontier and never becomes a result-ordering
 authority.
+Decision: directory execution hydrates that indexed collection population with `collectionQuery`, then Search
+applies recency or popularity order across the complete eligible frontier with query-wide currentness so a newly
+eligible identity appears in its global position; continuation is a sort keyset, not an OpenSearch prefix.
 
 ## Cost Touches / Bound / Growth check
 
