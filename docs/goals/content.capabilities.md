@@ -54,21 +54,23 @@ Scenarios and evidence on this base:
   `author-item-public-views` coverage; stage **implementation exposed**.
 - `late-board-revocation`: take the board down or revoke its protected read grant after the board check for thread,
   post head, exact revision, subject-thread and author-activity reads. Final output must disclose no now-ineligible
-  item, summary, count, source or cursor material. Stage **specified red**; the deterministic composed binding for
-  these point reads is not established on this base.
-- `late-board-revocation-pages`: the new suite declares literal cases for hot, active and newest board first and
+  item, summary, count, source or cursor material. Stage **driver registered**:
+  `test/content/late-board-revocation-point-reads.test.ts` is the one native family for those surfaces.
+- `late-board-revocation-pages`: the frozen suite declares literal cases for hot, active and newest board first and
   continuation pages, and thread post first and continuation pages. Each has a late board takedown, late protected
-  read-grant revocation, and unchanged public and protected positive controls. Stage **specified red**; no user-cases driver is registered.
+  read-grant revocation, and unchanged public and protected positive controls. Stage **driver registered**:
+  `test/content/user-cases-driver.ts` binds `holdPage`, and `test/content/late-board-revocation-pages.test.ts` pins
+  the native HTTP family. No extra stories.
 
 Native acceptance commands, from the repository root:
 
 ```sh
-bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts
+bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts test/content/late-board-revocation-point-reads.test.ts test/content/late-board-revocation-pages.test.ts
 CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/content-user-cases-outcomes.test.ts --test-name-pattern late-board-revocation-pages
 ```
 
-The second command requires the future real binding. Neither existing board sort tests nor the missing-driver
-verifier establish the late point-read or page outcomes.
+The second command uses the bound native driver. Existing board-sort tests do not establish the late point-read or
+page outcomes.
 
 ## realms-and-spaces
 

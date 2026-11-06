@@ -88,6 +88,8 @@ placement authority; the Board and thread need not share a native home.
 Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.
 They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
 author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.
+Decision: those two native files plus the frozen composed page cases are the fewest tests for the named families;
+no extra stories.
 
 ### Cost: native directory assembly
 
