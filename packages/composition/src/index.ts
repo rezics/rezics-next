@@ -47,6 +47,7 @@ export {
   planReads,
   readCost,
   shownProperties,
+  walkStructuralContent,
   type PageReadPlan,
 } from './reads.ts';
 export type {
