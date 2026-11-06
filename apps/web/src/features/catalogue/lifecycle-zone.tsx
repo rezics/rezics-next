@@ -27,7 +27,9 @@ export function ZoneLifecycleControls(props: {
         </Button>
       ) : null}
       {props.last && !props.last.ok ? (
-        <p role="status">{props.last.reason === 'denied' ? 'Not allowed' : 'Could not update the zone'}</p>
+        <p role="status" aria-live="polite">
+          {props.last.reason === 'denied' ? 'Not allowed' : 'Could not update the zone'}
+        </p>
       ) : null}
     </div>
   );

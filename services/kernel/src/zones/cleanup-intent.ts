@@ -29,3 +29,33 @@ export function withPurgeIntent(row: ZoneHead, intent: PurgeIntent | null): Json
 export function liveCoverage(row: ZoneHead): string[] {
   return Object.keys(record(row.withholding) ? row.withholding : {}).filter((key) => key === '' || key.startsWith('/'));
 }
+
+/** Live decisions cover a pointer, any ancestor, and any descendant. Named release is the only way coverage shrinks. */
+export function pointerIsCovered(row: ZoneHead, pointer: string): boolean {
+  return liveCoverage(row).some(
+    (live) => pointer === live || pointer.startsWith(`${live}/`) || live.startsWith(`${pointer}/`),
+  );
+}
+
+/** Early privacy and account cleanup keep covered originals and drop everything else. */
+export function retainCoveredPayload(row: ZoneHead): {
+  configuration: ZoneHead['configuration'];
+  mounts: string[];
+} {
+  const configuration = row.configuration;
+  const mounts = row.mounts ?? [];
+  if (!configuration) return { configuration: null, mounts: [] };
+  const labels = { ...configuration.labels };
+  for (const locale of Object.keys(labels) as (keyof typeof labels)[]) {
+    if (!pointerIsCovered(row, `/labels/${locale}`)) delete labels[locale];
+  }
+  return {
+    configuration: {
+      ...configuration,
+      labels,
+      pages: configuration.pages.filter((_, index) => pointerIsCovered(row, `/pages/${index}/document`)),
+      scope: configuration.scope.filter((_, index) => pointerIsCovered(row, `/scope/${index}`)),
+    },
+    mounts: mounts.filter((_, index) => pointerIsCovered(row, `/mounts/${index}`)),
+  };
+}

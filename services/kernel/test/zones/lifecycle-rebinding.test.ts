@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { ProblemError } from '../../src/http/problem.ts';
 import type { ZoneHead } from '../../src/zones/resource-store.ts';
+import { liveCoverage, retainCoveredPayload } from '../../src/zones/cleanup-intent.ts';
 import { changeTakedown, rebindWithholding, withholdingJson, withholdingOf } from '../../src/zones/takedown.ts';
 
 const doc = (text: string) => ({
@@ -52,4 +53,13 @@ test('a named release removes only a live decision and refuses one that is not h
   const held = covered();
   expect(withholdingJson(changeTakedown(held, ['/pages/1/document'], false, '4'))).toEqual({});
   expect(() => changeTakedown(held, ['/labels/en'], false, '4')).toThrow(ProblemError);
+});
+
+test('account cleanup and early privacy keep only the covered page and drop the uncovered label', () => {
+  const row = covered();
+  expect(liveCoverage(row)).toEqual(['/pages/1/document']);
+  const kept = retainCoveredPayload(row);
+  expect(kept.configuration?.pages).toEqual([notes]);
+  expect(kept.configuration?.labels).toEqual({});
+  expect(kept.mounts).toEqual([]);
 });

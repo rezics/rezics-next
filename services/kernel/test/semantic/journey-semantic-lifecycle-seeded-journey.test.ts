@@ -33,6 +33,13 @@ test('owner, another owner, anonymous reader, moderator and a delegate see curre
   await f.grant(id, 'editor', 'zone:read');
   expect((await f.read(id, 'editor')).status).toBe(200);
 
+  expect(
+    (await f.call('anonymous', 'DELETE', `/v1/zones/${id}`, undefined, f.conditional(published.body.zone.revision)))
+      .status,
+  ).toBe(401);
+  expect(
+    (await f.call('other', 'DELETE', `/v1/zones/${id}`, undefined, f.conditional(published.body.zone.revision))).status,
+  ).toBe(403);
   const deleted = await f.call(
     'owner',
     'DELETE',

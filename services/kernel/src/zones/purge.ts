@@ -2,7 +2,7 @@ import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, noEffect, runCommand, type LegacyCommandOptions } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { liveCoverage, purgeIntent, withPurgeIntent } from './cleanup-intent.ts';
+import { liveCoverage, purgeIntent, retainCoveredPayload, withPurgeIntent } from './cleanup-intent.ts';
 import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-store.ts';
 
 export type ZonePurgePageInput = Readonly<{
@@ -13,30 +13,6 @@ export type ZonePurgePageInput = Readonly<{
   cursor: string | null;
   limit: number;
 }>;
-
-function covered(row: ZoneHead, pointer: string): boolean {
-  for (const live of liveCoverage(row)) {
-    if (pointer === live || pointer.startsWith(`${live}/`) || live.startsWith(`${pointer}/`)) return true;
-  }
-  return false;
-}
-
-function redactUncovered(row: ZoneHead): { configuration: ZoneHead['configuration']; mounts: string[] } {
-  const configuration = row.configuration;
-  const mounts = row.mounts ?? [];
-  if (!configuration) return { configuration: null, mounts: [] };
-  const labels = { ...configuration.labels };
-  for (const locale of Object.keys(labels) as (keyof typeof labels)[]) {
-    if (!covered(row, `/labels/${locale}`)) delete labels[locale];
-  }
-  const pages = configuration.pages.filter((_, index) => covered(row, `/pages/${index}/document`));
-  const scope = configuration.scope.filter((_, index) => covered(row, `/scope/${index}`));
-  const keptMounts = mounts.filter((_, index) => covered(row, `/mounts/${index}`));
-  return {
-    configuration: { ...configuration, labels, pages, scope },
-    mounts: keptMounts,
-  };
-}
 
 /** Bounded Zone cleanup page. Held rows, live restore and uncovered-only privacy keep remaining work explicit. */
 export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: string | null }> {
@@ -59,7 +35,7 @@ export async function purgeZonePage(input: ZonePurgePageInput): Promise<{ next: 
     if (branch === 'ordinary' && liveCoverage(row).length > 0) return noEffect({ next: null });
     const next: ZoneHead = { ...row, writeFenced: true };
     if (branch === 'early_privacy' && liveCoverage(row).length > 0) {
-      const kept = redactUncovered(row);
+      const kept = retainCoveredPayload(row);
       next.configuration = kept.configuration;
       next.mounts = kept.mounts;
       next.state = row.state === 'active' ? 'active' : 'purge_pending';
