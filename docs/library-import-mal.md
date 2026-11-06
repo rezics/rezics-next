@@ -84,19 +84,30 @@ and require a fresh review; they are never upgraded by sampling new operands dur
 
 Decision: compose Content's existing conditional writer and complete native review operands with Library checkpoints;
 retain original guards and keys across uncertain delivery, and require native readback before reporting score success.
-`putVoteOutcome(actor, {questionId,targetId,units,guard}, key)` is called after persisting `score.started` in the
-existing intent. Native stale/unavailable errors are definitive typed outcomes. Unexpected delivery/readback errors
-throw and retain that checkpoint for exact command retry; current reads cannot settle uncertain delivery. A review
-refresh cannot replace a started unresolved score, including when labels are refreshed. Missing score consent remains
-resumable. Independent effects cannot turn a selected unsuccessful vote into overall success.
+Frozen vote observations use Content's meaning, or the question label when meaning is absent. Reviewed question DTOs keep Content's optional meaning, including null; they do not copy the display label into meaning.
+Confirmation calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
+source-document admission, persists `score.started` with that command, then `putVoteOutcome` with those operands; an
+uncertain retry first uses `reconcilePutVote(actor, receipt)`.
+Decision: retain each reviewed vote guard as an opaque JSON string keyed by review version so document canonicalize
+cannot reorder identity operands. Apply prefers the stored review guard (the same jsonb-roundtripped object Content's
+vote-review producer admits), parses the opaque encoding only when that object is absent, and calls putVoteOutcome with
+the prepared input rather than overlaying a second parse. A Rating redirect of the Library-selected Subject stores
+no vote guard and requires an explicit new target review. Native stale/unavailable errors are definitive typed
+outcomes. Unexpected delivery/readback errors throw and retain that checkpoint for exact command retry; current reads
+cannot settle uncertain delivery. A review refresh cannot replace a started unresolved score, including when labels are
+refreshed. Missing score consent remains resumable. A selected score without a completed review is
+`score-action-not-reviewed`: status may still appear in `applied`, and the row status follows that unsuccessful
+independent score. Independent effects cannot turn a selected unsuccessful vote into overall success.
 
 The consumer adapts the native flat question scale fields into the existing nested review scale.
-Definitive score outcomes persist independently before remaining labels or Progress; retries retain that original
+Public MAL client types keep conditional score admission and applied outcomes from the Kernel model snapshot until
+the compiler `typecheck --emit-client` emitter republishes them. Mutation callers send a required Idempotency-Key;
+page and apply reads do not.
+Definitive score outcomes persist independently before Progress, remaining labels or independent state; retries retain that original
 result and read current native state. A label refresh cannot erase an unresolved started vote.
-The consumer now calls the actual installed producer. On this source base the producer still throws
-`atomic_guard_unavailable` for guarded effects; this remains genuine unavailability, not positive acceptance.
-Content owns its original serial atomic-producer repair. No local vote writer, resolver or permission mechanism is
-introduced. Successful producer admission is followed by `readOwnVote`; receipts are never displayed as current votes.
+Same-home guarded effects complete through Content's writer; foreign homes remain `atomic_guard_unavailable` through
+Semantic's same-home fence. No local vote writer, resolver or permission mechanism is introduced. Successful producer
+admission is followed by `readOwnVote`; receipts are never displayed as current votes.
 The page's `currentScoreVote` comes from a fresh native Rating reader on each visit, independently of retained
 review baselines and effect outcomes. The owner Entry reader remains the page's current Library state source. Whole-list positive/changed-reimport,
 effect-before-ack retry, all native fences and mounted caller acceptance remain required after producer integration.
@@ -124,7 +135,10 @@ native matching.
 Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
 the explicit UUID submitted to `review.target` is identity.
 
+Decision: native redirect checks reuse the fixture steward on a token and Global grant that both carry `subject:merge` and `gate:subject_identity`; a reduced sibling token is denied even when the role row exists. Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish identity bootstrap on that partition before Rating review or merge. Native import vote, merge, progress and metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on that home so the first scan includes it; sealing the empty question/control home first leaves later creations past the cursor. Native import tests recapture identity dirty after each Subject write, after link drain on each HTTP send once a Subject is mapped on that home, and before direct Rating apply, so Entry, Progress and vote writes cannot leave Mapping pending. A mapped home with no dirty originals and empty control pending/prepare pins stays current; recapture does not start another bootstrap generation or republish an installed epoch. They drain held prearm after mapping completes; unpublished Search/Library acknowledgements do not pin the group against later Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed; native import tests then publish that job so later bootstrap can recapture dirty and a later merge or vote job can start. A home is current for later Progress, Rating and merge only after those jobs are published and control pending/prepare pins are empty; mapping-complete pending classification alone does not free home capacity. Apply commits selected scores and Progress before independent state so Entry writes cannot dirty the vote or occurrence target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty before Rating, Progress or merge resolve the mapping. Guarded Rating apply uses the same `rating:vote` token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal admits the job and mapping applies the redirect; it does not persist-command the catalogue redirect against that hold.
+
 Integration decision: MAL and Bangumi retain their separate native review guards, routes and erasure phases.
+Landing `list-import-mal.test.ts` pins tags-only apply (`fields: ['tags']`, status omitted) on the mounted HTTP path.
 
 Native rating cost: at most 20 selected rows per page/review/apply batch use one complete native `readVoteReview`
 per row (question directory/current account, bounded counted-reader prepare/read/finish, original/canonical slots and

@@ -14,21 +14,39 @@ import {
   unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
-import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
+import {
+  bootstrapGovernance,
+  PLATFORM_GOVERNANCE_ROLE,
+  PLATFORM_RESOURCE,
+} from '../../../src/access/bootstrap-governance.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../../src/access/lifecycle.ts';
+import { resourceRoleCatalogue } from '../../../src/access/resource-roles.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import type { KernelClock } from '../../../src/clock.ts';
-import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { actionCatalogue } from '../../../src/http/request.ts';
+import { runCommand } from '../../../src/command/command.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { Access, AccountActor } from '../../../src/request/access.ts';
+import { stepLibraryIdentityEpoch } from '../../../src/library/identity-epoch-participant.ts';
+import { accessCheck, type Access, type AccountActor } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
+import {
+  identityEpochStore,
+  identityJobPartition,
+  IdentityEpochStoreError,
+} from '../../../src/semantic/identity-adapters/index.ts';
+import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
+import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
+import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../../src/semantic/identity-epoch-coordinator.ts';
+import type { IdentityJobRef } from '../../../src/semantic/identity-epoch-contract.ts';
+import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-mapping.ts';
+import { subjectTarget } from '../../../src/semantic/subject.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
 import {
@@ -36,13 +54,11 @@ import {
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
-import { installIdentityGrants, installResourceGrants } from '../../support/trusted-grants.ts';
-
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
 export const entryStates = { game: 'playing', recipe: 'cooking', record: 'listening' };
 export const entryKey = () => randomUUID();
-const global = { route: 0, id: GLOBAL_CONTEXT };
+const global = { route: PLATFORM_RESOURCE.route, id: PLATFORM_RESOURCE.id };
 const clientId = 'native-profile-entry';
 const entryScopes = [
   'subject:create',
@@ -145,14 +161,13 @@ export async function createProfileEntryFixture(
   options: {
     clock?: KernelClock;
     pool?: Pool;
-    databaseUrl?: string;
     singleConnection?: boolean;
     projectLinks?: boolean;
     gameUnits?: readonly string[];
     ownerScopes?: readonly string[];
   } = {},
 ) {
-  const url = options.databaseUrl ?? process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = options.pool ?? createPool(url);
   if (options.singleConnection) pool.options.max = 1;
@@ -162,7 +177,6 @@ export async function createProfileEntryFixture(
     const tokens = testTokens();
     const routeKey = testRouteKey();
     let access!: Access;
-    composeLibraryDomain({ pool, routeKey });
     const kernel = createKernel({
       pool,
       tokens,
@@ -177,9 +191,6 @@ export async function createProfileEntryFixture(
         secret: 'native-profile-entry-test-rate-secret',
         overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
       }),
-      onAccessReady(ready) {
-        composeLibraryDomain({ pool, access: ready, routeKey });
-      },
     });
     // The kernel composes Access lazily from its complete mounted action catalogue.
     // Resolve it through an ordinary public read before authenticating native actors.
@@ -188,6 +199,8 @@ export async function createProfileEntryFixture(
     expect(access).toBeDefined();
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
+    const mappedHomes = new Set<number>();
+    let identityHomesReady = false;
     // Run the real relay for scenarios that consume Semantic link projections.
     // Direct source-reference scenarios can leave this unrelated worker asynchronous.
     async function drainSubjectLinks() {
@@ -201,6 +214,122 @@ export async function createProfileEntryFixture(
         if (!pending) return;
       }
       throw new Error('Native Semantic link projection did not drain');
+    }
+    function isIdentityPrearmHold(error: unknown) {
+      if (!(error instanceof Error)) return false;
+      const code = 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
+      return (
+        error.message.includes('identity_epoch_unavailable') ||
+        code === 'identity_epoch_unavailable' ||
+        (code === 'P0001' && error.message.includes('identity_epoch'))
+      );
+    }
+    async function identityDirty(home: number, original?: string) {
+      return original
+        ? (
+            await pool.query(
+              `SELECT 1 FROM semantic.identity_epoch_dirty
+                WHERE route=$1 AND original=$2 AND revision>captured_revision LIMIT 1`,
+              [routeOf(original), original],
+            )
+          ).rowCount
+        : (
+            await pool.query(
+              `SELECT 1 FROM semantic.identity_epoch_dirty
+                WHERE route BETWEEN $1 AND $2 AND revision>captured_revision LIMIT 1`,
+              [home * 16, home * 16 + 15],
+            )
+          ).rowCount;
+    }
+    async function heldPrearmJobs(home: number): Promise<IdentityJobRef[]> {
+      const pins = (
+        await pool.query<{ job_id: string }>(
+          `SELECT DISTINCT job_id::text AS job_id FROM (
+             SELECT job_id FROM semantic.identity_epoch_prearm_bridge
+              WHERE partition_no=$1 AND job_id IS NOT NULL
+             UNION ALL
+             SELECT pending_job FROM semantic.identity_epoch_group
+              WHERE partition_no=$1 AND pending_job IS NOT NULL
+             UNION ALL
+             SELECT pending_job FROM semantic.identity_epoch_control
+              WHERE partition_no=$1 AND pending_job IS NOT NULL
+             UNION ALL
+             SELECT prepare_job FROM semantic.identity_epoch_control
+              WHERE partition_no=$1 AND prepare_job IS NOT NULL
+             UNION ALL
+             SELECT pending_job FROM semantic.identity_epoch_home_gate
+              WHERE route BETWEEN $2 AND $3 AND pending_job IS NOT NULL
+             UNION ALL
+             SELECT job_id FROM semantic.identity_epoch_job
+              WHERE partition_no=$1 AND state NOT IN ('published','cancelled')
+           ) pins(job_id)
+           WHERE job_id IS NOT NULL`,
+          [home, home * 16, home * 16 + 15],
+        )
+      ).rows;
+      const jobs: IdentityJobRef[] = [];
+      for (const pin of pins) {
+        const saved = (
+          await pool.query<{ epoch: string }>(
+            `SELECT epoch::text AS epoch FROM semantic.identity_epoch_job
+              WHERE job_id=$1::uuid ORDER BY epoch DESC LIMIT 1`,
+            [pin.job_id],
+          )
+        ).rows[0];
+        jobs.push({ jobId: pin.job_id, epoch: saved ? BigInt(saved.epoch) : 0n });
+      }
+      return jobs;
+    }
+    async function homeCapacityOccupied(home: number) {
+      const control = (
+        await pool.query<{ pending_job: string | null; prepare_job: string | null }>(
+          `SELECT pending_job::text AS pending_job, prepare_job::text AS prepare_job
+             FROM semantic.identity_epoch_control WHERE partition_no=$1`,
+          [home],
+        )
+      ).rows[0];
+      return Boolean(control?.pending_job || control?.prepare_job || (await heldPrearmJobs(home)).length);
+    }
+    async function catchUpIdentity(home: number) {
+      const drained = new Set<string>();
+      const keyOf = (job: IdentityJobRef) => `${job.jobId}:${job.epoch.toString()}`;
+      for (let n = 0; n < 1000; n++) {
+        // Birth mappings and already-installed epochs stay current. Another bootstrap
+        // generation would rewrite published_epoch and invalidate reviewed identity.
+        if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
+        const held = await heldPrearmJobs(home);
+        for (const job of held) {
+          if (drained.has(keyOf(job))) continue;
+          await drainIdentityJob(job);
+          drained.add(keyOf(job));
+        }
+        if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
+        try {
+          const progress = await stepIdentityEpochBootstrap(pool, home);
+          if (
+            progress.state === 'caught-up' &&
+            !(await identityDirty(home)) &&
+            !(await homeCapacityOccupied(home))
+          )
+            return;
+        } catch (error) {
+          if (!isIdentityPrearmHold(error)) throw error;
+          const retry = await heldPrearmJobs(home);
+          if (retry.length) {
+            for (const job of retry) {
+              if (drained.has(keyOf(job))) continue;
+              await drainIdentityJob(job);
+              drained.add(keyOf(job));
+            }
+            continue;
+          }
+          if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
+        }
+      }
+      throw new Error('Native identity bootstrap did not finish');
+    }
+    async function recaptureMappedHomes() {
+      for (const home of mappedHomes) await catchUpIdentity(home);
     }
     const commands = createEntryCommands({ pool, access, tokens, ...options });
     const context = (actor: AccountActor) => ({ pool, actor, deadline: deadlineFor(30_000) });
@@ -231,13 +360,15 @@ export async function createProfileEntryFixture(
       let key = entryKey();
       let accountId = lifecycle.registrationTarget(key);
       while (
+        routeOf(accountId) === 0 ||
         (partition !== undefined && partitionOf(routeOf(accountId)!) !== partition) ||
         (exactRoute !== undefined && routeOf(accountId) !== exactRoute)
       ) {
         key = entryKey();
         accountId = lifecycle.registrationTarget(key);
       }
-      partitions.add(partitionOf(routeOf(accountId)!));
+      const home = partitionOf(routeOf(accountId)!);
+      partitions.add(home);
       const handle = `profile_${key.replaceAll('-', '')}`;
       const reservation = await lifecycle.reserveHandle({ accountId, handle, key });
       const input = { accountId, handle, reservationId: reservation.value.reservationId, key };
@@ -254,45 +385,129 @@ export async function createProfileEntryFixture(
       const claims = { accountId, clientId, scopes };
       // Native growth setup reuses this genuine five-minute test credential across requests.
       // Each native command still supplies and enforces its own physical operation deadline.
-      const actor = await authenticateAccount(access, { pool, deadline: deadlineFor(300_000) }, claims);
+      // Use wall time, not deadlineFor: a leaked request ALS deadline is the kernel's 30s budget.
+      const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 300_000 }, claims);
+      // Partition 0 is the Global question/control home. Sealing it before the first
+      // Subject exists leaves later creations past the bootstrap cursor with captured
+      // dirty, so catch it up only after createHomeSubject/admitSubjectMerge.
+      if (identityHomesReady && (home !== 0 || mappedHomes.has(0))) await catchUpIdentity(home);
       return { actor, bearer: await accountToken(claims) };
     }
+    // Grant-routes and outcome-driver admit platform.governance only on a token
+    // that carries the complete mounted catalogue plus gate:any. A reduced sibling
+    // list is denied even when the role row exists. media:complete stays off the
+    // token; it is reserved to the confidential website client.
     const steward = await identity([
-      'access:grant',
-      'subject:batch_write',
-      'offer:create',
-      'subject:create',
-      'subject:merge',
-      'statement:propose',
-      'definitions:read',
-      'definitions:publish',
-      'definitions:activate',
-      'account:suspend',
-      'moderation:hide',
-      'subject:read',
-      'exposure:open',
-      'exposure:close',
-      'gate:any',
-      'gate:personal_library',
+      ...new Set([...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete').concat('gate:any')),
     ]);
-    const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
-    const other = await identity(entryScopes);
+    const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])], 0);
+    const other = await identity(entryScopes, 0);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
-    // Fixture parent permissions install as trusted rows. Ordinary product commands
-    // still run Access checks; platform.governance reach is not a grant-command token.
-    await installIdentityGrants(pool, global.id, steward.actor.accountId, [
+    // Bootstrap writes platform.governance on the Global Context for this steward.
+    // Grant-routes authenticates that original bearer onto a fresh command boundary
+    // and records the live account/resource/role binding. gate:any on those original
+    // scopes covers library-gate delegation; a minted sibling token does not.
+    const grants = createGrantCommands({
+      pool,
+      access,
+      managementAction: 'access:grant',
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
+    async function grantFacts(
+      actor: AccountActor,
+      granted: readonly string[],
+      boundary: { pool: typeof pool; deadline: number },
+    ) {
+      const roles = await reader.query(
+        `SELECT grant_role AS fact, subject_kind, subject_id::text AS subject
+           FROM access.resource_role_grant
+          WHERE route = 0 AND resource_id = $1 AND subject_id = $2
+          ORDER BY grant_role`,
+        [global.id, steward.actor.accountId],
+      );
+      const held = await reader.query(
+        `SELECT action AS fact, subject_kind, subject_id::text AS subject
+           FROM access.resource_grant
+          WHERE route = 0 AND resource_id = $1 AND (subject_id = $2 OR subject_kind = 'active_accounts')
+          ORDER BY action, subject_kind, subject`,
+        [global.id, steward.actor.accountId],
+      );
+      const account = await reader.query(
+        `SELECT kind, state, authn_fenced AS fenced, membership_inverse_complete AS complete
+           FROM access.account WHERE route = $1 AND account_id = $2`,
+        [routeOf(steward.actor.accountId), steward.actor.accountId],
+      );
+      const roleActions = [...(resourceRoleCatalogue(access)?.roles.get(PLATFORM_GOVERNANCE_ROLE) ?? [])];
+      const needed = ['access:grant', 'gate:any', ...granted];
+      const permitted: Record<string, boolean | string> = {};
+      for (const action of needed) {
+        try {
+          permitted[action] = await (await accessCheck(access, actor, action, global, boundary))(pool);
+        } catch (error) {
+          permitted[action] = error instanceof Error ? error.message : String(error);
+        }
+      }
+      return {
+        role: PLATFORM_GOVERNANCE_ROLE,
+        roleActions,
+        roles: roles.rows,
+        grants: held.rows,
+        account: account.rows[0] ?? null,
+        actor: { accountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+        bound: actor.accountId === steward.actor.accountId && actor.clientId === steward.actor.clientId,
+        resource: global,
+        requested: granted,
+        deadline: boundary.deadline,
+        scopes: actor.scopes.length,
+        tokenScopes: needed.filter((action) => actor.scopes.includes(action)),
+        missingFromToken: needed.filter((action) => !actor.scopes.includes(action)),
+        missingFromRole: needed.filter((action) => !roleActions.includes(action)),
+        permitted,
+      };
+    }
+    async function grantOnDeadline(
+      subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
+      actions: readonly string[],
+      revoke = false,
+    ) {
+      // grant-routes authenticates the original steward bearer onto a fresh wall-clock
+      // boundary, then spreads that same object into the command. deadlineFor can
+      // reuse a leaked request ALS deadline; a minted sibling token drops coverage.
+      const boundary = { pool, deadline: Date.now() + 10_000 };
+      const actor = await access.authenticate(steward.bearer, boundary);
+      const input = {
+        resource: global,
+        subject,
+        actions: [...actions],
+        valid: '(,)',
+        key: entryKey(),
+      };
+      const command = { ...boundary, actor };
+      try {
+        if (revoke) await grants.revoke(command, input);
+        else await grants.create(command, input);
+      } catch (error) {
+        throw new Error(
+          `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts(actor, actions, boundary))}`,
+          { cause: error },
+        );
+      }
+    }
+    await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, [
       'definitions:publish',
       'definitions:activate',
-      'subject:merge',
-      'gate:personal_library',
     ]);
-    await installResourceGrants(
-      pool,
-      global.id,
-      { kind: 'active_accounts', id: '00000000-0000-0000-0000-000000000000' },
-      ['subject:create', 'statement:propose'],
-    );
+    // Governance bootstrap already performed the Global parent's one-time installation.
+    // Extend its standing creation authority through ordinary, fully authorized grants.
+    await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
+    await installIdentityEpochBootstrap(pool);
+    identityHomesReady = true;
+    for (const home of partitions) {
+      if (home === 0) continue;
+      await catchUpIdentity(home);
+    }
+    const grantAccountActions = (accountId: string, actions: readonly string[]) =>
+      grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
@@ -302,6 +517,7 @@ export async function createProfileEntryFixture(
       extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
+      await recaptureMappedHomes();
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -369,6 +585,113 @@ export async function createProfileEntryFixture(
       expect(active?.digest).toBe(digest);
       return active!;
     }
+    async function drainIdentityJob(job: IdentityJobRef) {
+      const saved = (
+        await pool.query<{ state: string; epoch: string; partition_no: number }>(
+          `SELECT state, epoch::text AS epoch, partition_no
+             FROM semantic.identity_epoch_job WHERE job_id=$1::uuid ORDER BY epoch DESC LIMIT 1`,
+          [job.jobId],
+        )
+      ).rows[0];
+      const resolved: IdentityJobRef = saved ? { jobId: job.jobId, epoch: BigInt(saved.epoch) } : job;
+      if (!saved || saved.state === 'published' || saved.state === 'cancelled') return;
+      let admitted = saved.state === 'pending';
+      if (!admitted) {
+        for (let attempt = 0; attempt < 16; attempt++) {
+          const progress = await stepIdentityEpochAdmission(pool, resolved);
+          if (progress.state === 'pending' || progress.state === 'published') {
+            admitted = true;
+            break;
+          }
+          expect(progress.state).toBe('preparing');
+        }
+        expect(admitted).toBe(true);
+      }
+      let mapped = false;
+      for (let attempt = 0; attempt < 512; attempt++) {
+        const progress = await stepIdentityEpochMapping(pool, resolved);
+        if (progress.state === 'complete') {
+          mapped = true;
+          break;
+        }
+      }
+      if (!mapped) throw new Error('Native identity mapping did not finish');
+      const store = identityEpochStore();
+      const partition = identityJobPartition(resolved);
+      for (let attempt = 0; attempt < 32; attempt++) {
+        try {
+          if ((await stepLibraryIdentityEpoch(pool, resolved)).state === 'complete') break;
+        } catch (error) {
+          if (!(error instanceof IdentityEpochStoreError)) throw error;
+          break;
+        }
+      }
+      try {
+        await resumeIdentityEpochJob(pool, resolved);
+        await waitIdentityEpochPublished(pool, resolved);
+        return;
+      } catch (error) {
+        if (!(error instanceof IdentityEpochStoreError)) throw error;
+      }
+      try {
+        await runCommand(pool, { partition }, (tx) => store.publish(tx, resolved));
+      } catch (error) {
+        if (!(error instanceof IdentityEpochStoreError) || error.code !== 'identity_participants_incomplete')
+          throw error;
+      }
+    }
+    async function drainIdentityMerge(jobId: string) {
+      const found = (
+        await pool.query<{ epoch: string }>(
+          'SELECT epoch::text AS epoch FROM semantic.identity_epoch_job WHERE job_id=$1::uuid ORDER BY epoch DESC LIMIT 1',
+          [jobId],
+        )
+      ).rows[0];
+      if (!found) throw new Error('Native merge identity job was not retained');
+      await drainIdentityJob({ jobId, epoch: BigInt(found.epoch) });
+    }
+    async function awaitCurrentIdentity(subjectId: string) {
+      const home = partitionOf(routeOf(subjectId)!);
+      partitions.add(home);
+      mappedHomes.add(home);
+      for (let attempt = 0; attempt < 64; attempt++) {
+        await catchUpIdentity(home);
+        const mapping = await identityEpochStore().readMapping(pool, subjectId);
+        const occupied = await homeCapacityOccupied(home);
+        if (mapping.state === 'mapped' && !(await identityDirty(home)) && !occupied) return;
+        if (mapping.state === 'pending') {
+          await drainIdentityJob(mapping.job);
+          continue;
+        }
+        const held = await heldPrearmJobs(home);
+        if (held.length) {
+          for (const job of held) await drainIdentityJob(job);
+        }
+      }
+      throw new Error('Native identity mapping did not become current');
+    }
+    async function admitSubjectMerge(canonical: string, selected: string) {
+      for (const id of [canonical, selected]) await awaitCurrentIdentity(id);
+      const opened = await send('steward', 'POST', '/v1/platform/exposure/subject_identity:open');
+      expect(opened.status).toBe(200);
+      const mergeActions = ['subject:merge', 'gate:subject_identity'] as const;
+      await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, mergeActions);
+      const mergeBearer = await accountToken({
+        ...steward.actor,
+        scopes: [...new Set([...steward.actor.scopes, ...mergeActions])],
+      });
+      const response = await sendWithHeaders(
+        mergeBearer,
+        'POST',
+        '/v1/subjects:merge',
+        { subjects: [canonical, selected] },
+        { 'idempotency-key': JSON.stringify(entryKey()) },
+      );
+      expect([200, 202]).toContain(response.status);
+      const body = (await response.json()) as { operation?: { id: string } };
+      if (body.operation?.id) await drainIdentityMerge(body.operation.id);
+      for (const id of [canonical, selected]) await awaitCurrentIdentity(id);
+    }
     async function createSubject(vertical: ProfileVertical, label: string = vertical) {
       const response = await send('owner', 'POST', '/v1/subjects', {
         type: entryTypes[vertical],
@@ -377,8 +700,46 @@ export async function createProfileEntryFixture(
       expect(response.status).toBe(201);
       const body = (await response.json()) as { subject: { id: string; type: string } };
       expect(body.subject.type).toBe(entryTypes[vertical]);
-      partitions.add(partitionOf(routeOf(body.subject.id)!));
+      const id = body.subject.id;
+      partitions.add(partitionOf(routeOf(id)!));
       await drainSubjectLinks();
+      await awaitCurrentIdentity(id);
+      return id;
+    }
+    function homeKey(accountId: string, home = partitionOf(routeOf(accountId)!)) {
+      let key = entryKey();
+      let route = subjectTarget(routeKey, accountId, key).route;
+      while (partitionOf(route) !== home || route === 0) {
+        key = entryKey();
+        route = subjectTarget(routeKey, accountId, key).route;
+      }
+      return key;
+    }
+    async function createHomeSubject(
+      vertical: ProfileVertical,
+      person: { actor: AccountActor; bearer: string },
+      home = partitionOf(routeOf(person.actor.accountId)!),
+      label: string = vertical,
+    ) {
+      partitions.add(home);
+      const key = homeKey(person.actor.accountId, home);
+      const response = await send(
+        person.bearer,
+        'POST',
+        '/v1/subjects',
+        {
+          type: entryTypes[vertical],
+          labels: { en: label },
+        },
+        key,
+      );
+      expect(response.status).toBe(201);
+      const body = (await response.json()) as { subject: { id: string; type: string } };
+      expect(body.subject.type).toBe(entryTypes[vertical]);
+      expect(partitionOf(routeOf(body.subject.id)!)).toBe(home);
+      partitions.add(home);
+      await drainSubjectLinks();
+      await awaitCurrentIdentity(body.subject.id);
       return body.subject.id;
     }
     async function inspect(accountId = owner.actor.accountId) {
@@ -443,6 +804,7 @@ export async function createProfileEntryFixture(
     const baseline = await createSubject('game');
     const accepted = await commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey());
     expect(accepted.value.entry.subjectId).toBe(baseline);
+    await awaitCurrentIdentity(baseline);
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
@@ -463,6 +825,12 @@ export async function createProfileEntryFixture(
       send,
       sendWithHeaders,
       createSubject,
+      createHomeSubject,
+      homeKey,
+      catchUpIdentity,
+      recaptureMappedHomes,
+      awaitCurrentIdentity,
+      admitSubjectMerge,
       publish,
       activate,
       readHead,
@@ -485,16 +853,11 @@ export async function createProfileEntryFixture(
       },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
-        await installIdentityGrants(pool, global.id, accountId, ['gate:personal_library']);
+        await grantOnDeadline({ kind: 'account', id: accountId }, ['gate:personal_library']);
       },
+      grantAccountActions,
       async revokeLibraryGate(accountId: string) {
-        await grants.revoke(context(steward.actor), {
-          resource: global,
-          subject: { kind: 'account', id: accountId },
-          actions: ['gate:personal_library'],
-          valid: '(,)',
-          key: entryKey(),
-        });
+        await grantOnDeadline({ kind: 'account', id: accountId }, ['gate:personal_library'], true);
       },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {

@@ -25,13 +25,18 @@ import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { MAL_LIMITS, parseMal, type MalRow } from './list-import-mal-parser.ts';
 import {
   createVoteCommands,
+  RatingQuestionNotFoundError,
+  RatingQuestionRetiredError,
   STANDARD_QUESTION_ID,
   VoteReviewStaleError,
   VoteReviewUnavailableError,
+  type PreparedPutVote,
   type RatingQuestion,
+  type VoteCommandAdmission,
   type VoteReview,
   type VoteReviewGuard,
 } from '../rating/votes.ts';
+import type { VoteObservation } from '../rating/vote-observation.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { reviewMalLabels } from './list-import-mal-labels.ts';
@@ -230,6 +235,8 @@ type Intent = {
     attribution: { provider: 'mal'; uploadId: string; sourceRow: number; reviewVersion: string };
     started?: boolean;
     outcome?: MalScoreOutcome;
+    commandActor?: AccountActor;
+    command?: PreparedPutVote;
   };
   progress?: ProgressAdoptionCheckpoint;
   outcome?: MalOutcome;
@@ -254,6 +261,7 @@ type Document = {
   dateIntents: Record<string, DateIntent>;
   labelIntents?: Record<string, LabelIntent>;
   metadataReviews?: Record<string, EntryImportMetadataReview[]>;
+  scoreGuards?: Record<string, string>;
   canceled: boolean;
 };
 
@@ -286,6 +294,10 @@ type DateIntent = {
   patch: ProgressSessionJournalPatch | null;
   outcome?: MalDateOutcome;
 };
+type NativeVotes = Pick<
+  ReturnType<typeof createVoteCommands>,
+  'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome' | 'preparePutVote' | 'reconcilePutVote' | 'readOwnVote'
+>;
 type Dependencies = {
   pool: Pool;
   access: Access;
@@ -293,6 +305,7 @@ type Dependencies = {
   routeKey: Uint8Array;
   journal: ReturnType<typeof createSessionCommands>;
   clock?: KernelClock;
+  votes?: NativeVotes;
 };
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const missing = () => new ProblemError('not_found');
@@ -533,7 +546,7 @@ export function createMalImport(deps: Dependencies) {
     runner = createLibraryCommandRunner(deps),
     entries = createEntryCommands(deps),
     sessions = journal,
-    votes = createVoteCommands(deps);
+    votes = deps.votes ?? createVoteCommands(deps);
   const labels = createPersonalLabelCommands(deps),
     assignments = createLabelAssignmentCommands(deps),
     personalEntries = createEntryPersonalCommands(deps);
@@ -797,6 +810,79 @@ export function createMalImport(deps: Dependencies) {
       lifecycleState: question.lifecycleState,
     };
   }
+  function malVoteObservation(review: MalScoreReview): VoteObservation | null {
+    if (!review.guard) return null;
+    return {
+      subjectId: review.guard.subject.canonicalId,
+      question: {
+        id: review.question.id,
+        revision: review.question.revision,
+        grain: review.question.grain,
+        meaning: review.question.meaning ?? review.question.label,
+        scale: {
+          min: review.question.scale.minimumUnits,
+          max: review.question.scale.maximumUnits,
+          displayStep: review.question.scale.stepUnits,
+        },
+      },
+    };
+  }
+  function malStoredScoreGuard(doc: Document, version: string, fallback: VoteReviewGuard | undefined) {
+    if (fallback) return fallback;
+    const raw = doc.scoreGuards?.[version];
+    if (typeof raw === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as VoteReviewGuard;
+      } catch {
+        return fallback;
+      }
+    }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as VoteReviewGuard;
+    return fallback;
+  }
+  function scoreAdmission(
+    actor: AccountActor,
+    id: string,
+    row: number,
+    version: string,
+    commandKey: string,
+  ): VoteCommandAdmission {
+    const input = { provider: 'mal', uploadId: id, row, version, commandKey };
+    return {
+      input,
+      async prepare() {
+        let sourceChanged = false;
+        try {
+          const { doc } = await load(actor, id, Date.now() + 5_000);
+          const intent = doc.intents[row];
+          sourceChanged =
+            doc.reviews[row]?.version !== version ||
+            intent?.score?.started !== true ||
+            intent.score.command?.receipt.requestKey !== commandKey;
+        } catch (error) {
+          if (!(error instanceof ProblemError) || error.code !== 'not_found') throw error;
+          sourceChanged = true;
+        }
+        return async (tx) => {
+          if (sourceChanged) throw new LibraryConflictError();
+          const route = routeOf(actor.accountId);
+          if (route === null) throw new LibraryConflictError();
+          const found = await tx.query<{ document: Document }>(
+            `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp() FOR UPDATE`,
+            [route, actor.accountId, id],
+          );
+          const intent = found.rows[0]?.document.intents[row];
+          if (
+            found.rows[0]?.document.reviews[row]?.version !== version ||
+            intent?.score?.started !== true ||
+            intent.score.command?.receipt.requestKey !== commandKey
+          )
+            throw new LibraryConflictError();
+        };
+      },
+    };
+  }
   function scoreBaseline(vote: VoteReview['currentVote']): MalScoreReview['baseline'] {
     return {
       state: vote.state === 'absent' ? 'absent' : vote.state === 'clear' ? 'cleared' : 'present',
@@ -857,6 +943,7 @@ export function createMalImport(deps: Dependencies) {
         view.scale.minimumUnits === 0 &&
         view.scale.maximumUnits === 20 &&
         view.scale.stepUnits === 1;
+    const redirected = native.guard.subject.canonicalId !== target;
     return {
       action: input.action,
       source: row.score,
@@ -877,8 +964,15 @@ export function createMalImport(deps: Dependencies) {
         status: scaleSupported ? 'supported' : 'unsupported',
         reason: scaleSupported ? null : 'standard-question-revision-or-scale-unsupported',
       },
-      guard: native.guard,
-      admission: { status: 'conditional', reason: null },
+      ...(redirected
+        ? {
+            admission: {
+              status: 'unavailable' as const,
+              reason: 'conditional-vote-admission-unavailable' as const,
+              missingGuard: 'question-revision-and-target-identity-and-current-vote-revision' as const,
+            },
+          }
+        : { guard: native.guard, admission: { status: 'conditional' as const, reason: null } }),
     };
   }
   async function review(actor: Actor, id: string, input: MalReviewInput, key: string, deadline: number) {
@@ -944,6 +1038,9 @@ export function createMalImport(deps: Dependencies) {
       delete doc.intents[input.row];
       if (doc.labelIntents) delete doc.labelIntents[input.row];
       doc.reviews[input.row] = proposed;
+      if (proposed.score?.guard) {
+        doc.scoreGuards = { ...doc.scoreGuards, [key]: JSON.stringify(proposed.score.guard) };
+      }
     });
     // A receipt for an older review cannot reinstall it after a refresh.
     const current = await load(actor, id, deadline);
@@ -1012,17 +1109,22 @@ export function createMalImport(deps: Dependencies) {
     if (!reviewed.profileCurrent || reviewed.importReviewVersion !== imported.version) return false;
     const observation = await observe(actor, row, imported.binding ? null : imported.target, deadline);
     if (!sameReviewContext(imported, observation)) return false;
-    const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
-    if (
-      fact.session.subjectId !== reviewed.target ||
-      fact.session.state === 'retired' ||
-      fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
-      hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
-      !profilePinMatches(fact.pin, observation.source)
-    )
-      return false;
-    const current = await journal.readSessionJournal(actor, reviewed.occurrence.sessionId);
-    return current.revision === reviewed.journalRevision;
+    try {
+      const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
+      if (
+        fact.session.subjectId !== reviewed.target ||
+        fact.session.state === 'retired' ||
+        fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
+        hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
+        !profilePinMatches(fact.pin, observation.source)
+      )
+        return false;
+      const current = await journal.readSessionJournal(actor, reviewed.occurrence.sessionId);
+      return current.revision === reviewed.journalRevision;
+    } catch (error) {
+      if (error instanceof LibraryNotFoundError) return false;
+      throw error;
+    }
   }
   async function applyLabels(
     actor: Actor,
@@ -1318,53 +1420,6 @@ export function createMalImport(deps: Dependencies) {
       } else if (r.skip || (!selected.fields.length && !r.progress)) {
         outcome.status = 'skipped';
         outcome.reason = null;
-      } else if (selected.fields.includes('status') && r.state && r.target && r.source) {
-        if (r.conflict && !r.replace) {
-          outcome.status = 'skipped';
-          outcome.reason = 'preserve-current-fact';
-        } else {
-          try {
-            const result = await entries.putEntry(
-              actor,
-              r.target,
-              {
-                state: r.state,
-                ...(r.current
-                  ? {
-                      revision: r.current.revision,
-                      ...(r.current.incarnationId ? { incarnationId: r.current.incarnationId } : {}),
-                    }
-                  : {}),
-              },
-              intent.key,
-              {
-                release: r.source.release,
-                epoch: r.source.epoch,
-                acceptingType: r.source.acceptingType,
-                importFence: { id, row: row.index, version: r.version },
-                ...(r.binding ? { binding: r.binding } : {}),
-              },
-            );
-            record(result);
-            outcome.status = 'applied';
-            outcome.applied = ['status'];
-            outcome.reason = null;
-            outcome.retained = outcome.retained.filter((k) => k !== 'my_status');
-          } catch (e) {
-            if (e instanceof GrantDeniedError) throw new ProblemError('forbidden');
-            if (
-              e instanceof LibraryConflictError ||
-              e instanceof LibraryNotFoundError ||
-              (e instanceof ProblemError && ['conflict', 'unsupported_library_profile', 'not_found'].includes(e.code))
-            ) {
-              outcome.status = 'stale';
-              outcome.reason = 'refresh-review';
-            } else {
-              outcome.status = 'failed';
-              outcome.reason = 'native-command-unavailable-retry-original';
-            }
-          }
-        }
       }
       if (selected.fields.includes('score')) {
         const scoreReview = r.score;
@@ -1435,47 +1490,95 @@ export function createMalImport(deps: Dependencies) {
             outcome.reason = 'preserve-current-vote';
           } else {
             const checkpoint = intent.score!;
-            await mutate(actor, id, `${checkpoint.key}:started`, 'score-started', selected, (doc) => {
-              doc.intents[selected.row]!.score!.started = true;
-            });
-            checkpoint.started = true;
-            try {
-              const result = await votes.putVoteOutcome(
-                actor,
+            const observation = malVoteObservation(scoreReview);
+            const retry = checkpoint.started === true && !!checkpoint.command && !!checkpoint.commandActor;
+            const storedGuard = malStoredScoreGuard(doc, r.version, scoreReview.guard);
+            if (!observation || !storedGuard) {
+              outcome.score = {
+                action: scoreReview.action,
+                status: 'unavailable',
+                reason: 'conditional-vote-admission-unavailable',
+                vote: null,
+              };
+              outcome.status = 'unavailable';
+              outcome.reason = 'conditional-vote-admission-unavailable';
+            } else if (!checkpoint.command || !checkpoint.commandActor) {
+              const commandActor = structuredClone(owner(actor));
+              const command = votes.preparePutVote(
+                commandActor,
                 {
                   questionId: scoreReview.question.id,
                   targetId: r.target!,
                   units: scoreReview.units,
-                  guard: scoreReview.guard!,
+                  observation,
+                  guard: storedGuard,
                 },
                 checkpoint.key,
+                scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
               );
-              if (result.component) record(result.component);
-              // A receipt proves admission; only the native reader supplies current state.
-              const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
-              outcome.score = {
-                action: scoreReview.action,
-                status: 'applied',
-                reason: null,
-                vote: current ? { units: current.units, revision: current.revision, at: current.changedAt } : null,
-              };
-              outcome.applied.push('score');
-              outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
-              outcome.status = 'applied';
-              outcome.reason = null;
-            } catch (error) {
-              if (error instanceof VoteReviewStaleError || error instanceof VoteReviewUnavailableError) {
+              checkpoint.commandActor = commandActor;
+              checkpoint.command = command;
+            }
+            if (observation && storedGuard && checkpoint.command && checkpoint.commandActor) {
+              const commandActor = checkpoint.commandActor;
+              const command = checkpoint.command;
+              await mutate(actor, id, `${checkpoint.key}:started`, 'score-started', selected, (doc) => {
+                const stored = doc.intents[selected.row]!.score!;
+                stored.started = true;
+                stored.commandActor = commandActor;
+                stored.command = command;
+              });
+              checkpoint.started = true;
+              try {
+                const reconciled = retry ? await votes.reconcilePutVote(actor, command.receipt) : null;
+                const result =
+                  reconciled ??
+                  (await votes.putVoteOutcome(
+                    commandActor,
+                    command.input,
+                    command.receipt.requestKey,
+                    scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
+                  ));
+                if (result.component) record(result.component);
+                // A receipt proves admission; only the native reader supplies current state.
+                const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
                 outcome.score = {
                   action: scoreReview.action,
-                  status: error instanceof VoteReviewStaleError ? 'stale' : 'unavailable',
-                  reason: error.reason,
-                  vote: null,
+                  status: 'applied',
+                  reason: null,
+                  vote: current ? { units: current.units, revision: current.revision, at: current.changedAt } : null,
                 };
-                outcome.status = outcome.score.status;
-                outcome.reason = error.reason;
-              } else {
-                // Keep the started checkpoint when delivery or readback throws; never resample it.
-                throw error;
+                outcome.applied.push('score');
+                outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
+                outcome.status = 'applied';
+                outcome.reason = null;
+              } catch (error) {
+                if (error instanceof VoteReviewStaleError || error instanceof VoteReviewUnavailableError) {
+                  outcome.score = {
+                    action: scoreReview.action,
+                    status: error instanceof VoteReviewStaleError ? 'stale' : 'unavailable',
+                    reason: error.reason,
+                    vote: null,
+                  };
+                  outcome.status = outcome.score.status;
+                  outcome.reason = error.reason;
+                } else if (
+                  error instanceof LibraryNotFoundError ||
+                  error instanceof RatingQuestionNotFoundError ||
+                  error instanceof RatingQuestionRetiredError
+                ) {
+                  outcome.score = {
+                    action: scoreReview.action,
+                    status: 'stale',
+                    reason: 'native_target_or_question_unavailable',
+                    vote: null,
+                  };
+                  outcome.status = 'stale';
+                  outcome.reason = 'native_target_or_question_unavailable';
+                } else {
+                  // Keep the started checkpoint when delivery or readback throws; never resample it.
+                  throw error;
+                }
               }
             }
           }
@@ -1487,19 +1590,6 @@ export function createMalImport(deps: Dependencies) {
           });
           intent.score.outcome = scoreOutcome;
         }
-      }
-      if (selected.fields.includes('tags') && review.labels && !review.skip) {
-        const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
-        outcome.labels = applied.outcomes;
-        outcome.remainingLabels = applied.remaining;
-        if (applied.outcomes.some((o) => o.status === 'accepted' || o.status === 'unchanged')) {
-          outcome.status = 'applied';
-          outcome.applied.push('tags');
-          outcome.reason = null;
-        }
-        if (applied.outcomes.some((o) => o.status === 'failed')) outcome.status = 'failed';
-        else if (applied.outcomes.some((o) => o.status === 'stale')) outcome.status = 'stale';
-        if (applied.remaining.length) outcome.reason = 'partial-cancellation';
       }
       if (r.progress && hash(row) === r.fingerprint) {
         const checkpoint = await executeProgressAdoption(actor, sessions, r.progress, intent.progress, {
@@ -1565,6 +1655,78 @@ export function createMalImport(deps: Dependencies) {
         ) {
           outcome.status = 'applied';
           outcome.reason = null;
+        }
+      }
+      if (selected.fields.includes('tags') && review.labels && !review.skip) {
+        const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
+        outcome.labels = applied.outcomes;
+        outcome.remainingLabels = applied.remaining;
+        if (applied.outcomes.some((o) => o.status === 'accepted' || o.status === 'unchanged')) {
+          outcome.status = 'applied';
+          outcome.applied.push('tags');
+          outcome.reason = null;
+        }
+        if (applied.outcomes.some((o) => o.status === 'failed')) outcome.status = 'failed';
+        else if (applied.outcomes.some((o) => o.status === 'stale')) outcome.status = 'stale';
+        if (applied.remaining.length) outcome.reason = 'partial-cancellation';
+      }
+      if (
+        hash(row) === r.fingerprint &&
+        !r.skip &&
+        selected.fields.includes('status') &&
+        r.state &&
+        r.target &&
+        r.source
+      ) {
+        if (r.conflict && !r.replace) {
+          if (outcome.status === 'unsupported') {
+            outcome.status = 'skipped';
+            outcome.reason = 'preserve-current-fact';
+          }
+        } else {
+          try {
+            const result = await entries.putEntry(
+              actor,
+              r.target,
+              {
+                state: r.state,
+                ...(r.current
+                  ? {
+                      revision: r.current.revision,
+                      ...(r.current.incarnationId ? { incarnationId: r.current.incarnationId } : {}),
+                    }
+                  : {}),
+              },
+              intent.key,
+              {
+                release: r.source.release,
+                epoch: r.source.epoch,
+                acceptingType: r.source.acceptingType,
+                importFence: { id, row: row.index, version: r.version },
+                ...(r.binding ? { binding: r.binding } : {}),
+              },
+            );
+            record(result);
+            if (!outcome.applied.includes('status')) outcome.applied.push('status');
+            outcome.retained = outcome.retained.filter((k) => k !== 'my_status');
+            if (outcome.status !== 'stale' && outcome.status !== 'failed' && outcome.status !== 'unavailable') {
+              outcome.status = 'applied';
+              outcome.reason = null;
+            }
+          } catch (e) {
+            if (e instanceof GrantDeniedError) throw new ProblemError('forbidden');
+            if (
+              e instanceof LibraryConflictError ||
+              e instanceof LibraryNotFoundError ||
+              (e instanceof ProblemError && ['conflict', 'unsupported_library_profile', 'not_found'].includes(e.code))
+            ) {
+              outcome.status = 'stale';
+              outcome.reason = 'refresh-review';
+            } else {
+              outcome.status = 'failed';
+              outcome.reason = 'native-command-unavailable-retry-original';
+            }
+          }
         }
       }
       if (outcome.score && ['stale', 'unavailable', 'failed', 'unsupported'].includes(outcome.score.status)) {

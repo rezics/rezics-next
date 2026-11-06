@@ -3,7 +3,11 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 import { accountToken } from '../support/admitted-access.ts';
 import { randomUUID } from 'node:crypto';
 import { parseMal, malDate, MAL_LIMITS } from '../../src/library/list-import-mal-parser.ts';
-import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { createMalImport } from '../../src/library/list-import-mal.ts';
+import { createSessionCommands } from '../../src/library/sessions.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 const anime = (id: string, extra = '', status = 'Completed') =>
   `<anime><series_animedb_id>${id}</series_animedb_id><series_title><![CDATA[Private title & text]]></series_title><my_status>${status}</my_status>${extra}</anime>`;
 const xml = (rows: string) => `<myanimelist><myinfo><user_name>private</user_name></myinfo>${rows}</myanimelist>`;
@@ -31,146 +35,260 @@ async function review(id: string, row: number, target: string | null, replace = 
 }
 const apply = (id: string, row: number, version: string, fields = ['status']) =>
   json('POST', `${base}/${id}/apply`, { confirm: true, rows: [{ row, version, fields }] });
-test('MAL retains independent measures, zero, private comments, dates and unknown fields without fabricated sessions', () => {
-  const [row] = parseMal(
-    xml(
-      `<manga><manga_mangadb_id>7</manga_mangadb_id><manga_title>M</manga_title><my_status>Reading</my_status><my_score>0</my_score><my_read_chapters>12</my_read_chapters><my_read_volumes>2</my_read_volumes><my_comments><![CDATA[secret & <text>]]></my_comments><my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-00</my_finish_date><my_times_read>3</my_times_read><my_tags>a,b</my_tags><my_privacy>1</my_privacy><my_last_updated>123</my_last_updated><unknown>x</unknown></manga>`,
-    ),
-  );
-  expect(row!.identifier.source).toBe('mal_manga');
-  expect(row!.score).toMatchObject({ kind: 'zero', value: 0, scale: { min: 1, max: 10, step: 1 } });
-  expect(row!.progress.my_read_chapters).toMatchObject({ value: 12 });
-  expect(row!.progress.my_read_volumes).toMatchObject({ value: 2 });
-  expect(row!.notes.value).toBe('secret & <text>');
-  expect(row!.dates).toMatchObject({
-    started: { value: '2024', precision: 'year' },
-    finished: { value: '2024-02', precision: 'month' },
-  });
-  expect(row!.repeats.value).toBe(3);
-  expect(row!.retained).toContainEqual({ field: 'unknown', reason: 'private-source-evidence' });
-  expect(malDate('0000-00-00').kind).toBe('unknown');
-  expect(malDate('2024-00-05').kind).toBe('invalid');
-  expect(malDate('2023-02-29').kind).toBe('invalid');
-  expect(malDate(undefined).kind).toBe('missing');
-  expect(malDate('').kind).toBe('unknown');
-  expect(() => parseMal('<!DOCTYPE x [<!ENTITY y SYSTEM "file:///etc/passwd">]><myanimelist/>')).toThrow('DTD');
-  expect(() => parseMal(xml(anime('0')))).toThrow('row 1');
-  expect(() => parseMal('<wrong/>')).toThrow('root');
-  expect(() => parseMal('<myanimelist><anime></myanimelist>')).toThrow('malformed');
-  expect(() => parseMal(' '.repeat(MAL_LIMITS.bytes + 1))).toThrow('2 MiB');
-});
-test('MAL adopts only an explicitly selected scalar occurrence and retries the same native receipts', async () => {
-  expect(native.original.types['ex:Parent']?.library?.profileId).toBe('fixture.game');
-  expect(
-    native.original.libraryProfiles?.['fixture.game']?.progress?.allowed[0]?.units.map((unit) => unit.id),
-  ).toContain('episode');
-  await native.grantLibraryGate(native.owner.actor.accountId);
-  const exposure = await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
-  expect(exposure.status).toBe(200);
-  const target = await native.createSubject('game');
-  const id = await upload(
-    anime('210', '<my_watched_episodes>0</my_watched_episodes>') +
-      anime('211') +
-      anime('212', '<my_watched_episodes>2</my_watched_episodes>') +
-      anime('213', '<my_watched_episodes>3</my_watched_episodes>'),
-  );
-  const select = async (row: number, occurrence: Record<string, unknown>) => {
-    const version = randomUUID();
+test.serial(
+  'MAL retains independent measures, zero, private comments, dates and unknown fields without fabricated sessions',
+  () => {
+    const [row] = parseMal(
+      xml(
+        `<manga><manga_mangadb_id>7</manga_mangadb_id><manga_title>M</manga_title><my_status>Reading</my_status><my_score>0</my_score><my_read_chapters>12</my_read_chapters><my_read_volumes>2</my_read_volumes><my_comments><![CDATA[secret & <text>]]></my_comments><my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-00</my_finish_date><my_times_read>3</my_times_read><my_tags>a,b</my_tags><my_privacy>1</my_privacy><my_last_updated>123</my_last_updated><unknown>x</unknown></manga>`,
+      ),
+    );
+    expect(row!.identifier.source).toBe('mal_manga');
+    expect(row!.score).toMatchObject({ kind: 'zero', value: 0, scale: { min: 1, max: 10, step: 1 } });
+    expect(row!.progress.my_read_chapters).toMatchObject({ value: 12 });
+    expect(row!.progress.my_read_volumes).toMatchObject({ value: 2 });
+    expect(row!.notes.value).toBe('secret & <text>');
+    expect(row!.dates).toMatchObject({
+      started: { value: '2024', precision: 'year' },
+      finished: { value: '2024-02', precision: 'month' },
+    });
+    expect(row!.repeats.value).toBe(3);
+    expect(row!.retained).toContainEqual({ field: 'unknown', reason: 'private-source-evidence' });
+    expect(malDate('0000-00-00').kind).toBe('unknown');
+    expect(malDate('2024-00-05').kind).toBe('invalid');
+    expect(malDate('2023-02-29').kind).toBe('invalid');
+    expect(malDate(undefined).kind).toBe('missing');
+    expect(malDate('').kind).toBe('unknown');
+    expect(() => parseMal('<!DOCTYPE x [<!ENTITY y SYSTEM "file:///etc/passwd">]><myanimelist/>')).toThrow('DTD');
+    expect(() => parseMal(xml(anime('0')))).toThrow('row 1');
+    expect(() => parseMal('<wrong/>')).toThrow('root');
+    expect(() => parseMal('<myanimelist><anime></myanimelist>')).toThrow('malformed');
+    expect(() => parseMal(' '.repeat(MAL_LIMITS.bytes + 1))).toThrow('2 MiB');
+  },
+);
+test.serial(
+  'MAL adopts only an explicitly selected scalar occurrence and retries the same native receipts',
+  async () => {
+    expect(native.original.types['ex:Parent']?.library?.profileId).toBe('fixture.game');
+    expect(
+      native.original.libraryProfiles?.['fixture.game']?.progress?.allowed[0]?.units.map((unit) => unit.id),
+    ).toContain('episode');
+    await native.grantLibraryGate(native.owner.actor.accountId);
+    const exposure = await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
+    expect(exposure.status).toBe(200);
+    const ownerHome = partitionOf(routeOf(native.owner.actor.accountId)!);
+    const target = await native.createHomeSubject('game', native.owner, ownerHome);
+    const id = await upload(
+      anime('210', '<my_watched_episodes>0</my_watched_episodes>') +
+        anime('211') +
+        anime('212', '<my_watched_episodes>2</my_watched_episodes>') +
+        anime('213', '<my_watched_episodes>3</my_watched_episodes>'),
+    );
+    const select = async (row: number, occurrence: Record<string, unknown>) => {
+      const version = randomUUID();
+      await json(
+        'POST',
+        `${base}/${id}/review`,
+        {
+          row,
+          target,
+          skip: false,
+          replace: false,
+          progress: { occurrence, measures: [{ field: 'my_watched_episodes', action: 'adopt' }] },
+        },
+        version,
+      );
+      return version;
+    };
+    const confirmed = (row: number, version: string) =>
+      json('POST', `${base}/${id}/apply`, { confirm: true, rows: [{ row, version, fields: [] }] });
+    const page = await json('GET', `${base}/${id}`);
+    expect(page.rows[0].progressMeasures[0]).toMatchObject({
+      state: 'zero',
+      amount: '0',
+      unit: 'episode',
+      unitSupported: false,
+    });
+    expect(page.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
+
+    const zeroReview = await select(0, { kind: 'start', primaryUnit: 'episode' });
+    const selectedPage = await json('GET', `${base}/${id}`);
+    expect(selectedPage.rows[0].progressMeasures[0]).toMatchObject({ state: 'zero', unitSupported: true });
+    expect(selectedPage.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
+    const zero = await confirmed(0, zeroReview);
+    expect(zero.outcomes[0].progress.measures).toMatchObject([
+      { status: 'applied', sourceAmount: '0', currentAmount: '0' },
+    ]);
+    const sessionId = zero.outcomes[0].progress.occurrence.sessionId;
+    let opened = await json('GET', `/v1/progressSessions/${sessionId}`);
+    expect(opened.progressSession).toMatchObject({
+      mode: 'scalar_amount',
+      unit: 'episode',
+      amount: '0',
+      state: 'active',
+      completedAt: null,
+    });
+    expect((await json('GET', `/v1/progressSessions/${sessionId}/journal`)).journal).toMatchObject({
+      startDate: null,
+      finishDate: null,
+    });
+    expect((await native.inspect()).entries.some((entry) => entry.row.subject_id === target)).toBe(false);
+
+    const absentReview = await select(1, { kind: 'start', primaryUnit: 'episode' });
+    const absent = await confirmed(1, absentReview);
+    expect(absent.outcomes[0].progress).toMatchObject({
+      occurrence: null,
+      complete: true,
+      measures: [{ status: 'missing' }],
+    });
+    expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
+
+    await json('POST', `/v1/progressSessions/${sessionId}:record`, {
+      revision: opened.progressSession.revision,
+      measureId: 'episode',
+      amount: '4',
+    });
+    const preserveReview = await select(2, { kind: 'existing', sessionId });
+    const preserved = await confirmed(2, preserveReview);
+    expect(preserved.outcomes[0].progress.measures).toMatchObject([{ status: 'preserved', currentAmount: '4' }]);
+    opened = await json('GET', `/v1/progressSessions/${sessionId}`);
+    expect(opened.progressSession.amount).toBe('4');
+
+    const staleReview = await select(3, { kind: 'existing', sessionId });
+    await json('POST', `/v1/progressSessions/${sessionId}:record`, {
+      revision: opened.progressSession.revision,
+      measureId: 'episode',
+      amount: '6',
+    });
+    const stale = await confirmed(3, staleReview);
+    expect(stale.outcomes[0].progress.measures).toMatchObject([{ status: 'stale' }]);
+    expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('6');
+    expect(
+      (await json('GET', `/v1/progressSessions/${sessionId}`, undefined, randomUUID(), 'other', 404)).progressSession,
+    ).toBeUndefined();
+
+    // A lost provider checkpoint replays both original native receipts instead of making a second occurrence.
+    await native.pool.query(
+      `UPDATE library.list_import_mal SET document=jsonb_set(document,'{intents,0,progress}',$3::jsonb)
+     WHERE account_id=$1 AND id=$2`,
+      [
+        native.owner.actor.accountId,
+        id,
+        JSON.stringify({
+          startAttempted: true,
+          occurrence: null,
+          lastRevision: null,
+          steps: {},
+          measures: [],
+          complete: false,
+        }),
+      ],
+    );
+    expect((await confirmed(0, zeroReview)).outcomes[0]).toEqual(zero.outcomes[0]);
+    expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
+    await json('DELETE', `${base}/${id}`);
+  },
+);
+test.serial(
+  'native HTTP own preview, explicit unmatched resolution, supported status, unsupported evidence, retry and owner fence',
+  async () => {
+    const producer = await accountToken({
+      accountId: native.steward.actor.accountId,
+      clientId: native.steward.actor.clientId,
+      scopes: [...native.steward.actor.scopes, 'subject:batch_write'],
+    });
+    const imported = await json(
+      'POST',
+      '/v1/subjects:batchWrite',
+      {
+        commands: [
+          {
+            op: 'create',
+            key: randomUUID(),
+            source: {
+              source: 'mal_anime',
+              external_id: '100',
+              record_revision: '1',
+              digest: 'a'.repeat(64),
+              converter_revision: 'fixture',
+              field_group: 'facts',
+            },
+            subject: { type: 'ex:Child', labels: { en: 'Admitted provider identity' } },
+          },
+        ],
+      },
+      randomUUID(),
+      producer,
+    );
+    expect(imported.results[0].status).toBe(201);
+    const target = imported.results[0].value.id;
+    const id = await upload(
+      anime('100', '<my_comments>private note</my_comments><my_score>9</my_score>') +
+        ['101', '102', '103'].map((id) => anime(id)).join(''),
+    );
+    const page = await json('GET', `${base}/${id}`);
+    const original = await json('GET', page.sourcePath);
+    expect(original.xml).toContain('<user_name>private</user_name>');
+    await json('GET', page.sourcePath, undefined, randomUUID(), 'other', 404);
+    expect(page.rows[0]).toMatchObject({ match: 'matched', notes: { value: 'private note' }, review: null });
+    expect((await native.inspect()).entries.some((e) => e.row.subject_id === target)).toBe(false);
+    await json('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }, randomUUID(), 'owner', 201);
+    expect(page.rows[1].match).toBe('unmatched');
+    const version = await review(id, 0, null, true);
+    const skip = await review(id, 1, null, false, true);
+    const retained = await review(id, 2, target);
+    expect((await json('GET', `${base}/${id}`)).rows[2].target).toBe(target);
+    expect((await json('GET', `${base}/${id}`)).rows[0].review.state).toBe('completed');
+    const resolvedVersion = await review(id, 3, await native.createSubject('game'));
+    const result = await json('POST', `${base}/${id}/apply`, {
+      confirm: true,
+      rows: [
+        { row: 0, version, fields: ['status', 'score', 'notes'] },
+        { row: 1, version: skip, fields: ['status'] },
+      ],
+    });
+    expect(result.outcomes[1].status).toBe('skipped');
+    expect((await apply(id, 3, resolvedVersion)).outcomes[0].status).toBe('applied');
+    expect(result.outcomes[0]).toMatchObject({
+      status: 'unsupported',
+      applied: ['status'],
+      score: { action: null, status: 'unsupported', reason: 'score-action-not-reviewed' },
+    });
+    expect(result.outcomes[0].retained).toContain('my_comments');
+    const history = await json('GET', `/v1/libraryEntries/${target}/state-history`);
+    expect(history.changes).toContainEqual(
+      expect.objectContaining({ beforeState: 'planned', afterState: 'completed', commandKind: 'library.entry.put' }),
+    );
+    expect((await apply(id, 0, version, ['status', 'score', 'notes'])).outcomes[0]).toEqual(result.outcomes[0]);
+    const beforeRetry = await json('GET', `/v1/libraryEntries/${target}`);
+    // Fault injection: native effects committed, but the import acknowledgement was lost.
+    await native.pool.query(
+      `UPDATE library.list_import_mal SET document=document #- '{intents,0,outcome}'
+    WHERE account_id=$1 AND id=$2`,
+      [native.owner.actor.accountId, id],
+    );
+    expect((await apply(id, 0, version, ['status', 'score', 'notes'])).outcomes[0]).toEqual(result.outcomes[0]);
+    expect((await json('GET', `/v1/libraryEntries/${target}`)).libraryEntry).toEqual(beforeRetry.libraryEntry);
+    expect(await json('GET', `/v1/libraryEntries/${target}/state-history`)).toEqual(history);
+    expect((await apply(id, 1, skip)).outcomes[0].status).toBe('skipped');
+    expect((await apply(id, 2, retained, ['score'])).outcomes[0].status).toBe('unsupported');
+    const facts = (await native.inspect()).entries.filter((e) => e.row.subject_id === target);
+    expect(facts).toHaveLength(1);
+    expect(facts[0]!.row.state).toBe('completed');
+    const other = await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
+    expect(JSON.stringify(other)).not.toContain('private note');
     await json(
       'POST',
-      `${base}/${id}/review`,
-      {
-        row,
-        target,
-        skip: false,
-        replace: false,
-        progress: { occurrence, measures: [{ field: 'my_watched_episodes', action: 'adopt' }] },
-      },
-      version,
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 0, version, fields: ['status'] }] },
+      randomUUID(),
+      'other',
+      404,
     );
-    return version;
-  };
-  const confirmed = (row: number, version: string) =>
-    json('POST', `${base}/${id}/apply`, { confirm: true, rows: [{ row, version, fields: [] }] });
-  const page = await json('GET', `${base}/${id}`);
-  expect(page.rows[0].progressMeasures[0]).toMatchObject({
-    state: 'zero',
-    amount: '0',
-    unit: 'episode',
-    unitSupported: false,
-  });
-  expect(page.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
-
-  const zeroReview = await select(0, { kind: 'start', primaryUnit: 'episode' });
-  const selectedPage = await json('GET', `${base}/${id}`);
-  expect(selectedPage.rows[0].progressMeasures[0]).toMatchObject({ state: 'zero', unitSupported: true });
-  expect(selectedPage.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
-  const zero = await confirmed(0, zeroReview);
-  expect(zero.outcomes[0].progress.measures).toMatchObject([
-    { status: 'applied', sourceAmount: '0', currentAmount: '0' },
-  ]);
-  const sessionId = zero.outcomes[0].progress.occurrence.sessionId;
-  let opened = await json('GET', `/v1/progressSessions/${sessionId}`);
-  expect(opened.progressSession).toMatchObject({
-    mode: 'scalar_amount',
-    unit: 'episode',
-    amount: '0',
-    state: 'active',
-    completedAt: null,
-  });
-  expect((await json('GET', `/v1/progressSessions/${sessionId}/journal`)).journal).toMatchObject({
-    startDate: null,
-    finishDate: null,
-  });
-  expect((await native.inspect()).entries.some((entry) => entry.row.subject_id === target)).toBe(false);
-
-  const absentReview = await select(1, { kind: 'start', primaryUnit: 'episode' });
-  const absent = await confirmed(1, absentReview);
-  expect(absent.outcomes[0].progress).toMatchObject({
-    occurrence: null,
-    complete: true,
-    measures: [{ status: 'missing' }],
-  });
-  expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
-
-  await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 1, measureId: 'episode', amount: '4' });
-  const preserveReview = await select(2, { kind: 'existing', sessionId });
-  const preserved = await confirmed(2, preserveReview);
-  expect(preserved.outcomes[0].progress.measures).toMatchObject([{ status: 'preserved', currentAmount: '4' }]);
-  opened = await json('GET', `/v1/progressSessions/${sessionId}`);
-  expect(opened.progressSession.amount).toBe('4');
-
-  const staleReview = await select(3, { kind: 'existing', sessionId });
-  await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 2, measureId: 'episode', amount: '6' });
-  const stale = await confirmed(3, staleReview);
-  expect(stale.outcomes[0].progress.measures).toMatchObject([{ status: 'stale' }]);
-  expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('6');
-  expect(
-    (await json('GET', `/v1/progressSessions/${sessionId}`, undefined, randomUUID(), 'other', 404)).progressSession,
-  ).toBeUndefined();
-
-  // A lost provider checkpoint replays both original native receipts instead of making a second occurrence.
-  await native.pool.query(
-    `UPDATE library.list_import_mal SET document=jsonb_set(document,'{intents,0,progress}',$3::jsonb)
-     WHERE account_id=$1 AND id=$2`,
-    [
-      native.owner.actor.accountId,
-      id,
-      JSON.stringify({
-        startAttempted: true,
-        occurrence: null,
-        lastRevision: null,
-        steps: {},
-        measures: [],
-        complete: false,
-      }),
-    ],
-  );
-  expect((await confirmed(0, zeroReview)).outcomes[0]).toEqual(zero.outcomes[0]);
-  expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
-  await json('DELETE', `${base}/${id}`);
-});
-test('native HTTP own preview, explicit unmatched resolution, supported status, unsupported evidence, retry and owner fence', async () => {
+    await json('DELETE', `${base}/${id}`);
+  },
+);
+test.serial('MAL applies independently selected tags with status omitted from confirmation', async () => {
   const producer = await accountToken({
     accountId: native.steward.actor.accountId,
     clientId: native.steward.actor.clientId,
@@ -186,527 +304,639 @@ test('native HTTP own preview, explicit unmatched resolution, supported status, 
           key: randomUUID(),
           source: {
             source: 'mal_anime',
-            external_id: '100',
+            external_id: '410',
             record_revision: '1',
-            digest: 'a'.repeat(64),
+            digest: 'c'.repeat(64),
             converter_revision: 'fixture',
             field_group: 'facts',
           },
-          subject: { type: 'ex:Child', labels: { en: 'Admitted provider identity' } },
+          subject: { type: 'ex:Child', labels: { en: 'Tags-only MAL identity' } },
         },
       ],
     },
     randomUUID(),
     producer,
   );
-  expect(imported.results[0].status).toBe(201);
-  const target = imported.results[0].value.id;
-  const id = await upload(
-    anime('100', '<my_comments>private note</my_comments><my_score>9</my_score>') +
-      ['101', '102', '103'].map((id) => anime(id)).join(''),
-  );
-  const page = await json('GET', `${base}/${id}`);
-  const original = await json('GET', page.sourcePath);
-  expect(original.xml).toContain('<user_name>private</user_name>');
-  await json('GET', page.sourcePath, undefined, randomUUID(), 'other', 404);
-  expect(page.rows[0]).toMatchObject({ match: 'matched', notes: { value: 'private note' }, review: null });
-  expect((await native.inspect()).entries.some((e) => e.row.subject_id === target)).toBe(false);
-  await json('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }, randomUUID(), 'owner', 201);
-  expect(page.rows[1].match).toBe('unmatched');
-  const version = await review(id, 0, null, true);
-  const skip = await review(id, 1, null, false, true);
-  const retained = await review(id, 2, target);
-  expect((await json('GET', `${base}/${id}`)).rows[2].target).toBe(target);
-  expect((await json('GET', `${base}/${id}`)).rows[0].review.state).toBe('completed');
-  const resolvedVersion = await review(id, 3, await native.createSubject('game'));
-  const result = await json('POST', `${base}/${id}/apply`, {
-    confirm: true,
-    rows: [
-      { row: 0, version, fields: ['status', 'score', 'notes'] },
-      { row: 1, version: skip, fields: ['status'] },
-    ],
-  });
-  expect(result.outcomes[1].status).toBe('skipped');
-  expect((await apply(id, 3, resolvedVersion)).outcomes[0].status).toBe('applied');
-  expect(result.outcomes[0]).toMatchObject({ status: 'applied', applied: ['status'] });
-  expect(result.outcomes[0].retained).toContain('my_comments');
-  const history = await json('GET', `/v1/libraryEntries/${target}/state-history`);
-  expect(history.changes).toContainEqual(
-    expect.objectContaining({ beforeState: 'planned', afterState: 'completed', commandKind: 'library.entry.put' }),
-  );
-  expect((await apply(id, 0, version, ['status', 'score', 'notes'])).outcomes[0]).toEqual(result.outcomes[0]);
-  const beforeRetry = await json('GET', `/v1/libraryEntries/${target}`);
-  // Fault injection: native effects committed, but the import acknowledgement was lost.
-  await native.pool.query(
-    `UPDATE library.list_import_mal SET document=document #- '{intents,0,outcome}'
-    WHERE account_id=$1 AND id=$2`,
-    [native.owner.actor.accountId, id],
-  );
-  expect((await apply(id, 0, version, ['status', 'score', 'notes'])).outcomes[0]).toEqual(result.outcomes[0]);
-  expect((await json('GET', `/v1/libraryEntries/${target}`)).libraryEntry).toEqual(beforeRetry.libraryEntry);
-  expect(await json('GET', `/v1/libraryEntries/${target}/state-history`)).toEqual(history);
-  expect((await apply(id, 1, skip)).outcomes[0].status).toBe('skipped');
-  expect((await apply(id, 2, retained, ['score'])).outcomes[0].status).toBe('unsupported');
-  const facts = (await native.inspect()).entries.filter((e) => e.row.subject_id === target);
-  expect(facts).toHaveLength(1);
-  expect(facts[0]!.row.state).toBe('completed');
-  const other = await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
-  expect(JSON.stringify(other)).not.toContain('private note');
-  await json(
-    'POST',
-    `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 0, version, fields: ['status'] }] },
-    randomUUID(),
-    'other',
-    404,
-  );
-  await json('DELETE', `${base}/${id}`);
-});
-test('native conflict defaults preserve facts; replacement has revision and release guards; cancel and terminal stop admission', async () => {
-  const target = await native.createSubject('game');
-  await json('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }, randomUUID(), 'owner', 201);
-  const id = await upload(anime('200') + anime('201') + anime('202'));
-  const keep = await review(id, 0, target);
-  expect((await apply(id, 0, keep)).outcomes[0]).toMatchObject({ status: 'skipped', reason: 'preserve-current-fact' });
-  const replacement = await review(id, 1, target, true);
-  const local = await json('GET', `/v1/libraryEntries/${target}`);
-  await json('PUT', `/v1/libraryEntries/${target}`, {
-    state: 'paused',
-    revision: local.libraryEntry.revision,
-    incarnationId: local.libraryEntry.incarnationId,
-  });
-  expect((await apply(id, 1, replacement)).outcomes[0].status).toBe('stale');
-  const refreshed = await review(id, 1, target, true);
-  expect((await apply(id, 1, refreshed)).outcomes[0].status).toBe('applied');
-  const releaseGuard = await review(id, 2, target, true);
-  await native.activate(native.replacementDigest);
-  expect((await apply(id, 2, releaseGuard)).outcomes[0].status).toBe('stale');
-  await native.activate(native.originalDigest);
-  await json('POST', `${base}/${id}/cancel`, {});
-  await json(
-    'POST',
-    `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 2, version: releaseGuard, fields: ['status'] }] },
-    randomUUID(),
-    'owner',
-    409,
-  );
-  await json('DELETE', `${base}/${id}`);
-  await json('POST', `${base}:preview`, { xml: xml(anime('bad')) }, randomUUID(), 'owner', 400);
-  await json('POST', `${base}:preview`, { xml: 'x'.repeat(MAL_LIMITS.bytes + 1) }, randomUUID(), 'owner', 400);
-  const denied = await native.identity(native.owner.actor.scopes);
-  const deniedUpload = await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer);
-  await native.suspend(denied.actor.accountId);
-  await json('GET', `${base}/${deniedUpload.id}`, undefined, randomUUID(), denied.bearer, 401);
-  await json(
-    'POST',
-    `${base}/${deniedUpload.id}/apply`,
-    { confirm: true, rows: [{ row: 0, version: 'never', fields: ['status'] }] },
-    randomUUID(),
-    denied.bearer,
-    401,
-  );
-  await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
-});
-
-test('MAL score review records explicit native units, preserves corrections and uses complete native guarded admission and preserves genuine producer unavailability', async () => {
-  const actor = await native.identity([
-      ...native.owner.actor.scopes,
-      'rating:vote',
-      'definitions:read',
-      'subject:read',
-    ]),
-    targets = await Promise.all(Array.from({ length: 4 }, () => native.createSubject('game')));
-  await native.grantLibraryGate(actor.actor.accountId);
-  const id = (
-    await json(
-      'POST',
-      `${base}:preview`,
-      {
-        xml: xml(
-          anime('301', '<my_score>9</my_score>') +
-            anime('302', '<my_score>0</my_score>') +
-            anime('303') +
-            anime('304', '<my_score>11</my_score>'),
-        ),
-      },
-      randomUUID(),
-      actor.bearer,
-    )
-  ).id as string;
-  const reviewScore = async (row: number, score?: Record<string, unknown>) => {
-    const version = randomUUID();
-    await json(
-      'POST',
-      `${base}/${id}/review`,
-      { row, target: targets[row], skip: false, replace: false, ...(score === undefined ? {} : { score }) },
-      version,
-      actor.bearer,
-    );
-    return version;
-  };
-  const adopt = (units: number) => ({
-    action: 'adopt',
-    questionId: STANDARD_QUESTION_ID,
-    questionRevision: 1,
-    units,
-  });
-  const clear = { action: 'clear', questionId: STANDARD_QUESTION_ID, questionRevision: 1 };
-  const first = await reviewScore(0, adopt(19));
-  const page = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
-  expect(page.rows[0].review.score).toMatchObject({
-    source: { kind: 'value', value: 9, scale: { min: 1, max: 10, step: 1 } },
-    conversion: 'owner-selected-not-exact',
-    question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 } },
-    units: 19,
-    baseline: { state: 'absent', units: null, revision: null, at: null },
-    admission: { status: 'conditional', reason: null },
-    guard: {
-      version: 1,
-      question: { revision: 1, lifecycleRevision: 1 },
-      subject: { canonicalId: targets[0] },
-      ownVote: { state: 'absent' },
-    },
-  });
-  expect(page.rows[0].review.score.question).toHaveProperty('meaning');
-  expect(page.rows[0].currentScoreVote).toBeNull();
-  await json(
-    'PUT',
-    `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
-    { units: 6 },
-    randomUUID(),
-    actor.bearer,
-    200,
-  );
-  const stale = await json(
-    'POST',
-    `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 0, version: first, fields: ['score'] }] },
-    randomUUID(),
-    actor.bearer,
-  );
-  expect(stale.outcomes[0]).toMatchObject({ status: 'stale', score: { status: 'stale', reason: 'refresh-review' } });
-  expect(
-    await json(
-      'GET',
-      `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
-      undefined,
-      randomUUID(),
-      actor.bearer,
-    ),
-  ).toMatchObject({ units: 6 });
-  const preserve = await reviewScore(0, adopt(19));
-  const preserved = await json(
-    'POST',
-    `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 0, version: preserve, fields: ['score'] }] },
-    randomUUID(),
-    actor.bearer,
-  );
-  expect(preserved.outcomes[0]).toMatchObject({
-    status: 'skipped',
-    score: { action: 'adopt', status: 'skipped', reason: 'preserve-current-vote' },
-  });
-  expect(
-    await json(
-      'GET',
-      `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
-      undefined,
-      randomUUID(),
-      actor.bearer,
-    ),
-  ).toMatchObject({ units: 6 });
-
+  const subject = imported.results[0].value.id as string;
+  const existing = (await json('POST', '/v1/libraryLabels', { name: 'Watch together' }, randomUUID(), 'owner', 201))
+    .label as { id: string; revision: number };
+  const id = await upload(anime('410', '<my_tags>watch together,keep private</my_tags>'));
+  const version = randomUUID();
   await json(
     'POST',
     `${base}/${id}/review`,
-    { row: 1, target: targets[1], skip: false, replace: false, score: adopt(0) },
-    randomUUID(),
-    actor.bearer,
-    400,
-  );
-  const clearVersion = await reviewScore(1, clear);
-  expect(
-    (
-      await json(
-        'POST',
-        `${base}/${id}/apply`,
-        { confirm: true, rows: [{ row: 1, version: clearVersion, fields: ['score'] }] },
-        randomUUID(),
-        actor.bearer,
-      )
-    ).outcomes[0],
-  ).toMatchObject({
-    status: 'skipped',
-    score: { action: 'clear', status: 'skipped', reason: 'no-current-vote-to-clear' },
-  });
-
-  const omitted = await reviewScore(2);
-  expect(
-    (
-      await json(
-        'POST',
-        `${base}/${id}/apply`,
-        { confirm: true, rows: [{ row: 2, version: omitted, fields: ['status', 'score'] }] },
-        randomUUID(),
-        actor.bearer,
-      )
-    ).outcomes[0],
-  ).toMatchObject({
-    status: 'unsupported',
-    applied: ['status'],
-    score: { status: 'unsupported', reason: 'score-action-not-reviewed' },
-  });
-
-  const unsupported = await reviewScore(3, adopt(13)),
-    refreshed = await reviewScore(3, adopt(15));
-  await json(
-    'POST',
-    `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 3, version: unsupported, fields: ['score'] }] },
-    randomUUID(),
-    actor.bearer,
-    409,
-  );
-  const unsupportedPage = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
-  expect(unsupportedPage.rows[0].currentScoreVote).toMatchObject({ units: 6 });
-  expect(unsupportedPage.rows[3]).toMatchObject({
-    score: { kind: 'invalid', raw: '11' },
-    review: {
-      score: {
-        units: 15,
-        conversion: 'owner-selected-not-exact',
-        sourceSupport: { status: 'owner-selection-required', reason: 'source-score-outside-integer-1-through-10' },
-      },
+    {
+      row: 0,
+      target: null,
+      skip: false,
+      replace: false,
+      labels: [
+        { value: 0, target: { labelId: existing.id, revision: existing.revision } },
+        { value: 1, target: { name: 'Private MAL tag' } },
+      ],
     },
+    version,
+  );
+  const page = await json('GET', `${base}/${id}`);
+  expect(page.rows[0].tagEvidence.values.map((value: { value: string }) => value.value)).toEqual([
+    'watch together',
+    'keep private',
+  ]);
+  expect(page.rows[0].review.labels.selections.map((selection: { status: string }) => selection.status)).toEqual([
+    'ready',
+    'ready',
+  ]);
+  const applied = await json('POST', `${base}/${id}/apply`, {
+    confirm: true,
+    rows: [{ row: 0, version, fields: ['tags'] }],
   });
-  const unavailable = await json(
-    'POST',
-    `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
-    randomUUID(),
-    actor.bearer,
-  );
-  expect(unavailable.outcomes[0]).toMatchObject({
-    status: 'unavailable',
-    score: { action: 'adopt', status: 'unavailable', reason: 'atomic_guard_unavailable', vote: null },
-  });
-  await json(
-    'GET',
-    `/v1/subjects/${targets[3]}/ratings/${STANDARD_QUESTION_ID}/vote`,
-    undefined,
-    randomUUID(),
-    actor.bearer,
-    404,
-  );
-  // The installed producer's definitive refusal is retained; it is not a successful native vote.
-  const retained = await native.pool.query<{ document: any }>(
-    'SELECT document FROM library.list_import_mal WHERE account_id=$1 AND id=$2',
-    [actor.actor.accountId, id],
-  );
-  const checkpoint = retained.rows[0]!.document.intents['3'];
-  expect(checkpoint.score.started).toBe(true);
-  expect(checkpoint.review.score.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
-  expect(checkpoint.score.outcome.reason).toBe('atomic_guard_unavailable');
-  expect(
-    (
+  expect(applied.outcomes[0].labels.map((label: { status: string }) => label.status)).toEqual(['accepted', 'accepted']);
+  expect(applied.outcomes[0].applied ?? []).not.toContain('status');
+  expect(applied.outcomes[0].remainingLabels ?? []).toEqual([]);
+  await json('GET', `/v1/libraryEntries/${subject}`, undefined, randomUUID(), 'owner', 404);
+  const assigned = await json('GET', `/v1/libraryLabelAssignments?subjectId=${subject}&limit=100`);
+  expect(assigned.assignments).toHaveLength(2);
+});
+test.serial(
+  'native conflict defaults preserve facts; replacement has revision and release guards; cancel and terminal stop admission',
+  async () => {
+    const target = await native.createSubject('game');
+    await json('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }, randomUUID(), 'owner', 201);
+    const id = await upload(anime('200') + anime('201') + anime('202'));
+    const keep = await review(id, 0, target);
+    expect((await apply(id, 0, keep)).outcomes[0]).toMatchObject({
+      status: 'skipped',
+      reason: 'preserve-current-fact',
+    });
+    const replacement = await review(id, 1, target, true);
+    const local = await json('GET', `/v1/libraryEntries/${target}`);
+    await json('PUT', `/v1/libraryEntries/${target}`, {
+      state: 'paused',
+      revision: local.libraryEntry.revision,
+      incarnationId: local.libraryEntry.incarnationId,
+    });
+    expect((await apply(id, 1, replacement)).outcomes[0].status).toBe('stale');
+    const refreshed = await review(id, 1, target, true);
+    expect((await apply(id, 1, refreshed)).outcomes[0].status).toBe('applied');
+    const releaseGuard = await review(id, 2, target, true);
+    await native.activate(native.replacementDigest);
+    expect((await apply(id, 2, releaseGuard)).outcomes[0].status).toBe('stale');
+    await native.activate(native.originalDigest);
+    await json('POST', `${base}/${id}/cancel`, {});
+    await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 2, version: releaseGuard, fields: ['status'] }] },
+      randomUUID(),
+      'owner',
+      409,
+    );
+    await json('DELETE', `${base}/${id}`);
+    await json('POST', `${base}:preview`, { xml: xml(anime('bad')) }, randomUUID(), 'owner', 400);
+    await json('POST', `${base}:preview`, { xml: 'x'.repeat(MAL_LIMITS.bytes + 1) }, randomUUID(), 'owner', 400);
+    const denied = await native.identity(native.owner.actor.scopes);
+    const deniedUpload = await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer);
+    await native.suspend(denied.actor.accountId);
+    await json('GET', `${base}/${deniedUpload.id}`, undefined, randomUUID(), denied.bearer, 401);
+    await json(
+      'POST',
+      `${base}/${deniedUpload.id}/apply`,
+      { confirm: true, rows: [{ row: 0, version: 'never', fields: ['status'] }] },
+      randomUUID(),
+      denied.bearer,
+      401,
+    );
+    await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
+  },
+);
+
+test.serial(
+  'MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer',
+  async () => {
+    const actor = await native.identity(
+      [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
+      0,
+    );
+    const targets: string[] = [];
+    for (let index = 0; index < 4; index++) targets.push(await native.createHomeSubject('game', actor));
+    await native.grantLibraryGate(actor.actor.accountId);
+    const id = (
       await json(
         'POST',
-        `${base}/${id}/apply`,
-        { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+        `${base}:preview`,
+        {
+          xml: xml(
+            anime('301', '<my_score>9</my_score>') +
+              anime('302', '<my_score>0</my_score>') +
+              anime('303') +
+              anime('304', '<my_score>11</my_score>'),
+          ),
+        },
         randomUUID(),
         actor.bearer,
       )
-    ).outcomes[0],
-  ).toEqual(unavailable.outcomes[0]);
-  await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
-  await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
-});
-
-test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns, clears only by consent and retries the original journal PATCH', async () => {
-  const bearer = await accountToken({
-    accountId: native.owner.actor.accountId,
-    clientId: native.owner.actor.clientId,
-    scopes: [
-      ...native.owner.actor.scopes,
-      'subject:read',
-      'progress_session:create',
-      'progress_session:read',
-      'progress_session:list',
-      'progress_session:update',
-    ],
-  });
-  expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
-  const target = await native.createSubject('game');
-  const occurrences: { id: string }[] = [];
-  for (let index = 0; index < 5; index++) {
-    const started = await json(
+    ).id as string;
+    const reviewScore = async (row: number, score?: Record<string, unknown>) => {
+      const version = randomUUID();
+      await json(
+        'POST',
+        `${base}/${id}/review`,
+        { row, target: targets[row], skip: false, replace: false, ...(score === undefined ? {} : { score }) },
+        version,
+        actor.bearer,
+      );
+      return version;
+    };
+    const adopt = (units: number) => ({
+      action: 'adopt',
+      questionId: STANDARD_QUESTION_ID,
+      questionRevision: 1,
+      units,
+    });
+    const clear = { action: 'clear', questionId: STANDARD_QUESTION_ID, questionRevision: 1 };
+    const first = await reviewScore(0, adopt(19));
+    const page = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+    expect(page.rows[0].review.score).toMatchObject({
+      source: { kind: 'value', value: 9, scale: { min: 1, max: 10, step: 1 } },
+      conversion: 'owner-selected-not-exact',
+      question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 } },
+      units: 19,
+      baseline: { state: 'absent', units: null, revision: null, at: null },
+      admission: { status: 'conditional', reason: null },
+      guard: {
+        version: 1,
+        question: { revision: 1, lifecycleRevision: 1 },
+        subject: { canonicalId: targets[0] },
+        ownVote: { state: 'absent' },
+      },
+    });
+    expect(page.rows[0].review.score.question).toHaveProperty('meaning');
+    expect(page.rows[0].currentScoreVote).toBeNull();
+    await json(
+      'PUT',
+      `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+      { units: 6 },
+      randomUUID(),
+      actor.bearer,
+      200,
+    );
+    const stale = await json(
       'POST',
-      '/v1/progressSessions',
-      { subjectId: target, mode: 'scalar_amount', unit: 'minute' },
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 0, version: first, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+    );
+    expect(stale.outcomes[0]).toMatchObject({ status: 'stale', score: { status: 'stale', reason: 'refresh-review' } });
+    expect(
+      await json(
+        'GET',
+        `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+        undefined,
+        randomUUID(),
+        actor.bearer,
+      ),
+    ).toMatchObject({ units: 6 });
+    const preserve = await reviewScore(0, adopt(19));
+    const preserved = await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 0, version: preserve, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+    );
+    expect(preserved.outcomes[0]).toMatchObject({
+      status: 'skipped',
+      score: { action: 'adopt', status: 'skipped', reason: 'preserve-current-vote' },
+    });
+    expect(
+      await json(
+        'GET',
+        `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+        undefined,
+        randomUUID(),
+        actor.bearer,
+      ),
+    ).toMatchObject({ units: 6 });
+
+    await json(
+      'POST',
+      `${base}/${id}/review`,
+      { row: 1, target: targets[1], skip: false, replace: false, score: adopt(0) },
+      randomUUID(),
+      actor.bearer,
+      400,
+    );
+    const clearVersion = await reviewScore(1, clear);
+    expect(
+      (
+        await json(
+          'POST',
+          `${base}/${id}/apply`,
+          { confirm: true, rows: [{ row: 1, version: clearVersion, fields: ['score'] }] },
+          randomUUID(),
+          actor.bearer,
+        )
+      ).outcomes[0],
+    ).toMatchObject({
+      status: 'skipped',
+      score: { action: 'clear', status: 'skipped', reason: 'no-current-vote-to-clear' },
+    });
+
+    const omitted = await reviewScore(2);
+    expect(
+      (
+        await json(
+          'POST',
+          `${base}/${id}/apply`,
+          { confirm: true, rows: [{ row: 2, version: omitted, fields: ['status', 'score'] }] },
+          randomUUID(),
+          actor.bearer,
+        )
+      ).outcomes[0],
+    ).toMatchObject({
+      status: 'unsupported',
+      applied: ['status'],
+      score: { status: 'unsupported', reason: 'score-action-not-reviewed' },
+    });
+
+    const unsupported = await reviewScore(3, adopt(13)),
+      refreshed = await reviewScore(3, adopt(15));
+    await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 3, version: unsupported, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+      409,
+    );
+    const unsupportedPage = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+    expect(unsupportedPage.rows[0].currentScoreVote).toMatchObject({ units: 6 });
+    expect(unsupportedPage.rows[3]).toMatchObject({
+      score: { kind: 'invalid', raw: '11' },
+      review: {
+        score: {
+          units: 15,
+          conversion: 'owner-selected-not-exact',
+          sourceSupport: { status: 'owner-selection-required', reason: 'source-score-outside-integer-1-through-10' },
+        },
+      },
+    });
+    const committed = await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+    );
+    expect(committed.outcomes[0]).toMatchObject({
+      status: 'applied',
+      applied: ['score'],
+      score: { action: 'adopt', status: 'applied', vote: { units: 15 } },
+    });
+    expect(
+      await json(
+        'GET',
+        `/v1/subjects/${targets[3]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+        undefined,
+        randomUUID(),
+        actor.bearer,
+      ),
+    ).toMatchObject({ units: 15 });
+    const retained = await native.pool.query<{ document: any }>(
+      'SELECT document FROM library.list_import_mal WHERE account_id=$1 AND id=$2',
+      [actor.actor.accountId, id],
+    );
+    const checkpoint = retained.rows[0]!.document.intents['3'];
+    expect(checkpoint.score.started).toBe(true);
+    expect(checkpoint.review.score.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
+    expect(checkpoint.score.command.input.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
+    expect(checkpoint.score.command.input.observation.subjectId).toBe(
+      unsupportedPage.rows[3].review.score.guard.subject.canonicalId,
+    );
+    expect(checkpoint.score.outcome).toMatchObject({ action: 'adopt', status: 'applied', vote: { units: 15 } });
+    const replayed = await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+    );
+    expect(replayed.outcomes[0].score).toMatchObject({ action: 'adopt', status: 'applied', vote: { units: 15 } });
+    expect(replayed.outcomes[0].score.vote.revision).toBe(committed.outcomes[0].score.vote.revision);
+    const currentPage = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+    expect(currentPage.rows[3].currentScoreVote).toMatchObject({ units: 15 });
+    expect(JSON.stringify(currentPage.rows[3])).not.toContain('commandActor');
+    await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
+    await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+  },
+);
+
+test.serial(
+  'MAL adopts reviewed partial dates to selected repeats, preserves unknowns, clears only by consent and retries the original journal PATCH',
+  async () => {
+    const bearer = await accountToken({
+      accountId: native.owner.actor.accountId,
+      clientId: native.owner.actor.clientId,
+      scopes: [
+        ...native.owner.actor.scopes,
+        'subject:read',
+        'progress_session:create',
+        'progress_session:read',
+        'progress_session:list',
+        'progress_session:update',
+      ],
+    });
+    expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
+    const ownerHome = partitionOf(routeOf(native.owner.actor.accountId)!);
+    const target = await native.createHomeSubject('game', native.owner, ownerHome);
+    const occurrences: { id: string }[] = [];
+    for (let index = 0; index < 5; index++) {
+      const started = await json(
+        'POST',
+        '/v1/progressSessions',
+        { subjectId: target, mode: 'scalar_amount', unit: 'minute' },
+        randomUUID(),
+        bearer,
+        201,
+      );
+      occurrences.push(started.progressSession);
+    }
+    for (const [index, value] of [
+      { startDate: { year: 2021 }, finishDate: { year: 2022 } },
+      { startDate: { year: 1998 } },
+      { startDate: { year: 2001 } },
+    ].entries()) {
+      await json(
+        'PATCH',
+        `/v1/progressSessions/${occurrences[index]!.id}/journal`,
+        { revision: 0, ...value },
+        randomUUID(),
+        bearer,
+      );
+    }
+    const id = await upload(
+      anime(
+        '700',
+        '<my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-29</my_finish_date><my_last_updated>999</my_last_updated>',
+      ) +
+        anime('701', '<my_start_date>0000-00-00</my_start_date>') +
+        anime('702', '<my_start_date>0000-00-00</my_start_date>') +
+        anime('703', '<my_start_date>2024-01-01</my_start_date>') +
+        anime('704', '<my_start_date>2024-03-03</my_start_date>'),
+    );
+    for (let row = 0; row < 5; row++) await review(id, row, target);
+
+    const adoptedVersion = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/dates/review`,
+      { row: 0, occurrenceId: occurrences[0]!.id, startAction: 'adopt', finishAction: 'adopt' },
+      adoptedVersion,
+      bearer,
+    );
+    const reviewed = await json('GET', `${base}/${id}`);
+    expect(reviewed.rows[0].dateReview).toMatchObject({
+      journalRevision: 1,
+      startDate: { status: 'conflict', proposed: { year: 2024 } },
+      finishDate: { status: 'conflict', proposed: { year: 2024, month: 2, day: 29 } },
+    });
+    expect(reviewed.rows[0].dates.started).toMatchObject({ value: '2024', precision: 'year' });
+    expect(reviewed.rows[0].timestamps.my_last_updated).toMatchObject({ value: '999' });
+    const dateApply = (row: number, version: string, fields: string[]) =>
+      json(
+        'POST',
+        `${base}/${id}/dates/apply`,
+        { confirm: true, rows: [{ row, version, fields }] },
+        randomUUID(),
+        bearer,
+      );
+    const applied = await dateApply(0, adoptedVersion, ['startDate', 'finishDate']);
+    expect(applied.outcomes[0]).toMatchObject({
+      status: 'applied',
+      fields: [
+        { field: 'startDate', status: 'applied' },
+        { field: 'finishDate', status: 'applied' },
+      ],
+      receipt: { sessionId: occurrences[0]!.id, revision: 2, changed: true },
+    });
+    expect(applied.outcomes[0].receipt).not.toHaveProperty('startDate');
+    const journalA = await json(
+      'GET',
+      `/v1/progressSessions/${occurrences[0]!.id}/journal`,
+      undefined,
       randomUUID(),
       bearer,
-      201,
     );
-    occurrences.push(started.progressSession);
-  }
-  for (const [index, value] of [
-    { startDate: { year: 2021 }, finishDate: { year: 2022 } },
-    { startDate: { year: 1998 } },
-    { startDate: { year: 2001 } },
-  ].entries()) {
+    expect(journalA.journal).toMatchObject({
+      startDate: { year: 2024 },
+      finishDate: { year: 2024, month: 2, day: 29 },
+    });
+    await native.pool.query(
+      `UPDATE library.list_import_mal SET document=document #- '{dateIntents,0,outcome}' WHERE account_id=$1 AND id=$2`,
+      [native.owner.actor.accountId, id],
+    );
+    expect((await dateApply(0, adoptedVersion, ['startDate', 'finishDate'])).outcomes[0]).toEqual(applied.outcomes[0]);
+    expect(
+      (await json('GET', `/v1/progressSessions/${occurrences[0]!.id}/journal`, undefined, randomUUID(), bearer)).journal
+        .revision,
+    ).toBe(2);
+
+    const unknownVersion = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/dates/review`,
+      { row: 1, occurrenceId: occurrences[1]!.id, startAction: 'adopt' },
+      unknownVersion,
+      bearer,
+    );
+    expect((await dateApply(1, unknownVersion, ['startDate'])).outcomes[0]).toMatchObject({
+      status: 'unsupported',
+      fields: [{ field: 'startDate', status: 'unknown' }],
+      receipt: null,
+    });
+    expect(
+      (await json('GET', `/v1/progressSessions/${occurrences[1]!.id}/journal`, undefined, randomUUID(), bearer)).journal
+        .startDate,
+    ).toEqual({ year: 1998 });
+
+    const clearVersion = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/dates/review`,
+      { row: 2, occurrenceId: occurrences[2]!.id, startAction: 'clear' },
+      clearVersion,
+      bearer,
+    );
+    expect((await dateApply(2, clearVersion, ['startDate'])).outcomes[0]).toMatchObject({
+      status: 'applied',
+      receipt: { changed: true },
+    });
+    expect(
+      (await json('GET', `/v1/progressSessions/${occurrences[2]!.id}/journal`, undefined, randomUUID(), bearer)).journal
+        .startDate,
+    ).toBeNull();
+    expect(
+      (await json('GET', `/v1/progressSessions/${occurrences[1]!.id}/journal`, undefined, randomUUID(), bearer)).journal
+        .startDate,
+    ).toEqual({ year: 1998 });
+
+    const staleVersion = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/dates/review`,
+      { row: 3, occurrenceId: occurrences[3]!.id, startAction: 'adopt' },
+      staleVersion,
+      bearer,
+    );
     await json(
       'PATCH',
-      `/v1/progressSessions/${occurrences[index]!.id}/journal`,
-      { revision: 0, ...value },
+      `/v1/progressSessions/${occurrences[3]!.id}/journal`,
+      { revision: 0, startDate: { year: 1990 } },
       randomUUID(),
       bearer,
     );
-  }
-  const id = await upload(
-    anime(
-      '700',
-      '<my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-29</my_finish_date><my_last_updated>999</my_last_updated>',
-    ) +
-      anime('701', '<my_start_date>0000-00-00</my_start_date>') +
-      anime('702', '<my_start_date>0000-00-00</my_start_date>') +
-      anime('703', '<my_start_date>2024-01-01</my_start_date>') +
-      anime('704', '<my_start_date>2024-03-03</my_start_date>'),
-  );
-  for (let row = 0; row < 5; row++) await review(id, row, target);
-
-  const adoptedVersion = randomUUID();
-  await json(
-    'POST',
-    `${base}/${id}/dates/review`,
-    { row: 0, occurrenceId: occurrences[0]!.id, startAction: 'adopt', finishAction: 'adopt' },
-    adoptedVersion,
-    bearer,
-  );
-  const reviewed = await json('GET', `${base}/${id}`);
-  expect(reviewed.rows[0].dateReview).toMatchObject({
-    journalRevision: 1,
-    startDate: { status: 'conflict', proposed: { year: 2024 } },
-    finishDate: { status: 'conflict', proposed: { year: 2024, month: 2, day: 29 } },
-  });
-  expect(reviewed.rows[0].dates.started).toMatchObject({ value: '2024', precision: 'year' });
-  expect(reviewed.rows[0].timestamps.my_last_updated).toMatchObject({ value: '999' });
-  const dateApply = (row: number, version: string, fields: string[]) =>
-    json(
+    expect((await dateApply(3, staleVersion, ['startDate'])).outcomes[0]).toMatchObject({
+      status: 'stale',
+      reason: 'refresh-review',
+    });
+    const refreshedVersion = randomUUID();
+    await json(
       'POST',
-      `${base}/${id}/dates/apply`,
-      { confirm: true, rows: [{ row, version, fields }] },
-      randomUUID(),
+      `${base}/${id}/dates/review`,
+      { row: 3, occurrenceId: occurrences[3]!.id, startAction: 'adopt' },
+      refreshedVersion,
       bearer,
     );
-  const applied = await dateApply(0, adoptedVersion, ['startDate', 'finishDate']);
-  expect(applied.outcomes[0]).toMatchObject({
-    status: 'applied',
-    fields: [
-      { field: 'startDate', status: 'applied' },
-      { field: 'finishDate', status: 'applied' },
-    ],
-    receipt: { sessionId: occurrences[0]!.id, revision: 2, changed: true },
-  });
-  expect(applied.outcomes[0].receipt).not.toHaveProperty('startDate');
-  const journalA = await json(
-    'GET',
-    `/v1/progressSessions/${occurrences[0]!.id}/journal`,
-    undefined,
-    randomUUID(),
-    bearer,
-  );
-  expect(journalA.journal).toMatchObject({ startDate: { year: 2024 }, finishDate: { year: 2024, month: 2, day: 29 } });
-  await native.pool.query(
-    `UPDATE library.list_import_mal SET document=document #- '{dateIntents,0,outcome}' WHERE account_id=$1 AND id=$2`,
-    [native.owner.actor.accountId, id],
-  );
-  expect((await dateApply(0, adoptedVersion, ['startDate', 'finishDate'])).outcomes[0]).toEqual(applied.outcomes[0]);
-  expect(
-    (await json('GET', `/v1/progressSessions/${occurrences[0]!.id}/journal`, undefined, randomUUID(), bearer)).journal
-      .revision,
-  ).toBe(2);
-
-  const unknownVersion = randomUUID();
-  await json(
-    'POST',
-    `${base}/${id}/dates/review`,
-    { row: 1, occurrenceId: occurrences[1]!.id, startAction: 'adopt' },
-    unknownVersion,
-    bearer,
-  );
-  expect((await dateApply(1, unknownVersion, ['startDate'])).outcomes[0]).toMatchObject({
-    status: 'unsupported',
-    fields: [{ field: 'startDate', status: 'unknown' }],
-    receipt: null,
-  });
-  expect(
-    (await json('GET', `/v1/progressSessions/${occurrences[1]!.id}/journal`, undefined, randomUUID(), bearer)).journal
-      .startDate,
-  ).toEqual({ year: 1998 });
-
-  const clearVersion = randomUUID();
-  await json(
-    'POST',
-    `${base}/${id}/dates/review`,
-    { row: 2, occurrenceId: occurrences[2]!.id, startAction: 'clear' },
-    clearVersion,
-    bearer,
-  );
-  expect((await dateApply(2, clearVersion, ['startDate'])).outcomes[0]).toMatchObject({
-    status: 'applied',
-    receipt: { changed: true },
-  });
-  expect(
-    (await json('GET', `/v1/progressSessions/${occurrences[2]!.id}/journal`, undefined, randomUUID(), bearer)).journal
-      .startDate,
-  ).toBeNull();
-  expect(
-    (await json('GET', `/v1/progressSessions/${occurrences[1]!.id}/journal`, undefined, randomUUID(), bearer)).journal
-      .startDate,
-  ).toEqual({ year: 1998 });
-
-  const staleVersion = randomUUID();
-  await json(
-    'POST',
-    `${base}/${id}/dates/review`,
-    { row: 3, occurrenceId: occurrences[3]!.id, startAction: 'adopt' },
-    staleVersion,
-    bearer,
-  );
-  await json(
-    'PATCH',
-    `/v1/progressSessions/${occurrences[3]!.id}/journal`,
-    { revision: 0, startDate: { year: 1990 } },
-    randomUUID(),
-    bearer,
-  );
-  expect((await dateApply(3, staleVersion, ['startDate'])).outcomes[0]).toMatchObject({
-    status: 'stale',
-    reason: 'refresh-review',
-  });
-  const refreshedVersion = randomUUID();
-  await json(
-    'POST',
-    `${base}/${id}/dates/review`,
-    { row: 3, occurrenceId: occurrences[3]!.id, startAction: 'adopt' },
-    refreshedVersion,
-    bearer,
-  );
-  expect((await dateApply(3, refreshedVersion, ['startDate'])).outcomes[0].status).toBe('applied');
-  const diary = await json('GET', '/v1/libraryDiary?limit=25', undefined, randomUUID(), bearer);
-  expect(
-    diary.occurrences.find((item: { id: string }) => item.id === occurrences[0]!.id).reportedDates.startDate,
-  ).toEqual({ year: 2024 });
-  const retiredVersion = randomUUID();
-  await json(
-    'POST',
-    `${base}/${id}/dates/review`,
-    { row: 4, occurrenceId: occurrences[4]!.id, startAction: 'adopt' },
-    retiredVersion,
-    bearer,
-  );
-  await json('POST', `/v1/progressSessions/${occurrences[4]!.id}:retire`, { revision: 0 }, randomUUID(), bearer);
-  expect((await dateApply(4, retiredVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale' });
-  await json('DELETE', `${base}/${id}`);
-});
+    expect((await dateApply(3, refreshedVersion, ['startDate'])).outcomes[0].status).toBe('applied');
+    const diary = await json('GET', '/v1/libraryDiary?limit=25', undefined, randomUUID(), bearer);
+    expect(
+      diary.occurrences.find((item: { id: string }) => item.id === occurrences[0]!.id).reportedDates.startDate,
+    ).toEqual({ year: 2024 });
+    const retiredVersion = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/dates/review`,
+      { row: 4, occurrenceId: occurrences[4]!.id, startAction: 'adopt' },
+      retiredVersion,
+      bearer,
+    );
+    await json('POST', `/v1/progressSessions/${occurrences[4]!.id}:retire`, { revision: 1 }, randomUUID(), bearer);
+    expect((await dateApply(4, retiredVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale' });
+    await json('DELETE', `${base}/${id}`);
+  },
+);
+test.serial(
+  'native redirect requires a deliberate review of the canonical MAL target',
+  async () => {
+    const actor = await native.identity(
+      [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
+      0,
+    );
+    await native.grantLibraryGate(actor.actor.accountId);
+    const subjects = [
+      await native.createHomeSubject('game', actor),
+      await native.createHomeSubject('game', actor),
+    ].sort();
+    const canonical = subjects[0]!;
+    const selected = subjects[1]!;
+    const votes = createVoteCommands({ pool: native.pool, access: native.access });
+    let redirected = false;
+    const service = createMalImport({
+      pool: native.pool,
+      access: native.access,
+      tokens: native.tokens,
+      routeKey: testRouteKey(),
+      journal: createSessionCommands({ pool: native.pool, access: native.access, tokens: native.tokens }),
+      votes: {
+        ...votes,
+        async readVoteReview(reviewActor, questionId, targetId) {
+          if (!redirected) {
+            await native.admitSubjectMerge(canonical, selected);
+            redirected = true;
+          }
+          return votes.readVoteReview(reviewActor, questionId, targetId);
+        },
+      },
+    });
+    const deadline = Date.now() + 120000;
+    const preview = await service.preview(
+      actor.actor,
+      xml(anime('900007', '<my_score>8</my_score>')),
+      randomUUID(),
+      deadline,
+    );
+    const uploadId = preview.value.id;
+    const firstVersion = randomUUID();
+    await service.review(
+      actor.actor,
+      uploadId,
+      {
+        row: 0,
+        target: selected,
+        skip: false,
+        replace: false,
+        score: { action: 'adopt', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 13 },
+      },
+      firstVersion,
+      deadline,
+    );
+    const firstPage = await service.page(actor.actor, uploadId, 0, deadline);
+    expect(firstPage.rows[0]!.review!.score).toMatchObject({
+      admission: { status: 'unavailable', reason: 'conditional-vote-admission-unavailable' },
+    });
+    expect(firstPage.rows[0]!.review!.score!.guard).toBeUndefined();
+    await native.recaptureMappedHomes();
+    const unavailable = await service.apply(
+      actor.actor,
+      uploadId,
+      { confirm: true, rows: [{ row: 0, version: firstVersion, fields: ['score'] }] },
+      deadline,
+      new AbortController().signal,
+      () => {},
+    );
+    expect(unavailable.outcomes[0]!.score).toMatchObject({
+      action: 'adopt',
+      status: 'unavailable',
+      reason: 'conditional-vote-admission-unavailable',
+    });
+    await native.recaptureMappedHomes();
+    const canonicalVersion = randomUUID();
+    await service.review(
+      actor.actor,
+      uploadId,
+      {
+        row: 0,
+        target: canonical,
+        skip: false,
+        replace: true,
+        score: {
+          action: 'adopt',
+          questionId: STANDARD_QUESTION_ID,
+          questionRevision: 1,
+          units: 13,
+          replaceCurrent: true,
+        },
+      },
+      canonicalVersion,
+      deadline,
+    );
+    const reviewed = await service.page(actor.actor, uploadId, 0, deadline);
+    expect(reviewed.rows[0]!.review!.score!.guard!.subject.canonicalId).toBe(canonical);
+    await native.recaptureMappedHomes();
+    const applied = await service.apply(
+      actor.actor,
+      uploadId,
+      { confirm: true, rows: [{ row: 0, version: canonicalVersion, fields: ['score'] }] },
+      deadline,
+      new AbortController().signal,
+      () => {},
+    );
+    expect(applied.outcomes[0]).toMatchObject({
+      status: 'applied',
+      score: { action: 'adopt', status: 'applied', vote: { units: 13 } },
+    });
+    expect(await votes.readOwnVote(actor.actor, STANDARD_QUESTION_ID, canonical)).toMatchObject({ units: 13 });
+  },
+  120000,
+);

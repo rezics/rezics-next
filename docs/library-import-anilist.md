@@ -43,22 +43,55 @@ scale, Content's current standard question/revision/meaning and owner-selected 0
 an explicit native clear separately. Apply needs a separate `confirmNativeVoteEffects:true`; source privacy,
 upload confirmation, state import and the score value do not provide that consent.
 
+Decision: native import tests keep the platform steward identity on the original governance scopes: every mounted
+catalogue action except `media:complete`, plus `gate:any`. That is the same token grant-routes and outcome-driver use
+to exercise `platform.governance`. Bootstrap installs that role on the Global Context; it already holds `access:grant`,
+`gate:any` and the extra import actions. Every fixture grant authenticates that original bearer onto a fresh wall-clock
+command boundary, matching grant-routes, so Access admits the live account/resource/role binding. `gate:any` covers
+library-gate delegation. Subject merge for a Rating redirect authenticates that steward onto a token that also carries
+`subject:merge` and `gate:subject_identity`, grants those actions on Global, then posts the mounted merge.
+Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish
+identity bootstrap on that partition before Rating review or merge. Native import vote, merge, progress and
+metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home
+guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on
+that home so the first scan includes it; sealing the empty question/control home first leaves later creations
+past the cursor. Native import tests recapture identity dirty after each Subject write, after link drain on
+each HTTP send once a Subject is mapped on that home, and before direct Rating apply, so Entry, Progress and
+vote writes cannot leave Mapping pending. A mapped home with no dirty originals and empty control pending/prepare pins stays current; recapture does not start another bootstrap generation or republish an installed epoch. They drain held prearm after mapping completes; unpublished
+Search/Library acknowledgements do not pin the group against later Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed;
+native import tests then publish that job so later bootstrap can recapture dirty and a later merge or vote job can start.
+A home is current for later Progress, Rating and merge only after those jobs are published and control pending/prepare pins are empty; mapping-complete pending classification alone does not free home capacity.
+Apply commits selected scores and Progress before independent state so Entry writes cannot dirty the vote or occurrence target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
+`cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty
+before Rating, Progress or merge resolve the mapping. Guarded Rating apply uses the same `rating:vote`
+token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal
+admits the job and mapping applies the redirect; it does not persist-command the catalogue redirect against that hold. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
+snapshot, `deadlineFor` from a leaked request budget, or putting `gate:personal_library` on the grantor identity
+drops coverage. Unique-typed extra grants (`definitions:publish`, `definitions:activate`) require Access to project
+the existing `deadline_live` operand as `deadlineLive`; without that fact the policy core treats a live governance
+role as unknown and denies grant administration.
+
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
-same-logical-home target in the existing AniList row; foreign-home support remains deferred. Effect confirmation
-is separate from review, and retries preserve the original guard, operands and command key. Owner reads take
-`currentScore` from Rating after guarded effects.
+same-logical-home target in the existing AniList row; foreign-home support remains deferred. Apply commits
+selected scores and Progress before independent state so Entry writes cannot dirty the vote or occurrence target. Confirmation
+calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
+source-row admission, then `putVoteOutcome` with those operands; an uncertain retry first uses
+`reconcilePutVote(actor, receipt)`. A Rating redirect of the Library-selected Subject stores no vote guard
+and requires an explicit new target review. Effect confirmation is separate from review, and retries preserve
+the original guard, operands and command key. Owner reads take `currentScore` from Rating after guarded effects.
+The frozen observation uses Content's meaning, or the question label when meaning is absent, captured at review. Reviewed question DTOs keep Content's optional meaning, including null; they do not copy the display label into meaning.
 
 `createVoteCommands.readVoteReview` supplies the current question, canonical identity and required identity epochs,
 raw original/canonical slots and counted own-vote witness. The importer stores its complete version 1 guard with
-immutable source evidence and selected native operands. Review reports observation availability independently of
-write availability. `putVoteOutcome(actor, {questionId,targetId,units,guard}, key)` owns validation, receipt digest
-and effects. `replace:true` explicitly permits replacing a current vote as well as state; clear remains an explicit
-score action. Missing effect consent is resumable. Consent checkpoints retain the original key and guard across
-uncertain delivery; retries call that exact command without replacing its observations. Native stale and unavailable
-results remain typed. Unexpected delivery errors propagate with the started checkpoint retained. Owner page reads
-include `currentScore` from Rating alongside the current Entry proposal; receipts and retained evidence are not
-current readback. A supported guarded effect is complete only after Rating accepts it and the importer records its
-outcome; a later owner read reports Rating's current vote.
+immutable source evidence and selected native operands, and retains the prepared command privately. Review reports
+observation availability independently of write availability. `replace:true` explicitly permits replacing a current
+vote as well as state; clear remains an explicit score action. Missing effect consent is resumable. Consent
+checkpoints retain the original key, prepared input and guard across uncertain delivery; retries call that exact
+command without replacing its observations. Native stale and unavailable results remain typed. Unexpected delivery
+errors propagate with the started checkpoint retained. Owner page reads include `currentScore` from Rating alongside
+the current Entry proposal; receipts and retained evidence are not current readback. A supported guarded effect is
+complete only after Rating accepts it and the importer records its outcome; a later owner read reports Rating's
+current vote.
 
 Progress keeps episodes (ANIME), chapters (MANGA), unknown measures and
 volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all unrecognized fields are

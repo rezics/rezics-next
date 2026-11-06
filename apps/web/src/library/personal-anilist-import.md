@@ -49,7 +49,7 @@ Score review keeps the exact source score value, lexeme, declared scale, validit
 native units within the current question or explicitly clear; source zero means unrated and native zero is a
 real vote. Keep is the default. Replacing a present own vote uses the existing explicit Replace choice.
 Review observations and atomic write availability are distinct: an available review does not promise that
-the guarded writer can apply, and the owner may return `atomic_guard_unavailable`. The page shows the supplied
+the guarded writer can apply, and a foreign-home target may return `atomic_guard_unavailable`. The page shows the supplied
 score outcome independently from the state outcome and displays the owner's `currentScore` observation as
 separate readback. A positive vote receipt does not replace readback; an unavailable vote effect does not
 undo an acknowledged state effect. Exact Retry keeps the original confirmation and review/consent identity.

@@ -229,7 +229,8 @@ export async function purgeExpiredBangumiUploadPage(
               outcome: Record<string, unknown> | null;
             }>(
               `SELECT ordinal,review,choice,outcome FROM library.bangumi_upload_row
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 ORDER BY ordinal LIMIT ${PAGE_ROWS}`,
+               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND evidence<>'{}'::jsonb
+               ORDER BY ordinal LIMIT ${PAGE_ROWS}`,
               [route, input.accountId, input.uploadId],
             );
             for (const row of rows.rows) {

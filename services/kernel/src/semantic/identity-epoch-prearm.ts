@@ -672,7 +672,7 @@ export async function sealColocatedEmptyIdentityPrearm(
     await tx.query(
       `INSERT INTO semantic.identity_epoch_admission_validation
       (partition_no,job_id,original,source_home,transaction_id,native_epoch,native_position)
-      VALUES($1,$2,$3,$1,$4,$5,$6)`,
+      VALUES($1,$2,$3,$1,$4::uuid,$5::integer,$6::bigint)`,
       [home, ref.jobId, base.original, transactionId, native.epoch, native.position.toString()],
     );
   }
