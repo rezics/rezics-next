@@ -459,6 +459,12 @@ retention retain their existing owners; this composition introduces no scheduler
 
 ## Progress
 
+Progress discovery hydrates current Subject summaries after its session-list command completes, using the
+resolved request Access capability and the admitted job's original absolute deadline. Summary hydration stays
+inside the same admission permit; completing the command does not start a fresh request budget. The focused
+route regression observes these inputs at the summary reader and retains the existing native assertions.
+Continue, Feed, native growth and rendered seeded journeys remain unaccepted pending a whole-feature outcome.
+
 The existing Progress and Continue descriptors retain their native session commands and response contracts.
 An operation declaration describes work; it supplies neither owner authority nor evidence of execution.
 Native owner admission still precedes receipt lookup. A completed mutation receipt and its current presentation
