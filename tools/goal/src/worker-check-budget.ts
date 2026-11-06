@@ -114,11 +114,7 @@ export function workerCheckHostCommandReached(receipt: WorkerCheckHostCommandRec
  * Give this wrapper run's stamp back when it died with infrastructure exit 75 before the check command ran.
  * The wrapper calls this where it records the run's final exit code.
  */
-export function settleWorkerCheckHostBudget(
-  env: NodeJS.ProcessEnv,
-  exitCode: number,
-  commandReached: boolean,
-): void {
+export function settleWorkerCheckHostBudget(env: NodeJS.ProcessEnv, exitCode: number, commandReached: boolean): void {
   if (exitCode !== WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT || commandReached) return;
   const directory = env.GOAL_WORKER_CHECK_BUDGET_DIR?.trim();
   const stamp = env.GOAL_WORKER_CHECK_BUDGET_STAMP?.trim();
