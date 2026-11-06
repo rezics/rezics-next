@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createContext, useContext, type ReactNode } from 'react';
+import { act, createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import type { NativeRealmHomeOperations, NativeRealmHomePage } from '../src/community/realm-home-native';
 import type { RealmJoinAdvice } from '../src/community/native-operations';
 import type { SpacePageData } from '../src/community/space';
@@ -33,9 +34,32 @@ for (const [key, value] of Object.entries(globals))
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const sessionModule = await import('../src/session/query');
-const spaceActions = await import('../src/community/space-actions');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
+const sessionModule = {
+  sessionQuery: {
+    queryKey: ['session'] as const,
+    queryFn: async () => session,
+    staleTime: Infinity,
+  },
+};
+mock.module('../src/session/query', () => ({
+  ...sessionModule,
+  AnonymousSessionContext: createContext(false),
+  sessionCsrfToken: () => session.csrfToken,
+  useSession: () => {
+    const client = useQueryClient();
+    return (
+      useSyncExternalStore(
+        (notify) =>
+          client.getQueryCache().subscribe(({ query }) => {
+            if (query.queryKey[0] === 'session') notify();
+          }),
+        () => client.getQueryData(sessionModule.sessionQuery.queryKey) ?? session,
+      )
+    );
+  },
+}));
+const spaceActions = await import('../src/community/space-actions');
 let joinAdvice: RealmJoinAdvice = { state: 'current', allowed: true };
 const joinAdviceReads: string[] = [];
 let membershipAction: () => Promise<unknown> = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
@@ -55,6 +79,30 @@ mock.module('../src/community/space-actions', () => ({
     return membershipAction();
   },
 }));
+mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
+mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
+mock.module('../src/community/space-setup-page', () => ({
+  SpaceSetupEntry: () => null,
+  useSpaceSetupRead: () => null,
+}));
+mock.module('../src/community/container-lifecycle-controls', () => ({
+  ContainerLifecyclePanel: () => null,
+  ContainerLifecycleControls: () => null,
+}));
+mock.module('../src/community/realm-claim-panel', () => ({ RealmClaimPanel: () => null }));
+mock.module('../src/community/realm-presentation-panel', () => ({ RealmAppearancePanel: () => null }));
+mock.module('../src/community/realm-bans-panel', () => ({ RealmBansPanel: () => null }));
+mock.module('../src/community/members/entry', () => ({ RealmMembersEntry: () => null }));
+mock.module('../src/search/search', () => {
+  const { createElement } = require('react') as typeof import('react');
+  return {
+    RealmCatalogueSearch: () => {
+      const { m } = require('../src/paraglide/messages.js') as typeof import('../src/paraglide/messages.js');
+      return createElement('h2', null, m.realm_catalogue_works_heading());
+    },
+    Search: () => null,
+  };
+});
 const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } =
   await import('../src/community/realm-home-native');
 const { readRealmJoinAdvice: readInstalledRealmJoinAdvice } = await import('../src/community/native-operations');
@@ -63,7 +111,6 @@ const { SpacePage, RealmShelf } = await import('../src/community/space-page');
 const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
   await import('../src/community/space-page-lifetime');
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { m } = await import('../src/paraglide/messages.js');
 const { getLocale, overwriteGetLocale, locales } = await import('../src/paraglide/runtime.js');
@@ -358,10 +405,13 @@ const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTi
 const host = document.createElement('main');
 document.body.append(host);
 let root = createRoot(host);
-const router = createRouter({
-  routeTree: createRootRoute({ component: () => useContext(Frame) }),
-  history: createMemoryHistory({ initialEntries: ['/en/spaces/realm'] }),
-});
+function makeRouter() {
+  return createRouter({
+    routeTree: createRootRoute({ component: () => useContext(Frame) }),
+    history: createMemoryHistory({ initialEntries: ['/en/spaces/realm'] }),
+  });
+}
+let router = makeRouter();
 await router.load();
 async function settle(action: () => void) {
   await act(async () => {
@@ -407,29 +457,36 @@ async function paint(page: SpacePageData, source = operations, admission?: Space
   await settle(() => {});
 }
 beforeEach(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  visitLocale = 'en';
   joinAdviceReads.length = 0;
   membershipActionCalls.length = 0;
   membershipAction = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
   joinAdvice = { state: 'current', allowed: true };
   realmMembershipTestReaders.readMembership = async () => null;
   realmMembershipTestReaders.readJoinAdvice = async () => joinAdvice;
+  session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
 });
-afterEach(async () => {
-  await settle(() => root.unmount());
+afterEach(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  root.unmount();
+  host.replaceChildren();
   root = createRoot(host);
   client.clear();
-  router.history.push('/en/spaces/realm');
-  await router.load();
+  session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+  router = makeRouter();
   calls.length = 0;
   joinAdviceReads.length = 0;
   membershipActionCalls.length = 0;
   membershipAction = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
   boardRead = async () => ({ status: 200, data: { items: [], next: null } });
   joinAdvice = { state: 'current', allowed: true };
-  session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
   visitLocale = 'en';
 });
 afterAll(async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   await settle(() => root.unmount());
   host.remove();
   overwriteGetLocale(originalGetLocale);

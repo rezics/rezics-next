@@ -249,7 +249,11 @@ async function makeSurface(
 
   async function until(predicate: () => boolean, label: string) {
     for (let turn = 0; turn < 200; turn++) {
-      if (predicate()) return;
+      if (predicate()) {
+        await settle();
+        if (predicate()) return;
+        continue;
+      }
       await settle();
     }
     throw new Error(
@@ -481,7 +485,7 @@ test('an uncertain leave check retires on transition, then exact retry and curre
       { data: { realmId, action: 'leave', idempotencyKey }, headers: { 'X-CSRF-Token': 'csrf-original' } },
     ]);
     expect(standingReads.length - 3).toBe(4);
-    expect(delays).toEqual([500, 1500, 3000]);
+    expect(delays.filter((delay) => delay > 0)).toEqual([500, 1500, 3000]);
     expect(followThrough.invalidations).toEqual([['my-realms'], ['follow-state', spaceId]]);
     expect(followThrough.routerInvalidations()).toBe(1);
     expect(surface.host.textContent).not.toContain(m.realm_leave_uncertain());

@@ -357,6 +357,8 @@ reads retain an uncertain command for exact retry or discard.
 
 Decision: the initial Home and continued Board shelf map `recent` and Board visibility directly from their installed root methods; complete-empty and unavailable discussion states and all reply-count states stay distinct, while the existing current-source completion host returns eligible focus to the selected supplying shelf.
 
+Decision: a same-source admitted Home refresh remounts both shelves and keeps Web's outer membership host; acknowledgement is stored with the original command so a remounted controller completes once after the admitted membership result, and intervening source replacement still retires that completion.
+
 ### Cost
 
 - **Touches:** Initial home reads Realm identity/Access, mints a released native time and reads one exact container

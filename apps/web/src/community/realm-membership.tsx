@@ -180,7 +180,7 @@ function NativeMembership({
   );
   const current = () => currentObservation.current === source && (!lifetime || lifetime.current());
   const joinCandidate = source.viewer.state === 'member' && source.viewer.membership === 'none';
-  const adviceKey = ['realm-membership-advice', realmId, caller.revision, returnTo, observationVersion] as const;
+  const adviceKey = ['realm-membership-advice', realmId, caller.revision, observationVersion] as const;
   const joinAdvice = useQuery({
     queryKey: adviceKey,
     enabled:
@@ -208,8 +208,8 @@ function NativeMembership({
     gcTime: 0,
     retry: false,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchOnReconnect: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   const canJoin =
     joinCandidate &&
@@ -229,33 +229,44 @@ function NativeMembership({
 
   useEffect(() => {
     if (!subject || !attempt || attempt.observation === observationVersion) return;
-    const accepted = acknowledged.current;
-    if (accepted?.command !== attempt) return;
+    const accepted = acknowledged.current?.command === attempt ? acknowledged.current : null;
+    if (!accepted && !caller.store.nativeCommandAcknowledged(attempt)) return;
+    // A same-source remount can paint before the replacement lifetime connects; wait rather than retire.
+    if (!current() || !caller.isCurrent()) return;
     acknowledged.current = null;
+    const owner = accepted?.caller ?? caller;
     if (
       source.viewer.state !== 'member' ||
       !(attempt.body.action === 'join'
         ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
         : source.viewer.membership === 'none') ||
-      !accepted.caller.isCurrent() ||
-      !current()
+      !owner.isCurrent()
     ) {
-      accepted.focus.cancel();
+      accepted?.focus.cancel();
+      caller.store.retireNativeCommandAcknowledgement(attempt);
       return;
     }
     caller.store.discardNativeCommand(realmId, subject, attempt);
     setAttemptRevision((revision) => revision + 1);
     setBusy(null);
-    const receiptCurrent = () => accepted.caller.isCurrent() && current();
+    const receiptCurrent = () => owner.isCurrent() && current();
+    const focus = accepted?.focus ?? {
+      eligible: () => document.activeElement === document.body,
+      restore(fallback: HTMLElement | null) {
+        if (document.activeElement === document.body && fallback?.isConnected)
+          fallback.focus({ preventScroll: true });
+      },
+      cancel() {},
+    };
     setCompleted({
       receipt: {
         realmId,
         action: attempt.body.action,
         membership: source.viewer.membership,
         current: receiptCurrent,
-        focusEligible: () => receiptCurrent() && accepted.focus.eligible(),
+        focusEligible: () => receiptCurrent() && focus.eligible(),
       },
-      focus: accepted.focus,
+      focus,
     });
   }, [attempt, caller, observationVersion, realmId, source, subject]);
 
@@ -324,6 +335,7 @@ function NativeMembership({
       });
       if (!stillCurrent()) return;
       if (result.outcome === 'accepted') {
+        caller.store.acknowledgeNativeCommand(command);
         acknowledged.current = { command, caller, focus };
         if (spaceId) await client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
         if (!stillCurrent()) return;
@@ -474,6 +486,19 @@ function PersonalMembership({
   const viewer = standingIsCurrent
     ? (query.data ?? client.getQueryData<RealmViewer>(realmMembershipQuery(realm.id, subject).queryKey))
     : undefined;
+  const fetchedRevision = useRef<number | null>(null);
+  useEffect(() => {
+    if (!caller.isReady()) return;
+    if (fetchedRevision.current === caller.revision) return;
+    if (hasCurrentRealmMembership(client, realm.id, subject, caller)) {
+      fetchedRevision.current = caller.revision;
+      return;
+    }
+    const state = client.getQueryState(realmMembershipQuery(realm.id, subject).queryKey);
+    fetchedRevision.current = caller.revision;
+    if (state?.fetchStatus === 'fetching') return;
+    void client.fetchQuery(realmMembershipQuery(realm.id, subject, caller)).catch(() => {});
+  }, [caller, client, realm.id, subject]);
   const currentPending = pending?.caller.isCurrent() ? pending : null;
   const currentBusy = busy?.caller.isCurrent() ? busy.value : false;
   const currentProblem = viewer || problem?.outcome === 'closed' ? problem : null;
@@ -806,7 +831,7 @@ function PersonalMembership({
         }
         visibility={realm.visibility}
         busy={currentBusy}
-        ready={!!csrfToken && !currentRecovery && caller.isCurrent()}
+        ready={!!csrfToken && caller.isCurrent()}
         refresh={currentRefresh}
         problem={currentProblem}
         onChange={(action) => void change(action)}

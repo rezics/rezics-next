@@ -60,9 +60,16 @@ export function useRealmCompletionFocus() {
       if (event.key === 'Tab') cancel();
     };
     const moved = (event: FocusEvent) => {
-      if (event.target !== control) cancel();
+      if (event.target === control) return;
+      // Committed membership render can replace the control; body taking focus is not a user move.
+      if (!control.isConnected && event.target === document.body) return;
+      cancel();
     };
-    const eligible = () => active && (document.activeElement === control || document.activeElement === document.body);
+    const eligible = () =>
+      active &&
+      (document.activeElement === control ||
+        document.activeElement === document.body ||
+        (!control.isConnected && document.activeElement === document.body));
     const intent: RealmCompletionFocus = {
       eligible,
       cancel,

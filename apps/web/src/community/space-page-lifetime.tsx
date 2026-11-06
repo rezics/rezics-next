@@ -792,6 +792,23 @@ export function sameNativeHomeBinding(
   return (Object.keys(original) as (keyof typeof original)[]).every((key) => original[key] === current[key]);
 }
 
+/** Heads, selected media/rules and lifecycle; a membership refresh keeps this identity. */
+export function nativeHomeSourceIdentity(page: SpacePageData) {
+  const realm = page.realm;
+  const source = realm?.nativeSource;
+  if (!realm?.nativeObservation || !source) return null;
+  return JSON.stringify([
+    page.space.id,
+    realm.id,
+    realm.credentialMode ?? null,
+    source.realm.headRevisionId,
+    source.space.headRevisionId,
+    source.realm.presentation,
+    realm.continuity?.ownershipState ?? null,
+    realm.continuity?.governanceReadOnly ?? null,
+  ]);
+}
+
 export class SpacePageLifetime {
   private connected = false;
   private disposed = false;
