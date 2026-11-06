@@ -169,12 +169,20 @@ test('edits rebind a covered page through reorder and edit, retain superseded an
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const zone = created.body.zone.id as string;
   const path = `/v1/zones/${zone}`;
+  const published = await f.call(
+    'owner',
+    'POST',
+    `${path}:publish`,
+    { visibility: 'public' },
+    f.conditional(created.body.zone.revision),
+  );
+  expect(published.status, JSON.stringify(published.body)).toBe(200);
   const taken = await f.call(
     'operator',
     'POST',
     `${path}:takedown`,
     { pointers: ['/pages/2/document'] },
-    f.conditional(created.body.zone.revision),
+    f.conditional(published.body.zone.revision),
   );
   expect(taken.status, JSON.stringify(taken.body)).toBe(200);
   const configuration = await f.call('owner', 'GET', `${path}/configuration`);
