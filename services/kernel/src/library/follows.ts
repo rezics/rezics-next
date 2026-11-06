@@ -58,17 +58,6 @@ function freezeFollowFrame(
   });
 }
 
-function actorFromFrame(frame: FollowCommandFrame): AccountActor {
-  return Object.freeze({
-    kind: 'account',
-    accountId: frame.accountId,
-    clientId: frame.clientId,
-    requestedBy: frame.requestedBy,
-    authnEpoch: frame.authnEpoch,
-    scopes: frame.scopes,
-  });
-}
-
 /** A committed follow command, or the current row when the follow did not change. */
 export type FollowWrite = {
   follow: Follow;
@@ -242,21 +231,20 @@ export function createFollowCommands(config: FollowDeps) {
     const targetId = typeof input === 'string' ? input : asTarget(input).targetId;
     if (routeOf(targetId) === null) throw new LibraryNotFoundError();
     const frame = freezeFollowFrame(actor, targetId, requestKey, deadline);
-    const owner = actorFromFrame(frame);
-    // Preserve the existing target-shaped digest. Stored identity is read only in
-    // this account's partition; an absent own row conveys no foreign target type.
+    // Production Access binds identity by reference. The frozen frame is command
+    // identity only; Access admission and target reads keep the verified actor.
     const existing = await load(frame.accountId, frame.targetId, frame.deadline);
     const target = Object.freeze(
       existing
         ? { targetId: existing.targetId, targetType: existing.targetType }
         : typeof input === 'string'
-          ? await resolveTarget(owner, input, frame.deadline)
+          ? await resolveTarget(actor, input, frame.deadline)
           : asTarget(input),
     );
     return finish(
       () =>
         runner.ownAccountPrepared(
-          owner,
+          actor,
           {
             action,
             kind,
@@ -269,7 +257,7 @@ export function createFollowCommands(config: FollowDeps) {
               // exact receipt replay. A stored removal never visits the target home.
               if (intent === 'unfollow' && existing) return { target, error: null };
               try {
-                return { target: await resolveTarget(owner, target, frame.deadline, attempt), error: null };
+                return { target: await resolveTarget(actor, target, frame.deadline, attempt), error: null };
               } catch (error) {
                 return { target: null, error };
               }

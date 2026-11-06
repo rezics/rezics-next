@@ -10,7 +10,6 @@ import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-ad
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import type { IdentityJobRef, IdentityStepProgress } from '../../src/semantic/identity-epoch-contract.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
-import { createSearchIdentityEpochParticipant } from '../../src/search/identity-epoch-participant.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
@@ -18,6 +17,10 @@ import { subjectPartition } from '../../src/search/source.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { digest, epochFixture, release, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 import { interruptNativeStatement, libraryCutoverInput } from '../semantic/support/identity-epoch-cutover.ts';
+import {
+  createSearchIdentityReceivingStep,
+  runSearchIdentityReceivingStep,
+} from './support/identity-receiving-runtime.ts';
 
 // Native production composition only. These cases are authored for integrated acceptance;
 // the minimal workspace compiler is not evidence that this suite has run or passed.
@@ -91,9 +94,15 @@ async function admitted(original: string, terminal: string) {
 }
 
 async function complete(job: IdentityJobRef, engine = search): Promise<IdentityStepProgress> {
-  const step = createSearchIdentityEpochParticipant({ search: engine, prefix, routeKey });
+  const step = createSearchIdentityReceivingStep({
+    pool: f.pool,
+    search: engine,
+    prefix,
+    routeKey,
+    access: f.access,
+  });
   for (let attempt = 0; attempt < 128; attempt++) {
-    const progress = await step(f.pool, job);
+    const progress = await runSearchIdentityReceivingStep(f.pool, step, job);
     expect(progress.job).toEqual(job);
     expect(progress.receipt.step).toBe('search-canonical-index');
     expect(progress.receipt.version).toBe(1);
@@ -277,10 +286,16 @@ test('lost original dispatch remains draining after actual refresh and cannot pr
   expect(before.rows[0]?.writer_token).not.toBeNull();
   await search.request('POST', `/${index}/_refresh`);
   const job = await admitted(original, terminal);
-  const step = createSearchIdentityEpochParticipant({ search, prefix, routeKey });
+  const step = createSearchIdentityReceivingStep({
+    pool: f.pool,
+    search,
+    prefix,
+    routeKey,
+    access: f.access,
+  });
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      expect((await step(f.pool, job)).state).toBe('more');
+      expect((await runSearchIdentityReceivingStep(f.pool, step, job)).state).toBe('more');
     } catch (error) {
       expect(error).toMatchObject({ code: 'identity_epoch_unavailable' });
     }

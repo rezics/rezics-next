@@ -258,6 +258,13 @@ terminal pages separately from browser and promoted-main proof.
 Decision: those four native HTTP cases are the fewest user-visible recovery pins; canonical self is admitted only from
 a published mapped-self row supplied by revision-1 creation or bounded original recovery, while absent mappings stay
 in the existing preparation path.
+Decision: identity receiving stores the resolved public-filter definition, not a release digest; OLD/NEW/first-apply
+follow published mappings and retained copies. Native suites wire searchIdentityReceivingComposition and the Source
+maintenance frame. Library cutover fixtures include collection:delete so Access compiles the collection owner role,
+compose the Library domain through composeLibraryDomain before Collection source setup, keep Collection create on the
+owner account through own-account Collection commands and JWT scopes, and mount follow:create/delete as own-account.
+Administering collection:* onto the owner-account resource through access.grant is denied because collection:create is
+typed to library.collection.
 
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
