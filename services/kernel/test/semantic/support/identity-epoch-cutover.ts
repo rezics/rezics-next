@@ -366,10 +366,12 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
   if (!peekLibraryDomain()) composeLibraryDomain();
   const { createCollectionCommands } = await import('../../../src/library/collections.ts');
   const { createFollowCommands } = await import('../../../src/library/follows.ts');
+  const { createGrantCommands } = await import('../../../src/access/grant-commands.ts');
   const { linkProjection } = await import('../../../src/semantic/links.ts');
   const { partitionOf } = await import('../../../src/route/route.ts');
   const accounts = { owner: newId(0xac10) };
   const actions = [
+    'access:grant',
     'collection:create',
     'collection:read',
     'collection:update',
@@ -386,11 +388,24 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
         {
           anonymous: action === 'subject:read',
           ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
+          ...(action === 'follow:create' || action === 'follow:delete' ? { authority: 'own-account' as const } : {}),
         },
       ]),
     ),
   });
-  const actor = () => access.authenticate(real.bearer('owner'), { pool: f.pool, deadline: Date.now() + 5000 });
+  const ownerResource = { route: routeOf(accounts.owner)!, id: accounts.owner };
+  await real.grant(ownerResource, 'owner', 'access:grant');
+  const actor = () => access.authenticate(real.bearer('owner'), { pool: f.pool, deadline: Date.now() + 30_000 });
+  await createGrantCommands({ pool: f.pool, access, managementAction: 'access:grant' }).create(
+    { pool: f.pool, actor: await actor(), deadline: Date.now() + 30_000 },
+    {
+      resource: ownerResource,
+      subject: { kind: 'account', id: accounts.owner },
+      actions: ['collection:create', 'collection:read', 'collection:update', 'collection:delete'],
+      valid: '(,)',
+      key: randomUUID(),
+    },
+  );
   const commands = createCollectionCommands({ pool: f.pool, access });
   const follows = createFollowCommands({ pool: f.pool, access });
   const collection = (

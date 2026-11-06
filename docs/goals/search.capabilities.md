@@ -261,7 +261,8 @@ in the existing preparation path.
 Decision: identity receiving stores the resolved public-filter definition, not a release digest; OLD/NEW/first-apply
 follow published mappings and retained copies. Native suites wire searchIdentityReceivingComposition and the Source
 maintenance frame. Library cutover fixtures include collection:delete so Access compiles the collection owner role,
-and compose the Library domain through composeLibraryDomain before Collection source setup.
+compose the Library domain through composeLibraryDomain before Collection source setup, grant Collection actions on
+the owner account through ordinary grant commands, and mount follow:create/delete as own-account.
 
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
