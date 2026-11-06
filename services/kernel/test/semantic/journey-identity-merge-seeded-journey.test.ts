@@ -154,7 +154,7 @@ test(
       expect(poll.body).toEqual({ operation: { id: operation.id, done: false } });
       expect((await d.request('anonymous', 'GET', operation.location)).status).toBe(401);
       expect((await d.request('editor', 'GET', operation.location)).status).toBe(404);
-      const [, redirected] = [...subjects].sort();
+      const redirected = [...subjects].sort()[1]!;
       const hop = await d.request('anonymous', 'GET', `/v1/subjects/${redirected}`);
       expect(hop.status).toBe(308);
       const redirect = (hop.body as { redirect: { from: string; to: string } }).redirect;
