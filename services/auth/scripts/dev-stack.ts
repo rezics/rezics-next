@@ -16,6 +16,7 @@ import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
+  walkHttpAnswers,
   walkStackEnvironment,
   walkStackNames,
   walkStackPorts,
@@ -783,16 +784,13 @@ function removeWalkStack(names: WalkNames): void {
 
 /** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
 async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
-  const answers = (url: string) =>
-    fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-      (response) => response.status < 500,
-      () => false,
-    );
   const deadline = Date.now() + 600_000;
-  while (!(await Promise.all(urls.map(answers))).every(Boolean)) {
+  while (true) {
     if (starting.exitCode !== null || starting.signalCode !== null)
       throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
-    if (Date.now() > deadline) throw new Error('walk: the local stack was not ready after ten minutes');
+    if (Date.now() > deadline)
+      throw new Error(`walk: the local stack was not ready after ten minutes (${urls.join(', ')})`);
+    if ((await Promise.all(urls.map((url) => walkHttpAnswers(url)))).every(Boolean)) return;
     await Bun.sleep(500);
   }
 }
@@ -833,13 +831,19 @@ async function walk(command: string[]): Promise<number> {
         ['services/kernel/scripts/search.ts', 'up'],
         ['services/auth/scripts/dev-stack.ts', 'setup'],
       ]) {
-        current = Bun.spawn([process.execPath, ...script], {
-          cwd: root,
-          env,
-          stdin: 'ignore',
-          stdout: 'inherit',
-          stderr: 'inherit',
-        });
+        const run = () =>
+          Bun.spawn([process.execPath, ...script], {
+            cwd: root,
+            env,
+            stdin: 'ignore',
+            stdout: 'inherit',
+            stderr: 'inherit',
+          });
+        current = run();
+        if ((await current.exited) !== 0 && script[1] === 'up' && script[0]?.endsWith('database.ts')) {
+          removeWalkStack(names);
+          current = run();
+        }
         if ((await current.exited) !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
       }
       const log = join(root, '.temp', 'walk', task, 'stack.log');
