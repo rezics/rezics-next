@@ -170,7 +170,9 @@ Decision: fewest tests pin publication, named stories and the emitted import con
 and the existing closed-controls operation-map); `expansion.test.ts` remains the ten-Type and
 one-hundred-manifest measurement. Authored import requestBody uses the OpenAPIV3 SchemaObject
 cast from subject.batch_write so TypeBox TNull compiles; a finite route type keeps the client
-method when emission drops it.
+method when emission drops it. Finite client typing composes the producer ImportedPreview from
+Definitions publication types rather than an operations-only copy; generation remains the
+installed OpenAPI and client wire.
 
 ### Definition publication admission cost
 

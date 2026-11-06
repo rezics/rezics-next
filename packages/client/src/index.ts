@@ -1,5 +1,17 @@
 import { treaty, type Treaty } from '@elysia/eden';
 import type { Static } from 'typebox';
+import type {
+  ActivationReconciliation,
+  EditorialHead,
+  ExtensionComparison,
+  PublicationDiagnostic,
+  PublicationDocumentKind,
+  PublicationIdentity,
+  PublicationOperations,
+  Release,
+  ReleaseComparison,
+} from '@rezics/definitions';
+import type { Extension } from '@rezics/definitions/extension';
 import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';
 import type { DecisionPageSchema } from './kernel/content/decision-page.ts';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
@@ -138,23 +150,32 @@ type InstalledSubjectRoutes = SharedRoutes<
 >;
 type SubjectRoutes = InstalledSubjectRoutes;
 type InstalledZoneRoutes = SharedRoutes<Routes['zones'] & ZoneSubjectListRoutes, Routes['zones']>;
+/** Producer `ImportedPreview` from kernel definition-import; SharedRoutes yields to generated emission. */
+export type ImportedPreview = {
+  kind: PublicationDocumentKind;
+  identity: PublicationIdentity | null;
+  diagnostics: PublicationDiagnostic[];
+  comparison: ReleaseComparison | ExtensionComparison | null;
+  types: { id: string }[];
+  current: EditorialHead | null;
+  reconciliation: ActivationReconciliation | null;
+  operations: PublicationOperations;
+  document: Release | Extension | null;
+};
+type DefinitionImportRequest = {
+  document: unknown;
+  context?: string;
+  expected_head?: number | null;
+};
 type DefinitionImportRoutes = {
   imports: {
     post: {
-      body: { document: unknown; context?: string; expected_head?: number | null };
+      body: DefinitionImportRequest;
       params: {};
       query: unknown;
       headers: unknown;
       response: {
-        200: {
-          operations: {
-            grant: 'definition_publication';
-            admitted: boolean;
-            publish: boolean;
-            activate: boolean;
-            build: boolean;
-          };
-        };
+        200: ImportedPreview;
         400: unknown;
         401: unknown;
         403: unknown;
