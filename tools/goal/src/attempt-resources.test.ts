@@ -103,12 +103,14 @@ test('walk, task-named and labelled resources are owned; shared keep prefixes ar
         { name: `rezics-walk-${taskId}-database`, pidLabel: '', startLabel: '', bootLabel: '', sizeBytes: 10 },
         { name: 'rezics-dev-data', pidLabel: '', startLabel: '', bootLabel: '', sizeBytes: 99 },
         { name: 'orphan-db', pidLabel: '99', startLabel: '1', bootLabel: 'boot', sizeBytes: 4 },
+        { name: 'reused-vol', pidLabel: '4242', startLabel: '9', bootLabel: 'boot', sizeBytes: 4 },
+        { name: 'live-vol', pidLabel: '4242', startLabel: '100', bootLabel: 'boot', sizeBytes: 4 },
       ],
       [taskId],
       keep,
       ownerLive,
     ).map((row) => row.name),
-  ).toEqual([`rezics-walk-${taskId}-database`, 'orphan-db']);
+  ).toEqual([`rezics-walk-${taskId}-database`, 'orphan-db', 'reused-vol']);
   expect(derivedOwnerGone({ pidLabel: '4242', startLabel: '9', bootLabel: 'boot' }, live.get('4242')!)).toBe(true);
   expect(derivedOwnerGone({ pidLabel: '4242', startLabel: '100', bootLabel: 'boot' }, live.get('4242')!)).toBe(false);
   expect(derivedOwnerGone({ pidLabel: '99', startLabel: '1', bootLabel: 'boot' }, null)).toBe(true);
@@ -253,4 +255,5 @@ test('throwaway Kernel databases start with --rm and owner identity labels so a 
   expect(fn).toContain('rezics.kernel.derived.pid=');
   expect(fn).toContain('rezics.kernel.derived.start=');
   expect(fn).toContain('rezics.kernel.derived.boot=');
+  expect(fn).toContain('volume-label=${label}');
 });

@@ -1851,10 +1851,10 @@ Removal errors are logged and do not prevent attempt settlement; containers with
 Decision: when an attempt ends (success, failure, stop, cancel or integration) the controller reaps processes whose
 cwd is in that worktree and containers and volumes named `rezics-walk-<task>-*` or `rezics-<task>-*`, plus throwaway
 Kernel databases whose `rezics.kernel.derived.pid` owner is gone. Owner identity is pid, start time and boot, so a
-reused pid cannot keep them. Shared stacks matching `rezics-dev-`, `rezics-doctor-`, `rezics-kernel-dev` or
-`rezics-pagecheck-` are kept. A five-minute host sweep repeats that for cancelled, stopped, integrated and merged
-tasks. Each reap is logged with its owner and size; `goal status` reports `reapedLastHour`. Throwaway Kernel databases
-start with `--rm`.
+reused pid cannot keep them; throwaway volumes carry the same labels as the container. Shared stacks matching
+`rezics-dev-`, `rezics-doctor-`, `rezics-kernel-dev` or `rezics-pagecheck-` are kept. A five-minute host sweep repeats
+that for cancelled, stopped, integrated and merged tasks. Each reap is logged with its owner and size; `goal status`
+reports `reapedLastHour`. Throwaway Kernel databases start with `--rm`.
 
 ### Worker container cleanup
 

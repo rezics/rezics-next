@@ -313,7 +313,7 @@ export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
     '-p',
     '127.0.0.1::5432',
     '--mount',
-    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${owner.pid}`,
+    `type=volume,destination=/var/lib/postgresql,${labels.map((label) => `volume-label=${label}`).join(',')}`,
     '-e',
     'POSTGRES_USER=rezics',
     '-e',

@@ -88,7 +88,9 @@ test('the one-run compiler database stays in the run slice on a labelled volume'
     const args = throwawayDatabaseRunArgs(4242);
     expect(args).toContain('--cgroup-parent=rezics-check-fixture.slice');
     expect(args).toContain('--mount');
-    expect(args).toContain('type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=4242');
+    const mount = args.find((arg) => arg.startsWith('type=volume,'));
+    expect(mount).toContain('destination=/var/lib/postgresql');
+    expect(mount).toContain('volume-label=rezics.kernel.derived.pid=4242');
     expect(args).not.toContain('--tmpfs');
     expect(args).toContain('--rm');
   } finally {
