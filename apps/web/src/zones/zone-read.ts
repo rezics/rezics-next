@@ -16,6 +16,8 @@ import { nextKernelSession, zoneKernelHeaders } from './session.ts';
 import { applyZoneTransport, zoneRequestTransport, zoneTransportHeaders } from './transport.ts';
 import { validZoneCursor } from './visit.ts';
 
+export { zoneConfiguredRoute, zoneLocationSearch, zonePageSearch } from './visit';
+
 type ZoneRouteClient = {
   zones(input: { id: string }): {
     $readPage: {

@@ -2,6 +2,8 @@ import { APPEARANCE } from '@rezics/composition';
 import type { CompositionDocument } from '@rezics/composition';
 import type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
 
+export type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
+
 type Tokens = ZonePublic['appearance'];
 type TokenName = keyof typeof APPEARANCE;
 

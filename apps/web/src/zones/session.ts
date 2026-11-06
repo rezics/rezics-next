@@ -1,7 +1,5 @@
 import { SESSION_HEADER } from '@rezics/client';
-import type { ReadCredentialMode } from '../kernel/credential';
-import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, viewerCredential, type ReadCredentialMode, type SessionEnv } from '../kernel/client';
 
 export type ZoneSessionBinding = {
   authorization?: string;

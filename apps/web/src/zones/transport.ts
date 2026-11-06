@@ -1,9 +1,13 @@
 import { SESSION_HEADER } from '@rezics/client';
 import { setResponseHeader } from '@tanstack/react-start/server';
-import type { ReadCredentialMode } from '../kernel/credential';
-import type { SessionEnv } from '../session/client';
-import { clearCookie, SESSION_COOKIE } from '../session/cookies';
-import { prepareSession, viewerCredential } from '../session/request';
+import {
+  clearCookie,
+  prepareSession,
+  SESSION_COOKIE,
+  viewerCredential,
+  type ReadCredentialMode,
+  type SessionEnv,
+} from '../kernel/client';
 import type { ZoneSessionBinding } from './session.ts';
 import { zoneKernelHeaders, zoneSessionRevoked } from './session.ts';
 

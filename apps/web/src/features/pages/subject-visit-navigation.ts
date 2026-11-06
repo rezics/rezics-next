@@ -1,7 +1,6 @@
-import { releaseVisitReturn } from '../catalogue/release-fidelity/navigation';
+import { releaseVisitReturn, zoneVisitReturn } from '../catalogue/release-fidelity/navigation';
 import { creditReturn } from '../catalogue/credit-inspection/navigation';
 import { realmReadingReturn } from '../../community/realm-reading-return';
-import { zoneVisitReturn } from '../../zones/visit';
 import {
   workFranchiseReturn,
   workFranchiseFragment,
@@ -1032,6 +1031,8 @@ export function connectionReturnHref(
   if (realm) url.searchParams.set('realm', realm);
   return `${url.pathname}${url.search}${window ? connectionWindowFragment(window) : '#connections'}`;
 }
+
+export { zoneVisitReturn };
 
 export function withSubjectVisitReturn(href: string, value: string, locale: string): string {
   const via = subjectVisitReturn(value, locale);

@@ -1,10 +1,8 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { ZoneComposedPage } from '../../zones/page';
-import { ZoneReadBoundary, zonePageTitle } from '../../zones/zone-shell';
-import { readZonePageRequest } from '../../zones/zone-read';
-import { zoneLocationSearch, zonePageSearch } from '../../zones/visit';
+import { ZoneComposedPage, ZoneReadBoundary, zonePageTitle } from '../../zones/zone-shell';
+import { readZonePageRequest, zoneLocationSearch, zonePageSearch } from '../../zones/zone-read';
 
 export const Route = createFileRoute('/zones/$id')({
   staticData: { sessionReread: true },

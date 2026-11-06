@@ -1,7 +1,9 @@
 import type { CompositionDocument, View } from '@rezics/composition';
 import { APPEARANCE, UI_LOCALES, VIEWS } from '@rezics/composition';
-import type { ZonePageResponse, ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
+import type { ZonePublic } from './appearance.ts';
 import { validZoneCursor } from './visit.ts';
+
+type PageTemplate = { scope: 'route' | 'type' | 'base' | 'generic'; key: string | null };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const revisionPattern = /^[1-9][0-9]*$/;
@@ -108,7 +110,7 @@ export function receiveZonePublic(value: unknown): ZonePublic | undefined {
   return zone;
 }
 
-function template(value: unknown): ZonePageResponse['template'] | undefined {
+function template(value: unknown): PageTemplate | undefined {
   if (
     !isRecord(value) ||
     (value.scope !== 'route' && value.scope !== 'type' && value.scope !== 'base' && value.scope !== 'generic')
@@ -139,7 +141,7 @@ function receiveRead(value: unknown): ReceivedRead | undefined {
 
 export type ReceivedZonePage = {
   profile: string;
-  template: ZonePageResponse['template'];
+  template: PageTemplate;
   document: CompositionDocument;
   reads: Record<string, ReceivedRead>;
   zone: ZonePublic;

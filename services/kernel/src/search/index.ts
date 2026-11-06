@@ -48,3 +48,5 @@ export type {
 export type { DiscoveryFilterDocument } from '@rezics/filter';
 export type { SerializableContinuation, Source, SourcePage } from './discovery-source-contract.ts';
 export type { SubjectListingSource, SubjectSource } from './source.ts';
+export { observeComposedSlot, type ObservedSlotResult } from '../presentation/http/slot-observed.ts';
+export { uniqueCanonicalRows } from '../presentation/slot-bodies.ts';

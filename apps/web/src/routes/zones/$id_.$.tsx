@@ -1,10 +1,8 @@
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { ZoneComposedPage } from '../../zones/page';
-import { ZoneReadBoundary, zonePageTitle } from '../../zones/zone-shell';
-import { readZonePageRequest } from '../../zones/zone-read';
-import { zoneConfiguredRoute, zoneLocationSearch, zonePageSearch } from '../../zones/visit';
+import { ZoneComposedPage, ZoneReadBoundary, zonePageTitle } from '../../zones/zone-shell';
+import { readZonePageRequest, zoneConfiguredRoute, zoneLocationSearch, zonePageSearch } from '../../zones/zone-read';
 
 function routeOf(value: string | undefined): string {
   const route = zoneConfiguredRoute(value);

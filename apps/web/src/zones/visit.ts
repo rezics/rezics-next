@@ -1,5 +1,4 @@
 import { isView, UI_LOCALES, type View } from '@rezics/composition';
-import { subjectHref } from '../subject/subject-href';
 
 const origin = 'https://rezics.invalid';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -103,11 +102,6 @@ export function zoneLocationSearch(search: unknown): ZonePageSearch {
 
 export function zoneMemberHref(visit: ZoneVisit, subject: { id: string }): string {
   return zoneSubjectHref(visit.locale, visit.zoneId, subject.id);
-}
-
-/** Canonical Global Subject URL. Callers attach the Zone visit return after `subjectVisitReturn` admits it. */
-export function zoneCanonicalSubjectHref(visit: ZoneVisit, subject: { id: string; label: string }): string {
-  return subjectHref(subject, visit.locale).href;
 }
 
 function decodePath(value: string): string | undefined {

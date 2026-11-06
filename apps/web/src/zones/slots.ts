@@ -1,9 +1,9 @@
 import type { CompositionDocument } from '@rezics/composition';
 import { planReads, platformRegistry } from '@rezics/composition';
-import type { TypeListTarget } from '../features/pages/type-list-model';
+import { slug } from '@rezics/definitions/slug';
 import type { ReceivedRead, ReceivedZonePage } from './receive.ts';
 import { receiveSlotContinuation, withheldSlotRow } from './receive.ts';
-import { zoneCanonicalSubjectHref, zoneListHref, zoneMemberHref, zoneVisitHref, type ZoneVisit } from './visit.ts';
+import { zoneListHref, zoneMemberHref, zoneVisitHref, type ZoneVisit } from './visit.ts';
 
 export type ZoneSlotProjection = {
   currentHref: string;
@@ -81,12 +81,13 @@ export function projectZoneSlots(page: ReceivedZonePage, visit: ZoneVisit): Zone
       return zoneListHref(routeVisit, cursor);
     },
     memberHref: (subject) => zoneMemberHref(visit, subject),
-    canonicalHref: (subject) => zoneCanonicalSubjectHref(visit, subject),
+    canonicalHref: (subject) =>
+      `/${encodeURIComponent(visit.locale)}/subjects/${encodeURIComponent(subject.id)}/${slug(subject.label)}`,
     reads,
   };
 }
 
 /** Search TypeList stays on Global configured pages; Zone lists never become `{ route: '/' }` Search targets. */
-export function zoneTypeListTarget(_page: ReceivedZonePage): TypeListTarget | undefined {
+export function zoneTypeListTarget(_page: ReceivedZonePage): undefined {
   return undefined;
 }
