@@ -49,6 +49,9 @@ export default defineConfig((context) => {
       ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
       // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
       fs: { allow: [workspaceRoot, dependencyRoot, ...fontDependencyRoots] },
+      warmup: {
+        ssrFiles: ['src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
+      },
     },
     html: { cspNonce: viteNonceMarker },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
@@ -62,6 +65,7 @@ export default defineConfig((context) => {
     ssr: {
       optimizeDeps: {
         include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+        entries: ['src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
       },
     },
     plugins: [

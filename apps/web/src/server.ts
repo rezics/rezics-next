@@ -1,6 +1,7 @@
 import { env, WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { authRequest } from './session/routes.ts';
+import './session/website-scopes.ts';
 import { prepareSession } from './session/request.ts';
 import { cookie, clearCookie, SESSION_COOKIE, validId } from './session/cookies.ts';
 import type { SessionEnv } from './session/client.ts';

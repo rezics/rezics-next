@@ -893,7 +893,7 @@ async function walk(command: string[]): Promise<number> {
       }
       const log = join(root, '.temp', 'walk', task, 'stack.log');
       await mkdir(dirname(log), { recursive: true });
-      await Bun.write(log, '');
+      await writeFile(log, '');
       starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
         cwd: root,
         env,
