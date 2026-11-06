@@ -1,4 +1,5 @@
 import { reviewWithin } from './request';
+import { grantAcknowledged, accessPreparing } from './response';
 import type { OwnerTransfer, TransferResult } from './owner-transfer.ts';
 import type { KernelClient } from '@rezics/client';
 
@@ -110,11 +111,6 @@ export function interval(startsAt: string, endsAt: string): string | null {
 }
 
 type Result = { status: number; data: unknown; error: unknown };
-function codeOf(result: Result): string | null {
-  const error = result.error as { value?: { type?: unknown } } | null;
-  const type = error?.value?.type;
-  return typeof type === 'string' ? (type.split('/').at(-1) ?? null) : null;
-}
 
 export async function loadAccess(
   client: KernelClient,
@@ -137,7 +133,7 @@ export async function loadAccess(
     if (!result.error && result.data) return { status: 'ready', page: result.data };
     if ([400, 401, 403, 404].includes(result.status)) return { status: 'denied' };
     return {
-      status: result.status === 503 && codeOf(result) !== 'dependency_unavailable' ? 'preparing' : 'unavailable',
+      status: accessPreparing(result.status, result.error) ? 'preparing' : 'unavailable',
     };
   } catch {
     return { status: 'unavailable' };
@@ -186,7 +182,13 @@ export async function writeAccess(
       }
       return result;
     }, caller);
-    if (!result.error && result.data && result.status < 300) return { status: 'saved' };
+    if (
+      !result.error &&
+      result.status >= 200 &&
+      result.status < 300 &&
+      grantAcknowledged(result.data, change, resource.route)
+    )
+      return { status: 'saved' };
     if (result.status === 409 || result.status === 422) return { status: 'conflict' };
     // Native grants deliberately use the same refusal for stale intervals and authorization loss.
     if (result.status === 403) return { status: 'refused' };

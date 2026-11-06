@@ -30,3 +30,15 @@ All recovery states reuse the existing unavailable, lookup and exact-operation r
 Sources: this page group's data, recovery, forms and route; Web account management's read deadline and lifecycle
 request conventions; the native Realm ownership section of Access's README and the current Accounts decisions.
 No external reference source is required for this request-lifetime change.
+
+Decision: current-page admission refresh preserves one in-memory grant or transfer draft for the exact resource,
+caller and source grant. Preserve text and selections through loading, preparation and unavailable reads; require
+fresh recipient lookup and review after remount. A definitive denial, changed caller/resource, replaced source grant,
+confirmed submission or deliberate editor/window replacement retires the draft. Hidden drafts still protect departure.
+A pending write is separately retained by the command owner: its inspectable original operands and key sit beside
+Retry, and a current read never rewrites them. A successful native grant response must acknowledge the submitted
+resource, subject, interval and role/actions; an empty or unrelated 2xx body remains uncertain.
+
+When a supplied identity identifies the resource itself, its recognizable label leads the resource and transfer
+review. Exact references remain inspectable without new identity requests. Transfer confirmation includes the acting
+account and any delegating principal along with both owners and the source interval.

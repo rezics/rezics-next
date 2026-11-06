@@ -318,3 +318,24 @@ test('a ready keyboard page movement returns focus to the current grants heading
 
   expect(document.activeElement).toBe(within(host).getByRole('heading', { name: m.access_current_grants() }));
 });
+
+test('a new grant draft survives unavailable admission and requires fresh recipient review', async () => {
+  let current: AccessState = { status: 'unavailable' };
+  const io = { ...ioFor(), read: mock(async () => structuredClone(current)) };
+  await mount({ status: 'ready', page: structuredClone(snapshot) }, io);
+  await click(button(m.access_add_grant()));
+  await type(within(host).getByLabelText(m.access_handle()), 'aki');
+  await click(button(m.access_find_account()));
+  await click(button(m.access_review_title()));
+  await click(button(m.access_reload()));
+  expect(host.querySelector('#access-handle')).toBeNull();
+  expect(blocked()).toBe(true);
+  current = { status: 'ready', page: structuredClone(snapshot) };
+  await click(button(m.access_reload()));
+  expect((within(host).getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('aki');
+  expect(within(host).queryByRole('button', { name: m.access_review_confirm() })).toBeNull();
+  expect(button(m.access_review_title()).disabled).toBe(true);
+  expect(blocked()).toBe(true);
+  expect(io.lookup).toHaveBeenCalledTimes(1);
+  expect(io.save).toHaveBeenCalledTimes(0);
+});
