@@ -544,7 +544,6 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       if (result.value.state === 'denied') throw result.value.error;
       return result.value.actor;
     } catch (error) {
-      console.error('DIAG_AUTH_CAUSE', error instanceof Error ? `${error.name}: ${error.message}\n${error.stack}` : String(error));
       throwAccessUnavailable(error, context.deadline);
       if (error instanceof ProblemError && error.code === 'account_suspended') throw error;
       throw invalid();
