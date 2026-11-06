@@ -1,5 +1,6 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
+import { fromPlainText } from '@rezics/document';
 import { readFile } from 'node:fs/promises';
 import { startNativeWebStack } from './stack';
 import { currentNativeLifecycle, NativeTestLifecycle, nativeProcessIsSame, inspectNativeProcess } from './lifecycle.ts';
@@ -40,9 +41,25 @@ function responseProblem(body: string): { code?: string } | null {
 }
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
+const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
+const minuteUnit = 'http://www.wikidata.org/entity/Q7727';
+const vegetarianDiet = 'https://schema.org/VegetarianDiet';
 // Every command performs source-fence and authorization work under the same
 // two-second request deadline. Give each creation its own native request budget.
 const fixtureBatchSize = 1;
+
+type CreatedSubject = { id: string; label: string; labels: Record<string, string>; type: string };
+type FixtureEntry = {
+  key: string;
+  type: string;
+  label: string;
+  labels: Record<string, string>;
+  descriptions?: Record<string, string>;
+};
+
+function valueStatement(property: string, content: unknown) {
+  return { property: { id: property }, value: { type: 'value' as const, content } };
+}
 
 type ProcessInfo = {
   pid: number;
@@ -255,8 +272,8 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
       );
 
-    const created = new Map<string, { id: string; label: string; labels: Record<string, string>; type: string }>();
-    const entries = Object.entries(data.subjects).map(([key, value]) => ({
+    const created = new Map<string, CreatedSubject>();
+    const entries: FixtureEntry[] = Object.entries(data.subjects).map(([key, value]) => ({
       key,
       type: typeByKey[key]!,
       label: titleOf(value),
@@ -266,6 +283,38 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       >,
       descriptions: 'description' in value ? { en: String(value.description) } : undefined,
     }));
+    const classification: FixtureEntry[] = [
+      {
+        key: 'light-novel',
+        type: 'skos:Concept',
+        label: data.subjects.book.form,
+        labels: { en: data.subjects.book.form, [data.search.locale]: data.search.facetLabels[0]! },
+      },
+      {
+        key: 'harem',
+        type: 'skos:Concept',
+        label: data.subjects.book.tag,
+        labels: { en: data.subjects.book.tag, [data.search.locale]: data.search.facetLabels[1]! },
+      },
+      {
+        key: 'vegetarian',
+        type: 'skos:Concept',
+        label: 'VegetarianDiet',
+        labels: { en: 'VegetarianDiet' },
+      },
+      {
+        key: 'pc',
+        type: 'skos:Concept',
+        label: data.subjects.game.platform,
+        labels: { en: data.subjects.game.platform },
+      },
+      {
+        key: 'nintendo-switch',
+        type: 'skos:Concept',
+        label: data.subjects.release.platform,
+        labels: { en: data.subjects.release.platform },
+      },
+    ];
     const personIndex = entries.findIndex(({ key }) => key === 'person');
     if (personIndex > 0) entries.unshift(entries.splice(personIndex, 1)[0]!);
     for (const view of data.traversal.views) {
@@ -337,6 +386,103 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         return persona;
       }),
     );
+    const createOne = async (persona: string, entry: FixtureEntry, statements?: Record<string, unknown[]>) => {
+      const response = await kernel(
+        '/v1/subjects',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(crypto.randomUUID()),
+          },
+          body: JSON.stringify({
+            type: entry.type,
+            labels: entry.labels,
+            ...(entry.descriptions ? { descriptions: entry.descriptions } : {}),
+            ...(statements ? { statements } : {}),
+          }),
+        },
+        persona,
+      );
+      if (!response.ok)
+        throw new Error(
+          `Could not create fixture subject ${entry.key} through kernel API: ${response.status} ${await response.text()}`,
+        );
+      const result = (await response.json()) as { subject?: { id: string } };
+      if (!result.subject?.id) throw new Error(`Fixture subject ${entry.key} API response lacked its created identity`);
+      created.set(entry.key, {
+        id: result.subject.id,
+        label: entry.label,
+        labels: entry.labels,
+        type: entry.type,
+      });
+    };
+    const owner = writers[0]!;
+    for (const concept of classification) {
+      await createOne(
+        owner,
+        concept,
+        concept.key === 'vegetarian'
+          ? { 'schema:sameAs': [valueStatement('schema:sameAs', vegetarianDiet)] }
+          : undefined,
+      );
+    }
+    const requireCreated = (key: string) => {
+      const subject = created.get(key);
+      if (!subject) throw new Error(`Fixture subject ${key} must be created first`);
+      return subject;
+    };
+    const statementsFor = (entry: FixtureEntry): Record<string, unknown[]> | undefined => {
+      if (entry.key === 'book') {
+        return {
+          'schema:author': [valueStatement('schema:author', requireCreated('person').id)],
+          'schema:wordCount': [
+            valueStatement('schema:wordCount', { amount: `+${data.subjects.book.wordCount}`, unit: '1' }),
+          ],
+          'wdt:P7937': [valueStatement('wdt:P7937', requireCreated('light-novel').id)],
+          'schema:keywords': [valueStatement('schema:keywords', requireCreated('harem').id)],
+        };
+      }
+      if (entry.key === 'recipe') {
+        return {
+          'schema:cookTime': [
+            valueStatement('schema:cookTime', { amount: `+${data.subjects.recipe.cookTimeMinutes}`, unit: minuteUnit }),
+          ],
+          'schema:suitableForDiet': [valueStatement('schema:suitableForDiet', requireCreated('vegetarian').id)],
+          'schema:recipeIngredient': data.subjects.recipe.ingredients.map((text) =>
+            valueStatement('schema:recipeIngredient', { language: 'en', text }),
+          ),
+          'schema:recipeInstructions': [
+            valueStatement('schema:recipeInstructions', {
+              language: 'en',
+              document: fromPlainText(data.subjects.recipe.instructions.join('\n')),
+            }),
+          ],
+        };
+      }
+      if (entry.key === 'game') {
+        return { 'schema:gamePlatform': [valueStatement('schema:gamePlatform', requireCreated('pc').id)] };
+      }
+      if (entry.key === 'release') {
+        return {
+          'schema:gamePlatform': [valueStatement('schema:gamePlatform', requireCreated('nintendo-switch').id)],
+          'schema:datePublished': [
+            valueStatement('schema:datePublished', {
+              time: `+${data.subjects.release.date}T00:00:00Z`,
+              precision: 11,
+              calendarmodel: gregorianCalendar,
+            }),
+          ],
+          'schema:inLanguage': [valueStatement('schema:inLanguage', data.subjects.release.language)],
+        };
+      }
+      if (entry.key.startsWith('search-book-')) {
+        return {
+          'wdt:P7937': [valueStatement('wdt:P7937', requireCreated('light-novel').id)],
+          'schema:keywords': [valueStatement('schema:keywords', requireCreated('harem').id)],
+        };
+      }
+    };
     const batches = Array.from({ length: writerCount }, (_, index) => {
       const writerEntries = entries.slice(index * 220, index * 220 + 220);
       return { persona: writers[index]!, entries: writerEntries };
@@ -345,47 +491,13 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       batches.map(async ({ persona, entries: writerEntries }) => {
         for (let start = 0; start < writerEntries.length; start += fixtureBatchSize) {
           const batch = writerEntries.slice(start, start + fixtureBatchSize);
-          if (batch.length === 1 && batch[0]!.key === 'book') {
-            const author = created.get('person');
-            if (!author) throw new Error('Fixture person must be created before its book');
+          if (batch.length === 1) {
             const entry = batch[0]!;
-            const response = await kernel(
-              '/v1/subjects',
-              {
-                method: 'POST',
-                headers: {
-                  'content-type': 'application/json',
-                  'idempotency-key': JSON.stringify(crypto.randomUUID()),
-                },
-                body: JSON.stringify({
-                  type: entry.type,
-                  labels: entry.labels,
-                  ...(entry.descriptions ? { descriptions: entry.descriptions } : {}),
-                  statements: {
-                    'schema:author': [
-                      {
-                        property: { id: 'schema:author' },
-                        value: { type: 'value', content: author.id },
-                      },
-                    ],
-                  },
-                }),
-              },
-              persona,
-            );
-            if (!response.ok)
-              throw new Error(
-                `Could not create fixture book through kernel API: ${response.status} ${await response.text()}`,
-              );
-            const result = (await response.json()) as { subject?: { id: string } };
-            if (!result.subject?.id) throw new Error('Fixture book API response lacked its created identity');
-            created.set(entry.key, {
-              id: result.subject.id,
-              label: entry.label,
-              labels: entry.labels,
-              type: entry.type,
-            });
-            continue;
+            const statements = statementsFor(entry);
+            if (statements) {
+              await createOne(persona, entry, statements);
+              continue;
+            }
           }
           const commands = batch.map(({ key, type, labels, descriptions }) => {
             return {
