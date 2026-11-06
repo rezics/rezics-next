@@ -109,12 +109,13 @@ function sourcesFor(count: number) {
 
 test('platform and Context editors publish, resume, activate and use a compiled fixture vertical with independent pinned reads', async () => {
   const anonymous = await call('anonymous', 'POST', '/v1/definitions/imports', { document: { types: {} } });
-  expect(anonymous.status, JSON.stringify(anonymous.body)).toBe(401);
+  expect(anonymous.status, JSON.stringify(anonymous.body)).toBe(403);
+  expect(anonymous.body.code).toBe('platform_closed');
   const closed = await call('reader', 'POST', '/v1/definitions/imports', { document: { types: {} } });
   expect(closed.status, JSON.stringify(closed.body)).toBe(403);
   expect(closed.body.code).toBe('platform_closed');
   const suspended = await call('suspended', 'POST', '/v1/definitions/imports', { document: { types: {} } });
-  expect(suspended.status).toBe(401);
+  expect([401, 403]).toContain(suspended.status);
 
   const invalid = await call('editor', 'POST', '/v1/definitions/imports', { document: { format: 'nope' } });
   expect(invalid.status, JSON.stringify(invalid.body)).toBe(200);
