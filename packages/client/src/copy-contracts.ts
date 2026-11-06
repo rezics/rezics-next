@@ -1,6 +1,11 @@
 /** Copy condition and inventory DTOs mounted beside the generated copies routes. Loan contracts derive from the
- * generated copy-loans route in index.ts, so this module carries no loan types.
+ * generated copy-loans route in index.ts, so this module carries no loan types. The write patch and display unions
+ * come from the generated copy-condition declarations; editing and inventory shapes have no generated declaration yet.
  */
+import type {
+  CopyConditionDisplay as GeneratedCopyConditionDisplay,
+  CopyConditionPatch as GeneratedCopyConditionPatch,
+} from './kernel/library/copy-condition.ts';
 
 export const COPY_CONDITION_VALUES = [
   'unknown',
@@ -14,16 +19,8 @@ export const COPY_CONDITION_VALUES = [
 ] as const;
 
 export type CopyConditionValue = (typeof COPY_CONDITION_VALUES)[number];
-export type CopyConditionPatch = {
-  mediaCondition?: CopyConditionValue | null;
-  packagingCondition?: CopyConditionValue | null;
-};
-
-export type CopyConditionDisplay =
-  | { state: 'not_recorded' }
-  | { state: 'unavailable' }
-  | { state: 'cleared' }
-  | { state: 'recorded'; id: CopyConditionValue; label: string };
+export type CopyConditionPatch = GeneratedCopyConditionPatch;
+export type CopyConditionDisplay = GeneratedCopyConditionDisplay;
 
 export type CopyConditionChoice = { id: CopyConditionValue; label: string; description: string };
 export type CopyConditionEditing =

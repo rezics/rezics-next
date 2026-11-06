@@ -81,6 +81,9 @@ Decision: each copy context's `facts` is the closed union the generated client d
 `code`), so a loan page serializes through the Web server function without casts. Loans read and refresh under the
 `copy.list` gate, the personal-library operation Copies already uses; the exposure table has no loan-specific operation.
 
+Decision: loan commands receive the transaction-bound History evidence through the request access seam, which binds the
+prepared history accounts on the live command transaction. They do not import the evidence leaf themselves.
+
 Returned history is private to the owner for the owner's lifetime and survives copy deletion or disposal. Terminal
 owner erasure removes loan rows and the generation row through the existing owned-graph receiver, in batches of at
 most 100 keys per work step. No separate cleanup scheduler or retention timer was added.
