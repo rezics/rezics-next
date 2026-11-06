@@ -14,14 +14,37 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import type { SummaryReaderDependencies } from '../../src/semantic/summaries.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { epochFixture, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 
 let f: EpochFixture;
+let workClient: WorkClient;
+let work: Awaited<ReturnType<typeof composeWork>> | undefined;
 beforeAll(async () => {
   f = await epochFixture();
+  // Account completion publishes through the real identity coordinator, which needs the production work modules.
+  const databaseUrl = process.env.DATABASE_URL!;
+  workClient = await createWorkClient(databaseUrl, f.pool);
+  work = await composeWork(KERNEL_WORK_MODULES, {
+    databaseUrl,
+    pool: f.pool,
+    client: workClient,
+    env: workerTestEnv({
+      KERNEL_ROUTE_KEY: Buffer.from(new Uint8Array(32).fill(37)).toString('base64url'),
+      OPENSEARCH_URL: process.env.OPENSEARCH_URL,
+    }),
+    receiptKeys: testReceiptKeys(),
+  });
+  await work.launch();
 });
 afterAll(async () => {
+  await work?.shutdown();
+  await workClient?.close();
   await f?.close();
 });
 

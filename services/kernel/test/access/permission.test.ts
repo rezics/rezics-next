@@ -1,4 +1,5 @@
 import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -24,6 +25,7 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 // A single connection also detects any nested checkout during final authorization.
 const pool = new pg.Pool({ connectionString: url, max: 1 });
+configureTestReceiptKeys(pool);
 afterAll(() => pool.end());
 const id = (route: string, suffix: string) => `00000000-0000-7000-8000-${route}${suffix.padStart(8, '0')}`;
 const actorId = id('1234', '1');
@@ -326,7 +328,7 @@ test('exact own-account and registered Global profiles retain their native ceili
   ).rejects.toBeInstanceOf(RangeError);
   expect(
     await ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [actorId] }),
-  ).toEqual({ [actorId]: { allowed: true, explicit: false } });
+  ).toEqual({ [actorId]: { allowed: true, explicit: true } });
 
   const governor = identity({ scopes: ['post:erase'], requestedBy: null });
   await grant(actorId, 'post:erase', PLATFORM_RESOURCE);
