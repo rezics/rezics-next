@@ -27,6 +27,19 @@ Decision: native identity receiving refuses a missing or incomplete Source direc
 a complete unchanged retained definition must reach the native reader. Immutable projection meaning alone cannot
 substitute for the Source binding, capture and dependency keys.
 
+Decision: public Search-scope capture compiles through `compilePublicFilterConsumerCapture` before Source binding,
+admitting with the binder's `{ inverse: true }` options and resolving the original accepted meaning. Compiled capture
+keeps the admitted tree; engine DSL stays optional equality evidence and is not a second retained copy. Initial kind
+chips reuse every distinct current admitted-page identity as an inexact witness, with no extra Source read beyond
+page disclosure of those identities. Continuations stay unavailable; aggregate proof remains a separate exact path.
+Members fixtures evaluate current grants plus collection eligibility on a repeatable-read snapshot the
+same way GET members `loadCollection` authorizes, using the kernel request deadline and without a second minted T that
+prepare did not capture. Extra kernel HTTP probes mount
+through `createKernel.modules` before compile. Native Search and HTTP fixtures release source-database sessions
+before clone and after the original context. Command-running bootstrap installs native History the same way server
+and worker do. After History moved the native record-source-set loader into `history/adapters`, that loader reads
+Semantic from `../../semantic/record-source-set.ts` as a filesystem path.
+
 Decision: the exported native receiving statement catalogue is SearchNativeReceivingSql-indexed `{ sql: string }`;
 consumers use that SQL text, so reylo generator metadata stays off the declaration surface.
 
@@ -665,9 +678,9 @@ Commerce admission nor final episode completion. Commerce still owns its indepen
 
 `test/search/members-native-scope.test.ts` authors real configured Members admission, useful ID/ordinal owner
 evaluation, rejected/deleted positions, hostile hints, stale/expired admission, transaction reuse, final currentness
-and cumulative cost controls, plus unrelated owner data at 1/10/100. Connected/native/growth execution remains
-UNRUN under the minimal source-delivery policy. The current explicit Members producer stub remains an exact
-activation refusal; these Search bodies do not substitute a ready certificate for genuine producer delivery.
+and cumulative cost controls, plus unrelated owner data at 1/10/100. Connected native execution uses the admitted
+source and the Members fixture's current grant/eligibility snapshot; Search does not substitute a ready certificate
+for genuine producer delivery.
 
 Whole-query publication has its own additive `{kind:'collection-publication',tx,locator}` branch,
 `CollectionPublicationWorkContext`. It imports the original `CollectionPublicationLocator`,

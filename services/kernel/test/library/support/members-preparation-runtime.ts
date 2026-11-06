@@ -20,9 +20,10 @@ import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { cookies, nativeFixture, password } from '../../access/native-account-bindings-fixture.ts';
 import { deletePersona as deleteNativePersona } from '../../support/account-deletion.ts';
+import { authorizeMintedRead, collectionReadEligibility } from '../../support/admitted-access.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
-import { registerTestClient, testKernel } from '../../support/test-kernel.ts';
+import { registerTestClient, TEST_REQUEST_DEADLINE_MS, testKernel } from '../../support/test-kernel.ts';
 
 /** Auth owns the only process-global executor. This fixture launches no kernel work runtime. */
 export async function membersPreparationRuntime() {
@@ -65,7 +66,7 @@ export async function membersPreparationRuntime() {
     .filter((scope) => scope !== 'media:complete')
     .sort();
   await registerTestClient(service, { clientId, firstParty: true, scopes });
-  const context = () => ({ pool: db.pool, deadline: Date.now() + 5000 });
+  const context = () => ({ pool: db.pool, deadline: Date.now() + TEST_REQUEST_DEADLINE_MS });
   const actor = (persona: Persona | null, pool: Pool = db.pool) =>
     actorOf(
       kernel.testAccess,
@@ -129,19 +130,16 @@ export async function membersPreparationRuntime() {
         expect.objectContaining({ subject_id: owner.accountId, grant_role: 'library.collection.owner' }),
       ]),
     );
+    const route = routeOf(collection.id)!;
+    const resource = { route, id: collection.id };
     const ownerRead = await accessCheck(
       kernel.testAccess,
       currentActor,
       'collection:read',
-      { route: routeOf(collection.id)!, id: collection.id },
+      { ...resource, eligibility: collectionReadEligibility(resource) },
       context(),
     );
-    const connection = await db.pool.connect();
-    try {
-      expect(await ownerRead(connection), JSON.stringify(authority.rows)).toBe(true);
-    } finally {
-      connection.release();
-    }
+    expect(await authorizeMintedRead(ownerRead, db.pool, context().deadline), JSON.stringify(authority.rows)).toBe(true);
     const read = await capture(
       db,
       async () => {
@@ -236,8 +234,11 @@ export async function membersPreparationRuntime() {
       try {
         await auth.close();
       } finally {
-        await workClient.close();
-        await db.close();
+        try {
+          await workClient.close();
+        } finally {
+          await db.close();
+        }
       }
     },
   };
