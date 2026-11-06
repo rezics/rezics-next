@@ -4,6 +4,7 @@ import { issuer } from '../../access/native-account-bindings-fixture.ts';
 import { createLibraryAccountHost, type LibraryAccountHost } from './native-account-host.ts';
 import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { releaseDigest } from '@rezics/definitions';
+import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { mkdir } from 'node:fs/promises';
@@ -485,47 +486,12 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     // db.admin is outside statement capture; the measured pool stays out of fixture setup.
     await bootstrapGovernance(db.admin, governor.id);
 
-    const definitionGrant = await byRoute(
-      tokenFor(governor),
-      'POST',
-      '/v1/grants',
-      {
-        resource: PLATFORM_RESOURCE,
-        subject: { kind: 'account', id: governor.id },
-        actions: ['definitions:publish', 'definitions:activate'],
-        valid: '(,)',
-      },
-      { 'Idempotency-Key': key() },
-    );
-    await expectJson('Granting fixture definition publication', definitionGrant, 201);
+    // Definitions is a prerequisite dataset, not a permission under test. Its native
+    // bootstrap owns initial publication/activation; governance cannot self-grant
+    // definition publication actions that its current role does not hold.
     const release = await compileLibraryOutcomeRelease();
     const digest = releaseDigest(release);
-    const published = await byRoute(
-      tokenFor(governor),
-      'POST',
-      '/v1/definitions/releases',
-      { release },
-      { 'Idempotency-Key': key() },
-    );
-    const publishedBody = await expectJson<{ digest: string }>(
-      'Publishing Library outcome definitions',
-      published,
-      201,
-    );
-    if (publishedBody.digest !== digest) throw new Error('Definitions returned a different compiled release digest');
-    const currentHead = await byRoute(null, 'GET', '/v1/definitions/active');
-    const expectedHead =
-      currentHead.status === 404
-        ? null
-        : (await expectJson<{ head: number }>('Reading fixture definitions head', currentHead, 200)).head;
-    const activated = await byRoute(
-      tokenFor(governor),
-      'POST',
-      `/v1/definitions/releases/${digest}:activate`,
-      { expected_head: expectedHead },
-      { 'Idempotency-Key': key() },
-    );
-    await expectJson('Activating Library outcome definitions', activated, 200);
+    await bootstrapRelease(db.admin, release);
     const active = await expectJson<{ digest: string }>(
       'Reading activated Library outcome definitions',
       await byRoute(null, 'GET', '/v1/definitions/active'),
