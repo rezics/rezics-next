@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
-import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions } from '../library/contract/work-dimensions.ts';
+import type { NativeCollectionWork } from '../library/access-capabilities.ts';
 import type {
   AccountIdentityReversalSettlement,
   AccountIdentitySource,
@@ -10,6 +11,13 @@ import type {
   IdentitySourceConsumerContext,
   IdentitySourceConsumerReference,
 } from './identity-source-consumer-custody.ts';
+import type {
+  LibraryExpectedEffectAfter,
+  LibraryScopeEffectSeal,
+  LibraryScopeEffectsKey,
+  LibraryScopeEffectsPage,
+  LibraryScopeEffectsPageInput,
+} from '../library/identity-scope-effects.ts';
 
 export type IdentitySourceWorkDeclaration = Readonly<{
   work: WorkDimensions;
@@ -44,6 +52,27 @@ export type IdentitySourceConsumerRuntime = Readonly<{
   ): Promise<boolean>;
   bindingConsumerDeclaration(): IdentitySourceWorkDeclaration;
   declareLibraryIdentityCustodyOperation(operation: 'revalidateHold'): IdentitySourceWorkDeclaration;
+  libraryOriginalDeclaration(): IdentitySourceWorkDeclaration;
+  readLibraryScopeEffectsPage(
+    pool: Pool,
+    input: LibraryScopeEffectsKey &
+      Readonly<{
+        after: LibraryExpectedEffectAfter | null;
+        limit: number;
+        allowance: WorkAllowance;
+        deadline: number;
+      }>,
+  ): Promise<LibraryScopeEffectsPage>;
+  readLibraryScopeEffectsPageWithWork(
+    pool: Pool,
+    input: LibraryScopeEffectsPageInput,
+    work: NativeCollectionWork,
+  ): Promise<LibraryScopeEffectsPage>;
+  verifyLibraryScopeEffectsSeal(
+    tx: CommandTransaction,
+    key: LibraryScopeEffectsKey,
+    seal: LibraryScopeEffectSeal,
+  ): Promise<boolean>;
 }>;
 
 let installed: IdentitySourceConsumerRuntime | undefined;

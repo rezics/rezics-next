@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { mergeVerifiedAgent } from '../../src/access/agent-verification.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/adapters/agent-identity-recovery-receiving.ts';
@@ -45,11 +46,23 @@ import { IdentityHistoryWorkUnavailable } from '../../src/history/contract/error
 
 /** Publish the original Accounts job through installed Search and Library participants. */
 async function publishOriginalAccountIdentity(
-  pool: import('pg').Pool,
+  pool: Pool,
   workflow: Parameters<typeof mergeVerifiedAgent>[1],
 ) {
-  await mergeVerifiedAgent(pool, workflow);
-  return { kind: 'account-agent.verify' as const, account: workflow.accountId, receipt: workflow.receiptId };
+  const receipt = { kind: 'account-agent.verify' as const, account: workflow.accountId, receipt: workflow.receiptId };
+  const until = Date.now() + 120_000;
+  let last: unknown;
+  while (Date.now() < until) {
+    try {
+      await mergeVerifiedAgent(pool, workflow);
+      await readAccountIdentityUndo(pool, receipt);
+      return receipt;
+    } catch (error) {
+      last = error;
+      await Bun.sleep(250);
+    }
+  }
+  throw last instanceof Error ? last : new Error('Native identity publication did not complete');
 }
 
 // Authored native cases only. Run through the existing kernel fixture runner after integration.
@@ -58,10 +71,10 @@ let publication: Awaited<ReturnType<typeof installIdentityEpochPublication>>;
 let reference: IdentitySourceConsumerReference;
 beforeAll(async () => {
   f = await cutoverFixture();
-  publication = await installIdentityEpochPublication(f);
   const catalogue = (await f.create('Custody verification catalogue')).subject.id;
   const approved = await approvedVerification(f, catalogue);
   await ensureAccountAgent(f.pool, { account: approved.account, kind: 'person', name: null });
+  publication = await installIdentityEpochPublication(f);
   const receipt = await publishOriginalAccountIdentity(f.pool, approved.workflow);
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   reference = {
@@ -545,6 +558,7 @@ test('The original Source owner durably guards exact History readiness and closu
   await bootstrapGovernance(f.pool, accounts.staff);
   await real.grant({ route: 1, id: accounts.person }, 'person', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'staff', 'account:verify_agent');
+  await ensureAccountAgent(f.pool, { account: accounts.person, kind: 'person', name: null });
   const context = async (persona: 'person' | 'staff') => ({
     pool: f.pool,
     deadline: Date.now() + 5000,
@@ -566,7 +580,6 @@ test('The original Source owner durably guards exact History readiness and closu
   expect(saved.decisionReceiptId).toBe(decided.value.decisionReceiptId);
   const workflow = { ...saved, receiptId: saved.decisionReceiptId };
   await recordPendingAgentVerification(f.pool, workflow, () => new Date());
-  await ensureAccountAgent(f.pool, { account: accounts.person, kind: 'person', name: null });
   const receipt = await publishOriginalAccountIdentity(f.pool, workflow);
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   const erased = (

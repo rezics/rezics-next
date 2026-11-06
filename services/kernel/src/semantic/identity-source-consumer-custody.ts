@@ -12,16 +12,14 @@ import type {
   NativeStepWork,
 } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
-import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type {
+  LibraryExpectedEffectAfter,
   LibraryScopeEffectSeal,
   LibraryScopeEffectsPage,
   LibraryScopeEffectsKey,
 } from '../library/identity-scope-effects.ts';
-import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } from '../library/identity-scope-effects.ts';
-import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effects.ts';
-import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-source-work.ts';
+import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/access-capabilities.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
 import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
@@ -771,27 +769,20 @@ export async function readIdentitySourcePrepaidLibraryPage(
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-resources-changed');
   claimIdentitySourceLibraryCall(pool, 'effectPages');
   input = structuredClone(input);
-  const installed = await import('../library/identity-scope-effects.ts');
+  const library = identitySourceConsumerRuntime();
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
-  const entry = Object.getOwnPropertyDescriptor(installed, 'readLibraryScopeEffectsPageWithWork');
-  if (!entry || !('value' in entry) || typeof entry.value !== 'function')
+  if (typeof library.readLibraryScopeEffectsPageWithWork !== 'function')
     throw new IdentitySourceOriginalUnavailable('identity-source-readLibraryScopeEffectsPageWithWork-not-installed');
-  const libraryOwner = await import('../library/collection-source-work.ts');
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
-  const declaration = Object.getOwnPropertyDescriptor(libraryOwner, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
-  if (!declaration || !('value' in declaration) || !declaration.value)
+  const declaration = library.libraryOriginalDeclaration();
+  if (!declaration?.work)
     throw new IdentitySourceOriginalUnavailable('identity-source-LibraryAllReachedCalls-declaration-not-installed');
-  const read = entry.value as (
-    pool: Pool,
-    pageInput: typeof input,
-    work: import('../library/collection-source-work.ts').NativeCollectionWork,
-  ) => Promise<LibraryScopeEffectsPage>;
   // The installed Library body enforces its own exact literal policy on the
   // SAME ledger. Its Core controls are reserved by the private Source adapter
   // from the disjoint Source partition, outside Library body observation.
-  const page = await read(pool, input, work);
+  const page = await library.readLibraryScopeEffectsPageWithWork(pool, input, work);
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
   const receipt = work.receipt();
@@ -1647,7 +1638,7 @@ async function advanceConsumers(
           const ticketKey = hash(ticket);
           const prior = previous?.state === 'scope' && previous.ticket_key === ticketKey ? previous : null;
           const readPage = (allowance: WorkAllowance) =>
-            readLibraryScopeEffectsPage(pool, {
+            identitySourceConsumerRuntime().readLibraryScopeEffectsPage(pool, {
               ...key,
               after: prior?.effect_after ?? null,
               limit: 1,
@@ -1762,7 +1753,7 @@ async function advanceConsumers(
                 { partition: identityScopeAddress(ticket.scope).partition, deadline },
                 async (tx) => {
                   claimIdentitySourceLibraryCall(pool, 'currentVerifications');
-                  const verify = () => verifyLibraryScopeEffectsSeal(tx, key, page.seal);
+                  const verify = () => identitySourceConsumerRuntime().verifyLibraryScopeEffectsSeal(tx, key, page.seal);
                   if (!(await (prepaid ? observe(verify, tx) : verify()))) return noEffect(null);
                   if (!page.exhausted) return noEffect({ fence: null });
                   const fence = await ports.scope.retainIdentityScopeConsumerFence!(tx, ticket, page.seal);

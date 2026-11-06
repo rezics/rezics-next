@@ -6,11 +6,17 @@ import {
   readAccountIdentitySource,
   verifyAccountIdentityTechnicalSource,
 } from '../access/agent-verification-identity.ts';
+import { IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION } from '../library/access-capabilities.ts';
 import { declareLibraryIdentityCustodyOperation } from '../library/identity-original-work.ts';
+import {
+  readLibraryScopeEffectsPage,
+  readLibraryScopeEffectsPageWithWork,
+  verifyLibraryScopeEffectsSeal,
+} from '../library/identity-scope-effects.ts';
 import { IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { bindIdentitySourceConsumerRuntime } from '../semantic/identity-source-consumer-ports.ts';
 
-/** Bind Access reader/reversal, Library hold and Semantic binding declarations to Source. */
+/** Bind Access reader/reversal, Library hold/page/seal and Semantic binding declarations to Source. */
 export function installIdentitySourceConsumerRuntime(): void {
   bindIdentitySourceConsumerRuntime(
     Object.freeze({
@@ -23,6 +29,10 @@ export function installIdentitySourceConsumerRuntime(): void {
       bindingConsumerDeclaration: IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION,
       declareLibraryIdentityCustodyOperation: (operation: 'revalidateHold') =>
         declareLibraryIdentityCustodyOperation(operation),
+      libraryOriginalDeclaration: IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION,
+      readLibraryScopeEffectsPage,
+      readLibraryScopeEffectsPageWithWork,
+      verifyLibraryScopeEffectsSeal,
     }),
   );
 }

@@ -18,7 +18,7 @@ import {
   NativeCollectionWork,
   bindNativeCollectionWorkLifetime,
   withNativeCollectionWorkAllowance,
-} from '../library/collection-source-work.ts';
+} from '../library/access-capabilities.ts';
 import {
   currentIdentityOriginalTransfer,
   identityOriginalRemainder,
@@ -648,8 +648,6 @@ export async function readIdentitySourceOriginalCostDisposition() {
   const sourceDeclaration = IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATIONGetter();
   const { scopeConsumerFootprint } = await import('./identity-scoped-observations.ts');
   const history = historyComposition();
-  const library = await import('../library/collection-source-work.ts');
-  const effects = await import('../library/identity-scope-effects.ts');
   const participants = await import('./identity-epoch-participant-cost.ts');
   const runtime = identitySourceConsumerRuntime();
   const ownValue = (module: object, name: string): unknown => {
@@ -666,7 +664,7 @@ export async function readIdentitySourceOriginalCostDisposition() {
     if (declaration.engineRequests !== 0 || !declaration.work) return null;
     return Object.freeze({ work: declaration.work, engineRequests: 0 as const });
   };
-  const libraryValue = invoke(library, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
+  const libraryValue = runtime.libraryOriginalDeclaration();
   const libraryDeclaration =
     libraryValue === undefined || libraryValue === null
       ? null
@@ -804,7 +802,7 @@ export async function readIdentitySourceOriginalCostDisposition() {
     historyComponents,
     historyCallableInstalled: typeof history.withPrepaidAgentIdentityHistoryUnit === 'function',
     libraryDeclaration,
-    librarySameWorkCallableInstalled: typeof ownValue(effects, 'readLibraryScopeEffectsPageWithWork') === 'function',
+    librarySameWorkCallableInstalled: typeof runtime.readLibraryScopeEffectsPageWithWork === 'function',
     accessOriginal,
     jobRead,
     stepReconcile,

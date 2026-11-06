@@ -371,6 +371,7 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
     'collection:create',
     'collection:read',
     'collection:update',
+    'collection:delete',
     'subject:read',
     'follow:create',
     'follow:delete',
@@ -382,7 +383,7 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
         action,
         {
           anonymous: action === 'subject:read',
-          ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
+          ...(action.startsWith('collection:') ? { 'x-resource-types': ['library.collection'] } : {}),
         },
       ]),
     ),
@@ -557,6 +558,8 @@ export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'poo
   const { startWorker } = await import('../../../src/worker.ts');
   const { workerTestEnv } = await import('../../support/worker-env.ts');
   const { readSearchConfig } = await import('../../../src/search/work.ts');
+  const { createOpenSearch } = await import('../../../src/search/opensearch.ts');
+  const { createSubjectIndex } = await import('../../../src/search/indices.ts');
   const databaseUrl = f.pool.options.connectionString;
   if (!databaseUrl) throw new Error('Identity publication fixture requires the owned pool connection string');
   const env = workerTestEnv({
@@ -564,15 +567,16 @@ export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'poo
     DATABASE_URL: databaseUrl,
     KERNEL_SEARCH_PREFIX: `identity-${randomUUID().replaceAll('-', '')}`,
   });
-  if (!readSearchConfig(env)) throw new Error('Actual default fixed Search participant needs OPENSEARCH_URL');
+  const config = readSearchConfig(env);
+  if (!config) throw new Error('Actual default fixed Search participant needs OPENSEARCH_URL');
   const pool = f.pool;
+  pool.options.connectionTimeoutMillis = 5_000;
   const end = pool.end.bind(pool);
   let closing: Promise<void> | undefined;
   pool.end = () => (closing ??= end());
-  return startWorker(
+  const worker = await startWorker(
     {
       databaseUrl,
-      poolSize: 1,
       kernelPool() {
         return pool;
       },
@@ -580,4 +584,6 @@ export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'poo
     undefined,
     env,
   );
+  await createSubjectIndex(createOpenSearch(config.url), config.prefix, 1);
+  return worker;
 }

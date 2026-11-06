@@ -117,7 +117,8 @@ readback keep those original bodies. Worker-installed Search and Library partici
 required before Accounts verify/unverify can resume a job. Original-source native cases install
 those participants, then run Accounts verify through `mergeVerifiedAgent` so the published job
 and participant receipts exist before original-funded prepare/checkpoint/finish. Admission-only
-cases may still call `prepareAdmission` without resume.
+cases may still call `prepareAdmission` without resume. Library cutover Access keeps
+`collection:delete` with `library.collection` owner/type metadata so native grants compile.
 
 ## Concurrent control and coherent admission
 

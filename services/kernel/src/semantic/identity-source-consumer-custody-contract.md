@@ -1160,7 +1160,8 @@ getter presence alone. Accounts' fully spent local allowance is not reused.
 
 Decision: original-source native cases install Search and Library participants, then run Accounts
 verify/unverify through `mergeVerifiedAgent` so publication and participant receipts exist before
-original-funded prepare/checkpoint/finish. Admission-only cases keep `prepareAdmission`.
+original-funded prepare/checkpoint/finish. Admission-only cases keep `prepareAdmission`. Library
+cutover Access retains `collection:delete` and `library.collection` owner/type metadata.
 
 The additional fixture cases cover genuine one-original/two-attempt/overlap/reentry,
 unavailable/failure and real Core rollback, exact counter/ledger/deadline behavior,

@@ -498,7 +498,9 @@
         "services/kernel/src/library/work-module.ts",
         "services/kernel/src/library/adapters/index.ts",
         "services/kernel/src/library/domain-binding.ts",
-        "services/kernel/src/library/identity-original-work.ts"
+        "services/kernel/src/library/identity-original-work.ts",
+        "services/kernel/src/library/identity-scope-effects.ts",
+        "services/kernel/src/library/collection-source-work.ts"
       ],
       "allowedDependencies": [
         "access-policy",
