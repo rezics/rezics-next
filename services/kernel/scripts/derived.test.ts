@@ -57,7 +57,6 @@ test('derived caches invalidate on migration, source, output, and container chan
 test('throwaway databases use --rm and refuse Linux namespace paths as Docker networks', () => {
   const args = throwawayDatabaseRunArgs(7);
   expect(args[0]).toBe('run');
-  expect(args).toContain('--stop-timeout');
   expect(args).toContain('--rm');
   expect(args).toContain('rezics.kernel.derived.pid=7');
   expect(args).not.toContain('--network');

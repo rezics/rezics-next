@@ -1,7 +1,7 @@
 // Reylo prepares `.sql` modules against DATABASE_URL. The root typecheck and the Auth check share this
 // preparation so those modules see the kernel schema and the Auth schema.
-import { spawn, spawnSync, type SpawnSyncOptions } from 'node:child_process';
-import { createConnection } from 'node:net';
+import { spawnSync } from 'node:child_process';
+import { createServer, createConnection } from 'node:net';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { migrate as migrateAuth } from '../services/auth/scripts/database.ts';
@@ -13,15 +13,6 @@ const CONTAINER_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const NETWORK_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const POSTGRES_SOCKET_NAME = '.s.PGSQL.5432';
 const READY_TIMEOUT_MS = 60_000;
-/** Matches Auth `DEFAULT_RUN_TIMEOUT`: `docker run` on a busy check host exceeds a 10s spawn cap. */
-export const DOCKER_RUN_TIMEOUT_MS = 120_000;
-/** Inspect/exec/ps/port probes; the 60s readiness loop retries these. */
-export const DOCKER_PROBE_TIMEOUT_MS = 5_000;
-/** Host-lifetime Python uses seconds; keep it identical to `DOCKER_RUN_TIMEOUT_MS`. */
-export const DOCKER_RM_TIMEOUT_SECONDS = DOCKER_RUN_TIMEOUT_MS / 1000;
-export const DOCKER_PROBE_TIMEOUT_SECONDS = DOCKER_PROBE_TIMEOUT_MS / 1000;
-export const COMPILER_PID_LABEL = 'rezics.compiler.pid';
-export const COMPILER_NONCE_LABEL = 'rezics.compiler.nonce';
 /** PostgreSQL SSLRequest; a ready postmaster replies with one byte, a half-open listener EOFs. */
 const POSTGRES_SSL_REQUEST = Buffer.from([0x00, 0x00, 0x00, 0x08, 0x04, 0xd2, 0x16, 0x2f]);
 
@@ -33,124 +24,14 @@ export type PostgresListen = {
 
 export type DockerCommand = (args: string[]) => string;
 
-export function dockerTimeoutMs(args: readonly string[]): number {
-  const verb = args[0];
-  if (verb === 'run' || verb === 'create' || verb === 'start' || verb === 'stop') return DOCKER_RUN_TIMEOUT_MS;
-  if (verb === 'rm' && args.includes('-f')) return DOCKER_RUN_TIMEOUT_MS;
-  return DOCKER_PROBE_TIMEOUT_MS;
-}
-
-/** Forced `rm` is a new session so a 200ms supervisor SIGKILL of the owner group cannot abort it. */
-export function dockerSpawnSyncOptions(
-  args: readonly string[],
-  extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {},
-): SpawnSyncOptions {
-  const forcedRm = args[0] === 'rm' && args.includes('-f');
-  return {
-    encoding: 'utf8',
-    timeout: dockerTimeoutMs(args),
-    ...(forcedRm ? { detached: true } : {}),
-    ...extra,
-  };
-}
-
-/**
- * Auth fixture pattern: issue `docker rm -f -v` in its own session and return. The host-lifetime supervisor still
- * waits up to 120s for labelled removal; SIGTERM handlers must not block in spawnSync.
- */
-export function beginDetachedDockerRm(id: string, extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {}): void {
-  if (!id || !CONTAINER_IDENTITY.test(id)) return;
-  const child = spawn('docker', ['rm', '-f', '-v', id], { detached: true, stdio: 'ignore', ...extra });
-  child.unref();
-}
-
-function spawnDockerError(args: readonly string[], error: NodeJS.ErrnoException): never {
-  if (error.code === 'ETIMEDOUT') {
-    throw Object.assign(error, {
-      message: `spawnSync docker ETIMEDOUT ${JSON.stringify(['docker', ...args])}`,
-    });
-  }
-  throw error;
-}
-
 function docker(args: string[]): string {
-  const result = spawnSync('docker', args, dockerSpawnSyncOptions(args));
-  if (result.error) spawnDockerError(args, result.error as NodeJS.ErrnoException);
+  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 10_000 });
+  if (result.error) throw result.error;
   if (result.status !== 0)
     throw new Error(
-      `docker ${args.join(' ')} failed with status ${result.status}: ${String(result.stderr ?? '').trim() || '(no stderr)'}`,
+      `docker ${args.join(' ')} failed with status ${result.status}: ${result.stderr?.trim() || '(no stderr)'}`,
     );
-  return String(result.stdout).trim();
-}
-
-export function newCompilerNonce(pid = process.pid, now = Date.now): string {
-  return `${pid}-${now().toString(36)}-${Math.random().toString(16).slice(2)}`;
-}
-
-export function compilerDatabaseRunArgs(
-  pid = process.pid,
-  nonce = newCompilerNonce(pid),
-  network = dockerNetworkArgs(),
-): string[] {
-  const labels = [`${COMPILER_PID_LABEL}=${pid}`, `${COMPILER_NONCE_LABEL}=${nonce}`];
-  return [
-    'run',
-    '-d',
-    '--stop-timeout',
-    '2',
-    '--rm',
-    ...network,
-    ...labels.flatMap((label) => ['--label', label]),
-    ...postgresPublishArgs(pid, network),
-    '--mount',
-    `type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=${pid}`,
-    '-e',
-    'POSTGRES_USER=rezics',
-    '-e',
-    'POSTGRES_PASSWORD=rezics',
-    '-e',
-    'POSTGRES_DB=rezics',
-    POSTGRES_IMAGE,
-    '-c',
-    'fsync=off',
-    '-c',
-    'synchronous_commit=off',
-    '-c',
-    'full_page_writes=off',
-  ];
-}
-
-export function reapCompilerNonce(nonce: string, pid = process.pid, dockerCommand: DockerCommand = docker): void {
-  try {
-    const ids = dockerCommand(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=${nonce}`])
-      .split('\n')
-      .filter(Boolean);
-    for (const id of ids) {
-      try {
-        dockerCommand(['rm', '-f', '-v', id]);
-      } catch {
-        // A concurrent cleanup may already have removed it.
-      }
-    }
-  } catch {
-    // Listing may fail after a daemon timeout; labelled stale cleanup still reaps later.
-  }
-  rmSync(isolatedPostgresSocketDir(pid), { recursive: true, force: true });
-}
-
-/** Start the one-run compiler container; a timeout or failed create reaps that nonce before the error escapes. */
-export function startCompilerContainer(
-  pid = process.pid,
-  nonce = newCompilerNonce(pid),
-  dockerCommand: DockerCommand = docker,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  try {
-    return dockerCommand(compilerDatabaseRunArgs(pid, nonce, dockerNetworkArgs(env)));
-  } catch (error) {
-    reapCompilerNonce(nonce, pid, dockerCommand);
-    throw error;
-  }
+  return result.stdout.trim();
 }
 
 /**
@@ -426,6 +307,35 @@ export async function startPostgresForwarder(
   }
 }
 
+/** Same-process forwarder kept only as the starvation witness; production always uses startPostgresForwarder. */
+export function startInProcessPostgresForwarder(socketPath: string, listenPort = 0): Promise<PostgresForwarder> {
+  return new Promise((resolve, reject) => {
+    const server = createServer((client) => {
+      const upstream = createConnection(socketPath);
+      const close = () => {
+        client.destroy();
+        upstream.destroy();
+      };
+      client.on('error', close);
+      upstream.on('error', close);
+      client.on('close', close);
+      upstream.on('close', close);
+      client.pipe(upstream);
+      upstream.pipe(client);
+    });
+    server.once('error', reject);
+    server.listen(listenPort, '127.0.0.1', () => {
+      const address = server.address();
+      const port = address && typeof address === 'object' ? address.port : listenPort;
+      resolve({
+        port,
+        child: { killed: false, exitCode: 0, exited: Promise.resolve(0), kill() {}, stdin: null, stdout: null, stderr: null } as unknown as ReturnType<typeof Bun.spawn>,
+        stop: () => server.close(),
+      });
+    });
+  });
+}
+
 export async function resolvePostgresListenUrl(
   container: string,
   pid = process.pid,
@@ -471,9 +381,9 @@ export function cleanupStaleCompilerDatabases(dockerCommand: DockerCommand = doc
     'ps',
     '-a',
     '--filter',
-    `label=${COMPILER_PID_LABEL}`,
+    'label=rezics.compiler.pid',
     '--format',
-    `{{.ID}} {{.Label "${COMPILER_PID_LABEL}"}}`,
+    '{{.ID}} {{.Label "rezics.compiler.pid"}}',
   ])
     .split('\n')
     .filter(Boolean);
@@ -498,17 +408,41 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) {
     cleanupStaleCompilerDatabases();
   }
-  const nonce = newCompilerNonce();
+  const network = dockerNetworkArgs();
   const container = await withCommandPhase(
     'database-image',
-    () => startCompilerContainer(process.pid, nonce),
+    () =>
+      docker([
+        'run',
+        '-d',
+        '--rm',
+        ...network,
+        '--label',
+        `rezics.compiler.pid=${process.pid}`,
+        ...postgresPublishArgs(process.pid, network),
+        '--tmpfs',
+        '/var/lib/postgresql:rw,size=1g',
+        '-e',
+        'POSTGRES_USER=rezics',
+        '-e',
+        'POSTGRES_PASSWORD=rezics',
+        '-e',
+        'POSTGRES_DB=rezics',
+        POSTGRES_IMAGE,
+        '-c',
+        'fsync=off',
+        '-c',
+        'synchronous_commit=off',
+        '-c',
+        'full_page_writes=off',
+      ]),
     process.env,
   );
   let listen: PostgresListen | undefined;
   let removed = false;
   let cleanupFailed = false;
   let cleanupFailure: unknown;
-  const remove = (wait = true): void => {
+  const remove = (): void => {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
     listen?.stop();
@@ -519,10 +453,6 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
       return;
     }
     removed = true;
-    if (!wait) {
-      beginDetachedDockerRm(container);
-      return;
-    }
     try {
       docker(['rm', '-f', '-v', container]);
     } catch (error) {
@@ -533,7 +463,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   };
   const onSigint = (): void => {
     try {
-      remove(false);
+      remove();
     } catch (error) {
       console.error(error);
     }
@@ -541,7 +471,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   };
   const onSigterm = (): void => {
     try {
-      remove(false);
+      remove();
     } catch (error) {
       console.error(error);
     }

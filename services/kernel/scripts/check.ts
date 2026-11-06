@@ -40,9 +40,7 @@ import {
   writeArtifactCatalog,
 } from '../../../scripts/check-artifacts.ts';
 import {
-  beginDetachedDockerRm,
   dockerNetworkArgs,
-  dockerSpawnSyncOptions,
   isolatedPostgresSocketDir,
   ownerProcessIdentity,
   postgresPublishArgs,
@@ -579,10 +577,7 @@ async function psql(sql: string): Promise<void> {
 }
 
 export function docker(args: string[]): string {
-  const result = spawnSync('docker', args, dockerSpawnSyncOptions(args, { cwd: directory, env: process.env }));
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return result.stdout.trim();
+  return run('docker', args);
 }
 
 type DockerCommand = (args: string[]) => string;
@@ -772,8 +767,6 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
   return dockerCommand([
     'run',
     '-d',
-    '--stop-timeout',
-    '2',
     '--rm',
     ...network,
     ...cgroupArgs(),
@@ -837,17 +830,12 @@ export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand:
 export function cleanup(
   containers: readonly string[] = [searchContainer, container],
   dockerCommand: DockerCommand = docker,
-  wait = true,
 ): void {
   postgresListen?.stop();
   postgresListen = undefined;
   rmSync(isolatedPostgresSocketDir(Number(pid)), { recursive: true, force: true });
   for (const id of containers) {
     if (!id) continue;
-    if (!wait) {
-      beginDetachedDockerRm(id, { cwd: directory, env: process.env });
-      continue;
-    }
     try {
       dockerCommand(['rm', '-f', '-v', id]);
     } catch (error) {
@@ -1166,12 +1154,12 @@ if (import.meta.main) {
   // the containers this process started.
   process.on('SIGINT', () => {
     if (placing) return;
-    cleanup([searchContainer, container], docker, false);
+    cleanup();
     process.exit(130);
   });
   process.on('SIGTERM', () => {
     if (placing) return;
-    cleanup([searchContainer, container], docker, false);
+    cleanup();
     process.exit(143);
   });
 
