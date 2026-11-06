@@ -309,31 +309,64 @@ test('fourth-page and name-coverage cases stay incomplete without dropping readi
   expect(names.state).toBe('incomplete');
   expect(await ready(named.id)).toBe(true);
 
-  const authors = [];
-  for (let index = 0; index < CREDIT_SEARCH_LIMITS.pages * CREDIT_SEARCH_LIMITS.creditsPerPage + 1; index++)
-    authors.push(await person(`Page author ${index}`));
+  const writer = await person('Page author');
   const paged = (
     await ok(
       '/v1/subjects',
       {
         type: 'wd:Q689445',
         labels: { en: 'Four page credits' },
-        statements: { 'schema:author': authors.map((author) => statement('schema:author', author.id)) },
+        statements: { 'schema:author': [statement('schema:author', writer.id)] },
       },
       201,
     )
   ).subject as Record<string, any>;
-  const projection = await receiveCreditSearch(source.creditSearch!, paged.id);
-  expect(projection.state).toBe('incomplete');
-  expect(await ready(paged.id)).toBe(true);
+  const needed = CREDIT_SEARCH_LIMITS.pages * CREDIT_SEARCH_LIMITS.creditsPerPage + 1;
+  const template = await admin.query(
+    `SELECT property FROM semantic.search_selected WHERE subject_id = $1 AND active LIMIT 1`,
+    [paged.id],
+  );
+  expect(template.rows).toHaveLength(1);
+  expect(template.rows[0]!.property).toBe('schema:author');
+  const inserted = await admin.query(
+    `INSERT INTO semantic.search_selected (
+       route, subject_id, slot_id, candidate_id, property, rank, ordinal, body, release, revision,
+       source, relation, compact, active, log_seq
+     )
+     SELECT t.route, t.subject_id, gen_random_uuid(), gen_random_uuid(), t.property, t.rank, t.ordinal,
+            t.body, t.release, t.revision, t.source, t.relation, true, true, t.log_seq
+     FROM semantic.search_selected t
+     CROSS JOIN generate_series(1, $2::integer)
+     WHERE t.subject_id = $1::uuid AND t.active`,
+    [paged.id, needed - 1],
+  );
+  expect(inserted.rowCount).toBe(needed - 1);
+  const counted = await pool.query<{ n: number }>(
+    'SELECT count(*)::int AS n FROM semantic.search_selected WHERE subject_id = $1 AND active AND property = $2',
+    [paged.id, 'schema:author'],
+  );
+  expect(counted.rows[0]!.n).toBe(needed);
+  const home = await pool.query<{ route: number }>('SELECT route FROM semantic.subject WHERE subject_id = $1', [
+    paged.id,
+  ]);
+  const mimic = await pool.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM semantic.search_selected
+     WHERE route = $1 AND subject_id = $2 AND property = ANY($3::text[]) AND active
+       AND route >= ($4::integer) * 16 AND route < ($4::integer + 1) * 16`,
+    [home.rows[0]!.route, paged.id, ['schema:author'], home.rows[0]!.route >> 4],
+  );
+  expect(mimic.rows[0]!.n).toBe(needed);
   const page = await source.creditSearch!.page({
     workId: paged.id,
     after: null,
     observation: null,
     limits: CREDIT_SEARCH_LIMITS,
   });
-  expect(page.state).toBe('current');
+  expect(page.state, JSON.stringify(page)).toBe('current');
   if (page.state !== 'current') throw new Error('current first page');
+  expect(page.next, `entries=${page.entries.length} mimic=${mimic.rows[0]!.n}`).toBeString();
   expect(page.entries).toHaveLength(CREDIT_SEARCH_LIMITS.creditsPerPage);
-  expect(page.next).toBeString();
+  const projection = await receiveCreditSearch(source.creditSearch!, paged.id);
+  expect(projection.state).toBe('incomplete');
+  expect(await ready(paged.id)).toBe(true);
 }, 180_000);

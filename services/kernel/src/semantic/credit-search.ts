@@ -19,6 +19,7 @@ import {
 import type { LanguageValue } from '../search/source.ts';
 import { readRelease } from './definitions.ts';
 import { withoutFencedEntries } from './fences.ts';
+import type { IdentityMapping } from './identity-adapters/identity-epoch-contract.ts';
 import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { workCreditProperties } from './list-presentation-work-context.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
@@ -30,6 +31,7 @@ import readCreditStatement from './credit-search-statement.sql';
 import readCreditNames from './credit-search-names.sql';
 
 const ZERO = '00000000-0000-0000-0000-000000000000';
+const SELECTED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const encoder = new TextEncoder();
 
 async function inCreditSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -173,17 +175,17 @@ function readCursor(after: string | null): { property: string; slot: string; can
     )
       return 'invalid';
     const [property, slot, candidate] = value as [string, string, string];
-    if (routeOf(slot) === null || routeOf(candidate) === null) return 'invalid';
+    if (!SELECTED_UUID.test(slot) || !SELECTED_UUID.test(candidate)) return 'invalid';
     return { property, slot, candidate };
   } catch {
     return 'invalid';
   }
 }
 
-function foldNames(rows: readonly NameRow[], nameBytes: number, namesPerCreator: number) {
+function foldNames(rows: readonly NameRow[], nameBytes: number, namesPerCreator: number, fetchLimit: number) {
   const labels = new Map<string, string>();
   const aliases = new Map<string, string[]>();
-  let overflow = rows.length > namesPerCreator * 2 + 1;
+  let overflow = rows.length >= fetchLimit;
   for (const row of rows) {
     if (row.language === null || typeof row.body !== 'string') continue;
     if (row.kind === 'alias') {
@@ -347,7 +349,7 @@ async function canonicalCreators(
     }
     if (terminal) terminals.set(original, terminal);
   }
-  const mappings = [];
+  const mappings: IdentityMapping[] = [];
   for (let offset = 0; offset < unique.length; offset += 100)
     mappings.push(...(await readIdentityMappings(pool, unique.slice(offset, offset + 100))));
   if (mappings.some((mapping) => mapping.state === 'pending'))
@@ -372,7 +374,7 @@ async function canonicalCreators(
     const terminal = terminals.get(original);
     if (!terminal) continue;
     const mapping = mapped.get(original);
-    const folded = foldNames(nameRows.get(terminal.id) ?? [], limits.nameBytes, limits.namesPerCreator);
+    const folded = foldNames(nameRows.get(terminal.id) ?? [], limits.nameBytes, limits.namesPerCreator, nameLimit);
     creators.set(original, {
       originalId: original,
       terminalId: terminal.id,

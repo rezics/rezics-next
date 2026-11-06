@@ -2,6 +2,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :partition_no::integer AS partition_no,
          :route::integer AS route,
          :subject_id::uuid AS subject_id,
+         :properties::text[] AS properties,
          :has_after::boolean AS has_after,
          :after_property::text AS after_property,
          :after_slot::uuid AS after_slot,
@@ -14,7 +15,7 @@ raw AS MATERIALIZED (
   CROSS JOIN input
   WHERE selected.route = input.route
     AND selected.subject_id = input.subject_id
-    AND selected.property = ANY(:properties::text[])
+    AND selected.property = ANY(input.properties)
     AND selected.active
     AND selected.route >= input.partition_no * 16
     AND selected.route < (input.partition_no + 1) * 16
