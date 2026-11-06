@@ -553,13 +553,6 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: registering kernel SQL modules');
     // Match the kernel test preload before evaluating anything that imports SQL.
     await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
-    const [{ createCommerceWork }, { readCommerceConfig }, { createStripePort }, { createWorkClient }] =
-      await Promise.all([
-        import('../../../../services/kernel/src/commerce/enqueue.ts'),
-        import('../../../../services/kernel/src/commerce/config.ts'),
-        import('../../../../services/kernel/src/commerce/stripe.ts'),
-        import('../../../../services/kernel/src/work/client.ts'),
-      ]);
     reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');
@@ -712,6 +705,13 @@ async function startStack(): Promise<
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
+    const [{ createCommerceWork }, { readCommerceConfig }, { createStripePort }, { createWorkClient }] =
+      await Promise.all([
+        import('../../../../services/kernel/src/commerce/enqueue.ts'),
+        import('../../../../services/kernel/src/commerce/config.ts'),
+        import('../../../../services/kernel/src/commerce/stripe.ts'),
+        import('../../../../services/kernel/src/work/client.ts'),
+      ]);
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
     const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
     const searchConfig = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: searchPrefix });
