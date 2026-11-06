@@ -104,6 +104,8 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
 
 ## Operating discipline
 
+- The supermanager decides operational and engineering trade-offs itself, by the best efficiency, and does not wait for
+  the maintainer. It reports the decision afterwards.
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
   one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
