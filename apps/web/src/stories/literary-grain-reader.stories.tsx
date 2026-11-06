@@ -4,10 +4,18 @@ import { LiteraryReaderEntry } from '../features/catalogue/literary-reader/entry
 import { literaryGrainExample, literaryIds, literaryStatement } from '../features/catalogue/literary-reader/examples';
 
 const client = new QueryClient();
+
+// The example factory widens the population kind to string; every grain example is the global population.
+function grainExample(type?: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance') {
+  const population: { kind: 'global' } = { kind: 'global' };
+  const example = literaryGrainExample(type);
+  return { ...example, context: { ...example.context, population } };
+}
+
 const meta = {
   title: 'Pages/Subjects/Literary grain',
   component: LiteraryReaderEntry,
-  args: literaryGrainExample(),
+  args: grainExample(),
   decorators: [
     (Story) => (
       <QueryClientProvider client={client}>
@@ -21,11 +29,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Series: Story = {};
-export const SeriesWithAnimeCounterpart: Story = { args: literaryGrainExample() };
-export const Member: Story = { args: literaryGrainExample('schema:Book') };
-export const Edition: Story = { args: literaryGrainExample('bf:Instance') };
+export const SeriesWithAnimeCounterpart: Story = { args: grainExample() };
+export const Member: Story = { args: grainExample('schema:Book') };
+export const Edition: Story = { args: grainExample('bf:Instance') };
 const windowState = (status: number): Story => {
-  const input = literaryGrainExample();
+  const input = grainExample();
   return { args: { ...input, windows: [{ ...input.windows[0]!, status }] } };
 };
 export const Preparing: Story = windowState(202);
@@ -40,7 +48,7 @@ export const Unsupported: Story = { args: { descriptorState: 'unsupported', defi
 export const Loading: Story = { args: { windows: [loading] } };
 export const LongJapanese: Story = {
   args: {
-    ...literaryGrainExample('schema:Book'),
+    ...grainExample('schema:Book'),
     locale: 'ja',
     work: {
       ...literaryGrainExample('schema:Book').work,
@@ -50,7 +58,7 @@ export const LongJapanese: Story = {
 };
 export const TraditionalChinese: Story = {
   args: {
-    ...literaryGrainExample('schema:Book'),
+    ...grainExample('schema:Book'),
     locale: 'zh-Hant',
     work: {
       ...literaryGrainExample('schema:Book').work,
@@ -59,7 +67,7 @@ export const TraditionalChinese: Story = {
   },
 };
 const multipleStreams = () => {
-  const input = literaryGrainExample();
+  const input = grainExample();
   const member = input.windows[0]!;
   const assertion = literaryStatement('schema:exampleOfWork', literaryIds.series);
   return {

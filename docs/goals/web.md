@@ -232,6 +232,8 @@ latter. Supported same-origin `/spaces/<address>` URLs are admitted before netwo
 paths and extra segments are rejected. Address normalization stays native. Former reserved claims are not forwarding
 results. No Space page loader, directory, follows enumeration or per-option reads supply this choice.
 
+Decision: a definitive 404 from the exact address resolution or the point read is `not_found` ("This Space was not found"); other failures keep `unavailable`, which offers retry.
+
 The selection retains the actual Space id, title/current address, head revision and independently viewer-derived
 Realm id. Realm-backed Space is a genuine scope. A null or unreadable Realm makes the selected scope unavailable;
 it never becomes Global, unselected success or known empty. The schema has no Zone id. Content owns the native

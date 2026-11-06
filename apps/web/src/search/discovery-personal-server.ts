@@ -71,11 +71,9 @@ export const readDiscoveryPersonalPage = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<DiscoveryBoundPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     try {
-      const [{ env }, { kernelClient }, { readReleaseForCaller }] = await Promise.all([
-        import('cloudflare:workers'),
-        import('../kernel/client'),
-        import('../subject/definitions'),
-      ]);
+      const { env } = await import('cloudflare:workers');
+      const { kernelClient } = await import('../kernel/client');
+      const { readReleaseForCaller } = await import('../subject/definitions');
       const request = getRequest();
       const client = kernelClient(data.locale);
       const metadata = kernelClient(data.locale, undefined, discoveryMetadataFetch(request.signal));

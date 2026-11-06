@@ -265,7 +265,7 @@ export function CopyForm({
           ? result.copy.id === copy.id
             ? { state: 'ready', copy: result.copy }
             : { state: 'unavailable' }
-          : { state: result.reason },
+          : { state: result.reason === 'closed' ? 'unavailable' : result.reason },
       );
     } catch {
       if (current('copy.get') && request === lookup.current) setReview({ state: 'unavailable' });

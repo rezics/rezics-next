@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { NativeRealmHomePage } from '../community/realm-home-native';
+import type { NativeRealmHomeObservation } from '../community/realm-home-native';
 import { RealmMembership } from '../community/realm-membership';
 import { appearancePath } from '../kernel/fake/community';
 import { PatternStory } from './page';
@@ -7,7 +7,7 @@ import { PatternStory } from './page';
 const realm = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000001', visibility: 'public' as const, viewer: null };
 type ViewerCase = 'member' | 'denied' | 'banned' | 'orphaned';
 
-function observation(kind: ViewerCase): Pick<NativeRealmHomePage, 'viewer' | 'actions'> {
+function observation(kind: ViewerCase): NativeRealmHomeObservation {
   if (kind === 'member')
     return {
       viewer: { state: 'member', membership: 'member' },

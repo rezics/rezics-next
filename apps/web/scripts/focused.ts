@@ -23,6 +23,16 @@ export function admitExplicitHostTestCommand(command: string[]): string[] {
   return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
 }
 
+/** Explicit files run in fresh runtimes: Bun's module mocks otherwise survive across file boundaries. */
+export function focusedTestCommands(command: string[]): string[][] {
+  if (command[0] !== 'bun' || command[1] !== 'test') return [command];
+  const files = command.slice(2).filter((argument) => /\.test\.[cm]?[jt]sx?$/.test(argument));
+  if (files.length < 2) return [command];
+  const selected = new Set(files);
+  const prefix = command.filter((argument) => !selected.has(argument));
+  return files.map((file) => [...prefix, file]);
+}
+
 export type FocusedRunnerOptions = {
   appDirectory?: string;
   env?: NodeJS.ProcessEnv;
@@ -129,9 +139,21 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     REZICS_TEST_RUNTIME: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
   };
-  const invocation = options.privateNetwork
-    ? ['unshare', '--user', '--map-root-user', '--net', 'sh', '-c', 'ip link set lo up && exec "$@"', 'sh', ...admitted]
-    : admitted;
+  const invocations = focusedTestCommands(admitted).map((command) =>
+    options.privateNetwork
+      ? [
+          'unshare',
+          '--user',
+          '--map-root-user',
+          '--net',
+          'sh',
+          '-c',
+          'ip link set lo up && exec "$@"',
+          'sh',
+          ...command,
+        ]
+      : command,
+  );
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;
@@ -160,34 +182,40 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
     if (prepared !== 0) return prepared;
 
-    child = Bun.spawn(invocation, {
-      cwd: appDirectory,
-      env: childEnvironment,
-      detached: true,
-      stdin: 'inherit',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const pid = child.pid;
-    options.onStart?.({ pid, stateDirectory });
+    let result = 0;
+    for (const invocation of invocations) {
+      runtimeStopped = false;
+      child = Bun.spawn(invocation, {
+        cwd: appDirectory,
+        env: childEnvironment,
+        detached: true,
+        stdin: 'inherit',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const pid = child.pid;
+      options.onStart?.({ pid, stateDirectory });
 
-    const relay = async (stream: ReadableStream<Uint8Array>, kind: 'stdout' | 'stderr') => {
-      try {
-        for await (const chunk of stream) {
-          if (options.onOutput) options.onOutput(kind, chunk);
-          else (kind === 'stdout' ? process.stdout : process.stderr).write(chunk);
+      const relay = async (stream: ReadableStream<Uint8Array>, kind: 'stdout' | 'stderr') => {
+        try {
+          for await (const chunk of stream) {
+            if (options.onOutput) options.onOutput(kind, chunk);
+            else (kind === 'stdout' ? process.stdout : process.stderr).write(chunk);
+          }
+        } catch (error) {
+          outputError ??= error;
         }
-      } catch (error) {
-        outputError ??= error;
-      }
-    };
-    const output = Promise.all([relay(child.stdout, 'stdout'), relay(child.stderr, 'stderr')]);
-    const status = await child.exited;
-    await stopProcessGroup(child);
-    runtimeStopped = true;
-    await output;
-    if (outputError) throw outputError;
-    return receivedSignal ? 128 + signals.find(([signal]) => signal === receivedSignal)![1] : status;
+      };
+      const output = Promise.all([relay(child.stdout, 'stdout'), relay(child.stderr, 'stderr')]);
+      const status = await child.exited;
+      await stopProcessGroup(child);
+      runtimeStopped = true;
+      await output;
+      if (outputError) throw outputError;
+      if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
+      if (status !== 0 && result === 0) result = status;
+    }
+    return result;
   } finally {
     if (forceTimer) clearTimeout(forceTimer);
     for (const [signal, listener] of forwarders) process.off(signal, listener);

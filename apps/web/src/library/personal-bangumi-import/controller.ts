@@ -23,6 +23,9 @@ import type { BangumiVisit } from './visit';
 
 export type BangumiStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
 
+/** Label commands run in the labels panel, outside the journey's retry and cost ledger. */
+type JourneyCommand = Exclude<BangumiCommand, { kind: 'tags' | 'review-labels' | 'apply-labels' }>;
+
 export type BangumiNotice = BangumiFailure | BangumiUnknown | { kind: 'too-large' } | { kind: 'empty' } | null;
 
 export type BangumiJourneySnapshot = {
@@ -178,7 +181,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   async function run<T extends { kind: string }>(
-    command: BangumiCommand,
+    command: JourneyCommand,
     send: () => Promise<T | BangumiFailure | BangumiUnknown>,
     retry = false,
   ): Promise<T | undefined> {
@@ -533,6 +536,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       }
       return snapshot();
     }
+    if (command.kind !== 'delete') return snapshot();
     await run(command, () => port.delete(command), true);
     if (!notice) clearPrivate('removed');
     return snapshot();

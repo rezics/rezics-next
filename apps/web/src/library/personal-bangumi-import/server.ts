@@ -26,6 +26,7 @@ import {
   type BangumiReviewResult,
   type BangumiScoreChoice,
   type BangumiScoreSelection,
+  type BangumiLabelApplyResult,
   type BangumiLabelAssignmentsResult,
   type BangumiLabelOptionsResult,
   type BangumiLabelReviewResult,
@@ -238,12 +239,13 @@ export const readBangumiTags = createServerFn({ method: 'GET' })
     const after = input.after;
     if (typeof after !== 'number' || !Number.isSafeInteger(after) || after < -1 || after >= BANGUMI_ROW_BYTES)
       throw new Error('Invalid Bangumi tag page');
+    const custody = 'custody' in input ? input.custody : undefined;
     return {
       kind: 'tags',
       uploadId: requireId(input.uploadId),
       ordinal: requireOrdinal(input.ordinal),
       after,
-      ...(input.custody === undefined ? {} : { custody: requireCustody(input.custody) }),
+      ...(custody === undefined ? {} : { custody: requireCustody(custody) }),
     };
   })
   .handler(async ({ data }): Promise<BangumiTagPageResult> => {

@@ -13,7 +13,7 @@ import {
   prepareOwnClassificationsVisit,
 } from '../../ratings/own-classifications/actions';
 import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
-import { OwnVotesDeparture } from '../../ratings/own-votes/departure';
+import { OwnVotesDeparture, type OwnVotesDepartureControl } from '../../ratings/own-votes/departure';
 import { useClassificationAddress } from '../../ratings/own-classifications/address';
 import { ClassificationsReader } from '../../ratings/own-classifications/reader';
 import {
@@ -58,7 +58,7 @@ function ClassificationAssessmentsRoute() {
     retained.current.initial = initial;
   }
   retained.current.address = address.key;
-  const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
+  const departureControl = useRef<OwnVotesDepartureControl | null>(null);
   useEffect(() => {
     const cancelFocus = () => {
       windows.focus = false;
@@ -107,7 +107,11 @@ function ClassificationAssessmentsRoute() {
         });
       }}
       commands={{
-        confirmMovement,
+        confirmMovement: {
+          get current() {
+            return departureControl.current?.confirm ?? null;
+          },
+        },
         csrfToken: () => origin.credential(0) ?? null,
         send: (intent, signal) =>
           executeClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
@@ -119,7 +123,7 @@ function ClassificationAssessmentsRoute() {
             locked={locked}
             isCurrent={current}
             onLeave={retire}
-            confirmMovement={confirmMovement}
+            confirmMovement={departureControl}
           />
         ),
       }}

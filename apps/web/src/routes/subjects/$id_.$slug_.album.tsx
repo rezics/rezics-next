@@ -36,10 +36,8 @@ const canonicalAlbum = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     if (data.identityOnly) return { id: data.id };
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadSubject } = await import('../../subject/load-subject');
     const canonical = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
     if (canonical.kind === 'missing' || canonical.value.id !== data.id) throw notFound();
     if (canonical.value.slug !== data.slug)

@@ -133,7 +133,7 @@ export class BoardWatchVisit {
       boardId: owner.boardId,
       accountId: owner.accountId,
       csrfToken: owner.csrfToken,
-      isCurrent: owner.isCurrent,
+      ...(owner.isCurrent ? { isCurrent: owner.isCurrent } : {}),
       watching: !page.viewer.watching,
       expectedRevision: page.viewer.revision,
       idempotencyKey: crypto.randomUUID(),
@@ -242,8 +242,9 @@ export class BoardWatchVisit {
       this.publish({ phase: 'unknown', command: 'unknown' });
     } else {
       this.command = undefined;
+      const reason = result.kind === 'refused' ? result.reason : undefined;
       this.publish({
-        phase: result.reason === 'access-lost' ? 'denied' : result.reason === 'unavailable' ? 'unavailable' : 'denied',
+        phase: reason === 'access-lost' ? 'denied' : reason === 'unavailable' ? 'unavailable' : 'denied',
         command: 'denied',
       });
     }

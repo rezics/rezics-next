@@ -1,3 +1,4 @@
+import { CollectionReadError } from './collection-public-reading/failure';
 import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import {
   collectionPresentationOf,
@@ -371,10 +372,31 @@ export async function loadEditableCollectionPage(
     request: collectionRequestVariant(input),
   };
   const headers = authorization ? { headers: { authorization } } : {};
-  const collectionResult = await client.collections({ collectionId: input.id }).get({
-    query: libraryFullQuery(),
-    ...headers,
-  });
+  let collectionResult: Awaited<ReturnType<ReturnType<typeof client.collections>['get']>>;
+  try {
+    collectionResult = await client
+      .collections({ collectionId: input.id })
+      .get({ query: libraryFullQuery(), ...headers });
+  } catch (error) {
+    if (error instanceof TypeError)
+      throw new CollectionReadError({ status: 503, code: 'dependency_unavailable', retryAfter: '1' });
+    throw error;
+  }
+  const ownerStatus = resultStatus(collectionResult);
+  if (ownerStatus === 202 || (ownerStatus !== undefined && ownerStatus >= 500)) {
+    const problem = record(record(collectionResult.error).value ?? collectionResult.data);
+    const retryAfter = new Headers(collectionResult.headers).get('retry-after');
+    throw new CollectionReadError({
+      status: ownerStatus,
+      code:
+        typeof problem.code === 'string'
+          ? problem.code
+          : ownerStatus === 202
+            ? 'presentation_not_ready'
+            : 'dependency_unavailable',
+      ...(retryAfter ? { retryAfter } : {}),
+    });
+  }
   if (
     [401, 403].includes(resultStatus(collectionResult) ?? 0) &&
     !isPlatformClosedProblem(resultStatus(collectionResult), record(record(collectionResult).error).value)

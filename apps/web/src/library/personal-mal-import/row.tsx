@@ -7,6 +7,7 @@ import type {
   MalQuestion,
   MalScoreReviewInput,
 } from './contract';
+import { standardMalQuestion } from './contract';
 import { MalAction, MalCheck } from './controls';
 import {
   admittedFields,
@@ -21,7 +22,10 @@ import { MalTargetSearch } from './target';
 import { MalLabelsReview } from './labels';
 
 type DraftScore =
-  | (Extract<MalScoreReviewInput, { action: 'adopt' }> & { units?: number })
+  | (Omit<Extract<MalScoreReviewInput, { action: 'adopt' }>, 'units' | 'replaceCurrent'> & {
+      units?: number | undefined;
+      replaceCurrent?: boolean | undefined;
+    })
   | Extract<MalScoreReviewInput, { action: 'clear' }>;
 
 export type RowDraft = {
@@ -29,7 +33,7 @@ export type RowDraft = {
   target: string | null;
   skip: boolean;
   replace: boolean;
-  score?: DraftScore;
+  score?: DraftScore | undefined;
   labels?: MalLabelSelection[];
   fields: string[];
 };
@@ -37,17 +41,17 @@ export type RowDraft = {
 export function draftFromRow(row: MalPreviewRow): RowDraft {
   const review = row.review;
   const score = review?.score;
-  const selection: RowDraft['score'] = score
+  const standard = score ? standardMalQuestion(score.question) : null;
+  const selection: RowDraft['score'] = score && standard
     ? score.action === 'adopt'
       ? {
           action: 'adopt',
-          questionId: score.question.id,
-          questionRevision: score.question.revision,
+          ...standard,
           ...(score.units !== null ? { units: score.units } : {}),
           ...(score.replaceCurrent ? { replaceCurrent: true } : {}),
         }
       : score.action === 'clear'
-        ? { action: 'clear', questionId: score.question.id, questionRevision: score.question.revision }
+        ? { action: 'clear', ...standard }
         : undefined
     : undefined;
   return {
@@ -168,7 +172,7 @@ export function MalRowReview({
   row: MalPreviewRow;
   draft: RowDraft;
   question: MalQuestion | null;
-  voteReadback?: MalOwnVoteReadback;
+  voteReadback?: MalOwnVoteReadback | undefined;
   busy: boolean;
   onChange: (draft: RowDraft) => void;
   onSave: (draft: RowDraft) => void;
@@ -357,22 +361,22 @@ export function MalRowReview({
                   checked={draft.score?.action === 'adopt' && currentScoreChoice}
                   disabled={busy || !canAdopt}
                   onChange={() => {
-                    if (!question) return;
+                    const standard = question ? standardMalQuestion(question) : null;
+                    if (!standard) return;
                     onChange({
                       ...draft,
                       score: {
                         action: 'adopt',
-                        questionId: question.id,
-                        questionRevision: question.revision,
+                        ...standard,
                         ...(draft.score?.action === 'adopt' &&
-                        draft.score.questionId === question.id &&
-                        draft.score.questionRevision === question.revision &&
+                        draft.score.questionId === standard.questionId &&
+                        draft.score.questionRevision === standard.questionRevision &&
                         draft.score.units !== undefined
                           ? { units: draft.score.units }
                           : {}),
                         ...(draft.score?.action === 'adopt' &&
-                        draft.score.questionId === question.id &&
-                        draft.score.questionRevision === question.revision &&
+                        draft.score.questionId === standard.questionId &&
+                        draft.score.questionRevision === standard.questionRevision &&
                         draft.score.replaceCurrent
                           ? { replaceCurrent: true }
                           : {}),
@@ -390,10 +394,11 @@ export function MalRowReview({
                   checked={draft.score?.action === 'clear' && currentScoreChoice}
                   disabled={busy}
                   onChange={() => {
-                    if (!question) return;
+                    const standard = question ? standardMalQuestion(question) : null;
+                    if (!standard) return;
                     onChange({
                       ...draft,
-                      score: { action: 'clear', questionId: question.id, questionRevision: question.revision },
+                      score: { action: 'clear', ...standard },
                     });
                   }}
                 />

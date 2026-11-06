@@ -47,10 +47,10 @@ test('the Home catalogue keeps native list headings without adding type subtitle
   expect(html).not.toContain('schema:Recipe');
 });
 
-test('only an absent page is missing; an inactive publication is unavailable', async () => {
+test('only an absent page is missing; an inactive publication is preparing', async () => {
   for (const [status, code, expected] of [
     [404, 'not_found', { kind: 'missing' }],
-    [503, 'presentation_not_ready', { kind: 'unavailable', status: 503, code: 'presentation_not_ready' }],
+    [503, 'presentation_not_ready', { kind: 'preparing', status: 503, code: 'presentation_not_ready' }],
   ] as const) {
     const answer = (async () =>
       new Response(JSON.stringify({ type: 'about:blank', title: code, status, code }), {
@@ -69,9 +69,9 @@ test('Home preserves rejected, missing and unavailable page reads as separate ou
         Response.json({ type: 'about:blank', title: code, status, code }, { status })) as typeof fetch,
     });
   const rejected = await loadRoutePage(response(400, 'unsupported_query'), '/');
-  const unavailable = await loadRoutePage(response(503, 'presentation_not_ready'), '/');
+  const unavailable = await loadRoutePage(response(503, 'dependency_unavailable'), '/');
   expect(rejected).toEqual({ kind: 'rejected', status: 400, code: 'unsupported_query' });
-  expect(unavailable).toEqual({ kind: 'unavailable', status: 503, code: 'presentation_not_ready' });
+  expect(unavailable).toEqual({ kind: 'unavailable', status: 503, code: 'dependency_unavailable' });
   const network = await loadRoutePage(
     {
       pages: {
@@ -91,8 +91,8 @@ test('Home preserves rejected, missing and unavailable page reads as separate ou
   expect(rejectedHtml).toContain('data-home-catalogue-state="rejected"');
   expect(rejectedHtml).toContain('data-response-code="unsupported_query"');
   expect(unavailableHtml).toContain('data-home-catalogue-state="unavailable"');
-  expect(unavailableHtml).toContain(m.catalogue_result_read_unavailable());
-  expect(unavailableHtml).toContain(m.catalogue_retry_loading_result());
+  expect(unavailableHtml).toContain(m.subject_section_failed());
+  expect(unavailableHtml).toContain(m.subject_section_retry());
 });
 
 test('the Home route renders its catalogue and feed consumers', async () => {

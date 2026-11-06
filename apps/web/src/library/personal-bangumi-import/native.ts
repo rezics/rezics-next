@@ -45,11 +45,16 @@ import {
 } from './contract';
 
 type NativeResult = { data?: unknown; error?: { value?: unknown } | null; status: number };
-type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
+type NativeHeaders = { authorization: string };
+type KeyedNativeHeaders = NativeHeaders & { 'idempotency-key': string };
 export type BangumiSurface = NonNullable<KernelClient['libraryImports']['bangumi']>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function safeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value);
 }
 
 function statusOfError(error: unknown): number | undefined {
@@ -181,9 +186,9 @@ function isScoreQuestion(value: unknown): value is NonNullable<BangumiScoreRevie
     (value.grain !== 'work' && value.grain !== 'release' && value.grain !== 'episode' && value.grain !== 'character') ||
     (value.lifecycleState !== 'active' && value.lifecycleState !== 'retired') ||
     !record(value.scale) ||
-    !Number.isSafeInteger(value.scale.minimum) ||
-    !Number.isSafeInteger(value.scale.maximum) ||
-    !Number.isSafeInteger(value.scale.step)
+    !safeInteger(value.scale.minimum) ||
+    !safeInteger(value.scale.maximum) ||
+    !safeInteger(value.scale.step)
   )
     return false;
   return value.scale.minimum <= value.scale.maximum && value.scale.step > 0;
@@ -357,7 +362,7 @@ function isLabelState(value: unknown): value is BangumiLabelState {
       return (
         typeof item.target.labelId === 'string' &&
         SUBJECT_ID.test(item.target.labelId) &&
-        Number.isSafeInteger(item.target.revision) &&
+        safeInteger(item.target.revision) &&
         item.target.revision > 0
       );
     return typeof item.target.name === 'string';
@@ -388,7 +393,7 @@ function isTagPage(value: unknown): value is BangumiTagPage {
     !['missing', 'empty', 'known', 'invalid', 'unknown'].includes(String(value.evidence)) ||
     !Array.isArray(value.tags) ||
     value.tags.length > 32 ||
-    !(value.next === null || (Number.isSafeInteger(value.next) && value.next >= 0)) ||
+    !(value.next === null || (safeInteger(value.next) && value.next >= 0)) ||
     !(value.labels === null || isLabelState(value.labels))
   )
     return false;
@@ -442,7 +447,7 @@ function isLabelOptions(value: unknown): value is { labels: BangumiLabelOption[]
       typeof label.id === 'string' &&
       SUBJECT_ID.test(label.id) &&
       typeof label.name === 'string' &&
-      Number.isSafeInteger(label.revision) &&
+      safeInteger(label.revision) &&
       label.revision > 0,
   );
 }
@@ -480,7 +485,7 @@ function responseReason(result: NativeResult): string {
   return `http_${result.status}`;
 }
 
-function unavailableReadback(result: NativeResult): BangumiEntryReadback | BangumiVoteReadback {
+function unavailableReadback(result: NativeResult): { status: 'stale' | 'unavailable'; reason: string } {
   return {
     status: result.status === 409 ? 'stale' : 'unavailable',
     reason: responseReason(result),
@@ -542,9 +547,10 @@ export function kernelBangumiPort(
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
 ): BangumiImportPort {
-  const headers = (authorization: string, key?: string): NativeHeaders => ({
+  const headers = (authorization: string): NativeHeaders => ({ authorization });
+  const keyedHeaders = (authorization: string, key: string): KeyedNativeHeaders => ({
     authorization,
-    ...(key ? { 'idempotency-key': quotedIdempotencyKey(key) } : {}),
+    'idempotency-key': quotedIdempotencyKey(key),
   });
   async function call<T>(
     command: BangumiCommand,
@@ -573,7 +579,7 @@ export function kernelBangumiPort(
       return call(
         command,
         (bangumi, authorization) =>
-          bangumi.$preview.post({ upload: command.upload }, { headers: headers(authorization, command.key) }),
+          bangumi.$preview.post({ upload: command.upload }, { headers: keyedHeaders(authorization, command.key) }),
         (data) => {
           if (!record(data) || typeof data.uploadId !== 'string' || !SUBJECT_ID.test(data.uploadId)) return undefined;
           if (typeof data.count !== 'number' || !Number.isInteger(data.count) || data.count < 1) return undefined;
@@ -603,7 +609,7 @@ export function kernelBangumiPort(
               ...(command.target ? { target: command.target } : {}),
               ...(command.score ? { score: command.score } : {}),
             },
-            { headers: headers(authorization, command.key) },
+            { headers: keyedHeaders(authorization, command.key) },
           );
         },
         (data) => {
@@ -626,7 +632,10 @@ export function kernelBangumiPort(
       return call(
         command,
         (bangumi, authorization) =>
-          bangumi({ uploadId: command.uploadId }).$cancel.post({}, { headers: headers(authorization, command.key) }),
+          bangumi({ uploadId: command.uploadId }).$cancel.post(
+            {},
+            { headers: keyedHeaders(authorization, command.key) },
+          ),
         (data) => {
           if (!record(data) || typeof data.uploadId !== 'string' || data.cancelled !== true) return undefined;
           return { kind: 'cancelled' as const, uploadId: data.uploadId };
@@ -637,7 +646,9 @@ export function kernelBangumiPort(
       return call(
         command,
         (bangumi, authorization) =>
-          bangumi({ uploadId: command.uploadId }).delete(undefined, { headers: headers(authorization, command.key) }),
+          bangumi({ uploadId: command.uploadId }).delete(undefined, {
+            headers: keyedHeaders(authorization, command.key),
+          }),
         (data) => (record(data) && data.deleted === true ? ({ kind: 'deleted' } as const) : undefined),
       );
     },
@@ -677,7 +688,7 @@ export function kernelBangumiPort(
         (bangumi, authorization) =>
           bangumi({ uploadId: command.uploadId }).$reviewLabels.post(
             { ordinal: command.ordinal, rowRevision: command.rowRevision, mappings: command.mappings },
-            { headers: headers(authorization, command.key) },
+            { headers: keyedHeaders(authorization, command.key) },
           ),
         (data) =>
           record(data) &&

@@ -13,6 +13,7 @@ import {
   type MalOutcome,
   type MalPage,
   type MalPreviewRow,
+  type MalScoreReviewInput,
   type MalUnknown,
 } from './contract';
 import { MalConfirmPage, scoreConsentKey } from './confirm';
@@ -164,7 +165,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         ...current,
         rows: current.rows.map((row) => {
           const next = { ...row };
-          delete next.currentScoreVote;
+          Reflect.deleteProperty(next, 'currentScoreVote');
           return next;
         }),
       };
@@ -193,7 +194,8 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       delivery.current = custody;
       unknownRef.current = lost.command;
       if (lost.command.kind === 'admit-source') {
-        const queuedIndex = admitQueue.current.findIndex((item) => item.key === lost.command.key);
+        const lostAdmit = lost.command;
+        const queuedIndex = admitQueue.current.findIndex((item) => item.key === lostAdmit.key);
         if (queuedIndex >= 0) {
           admitQueue.current = admitQueue.current.map((item, index) =>
             index === queuedIndex ? (lost.command as Extract<MalCommand, { kind: 'admit-source' }>) : item,
@@ -314,9 +316,15 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   async function saveReview(draft: RowDraft) {
     const id = uploadId.current;
     if (!id || !page || (draft.score?.action === 'adopt' && draft.score.units === undefined)) return;
-    const score =
+    const score: MalScoreReviewInput | undefined =
       draft.score?.action === 'adopt'
-        ? { ...draft.score, units: draft.score.units! }
+        ? {
+            action: 'adopt',
+            questionId: draft.score.questionId,
+            questionRevision: draft.score.questionRevision,
+            units: draft.score.units!,
+            ...(draft.score.replaceCurrent ? { replaceCurrent: true } : {}),
+          }
         : draft.score?.action === 'clear'
           ? draft.score
           : undefined;
@@ -415,7 +423,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       const review = row.review;
       if (!review) return [];
       const draft = drafts[row.index] ?? draftFromRow(row);
-      const fields = review.skip ? [] : draft.fields.filter((field) => field === 'status' || field === 'tags');
+      const fields: string[] = review.skip
+        ? []
+        : draft.fields.filter((field) => field === 'status' || field === 'tags');
       const consentKey = scoreConsentKey(row);
       const scoreCurrent =
         row.scoreReviewState === 'observations-match' &&

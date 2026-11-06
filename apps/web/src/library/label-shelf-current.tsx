@@ -452,7 +452,12 @@ function LabelShelfRead({
   }, [accepted, current, isCurrent, onAdmitted, onFailed, query.isFetching, query.isError, source.cursor, windows]);
   const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
   const view = presentation?.intent ?? { label: source.labelId, ...explicitShelfDisplay(display) };
-  const hrefAt = (cursor: string | null) => shelfHref(locale, cursor === null ? view : { ...view, cursor });
+  const hrefAt = (cursor: string | null) => {
+    const target = { ...view };
+    if (cursor === null) delete target.cursor;
+    else target.cursor = cursor;
+    return shelfHref(locale, target);
+  };
   const action = (move: LabelShelfWindowMove, target: string | null) => ({
     href: hrefAt(target),
     onClick: (event: MouseEvent<HTMLAnchorElement>) => {

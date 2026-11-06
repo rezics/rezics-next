@@ -42,7 +42,7 @@ function Outcome({
   admission: SourceAdmissionOutcome | null | undefined;
   row: MalPreviewRow | undefined;
   questionId: string | null;
-  voteReadback?: MalOwnVoteReadback;
+  voteReadback?: MalOwnVoteReadback | undefined;
   busy: boolean;
   onReadVote: (row: MalPreviewRow) => void;
 }) {
@@ -98,11 +98,13 @@ function Outcome({
           </p>
           {score.vote ? (
             <p className="text-sm">
-              {m.library_mal_score_receipt_vote({
-                units: score.vote.units,
-                revision: score.vote.revision,
-                at: score.vote.at,
-              })}
+              {score.vote.units === null
+                ? m.library_mal_vote_cleared()
+                : m.library_mal_score_receipt_vote({
+                    units: score.vote.units,
+                    revision: score.vote.revision,
+                    at: score.vote.at,
+                  })}
             </p>
           ) : (
             <p className="text-sm">{m.library_mal_score_receipt_without_vote()}</p>

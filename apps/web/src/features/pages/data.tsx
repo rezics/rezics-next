@@ -923,7 +923,7 @@ export function PageData({
   operator?: { id: string; handle: string | null; displayName: string | null };
   base?: string;
   document: PageDocument;
-  reads: Record<string, { status: number; body: unknown; retryAt?: number }>;
+  reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
   messages: PageMessages;
   link?: PageLink;
   reader?: Reader;
@@ -1024,6 +1024,8 @@ export function PageData({
         : {
             ok: false,
             status: result?.status,
+            ...(isRecord(result?.body) && typeof result.body.code === 'string' ? { code: result.body.code } : {}),
+            ...(result?.headers?.['retry-after'] ? { retryAfter: result.headers['retry-after'] } : {}),
             ...(result?.retryAt !== undefined ? { retryAt: result.retryAt } : {}),
           },
     );

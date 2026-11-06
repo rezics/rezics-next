@@ -14,7 +14,7 @@ export type ProgressIndexWindowTarget = {
   kind: ProgressIndexWindowMove;
   from: ProgressIndexCoordinate;
   to: ProgressIndexCoordinate;
-  sourceLocation: string;
+  sourceLocation: string | undefined;
   sourceRead: string;
   keyboard: boolean;
 };

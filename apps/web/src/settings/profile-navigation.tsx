@@ -103,11 +103,7 @@ function ProfileNavigationRegistration({
   const profileReturn = useSettingsProfileReturn();
   useLayoutEffect(() => {
     if (!profileReturn) return;
-    return profileReturn.register(() => {
-      if (!writable || !isCurrent()) return null;
-      const captured = editor.captureReturn();
-      return captured ? { ...captured, lastFocus: editor.lastFocus } : null;
-    });
+    return profileReturn.register(() => (!writable || !isCurrent() ? null : editor.captureReturn()));
   }, [editor, isCurrent, profileReturn, writable]);
   useLayoutEffect(() => {
     if (!profileReturn?.snapshot || state.readAuthority !== 'allowed' || !state.known) return;

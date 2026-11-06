@@ -17,10 +17,8 @@ export const writeCollectionFollow = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<FollowWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { kernelClient }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../../kernel/client'),
-    ]);
+    const { env } = await import('cloudflare:workers');
+    const { kernelClient } = await import('../../kernel/client');
     const request = getRequest();
     if (!(await prepareExpectedReader(request, env, data))) return { ok: false, reason: 'unauthorized' };
     return writeFollowRecord(kernelClient(), request, env, data);

@@ -13,13 +13,16 @@ export function malValueLabel(value: MalValue): string {
   return text;
 }
 
-export function malScoreLabel(score: MalValue): string {
+/** The native score carries its source scale; fixtures and older callers may omit it. */
+type MalScore = MalValue & { scale?: { min: number; max: number; step: number } };
+
+export function malScoreLabel(score: MalScore): string {
   if (score.kind === 'zero') return m.library_mal_score_none();
   const scale = score.scale ? m.library_mal_score_scale({ min: score.scale.min, max: score.scale.max }) : '';
   return scale ? `${malValueLabel(score)} (${scale})` : malValueLabel(score);
 }
 
-export function malOriginalScoreLabel(score: MalValue): string {
+export function malOriginalScoreLabel(score: MalScore): string {
   const value =
     score.kind === 'zero'
       ? m.library_mal_score_zero_source({ value: score.raw ?? String(score.value ?? 0) })
@@ -85,10 +88,10 @@ export function malProgressEntries(row: MalPreviewRow): { key: string; label: st
     my_read_chapters: m.library_mal_chapters(),
     my_read_volumes: m.library_mal_volumes(),
   };
-  return Object.entries(row.progress).map(([key, value]) => ({
-    key,
-    label: labels[key] ?? key,
-    value,
+  return row.progressMeasures.map((measure) => ({
+    key: measure.field,
+    label: labels[measure.field] ?? measure.field,
+    value: { kind: measure.state, ...(measure.amount === undefined ? {} : { value: measure.amount }) },
   }));
 }
 

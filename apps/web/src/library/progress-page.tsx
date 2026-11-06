@@ -350,7 +350,7 @@ export function CurrentViewerProgressIndexPage({
     identity: string;
     visit: string;
     addressKey: string;
-    locationKey: string;
+    locationKey: string | undefined;
     search: Record<string, unknown>;
   } | null>(null);
   const oldVisit = visitRef.current?.visit;

@@ -153,11 +153,9 @@ export async function suggestSubjects(
   request: Request,
   requestedLocale?: string,
 ): Promise<SuggestionResult> {
-  const [{ kernelClient, requestLocale }, { readRelease }, { viewerCredential }] = await Promise.all([
-    import('../kernel/client.ts'),
-    import('../subject/definitions.ts'),
-    import('../session/request.ts'),
-  ]);
+  const { kernelClient, requestLocale } = await import('../kernel/client.ts');
+  const { readRelease } = await import('../subject/definitions.ts');
+  const { viewerCredential } = await import('../session/request.ts');
   const locale = requestedLocale ?? new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
   const languages = requestLanguages(locale ?? 'en');
   const rawLimit = new URL(request.url).searchParams.get('limit');
@@ -198,11 +196,9 @@ export async function readConditionEntityLabel(id: string, request: Request): Pr
   const releases = searchParams.getAll('release');
   if (filters.length !== 1 || releases.length !== 1) return invalidEntityRead();
   const targets = admittedConditionTargets(filters[0]!);
-  const [{ kernelClient, requestLocale }, { readRelease }, { viewerCredential }] = await Promise.all([
-    import('../kernel/client.ts'),
-    import('../subject/definitions.ts'),
-    import('../session/request.ts'),
-  ]);
+  const { kernelClient, requestLocale } = await import('../kernel/client.ts');
+  const { readRelease } = await import('../subject/definitions.ts');
+  const { viewerCredential } = await import('../session/request.ts');
   const locale = searchParams.get('locale') ?? requestLocale(request) ?? 'en';
   const release = await readRelease().catch(() => undefined);
   request.signal.throwIfAborted();
@@ -260,10 +256,8 @@ export async function suggestionResponse(
   };
   if (request.method !== 'GET') return privateNoStore(new Response(null, { status: 405, headers: { allow: 'GET' } }));
   try {
-    const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
-      import('../session/request.ts'),
-      import('../session/csrf.ts'),
-    ]);
+    const { prepareSession, viewerCredential } = await import('../session/request.ts');
+    const { carriesSession } = await import('../session/csrf.ts');
     const stale = await prepareSession(request, env);
     if (stale) throw problem(401, 'invalid_credentials', 'Sign in again');
     if (carriesSession(request) && !viewerCredential(request))

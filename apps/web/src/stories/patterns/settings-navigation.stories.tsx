@@ -39,7 +39,7 @@ function Example({
     }));
   return (
     <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[12rem_minmax(0,48rem)]">
-      <SectionsNavigation sections={sections} pending={pending} />
+      <SectionsNavigation sections={sections} admission={pending ? 'unknown' : 'available'} />
       <div className="space-y-8">
         {sections.map((section) => (
           <section key={section.id} id={section.id} tabIndex={-1} className="scroll-mt-6 rounded-lg border p-4">

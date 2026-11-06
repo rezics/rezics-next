@@ -132,7 +132,7 @@ export const Route = createFileRoute('/collections/')({
         retrying={query.isFetching}
         onRetry={onRetry}
         navigation={{
-          previous: visit.previous,
+          ...(visit.previous === undefined ? {} : { previous: visit.previous }),
           hasPrevious: visit.previous !== undefined,
           pending: !!visit.pending?.loading || query.isFetching,
           href,

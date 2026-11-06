@@ -79,14 +79,11 @@ export function createNativeBoardDirectoryAdapter(
 
 /** Resolve the current BFF credential for every action; a session failure never retries anonymously. */
 const currentBoardDirectoryAdapter = createServerOnlyFn(async (request: BoardDirectoryRequest) => {
-  const [{ kernelClient }, { getRequest }, { env }, { prepareSession, viewerCredential }, { carriesSession }] =
-    await Promise.all([
-      import('../kernel/client'),
-      import('@tanstack/react-start/server'),
-      import('cloudflare:workers'),
-      import('../session/request'),
-      import('../session/csrf'),
-    ]);
+  const { kernelClient } = await import('../kernel/client');
+  const { getRequest } = await import('@tanstack/react-start/server');
+  const { env } = await import('cloudflare:workers');
+  const { prepareSession, viewerCredential } = await import('../session/request');
+  const { carriesSession } = await import('../session/csrf');
   const incoming = getRequest();
   if (await prepareSession(incoming, env as Partial<SessionEnv>)) return { state: 'denied' as const };
   const authorization = viewerCredential(incoming);

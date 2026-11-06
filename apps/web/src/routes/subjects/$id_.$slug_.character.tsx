@@ -30,11 +30,9 @@ const canonicalCharacter = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ kernelClient }, { loadSubject }, { loadContextSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-      import('../../features/pages/context-subject'),
-    ]);
+    const { kernelClient } = await import('../../kernel/client');
+    const { loadSubject } = await import('../../subject/load-subject');
+    const { loadContextSubject } = await import('../../features/pages/context-subject');
     const address = parseCharacterCorrectionUrl(data.search);
     if (!address.ok) throw notFound();
     if (

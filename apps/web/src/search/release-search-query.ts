@@ -207,10 +207,8 @@ const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 async function readSelections(parsed: ParsedReleaseSearch, locale: string): Promise<ReleaseSearchSelections> {
   const request = getRequest();
-  const [{ readSubjectSuggestions }, { viewerCredential }] = await Promise.all([
-    import('./suggestions'),
-    import('../session/request'),
-  ]);
+  const { readSubjectSuggestions } = await import('./suggestions');
+  const { viewerCredential } = await import('../session/request');
   const credential = viewerCredential(request);
   const languages = [...new Set([locale, 'en'])];
   const client = kernelClient(locale);

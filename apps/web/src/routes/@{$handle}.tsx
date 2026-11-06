@@ -56,7 +56,7 @@ export const Route = createFileRoute('/@{$handle}')({
   head: ({ loaderData }) =>
     loaderData?.kind === 'page'
       ? agentPageHead(
-          loaderData.overview,
+          { ...loaderData.overview, account: loaderData.page.account! },
           getLocale(),
           publicOrigin(),
           loaderData.paths,

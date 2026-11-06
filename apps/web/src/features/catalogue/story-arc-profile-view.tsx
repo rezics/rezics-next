@@ -5,9 +5,9 @@ import {
   useEditorWorkspaceLifetime,
 } from './editor-lifetime';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
-import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { releaseDigest } from '@rezics/definitions';
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { releaseDigest } from '@rezics/definitions';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -153,7 +153,10 @@ function StoryArcProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const observedDefinition = query.data?.ok ? releaseDigest(query.data.release) : undefined;
+  const observedDefinition = useMemo(
+    () => (query.data?.ok ? releaseDigest(query.data.release) : undefined),
+    [query.data],
+  );
   const selection = JSON.stringify([
     id,
     work,
@@ -199,6 +202,12 @@ function StoryArcProfileLive({
   const arc = current?.arc;
   const label = pageText(arc?.subject.labels, locale);
   const href = arc ? subjectHref({ id: arc.subject.id, label: label.text }, locale).href : undefined;
+  const address = storyArcEntry({
+    id: readable ? id : undefined,
+    work: readable ? work : undefined,
+    label: label.text,
+    locale,
+  }).href;
   const signInAddress = storyArcEntry({
     id: readable ? id : undefined,
     work: readable ? work : undefined,

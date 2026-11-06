@@ -63,13 +63,15 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     const view = agentPathView(params.view);
     if (!view) throw notFound();
     const locale = getLocale();
+    // loaderDeps returns exactly this shape; the inferred deps type does not expose it.
+    const { cursor } = deps as { cursor: string | undefined };
     const address = new URL(location.publicHref, 'https://route.local');
     const search = view === 'realms' ? address.search : location.searchStr;
     const hash = view === 'realms' ? address.hash : location.hash;
-    const query = agentViewQuery(params.handle, locale, view, deps.cursor, search);
+    const query = agentViewQuery(params.handle, locale, view, cursor, search);
     const page =
       view === 'realms'
-        ? await readAgentPage({ data: { handle: params.handle, locale, view, cursor: deps.cursor, search } })
+        ? await readAgentPage({ data: { handle: params.handle, locale, view, cursor, search } })
         : await context.queryClient.fetchQuery({ ...query, staleTime: 0 }).catch((error: unknown) => {
             context.queryClient.removeQueries({ queryKey: query.queryKey });
             throw error;

@@ -1,6 +1,5 @@
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, decodeQuestionManagementPage, decodeQuestionLabelHistory } from '@rezics/client';
 import { requestLanguages } from '../../kernel/languages';
-import { parseQuestionLabelHistory, parseQuestionManagementPage } from './contract';
 import { parseQuestionManagementIntent } from './intent';
 import type {
   QuestionManagementAddress,
@@ -133,8 +132,8 @@ export async function readQuestionManagementSource(input: {
   try {
     const body = await boundedBody(response);
     const source: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
-    const page = parseQuestionManagementPage(source);
-    if (page === null) return { state: 'unavailable' };
+    const page = decodeQuestionManagementPage(source);
+    if (!page) return { state: 'unavailable' };
     if (
       page.realmId !== input.address.realmId ||
       page.directory.ratingQuestions.some((question) => question.realmId !== input.address.realmId) ||
@@ -182,8 +181,8 @@ export async function createQuestionManagementClient(input: {
         query: { limit: 20, ...(cursor === null ? {} : { cursor }) },
       });
       if (result.status === 409) return unavailable('stale-cursor');
-      const page = result.status === 200 ? parseQuestionLabelHistory(result.data) : null;
-      if (page === null) return unavailable('unavailable');
+      const page = result.status === 200 ? decodeQuestionLabelHistory(result.data) : null;
+      if (!page) return unavailable('unavailable');
       if (
         page.labels.length > 20 ||
         (page.next !== null && page.next.length > 4096) ||

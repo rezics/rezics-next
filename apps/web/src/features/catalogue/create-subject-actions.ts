@@ -75,10 +75,8 @@ export const readCatalogueCreateEligibility = createServerFn({ method: 'GET' }).
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     try {
-      const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
-        import('../../session/request'),
-        import('../../session/csrf'),
-      ]);
+      const { prepareSession, viewerCredential } = await import('../../session/request');
+      const { carriesSession } = await import('../../session/csrf');
       const stale = await prepareSession(request, env as Partial<SessionEnv>);
       const credential = stale ? null : viewerCredential(request);
       const viewer = !stale && credential ? 'signed-in' : 'signed-out';

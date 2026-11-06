@@ -1,9 +1,6 @@
 import { expectedCandidateReader } from '../../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../../../kernel/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
 import { fetchGuideRelease } from '../../catalogue/definition-guide';
 import {
   GRAPH_LIMIT,
@@ -74,6 +71,9 @@ function address(value: unknown) {
 }
 
 export async function exploreContext(locale: string, expectedReader: string | null, signal?: AbortSignal) {
+  const { env } = await import('cloudflare:workers');
+  const { prepareSession, sessionSubject, viewerCredential } = await import('../../../session/request');
+  const { kernelClient } = await import('../../../kernel/client');
   setResponseHeader('cache-control', 'private, no-store');
   signal?.throwIfAborted();
   const request = getRequest();

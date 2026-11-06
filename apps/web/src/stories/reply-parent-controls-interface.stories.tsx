@@ -92,6 +92,7 @@ function Controls() {
           pending={pending}
           initialKey={id(930)}
           containerId={post.threadId}
+          credentialMode="session"
           onPendingChange={setPending}
           onCancel={() => select(null)}
           onSubmit={write}

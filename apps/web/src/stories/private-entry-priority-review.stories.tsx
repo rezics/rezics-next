@@ -72,7 +72,6 @@ function Review({ scenario }: { scenario: Scenario }) {
         };
         return { kind: 'saved', entry: entry.current };
       },
-      privacy: async () => ({ kind: 'uncertain' }),
       sourceCorrection: async () => ({ kind: 'uncertain' }),
     }),
     [scenario],

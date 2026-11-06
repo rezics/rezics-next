@@ -85,6 +85,7 @@ function Example({
         }}
         personal={{
           regionRef,
+          recoveryView: null,
           renderPersonal: (hit) => {
             const target = hit.summary.kind === 'account' ? hit.summary.value.context?.followTarget : undefined;
             return signedIn && target?.state === 'available' ? (

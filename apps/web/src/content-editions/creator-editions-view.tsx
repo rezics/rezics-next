@@ -190,9 +190,9 @@ export function CreatorEditionsOriginView({ page, cursor }: CreatorEditionsViewP
       {origin ? (
         <CreatorEditionOriginPanel
           resolution={origin}
-          occurrence={returnedEdition}
+          {...(returnedEdition ? { occurrence: returnedEdition } : {})}
           onRestart={restartInventory}
-          editionId={origin.kind === 'current' ? origin.receipt.editionId : undefined}
+          {...(origin.kind === 'current' ? { editionId: origin.receipt.editionId } : {})}
         />
       ) : null}
       <CreatorEditionsView page={page} cursor={cursor} />

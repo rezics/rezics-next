@@ -94,13 +94,10 @@ export const nativeOrderReconcile: (
 export const requestOrderReconciliation = createServerFn({ method: 'POST' })
   .validator(validateIntent)
   .handler(async ({ data }): Promise<ReconciliationResult> => {
-    const [{ getRequest, setResponseHeader }, { env }, { prepareSession, viewerCredential }, { kernelClient }] =
-      await Promise.all([
-        import('@tanstack/react-start/server'),
-        import('cloudflare:workers'),
-        import('../session/request'),
-        import('../kernel/client'),
-      ]);
+    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, viewerCredential } = await import('../session/request');
+    const { kernelClient } = await import('../kernel/client');
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     // The current session and ordinary POST middleware enforce Origin and CSRF.
