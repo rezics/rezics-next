@@ -1550,6 +1550,69 @@ export function createVndbImport(config: Config) {
         decision = upload.decisions[ordinal];
       return decision?.metadata?.find((item) => item.token === reviewToken) ?? null;
     },
+    async readReceipt({ actor, id, ordinal }, reviewed, phase) {
+      const account = owner(actor),
+        confirmation = reviewed.confirmation;
+      if (
+        !confirmation ||
+        reviewed.clientId !== account.clientId ||
+        reviewed.requestedBy !== (account.requestedBy ?? null)
+      )
+        return false;
+      const annotation = phase === 'annotation',
+        started = annotation ? confirmation.annotationStarted : confirmation.provenanceStarted,
+        key = annotation ? confirmation.annotationKey : confirmation.provenanceKey,
+        digest = annotation ? confirmation.annotationReceiptDigest : confirmation.provenanceReceiptDigest,
+        kind = annotation
+          ? 'library.entry.annotations.put'
+          : confirmation.provenanceKind === 'admit'
+            ? 'library.entry.source-observation.admit'
+            : 'library.entry.source-observation.correct';
+      if (!started || !digest) return false;
+      await authorized(actor);
+      const receipt = await personalEntries.readCommandReceipt(actor, {
+        kind,
+        requestKey: key,
+        digest,
+        async authorize(tx) {
+          const linked = await tx.query(
+            `SELECT 1 FROM library.vndb_import u
+             CROSS JOIN LATERAL jsonb_array_elements(COALESCE(u.decisions->$4::text->'metadata','[]'::jsonb)) m
+             WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3
+               AND u.decisions->$4::text->>'reviewId'=$6
+               AND m->>'token'=$5 AND m->>'sourceReviewToken'=$6
+               AND m->>'subjectId'=$7 AND m->>'clientId'=$8
+               AND m->>'requestedBy' IS NOT DISTINCT FROM $9::text
+               AND m->'confirmation'->>$10='true'
+               AND m->'confirmation'->>$11=$12
+               AND m->'confirmation'->>$13=$14
+               AND m->'confirmation'->>'selectionDigest'=$15
+               AND ($16::text IS NULL OR m->'confirmation'->>'provenanceKind'=$16)
+             FOR UPDATE OF u`,
+            [
+              requireRoute(account.accountId),
+              account.accountId,
+              id,
+              String(ordinal),
+              reviewed.token,
+              reviewed.sourceReviewToken,
+              reviewed.subjectId,
+              account.clientId,
+              account.requestedBy ?? null,
+              annotation ? 'annotationStarted' : 'provenanceStarted',
+              annotation ? 'annotationKey' : 'provenanceKey',
+              key,
+              annotation ? 'annotationReceiptDigest' : 'provenanceReceiptDigest',
+              digest,
+              confirmation.selectionDigest,
+              annotation ? null : (confirmation.provenanceKind ?? null),
+            ],
+          );
+          if (!linked.rowCount) throw new LibraryNotFoundError();
+        },
+      });
+      return receipt !== null;
+    },
     async readView({ actor, id, ordinal, reconcile }, reviewToken) {
       const upload = await load(actor, id, reconcile),
         row = upload.rows[ordinal],

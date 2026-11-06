@@ -1132,11 +1132,15 @@ test('correcting one match retires only that rows consent; metadata lost acknowl
     outcomes: [{ status: 'applied', subjectId: corrected }],
   });
   const selection = [{ field: 'note', action: 'adopt' }];
+  let annotationAcknowledgements = 0;
   expect(
     await service.applyMetadata(f.owner.actor, id, 1, reviews[1].reviewToken, selection, () => {
+      annotationAcknowledgements++;
       throw new Error('Lost annotation acknowledgement');
     }),
   ).toMatchObject({ fields: [{ status: 'failed' }] });
+  expect(annotationAcknowledgements).toBe(1);
+  expect((await json('GET', `/v1/libraryEntries/${second}/personal`)).personalEntry.note).toBe('Two');
   await f.pool.query(
     "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
     [f.owner.actor.accountId, id],
@@ -1149,6 +1153,8 @@ test('correcting one match retires only that rows consent; metadata lost acknowl
       fields: selection,
     }),
   ).toMatchObject({ fields: [{ status: 'applied' }] });
+  expect((await f.send('owner', 'GET', `${base}/${id}`)).status).toBe(404);
+  expect((await f.send('other', 'GET', `${base}/${id}`)).status).toBe(404);
   expect(await f.inspect()).toMatchObject({ entries: effects.entries, sessions: effects.sessions });
   expect((await json('GET', `/v1/libraryEntries/${corrected}/personal`)).personalEntry.note).toBeNull();
   expect((await json('GET', `/v1/libraryEntries/${second}/personal`)).personalEntry.note).toBe('Two');
