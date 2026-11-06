@@ -2,6 +2,7 @@
 
 export { createAuthorizationAdapter } from './authorization.ts';
 export { createIdentityDisclosureAdapter } from './identity-disclosure.ts';
+export { createNativeIdentityBoundsAdapter } from './identity-native.ts';
 export { createIdentityNativeCatalog } from './identity-statements.ts';
 export { createSearchPreparationAdapter } from './search-scope.ts';
 export { createContentPublicationAdapter } from './publication-foreign.ts';

@@ -94,8 +94,8 @@ server and the worker call `composeLibraryDomain`. Compatibility entries (`ident
 
 Installed capabilities, bound by ordinary process composition: `authorization` (Access command, fence, deadline and
 lifecycle), `identityDisclosure` (Semantic original/terminal and release), `searchPreparation` (Search scope and
-owner-leaf), `contentPublication` (private working versus activated public), `identityNative` (SQL catalog and
-core matching) and `sourceCapture` (native Collection Source when pool and Access are present). Public entries:
+owner-leaf), `contentPublication` (private working versus activated public), `identityNative` (installed
+`identity-native-bounds.ts` matching) and `sourceCapture` (native Collection Source when pool and Access are present). Public entries:
 `kernel-library-contract` `contract/work-dimensions.ts` and `contract/index.ts`; `kernel-library-core`
 `core/index.ts`; `kernel-library-application` `application/index.ts`; adapter `adapters/index.ts` and
 `domain-binding.ts` plus the existing Library discovery and Access-capability entries.

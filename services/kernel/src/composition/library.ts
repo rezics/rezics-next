@@ -2,12 +2,12 @@
 
 import type { Access } from '../request/access.ts';
 import type { Pool } from 'pg';
-import { createIdentityNativeApplication, createLibraryApplications } from '../library/application/index.ts';
+import { createLibraryApplications } from '../library/application/index.ts';
 import {
   createAuthorizationAdapter,
   createContentPublicationAdapter,
   createIdentityDisclosureAdapter,
-  createIdentityNativeCatalog,
+  createNativeIdentityBoundsAdapter,
   createNativeSourceCaptureAdapter,
   createSearchPreparationAdapter,
 } from '../library/adapters/index.ts';
@@ -51,8 +51,7 @@ function stubSource(): PreparedCollectionSource {
 }
 
 export function composeLibraryDomain(options: LibraryComposeOptions = {}): LibraryDomain {
-  const identityNative =
-    options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
+  const identityNative = options.capabilities?.identityNative ?? createNativeIdentityBoundsAdapter();
   const sourceCapture =
     options.sourceCapture ??
     options.capabilities?.sourceCapture ??

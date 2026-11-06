@@ -48,10 +48,6 @@ import storeSelectJob4 from '../identity-epoch-store-select-job-4.sql';
 import libraryTransform from '../identity-epoch-store-library-transform.sql';
 import storeSelectInput from '../identity-epoch-store-select-input.sql';
 import storeSelectOriginal from '../identity-epoch-store-select-original.sql';
-import libraryIdentityOwnersSql from '../identity-epoch-read-owners.sql';
-import libraryIdentitySourcesSql from '../identity-epoch-read-sources.sql';
-import libraryIdentityPendingSql from '../identity-epoch-read-pending.sql';
-import libraryIdentityMappingSql from '../identity-epoch-read-current.sql';
 import storeSelectHomeGate from '../identity-epoch-store-select-home-gate.sql';
 import storeSelectRedirect2 from '../identity-epoch-store-select-redirect-2.sql';
 import storeSelectStep from '../identity-epoch-store-select-step.sql';
@@ -901,17 +897,6 @@ export function identityEpochStore(): IdentityEpochStore {
 }
 
 export { readRelease } from '../definitions.ts';
-export const libraryIdentityCatalogSql = Object.freeze({
-  commit: storeInsertNativeCommit,
-  savedJob: storeSelectJob4,
-  libraryTransform,
-  inputs: storeSelectInput,
-  originals: storeSelectOriginal,
-  owners: libraryIdentityOwnersSql,
-  sources: libraryIdentitySourcesSql,
-  pending: libraryIdentityPendingSql,
-  mapping: libraryIdentityMappingSql,
-});
 export { readIdentityMappings, readIdentityRatingReview };
 export type {
   IdentityRatingControlLocator,

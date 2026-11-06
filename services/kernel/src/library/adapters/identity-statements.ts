@@ -1,17 +1,24 @@
-/** Identity SQL catalog. Composition binds these texts; core matching never imports Semantic or Access SQL. */
+/** Identity SQL catalog for fake-capability applications. Native matching uses identity-native-bounds.ts. */
 
 import type { IdentityNativeCatalog } from '../contract/index.ts';
 import { libraryIdentitySQL } from '../identity-native-planner-statements.ts';
 import plan from '../identity-native-planner-read.sql';
 import job from '../identity-native-planner-job.sql';
-import {
-  identityAccountSql as account,
-  identityFenceSql as fence,
-  identityNoEffectFenceSql as noEffectFence,
-  identityPartitionSql as partition,
-  identityTimeSql as time,
-} from '../identity-native-bounds.ts';
-import { identityEpochLibraryInputsSQL, libraryIdentityCatalogSql } from '../../semantic/identity-adapters/index.ts';
+import time from '../../command/time.sql';
+import fence from '../../command/fence.sql';
+import noEffectFence from '../../command/no-effect-fence.sql';
+import partition from '../../partition/read.sql';
+import account from '../../access/account-share.sql';
+import commit from '../../semantic/identity-epoch-store-insert-native-commit.sql';
+import savedJob from '../../semantic/identity-epoch-store-select-job-4.sql';
+import libraryTransform from '../../semantic/identity-epoch-store-library-transform.sql';
+import { identityEpochLibraryInputsSQL } from '../../semantic/identity-adapters/index.ts';
+import inputs from '../../semantic/identity-epoch-store-select-input.sql';
+import originals from '../../semantic/identity-epoch-store-select-original.sql';
+import owners from '../../semantic/identity-epoch-read-owners.sql';
+import sources from '../../semantic/identity-epoch-read-sources.sql';
+import pending from '../../semantic/identity-epoch-read-pending.sql';
+import mapping from '../../semantic/identity-epoch-read-current.sql';
 import facts from '../collection-source-native-facts.sql';
 import labels from '../owner-index-native-label-originals.sql';
 import accountQuery from '../native-source-custody-account.sql';
@@ -26,22 +33,13 @@ import {
   libraryIdentityBoundedPlanSQL,
   libraryIdentitySelectedBindBound,
 } from '../identity-native-planner-projection.ts';
-
-export const libraryIdentityJobSizeSQL =
-  'SELECT octet_length(intent::text) AS bytes FROM semantic.identity_epoch_job WHERE partition_no=$1 AND job_id=$2 AND epoch=$3';
-
-export const nativeIdentityPartitionQuery = Object.freeze({
-  sql: `SELECT epoch, position::text AS position, write_state AS "writeState",
-    CASE WHEN moved_to IS NULL THEN NULL ELSE '' END AS "movedTo"
-    FROM core.partition WHERE partition_no=$1 FOR SHARE`,
-  params: Object.freeze(['partition_no']),
-});
+import { nativeIdentityPartitionQuery } from '../identity-native-bounds.ts';
 
 const boundId = 'f'.repeat(36);
 const boundDecimal = '9'.repeat(20);
 const boundText = String.fromCharCode(1);
 
-const currentCaptureProjectionBytes = new TextEncoder().encode(
+const currentCaptureProjectionBytes = Buffer.byteLength(
   JSON.stringify({
     captureId: boundId,
     collectionFence: boundDecimal,
@@ -54,11 +52,9 @@ const currentCaptureProjectionBytes = new TextEncoder().encode(
     scanned: boundDecimal,
     version: 2147483647,
   }),
-).length;
+);
 
 export function createIdentityNativeCatalog(): IdentityNativeCatalog {
-  const { commit, savedJob, libraryTransform, inputs, originals, owners, sources, pending, mapping } =
-    libraryIdentityCatalogSql;
   const selected = LIBRARY_IDENTITY_SELECTED_STATEMENTS();
   return Object.freeze({
     libraryIdentitySQL,
@@ -126,9 +122,9 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativePoints: 1,
         identityMetadataRows: 1,
         emptySeeks: 1,
-        resultBytes: new TextEncoder().encode(
+        resultBytes: Buffer.byteLength(
           JSON.stringify({ epoch: 2147483647, position: boundDecimal, writeState: 'active', movedTo: null }),
-        ).length,
+        ),
       },
       {
         sql: accountQuery.sql,
@@ -136,9 +132,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativePoints: 1,
         identityMetadataRows: 0,
         emptySeeks: 0,
-        resultBytes: new TextEncoder().encode(
-          JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal }),
-        ).length,
+        resultBytes: Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal })),
       },
       {
         sql: sourceQuery.sql,
@@ -146,7 +140,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativePoints: 1,
         identityMetadataRows: 0,
         emptySeeks: 0,
-        resultBytes: new TextEncoder().encode(
+        resultBytes: Buffer.byteLength(
           JSON.stringify({
             accountId: boundId,
             incarnation: boundText.repeat(128),
@@ -157,7 +151,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
             visibility: 'unlisted',
             ruleReady: false,
           }),
-        ).length,
+        ),
       },
       {
         sql: outputQuery.sql,
@@ -165,7 +159,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativePoints: 7,
         identityMetadataRows: 1,
         emptySeeks: 1,
-        resultBytes: new TextEncoder().encode(
+        resultBytes: Buffer.byteLength(
           JSON.stringify({
             generation: boundId,
             transactionId: boundId,
@@ -175,7 +169,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
             memberFence: boundDecimal,
             sourceGeneration: boundDecimal,
           }),
-        ).length,
+        ),
       },
       {
         sql: fencesQuery.sql,
@@ -183,12 +177,12 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativePoints: 2,
         identityMetadataRows: 0,
         emptySeeks: 0,
-        resultBytes: new TextEncoder().encode(
+        resultBytes: Buffer.byteLength(
           JSON.stringify([
             { kind: 'collection', generation: boundDecimal },
             { kind: 'account', generation: boundDecimal },
           ]),
-        ).length,
+        ),
       },
       {
         sql: identityCapture.sql,
@@ -204,8 +198,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativePoints: 3,
         identityMetadataRows: 1,
         emptySeeks: 1,
-        resultBytes: new TextEncoder().encode(JSON.stringify({ transactionId: boundId, position: boundDecimal }))
-          .length,
+        resultBytes: Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal })),
       },
     ]),
     plan,
@@ -227,7 +220,8 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
     mapping,
     facts,
     labels,
-    libraryIdentityJobSizeSQL,
+    libraryIdentityJobSizeSQL:
+      'SELECT octet_length(intent::text) AS bytes FROM semantic.identity_epoch_job WHERE partition_no=$1 AND job_id=$2 AND epoch=$3',
     libraryIdentityBoundedPlanSQL: libraryIdentityBoundedPlanSQL(),
     planResultBytes: LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
     selectedBindCeiling: libraryIdentitySelectedBindBound,

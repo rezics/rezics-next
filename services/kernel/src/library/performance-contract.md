@@ -8,7 +8,8 @@ Layer ownership: `kernel-library-contract` (vocabulary and ports), `kernel-libra
 Access/Search/Semantic/Content), and `composition/library.ts` (ordinary server/worker/`createKernelRuntimeDefaults`
 binding). Installed capabilities: authorization, identityDisclosure, searchPreparation, contentPublication,
 identityNative, sourceCapture. Application result types stay in the contract. Compatibility Source, member,
-publication, command-support and identity entries reach the composed implementation. Selected identity seal
+publication, command-support and identity entries reach the composed implementation. Native identity matching stays
+the installed `identity-native-bounds.ts` declarations; composition binds that adapter. Selected identity seal
 declarations use the selected bind vector; transform fixtures use routable job IDs. Fewest tests: one
 domain-composition suite covering fake capabilities and ordinary native adapter install; native and publication
 growth cases keep their existing assertions.

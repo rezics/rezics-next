@@ -402,7 +402,11 @@ test('owner-query filter uses the Search preparation capability and records nest
     at: { epoch: 1 },
   });
   const filtered = await searchingOpen.filter({ all: [] }, 'digest');
-  expect(filtered.prepared).toEqual({ filter: { all: [] }, releaseDigest: 'digest' });
+  expect(filtered.prepared).toEqual({
+    basis: 'digest',
+    filter: { all: [] },
+    releaseDigest: 'digest',
+  });
   expect(searchingWork.receipt().used.statements).toBe(1);
 });
 
