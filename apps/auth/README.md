@@ -1325,6 +1325,10 @@ use a 1280×900 viewport; login also has one 390×844 light-theme phone image pe
 
 ## Development
 
+The development renderer scans every route before serving the browser and waits for dependency crawling to finish.
+Late dependency optimization must not reload a mounted authentication document and discard its credential draft or
+command observation. The installed login regression retains the document through field validation and refusal.
+
 Shared `authPost` submissions have a five-second deadline (`AUTH_POST_TIMEOUT_MS`), matching existing Auth issuer
 transport conventions and covering both connection waiting and JSON consumption. A timeout uses the existing localized
 outage state; native writes remain uncertain where their protocol requires readback or exact-command recovery.
