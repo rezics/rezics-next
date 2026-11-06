@@ -349,8 +349,8 @@ Migrations, not the worker, create and upgrade the `dbos` schema.
 
 The worker registers the six ADR-0033 queues once, calls every module registration in order, then launches DBOS
 once. Governance has separate concurrency; import work supplies its source as `queuePartitionKey`. A module exports
-one `WorkModule` registration for its workflows, effects and schedules and adds one entry to `KERNEL_WORK_MODULES`
-in `src/work/modules.ts`, just as its HTTP routes register in `createKernel`. Registrations receive the pool, queue
+one `WorkModule` registration for its workflows, effects and schedules and adds one entry to `createKernelWorkModules`
+in `src/composition/work-modules.ts`, just as its HTTP routes register in `createKernel`. Registrations receive the pool, queue
 options and work client. Duplicate module names and registration after launch are refused. Modules never launch
 DBOS or create their own worker. The list is empty until modules add their work.
 

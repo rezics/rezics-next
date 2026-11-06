@@ -8,6 +8,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createSemanticWorkModule } from '../../src/semantic/work-module.ts';
 import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -51,7 +52,7 @@ const program = `
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
   import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
   import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(
       createDiscoveryProducerEntry,
@@ -234,6 +235,7 @@ test('actual native subject relation events converge through registered Semantic
     access: access.access,
     writeRate: access.writeRate,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
+    receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(4),
   });
   const call = async (method: string, path: string, as: keyof typeof accounts, body?: unknown) => {

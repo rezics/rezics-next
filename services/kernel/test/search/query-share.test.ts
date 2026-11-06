@@ -99,6 +99,9 @@ const search: SearchService = {
   async suggest() {
     return { subjects: [], as_of: new Date().toISOString() };
   },
+  async savedCatalogueMembers() {
+    throw new Error('saved catalogue members is not used by this fixture');
+  },
 };
 const app = createKernel({ pool, access, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys(), search });
 test('mounted preparation executes native admission and a recipient denial cannot acquire a portable query', async () => {
