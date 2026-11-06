@@ -959,18 +959,15 @@ test('acknowledged native membership refresh keeps the selected Board visit curr
 
   native = fixture(0, 'member');
   native.presentation.members = { state: 'current', count: 7, version: 'members-7' };
-  const refreshedRead = capture();
   const refreshedPage = await readNativeRealmHome(operations, input);
-  const refreshedAdmission = bindSpacePageResult(refreshedPage, refreshedRead, {
-    kind: 'signed-in',
-    subject: session.subject,
-  })!;
-  await paint(refreshedPage, operations, refreshedAdmission);
+  await paint(refreshedPage, operations, initialAdmission);
   await settle(() => {});
   await settle(() => {});
 
+  expect(membershipActionCalls).toEqual([`${id(1)}:join`]);
   expect(host.querySelector('[data-slot="realm-membership"]')?.getAttribute('data-member-state')).toBe('member');
   expect(host.querySelector('[data-slot="community-members"]')?.textContent).toBe(m.board_community_members({ count: 7 }));
+  expect(host.textContent).not.toContain(m.realm_membership_command_uncertain());
   expect(document.activeElement?.id).toBe('realm-boards-heading');
   expect(shelfCursorReads).toEqual(['selected-window', 'selected-window']);
   const section = host.querySelector('[data-slot="realm-community-boards"]')!;

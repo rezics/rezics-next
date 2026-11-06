@@ -51,6 +51,7 @@ export type RealmMembershipCommandAttempt = Readonly<{
   credential: string;
   body: Readonly<{ realmId: string; action: 'join' | 'leave'; idempotencyKey: string }>;
   observation: number;
+  source: string | null;
 }>;
 
 function readSessionSnapshot(client: QueryClient): SessionSnapshot | null {

@@ -190,6 +190,7 @@ mock.module('../src/community/space-actions', () => ({
     }));
   },
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
+  changeRealmMembership: async () => ({ outcome: 'refused' }),
   readSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
   changeSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
   resolveSpaceSetupChoice: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
@@ -197,17 +198,14 @@ mock.module('../src/community/space-actions', () => ({
   readSpaceSetupBoardChoices: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
   readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
 }));
+const actualMembership = await import('../src/community/realm-membership');
+const actualHeader = await import('../src/community/realm-home-header');
 mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
 mock.module('../src/community/realm-membership', () => ({
-  RealmMembership: ({
-    realm,
-    onCompleted,
-  }: {
-    realm: { id: string };
-    onCompleted?: (receipt: MembershipTestReceipt) => boolean;
-  }) => {
-    if (!showMembershipHarness) return null;
+  ...actualMembership,
+  RealmMembership: (props: Parameters<typeof actualMembership.RealmMembership>[0]) => {
+    if (!showMembershipHarness) return createElement(actualMembership.RealmMembership, props);
     return createElement(
       'button',
       {
@@ -217,8 +215,8 @@ mock.module('../src/community/realm-membership', () => ({
         type: 'button',
         onClick: () => {
           membershipResult =
-            onCompleted?.({
-              realmId: realm.id,
+            props.onCompleted?.({
+              realmId: props.realm.id,
               action: 'join',
               membership: 'member',
               current: () => membershipCurrent,
@@ -235,8 +233,11 @@ mock.module('../src/community/realm-presentation-panel', () => ({ RealmAppearanc
 mock.module('../src/community/realm-claim-panel', () => ({ RealmClaimPanel: () => null }));
 mock.module('../src/community/container-lifecycle-controls', () => ({ ContainerLifecyclePanel: () => null }));
 mock.module('../src/community/realm-home-header', () => ({
-  RealmHomeHeader: ({ participation }: { participation?: ReactNode }) =>
-    showMembershipHarness ? createElement('header', null, participation) : null,
+  ...actualHeader,
+  RealmHomeHeader: (props: Parameters<typeof actualHeader.RealmHomeHeader>[0]) =>
+    showMembershipHarness
+      ? createElement('header', null, props.participation)
+      : createElement(actualHeader.RealmHomeHeader, props),
 }));
 
 const { createRoot } = await import('react-dom/client');
