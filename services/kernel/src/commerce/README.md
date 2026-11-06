@@ -996,6 +996,8 @@ minimization, deadline purge and separate Access resolution; it distinguishes th
 production financial retention and remaining shared custody.
 Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
+Decision: one native purchase/retention/expiry journey plus the unused-actor operator-history case; Board and offer
+grants and edition publication use Content's native kernel, Commerce HTTP uses the composed kernel on the same Access.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Preserve the unused-account test's `none`

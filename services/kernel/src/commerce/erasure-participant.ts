@@ -428,7 +428,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       exceptions.push({
         store: retained.store,
         fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
-        purpose: retained.purpose,
+        purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
         expiresAt: new Date(retained.expiresAt),
       });
     }
