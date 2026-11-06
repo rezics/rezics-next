@@ -11467,5 +11467,9 @@
   "library_archive_recovery_restart_original": "Use the original archive",
   "library_archive_entry_open_library": "Open Library",
   "library_archive_progress_open_session": "Open the current Session",
-  "library_archive_progress_restart": "Start another recovery with the original archive"
+  "library_archive_progress_restart": "Start another recovery with the original archive",
+  "library_archive_observation_correct": "Preserve or correct an existing observation",
+  "library_archive_observation_admit": "Admit a new observation",
+  "library_archive_observation_revision": "Current observation revision",
+  "library_archive_observation_admit_help": "Admission uses every archived field, including explicit clears. Native review checks that no observation exists."
 }

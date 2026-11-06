@@ -11171,5 +11171,9 @@
   "library_archive_recovery_restart_original": "Das ursprüngliche Archiv verwenden",
   "library_archive_entry_open_library": "Bibliothek öffnen",
   "library_archive_progress_open_session": "Die aktuelle Session öffnen",
-  "library_archive_progress_restart": "Eine weitere Wiederherstellung mit dem ursprünglichen Archiv starten"
+  "library_archive_progress_restart": "Eine weitere Wiederherstellung mit dem ursprünglichen Archiv starten",
+  "library_archive_observation_correct": "Vorhandene Beobachtung beibehalten oder korrigieren",
+  "library_archive_observation_admit": "Neue Beobachtung aufnehmen",
+  "library_archive_observation_revision": "Aktuelle Revision der Beobachtung",
+  "library_archive_observation_admit_help": "Die Aufnahme verwendet alle archivierten Felder einschließlich ausdrücklicher Löschungen. Die native Prüfung bestätigt, dass keine Beobachtung vorhanden ist."
 }

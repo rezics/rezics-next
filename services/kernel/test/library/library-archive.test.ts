@@ -7,7 +7,7 @@ import {
   type ArchiveRecord,
   type ArchiveValidationCode,
 } from '../../src/library/library-archive.ts';
-import { exportSectionsV2, libraryExportManifest } from '../../src/library/library-export-format.ts';
+import { exportSectionsV2, exportSectionsV4, libraryExportManifest } from '../../src/library/library-export-format.ts';
 
 const first = randomUUID(),
   second = randomUUID(),
@@ -135,7 +135,7 @@ test('completed installed manifest preserves old meanings, explicit emptiness an
 
 test('unsupported versions, unfinished captures and inconsistent final counts are refused', () => {
   const file = archive();
-  refuses({ ...file, manifest: { ...file.manifest, version: 2 } }, 'unsupported_version');
+  refuses({ ...file, manifest: { ...file.manifest, version: 5 } }, 'unsupported_version');
   refuses({ ...file, manifest: { ...file.manifest, format: 'other' } }, 'unsupported_version');
   refuses({ records: file.records }, 'incomplete_capture');
   refuses({ ...file, manifest: null }, 'incomplete_capture');
@@ -150,7 +150,7 @@ test('unsupported versions, unfinished captures and inconsistent final counts ar
   refuses({ ...file, manifest: { ...file.manifest, state: 'collecting' } }, 'invalid_envelope');
 });
 
-test('version 2 retains exact annotation presence and partial journal dates while provenance stays unsupported', () => {
+test('version 2 retains exact annotation presence, partial journal dates and reviewable provenance', () => {
   const annotation = {
     section: 'annotations',
     accountId: first,
@@ -163,6 +163,9 @@ test('version 2 retains exact annotation presence and partial journal dates whil
   } as ArchiveRecord;
   const provenance = {
     section: 'provenance',
+    accountId: first,
+    entryIncarnationId: null,
+    libraryProfilePin: null,
     subjectId: second,
     observation: { provider: 'source', recordId: 'row-4' },
   } as ArchiveRecord;
@@ -196,7 +199,7 @@ test('version 2 retains exact annotation presence and partial journal dates whil
   });
   expect(decoded.coverage.find((row) => row.section === 'provenance')).toMatchObject({
     capture: 'present',
-    treatment: 'retained-unsupported',
+    treatment: 'requires-explicit-mapping',
     rows: 1,
   });
   const v1 = decode(archive([]));
@@ -287,4 +290,59 @@ test('malformed, duplicate-key and non-Unicode inputs never reflect private sour
     }
   }
   expect(() => decodeLibraryArchive(new Uint8Array([0xff]))).toThrow(new ArchiveValidationError('invalid_json'));
+});
+
+test('V4 validates the original complete manifest and retains provider evidence without admitting it', () => {
+  const provider = {
+    section: 'vndbEvidence' as const,
+    upload_id: randomUUID(),
+    ordinal: 0,
+    evidence: { fields: { progress: { raw: 'unknown' }, score: { raw: '0' } } },
+  };
+  const records: ArchiveRecord[] = [entry(first), provider];
+  const sectionTotals = Object.fromEntries(
+    exportSectionsV4.map((section) => {
+      const rows = records.filter((row) => row.section === section);
+      return [
+        section,
+        { rows: rows.length, recordBytes: rows.reduce((n, row) => n + Buffer.byteLength(JSON.stringify(row)), 0) },
+      ];
+    }),
+  );
+  const file = {
+    records,
+    manifest: {
+      ...libraryExportManifest({
+        export_id: randomUUID(),
+        created_at: at,
+        expires_at: '2026-01-01 00:15:00.123456+00',
+        format_version: 4,
+      }),
+      fullExport: false,
+      rows: records.length,
+      recordBytes: records.reduce((n, row) => n + Buffer.byteLength(JSON.stringify(row)), 0),
+      sectionTotals,
+    },
+  };
+  const decoded = decode(file);
+  expect(decoded.manifest).toEqual(file.manifest);
+  expect(decoded.records).toEqual(records);
+  expect(decoded.coverage.find((row) => row.section === 'vndbEvidence')).toMatchObject({
+    rows: 1,
+    treatment: 'retained-unsupported',
+  });
+  expect(decoded.coverage.find((row) => row.section === 'entries')?.treatment).toBe('requires-explicit-mapping');
+  refuses({ ...file, manifest: { ...file.manifest, sectionTotals: undefined } }, 'invalid_envelope');
+  refuses({ ...file, records: records.slice(0, 1) }, 'inconsistent_manifest');
+  refuses({ ...file, manifest: { ...file.manifest, rows: 1 } }, 'inconsistent_manifest');
+  refuses(
+    {
+      ...file,
+      manifest: { ...file.manifest, sectionTotals: { ...sectionTotals, vndbEvidence: { rows: 1, recordBytes: 0 } } },
+    },
+    'inconsistent_manifest',
+  );
+  refuses({ ...file, manifest: { ...file.manifest, sections: exportSectionsV2 } }, 'incomplete_capture');
+  const raw = JSON.stringify(file).replace('"version":4', '"version":4,"version":4');
+  expect(() => decodeLibraryArchive(Buffer.from(raw))).toThrow(new ArchiveValidationError('invalid_json'));
 });
