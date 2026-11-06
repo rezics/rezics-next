@@ -35,13 +35,12 @@ retirement against fake ports; the existing growth-work-client, selected-runtime
 sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention deletion cost is selected
 IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload. The growth-retention suite
 uses one folded capture per measured batch or sweep: nested SDK-delete auto_explain notices exceed the 32 MiB raw
-cap and the 20,000 retained-entry cap at a 1,000-id batch, so occurrence costs, SQL, binds and background attribution
-stay and selector-plan samples prove `workflow_retention_selector`. Selector-plan notices are taken from acquired
-pool clients after the auto_explain probe, and payload tables share the 32,768-row planner floor so fanout 1/8/64
-keeps indexed equality deletes. Fanout grows only `operation_outputs`; cascade families stay unit copies because FK
-nested-loop blocks are not affine at 1/8/64. Measured nonempty batches are five application statements plus two
-control. Folded notice envelopes and walk occupancy are
-released after each summary; unmeasured prepare/warmup ignores nested trigger notices.
+cap and the 20,000 retained-entry cap at a 1,000-id batch. Selector-plan notices from acquired pool clients prove
+`workflow_retention_selector`. Payload tables share the 32,768-row planner floor so fanout 1/8/64 keeps indexed
+equality deletes of `operation_outputs`; cascade families stay unit copies. Measured nonempty batches are five
+application statements plus two control. Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1,
+short 90/5+2, full/backlog 107304/5+2, fanout 90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0.
+Folded notice envelopes and walk occupancy are released after each summary.
 
 ## Semantic domain composition
 

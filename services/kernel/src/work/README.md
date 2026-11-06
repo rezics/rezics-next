@@ -82,16 +82,15 @@ that plan change. Payload fanout grows only `operation_outputs` on a short batch
 one copy so FK nested-loop page work stays a constant neighbourhood. Growing events/history/streams with fanout
 makes `DELETE workflow_status` blocks fail the linear family: per-parent index descent dominates at fanout 1 and
 heap packing improves at 64, so additive slope from 1→8 overshoots 64. A selected count of 10 still cannot bound
-10 vs 640 operation rows. Selector-plan notices are sampled from acquired pool clients, including connections the
-auto_explain probe already opened, because `connect` does not fire again for those backends.
-Plans must use `workflow_retention_selector` with no sequential scan. The suite samples only selector-plan notices
-for that index proof and classifies the four exact-ID deletes from folded statement lists. Measured statement pins
-compare `Cost.statements + Cost.controlStatements` with the owner derivation of 7/14. The full-batch series
-bound retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`. Native recovery
+10 vs 640 operation rows. Selector-plan notices are sampled from acquired pool clients after the auto_explain probe.
+Selector plans use `workflow_retention_selector` (Index Only Scan, no sequential scan); folded lists classify the
+four exact-ID deletes. Statement pins are `Cost.statements + Cost.controlStatements` = 1/7/14. Native recovery
 `test/work/retention.test.ts` interrupts before and after the durable batch checkpoint, resumes the same workflow
-identity on the frozen cutoff/application, and finishes on repeated empty. Measured SQL, binds, selector-plan
-indexes/nodes, rows, blocks, statements, payload fanout and background attribution are logged from those native
-checks.
+identity on the frozen cutoff/application, and finishes on repeated empty. Bound revision
+`e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full and backlog 107304/5+2, fanout
+90→160→720, sweep 41868/10+4 at 64/512/4096 (fanout 1/8/64); background 0. A 1,000-id delete seq-scans the 32,768-row
+selected payload neighbourhood; fanout stays indexed. The full-batch series retires the former `GROWTH_BASELINE`
+step exemption for `workflow retention batch`.
 
 ### Cost: workflow retention batch
 

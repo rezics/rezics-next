@@ -94,6 +94,8 @@ sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof
 capture so a 1,000-id SDK delete stays inside the 32 MiB and 20,000-entry caps; selector-plan notices come from
 acquired pool clients, payload tables share the 32,768-row planner floor, fanout 1/8/64 grows only
 `operation_outputs`, and measured nonempty batches are five application statements plus two BEGIN/COMMIT control.
+Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2,
+fanout 90/160/720 and sweep 41868/10+4; selector Index Only Scan; background 0.
 Search tombstone registration
 includes both `search_account_erasure` and `search_erasure`. Contract/core/application load no downstream
 implementations. Native adapters are bound by ordinary `createKernel`/`server`/`worker` composition, with product
