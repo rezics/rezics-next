@@ -357,7 +357,7 @@ test('journalled explicit review and changed reimport survive lost delivery and 
     expect(first.rows).toBe(2);
     const preview = await readShowcasePersonalList({ client, uploadId: first.uploadId });
     if (preview.state !== 'current') throw new Error(preview.code);
-    expect(preview.value.rows[0].match.status).toBe('unmatched');
+    expect(preview.value.rows[0]?.match.status).toBe('unmatched');
     expect((await f.send('owner', 'GET', `/v1/libraryEntries/${targetId}`)).status).toBe(404);
     const state = await reviewShowcasePersonalList({
       ...caller,
@@ -398,9 +398,9 @@ test('journalled explicit review and changed reimport survive lost delivery and 
       body: { rows: [{ ordinal: 1, reviewId: progress.value.reviewId }] },
     });
     if (progressApplied.state !== 'acknowledged') throw new Error(progressApplied.code);
-    const progressOutcome = progressApplied.value.outcomes[0];
-    const sessionId =
-      progressOutcome && 'progress' in progressOutcome ? progressOutcome.progress?.readback?.sessionId : undefined;
+    const sessions = await json('GET', `/v1/progressSessions?subjectId=${targetId}&limit=8`);
+    expect(sessions.progressSessions).toHaveLength(1);
+    const sessionId = sessions.progressSessions[0].id;
     expect(sessionId).toBeString();
     const changed = await seedShowcasePersonalList({ ...caller, xml: xml(vn(sourceId, '<label label="Finished"/>')) });
     if (changed.state !== 'uploaded') throw new Error(changed.code);
