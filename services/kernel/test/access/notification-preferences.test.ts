@@ -88,7 +88,8 @@ test("a notifications patch merges per kind and null restores a kind's default",
     shelf: { gridSize: 'large' },
   });
   expect(merged.status).toBe(200);
-  expect(merged.value.notifications).toEqual(allOff);
+  // Only the two named kinds change; thread_watch and board_activity keep their defaults.
+  expect(merged.value.notifications).toEqual({ ...DEFAULT_NOTIFICATIONS, reply: false, mention: false });
   expect(merged.value.version).toBe(2);
   const restored = await call(person, { expectedVersion: 2, notifications: { reply: null } });
   expect(restored.status).toBe(200);

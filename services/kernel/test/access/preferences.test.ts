@@ -3,6 +3,7 @@ import { DEFAULT_NOTIFICATIONS } from '../../src/access/notification-kinds.ts';
 import { withReadingPreferencePage, type AccountPreferences } from '../../src/access/preferences.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { receiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -110,11 +111,18 @@ test('versioned partial writes replay once, reject stale versions and bind the i
   expect(first.value).toEqual(shown({ spoilerLevel: 2, version: 1 }));
   expect(first.response.headers.has('rezics-session-token')).toBe(true);
   expect((await call(owner.accountId, owner.bearer, body, key)).value).toEqual(first.value);
+  // The receipt stores the derived command-key token for the account principal, not the raw header value.
+  const storedKeys = receiptKeyCandidates(
+    testReceiptKeys(),
+    'access.account.preferences',
+    { kind: 'account', id: owner.accountId },
+    key,
+  );
   expect(
     (
       await db.admin.query(
-        "SELECT 1 FROM core.receipt WHERE command_kind='access.account.preferences' AND idempotency_key=$1",
-        [key],
+        "SELECT 1 FROM core.receipt WHERE command_kind='access.account.preferences' AND idempotency_key = ANY($1)",
+        [storedKeys],
       )
     ).rows,
   ).toHaveLength(1);
