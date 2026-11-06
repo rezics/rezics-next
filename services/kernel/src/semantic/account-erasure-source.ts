@@ -1,5 +1,6 @@
 import { classifyUnavailability } from '../access/unavailable.ts';
-import { tupleRoute, type ImportedFieldGroup } from '../content/imported-contract.ts';
+import type { ContentImportedFieldGroup } from './contract/domain-ports.ts';
+import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import {
@@ -157,7 +158,7 @@ type Detail = {
   context_id: string | null;
   source_name: string | null;
   external_id: string | null;
-  field_group: ImportedFieldGroup | null;
+  field_group: ContentImportedFieldGroup | null;
   native_present: boolean;
   state: string;
   custody_pending: boolean;
@@ -180,7 +181,7 @@ type StoredObservation = {
   tuple_route: number | null;
   source_name: string | null;
   external_id: string | null;
-  field_group: ImportedFieldGroup | null;
+  field_group: ContentImportedFieldGroup | null;
   disposition: SubjectErasureSourceRecord['disposition'] | null;
 };
 const observationColumns = `original,previous_terminal,current_terminal,source_home,source_revision,source_security_revision,
@@ -639,7 +640,11 @@ function sourceFactory(
                                   {
                                     kind: 'sourceTuple' as const,
                                     tuple: {
-                                      route: tupleRoute(config.routeKey, detail.source_name, detail.external_id),
+                                      route: importedTupleRouteOf()(
+                                        config.routeKey,
+                                        detail.source_name,
+                                        detail.external_id,
+                                      ),
                                       source: detail.source_name,
                                       external_id: detail.external_id,
                                       field_group: detail.field_group,

@@ -2,7 +2,8 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withReadTransaction } from './read.ts';
-import { VoteReviewStaleError, VoteReviewUnavailableError, type VoteReviewEpoch } from '../rating/own-votes-review.ts';
+import { ratingReviewOf } from './adapters/rating-review.ts';
+import type { IdentityRatingEpochObservation, RatingReviewPort } from './contract/domain-ports.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityEpochStore } from './identity-adapters/index.ts';
 import type { IdentityEpochState } from './identity-epoch-contract.ts';
@@ -12,12 +13,17 @@ export type IdentityRatingAdmissionReason = 'redirect-chain' | 'epoch-pending' |
 export type IdentityRatingAdmissionResult =
   | Readonly<{ status: 'admitted'; subjectId: string }>
   | Readonly<{ status: 'pending'; reason: IdentityRatingAdmissionReason }>;
+export type IdentityRatingEpochWitness = IdentityRatingEpochObservation;
 
 export type IdentityRatingEpochReader = (tx: CommandTransaction, home: number) => Promise<IdentityEpochState>;
 
+function review(): RatingReviewPort {
+  return ratingReviewOf();
+}
+
 /** Released native-home observations. These do not fence identity publication through an owner commit. */
 export async function readIdentityRatingEpochs(pool: Pool, homes: readonly number[], deadline: number) {
-  const epochs: VoteReviewEpoch[] = [];
+  const epochs: IdentityRatingEpochWitness[] = [];
   for (const partition of [...new Set(homes)].sort((a, b) => a - b)) {
     const state = await withReadTransaction(
       pool,
@@ -27,21 +33,24 @@ export async function readIdentityRatingEpochs(pool: Pool, homes: readonly numbe
       },
       deadline,
     );
-    if (state.state === 'pending') throw new VoteReviewUnavailableError('identity_pending');
-    if (state.state !== 'published') throw new VoteReviewUnavailableError('identity_observation_unavailable');
+    if (state.state === 'pending') throw review().pending();
+    if (state.state !== 'published') throw review().unavailable();
     epochs.push({ partition, epoch: state.epoch.toString() });
   }
   return epochs;
 }
 
-export function compareIdentityRatingEpochs(expected: readonly VoteReviewEpoch[], actual: readonly VoteReviewEpoch[]) {
+export function compareIdentityRatingEpochs(
+  expected: readonly IdentityRatingEpochWitness[],
+  actual: readonly IdentityRatingEpochWitness[],
+) {
   if (
     expected.length !== actual.length ||
     expected.some(
       (entry, index) => entry.partition !== actual[index]?.partition || entry.epoch !== actual[index]?.epoch,
     )
   )
-    throw new VoteReviewStaleError('identity_epoch_changed');
+    throw review().identityEpochChanged();
 }
 
 /**
@@ -53,7 +62,7 @@ export async function admitIdentityRatingEffect(
   input: Readonly<{
     requestedTargetId: string;
     resolvedTargetId: string;
-    expectedEpochs?: readonly VoteReviewEpoch[];
+    expectedEpochs?: readonly IdentityRatingEpochWitness[];
   }>,
   readEpoch: IdentityRatingEpochReader = (transaction, home) => identityEpochStore().readEpoch(transaction, home),
 ): Promise<IdentityRatingAdmissionResult> {
@@ -69,7 +78,7 @@ export async function admitIdentityRatingEffect(
   const homes = [...new Set([partitionOf(requestedRoute), partitionOf(resolvedRoute)])].sort(
     (left, right) => left - right,
   );
-  const epochs: VoteReviewEpoch[] = [];
+  const epochs: IdentityRatingEpochWitness[] = [];
   for (const home of homes) {
     const state = await readEpoch(tx, home);
     if (state.state === 'pending') return { status: 'pending', reason: 'epoch-pending' };

@@ -1161,16 +1161,18 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('vndb', 'vn_titles')) {
     if (selection && !selection.vndb.includes(text(row, 'id'))) continue;
     const family = crossMediaFranchise(row.title, row.latin);
-    if (!family) continue;
+    if (!family && !selection) continue;
     const id = text(row, 'id');
     ensure(/^v[1-9][0-9]*$/.test(id), 'Invalid VNDB work identity');
-    if (!vnFamily.has(id) && countFamily(vnFamily, family) >= FAMILY_CAP) {
+    if (!selection && family && !vnFamily.has(id) && countFamily(vnFamily, family) >= FAMILY_CAP) {
       gap('vndb', 'vn_titles', { id }, 'Selected VNDB family exceeds the bounded work limit');
       continue;
     }
     vnIds.add(id);
-    vnFamily.set(id, family);
-    if (!plan.franchises[family].vndb.includes(id)) plan.franchises[family].vndb.push(id);
+    if (family) {
+      vnFamily.set(id, family);
+      if (!plan.franchises[family].vndb.includes(id)) plan.franchises[family].vndb.push(id);
+    }
   }
   let vnGrew = selection === undefined;
   while (vnGrew) {

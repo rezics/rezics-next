@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import type { OpenAPIV3 } from 'openapi-types';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization } from '../../access/resource-authorization.ts';
-import { tupleRoute } from '../../content/imported-contract.ts';
+import { importedTupleRouteOf } from '../adapters/imported-route.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -63,7 +63,7 @@ export function sourceRecordRoutes(
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       try {
         validateSourceRecordMetadata(body);
-        const home = tupleRoute(routeKey, body.source, body.external_id);
+        const home = importedTupleRouteOf(pool)(routeKey, body.source, body.external_id);
         const authorization = resourceAuthorization({
           access: access(),
           actor,

@@ -30,11 +30,12 @@ import { withReadTransaction } from './read.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
-import type { Release } from '@rezics/definitions';
+import type { DataType, Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import {
   currentCommand,
+  currentCommandResources,
   DEFAULT_REQUEST_DEADLINE_MS,
   runCommand,
   type CommandAuthorization,
@@ -52,8 +53,8 @@ import {
   type AgentSelfSource as CandidateAgentSelfSource,
   type CandidateSource,
 } from './fences.ts';
-import { checkMediaObject } from '../content/cover-reference.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
+import { contentLifecycleOf } from './adapters/ports.ts';
+import { resolvedSemanticDomain } from './adapters/registry.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectBulkContent, rejectContent } from './rules.ts';
@@ -97,6 +98,14 @@ import readSourceMembers from './source-records-members.sql';
 import { declareCommandHistory } from '../history/record.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+function composedDomain(pool?: Pool) {
+  return resolvedSemanticDomain(pool);
+}
+
+function contentLifecycle(pool?: Pool) {
+  return contentLifecycleOf(pool);
+}
 
 export { writeFacts } from './write-facts.ts';
 
@@ -214,13 +223,18 @@ export async function writeSubject(
     authored,
   );
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
-  const facts = itemFacts(
+  const type = typeof input?.type === 'string' ? input.type : String(input.type);
+  const domain = composedDomain(currentCommandResources(tx).pool);
+  const plan = domain?.subjects.plan({
     subjectId,
-    options.item,
-    typeof input?.type === 'string' ? input.type : undefined,
-    options.release.release,
-  );
-  const dataTypes = factDataTypes(options.release.release, facts);
+    item: options.item,
+    type,
+    release: options.release.release,
+    releaseDigest: options.release.digest,
+  });
+  const facts = [...(plan?.facts ?? itemFacts(subjectId, options.item, type, options.release.release))];
+  const dataTypes =
+    (plan?.dataTypes as Record<string, DataType> | undefined) ?? factDataTypes(options.release.release, facts);
   const statementSubjects = [subjectId, ...checked.targets.map((item) => item.id)];
   const itemDetails = await readItemDetails(tx, statementSubjects);
   const privateAccounts = new Map<string, string>();
@@ -255,7 +269,7 @@ export async function writeSubject(
   await insertSubject.run(tx, {
     route,
     subject_id: subjectId,
-    type: String(input.type),
+    type,
     transaction_id: transactionId,
     current_facts: facts.filter(
       (fact) => fact.kind !== 'statement' || !isRelationProperty(options.release.release, fact.property!),
@@ -272,7 +286,8 @@ export async function writeSubject(
   // Historic trusted callbacks carry no creation capability and acquire no author rights.
   if (authored && creationDeclares(tx, revisionResource(subjectId, 1)))
     await initializeRevisionAuthorship(tx, { subject: subjectId, revision: 1 });
-  await identityEpochStore().initializeSubject(tx, subjectId);
+  if (domain) await domain.subjects.initializeIdentity(tx, subjectId);
+  else await identityEpochStore().initializeSubject(tx, subjectId);
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
   ];
@@ -293,16 +308,32 @@ export async function writeSubject(
     events.push(...installed.events);
   }
   await collectSemanticRecordFacts(tx, subjectId, facts, 1);
-  await writeFacts(tx, {
-    route,
-    subject_id: subjectId,
-    transaction_id: transactionId,
-    facts: facts.map((fact) => ({
-      ...fact,
-      release: fact.kind === 'statement' ? options.release.digest : null,
-      relation: fact.kind === 'statement' && isRelationProperty(options.release.release, fact.property!),
-    })),
-  });
+  if (domain && plan) {
+    await domain.subjects.writePlannedFacts(
+      {
+        tx,
+        route,
+        subjectId,
+        item: options.item,
+        type,
+        release: options.release.release,
+        releaseDigest: options.release.digest,
+        transactionId,
+      },
+      plan,
+    );
+  } else {
+    await writeFacts(tx, {
+      route,
+      subject_id: subjectId,
+      transaction_id: transactionId,
+      facts: facts.map((fact) => ({
+        ...fact,
+        release: fact.kind === 'statement' ? options.release.digest : null,
+        relation: fact.kind === 'statement' && isRelationProperty(options.release.release, fact.property!),
+      })),
+    });
+  }
   for (const fact of facts) {
     const account = privateAccounts.get(fact.statement_id!);
     if (!account) continue;
@@ -333,7 +364,7 @@ export async function writeSubject(
     {
       subject: subjectId,
       release: options.release.release,
-      type: String(input.type),
+      type,
     },
   );
   if (changes.length > 0) {
@@ -366,22 +397,21 @@ export async function writeSubject(
     events,
   );
   await sealSemanticRecordSourceSet(tx, sourceSet);
+  const relationCounts = Object.fromEntries(
+    (options.release.release.types[type]?.properties ?? [])
+      .filter((property) => isRelationProperty(options.release.release, property))
+      .map((property) => [
+        property,
+        facts.filter((fact) => fact.kind === 'statement' && fact.property === property && fact.operation === 'assert')
+          .length,
+      ]),
+  );
+  const metadata = { revision: 1, release: options.release.digest, context: CONTEXT, relationCounts };
   return {
-    value: resolveItem(subjectId, facts, String(input.type), dataTypes, {
-      revision: 1,
-      release: options.release.digest,
-      context: CONTEXT,
-      relationCounts: Object.fromEntries(
-        (options.release.release.types[String(input.type)]?.properties ?? [])
-          .filter((property) => isRelationProperty(options.release.release, property))
-          .map((property) => [
-            property,
-            facts.filter(
-              (fact) => fact.kind === 'statement' && fact.property === property && fact.operation === 'assert',
-            ).length,
-          ]),
-      ),
-    }),
+    value:
+      domain && plan
+        ? domain.subjects.project(plan, facts, metadata)
+        : resolveItem(subjectId, facts, type, dataTypes, metadata),
     events,
   };
 }
@@ -844,10 +874,17 @@ export async function readSubject(
   // The display projection is independent of the fenced statement view. Recheck
   // its selected media's exact source home before disclosing the cover metadata.
   if (summary?.cover && routeKey) {
-    const media = await checkMediaObject({ query: pool.query.bind(pool) }, summary.cover.media, 'cover');
-    if (media) {
+    const lifecycle = contentLifecycle(pool);
+    const media = await lifecycle.checkCover({ query: pool.query.bind(pool) }, summary.cover.media);
+    if (!media?.source) summary.cover = null;
+    else {
       const { source, external_id, field_group } = media.source;
-      const tuple = { route: tupleRoute(routeKey, source, external_id), source, external_id, field_group };
+      const tuple = {
+        route: lifecycle.importedTupleRoute(routeKey, source, external_id),
+        source,
+        external_id,
+        field_group,
+      };
       const [fence] = await readAnchoredFences(pool, partitionOf(tuple.route), [tuple]);
       if (!fence || fence.takenDown) summary.cover = null;
     }

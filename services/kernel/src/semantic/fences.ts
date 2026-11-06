@@ -2,13 +2,14 @@ import provenance from './scope-leaf-selection-provenance.sql';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
-import { tupleRoute, type ImportedFieldGroup } from '../content/imported-contract.ts';
+import type { ContentImportedFieldGroup } from './contract/domain-ports.ts';
+import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf } from '../route/route.ts';
 
-const FIELD_GROUPS = new Set<ImportedFieldGroup>(['facts', 'summary', 'cover']);
+const FIELD_GROUPS = new Set<ContentImportedFieldGroup>(['facts', 'summary', 'cover']);
 
 /** Account-agent provenance is a current native identity, not an imported source tuple. */
 export type AgentSelfSource = Readonly<{ kind: 'agent'; subject: string }>;
@@ -46,7 +47,7 @@ export function fenceKey(tuple: Pick<SourceFenceTuple, 'route' | 'source' | 'ext
 
 export function sourceTuple(routeKey: Uint8Array, source: Source): SourceFenceTuple {
   return {
-    route: tupleRoute(routeKey, source.source, source.external_id),
+    route: importedTupleRouteOf()(routeKey, source.source, source.external_id),
     source: source.source,
     external_id: source.external_id,
     field_group: source.field_group,

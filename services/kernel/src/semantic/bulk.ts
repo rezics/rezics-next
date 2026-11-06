@@ -20,7 +20,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { appendImportedField } from '../content/imported-fields.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
+import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { claimMedia } from '../content/media.ts';
 import { requestDigest } from '../http/request.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -48,7 +48,7 @@ export type BulkValue =
 type Value = { status: 200 | 201; value: BulkValue };
 
 export function batchRoute(routeKey: Uint8Array, command: BatchCommand): number | null {
-  const tuple = tupleRoute(routeKey, command.source.source, command.source.external_id);
+  const tuple = importedTupleRouteOf()(routeKey, command.source.source, command.source.external_id);
   return command.op === 'create' ? tuple : routeOf(command.subject);
 }
 

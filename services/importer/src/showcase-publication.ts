@@ -36,7 +36,7 @@ import {
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
@@ -281,7 +281,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       if (
         prior.state === 'refused' &&
         prior.error_code?.startsWith('review-http-4') &&
-        prior.body_digest !== bodyDigest
+        (prior.body_digest !== bodyDigest ||
+          (prior.error_code === 'review-http-422' && prior.idempotency_key !== idempotencyKey))
       ) {
         this.#db
           .query(
@@ -744,8 +745,8 @@ function actionKey(kind: 'accept' | 'adopt', identity: string, digest: string): 
   return `${kind}:${showcaseDigest({ identity, digest })}`;
 }
 
-function actionIdempotencyKey(body: unknown): string {
-  return showcaseDigest(body);
+function actionIdempotencyKey(action: string, body: unknown): string {
+  return showcaseDigest({ action, body });
 }
 
 function errorCode(error: unknown): string {
@@ -1392,6 +1393,88 @@ export type ShowcasePublicationResult = Readonly<{
   }[];
 }>;
 
+/** Recover publication targets from original create acknowledgements, independently
+ * checking the native ID/type. A fresh source identifier is itself an unadopted
+ * candidate, so current source-identity readings cannot be a prerequisite for
+ * publishing that identifier. These readings are local publication intent only;
+ * retained identity consumers still receive the seed's independently current reads.
+ */
+async function publicationTargetReadings(input: {
+  plan: CrossMediaPlan;
+  result: CrossMediaSeedResult;
+  aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
+  acknowledgements: readonly ShowcaseAcknowledgement[];
+  review: ShowcaseReviewPort;
+}): Promise<CrossMediaSeedResult['readings']> {
+  const readings = [...input.result.readings];
+  const present = new Set(readings.map((reading) => `${reading.source}\0${reading.externalId}`));
+  const creates = new Map<string, ShowcaseAcknowledgement[]>();
+  for (const entry of input.acknowledgements) {
+    if (entry.command.op !== 'create') continue;
+    const key = `${entry.command.source.source}\0${entry.command.source.external_id}`;
+    const entries = creates.get(key) ?? [];
+    entries.push(entry);
+    creates.set(key, entries);
+  }
+  const rows = [
+    ...input.plan.records.bangumi,
+    ...input.plan.entities.bangumi,
+    ...input.plan.records.vndb,
+    ...input.plan.entities.vndb,
+  ];
+  if (rows.length > showcaseLimits.records) throw new RangeError('Selected showcase record limit exceeded');
+  for (const row of rows) {
+    const provider = row.source === 'vndb' ? 'vndb' : 'bangumi';
+    const key = `${provider}\0${row.key}`;
+    if (present.has(key)) continue;
+    const alias = input.aliases[provider];
+    const registration = createSelectedFamilySourceRegistration(provider, alias);
+    const converted = registration.convert(
+      { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
+      { source: alias },
+    );
+    const bootstrap = converted.proposals.find((command) => command.op === 'create');
+    if (!bootstrap) continue;
+    const initial = createSourceRegistration(provider, {
+      source: alias,
+      ...(provider === 'bangumi'
+        ? { converterRevision: crossMediaBangumiRevision }
+        : { converterRevision: entityRevision }),
+    }).convert(
+      { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
+      { source: alias },
+    );
+    const initialBootstrap = initial.proposals.find((command) => command.op === 'create');
+    const bootstraps = [bootstrap, ...(initialBootstrap ? [initialBootstrap] : [])];
+    const exact = (creates.get(`${alias}\0${row.key}`) ?? []).filter(
+      (entry) =>
+        showcaseDigest(entry.command) === entry.commandDigest &&
+        bootstraps.some((expected) => showcaseDigest({ ...expected, key: entry.command.key }) === entry.commandDigest),
+    );
+    if (exact.length !== 1 || !exact[0]!.subjectId) continue;
+    const id = exact[0]!.subjectId!;
+    let read: ReviewedSubjectRead;
+    try {
+      read = await input.review.readReviewedSubject(id);
+    } catch (error) {
+      // Known native read refusal/unavailability withholds publication, never a new identity.
+      if (typeof (error as { status?: unknown }).status === 'number') continue;
+      throw error;
+    }
+    if (subjectId(read) !== id || subjectType(read) !== bootstrap.subject.type) continue;
+    readings.push({
+      source: provider,
+      externalId: row.key,
+      boundSubjectId: id,
+      subject: read,
+      route: `/subjects/${id}/subject`,
+      selection: 'proposed',
+    });
+    present.add(key);
+  }
+  return readings;
+}
+
 /** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
 export async function publishShowcase(input: {
   plan: CrossMediaPlan;
@@ -1412,7 +1495,11 @@ export async function publishShowcase(input: {
   tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
 }): Promise<ShowcasePublicationResult> {
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
-  const result = { ...input.result, mediaOutcomes };
+  const readings = await publicationTargetReadings({
+    ...input,
+    acknowledgements: input.journal.acknowledgedCommands(),
+  });
+  const result = { ...input.result, readings, mediaOutcomes };
   const recovered = await resolveLegacyCandidates({
     plan: input.plan,
     result,
@@ -1440,7 +1527,7 @@ export async function publishShowcase(input: {
   ) =>
     buildShowcaseManifest({
       plan: input.plan,
-      readings: input.result.readings,
+      readings: result.readings,
       acknowledgements,
       aliases: input.aliases,
       mediaOutcomes: outcomes,
@@ -1945,7 +2032,7 @@ export async function publishShowcase(input: {
     }
     const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
     const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
-    const idempotencyKey = actionIdempotencyKey(body);
+    const idempotencyKey = actionIdempotencyKey(key, body);
     const prior = input.journal.action(key);
     if (prior?.state === 'acknowledged') continue;
     if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
@@ -2194,7 +2281,7 @@ export async function publishShowcase(input: {
     if (candidate.decision !== 'accept') {
       const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
       const key = actionKey('accept', edge.assertion.candidateId, edge.assertion.candidateDigest);
-      const idempotencyKey = actionIdempotencyKey(body);
+      const idempotencyKey = actionIdempotencyKey(key, body);
       const prior = input.journal.action(key);
       if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
         omissions.push({ provider: 'vndb', sourceKey: binding.path, code: prior.error_code! });
@@ -2320,7 +2407,7 @@ export async function publishShowcase(input: {
         .map(([candidate, rank]) => ({ candidate, rank })),
     };
     const action = actionKey('adopt', `${childId}:skos:broader`, showcaseDigest({ intent: manifest.digest, body }));
-    const idempotencyKey = actionIdempotencyKey(body);
+    const idempotencyKey = actionIdempotencyKey(action, body);
     const priorAction = input.journal.action(action);
     if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
       omissions.push({ provider: 'vndb', sourceKey: group.record.sourceKey, code: priorAction.error_code! });
@@ -2450,7 +2537,7 @@ export async function publishShowcase(input: {
     }
     const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
     const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
-    const idempotencyKey = actionIdempotencyKey(body);
+    const idempotencyKey = actionIdempotencyKey(key, body);
     const prior = input.journal.action(key);
     if (prior?.state === 'acknowledged') continue;
     if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
@@ -2669,7 +2756,7 @@ export async function publishShowcase(input: {
         .map(([candidate, rank]) => ({ candidate, rank })),
     };
     const action = actionKey('adopt', `${id}:${group.property}`, showcaseDigest({ intent: manifest.digest, body }));
-    const idempotencyKey = actionIdempotencyKey(body);
+    const idempotencyKey = actionIdempotencyKey(action, body);
     const priorAction = input.journal.action(action);
     if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
       omissions.push({

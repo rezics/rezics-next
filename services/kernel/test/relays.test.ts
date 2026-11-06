@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { createPool } from '../src/database/pool.ts';
 import { projectBatch, readBatch, type Envelope } from '../src/events/log.ts';
-import { startRelays, type Relay } from '../src/events/relays.ts';
+import { relayConcurrencyForPool, startRelays, type Relay } from '../src/events/relays.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -252,4 +252,21 @@ test('a stopped partition is retried on later ticks without holding back the oth
   await append(healthy);
   await Bun.sleep(200);
   expect(total()).toBe(stopped);
+});
+
+test('a max-one pool shares its only connection and does not queue behind a held command lease', async () => {
+  const one = createPool(databaseUrl);
+  one.options.max = 1;
+  expect(relayConcurrencyForPool(one)).toBe(1);
+  const held = await one.connect();
+  const relays = startRelays(one, [projecting(freshConsumer(), async () => {})], { intervalMs: 20, concurrency: 1 });
+  try {
+    await Bun.sleep(50);
+    expect(one.waitingCount).toBe(0);
+    expect(one.idleCount).toBe(0);
+  } finally {
+    await relays.stop();
+    held.release();
+    await one.end();
+  }
 });

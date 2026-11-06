@@ -299,7 +299,9 @@
         "services/kernel/src/content/access-capabilities.ts",
         "services/kernel/src/content/adapters/index.ts",
         "services/kernel/src/content/adapters/bind.ts",
-        "services/kernel/src/content/adapters/ambient.ts"
+        "services/kernel/src/content/adapters/ambient.ts",
+        "services/kernel/src/content/cover-reference.ts",
+        "services/kernel/src/content/imported-contract.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -394,7 +396,8 @@
       "publicEntries": [
         "services/kernel/src/rating/index.ts",
         "services/kernel/src/rating/module.ts",
-        "services/kernel/src/rating/events.ts"
+        "services/kernel/src/rating/events.ts",
+        "services/kernel/src/rating/own-votes-review.ts"
       ],
       "allowedDependencies": [
         "kernel-access",
@@ -517,7 +520,9 @@
         "services/kernel/src/semantic/identity-adapters/read.ts",
         "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
         "services/kernel/src/semantic/work-module.ts",
-        "services/kernel/src/semantic/access-capabilities.ts"
+        "services/kernel/src/semantic/access-capabilities.ts",
+        "services/kernel/src/semantic/adapters/native-domain.ts",
+        "services/kernel/src/semantic/adapters/index.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -1253,7 +1258,10 @@
       "kind": "core",
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/identity-core/**"],
-      "publicEntries": ["services/kernel/src/semantic/identity-core/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/semantic/identity-core/index.ts",
+        "services/kernel/src/semantic/identity-core/rating-review-bounds.ts"
+      ],
       "allowedDependencies": ["kernel-semantic-contract"],
       "capabilities": ["canonical-identity-rules"]
     },
@@ -1264,7 +1272,11 @@
       "paths": ["services/kernel/src/semantic/contract/**"],
       "publicEntries": [
         "services/kernel/src/semantic/contract/identity-values.ts",
-        "services/kernel/src/semantic/contract/identity-epoch-ports.ts"
+        "services/kernel/src/semantic/contract/identity-epoch-ports.ts",
+        "services/kernel/src/semantic/contract/item-values.ts",
+        "services/kernel/src/semantic/contract/domain-ports.ts",
+        "services/kernel/src/semantic/contract/subject-values.ts",
+        "services/kernel/src/semantic/contract/index.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["semantic-contract"]
@@ -1274,18 +1286,36 @@
       "kind": "core",
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/core/**"],
-      "publicEntries": ["services/kernel/src/semantic/core/identity-epoch-sequence.ts"],
-      "allowedDependencies": ["kernel-semantic-contract"],
-      "capabilities": ["semantic-identity-sequence"]
+      "publicEntries": [
+        "services/kernel/src/semantic/core/identity-epoch-sequence.ts",
+        "services/kernel/src/semantic/core/item-projection.ts",
+        "services/kernel/src/semantic/core/identity-coordination.ts",
+        "services/kernel/src/semantic/core/index.ts"
+      ],
+      "allowedDependencies": ["kernel-semantic-contract", "definitions"],
+      "capabilities": ["semantic-identity-sequence", "semantic-item-projection"]
     },
     {
       "id": "kernel-semantic-application",
       "kind": "application",
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/application/**"],
-      "publicEntries": ["services/kernel/src/semantic/application/identity-epoch-participants.ts"],
-      "allowedDependencies": ["kernel-semantic-contract"],
-      "capabilities": ["semantic-identity-participants"]
+      "publicEntries": [
+        "services/kernel/src/semantic/application/identity-epoch-participants.ts",
+        "services/kernel/src/semantic/application/item-application.ts",
+        "services/kernel/src/semantic/application/subject-application.ts",
+        "services/kernel/src/semantic/application/identity-coordination.ts",
+        "services/kernel/src/semantic/application/rating-review.ts",
+        "services/kernel/src/semantic/application/semantic-domain.ts",
+        "services/kernel/src/semantic/application/index.ts"
+      ],
+      "allowedDependencies": [
+        "kernel-semantic-contract",
+        "kernel-semantic-core",
+        "kernel-identity-core",
+        "definitions"
+      ],
+      "capabilities": ["semantic-identity-participants", "semantic-domain"]
     },
     {
       "id": "progress",

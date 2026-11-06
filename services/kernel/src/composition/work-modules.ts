@@ -9,7 +9,7 @@ import { contentDeclaration, type ContentWorkAmbient } from '../content/register
 import type { WorkModule } from '../work/registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
-import { createSemanticWorkModule, type SemanticIdentityParticipantComposer } from '../semantic/work-module.ts';
+import { createSemanticWorkModule, type SemanticDomainComposer } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
 import { ratingNativeWorkModule } from '../rating/module.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
@@ -63,7 +63,7 @@ function contentWorkAmbient(supplied?: ContentWorkAmbient): ContentWorkAmbient {
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
-  composeSemantic: SemanticIdentityParticipantComposer,
+  composeSemantic: SemanticDomainComposer,
   ambient?: ContentWorkAmbient,
 ): readonly WorkModule[] {
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);

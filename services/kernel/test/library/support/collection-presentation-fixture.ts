@@ -9,6 +9,7 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import type { CollectionView } from '../../../src/library/collection-reads.ts';
 import { openApiRuntime } from '../../imports/api-runtime.ts';
 import { identitySupport } from '../../imports/identity-fixture.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export const collectionScopes = [
   'collection:create',
@@ -43,12 +44,19 @@ export async function createCollectionPresentationFixture() {
     const support = identitySupport(identity);
     const clientId = `collection-presentation-${randomUUID()}`;
     await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes: managementScopes });
-    const another = await support.host.workflows.register({
-      key: randomUUID(),
-      handle: 'collection_other',
-      email: 'another@identity.test',
-      password: 'private native identity fixture password',
-    });
+    await support.host.workflows.start();
+    const another = await (async () => {
+      try {
+        return await support.host.workflows.register({
+          key: randomUUID(),
+          handle: 'collection_other',
+          email: 'another@identity.test',
+          password: 'private native identity fixture password',
+        });
+      } finally {
+        await support.host.workflows.close();
+      }
+    })();
     async function credential(person: 'ordinary' | 'governance' | 'another', scopes = collectionScopes) {
       const signed = await support.request('/signin', {
         email: `${person}@identity.test`,
@@ -75,6 +83,7 @@ export async function createCollectionPresentationFixture() {
     database.pool.options.max = 1;
     const app = createKernel({
       pool: database.pool,
+      receiptKeys: testReceiptKeys(),
       routeKey: identity.routeKey,
       tokens: identity.tokenKeys,
       access: (configuration) => createAccess({ ...configuration, auth: identity.accessConfig.auth! }),
@@ -104,7 +113,10 @@ export async function createCollectionPresentationFixture() {
         actions,
         valid: '(,)',
       });
-      expect(response.status).toBe(201);
+      if (response.status !== 201)
+        throw new Error(
+          `Collection fixture grant ${actions.join(',')}: HTTP ${response.status}: ${await response.text()}`,
+        );
     };
     await grant(owner.accountId, ['subject:create', 'offer:create']);
     async function refresh() {

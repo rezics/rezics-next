@@ -1,9 +1,11 @@
 import { registerDefinitionCatalogueWork } from './register.ts';
 import { contextDirectoryEffect, populateContextDirectory, registerContextDirectoryWork } from './context-directory.ts';
-import { startRelays } from '../events/relays.ts';
+import { relayConcurrencyForPool, startRelays } from '../events/relays.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import type { Pool } from 'pg';
 import type { IdentityEpochParticipantPorts } from './contract/identity-epoch-ports.ts';
+import type { NativeSemanticDomain } from './adapters/native-domain.ts';
+import { bindDefaultSemanticDomain, registerSemanticDomain } from './adapters/registry.ts';
 import { runIdentityEpochBootstrapBatch, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
 import {
   IDENTITY_EPOCH_BOOTSTRAP,
@@ -52,13 +54,23 @@ export function createSemanticErasureEffect(pool: Parameters<typeof synchronizeA
   };
 }
 
-/** Process composition supplies the fixed identity participants for one worker context. Null leaves the identity
- * coordinator unavailable; this module never selects Library or Search implementations itself.
- */
+/** Process composition supplies the domain or the fixed identity participants. Null leaves identity unavailable. */
 export type SemanticIdentityParticipantComposer = (context: WorkContext) => IdentityEpochParticipantPorts<Pool> | null;
+export type SemanticDomainComposer = (
+  context: WorkContext,
+) => IdentityEpochParticipantPorts<Pool> | NativeSemanticDomain | null;
+
+function installedDomain(composed: IdentityEpochParticipantPorts<Pool> | NativeSemanticDomain | null): {
+  participants: IdentityEpochParticipantPorts<Pool> | null;
+  domain: NativeSemanticDomain | null;
+} {
+  if (!composed) return { participants: null, domain: null };
+  if ('items' in composed) return { participants: composed.ports.identityEpoch, domain: composed };
+  return { participants: composed, domain: null };
+}
 
 /** Native relation projection shares the worker pool and registered service lifecycle. */
-export function createSemanticWorkModule(composeParticipants: SemanticIdentityParticipantComposer): WorkModule {
+export function createSemanticWorkModule(composeParticipants: SemanticDomainComposer): WorkModule {
   return {
     name: 'semantic',
     async register(context) {
@@ -82,7 +94,10 @@ export function createSemanticWorkModule(composeParticipants: SemanticIdentityPa
       await registerRecordRetentionWork(context);
       await registerIdentityScopedObservationWork(context);
       registerProviderReviewWork(context);
-      registerIdentityEpochCoordinator(context, composeParticipants(context));
+      const { participants, domain } = installedDomain(composeParticipants(context));
+      registerSemanticDomain(context.pool, domain);
+      if (domain) bindDefaultSemanticDomain(domain);
+      registerIdentityEpochCoordinator(context, participants);
       await registerContextDirectoryWork(context);
       context.addEffects([
         contextDirectoryEffect(context.pool, context.clock),
@@ -134,7 +149,11 @@ export function createSemanticWorkModule(composeParticipants: SemanticIdentityPa
           // Four bounded wake chains share the existing effect registration and queue limits.
           events: Array.from({ length: 4 }, (_, partition) => identityBootstrapWake(partition, 1n)),
         }));
-        return startRelays(context.pool, [linkProjection(context.pool), providerReviewProjection(context.pool), relay]);
+        return startRelays(
+          context.pool,
+          [linkProjection(context.pool), providerReviewProjection(context.pool), relay],
+          { concurrency: relayConcurrencyForPool(context.pool) },
+        );
       });
     },
   };
