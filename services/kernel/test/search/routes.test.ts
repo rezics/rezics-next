@@ -43,6 +43,16 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const opening = Bun.randomUUIDv7();
+let stubPoolOpen = true;
+async function closeStubPool() {
+  if (!stubPoolOpen) return;
+  stubPoolOpen = false;
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
+}
 beforeAll(async () => {
   // These dispatch cases use stub actors, not native write identities. Set only their
   // exposure fixture; release-exposure.test.ts proves real governor admission separately.
@@ -56,13 +66,7 @@ beforeAll(async () => {
     }
   }
 });
-afterAll(async () => {
-  try {
-    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
-  } finally {
-    await pool.end();
-  }
-});
+afterAll(closeStubPool);
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
 const routeKey = new Uint8Array(32).fill(13);
@@ -474,6 +478,7 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
 });
 
 describe('bounded native kind metadata and checked-hit witnesses', () => {
+  // Release the stub HTTP pool before cloning the check database; leftover sessions block TEMPLATE.
   const database = process.env.DATABASE_URL;
   const url = process.env.OPENSEARCH_URL;
   if (!database || !url) throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
@@ -516,7 +521,10 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     },
   };
   const subjects: IndexedSubject[] = [];
+  let indexCreated = false;
+  let templatesCreated = false;
   beforeAll(async () => {
+    await closeStubPool();
     driver = await createSemanticDriver();
     // Canonical admission consumes native identity mappings, even when this test owns
     // a deliberately small index/source projection for metadata witness counts.
@@ -532,9 +540,9 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
         { 'Idempotency-Key': JSON.stringify(crypto.randomUUID()) },
       );
       expect(created.status).toBe(201);
-      const subject: IndexedSubject = {
+      subjects.push({
         id: (created.body.subject as { id: string }).id,
-        type: n < 3 ? 'schema:Book' : 'kind:Kind1',
+        type: 'schema:Book',
         visibility: 'visible',
         redirect: null,
         securityRevision: 1,
@@ -542,11 +550,16 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
         aliases: [],
         descriptions: [],
         statements: [],
-      };
-      subjects.push(subject);
-      fake.put(subject);
+      });
+    }
+    subjects.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+    for (const [n, subject] of subjects.entries()) {
+      const typed: IndexedSubject = { ...subject, type: n < 3 ? 'schema:Book' : 'kind:Kind1' };
+      subjects[n] = typed;
+      fake.put(typed);
     }
     await installTemplates(native, prefix);
+    templatesCreated = true;
     service = createSearchService({
       pool: driver.fixtures.pool,
       client: engine,
@@ -556,6 +569,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       release: async () => version,
     });
     await createSubjectIndex(native, prefix, 1);
+    indexCreated = true;
     const partitions = new Map<number, string[]>();
     for (const subject of subjects) {
       const partition = subjectPartition(subject.id);
@@ -568,22 +582,29 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     await native.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(prefix) } }] });
   }, 600_000);
   afterAll(async () => {
-    await native.request('DELETE', `/${index}`);
-    for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
-      await native.request('DELETE', `/_scripts/${prefix}${name}`);
-    await driver?.close();
-    await closeOwnedSemanticAuth();
+    try {
+      if (indexCreated) await native.request('DELETE', `/${index}`);
+      if (templatesCreated)
+        for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
+          await native.request('DELETE', `/_scripts/${prefix}${name}`);
+    } finally {
+      try {
+        await driver?.close();
+      } finally {
+        await closeOwnedSemanticAuth();
+      }
+    }
   }, 600_000);
   const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
-  test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {
+  test('initial counts reuse every current admitted-page identity, once, without count reads or extra engine execution', async () => {
     const before = queries;
     const beforeReads = reads;
     const initial = await service.search('anonymous', request);
     expect(initial.subjects).toHaveLength(4);
-    expect(initial.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
-    expect(initial.kinds!.values.filter((v) => v.count).reduce((n, v) => n + v.count!.value, 0)).toBe(2);
+    expect(initial.kinds!.values[0]!.count).toEqual({ value: 3, exact: false });
+    expect(initial.kinds!.values.filter((v) => v.count).reduce((n, v) => n + v.count!.value, 0)).toBe(4);
     expect(queries - before).toBe(1);
-    expect(reads - beforeReads).toBe(1);
+    expect(reads - beforeReads).toBe(new Set(subjects.map((subject) => subjectPartition(subject.id))).size);
     expect(countReads).toBe(0);
     expect(new TextEncoder().encode(JSON.stringify(initial)).length).toBeLessThan(16_384);
     const next = await service.search('anonymous', { ...request, cursor: initial.next! });
@@ -595,7 +616,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       filter: { and: [{ type: { in: ['schema:Book'] } }, { not: { type: { in: ['kind:Kind1'] } } }] },
     });
     expect(result.subjects).toHaveLength(3);
-    expect(result.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
+    expect(result.kinds!.values[0]!.count).toEqual({ value: 3, exact: false });
     expect(result.kinds!.values[1]!.count).toBeUndefined();
   });
   test('opaque metadata continuation returns normal hits, no count recomputation, and rejects tamper/query/viewer changes and release restart', async () => {

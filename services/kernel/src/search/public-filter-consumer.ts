@@ -169,7 +169,7 @@ export function compilePublicFilterConsumerCapture(
       if ('owner' in node) throw new TypeError('Public capture cannot contain owner predicates');
       if ('saved' in node) throw new TypeError('Public capture requires expanded saved filters');
     }
-    filterDocument = admitFilter(parsed, meaning.release, { saved: false, inverse: true });
+    filterDocument = admitFilter(parsed, meaning.release, { inverse: true });
   }
   if (copied.text !== undefined) validateText(copied.text);
   const filter =
@@ -216,9 +216,12 @@ export function compilePublicFilterConsumerCapture(
     sort: copied.sort,
     size: copied.size,
     ...(copied.pageSize === undefined ? {} : { pageSize: copied.pageSize }),
-    ...(derived.query === undefined ? {} : { query: derived.query }),
-    ...(derived.filter === undefined ? {} : { filter: derived.filter }),
-    ...(derived.boost === undefined ? {} : { boost: derived.boost }),
+    // Engine DSL is optional equality evidence. Retained capture is the admitted tree;
+    // attaching derived query/filter/boost makes the binder recompile and reject any
+    // structural difference from that extra copy.
+    ...(copied.query === undefined ? {} : { query: copied.query }),
+    ...(copied.filter === undefined ? {} : { filter: copied.filter }),
+    ...(copied.boost === undefined ? {} : { boost: copied.boost }),
     ...(overflowProperties === undefined ? {} : { overflowProperties }),
     ...(copied.after === undefined ? {} : { after: copied.after }),
     ...(copied.generation === undefined ? {} : { generation: copied.generation }),
