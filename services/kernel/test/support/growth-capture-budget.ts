@@ -68,15 +68,18 @@ export class GrowthCaptureBudget {
         `${this.#label} exceeded native notice byte capacity (${this.limits.nativeNoticeBytes} bytes); current 0, requested ${bytes}, total ${bytes} UTF-8 bytes for ${side} notice; capture has ${this.#bytes} charged bytes and ${this.#entries} evidence entries.`,
       );
     const chargedBytes = bytes * GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER;
-    this.reserve(`${side} native plan notice`, 1, chargedBytes);
+    const chargedEntries = 1;
+    this.reserve(`${side} native plan notice`, chargedEntries, chargedBytes);
     let retained = true;
     return {
       chargedBytes,
       release: () => {
         if (!retained) return;
         retained = false;
-        if (chargedBytes > this.#bytes) throw new Error('Growth capture notice reservation was already released');
+        if (chargedBytes > this.#bytes || chargedEntries > this.#entries)
+          throw new Error('Growth capture notice reservation was already released');
         this.#bytes -= chargedBytes;
+        this.#entries -= chargedEntries;
       },
     };
   }

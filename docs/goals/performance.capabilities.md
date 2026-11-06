@@ -226,7 +226,8 @@ Decision: pin retention with the four named native suites only (compact selector
 interrupt/resume, and growth empty/short/full/backlog/fanout/sweep). Seed all eight SDK families at 64/512/4096, derive
 deletion rows from actual payload/FK cascade counts rather than selected workflow count, and give each growth series
 its own application and seed identities. Growth checks use folded capture; raw nested auto_explain notices from a
-1,000-id SDK delete exceed the 32 MiB telemetry cap.
+1,000-id SDK delete exceed the 32 MiB and 20,000 retained-entry telemetry caps. Folded captures recycle each notice
+envelope and walk occupancy after summaries; unmeasured prepare/warmup ignores nested trigger notices.
 Explicit Imports driver bindings use repo-relative paths in command argv, resolved on admitted remote checkouts; the
 frozen suite receives an absolute path.
 

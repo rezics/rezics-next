@@ -91,7 +91,7 @@ Decision: Compact `domain-composition` tests are the fewest pins for Work enqueu
 and retirement against fake ports; worker and kernel landing tests carry `KERNEL_RECEIPT_KEYS` through
 `workerTestEnv`. The existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
 sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention growth uses folded
-capture so a 1,000-id SDK delete stays inside the 32 MiB notice cap. Search tombstone registration
+capture so a 1,000-id SDK delete stays inside the 32 MiB and 20,000-entry caps. Search tombstone registration
 includes both `search_account_erasure` and `search_erasure`. Contract/core/application load no downstream
 implementations. Native adapters are bound by ordinary `createKernel`/`server`/`worker` composition, with product
 assembly in `composition/work-modules.ts` using `ratingNativeWorkModule`. The split adds no query or extra

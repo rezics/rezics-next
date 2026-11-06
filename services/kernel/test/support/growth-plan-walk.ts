@@ -33,6 +33,7 @@ type CompiledPlan = {
   readonly root: unknown;
   readonly preorder: readonly PlanWalkEntry[];
   readonly postorder: readonly PlanWalkEntry[];
+  readonly nodes: number;
 };
 
 function isPlanNode(value: unknown): value is PlanNode {
@@ -119,18 +120,32 @@ export class PlanWalkSession {
       yield* cached[order];
       return;
     }
+    if (cached !== undefined) this.release(location, cached.root);
     const preorder: PlanWalkEntry[] = [];
     const postorder: PlanWalkEntry[] = [];
     for (const { entry, phase } of traversePlanTree(root, location, this.#total)) {
       (phase === 'preorder' ? preorder : postorder).push(entry);
     }
-    this.#compiled.set(location, { root, preorder, postorder });
+    this.#compiled.set(location, { root, preorder, postorder, nodes: preorder.length });
     yield* order === 'preorder' ? preorder : postorder;
   }
 
-  /** Drops one compiled tree after a streaming consumer has folded it, keeping the cumulative node count. */
+  /** Drops one compiled tree after a streaming consumer has folded it and returns its occupancy to the envelope. */
   forget(location: string, root: unknown): void {
-    if (this.#compiled.get(location)?.root === root) this.#compiled.delete(location);
+    this.release(location, root);
+  }
+
+  get occupancy(): number {
+    return this.#total.used;
+  }
+
+  private release(location: string, root: unknown): void {
+    const compiled = this.#compiled.get(location);
+    if (compiled === undefined || compiled.root !== root) return;
+    this.#compiled.delete(location);
+    if (compiled.nodes > this.#total.used)
+      throw new Error(`${location}: plan walk session released more nodes than it compiled`);
+    this.#total.used -= compiled.nodes;
   }
 }
 
