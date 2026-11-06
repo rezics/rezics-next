@@ -13,7 +13,8 @@ not evidence that the capabilities have passed.
 
 Decision: Published Log public lifecycle acceptance stays on the seven existing Log operation/growth/retention/source
 suites and the five retained Search scope/work-context suites, plus affected Web log tests. Public reads keep the
-immutable snapshot without current Source; FULL withholds `subject: null` on a changed Source. Growth uses 64/512/4096
+immutable snapshot without current Source; FULL withholds `subject: null` on a changed Source. Retract hides the
+snapshot from the public list immediately; replaying the original create receipt does not restore it. Growth uses 64/512/4096
 with `scale` rows per population and a fixed selected neighbourhood. restoreExpired CAS-sets `restore_until`;
 restoreHistorical retires the private session. Empty and post-drain sweeps use the default worker. Back href is
 cursor-free My Logs; ordinary click uses history.back(). Full native Auth walk and rendered 720-hour browser

@@ -72,7 +72,7 @@ test('published reading log retracts immediately and Undo restores its original 
   const replayedList = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
   expect(
     (await replayedList.json()).publishedLogs.filter((log: { id: string }) => log.id === original.id),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   const restored = await f.send(owner.bearer, 'POST', path + ':restore', { deletionId, revision: deletedRevision });
   expect(restored.status).toBe(200);
   const value = (await restored.json()).publishedLog;

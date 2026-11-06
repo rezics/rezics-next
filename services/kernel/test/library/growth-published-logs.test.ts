@@ -7,6 +7,7 @@ import { createPublishedLogCommands } from '../../src/library/published-logs.ts'
 import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, costOf, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { testTokens } from '../support/test-kernel.ts';
 
 const anonymous: Actor = { kind: 'anonymous' };
@@ -111,6 +112,7 @@ async function grow(
 async function prepare(route: number) {
   const database = await openGrowthDatabase();
   try {
+    configureTestReceiptKeys(database.pool);
     const owner = newId(route);
     const sessionId = newId(route);
     const subjectId = newId(route + 4096);

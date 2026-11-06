@@ -1,6 +1,7 @@
 import { createWorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';
 import { libraryWorkModule } from '../../../src/library/work-module.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './profile-entry-fixture.ts';
 
 export type PublishedLogRetentionRuntime = Awaited<ReturnType<typeof createPublishedLogRetentionRuntime>>;
@@ -20,7 +21,7 @@ export async function createPublishedLogRetentionRuntime(clock: () => Date) {
       client,
       databaseUrl,
       clock,
-      env: {},
+      env: workerTestEnv(),
     });
     await worker.launch();
     return {

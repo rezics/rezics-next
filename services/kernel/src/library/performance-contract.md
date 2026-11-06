@@ -677,7 +677,8 @@ inactive owners serialize the tombstone response without Semantic disclosure. A 
 readable without a command-layer Source gate; FULL `present`/`fullView` owns original and terminal disclosure and
 withholds `subject: null` when the Source changed, keeping the public snapshot. The public list charges its
 repeatable-read transaction, partition epoch and account-state/floor reads, the cursor input, page streams and
-serialized result. The first page has one ordered stream; a next page charges both independently limited streams
+serialized result. Retract omits the snapshot from that page immediately; replaying the original create receipt
+does not restore it. The first page has one ordered stream; a next page charges both independently limited streams
 before sorting, including discarded candidates and the `limit + 1` sentinel. FULL disclosure examines at most the
 shown page and never refills filtered rows.
 The cursor bound follows the existing 4096-byte sealed-token ceiling. Public reads use
