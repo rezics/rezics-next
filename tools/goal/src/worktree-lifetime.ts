@@ -327,10 +327,7 @@ function recordPermissionFailure(
   if (store.recordWorktreeCleanup(disposition)) notify(reporter, task, disposition);
 }
 
-async function waitForIdleIo(
-  io: LifetimeRuntime,
-  pressureWaits: { value: number },
-): Promise<boolean> {
+async function waitForIdleIo(io: LifetimeRuntime, pressureWaits: { value: number }): Promise<boolean> {
   let pressure = io.pressure() ?? 0;
   while (pressure > IO_PRESSURE_LIMIT && pressureWaits.value < IO_PRESSURE_WAIT_ATTEMPTS) {
     await io.sleep(1000);
@@ -347,10 +344,10 @@ function leftoverStillOwned(
 ): remaining is WorktreeStat {
   return Boolean(
     remaining &&
-      remaining.isDirectory() &&
-      !remaining.isSymbolicLink() &&
-      String(remaining.dev) === expectedDev &&
-      String(remaining.ino) === expectedIno,
+    remaining.isDirectory() &&
+    !remaining.isSymbolicLink() &&
+    String(remaining.dev) === expectedDev &&
+    String(remaining.ino) === expectedIno,
   );
 }
 

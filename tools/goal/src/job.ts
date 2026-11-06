@@ -764,7 +764,9 @@ export class WorkerJob implements GateOutcomeSink {
           if (Date.now() - activity.startedAt < grace) return;
         }
         if (hadCpu && cpu === undefined) return;
-        if (reportsSuccess(readLogTail(ref.logPath, this.policy.worker.logTailBytes), agentAdapter(attempt.profile.cli)))
+        if (
+          reportsSuccess(readLogTail(ref.logPath, this.policy.worker.logTailBytes), agentAdapter(attempt.profile.cli))
+        )
           return;
         // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
         // a local or remote check does not look silent while the command is running. Idle time is the gap at sample
