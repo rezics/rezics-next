@@ -70,9 +70,7 @@ export const TERMINAL_WORKFLOW_STATUSES = TERMINAL satisfies readonly WorkflowSt
 type Environment = Readonly<Record<string, string | undefined>>;
 export type WorkflowRetentionConfig = Readonly<{ retentionDays: number }>;
 export type WorkflowRetentionSdk = Pick<typeof DBOS, 'deleteWorkflows'>;
-export type WorkflowRetentionSelector = (
-  input: WorkflowRetentionSelection,
-) => Promise<readonly string[]>;
+export type WorkflowRetentionSelector = (input: WorkflowRetentionSelection) => Promise<readonly string[]>;
 type RetentionBatchStep = (batch: () => Promise<number>) => Promise<number>;
 
 export function readWorkflowRetentionConfig(env: Environment): WorkflowRetentionConfig {
@@ -93,9 +91,7 @@ export async function runWorkflowRetentionBatch(
 ): Promise<number> {
   assertRetentionDays(retentionDays);
   if (!select) throw new TypeError('Workflow retention requires the indexed selector');
-  const ids = clampRetentionBatch(
-    await select(retentionSelectionBinds(now, retentionDays, applicationName)),
-  );
+  const ids = clampRetentionBatch(await select(retentionSelectionBinds(now, retentionDays, applicationName)));
   if (ids.length > 0) await sdk.deleteWorkflows([...ids], false);
   return ids.length;
 }

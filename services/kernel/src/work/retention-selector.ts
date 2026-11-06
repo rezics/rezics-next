@@ -63,10 +63,7 @@ export async function readWorkflowRetentionPayload(
   });
 }
 
-export async function readWorkflowRetentionFences(
-  pool: Pick<Pool, 'query'>,
-  ids: readonly string[],
-): Promise<number> {
+export async function readWorkflowRetentionFences(pool: Pick<Pool, 'query'>, ids: readonly string[]): Promise<number> {
   if (ids.length === 0) return 0;
   const result = await countOwnedFences.run(pool, { ids: [...ids] });
   const row = Array.isArray(result) ? result[0] : result;

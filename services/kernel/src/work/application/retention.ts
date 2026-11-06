@@ -38,9 +38,7 @@ export function createRetention(ports: Pick<WorkApplicationPorts, 'sdkRuntime' |
     deleter: Deleter = (ids, descendants) => ports.sdkRuntime.deleteWorkflows(ids, descendants),
   ): Promise<number> {
     assertRetentionDays(retentionDays);
-    const ids = clampRetentionBatch(
-      await select(retentionSelectionBinds(now, retentionDays, applicationName)),
-    );
+    const ids = clampRetentionBatch(await select(retentionSelectionBinds(now, retentionDays, applicationName)));
     if (ids.length > 0) await deleter(ids, false);
     return ids.length;
   }

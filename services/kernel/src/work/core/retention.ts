@@ -146,18 +146,11 @@ export function retentionPayloadRows(inventory: WorkflowRetentionPayloadInventor
 }
 
 export function retentionCascadeRows(inventory: WorkflowRetentionPayloadInventory): number {
-  return (
-    inventory.workflow_events +
-    inventory.workflow_events_history +
-    inventory.notifications +
-    inventory.streams
-  );
+  return inventory.workflow_events + inventory.workflow_events_history + inventory.notifications + inventory.streams;
 }
 
 export function retentionExplicitDeleteRows(inventory: WorkflowRetentionPayloadInventory): number {
-  return (
-    inventory.workflow_input + inventory.workflow_output + inventory.operation_outputs + inventory.workflow_status
-  );
+  return inventory.workflow_input + inventory.workflow_output + inventory.operation_outputs + inventory.workflow_status;
 }
 
 export function retentionDeletionRows(inventory: WorkflowRetentionPayloadInventory): number {
