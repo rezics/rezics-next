@@ -392,6 +392,8 @@ Decision: this source landing keeps the named Kernel, Web and Client tests only 
 Decision: receive Catalogue 3e85da05fe saved-query consumer as pageObservation lifetime binding in DynamicRuleResultsReview and results-window focus correction; keep the original cancel-focus assertion; Search remains the sole http-json-body-strict fixture writer except the returned duplicate savedCatalogueMembers removal. Commerce retains publication and permission-bound producer files.
 
 Decision: typecheck repairs keep NativePermissionProjection.deadlineLive, one savedCatalogueMembers fixture method, shelf hrefs that omit a null cursor, and received-entry incarnation identity as null rather than undefined.
+Conflict review passes the received entry through `captureEntryStateBasis`, preserving the same subject, revision
+and incarnation used by review currentness. Existing state-review tests cover received/proposed labels and retired origins.
 
 Decision: Kernel typecheck keeps SearchHit.matchEvidence on the saved-catalogue page fixture, one unused savedCatalogueMembers method on SearchService test doubles, and removes the duplicate second-scope method.
 
