@@ -22,7 +22,7 @@ import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables.ts';
-import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
+import { captureShowcaseCommands, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
 import { importShowcaseTags } from '../src/selected-import.ts';
@@ -1151,7 +1151,7 @@ test('reviewed-tag flow accepts, adopts, rereads current identities and selected
     },
   };
   const result = await completeReviewedSharedTagFlow({
-    review,
+    review: review as unknown as ShowcaseReviewPort,
     schemes: [schemeId],
     concepts: [conceptId],
     works: [workId],

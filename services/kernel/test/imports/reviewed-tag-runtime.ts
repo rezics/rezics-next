@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createImportTransport, type ImportTransportOptions } from '../../../importer/src/import-client.ts';
+import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from '../semantic/outcome-driver.ts';
@@ -104,7 +104,7 @@ export async function openReviewedTagRuntime() {
         return response;
       },
       { preconnect: fetch.preconnect },
-    ) as ImportTransportOptions['importFetch'];
+    ) as typeof fetch;
 
     const importTransport = createImportTransport({
       origin,

@@ -1,4 +1,4 @@
-import type { KernelClient, SubjectRead } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 
@@ -27,23 +27,8 @@ export type ConceptMembership = {
 };
 
 type Definitions = Pick<Release, 'types' | 'properties'> & { digest?: string };
-type LinkPage = {
-  links: {
-    subject: string;
-    property?: string;
-    statement?: string;
-    assertion?: SubjectRead['subject']['statements'][string][number];
-    summary?: {
-      id?: string;
-      type?: string;
-      label?: { value?: string; language?: string | null } | null;
-    };
-    related?: SubjectRead['related'];
-  }[];
-  next: string | null;
-  freshness: { caught_up?: boolean };
-  count?: { value: number; exact?: boolean };
-};
+type LinkPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['links']['get']>>['data']>;
+type LinkAssertion = NonNullable<LinkPage['links'][number]['assertion']>;
 
 function headersOf(authorization?: string, session?: string) {
   return {
@@ -60,7 +45,7 @@ function workTypeAdmitted(release: Definitions, type: string) {
   return typeExtends(release, type, 'schema:CreativeWork');
 }
 
-function citationUrls(assertion: SubjectRead['subject']['statements'][string][number] | undefined): { url: string }[] {
+function citationUrls(assertion: LinkAssertion | undefined): { url: string }[] {
   if (!assertion) return [];
   const seen = new Set<string>();
   const urls: { url: string }[] = [];
@@ -121,7 +106,7 @@ export async function readConceptMembership(
         exactEmpty = false;
         continue;
       }
-      const data = page.data as LinkPage;
+      const data = page.data;
       if (
         data.links.length > CONCEPT_PAGE_CAP ||
         new TextEncoder().encode(JSON.stringify(data)).byteLength > membershipEvidenceBytes
