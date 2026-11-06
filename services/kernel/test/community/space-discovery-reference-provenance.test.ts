@@ -162,6 +162,34 @@ test('a populated Realm revision removes reference tuples with the committed wit
   );
   expect(await read()).toMatchObject({ state: 'unavailable', tuples: [] });
 
+  // A prior witness generation must not restore a removed edge. The current inverse stays inactive.
+  const generation = (
+    await pool.query<{ witness_generation: string }>(
+      `SELECT witness_generation::text FROM community.space_discovery_tuple_witness
+       WHERE route=$1 AND space_id=$2`,
+      [route, space.spaceId],
+    )
+  ).rows[0]!.witness_generation;
+  await pool.query(
+    `INSERT INTO community.space_discovery_tuple_work
+      (route,space_id,witness_generation,tuple_route,source,external_id,field_group,action,producer_epoch,source_position)
+     VALUES($1,$2,$3::bigint-1,$4,$5,$6,$7,'upsert',3,17)`,
+    [route, space.spaceId, generation, alpha.route, alpha.source, alpha.external_id, alpha.field_group],
+  );
+  while (await repairSpaceDiscoveryTupleWitness(pool, home, space.spaceId, 1)) {
+    /* Discard the stale upsert without applying it. */
+  }
+  expect([await count('space_discovery_tuple_reference'), await count('space_discovery_tuple_work')]).toEqual([0, 0]);
+  expect(
+    (
+      await pool.query<{ external_id: string; active: boolean }>(
+        `SELECT external_id,active FROM community.space_discovery_tuple_inverse
+         WHERE space_route=$1 AND space_id=$2 AND external_id=$3`,
+        [route, space.spaceId, alpha.external_id],
+      )
+    ).rows[0],
+  ).toEqual({ external_id: alpha.external_id, active: false });
+
   const republished = await publishSpaceDiscoveryTupleWitness(pool, {
     spaceId: space.spaceId,
     spaceRevision: space.headRevisionId,
