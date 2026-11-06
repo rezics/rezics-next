@@ -64,18 +64,29 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next auto connection.
+idle sockets. A failed probe never stops a master: a busy master times out too, and `-O exit` would cut every run
+multiplexed through it (their rsync sessions end with exit 255). A socket file left by a killed master is removed when
+`-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
+multiplexing` and every connection pays a full handshake.
+Expired immutable bases are renamed aside under `bases/.lock` and deleted after it is released, so a base lookup never
+waits behind another run's recursive delete.
 Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted
 execution. `--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
 including the 11 GiB wait that still places on host b.
 
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
-labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, a labelled volume rather than 1 GiB tmpfs, nonce
-reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container
-`pg_isready` plus a protocol reply; host-lifetime Python cleanup uses those same 120s/5s bounds and does not classify a
-`docker rm` timeout as install/preparation; SIGTERM removal is detached. Original remote context stays on those same tests. Management walk
-idle-in-transaction is that lifetime, not a second launcher. Original walks remain open.
+labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
+rather than 1 GiB tmpfs, nonce reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix
+forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
+returns a string or a Buffer; cleanup retains the original failure and the exact cleanup diagnostic. Host-lifetime
+Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;
+SIGTERM removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
+remote typing share one workspace. Mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web
+compilers do not share an admitted 6GiB slice. Vite starts only after complete Paraglide modules exist, and `/en` is
+ready only as HTML without a missing-module overlay; ECONNREFUSED during that wait is hydration startup. Original
+remote context stays on those same tests. Management walk idle-in-transaction
+is that lifetime, not a second launcher. Original walks remain open.
 `GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
 workspace-relative path and returned with the run result. Existing local profile lines are preserved when the
 returned file is merged.
@@ -520,7 +531,7 @@ either stopgap, remain with the supermanager. Post-admission throughput and host
 remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
 1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
-   using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and
+   using it. The probe is bounded to ninety seconds. On failure, close that run's master, replace its control path and
    probe once more; the second failure is `RemoteTransportError` for the host and `control probe` stage. A check never
    closes another run's control path.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution

@@ -33,25 +33,54 @@ export type PostgresListen = {
 
 export type DockerCommand = (args: string[]) => string;
 
+/** Image builds and pulls are bounded; they are not the 5s probe window. */
+export const DOCKER_BUILD_TIMEOUT_MS = 600_000;
+
 export function dockerTimeoutMs(args: readonly string[]): number {
   const verb = args[0];
   if (verb === 'run' || verb === 'create' || verb === 'start' || verb === 'stop') return DOCKER_RUN_TIMEOUT_MS;
   if (verb === 'rm' && args.includes('-f')) return DOCKER_RUN_TIMEOUT_MS;
+  if (verb === 'build' || verb === 'pull') return DOCKER_BUILD_TIMEOUT_MS;
   return DOCKER_PROBE_TIMEOUT_MS;
 }
 
-/** Forced `rm` is a new session so a 200ms supervisor SIGKILL of the owner group cannot abort it. */
+export type DockerSpawnSyncOptions = SpawnSyncOptions & { encoding: 'utf8'; timeout: number };
+
+/**
+ * Forced `rm` is a new session so a 200ms supervisor SIGKILL of the owner group cannot abort it. A timeout kills with
+ * SIGKILL: a docker CLI that ignores SIGTERM would otherwise hold the bounded wait open.
+ */
+/** A caller's bound replaces the verb's default; cleanup of a busy container or volume passes its own. */
+export type DockerRunOptions = Pick<SpawnSyncOptions, 'cwd' | 'env'> & { timeout?: number };
+
 export function dockerSpawnSyncOptions(
   args: readonly string[],
-  extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {},
-): SpawnSyncOptions {
+  extra: DockerRunOptions = {},
+): DockerSpawnSyncOptions {
   const forcedRm = args[0] === 'rm' && args.includes('-f');
+  const { timeout = dockerTimeoutMs(args), ...rest } = extra;
   return {
     encoding: 'utf8',
-    timeout: dockerTimeoutMs(args),
+    timeout,
+    killSignal: 'SIGKILL',
     ...(forcedRm ? { detached: true } : {}),
-    ...extra,
+    ...rest,
   };
+}
+
+/** spawnSync still types stdout as string|Buffer when options are not a literal encoding. */
+export function dockerProcessText(value: string | Buffer | null | undefined): string {
+  if (value == null) return '';
+  return (typeof value === 'string' ? value : Buffer.from(value).toString('utf8')).trim();
+}
+
+/** Cleanup never replaces the original failure: both exact messages stay in the thrown error. */
+export function retainOriginalAndCleanupFailure(original: unknown, cleanup: unknown, context: string): Error {
+  const setup = original instanceof Error ? original.message : String(original);
+  const cleaned = cleanup instanceof Error ? cleanup.message : String(cleanup);
+  return new Error(`${context} (${setup}); cleanup could not be proven (${cleaned})`, {
+    cause: original instanceof Error ? original : undefined,
+  });
 }
 
 /**
@@ -73,14 +102,35 @@ function spawnDockerError(args: readonly string[], error: NodeJS.ErrnoException)
   throw error;
 }
 
-function docker(args: string[]): string {
-  const result = spawnSync('docker', args, dockerSpawnSyncOptions(args));
+export function runDocker(args: string[], extra: DockerRunOptions = {}): string {
+  const result = spawnSync('docker', args, dockerSpawnSyncOptions(args, extra));
   if (result.error) spawnDockerError(args, result.error as NodeJS.ErrnoException);
   if (result.status !== 0)
     throw new Error(
-      `docker ${args.join(' ')} failed with status ${result.status}: ${String(result.stderr ?? '').trim() || '(no stderr)'}`,
+      `docker ${args.join(' ')} failed with status ${result.status}: ${dockerProcessText(result.stderr) || '(no stderr)'}`,
     );
-  return String(result.stdout).trim();
+  return dockerProcessText(result.stdout);
+}
+
+function docker(args: string[]): string {
+  return runDocker(args);
+}
+
+export function reapLabeledContainers(label: string, value: string, dockerCommand: DockerCommand = docker): void {
+  try {
+    const ids = dockerCommand(['ps', '-aq', '--filter', `label=${label}=${value}`])
+      .split('\n')
+      .filter(Boolean);
+    for (const id of ids) {
+      try {
+        dockerCommand(['rm', '-f', '-v', id]);
+      } catch {
+        // A concurrent cleanup may already have removed it.
+      }
+    }
+  } catch {
+    // Listing may fail after a daemon timeout; labelled stale cleanup still reaps later.
+  }
 }
 
 export function newCompilerNonce(pid = process.pid, now = Date.now): string {
@@ -117,24 +167,15 @@ export function compilerDatabaseRunArgs(
     'synchronous_commit=off',
     '-c',
     'full_page_writes=off',
+    '-c',
+    'shared_buffers=32MB',
+    '-c',
+    'work_mem=8MB',
   ];
 }
 
 export function reapCompilerNonce(nonce: string, pid = process.pid, dockerCommand: DockerCommand = docker): void {
-  try {
-    const ids = dockerCommand(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=${nonce}`])
-      .split('\n')
-      .filter(Boolean);
-    for (const id of ids) {
-      try {
-        dockerCommand(['rm', '-f', '-v', id]);
-      } catch {
-        // A concurrent cleanup may already have removed it.
-      }
-    }
-  } catch {
-    // Listing may fail after a daemon timeout; labelled stale cleanup still reaps later.
-  }
+  reapLabeledContainers(COMPILER_NONCE_LABEL, nonce, dockerCommand);
   rmSync(isolatedPostgresSocketDir(pid), { recursive: true, force: true });
 }
 
@@ -565,11 +606,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     try {
       remove();
     } catch (cleanupError) {
-      const setup = error instanceof Error ? error.message : String(error);
-      const cleanup = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-      throw new Error(`Compiler database setup failed (${setup}); cleanup could not be proven (${cleanup})`, {
-        cause: error,
-      });
+      throw retainOriginalAndCleanupFailure(error, cleanupError, 'Compiler database setup failed');
     }
     throw error;
   }

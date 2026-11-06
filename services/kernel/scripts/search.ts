@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import {
+  DOCKER_BUILD_TIMEOUT_MS,
+  retainOriginalAndCleanupFailure,
+  runDocker,
+} from '../../../scripts/compiler-database.ts';
 import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -12,15 +17,8 @@ const volume = process.env.KERNEL_SEARCH_VOLUME ?? container;
 const port = Number(process.env.KERNEL_SEARCH_PORT ?? '59200');
 export const subjectAutoCreateIndexSetting = 'action.auto_create_index=-*subjects-g*,+*';
 
-function command(program: string, args: string[], cwd = directory): string {
-  const result = spawnSync(program, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return result.stdout.trim();
-}
-
 function docker(args: string[], cwd = directory): string {
-  return command('docker', args, cwd);
+  return runDocker(args, { cwd });
 }
 
 export function buildSearchImage(): string {
@@ -135,7 +133,17 @@ async function up(): Promise<void> {
     if (running !== 'true') docker(['start', container]);
   } else {
     docker(['volume', 'create', volume]);
-    docker(searchRunArgs(image));
+    try {
+      // `docker run` also pulls the image when it is absent; a busy daemon exceeds the 120s run bound on a loaded host.
+      runDocker(searchRunArgs(image), { cwd: directory, timeout: DOCKER_BUILD_TIMEOUT_MS });
+    } catch (error) {
+      try {
+        docker(['rm', '-f', '-v', container]);
+      } catch (cleanupError) {
+        throw retainOriginalAndCleanupFailure(error, cleanupError, 'OpenSearch run failed');
+      }
+      throw error;
+    }
   }
 
   const url = `http://127.0.0.1:${port}`;

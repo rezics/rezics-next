@@ -1,8 +1,26 @@
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fromPlainText } from '@rezics/document';
+import { installedRatingsPage, walkWorkingDirectory } from '../scripts/seeded-content-ratings-reviews-walk.ts';
+
+test('the ratings walk runs from apps/web with installed Subject page types and no root lease preload', () => {
+  if (process.env.REZICS_RATINGS_WALK !== '1')
+    console.log('skip: seeded ratings walk requires REZICS_RATINGS_WALK=1 on a walk stack');
+  expect(walkWorkingDirectory()).toBe(resolve(import.meta.dir, '..'));
+  expect(installedRatingsPage()).toEqual({
+    questionId: '00000000-0000-7000-8000-000000000001',
+    population: '00000000-0000-8000-8000-000000000000',
+  });
+  const source = readFileSync(resolve(import.meta.dir, '../scripts/seeded-content-ratings-reviews-walk.ts'), 'utf8');
+  expect(source).toContain("await import('../src/features/pages/subject-ratings.ts')");
+  expect(source).toContain('assert.equal(pageTypes.questionId, QUESTION)');
+  expect(source).toContain('cwd: webRoot');
+  expect(readFileSync(resolve(import.meta.dir, '../bunfig.toml'), 'utf8')).not.toContain('stack-lease-preload');
+  expect(readFileSync(resolve(import.meta.dir, '../../../bunfig.toml'), 'utf8')).toContain('stack-lease-preload');
+});
 
 /**
  * Seeded ratings and reviews walk. It runs only inside `dev-stack.ts walk` with native and browser acceptance (see

@@ -1,5 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   acquireHostControl,
@@ -232,5 +242,139 @@ test('sshExecutable walks PATH at call time so a fake ssh is used', () => {
     expect(sshExecutable()).toBe(join(bin, 'ssh'));
   } finally {
     process.env.PATH = previousPath;
+  }
+});
+
+test('a socket left by a killed master is removed before the probe, so the next master can bind the path', async () => {
+  const directory = fixture();
+  const control = join(directory, 'ssh-control');
+  const socketPath = sshControlOptions(host('a'), control)
+    .find((option) => option.startsWith('ControlPath='))!
+    .slice('ControlPath='.length);
+  // A listener that exits without cleanup leaves its socket file behind, as a killed OpenSSH master does.
+  const listener = Bun.spawnSync([
+    process.execPath,
+    '-e',
+    `Bun.listen({ unix: ${JSON.stringify(socketPath)}, socket: { data() {} } }); process.exit(0);`,
+  ]);
+  expect(listener.exitCode).toBe(0);
+  expect(lstatSync(socketPath).isSocket()).toBe(true);
+  const log = join(directory, 'ssh.log');
+  writeFileSync(log, '');
+  const bin = writeFakeSsh(
+    directory,
+    `#!/bin/sh
+for argument in "$@"; do
+  case "$argument" in ControlPath=*) path=\${argument#ControlPath=} ;; esac
+done
+printf '%s\n' "$*" >> "$SSH_LOG"
+case " $* " in
+  *" check "*)
+    if [ -S "$path" ]; then echo "Control socket connect($path): Connection refused" >&2; else echo "Control socket connect($path): No such file or directory" >&2; fi
+    exit 255 ;;
+esac
+case "$*" in *REMOTE_CHECK_CONTROL_PROBE*) echo REMOTE_CHECK_CONTROL_OK; exit 0 ;; esac
+exit 2
+`,
+  );
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}:${previousPath ?? ''}`;
+  process.env.SSH_LOG = log;
+  try {
+    const lease = await acquireHostControl(host('a'), control);
+    fixtures.push(lease.directory);
+    expect(lease.socketPath).toBe(socketPath);
+    expect(existsSync(socketPath)).toBe(false);
+    const calls = readFileSync(log, 'utf8');
+    expect(calls.indexOf('-O check')).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf('-O check')).toBeLessThan(calls.indexOf('REMOTE_CHECK_CONTROL_PROBE'));
+    releaseHostControl(lease);
+  } finally {
+    delete process.env.SSH_LOG;
+    process.env.PATH = previousPath;
+  }
+});
+
+test('a failed probe reports the ssh failure, not the stale-socket warning OpenSSH prints before it', async () => {
+  const directory = fixture();
+  const bin = writeFakeSsh(
+    directory,
+    `#!/bin/sh
+case "$*" in
+  *REMOTE_CHECK_CONTROL_PROBE*)
+    echo "ControlSocket /run/user/1000/rezics-ssh/a already exists, disabling multiplexing" >&2
+    echo "ops@a.test: Permission denied (publickey)." >&2
+    exit 255 ;;
+esac
+exit 0
+`,
+  );
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}:${previousPath ?? ''}`;
+  try {
+    const failure = await acquireHostControl(host('a'), join(directory, 'ssh-control')).then(
+      () => '',
+      (error: Error) => error.message,
+    );
+    expect(failure).toContain('Permission denied (publickey).');
+    expect(failure).not.toContain('disabling multiplexing');
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test('a failed probe against a live master never stops that master, since -O exit would cut every run multiplexed through it', async () => {
+  const directory = fixture();
+  const control = join(directory, 'ssh-control');
+  const socketPath = sshControlOptions(host('a'), control)
+    .find((option) => option.startsWith('ControlPath='))!
+    .slice('ControlPath='.length);
+  // A live master keeps its listener; the fake ssh answers `-O check` for it.
+  const master = Bun.spawn([
+    process.execPath,
+    '-e',
+    `Bun.listen({ unix: ${JSON.stringify(socketPath)}, socket: { data() {} } }); setInterval(() => {}, 1000);`,
+  ]);
+  try {
+    for (let waited = 0; !existsSync(socketPath) && waited < 100; waited++) await Bun.sleep(20);
+    const log = join(directory, 'ssh.log');
+    const count = join(directory, 'probes');
+    writeFileSync(log, '');
+    writeFileSync(count, '0');
+    const bin = writeFakeSsh(
+      directory,
+      `#!/bin/sh
+printf '%s\\n' "$*" >> "$SSH_LOG"
+case " $* " in
+  *" check "*) echo "Master running (pid=1)" >&2; exit 0 ;;
+  *" exit "*) echo "Exit request sent." >&2; exit 0 ;;
+esac
+case "$*" in
+  *REMOTE_CHECK_CONTROL_PROBE*)
+    n=$(cat "$SSH_COUNT"); n=$((n + 1)); echo "$n" > "$SSH_COUNT"
+    if [ "$n" -eq 1 ]; then echo "kex_exchange_identification: read: Connection reset by peer" >&2; exit 255; fi
+    echo REMOTE_CHECK_CONTROL_OK; exit 0 ;;
+esac
+exit 2
+`,
+    );
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ''}`;
+    process.env.SSH_LOG = log;
+    process.env.SSH_COUNT = count;
+    try {
+      const lease = await acquireHostControl(host('a'), control);
+      fixtures.push(lease.directory);
+      expect(readFileSync(count, 'utf8').trim()).toBe('2');
+      expect(readFileSync(log, 'utf8')).not.toContain('-O exit');
+      releaseHostControl(lease);
+    } finally {
+      delete process.env.SSH_LOG;
+      delete process.env.SSH_COUNT;
+      process.env.PATH = previousPath;
+    }
+  } finally {
+    master.kill();
+    await master.exited;
   }
 });

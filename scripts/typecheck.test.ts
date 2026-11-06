@@ -13,7 +13,13 @@ import {
 import { join } from 'node:path';
 import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
 import { prepareCompilerDatabase } from './compiler-database.ts';
-import { affectedWorkspaces, typecheck, type StartedDatabase } from './typecheck.ts';
+import {
+  affectedWorkspaces,
+  compilerIdentityPaths,
+  typecheck,
+  typecheckRunOrder,
+  type StartedDatabase,
+} from './typecheck.ts';
 
 function fixture(): { root: string; remove: () => void } {
   const repository = join(import.meta.dir, '..');
@@ -89,7 +95,7 @@ test("every workspace's typecheck runs and the run passes when all pass", async 
     expect(existsSync(join(root, 'tools/goal/ran'))).toBe(false);
     const text = output.text();
     for (const name of ['@fixture/app', '@fixture/kernel', '@fixture/filter']) {
-      expect(text).toMatch(new RegExp(`Workspace ${name} finished in \\d+\\.\\d{2}s`));
+      expect(text).toMatch(new RegExp(`Workspace ${name} finished \\d+\\.\\d{2}s`));
     }
     expect(text).not.toContain('@fixture/tools');
     expect(text).not.toContain('@fixture/nested');
@@ -124,7 +130,7 @@ test('a failing workspace fails the run and its output is printed under its name
     expect(diagnostic).toBeGreaterThan(failing);
     expect(text.indexOf('  Type X is not assignable')).toBeGreaterThan(diagnostic);
     expect(text).not.toContain('passing workspace output');
-    expect(text).toMatch(/Workspace @fixture\/failing finished in \d+\.\d{2}s/);
+    expect(text).toMatch(/Workspace @fixture\/failing type-errors after \d+\.\d{2}s/);
   } finally {
     remove();
   }
@@ -156,7 +162,7 @@ test('a workspace without a typecheck script falls back to tsc on its tsconfig',
       '-p',
       'tsconfig.json',
     ]);
-    expect(output.text()).toMatch(/Workspace @fixture\/plain finished in \d+\.\d{2}s/);
+    expect(output.text()).toMatch(/Workspace @fixture\/plain finished \d+\.\d{2}s/);
     expect(output.text()).toContain('node_modules/.bin/tsc --noEmit -p tsconfig.json');
   } finally {
     remove();
@@ -196,7 +202,7 @@ await Bun.write('database-url', url);
 
     const code = await typecheck({
       root,
-      env: {},
+      env: { PATH: process.env.PATH ?? '' },
       recognize: () => ({
         outcome: 'admitted',
         runId: 'fixture',
@@ -418,6 +424,81 @@ test('compiler cleanup and no-diagnostic compiler failures are infrastructure, n
   } finally {
     commandFixture.remove();
   }
+});
+
+test('mapper-enabled workspaces typecheck one at a time inside an admitted slice', async () => {
+  expect(
+    typecheckRunOrder([
+      { needsDatabase: false, name: 'filter' },
+      { needsDatabase: true, name: 'kernel' },
+      { needsDatabase: true, name: 'web' },
+    ]),
+  ).toEqual({
+    parallel: [{ needsDatabase: false, name: 'filter' }],
+    serial: [
+      { needsDatabase: true, name: 'kernel' },
+      { needsDatabase: true, name: 'web' },
+    ],
+  });
+  const { root, remove } = fixture();
+  try {
+    const lock = join(root, 'mapper.lock');
+    const overlap = join(root, 'overlap');
+    const mapperScript = `import { existsSync, writeFileSync, unlinkSync } from 'node:fs';
+if (existsSync(${JSON.stringify(lock)})) writeFileSync(${JSON.stringify(overlap)}, 'yes');
+writeFileSync(${JSON.stringify(lock)}, 'held');
+await Bun.sleep(80);
+unlinkSync(${JSON.stringify(lock)});
+await Bun.write('typechecked', 'ok');
+`;
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': mapperScript,
+    });
+    writeWorkspace(root, 'apps/web', '@fixture/web', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': mapperScript,
+    });
+    writeWorkspace(root, 'packages/filter', '@fixture/filter', 'bun pass.ts', { 'pass.ts': passScript });
+    expect(
+      await typecheck({
+        root,
+        recognize: () => ({
+          outcome: 'admitted',
+          runId: 'fixture',
+          scope: 'fixture.scope',
+          supervisor: { pid: 1, started: '1', group: 1 },
+        }),
+        place: async () => {
+          throw new Error('nested host admission');
+        },
+        startDatabase: unusedDatabase(),
+        stdout: collector().stdout,
+      }),
+    ).toBe(0);
+    expect(existsSync(overlap)).toBe(false);
+  } finally {
+    remove();
+  }
+});
+
+test('compiler identity includes the Reylo mapper each workspace resolves and the Web workspace manifests', () => {
+  expect(compilerIdentityPaths()).toEqual([
+    'package.json',
+    'bun.lock',
+    'node_modules/typescript/package.json',
+    'services/kernel/package.json',
+    'services/kernel/node_modules/reylo/package.json',
+    'services/kernel/tsconfig.json',
+    'services/kernel/scripts/typecheck.ts',
+    'services/auth/package.json',
+    'services/auth/node_modules/reylo/package.json',
+    'services/auth/tsconfig.json',
+    'services/auth/scripts/database.ts',
+    'apps/web/package.json',
+    'apps/web/node_modules/reylo/package.json',
+    'apps/web/tsconfig.json',
+  ]);
 });
 
 test('an admitted explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {

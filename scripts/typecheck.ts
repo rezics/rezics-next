@@ -34,6 +34,10 @@ function infrastructure(label: string, reason: string): number {
   return 75;
 }
 
+function retainOriginalAndCleanupMessage(original: string, cleanup: string, context: string): string {
+  return `${context} (${original}); cleanup could not be proven (${cleanup})`;
+}
+
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
 
 /** The train opts in only with both immutable revisions bound to this local landing check. */
@@ -54,16 +58,32 @@ type CompilerState = {
   discard: () => void;
 };
 
-function compilerStateFingerprint(root: string, env: NodeJS.ProcessEnv): string {
-  const files = new Set([
+/**
+ * Mapper, lockfile and workspace identities that must match between local and remote compiler runs. Each workspace
+ * that declares the Reylo content mapper resolves `reylo` from its own `node_modules`, so that installed package is the
+ * identity; the root has no such link, and naming it hashed nothing for the mapper.
+ */
+export function compilerIdentityPaths(): readonly string[] {
+  return [
     'package.json',
     'bun.lock',
     'node_modules/typescript/package.json',
     'services/kernel/package.json',
+    'services/kernel/node_modules/reylo/package.json',
     'services/kernel/tsconfig.json',
     'services/kernel/scripts/typecheck.ts',
+    'services/auth/package.json',
+    'services/auth/node_modules/reylo/package.json',
+    'services/auth/tsconfig.json',
     'services/auth/scripts/database.ts',
-  ]);
+    'apps/web/package.json',
+    'apps/web/node_modules/reylo/package.json',
+    'apps/web/tsconfig.json',
+  ];
+}
+
+function compilerStateFingerprint(root: string, env: NodeJS.ProcessEnv): string {
+  const files = new Set<string>(compilerIdentityPaths());
   for (const glob of [
     'services/kernel/db/**/migrations/*.sql',
     'services/auth/db/**/migrations/*.sql',
@@ -435,6 +455,17 @@ async function runWorkspace(root: string, workspace: Workspace, env: Record<stri
   }
 }
 
+/** Mapper-enabled compilers run one at a time so Kernel, Auth and Web cannot share an admitted 6GiB slice. */
+export function typecheckRunOrder<W extends { needsDatabase: boolean }>(workspaces: readonly W[]): {
+  parallel: W[];
+  serial: W[];
+} {
+  return {
+    parallel: workspaces.filter((workspace) => !workspace.needsDatabase),
+    serial: workspaces.filter((workspace) => workspace.needsDatabase),
+  };
+}
+
 async function runWorkspaces(
   root: string,
   workspaces: readonly Workspace[],
@@ -450,18 +481,19 @@ async function runWorkspaces(
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
   const results: WorkspaceResult[] = [];
-  await Promise.all(
-    workspaces.map(async (workspace) => {
-      const workspaceEnv =
-        state && relative(root, workspace.directory) === 'services/kernel'
-          ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
-          : childEnv;
-      const result = await runWorkspace(root, workspace, workspaceEnv);
-      if (result.code === 0) write(result.block);
-      else failures.push(result.block);
-      results.push(result);
-    }),
-  );
+  const runOne = async (workspace: Workspace): Promise<void> => {
+    const workspaceEnv =
+      state && relative(root, workspace.directory) === 'services/kernel'
+        ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
+        : childEnv;
+    const result = await runWorkspace(root, workspace, workspaceEnv);
+    if (result.code === 0) write(result.block);
+    else failures.push(result.block);
+    results.push(result);
+  };
+  const { parallel, serial } = typecheckRunOrder(workspaces);
+  await Promise.all(parallel.map(runOne));
+  for (const workspace of serial) await runOne(workspace);
   for (const block of failures) write(block);
   if (failures.length === 0) return 0;
   return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;
@@ -534,6 +566,13 @@ async function withStartedDatabase(
     } catch (error) {
       cleanupFailure = error instanceof Error ? error.message : String(error);
     }
+  }
+  if (failure && cleanupFailure) {
+    state?.discard();
+    return infrastructure(
+      'root typecheck',
+      retainOriginalAndCleanupMessage(failure, cleanupFailure, 'compiler run could not be completed'),
+    );
   }
   if (cleanupFailure) {
     state?.discard();

@@ -130,3 +130,14 @@ kernel-library and kernel zones.
 Decision: Management walk setup idle-in-transaction and Access-deadline termination is received through that same
 throwaway/isolated-stack database lifetime. Content keeps the launcher, stack and cleanup. Original walks remain
 open. Driver main versus canonical publication is a control-plane owner item.
+Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel without watch, and defer Auth pages and Web
+until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Pin that
+startup, Docker string|Buffer output, original-plus-cleanup diagnostics, seed-journal database identity, same-host
+preload and mapper-resolution seams with the existing compiler-database, walk-stack, Kernel check, Auth stack and
+ratings-walk unit files rather than a second suite. Original native acceptance remains open.
+Decision: mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web compilers do not share an
+admitted 6GiB slice; remaining workspaces stay parallel. The compiler database uses 32MB shared_buffers. Pin that
+order with the existing root typecheck unit file. Original native acceptance remains open.
+Decision: generate Paraglide messages before Vite starts and treat `/en` as ready only when it returns HTML without a
+missing-module overlay; ECONNREFUSED during that wait is hydration startup. Pin with the existing walk-stack,
+messages-ready and storybook-dev unit files. Original native acceptance remains open.

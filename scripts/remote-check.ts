@@ -35,6 +35,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
   acquireHostControl,
+  DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   releaseHostControl,
   rsyncRemoteShell,
   sshControlDirectory,
@@ -1623,18 +1624,8 @@ exec 8>&-
 flock -u 6
 exec 6>&-
 mkdir -p ${ROOT}/bases
-# Keep the parent slot descriptors open while base cleanup reuses descriptor 9.
-(
-exec 9>"${ROOT}/bases/.lock"
-flock -x 9
-current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
-for base in ${ROOT}/bases/*; do
-  [ -d "$base" ] || continue
-  [ "$base" = "$current" ] && continue
-  if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
-done
-flock -u 9
-)
+# Retirement holds the bases lock only for renames; the parent slot descriptors stay open meanwhile.
+${retireExpiredBasesShell()}
 echo "SLOTS ${count}"
 run_id=
 run_directory=
@@ -4040,26 +4031,41 @@ printf 'STOPPED\\n'`;
 }
 
 /** Serializes stale-base cleanup and reports the immutable current base used by this upload. */
+/**
+ * Moves expired immutable bases aside under `bases/.lock`, then deletes them after the lock is released. A recursive
+ * delete under the lock held every base lookup until it finished. Each run retires into its own directory, so
+ * concurrent runs cannot remove one another's entries. The current base is never retired.
+ */
+export function retireExpiredBasesShell(root: string = ROOT): string {
+  return `retired=${root}/bases/.retired-$$
+mkdir -p "$retired"
+(
+  exec 9>"${root}/bases/.lock"
+  flock -x 9
+  current=$(readlink -f ${root}/bases/current 2>/dev/null || true)
+  for base in ${root}/bases/*; do
+    [ -d "$base" ] || continue
+    [ "$base" = "$current" ] && continue
+    if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then mv -- "$base" "$retired/" || true; fi
+  done
+  flock -u 9
+)
+(rm -rf -- "$retired" </dev/null >/dev/null 2>&1 &)`;
+}
+
 function baseStateScript(): string {
   return `# REMOTE_CHECK_BASE_STATE
 set -eu
 mkdir -p ${ROOT}/bases
-exec 9>"${ROOT}/bases/.lock"
-flock -x 9
+${retireExpiredBasesShell()}
 current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
-for base in ${ROOT}/bases/*; do
-  [ -d "$base" ] || continue
-  [ "$base" = "$current" ] && continue
-  if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
-done
 if [ -n "$current" ] && [ -d "$current" ]; then
   age=$(( $(date +%s) - $(stat -c %Y "$current") ))
   printf 'BASE %s\\nAGE %s\\n' "$current" "$age"
 else
   printf 'BASE -\\nAGE -\\n'
 fi
-if rsync --version 2>/dev/null | grep -qi zstd; then echo ZSTD 1; else echo ZSTD 0; fi
-flock -u 9`;
+if rsync --version 2>/dev/null | grep -qi zstd; then echo ZSTD 1; else echo ZSTD 0; fi`;
 }
 
 /** Refreshes only when the current immutable base is old enough; replacing the symlink is atomic. */
