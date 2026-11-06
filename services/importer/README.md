@@ -65,6 +65,8 @@ Native selected-family checks register the six frozen VNDB statistics cases in t
 
 The full native worker shares the original Pool with its WorkClient, as required by selected Work composition. Each isolated runtime owns a process group. Initialization cancellation starts a five-second termination deadline before waiting for its host, and parent cleanup kills remaining compiler descendants before draining pipes. A focused lifetime case pins the concrete stalled-bootstrap case: both parent and compiler ignore SIGTERM while the compiler retains stdout. Statistics fixtures stream setup phase starts, durations and worker errors as they occur.
 
+Game environment current-read caching belongs to one importer run's signal. Reusing an importer rereads adopted Concept provenance on the next run, including unchanged source records; removing the platform's adopted source URL retracts its proposal without removing other independently verified platforms. The same lookup object handles dependency recovery and provenance removal, with one read per distinct Concept within each run.
+
 Selected Book/BookSeries membership and creator rows require current exact endpoints and supported Organization roles; title text or editions do not fill missing publishers. Membership refresh keys include the effective sourced ordinal: a conflicting sibling row withdraws the old position even when this volume’s own rows are unchanged; unknown ordinals use stable source-ID ordering without acquiring a position. Relation.1 remains the released neutral cross-media relation. Selected release dates/states remain on exact Work/Release identities; current development-status/platform/media Concepts are reread. Producer/parent links keep source direction.
 
 ### Cover acquisition and media
