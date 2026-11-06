@@ -175,10 +175,20 @@ test('reader keeps book, volume and author identities after accept, adopt and on
   }
 }, 600_000);
 
-type ReadStatement = { value?: { content?: unknown } };
+type ReadStatement = {
+  value?: { content?: unknown };
+  references?: readonly { parts?: readonly ReadStatement[] }[];
+};
 type ReadSubject = { type: string; statements?: Record<string, ReadStatement[]> };
 function contentsOf(subject: ReadSubject, property: string): unknown[] {
   return (subject.statements?.[property] ?? []).map((row) => row.value?.content);
+}
+function citationContents(subject: ReadSubject, property: string, target: string): unknown[] {
+  return (subject.statements?.[property] ?? [])
+    .filter((row) => row.value?.content === target)
+    .flatMap((row) => row.references ?? [])
+    .flatMap((reference) => reference.parts ?? [])
+    .map((part) => part.value?.content);
 }
 function pinnedTables() {
   const rows = pinned.rows as Record<string, Record<string, unknown>[]>;
@@ -247,7 +257,16 @@ test('pinned light-novel families publish a native graph with separate acceptanc
 
     const read = async (key: string) =>
       (await publicClient.readSubject(first.identities[key]!.id)).subject as unknown as ReadSubject;
+    const sourceSubjects = pinned.rows.subject as { id: number; name: string }[];
+    const sourceCredits = pinned.rows['subject-persons'] as {
+      person_id: number;
+      subject_id: number;
+      position: number;
+    }[];
+    const sourceName = (key: string) => sourceSubjects.find((row) => String(row.id) === key)!.name;
+    const bookGirl = await read('499');
     const series = await read('2815');
+    expect(bookGirl.type).toBe('schema:BookSeries');
     expect(series.type).toBe('schema:BookSeries');
     // A BookSeries admits publisher but not author or illustrator; those credits stay exact gaps.
     expect(first.creditGaps).toEqual(
@@ -258,11 +277,33 @@ test('pinned light-novel families publish a native graph with separate acceptanc
         expect.objectContaining({ path: '/subject-persons/499/5839/position', reason: 'property_not_admitted' }),
       ]),
     );
+    const bookGirlPublishers = sourceCredits.filter((row) => row.subject_id === 499 && row.position === 2004);
+    expect(bookGirlPublishers.length).toBeGreaterThan(0);
+    for (const credit of bookGirlPublishers) {
+      const key = `person:${credit.person_id}`;
+      const identity = first.identities[key]!;
+      expect(identity.type).toBe('schema:Organization');
+      expect(contentsOf(bookGirl, 'schema:publisher')).toContain(identity.id);
+      expect(citationContents(bookGirl, 'schema:publisher', identity.id)).toContain(
+        `https://bgm.tv/subject/499#/subject-persons/499/${credit.person_id}/position`,
+      );
+    }
     expect(contentsOf(series, 'schema:publisher')).toContain(first.identities['person:128']!.id);
+    expect(citationContents(series, 'schema:publisher', first.identities['person:128']!.id)).toContain(
+      'https://bgm.tv/subject/2815#/subject-persons/2815/128/position',
+    );
     // Bangumi archive aliases stay exact und names beside the admitted zh name.
+    expect(contentsOf(bookGirl, 'schema:name')).toContainEqual({ language: 'und', text: sourceName('499') });
     expect(contentsOf(series, 'schema:name')).toContainEqual({ language: 'und', text: 'THE GARDEN OF SINNERS' });
-    for (const key of ['5329', '10862'])
-      expect(contentsOf(await read(key), 'wdt:P179')).toContain(first.identities['2815']!.id);
+    for (const key of ['26', '5329', '10862']) {
+      const expectedSeries = key === '26' ? '499' : '2815';
+      const volume = await read(key);
+      expect(contentsOf(volume, 'wdt:P179')).toContain(first.identities[expectedSeries]!.id);
+      expect(contentsOf(volume, 'schema:name')).toContainEqual({
+        language: 'und',
+        text: sourceName(key),
+      });
+    }
     const anime = await read('233');
     expect(anime.type).toBe('schema:TVSeries');
     expect(contentsOf(anime, 'schema:name')).toContainEqual({
