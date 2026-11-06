@@ -2742,6 +2742,8 @@ Only exact Global selection is supported; non-Global Context/Realm is unsupporte
 
 The installed explainSubjectSources projection uses the independently admitted selected fact before ordinary language preference, including a non-default language choice. Its closed native result preserves exact empty citations and omits the document comparison operands. Before Sources or authored correction uses a matched result, the Web consumer compares it with the same current Subject statement: candidate ID, current document locator, best rank, qualifiers and exact references must agree. The mounted consumer also binds this result to its original visit and reader attempt; general Sources continues to project current facts independently.
 
+Decision: phone and desktop selected-synopsis Sources retry and authored current/candidate comparison stories consume recorded native selected-slot responses, keep those exact citations, and return keyboard retry focus to the surviving opener or heading. Source observation on Sources uses the installed KernelClient observations GET.
+
 ### Cost and acceptance bounds
 
 Keep selector admission at 512 entries/262,144 UTF-8 bytes; never drop a choice to fit. Native definitions allow 64 properties/Type, 32 slot entries, 16 qualifiers and 16 references of 16 parts. Exact lookup examines at most 32 current slots and emits one fact; one statement has at most 273 snaks and 256 unique related targets. Charge the full exact component, labels included, against 262,144 bytes. Body limit remains 2,097,152 bytes; imported source references remain capped at 128.

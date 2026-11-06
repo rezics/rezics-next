@@ -432,3 +432,48 @@ test('a conflict retry replays the exact original cursor and a late retired obse
     }
   }
 });
+
+test('Sources observation uses the generated Kernel observations GET and drops CAS resolution', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { inspectSourceObservation } = await import('../src/features/catalogue/source-observation/contract');
+  const { sourceObservationOperation } = await import('../src/features/catalogue/source-observation/kernel');
+  const requests: URL[] = [];
+  const native = {
+    source: 'bangumi',
+    head: {
+      digest: headItem.digest,
+      state: 'published',
+      observation: headItem,
+    },
+    selectedObservation: selectedItem,
+    resolution: {
+      put: { expectedObservation: headItem.digest },
+      clear: { expectedObservation: headItem.digest },
+    },
+  };
+  const client = createKernelClient('http://observation.test', {
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      requests.push(url);
+      expect(request.cache).toBe('no-store');
+      return Response.json(native);
+    }) as typeof fetch,
+  });
+  const outcome = await inspectSourceObservation(sourceObservationOperation(client), {
+    subjectId,
+    source: 'bangumi',
+    digest: selectedDigest,
+  });
+  expect(requests).toHaveLength(1);
+  expect(requests[0]!.pathname).toBe(`/v1/subjects/${subjectId}/source-statistics/bangumi/observations`);
+  expect(requests[0]!.searchParams.get('digest')).toBe(selectedDigest);
+  expect(outcome).toEqual({
+    kind: 'ready',
+    inspection: {
+      source: 'bangumi',
+      head: { digest: headItem.digest, state: 'published', observation: headItem },
+      selectedObservation: selectedItem,
+    },
+  });
+});

@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
 import { fromPlainText } from '@rezics/document';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AuthoredField } from '../features/catalogue/authored-field-view';
 import { authoredFixture, type AuthoredScenario } from '../kernel/fake/authored-field';
+import { RECORDED_SELECTED_SYNOPSIS_CITATION } from '../kernel/recorded/selected-synopsis';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
@@ -557,4 +559,135 @@ export const KeyboardAssociations: Story = {
     await userEvent.keyboard('{Enter}');
     await expect(first.getByRole('textbox', { name: m.authored_licence() })).toHaveFocus();
   },
+};
+
+let selectedAbaNavigate: ((visit: 'a' | 'b') => Promise<void>) | undefined;
+let selectedAbaRelease: (() => void) | undefined;
+let selectedAbaHeld = false;
+
+function SelectedComparisonExample({ retryAba = false }: { retryAba?: boolean }) {
+  const locale = getLocale();
+  const router = useRouter();
+  const releaseRetry = useRef<(() => void) | undefined>(undefined);
+  const fixture = useMemo(() => {
+    let first = true;
+    return authoredFixture('ready', locale, {
+      selected: true,
+      ...(retryAba
+        ? {
+            holdRead: async () => {
+              if (first) {
+                first = false;
+                return;
+              }
+              await new Promise<void>((resolve) => {
+                selectedAbaHeld = true;
+                releaseRetry.current = () => {
+                  selectedAbaHeld = false;
+                  resolve();
+                };
+              });
+            },
+          }
+        : {}),
+    });
+  }, [locale, retryAba]);
+  const query = useQuery({
+    queryKey: ['authored-selected-story', locale, retryAba],
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: () => fixture.transport.read('schema:abstract'),
+  });
+  selectedAbaNavigate = retryAba
+    ? async (visit) => {
+        await router.navigate({ to: `/?retryVisit=${visit}` } as never);
+      }
+    : undefined;
+  selectedAbaRelease = retryAba ? () => releaseRetry.current?.() : undefined;
+  if (!query.data)
+    return (
+      <p role="status" className="p-6">
+        {m.candidate_loading()}
+      </p>
+    );
+  return (
+    <AuthoredField
+      key={`${locale}:${retryAba}`}
+      initial={query.data}
+      locale={locale}
+      inspection={fixture.via}
+      transport={fixture.transport}
+      confirm={fixture.confirm}
+    />
+  );
+}
+
+function SelectedComparisonStory({ retryAba = false }: { retryAba?: boolean }) {
+  return (
+    <PatternStory path="/?retryVisit=a" visitor="Signed In">
+      <AppShell>
+        <SelectedComparisonExample retryAba={retryAba} />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+async function selectedComparisonPlay(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const selected = await canvas.findByRole('region', { name: m.authored_selected() });
+  await expect(
+    within(selected).getByText(
+      'A pilot stranded in the Sahara meets a small prince who has left his asteroid, and learns from him what matters.',
+    ),
+  ).toBeVisible();
+  const citations = selected.querySelector('summary');
+  expect(citations).toBeTruthy();
+  await userEvent.click(citations!);
+  expect(await canvas.findByRole('link', { name: RECORDED_SELECTED_SYNOPSIS_CITATION })).toHaveAttribute(
+    'href',
+    RECORDED_SELECTED_SYNOPSIS_CITATION,
+  );
+}
+
+async function selectedComparisonAbaPlay(canvasElement: HTMLElement) {
+  await selectedComparisonPlay(canvasElement);
+  const canvas = within(canvasElement);
+  const reload = canvas.getByRole('button', { name: m.authored_reload_current_text() });
+  reload.focus();
+  await userEvent.keyboard('{Enter}');
+  await waitFor(() => expect(selectedAbaHeld).toBe(true));
+  await selectedAbaNavigate?.('b');
+  await selectedAbaNavigate?.('a');
+  selectedAbaRelease?.();
+  expect(await canvas.findByRole('link', { name: RECORDED_SELECTED_SYNOPSIS_CITATION })).toBeTruthy();
+  await waitFor(() => {
+    const heading = canvas.getByRole('heading', { name: m.authored_title() });
+    expect(canvasElement.ownerDocument.activeElement).not.toBe(heading);
+  });
+}
+
+export const SelectedSynopsisComparison: Story = {
+  render: () => <SelectedComparisonStory />,
+  play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
+};
+export const SelectedSynopsisComparisonPhone: Story = {
+  render: () => <SelectedComparisonStory />,
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
+};
+export const SelectedSynopsisComparisonDesktop: Story = {
+  render: () => <SelectedComparisonStory />,
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
+};
+export const SelectedSynopsisComparisonABAPhone: Story = {
+  render: () => <SelectedComparisonStory retryAba />,
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => selectedComparisonAbaPlay(canvasElement),
+};
+export const SelectedSynopsisComparisonABADesktop: Story = {
+  render: () => <SelectedComparisonStory retryAba />,
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => selectedComparisonAbaPlay(canvasElement),
 };

@@ -14,8 +14,9 @@ const { explainSubjectSources, readSubjectSources } = await import('../src/featu
 const { inspectSelectedSynopsisRead, inspectSelectedSynopsisVisit, readSelectedSynopsisEditor } =
   await import('../src/features/catalogue/subject-editor');
 const { selectedEditorAttempt } = await import('../src/features/catalogue/subject-editor-lifetime');
-const { catalogueSourcesFixture, citationUrl, sourceDefinitions } =
+const { catalogueSourcesFixture, citationUrl, recordedSelectedSynopsisSelection, sourceDefinitions } =
   await import('../src/kernel/fake/catalogue-sources');
+const { RECORDED_SELECTED_SYNOPSIS_CITATION } = await import('../src/kernel/recorded/selected-synopsis');
 
 const render = (result: SourcesResult) => {
   const router = createRouter({
@@ -431,4 +432,27 @@ test('selected editor rereads the native selected slot and A/B/A replacement ret
     kind: 'selected',
     query: expect.stringContaining(candidateId),
   });
+});
+
+test('recorded native selected-slot Sources keeps the exact citation and withholds changed or missing support', async () => {
+  const matched = catalogueSourcesFixture('selected-facts', { exact: 'matched' });
+  const via = `/en/subjects/${matched.id}/work${summaryReadingFragment({
+    ...recordedSelectedSynopsisSelection,
+    locale: 'en',
+    context: matched.read.subject.context,
+  })}`;
+  const result = await readSubjectSources(matched.client, matched.id, 'en', sourceDefinitions, false, via);
+  expect(result.kind).toBe('ready');
+  if (result.kind !== 'ready') throw new Error('Expected recorded native selected Sources');
+  expect(result.page.selectedSynopsis).toBe('matched');
+  const markup = render(result);
+  expect(markup).toContain(RECORDED_SELECTED_SYNOPSIS_CITATION);
+  expect(markup).not.toContain(citationUrl);
+  expect(markup).not.toContain(recordedSelectedSynopsisSelection.documentId);
+  expect(markup).not.toContain(recordedSelectedSynopsisSelection.digest);
+  for (const kind of ['changed', 'missing', 'unavailable'] as const) {
+    const fixture = catalogueSourcesFixture('selected-facts', { exact: kind });
+    const current = await readSubjectSources(fixture.client, fixture.id, 'en', sourceDefinitions, false, via);
+    expect(current).toMatchObject({ kind: 'ready', page: { selectedSynopsis: kind, fields: [] } });
+  }
 });

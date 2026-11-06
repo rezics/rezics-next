@@ -7,9 +7,12 @@ import { explainSubjectSources, readSubjectSources, type SourcesResult } from '.
 import {
   catalogueSourcesFixture,
   citationUrl,
+  recordedSelectedSynopsisSelection,
   sourceDefinitions,
+  type CatalogueSourcesExact,
   type SourcesScenario,
 } from '../kernel/fake/catalogue-sources';
+import { RECORDED_SELECTED_SYNOPSIS_CITATION } from '../kernel/recorded/selected-synopsis';
 import { PatternStory } from './page';
 import { AppShell } from '../shell/shell';
 import { getLocale } from '../paraglide/runtime.js';
@@ -24,7 +27,7 @@ let retryAbaHeld = false;
 type SourcesStoryProps = {
   scenario?: SourcesScenario;
   loading?: boolean;
-  exact?: 'distinct' | 'empty' | 'changed';
+  exact?: CatalogueSourcesExact;
   retryAba?: boolean;
 };
 
@@ -46,78 +49,18 @@ function SourcesStoryPage({
 }: {
   scenario?: SourcesScenario;
   loading?: boolean;
-  exact?: 'distinct' | 'empty' | 'changed';
+  exact?: CatalogueSourcesExact;
   retryAba?: boolean;
 }) {
   const router = useRouter();
   const locale = getLocale();
-  const fixture = useMemo(() => {
-    const fixture = catalogueSourcesFixture(scenario);
-    if (exact) {
-      const { rezics: _revision, ...recorded } = fixture.read.subject.statements['schema:isbn']![0]!;
-      fixture.read.selectedSynopsis =
-        exact === 'changed'
-          ? { kind: 'changed' }
-          : {
-              kind: 'matched',
-              context: fixture.read.subject.context,
-              release: fixture.read.subject.release,
-              fact: {
-                ...recorded,
-                property: { id: 'schema:abstract', data_type: 'document' },
-                value: { type: 'somevalue' },
-                references:
-                  exact === 'empty'
-                    ? []
-                    : [
-                        {
-                          hash: 'selected-reference',
-                          parts: [
-                            {
-                              property: { id: 'schema:url', data_type: 'url' },
-                              value: { type: 'value', content: 'https://catalogue.example.test/second-synopsis' },
-                            },
-                          ],
-                        },
-                      ],
-              },
-            };
-    }
-    return fixture;
-  }, [scenario, locale, exact]);
-  const selection =
-    exact && fixture.read.selectedSynopsis?.kind === 'matched'
-      ? {
-          candidateId: fixture.read.selectedSynopsis.fact.id,
-          documentId: '00000000-0000-4000-8000-000000000202',
-          digest: 'c'.repeat(64),
-          language: 'ja',
-          locale,
-          context: fixture.read.subject.context,
-          subjectRelease: fixture.read.subject.release,
-        }
-      : undefined;
-  if (selection && fixture.read.selectedSynopsis?.kind === 'matched') {
-    const { fact } = fixture.read.selectedSynopsis;
-    fixture.read.subject.statements['schema:abstract'] = [
-      {
-        id: fact.id,
-        rank: fact.rank,
-        property: fact.property,
-        value: {
-          type: 'value',
-          content: {
-            document: selection.documentId,
-            digest: selection.digest,
-            language: selection.language,
-          },
-        },
-        qualifiers: fact.qualifiers,
-        references: fact.references,
-        rezics: { release: selection.subjectRelease, revision: 1 },
-      },
-    ];
-  }
+  const fixture = useMemo(
+    () => catalogueSourcesFixture(scenario, exact ? { exact } : {}),
+    [scenario, locale, exact],
+  );
+  const selection = exact
+    ? { ...recordedSelectedSynopsisSelection, locale, context: fixture.read.subject.context }
+    : undefined;
   const via = selection ? `/en/subjects/${fixture.id}/work${summaryReadingFragment(selection)}` : undefined;
   const initial: SourcesResult = ['denied', 'invalid', 'conflict', 'unavailable'].includes(scenario)
     ? { kind: scenario as 'denied' | 'invalid' | 'conflict' | 'unavailable' }
@@ -189,15 +132,15 @@ function fixtureId() {
 }
 export const NoCitations: Story = { args: { scenario: 'no-citations' } };
 export const ExactSynopsisCitations: Story = {
-  args: { exact: 'distinct' },
+  args: { exact: 'matched' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    expect(await canvas.findByRole('link', { name: 'https://catalogue.example.test/second-synopsis' })).toBeTruthy();
+    expect(await canvas.findByRole('link', { name: RECORDED_SELECTED_SYNOPSIS_CITATION })).toBeTruthy();
     expect(canvas.queryByRole('link', { name: citationUrl })).toBeNull();
   },
 };
 export const ExactSynopsisEmptyCitations: Story = {
-  args: { exact: 'empty' },
+  args: { exact: 'matched-empty' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     expect(await canvas.findByText(m.sources_no_citations())).toBeTruthy();
@@ -218,7 +161,7 @@ export const UnavailableRetry: Story = {
     const retry = await canvas.findByRole('button', { name: m.sources_retry() });
     retry.focus();
     await userEvent.keyboard('{Enter}');
-    const heading = await canvas.findByRole('heading', { name: m.sources_selected() });
+    const heading = await canvas.findByRole('heading', { name: m.subject_sources() });
     await waitFor(() => expect(canvasElement.ownerDocument.activeElement).toBe(heading));
   },
 };
@@ -233,19 +176,19 @@ async function retryAbaStory(canvasElement: HTMLElement) {
   await retryAbaNavigate?.('b');
   await retryAbaNavigate?.('a');
   retryAbaRelease?.();
-  await canvas.findByRole('link', { name: 'https://catalogue.example.test/second-synopsis' });
+  await canvas.findByRole('link', { name: RECORDED_SELECTED_SYNOPSIS_CITATION });
   await waitFor(() => {
     const heading = canvas.getByRole('heading', { name: m.subject_sources() });
     expect(canvasElement.ownerDocument.activeElement).not.toBe(heading);
   });
 }
 export const UnavailableRetryABAPhone: Story = {
-  args: { scenario: 'unavailable', exact: 'distinct', retryAba: true },
+  args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
   globals: { viewport: { value: 'phone390' } },
   play: async ({ canvasElement }) => retryAbaStory(canvasElement),
 };
 export const UnavailableRetryABADesktop: Story = {
-  args: { scenario: 'unavailable', exact: 'distinct', retryAba: true },
+  args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
   globals: { viewport: { value: 'desktop1280' } },
   play: async ({ canvasElement }) => retryAbaStory(canvasElement),
 };
