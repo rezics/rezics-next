@@ -324,18 +324,21 @@ export async function openApiRuntime(
         if (reported || reportedRequests >= 32) return;
         reported = true;
         reportedRequests++;
-        console.error(`Native request failure ${JSON.stringify({
-          method: req.method,
-          url: req.url.slice(0, 2048),
-          elapsedMs: Date.now() - startedAtMs,
-          phase,
-          requestId: requestId.slice(0, 160),
-          status,
-          problemCode,
-          outcome,
-          cancellation: req.signal.aborted ? 'request signal' : 'none',
-          cancellationName: req.signal.aborted && req.signal.reason instanceof Error ? req.signal.reason.name : undefined,
-        })}`);
+        console.error(
+          `Native request failure ${JSON.stringify({
+            method: req.method,
+            url: req.url.slice(0, 2048),
+            elapsedMs: Date.now() - startedAtMs,
+            phase,
+            requestId: requestId.slice(0, 160),
+            status,
+            problemCode,
+            outcome,
+            cancellation: req.signal.aborted ? 'request signal' : 'none',
+            cancellationName:
+              req.signal.aborted && req.signal.reason instanceof Error ? req.signal.reason.name : undefined,
+          })}`,
+        );
       };
       const aborted = () => report('cancelled');
       req.signal.addEventListener('abort', aborted, { once: true });
@@ -347,7 +350,7 @@ export async function openApiRuntime(
         requestId = response.headers.get('x-request-id') ?? requestId;
         if (status >= 400) {
           phase = 'public problem response';
-          const problem = await response.clone().json() as { code?: string };
+          const problem = (await response.clone().json()) as { code?: string };
           problemCode = problem.code?.slice(0, 160);
           report('problem');
         }
