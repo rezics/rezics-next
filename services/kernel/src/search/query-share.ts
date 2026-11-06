@@ -6,7 +6,15 @@ export type QueryShare = {
   viewer: 'anonymous' | 'signed-in';
   action: 'allowed' | 'disabled' | 'unavailable';
   reason: 'ready' | 'private_context' | 'unsupported' | 'oversized' | 'unavailable';
-  document: { text: string; filter: string | null; languages: string[]; sort: string | null } | null;
+  document: {
+    text: string;
+    filter: string | null;
+    languages: string[];
+    sort: string | null;
+    textField?: 'credited_creator';
+    creditQualifiers?: { property: string; value: string }[];
+    spoilerThreshold?: number;
+  } | null;
   parameters: string | null;
   selections: { value: string; language: string }[];
 };
@@ -30,6 +38,8 @@ export function prepareQueryShare(
     work?: string;
     spoilerThreshold?: number;
     representation?: string;
+    textField?: 'credited_creator';
+    creditQualifiers?: { property: string; value: string }[];
   },
   labels: Record<string, Record<string, string>> = {},
 ): QueryShare {
@@ -37,7 +47,7 @@ export function prepareQueryShare(
     request.population !== undefined ||
     request.spaceId !== undefined ||
     request.work !== undefined ||
-    request.spoilerThreshold !== undefined ||
+    (request.spoilerThreshold !== undefined && request.textField !== 'credited_creator') ||
     request.representation === 'release-groups-v1'
   )
     return unavailableQueryShare('private_context');
@@ -74,13 +84,59 @@ export function prepareQueryShare(
   if (privateContext) return unavailableQueryShare('private_context');
   // The receiver adds an outer conjunction. Remove only redundant single-child roots for stable replay.
   while (filter && 'and' in filter && filter.and.length === 1) filter = filter.and[0];
-  const document = {
+  const document: NonNullable<QueryShare['document']> = {
     text: request.text ?? '',
     filter: filter === undefined ? null : JSON.stringify(filter),
     languages: request.languages ?? ['en'],
     sort: request.sort ?? null,
+    ...(request.textField === undefined ? {} : { textField: request.textField }),
+    ...(request.textField === undefined ? {} : { creditQualifiers: request.creditQualifiers ?? [] }),
+    ...(request.textField === undefined || request.spoilerThreshold === undefined
+      ? {}
+      : { spoilerThreshold: request.spoilerThreshold }),
   };
   const params = new URLSearchParams();
+  if (request.textField === 'credited_creator') {
+    const qualifiers = request.creditQualifiers ?? [];
+    if (
+      qualifiers.length > 1 ||
+      qualifiers.some(
+        (qualifier) =>
+          qualifier.property !== 'wdt:P3831' ||
+          typeof qualifier.value !== 'string' ||
+          !qualifier.value ||
+          bytes(qualifier.value) > 256,
+      ) ||
+      (request.spoilerThreshold !== undefined &&
+        (!Number.isInteger(request.spoilerThreshold) || request.spoilerThreshold < 0 || request.spoilerThreshold > 2))
+    )
+      return unavailableQueryShare('unsupported');
+    const children = filter ? ('and' in filter ? filter.and : [filter]) : [];
+    if (children.some((node) => !('kind' in node))) return unavailableQueryShare('unsupported');
+    params.set('mode', 'works');
+    params.set('name', document.text);
+    if (qualifiers[0]) params.set('role', qualifiers[0].value);
+    for (const node of children) if ('kind' in node) for (const kind of node.kind.in) params.append('kinds', kind);
+    for (const language of document.languages) params.append('language', language);
+    params.set('threshold', String(request.spoilerThreshold ?? 0));
+    if (document.sort !== null && document.sort !== 'name' && document.sort !== 'relevance')
+      return unavailableQueryShare('unsupported');
+    params.set('sort', document.sort ?? 'name');
+    const parameters = params.toString();
+    if (
+      bytes(JSON.stringify(document)) > QUERY_SHARE_LIMITS.documentBytes ||
+      bytes(parameters) + 128 > QUERY_SHARE_LIMITS.urlBytes
+    )
+      return unavailableQueryShare('oversized');
+    return {
+      viewer: 'anonymous',
+      action: 'allowed',
+      reason: 'ready',
+      document,
+      parameters,
+      selections: selections.slice(0, QUERY_SHARE_LIMITS.labels),
+    };
+  }
   if (document.text) params.set('q', document.text);
   if (filter) {
     const children = 'and' in filter ? filter.and : [filter];

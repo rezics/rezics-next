@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -17,15 +17,23 @@ import type { DiscoveryState } from './discovery';
 import { characterPersonQueryOptions } from './character-person-window-query';
 import { characterPersonWindowFacts } from './character-person-window';
 import { SearchWindowControls, useSearchWindow } from './search-window';
+import { DiscoveryKinds } from './discovery-kinds';
+import { QuerySharePreview } from './query-share-preview';
+import { subjectVisitReturnHref } from '../features/pages/subject-visit-navigation';
 export { characterPersonQueryOptions } from './character-person-window-query';
 import { DiscoveryResults } from './discovery-results';
 import {
+  type CharacterPersonMode,
   type CharacterPersonSearch,
   characterPersonHref,
+  characterPersonSearchFromFields,
+  creditRoleIds,
   parseCharacterPersonSearch,
   type CharacterPersonForm as CharacterPersonFormState,
   type ParsedCharacterPersonSearch,
 } from './character-person';
+import { resolveConditionEntityLabels } from './condition-entity';
+import { readCharacterPersonKinds, prepareCharacterPersonShare } from './character-person-window-server';
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -33,6 +41,10 @@ function messageOptions(locale: string) {
 
 function searchPath(locale: string): string {
   return `/${encodeURIComponent(locale)}/search/characters`;
+}
+
+function formMode(value: string): CharacterPersonMode {
+  return value === 'people' || value === 'works' ? value : 'characters';
 }
 
 function searchForm(search: CharacterPersonSearch): CharacterPersonFormState {
@@ -67,7 +79,7 @@ function CharacterPersonForm({
   onReady(ready: boolean): void;
 }) {
   const options = messageOptions(locale);
-  const [mode, setMode] = useState(form.mode === 'people' ? ('people' as const) : ('characters' as const));
+  const [mode, setMode] = useState(formMode(form.mode));
   const [languages, setLanguages] = useState(form.languages);
   const [threshold, setThreshold] = useState(form.threshold);
   const [selection, setSelection] = useState<CharacterPersonSelection>({
@@ -116,12 +128,16 @@ function CharacterPersonForm({
           name="mode"
           value={mode}
           onChange={(event) => {
-            setMode(event.currentTarget.value === 'people' ? 'people' : 'characters');
-            changeSelection(editCharacterPersonSelection(selection, { kind: 'mode' }));
+            const next = formMode(event.currentTarget.value);
+            setMode(next);
+            const edited = editCharacterPersonSelection(selection, { kind: 'mode' });
+            // Work operands do not apply to works mode, so none remains in a hidden draft.
+            changeSelection(next === 'works' ? { ...edited, works: [] } : edited);
           }}
         >
           <option value="characters">{m.character_person_characters({}, options)}</option>
           <option value="people">{m.character_person_people({}, options)}</option>
+          <option value="works">{m.character_person_credited_works({}, options)}</option>
         </select>
       </label>
       <label className="grid gap-1 text-sm font-medium">
@@ -208,6 +224,8 @@ export function CharacterPersonSearchPage({
     );
   };
   const [dirty, setDirty] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [selectionReady, setSelectionReady] = useState(
     parsed.search.works.length === 0 && !parsed.search.role && !parsed.error,
   );
@@ -242,6 +260,41 @@ export function CharacterPersonSearchPage({
       : query.isError
         ? { status: 'unavailable' }
         : (query.data?.discovery ?? { status: 'loading' });
+  // Role labels for credited hits use the same release-bound reader as the selection's role operand.
+  const roleIds = state.status === 'ready' ? creditRoleIds(state.page.hits) : [];
+  const roleTargets = currentMetadata?.roleTargets.works ?? [];
+  const roleLabels = useQuery({
+    queryKey: ['character-person-credit-roles', locale, reader.identity, currentMetadata?.release, roleIds],
+    queryFn: async ({ signal }) => {
+      const result = await resolveConditionEntityLabels(
+        roleIds,
+        roleTargets,
+        {
+          locale,
+          languages: parsed.search.languages,
+          reader: reader.identity,
+          ...(currentMetadata ? { release: currentMetadata.release } : {}),
+          available: true,
+        },
+        signal,
+      );
+      signal.throwIfAborted();
+      if (!current()) throw new DOMException('Reader retired', 'AbortError');
+      return result;
+    },
+    enabled:
+      parsed.search.mode === 'works' &&
+      roleIds.length > 0 &&
+      roleTargets.length > 0 &&
+      !!currentMetadata &&
+      reader.ready &&
+      current(),
+    retry: false,
+    gcTime: 0,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
   const facts = characterPersonWindowFacts(locale, parsed, state, current);
   const windowNavigation = useSearchWindow({
     cursor: facts.cursor,
@@ -277,6 +330,45 @@ export function CharacterPersonSearchPage({
         onDraftChange={markDirty}
         onReady={setSelectionReady}
       />
+      {parsed.search.mode === 'works' && !dirty && state.status === 'ready' && (
+        <form action={searchPath(locale)} method="get" className="rounded-lg border p-4">
+          <input type="hidden" name="mode" value="works" />
+          <input type="hidden" name="name" value={parsed.search.name} />
+          {parsed.search.role && <input type="hidden" name="role" value={parsed.search.role} />}
+          {parsed.search.languages.map((language) => (
+            <input key={language} type="hidden" name="language" value={language} />
+          ))}
+          <input type="hidden" name="threshold" value={String(parsed.search.threshold)} />
+          <input type="hidden" name="sort" value={parsed.search.sort} />
+          <DiscoveryKinds
+            key={JSON.stringify([executedHref, state.page.as_of])}
+            initial={state.page.kinds}
+            checkpoint={state.page.as_of}
+            selected={parsed.search.kinds}
+            locale={locale}
+            hydrated={hydrated}
+            load={(cursor, signal) =>
+              readCharacterPersonKinds({
+                data: { locale, search: parsed.search, cursor },
+                signal,
+              })
+            }
+          />
+        </form>
+      )}
+      {parsed.search.mode === 'works' && !dirty && state.status === 'ready' && (
+        <QuerySharePreview
+          key={executedHref}
+          locale={locale}
+          changed={false}
+          prepare={(signal) =>
+            prepareCharacterPersonShare({
+              data: { locale, search: characterPersonSearchFromFields({ ...parsed.search, cursor: undefined }) },
+              signal,
+            })
+          }
+        />
+      )}
       {parsed.error && (
         <p className="text-sm text-destructive" role="alert">
           {parsed.error === 'role_requires_work'
@@ -305,6 +397,8 @@ export function CharacterPersonSearchPage({
           <DiscoveryResults
             state={state}
             locale={locale}
+            creditRoleLabels={roleLabels.data?.labels}
+            subjectHrefFor={(subject) => subjectVisitReturnHref(subject, locale, executedHref)}
             {...(state.status === 'restart' ? { restartHref: facts.firstHref } : {})}
           />
         )}

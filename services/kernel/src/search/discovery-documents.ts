@@ -6,6 +6,7 @@ import {
   ACCOUNT_DISCOVERY_BATCH_SIZE,
   DISCOVERY_DOCUMENT_FORMAT,
   MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT,
+  MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT,
   MIXED_DISCOVERY_DOCUMENT_FORMAT,
   type DiscoveryIndexAction,
   type DiscoveryIndexDefinition,
@@ -21,11 +22,13 @@ import definition from '../../db/search/indices/discovery.json';
 import mixedDefinition from '../../db/search/indices/discovery-mixed-v1.json';
 import { MISSING_NAME } from './document.ts';
 import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
+import { creditSearchIndexDefinition, hasCreditIndexFormat } from './credit-search-mapping.ts';
+import { parseCreditedNameEvidence } from './credit-search-query.ts';
 
 const MAX_NATIVE_VERSION = 9_223_372_036_854_775_807n;
 const ID_PREFIX = 'discovery-v1:';
 
-export type MixedDiscoveryDocumentCodec = 'mixed-public-v1' | 'mixed-calendar-v1';
+export type MixedDiscoveryDocumentCodec = 'mixed-public-v1' | 'mixed-calendar-v1' | 'mixed-credit-v1';
 
 /** Bind each physical mixed mapping to exactly one writer codec. */
 export function mixedDiscoveryDocumentCodec(mappings: unknown): MixedDiscoveryDocumentCodec | undefined {
@@ -45,6 +48,8 @@ export function mixedDiscoveryDocumentCodec(mappings: unknown): MixedDiscoveryDo
       return undefined;
     return 'mixed-public-v1';
   }
+  if (metadata.discovery_document_format === MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT)
+    return hasCalendarIndexFormat(mappings) && hasCreditIndexFormat(mappings) ? 'mixed-credit-v1' : undefined;
   if (
     metadata.discovery_document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT &&
     hasCalendarIndexFormat(mappings)
@@ -77,6 +82,7 @@ const SUBJECT_FIELDS = [
   'rating_score',
   'rating_prior_epoch',
 ];
+const SUBJECT_CREDIT_FIELDS = [...SUBJECT_FIELDS, 'credit_search_complete', 'credited_names'];
 const SECOND_SCOPE_FIELDS = [...COMMON_FIELDS, 'revision', 'source_version', 'names', 'descriptions', 'name_sort'];
 const SECOND_SCOPE_BATCH_SIZE = 256;
 
@@ -321,7 +327,7 @@ export function discoveryDocumentActions(
   observation: DiscoverySnapshot,
   keys: readonly DiscoveryKey[],
   counts?: ReadonlyMap<string, number>,
-  format: 'legacy' | 'mixed-public-v1' | 'mixed-calendar-v1' = 'legacy',
+  format: 'legacy' | MixedDiscoveryDocumentCodec = 'legacy',
 ): DiscoveryIndexAction[] {
   if (observation.owner !== 'semantic' && observation.owner !== 'accounts')
     throw new TypeError('Unknown discovery owner');
@@ -366,9 +372,11 @@ export function discoveryDocumentActions(
       document_format:
         format === 'legacy'
           ? DISCOVERY_DOCUMENT_FORMAT
-          : format === 'mixed-calendar-v1'
-            ? MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
-            : MIXED_DISCOVERY_DOCUMENT_FORMAT,
+          : format === 'mixed-credit-v1'
+            ? MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT
+            : format === 'mixed-calendar-v1'
+              ? MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
+              : MIXED_DISCOVERY_DOCUMENT_FORMAT,
       ...(format === 'legacy' ? {} : { identity: id }),
       id: key.id,
       kind: key.kind,
@@ -403,15 +411,20 @@ export function discoveryDocumentActions(
       const value = rows.get(key.id);
       if (value !== undefined && !('type' in value)) throw new TypeError('Expected a Subject source row');
       const current = value !== undefined && 'type' in value && value.type === key.kind ? value : undefined;
+      // Credit projections come only from the index-only read; a credit codec without them publishes incomplete cuts.
       const [action] = documentActions(
         {
           partition: snapshot.partition,
           position: snapshot.position,
           subjects: current === undefined ? [] : [current],
+          ...(observation.snapshot.creditSearch === undefined
+            ? {}
+            : { creditSearch: observation.snapshot.creditSearch }),
         },
         [key.id],
         counts,
-        format === 'mixed-calendar-v1' ? 1 : undefined,
+        format === 'mixed-calendar-v1' || format === 'mixed-credit-v1' ? 1 : undefined,
+        format === 'mixed-credit-v1' ? 1 : undefined,
       );
       if (action?.op === 'index') document = { ...action.document, ...identity, owner: 'semantic' };
     }
@@ -485,12 +498,23 @@ export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: un
 }
 
 /** Strict mixed _source validation, including fields which a shared mapping alone cannot prohibit per owner. */
+/** A cut is complete or it publishes no names; each published name is an exact witness document. */
+function validateCreditedNameFields(value: Record<string, unknown>): void {
+  if (typeof value.credit_search_complete !== 'boolean' || !Array.isArray(value.credited_names))
+    throw new TypeError('Invalid credited-name fields');
+  if (!value.credit_search_complete && value.credited_names.length !== 0)
+    throw new TypeError('An incomplete credited-name cut publishes no names');
+  for (const name of value.credited_names)
+    if (parseCreditedNameEvidence(name) === undefined) throw new TypeError('Invalid credited-name document');
+}
+
 function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value: unknown): IndexedDiscoveryDocument {
   if (
     !record(value) ||
     (value.document_format !== DISCOVERY_DOCUMENT_FORMAT &&
       value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT &&
-      value.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) ||
+      value.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT &&
+      value.document_format !== MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT) ||
     typeof value.id !== 'string' ||
     typeof value.kind !== 'string' ||
     typeof value.route !== 'number' ||
@@ -505,7 +529,8 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
   if (value.kind !== key.kind) throw new TypeError('Invalid discovery kind');
   if (
     (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT ||
-      value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) &&
+      value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT ||
+      value.document_format === MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT) &&
     value.identity !== discoveryDocumentId(registry, key)
   )
     throw new TypeError('Invalid mixed identity');
@@ -518,7 +543,9 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
       ? value.document_format === DISCOVERY_DOCUMENT_FORMAT
         ? ACCOUNT_FIELDS.filter((field) => !['names', 'descriptions', 'name_sort'].includes(field))
         : ACCOUNT_FIELDS
-      : SUBJECT_FIELDS;
+      : value.document_format === MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT
+        ? SUBJECT_CREDIT_FIELDS
+        : SUBJECT_FIELDS;
   if (Object.keys(value).some((field) => !allowed.includes(field)))
     throw new TypeError('Unsupported discovery document field');
   if (value.owner === 'accounts') {
@@ -532,7 +559,8 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
       throw new TypeError('Invalid Account discovery document');
     if (
       (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT ||
-        value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) &&
+        value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT ||
+        value.document_format === MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT) &&
       (!texts(value.names) ||
         !Array.isArray(value.descriptions) ||
         value.descriptions.length !== 0 ||
@@ -560,10 +588,13 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
         !safeInteger(value.rating_prior_epoch))
     )
       throw new TypeError('Invalid Subject discovery document');
+    if (value.document_format === MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT) validateCreditedNameFields(value);
     for (const fact of value.facts) {
       if (!record(fact) || typeof fact.property !== 'string' || !texts(fact.qualifiers))
         throw new TypeError('Invalid Subject discovery fact');
-      const calendarFormat = value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
+      const calendarFormat =
+        value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT ||
+        value.document_format === MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
       const fields =
         'value' in fact
           ? ['property', 'value', 'qualifiers']
@@ -674,6 +705,16 @@ export function discoveryIndexDefinition(): DiscoveryIndexDefinition {
 /** Versioned successor; never modifies the immutable format-1 mapping. */
 export function mixedDiscoveryIndexDefinition(): DiscoveryIndexDefinition {
   return structuredClone(mixedDefinition) as DiscoveryIndexDefinition;
+}
+
+/** Calendar and credit successor for new mixed generations; older physical mappings keep their own codec. */
+export function mixedCreditDiscoveryIndexDefinition(): DiscoveryIndexDefinition {
+  const calendar = calendarIndexDefinition(structuredClone(mixedDefinition) as Record<string, unknown>);
+  const result = creditSearchIndexDefinition(calendar);
+  const mappings = result.mappings;
+  if (!record(mappings) || !record(mappings._meta)) throw new TypeError('Invalid mixed Search mapping');
+  mappings._meta.discovery_document_format = MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
+  return result as unknown as DiscoveryIndexDefinition;
 }
 
 /** Inert format-3 mapping: old mixed generations retain their year-only writer and mapping. */

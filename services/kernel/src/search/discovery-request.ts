@@ -12,6 +12,8 @@ import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { CollectionDirectorySelection, DiscoveryOwnerRegistry, DiscoveryRegistry } from './discovery.ts';
 import type { DiscoveryRequest } from './discovery-api.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
+import { CREDIT_SEARCH_LIMITS } from './credit-search.ts';
+import type { CreditQualifierOperand } from './credit-search-query.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
 import { taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
 import { parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';
@@ -35,6 +37,8 @@ const OWNED_FIELDS = [
   'kindCountLeaf',
   'spaceId',
   'collectionDirectory',
+  'textField',
+  'creditQualifiers',
 ] as const satisfies readonly (keyof MixedDiscoveryRequest)[];
 
 function collectionDirectorySelection(value: unknown): CollectionDirectorySelection {
@@ -87,6 +91,37 @@ function invalid(pointer: string): never {
 }
 function unsupported(pointer: string): never {
   throw new ProblemError('unsupported_query', { errors: [{ pointer, code: 'unsupported' }] });
+}
+
+const WIKIBASE_ITEM_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** Same-credit qualifiers name released properties; item values are canonical UUIDs, like statement operands. */
+export function admitCreditQualifiers(value: unknown, release: FilterRelease): CreditQualifierOperand[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > CREDIT_SEARCH_LIMITS.qualifiersPerCredit)
+    invalid('/creditQualifiers');
+  const seen = new Set<string>();
+  return value.map((item: unknown, index: number) => {
+    const pointer = `/creditQualifiers/${index}`;
+    if (
+      item === null ||
+      typeof item !== 'object' ||
+      Array.isArray(item) ||
+      Object.keys(item).some((key) => key !== 'property' && key !== 'value')
+    )
+      invalid(pointer);
+    const { property, value: operand } = item as Record<string, unknown>;
+    if (typeof property !== 'string' || property.length === 0 || property.length > 256 || !property.isWellFormed())
+      invalid(`${pointer}/property`);
+    const definition = release.properties[property] as FilterRelease['properties'][string] | undefined;
+    if (!definition) unsupported(`${pointer}/property`);
+    if (typeof operand !== 'string' || operand.length === 0 || operand.length > 256 || !operand.isWellFormed())
+      invalid(`${pointer}/value`);
+    if (definition.datatype === 'wikibase-item' && !WIKIBASE_ITEM_UUID.test(operand)) invalid(`${pointer}/value`);
+    const identity = `${property}\0${operand}`;
+    if (seen.has(identity)) invalid(pointer);
+    seen.add(identity);
+    return { property, value: operand };
+  });
 }
 
 /** Copy bounded caller fields before the first await. Omitted keys stay omitted. */
@@ -158,6 +193,14 @@ export function admitDiscoveryRequest(
   }
   const collectionDirectory =
     request.collectionDirectory === undefined ? undefined : collectionDirectorySelection(request.collectionDirectory);
+  // Credited-creator text is its own field: it never falls back to catalogue text and needs its own text.
+  const creditQualifiers =
+    request.creditQualifiers === undefined ? undefined : admitCreditQualifiers(request.creditQualifiers, release);
+  if (request.textField !== undefined) {
+    if (request.textField !== 'credited_creator') invalid('/textField');
+    if (text === undefined) invalid('/text');
+    if (request.collectionDirectory !== undefined || request.spaceId !== undefined) unsupported('/textField');
+  } else if (creditQualifiers !== undefined) invalid('/creditQualifiers');
   if (
     collectionDirectory &&
     (text !== undefined ||
@@ -203,6 +246,10 @@ export function admitDiscoveryRequest(
     kindCountLeaf: request.kindCountLeaf ?? null,
     spaceId: request.spaceId ?? null,
     ...(collectionDirectory ? { collectionDirectory } : {}),
+    // Absent for catalogue text, so existing cursors keep their binding bytes.
+    ...(request.textField === undefined
+      ? {}
+      : { textField: request.textField, creditQualifiers: creditQualifiers ?? [] }),
   };
   return {
     text,
@@ -215,6 +262,9 @@ export function admitDiscoveryRequest(
     options,
     languages: options.languages ?? [],
     ...(collectionDirectory ? { collectionDirectory } : {}),
+    ...(request.textField === undefined
+      ? {}
+      : { textField: request.textField, creditQualifiers: creditQualifiers ?? [] }),
     bindingRequest,
   };
 }

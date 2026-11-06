@@ -23,6 +23,7 @@ import {
   type FacetNativeOperations,
   type FacetNativePlan,
   type FacetNativePageResult,
+  type FacetNativeRead,
 } from './facet-discovery-native.ts';
 import { createFacetDiscoveryStorage } from './facet-discovery-storage.ts';
 import {
@@ -67,7 +68,8 @@ function captureInput(plan: FacetNativePlan): PublicFilterConsumerCaptureInput {
   const overflowProperties = overflowFor(plan);
   return {
     filterDocument: plan.filterDocument,
-    text: plan.text,
+    // Credited text is checked inside the retained PIT below; this shared consumer only compiles catalogue text.
+    text: plan.textField === 'credited_creator' ? undefined : plan.text,
     sort: plan.valueKind === 'item' ? 'name' : 'id',
     size: 1,
     ...(overflowProperties === undefined ? {} : { overflowProperties }),
@@ -143,10 +145,15 @@ export function createFacetNativeOperations(
     return subject;
   }
 
-  async function current(row: StoredRow, kind: FacetNativePlan['valueKind']) {
+  async function current(row: StoredRow, read: FacetNativeRead, context: PublicFilterConsumerContext, meter: Meter) {
     const contributor = await visible(row.contributor_original);
     if (!contributor || contributor.id !== row.contributor_terminal) return null;
-    if (kind !== 'item') return { labels: {} as Record<string, string> };
+    if (read.plan.textField === 'credited_creator') {
+      const proof = await storage.verifyCreditedCandidate(read, contributor.id, context);
+      add(meter, proof.cost);
+      if (proof.status !== 'match') return null;
+    }
+    if (read.plan.valueKind !== 'item') return { labels: {} as Record<string, string> };
     const target = await visible(row.target_original);
     if (!target || target.id !== (row.target_terminal ?? row.value)) return null;
     return { labels: Object.fromEntries(target.labels.map(({ language, value }) => [language, value])) };
@@ -253,7 +260,12 @@ export function createFacetNativeOperations(
             retained,
           );
           add(meter, charged);
-          if (published === true) return { ...prepared, cost: meter };
+          if (published === true)
+            return {
+              ...prepared,
+              ...(textObservation ? { textObservation } : {}),
+              cost: meter,
+            };
         }
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'Facet deadline exceeded') {
@@ -306,7 +318,7 @@ export function createFacetNativeOperations(
           for (const row of found.rows as StoredRow[]) {
             let disclosed: Awaited<ReturnType<typeof current>> | null;
             try {
-              disclosed = await current(row, read.plan.valueKind);
+              disclosed = await current(row, read, context, meter);
             } catch {
               disclosed = null;
             }

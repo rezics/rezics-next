@@ -19,6 +19,20 @@ export const QueryShareSchema = t.Object(
           filter: t.Union([t.String({ maxLength: 16384 }), t.Null()]),
           languages: t.Array(t.String({ maxLength: 35 }), { maxItems: 8 }),
           sort: t.Union([t.String(), t.Null()]),
+          textField: t.Optional(t.Literal('credited_creator')),
+          creditQualifiers: t.Optional(
+            t.Array(
+              t.Object(
+                {
+                  property: t.String({ minLength: 1, maxLength: 256 }),
+                  value: t.String({ minLength: 1, maxLength: 256 }),
+                },
+                closed,
+              ),
+              { maxItems: 4 },
+            ),
+          ),
+          spoilerThreshold: t.Optional(t.Integer({ minimum: 0, maximum: 2 })),
         },
         closed,
       ),

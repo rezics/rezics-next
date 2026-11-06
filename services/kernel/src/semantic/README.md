@@ -658,11 +658,10 @@ without expanding omitted creators; creator names and identity are bound by `nam
 checks and whole-dependency `unchanged`, and an incomplete fourth page or name coverage keeps selection ready.
 
 The installed port is `createCreditSearchSource` from `semantic/credit-search.ts`, a public Semantic entry outside
-the barrel. Runtime defaults expose `createKernelCreditSearchSource` (re-exported by `server.ts`). Search calls
-either factory; `page`, `current` and `unchanged` are the producer methods. Attaching the adapter onto
-`subjectSource` or `createRatedSubjectSource` stays Search-owned, because those files already participate in the
-Semantic value-import cycle. It uses released `listWorkPlan` / `workCreditProperties` outgoing credit properties,
-never a role roster or the three-entry work-context preview.
+the barrel. Runtime defaults expose `createKernelCreditSearchSource` (re-exported by `server.ts`). Search composition
+injects that producer into its rated Subject source; Semantic's `subjectSource` does not attach the Search port.
+`page`, `current` and `unchanged` are the producer methods. It uses released `listWorkPlan` /
+`workCreditProperties` outgoing credit properties, never a role roster or the three-entry work-context preview.
 `receiveCreditSearch` and `receiveCreditSearchMatch` are the receiving entries; restart maps onto `changed`, so the
 existing pipeline publishes preparing, incomplete, changed or complete. Hidden or concealed credits and creators are
 omitted, not counted as incomplete. Identity `absent` follows the public redirect chain; pending identity is

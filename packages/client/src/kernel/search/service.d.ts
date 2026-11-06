@@ -26,6 +26,13 @@ import { type MatchEvidence } from './match-evidence.ts';
 import { type SuggestionWorkContext, type SuggestionWorkContextReader } from './suggestion-context.ts';
 export type SearchRequest = {
     text?: string;
+    /** `credited_creator` matches `text` against names of Persons credited on works. */
+    textField?: 'credited_creator';
+    /** Same-credit released qualifiers; admitted only with `textField: 'credited_creator'`. */
+    creditQualifiers?: readonly {
+        property: string;
+        value: string;
+    }[];
     filter?: unknown;
     sort?: SearchPlan['sort'];
     spoilerThreshold?: number;

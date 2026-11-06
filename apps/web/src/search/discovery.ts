@@ -255,12 +255,22 @@ const publicSpaceSummary = v.strictObject({
     ),
   ),
 });
+// Only credited-name requests carry this: the credited Person and the matched statement's qualifiers.
+// Unknown fields are dropped so an additive kernel field cannot make the whole page unavailable.
+const creditMatch = v.object({
+  statementId: resourceId,
+  property: v.string(),
+  targetId: resourceId,
+  name: v.object({ language: v.string(), value: v.string() }),
+  qualifiers: v.array(v.object({ property: v.string(), value: v.string() })),
+});
 const hit = v.union([
   v.object({
     key: v.strictObject({ owner: v.literal('semantic'), kind: v.string(), route, id: resourceId }),
     summary: v.object({ kind: v.literal('subject'), value: subjectSummary }),
     ...catalogueFields,
     contexts: v.exactOptional(characterPersonContexts),
+    creditMatch: v.exactOptional(creditMatch),
   }),
   v.object({
     key: v.strictObject({ owner: v.literal('accounts'), kind: v.literal('account'), route, id: resourceId }),
@@ -388,6 +398,7 @@ export type EmptyRecovery = NonNullable<DiscoveryPage['emptyRecovery']>;
 export type LegacySearchPage = v.InferOutput<typeof legacyPage> & { kinds?: DiscoveryKinds };
 export type DiscoveryKinds = v.InferOutput<typeof kinds>;
 export type DiscoveryHit = DiscoveryPage['hits'][number];
+export type DiscoveryCreditMatch = v.InferOutput<typeof creditMatch>;
 export type AccountDiscoverySummary = v.InferOutput<typeof accountSummary>;
 export type PublicCollectionSummary = v.InferOutput<typeof publicCollectionSummary>;
 export type PublicReviewSummary = v.InferOutput<typeof publicReviewSummary>;
@@ -402,7 +413,6 @@ export type DiscoveryRequest = Parameters<KernelClient['subjects']['$search']['p
   descriptions?: boolean;
   properties?: string[];
   kindPage?: { limit: number; cursor?: string };
-  kindCountLeaf?: number;
   collectionDirectory?: Omit<PublicCollectionDirectorySelection, 'order'> & { order: 'recent' | 'popular' };
 };
 export type DiscoveryState =
