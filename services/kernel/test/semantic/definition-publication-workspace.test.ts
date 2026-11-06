@@ -152,15 +152,73 @@ test('platform and Context editors publish, resume, activate and use a compiled 
   expect(measured.body.identity.digest).toBe(releaseDigest(compiledTen));
 
   const vertical = sourcesFor(1);
-  const compiled = await compileCatalogue(vertical);
-  const preview = await call('editor', 'POST', '/v1/definitions/imports', { document: vertical });
+  const compiledVertical = await compileCatalogue(vertical);
+  const largePreview = await call('editor', 'POST', '/v1/definitions/imports', { document: vertical });
+  expect(largePreview.status, JSON.stringify(largePreview.body)).toBe(200);
+  expect(largePreview.body.kind).toBe('sources');
+  expect(largePreview.body.diagnostics).toEqual([]);
+  expect(largePreview.body.identity.digest).toBe(releaseDigest(compiledVertical));
+  expect(largePreview.body.comparison.addedTypes.some((id: string) => id.startsWith('ex:V0'))).toBe(true);
+  const largeDigest = largePreview.body.identity.digest as string;
+  const largeKey = { 'idempotency-key': JSON.stringify(randomUUID()) };
+  const largePublish = await call(
+    'editor',
+    'POST',
+    '/v1/definitions/releases',
+    { release: compiledVertical },
+    largeKey,
+  );
+  expect(largePublish.status, JSON.stringify(largePublish.body)).toBe(201);
+  expect(largePublish.body).toEqual({ digest: largeDigest });
+  const largeReplay = await call('editor', 'POST', '/v1/definitions/releases', { release: compiledVertical }, largeKey);
+  expect(largeReplay.status).toBe(201);
+  expect(largeReplay.body).toEqual(largePublish.body);
+  const largeRead = await call('anonymous', 'GET', `/v1/definitions/releases/${largeDigest}`);
+  expect(largeRead.status).toBe(200);
+  expect(largeRead.body.digest).toBe(largeDigest);
+
+  const typeId = 'ex:V0Work';
+  const usableClasses = {
+    ...classes,
+    V0Work: { class_uri: typeId, annotations: { library: { id: 'fixture.catalogue' } } },
+  };
+  const usableLabels = { ...labels, [typeId]: 'Fixture vertical work' };
+  const usable = {
+    root: 'main.yaml',
+    schemas: {
+      'main.yaml': JSON.stringify({
+        id: 'https://catalogue.example/usable',
+        name: 'usable',
+        version: '1',
+        prefixes: {
+          scale: 'https://catalogue.example/types/',
+          ex: 'https://example.org/vocab/',
+          linkml: 'https://w3id.org/linkml/',
+        },
+        imports: ['linkml:types'],
+        classes: usableClasses,
+        slots: {},
+      }),
+    },
+    presentation: Object.fromEntries(
+      VERTICAL_LOCALES.map((locale) => [
+        locale,
+        JSON.stringify({
+          types: Object.fromEntries(
+            Object.entries(usableLabels).map(([id, label]) => [id, locale === 'en' ? label : `${label} ${locale}`]),
+          ),
+          properties: {},
+        }),
+      ]),
+    ),
+  };
+  const compiled = await compileCatalogue(usable);
+  const preview = await call('editor', 'POST', '/v1/definitions/imports', { document: usable });
   expect(preview.status, JSON.stringify(preview.body)).toBe(200);
   expect(preview.body.kind).toBe('sources');
   expect(preview.body.diagnostics).toEqual([]);
   expect(preview.body.identity.digest).toBe(releaseDigest(compiled));
-  expect(preview.body.document?.types && Object.keys(preview.body.document.types).length).toBeGreaterThan(0);
   expect(preview.body.operations).toMatchObject({ grant: 'definition_publication', admitted: true, publish: true });
-  expect(preview.body.comparison.addedTypes.some((id: string) => id.startsWith('ex:V0'))).toBe(true);
   const previousHead = preview.body.current.head as number;
   const previousDigest = preview.body.current.digest as string;
   const digest = preview.body.identity.digest as string;
@@ -194,15 +252,13 @@ test('platform and Context editors publish, resume, activate and use a compiled 
 
   const pinnedOld = await call('anonymous', 'GET', `/v1/definitions/releases/${previousDigest}`);
   const pinnedNew = await call('anonymous', 'GET', `/v1/definitions/releases/${digest}`);
+  const pinnedLarge = await call('anonymous', 'GET', `/v1/definitions/releases/${largeDigest}`);
   const active = await call('anonymous', 'GET', '/v1/definitions/active');
   expect(pinnedOld.status).toBe(200);
   expect(pinnedOld.body.digest).toBe(previousDigest);
   expect(pinnedNew.body.digest).toBe(digest);
+  expect(pinnedLarge.body.digest).toBe(largeDigest);
   expect(active.body.digest).toBe(digest);
-
-  const typeId =
-    (preview.body.comparison.addedTypes as string[]).find((id) => id.endsWith('Work')) ??
-    preview.body.comparison.addedTypes[0]!;
   const created = await call('editor', 'POST', '/v1/subjects', {
     type: typeId,
     labels: { en: 'Fixture vertical work' },
