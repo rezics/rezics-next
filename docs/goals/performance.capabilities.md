@@ -239,6 +239,14 @@ failed its linear block assertion, then held them constant. Restore those axes i
 correct the violated derivation or growth classification using native plans and a derived work envelope. Keep
 physical packing effects and raw diagnostics visible; a smaller fixture cannot establish the missing bound.
 
+Decision: Auth retirement fixtures require the real versioned terminal consumer proof before request deletion;
+synthetic maintenance requests remain recoverable. Healthy native growth evidence alone does not bound an
+invocation whose SDK closure retries connection failures indefinitely. The supported producer must expose finite
+attempt/deadline admission, count failed native attempts and backoff, and retain the original closure identity for
+resumption after uncertainty. Prove interrupted closure and lost-response recovery through the real maintenance
+consumer, separately from healthy 256/1,024/4,096 selection and deletion growth. Recovery continues from durable
+custody on a later funded invocation; a timeout cannot manufacture retirement or absence.
+
 Decision: installed Rating repair cost receiving consumes Semantic's exact mapping/retained-obligation producer
 and Content's installed composition. Complete native accounting includes producer preparation, holds, handoff,
 rollback, replay, empty completion and durable future-custody work in the original operation context. Independently
