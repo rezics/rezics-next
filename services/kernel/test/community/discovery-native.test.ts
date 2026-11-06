@@ -1,12 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import {
-  createContentSystemWithOrdinaryScopes,
-  contentGovernanceCredential,
-  type ContentSystem,
-} from '../content/support/system.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createContentSystemWithOrdinaryScopes, type ContentSystem } from '../content/support/system.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { listRealmDiscovery, type DiscoveryPage } from '../../src/community/discovery.ts';
 import { projectRealmDiscovery } from '../../src/community/discovery-projection.ts';
@@ -29,9 +25,7 @@ beforeAll(async () => {
       ),
     ),
   );
-  const governance = await contentGovernanceCredential(system);
-  const release = await call('/v1/definitions/releases', { release: bundledRelease }, governance);
-  await call(`/v1/definitions/releases/${release.digest}:activate`, { expected_head: null }, governance);
+  await bootstrapRelease(system.database.pool, bundledRelease);
   first = Math.floor(Date.now() / DAY) * DAY + DAY;
   await time(first);
 }, 120_000);

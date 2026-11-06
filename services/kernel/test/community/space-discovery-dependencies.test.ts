@@ -119,7 +119,7 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
     partition: home,
     epoch: 1,
     position,
-    eventId: crypto.randomUUID(),
+    eventId: Bun.randomUUIDv7(),
     type: 'com.rezics.search.source-tuple.changed.v1',
     resourceId: space.spaceId,
   });

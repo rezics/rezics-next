@@ -184,6 +184,7 @@ test('a real source fence delivers one durable tuple obligation, without enumera
 }, 120_000);
 
 test('Space bootstrap has exact native positions, sparse bounded pages and current anonymous hydration through lifecycle and media changes', async () => {
+  await system.close();
   const f = await mediaRealmDownloadFixture();
   try {
     const access = testAccess({

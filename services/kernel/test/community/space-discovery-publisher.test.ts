@@ -106,7 +106,7 @@ test('native authored heads publish complete absence independently of eligibilit
         partition: home,
         epoch: first.native!.epoch,
         position: first.native!.position,
-        eventId: crypto.randomUUID(),
+        eventId: Bun.randomUUIDv7(),
         resourceId: space.spaceId,
         type: 'com.rezics.community.native-heads.observed.v1',
       },
