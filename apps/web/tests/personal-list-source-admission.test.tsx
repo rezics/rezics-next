@@ -12,7 +12,14 @@ import { createBangumiJourney } from '../src/library/personal-bangumi-import/con
 import { bangumiCallTotal, expectedBangumiCalls } from '../src/library/personal-bangumi-import/cost';
 import { bangumiSourcePreview } from '../src/library/personal-bangumi-import/source';
 import type { BangumiVisit } from '../src/library/personal-bangumi-import/visit';
-import type { MalCommand, MalImportPort, MalPage, MalPreviewRow } from '../src/library/personal-mal-import/contract';
+import {
+  sameCommand,
+  type MalCommand,
+  type MalDeliveryCustody,
+  type MalImportPort,
+  type MalPage,
+  type MalPreviewRow,
+} from '../src/library/personal-mal-import/contract';
 import { malSourcePreview } from '../src/library/personal-mal-import/source';
 import type { MalVisit } from '../src/library/personal-mal-import/visit';
 import { sourceAdmissionBody } from '../src/library/rich-private-entry/admission';
@@ -165,6 +172,7 @@ function expectCustodyQueue(
 function visit(): AniListVisit & BangumiVisit & MalVisit {
   const controller = new AbortController();
   let retired = false;
+  let retained: MalDeliveryCustody | null = null;
   return {
     identity: 1,
     subject: 'alice',
@@ -177,6 +185,15 @@ function visit(): AniListVisit & BangumiVisit & MalVisit {
     },
     current() {
       return !retired;
+    },
+    delivery() {
+      return retained ? structuredClone(retained) : null;
+    },
+    retainDelivery(custody) {
+      retained = structuredClone(custody);
+    },
+    resolveDelivery(command) {
+      if (retained && sameCommand(retained.command, command)) retained = null;
     },
   };
 }
