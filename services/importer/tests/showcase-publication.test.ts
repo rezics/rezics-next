@@ -707,6 +707,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ?.assertions.find((assertion) => assertion.candidateId === refusedCandidate.id);
     if (!refusedAssertion) throw new Error('Missing selected synopsis for permanent refusal recovery');
     const refusedAction = `accept:${showcaseDigest({ identity: refusedCandidate.id, digest: refusedAssertion.candidateDigest })}`;
+    accepted.delete(refusedCandidate.id);
     journal.refuseAction(refusedAction, 'review-http-403');
     const refusedCallsBefore = acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id).length;
     const permanentlyRefused = await publishShowcase({
