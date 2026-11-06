@@ -20,6 +20,7 @@ publish safe page compositions without adding a page implementation for each ver
 - Unavailable components are skipped and malformed declared slots render empty; supported siblings keep document order.
   Configured-list lookup uses those same slots and structural nodes, without crashing or exposing lists elsewhere.
   TypeList admits only native Search pages at or below its planned `body.limit`; oversized or non-search pages are wholly unavailable.
+  Collection directory capability, recency/popularity order and catalogue publication of selected public A over live working B are Search-owned; omitted-source HTTP stays owner.
 - The real default worker proves convergence, freshness, generation recovery and public rating-sort consumption.
 
 Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,

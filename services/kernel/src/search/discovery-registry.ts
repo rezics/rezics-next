@@ -31,6 +31,7 @@ const SUBJECT_DOMAINS: readonly DiscoveryDomain[] = Object.freeze([
 ]);
 const ACCOUNT_DOMAINS: readonly DiscoveryDomain[] = Object.freeze(['text', 'kind']);
 const OWNER_DOMAINS = Object.freeze(['text', 'kind'] as const);
+const COLLECTION_OWNER_DOMAINS = Object.freeze(['text', 'kind', 'collectionDirectory'] as const);
 const UNAVAILABLE_OWNER_ADAPTERS: DiscoveryOwnerAdapterSlots = Object.freeze({
   collection: Object.freeze({ readiness: 'unavailable' }),
   review: Object.freeze({ readiness: 'unavailable' }),
@@ -109,7 +110,13 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
       metadata: metadata(kind, adapter.metadata.labels, adapter.metadata.icon),
       readCurrent: adapter.readCurrent,
     });
-    ownerByKind.set(kind, Object.freeze({ ...normalized, domains: OWNER_DOMAINS }) as DiscoveryOwnerRegistration);
+    ownerByKind.set(
+      kind,
+      Object.freeze({
+        ...normalized,
+        domains: kind === 'collection' ? COLLECTION_OWNER_DOMAINS : OWNER_DOMAINS,
+      }) as DiscoveryOwnerRegistration,
+    );
     return Object.freeze({ readiness: 'ready', adapter: normalized }) as unknown as DiscoveryOwnerAdapterSlots[K];
   }
   const supplied = options.ownerAdapters ?? UNAVAILABLE_OWNER_ADAPTERS;
