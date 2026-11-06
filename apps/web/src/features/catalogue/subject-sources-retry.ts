@@ -134,8 +134,8 @@ export function useSourcesRetry({
     retry.intent = intent;
     retry.pending = true;
     emit();
-    // Keep the error presentation mounted while its replacement loads. Resetting first can
-    // render the failed match again and finish the retry before its loader has settled.
+    // Reset the error boundary after its replacement has loaded, so resetting cannot
+    // render the failed match again before invalidation has started.
     void (async () => {
       try {
         await router.invalidate({ sync: true });
