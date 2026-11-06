@@ -17,10 +17,10 @@ test('Novel-template light novel series and volumes keep their exact und archive
       series,
       infobox: `{{Infobox animanga/Novel\r\n|中文名= 空之境界\r\n|别名={\r\n[${alias}]\r\n}\r\n|作者= 奈須きのこ\r\n}}`,
     };
-    const converted = convertBangumi(
-      { external_id: String(id), record_revision: null, record } as never,
-      { source: 'bangumi', subjectId },
-    );
+    const converted = convertBangumi({ external_id: String(id), record_revision: null, record } as never, {
+      source: 'bangumi',
+      subjectId,
+    });
     expect(converted.outcome).toBe('converted');
     const names = (converted.proposals ?? []).flatMap((command) =>
       command.op === 'propose' && command.statement.property.id === 'schema:name'

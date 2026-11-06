@@ -261,7 +261,10 @@ test('pinned light-novel families publish a native graph with separate acceptanc
       expect(contentsOf(await read(key), 'wdt:P179')).toContain(first.identities['2815']!.id);
     const anime = await read('233');
     expect(anime.type).toBe('schema:TVSeries');
-    expect(contentsOf(anime, 'schema:name')).toContainEqual({ language: 'und', text: '劇場版 空の境界 第一章 俯瞰風景' });
+    expect(contentsOf(anime, 'schema:name')).toContainEqual({
+      language: 'und',
+      text: '劇場版 空の境界 第一章 俯瞰風景',
+    });
     // The counterpart is one canonical statement, read from the series side through its inverse links.
     const links = await runtime.request(
       `/v1/subjects/${first.identities['2815']!.id}/links?property=${encodeURIComponent('rezics:crossMediaCounterpart')}`,

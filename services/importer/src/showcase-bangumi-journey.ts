@@ -125,11 +125,12 @@ export async function runBangumiJourney() {
         assert.equal(response?.status(), 200, `mounted work ${work.sourceKey}`);
         await page.locator('main').waitFor();
         const text = await page.locator('main').innerText();
-        const links = await page
-          .locator('main a[href]')
-          .evaluateAll((nodes: any[]) =>
-            nodes.map((node: any) => ({ href: node.getAttribute('href')! as string, text: (node.textContent ?? '') as string })),
-          );
+        const links = await page.locator('main a[href]').evaluateAll((nodes: any[]) =>
+          nodes.map((node: any) => ({
+            href: node.getAttribute('href')! as string,
+            text: (node.textContent ?? '') as string,
+          })),
+        );
         visits.push({ sourceKey: work.sourceKey, url: page.url(), text, links });
         await page.screenshot({ path: resolve(evidence, `anonymous-${work.sourceKey}.png`), fullPage: true });
         assert.ok(text.includes('STEINS;GATE') || text.includes('CLANNAD'), 'selected anime title rendered');
