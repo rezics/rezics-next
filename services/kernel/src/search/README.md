@@ -1703,9 +1703,14 @@ revalidates current disclosure before exposing distinct positive witnesses as `N
 separate proof and are not inferred from the candidate prefix. Source census and page length are never query counts.
 Tagged-work requests (`tagged-work-plan.ts`) keep that designated kind as a direct top-level AND leaf, compile the
 remaining catalogue predicate (`tagged-work-query.ts`) and prove kind chips from those current rows (`type-facet.ts`).
-Capture overflow includes statement and same-statement qualifier properties. Name and id execute directly through a
-bounded disclosed-candidate walk; spending the scan bound without a filled page or certified exhaustion is finite
-preparation. Rating sort is finite preparation until mixed rating seek is installed. Web Concept type labels read Search
+Capture overflow includes statement and same-statement qualifier properties. Concept statements compile to a property
+superset; same-statement weight/metric/spoiler stay current native proof. Name and id execute directly through a
+bounded disclosed-candidate walk of `min(600, 6s+3)` raw rows in three `2s+1` windows. Spending that bound without a
+filled page or certified exhaustion retires the PIT and captures a prepared snapshot of the same admitted predicate
+(100-row steps, 1,000 raw-row cap, including rejects and duplicates). Prepared serving walks at most 600 retained raw
+rows in 200-row windows, revalidates current owners and the remaining predicate, and pages `s` hits. Continuations
+resume that observation; replacement and settlement close it through the existing observation path. Rating sort is
+finite preparation until mixed rating seek is installed. Web Concept type labels read Search
 kind metadata rather than substituting admission maps. Catalogue mounts Search's public weight control for the shared
 numeric grammar. Released Book word/form/weight identities come from Definitions; Concept UUIDs and crossed
 platform/language tuples stay Semantic fixture handles.

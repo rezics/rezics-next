@@ -48,7 +48,13 @@ import type {
 import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
 import { OwnerCurrentRestartRequired, revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
-import { admitTaggedWorkPlan, taggedWorkHitScanBound, taggedWorkRemainingHasConcept } from './tagged-work-plan.ts';
+import {
+  admitTaggedWorkPlan,
+  taggedWorkEngineWindow,
+  taggedWorkHitScanBound,
+  taggedWorkRawBound,
+  taggedWorkRemainingHasConcept,
+} from './tagged-work-plan.ts';
 import { proveCurrentKindCounts } from './type-facet.ts';
 import { kindWitnessCounts, selectCurrentPredicatePage } from './current-predicate.ts';
 import { projectKindDirectoryCounts } from './kind-count-proof.ts';
@@ -381,7 +387,7 @@ function executeDiscoverySearch(
     };
     const now = config.now();
     const nativeContext = { deadline: context.deadline };
-    const coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
+    let coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
     try {
       let queried!: PublicFilterQueriedObservation;
       let observationOpened = false;
@@ -421,7 +427,14 @@ function executeDiscoverySearch(
           queried = token.state.queried;
           observationOpened = true;
           repair = token.state.repair;
-          refill = { ...token.state.retained, size: Math.min(200, 2 * admitted.limit + 1) };
+          refill = {
+            ...token.state.retained,
+            size: taggedWorkEngineWindow({
+              prepared: queried.snapshot.kind === 'prepared',
+              remainingHits: admitted.limit,
+              remainingRaw: taggedWorkRawBound(queried.snapshot.kind === 'prepared', taggedWork, admitted.limit),
+            }),
+          };
         }
       }
       const conceptFilter =
@@ -442,25 +455,25 @@ function executeDiscoverySearch(
           ? { collectionQuery: collectionDirectoryQuery(admitted.collectionDirectory) }
           : {}),
       };
+      const nativePlan = compileDiscoveryCapture(
+        {
+          representation: 'discovery-v1',
+          comparator: 'mixed-public-v1',
+          filterDocument: taggedWork?.filter ?? admitted.filter,
+          text: admitted.text,
+          sort: admitted.sort,
+          size: Math.min(200, 2 * admitted.limit + 1),
+          pageSize: admitted.limit,
+          ...(request.text === undefined || admitted.textField !== undefined ? {} : { boost: request.text }),
+          ...(admitted.textField === undefined
+            ? {}
+            : { textField: admitted.textField, creditQualifiers: admitted.creditQualifiers ?? [] }),
+        },
+        registry,
+        release,
+      );
       if (!observationOpened) {
-        const plan = compileDiscoveryCapture(
-          {
-            representation: 'discovery-v1',
-            comparator: 'mixed-public-v1',
-            filterDocument: admitted.filter,
-            text: admitted.text,
-            sort: admitted.sort,
-            size: Math.min(200, 2 * admitted.limit + 1),
-            pageSize: admitted.limit,
-            ...(request.text === undefined || admitted.textField !== undefined ? {} : { boost: request.text }),
-            ...(admitted.textField === undefined
-              ? {}
-              : { textField: admitted.textField, creditQualifiers: admitted.creditQualifiers ?? [] }),
-          },
-          registry,
-          release,
-        );
-        const captured = await coverage.capture(plan, 'pit');
+        const captured = await coverage.capture(nativePlan, 'pit');
         if (captured.status === 'preparing') {
           await config.prepare?.(captured.repair);
           await config.consumer.repairStep(captured.repair, nativeContext);
@@ -569,81 +582,124 @@ function executeDiscoverySearch(
           directoryNextAfter = paged.nextAfter;
           exhausted = paged.exhausted;
         }
-        for (let round = 0; !admitted.collectionDirectory && round < 3; round++) {
-          const batch = await coverage.queryDiscovery(queried, refill);
-          if (batch.status !== 'queried') {
-            retained = batch.status === 'preparing';
-            if (retained && repair) await config.prepare?.(repair);
+        let preparedTraversal = queried.snapshot.kind === 'prepared';
+        scan: for (;;) {
+          const scanBound = taggedWorkRawBound(preparedTraversal, taggedWork, admitted.limit);
+          for (let round = 0; !admitted.collectionDirectory && round < 3; round++) {
+            const batch = await coverage.queryDiscovery(queried, refill);
+            if (batch.status !== 'queried') {
+              retained = batch.status === 'preparing';
+              if (retained && repair) await config.prepare?.(repair);
+              if (
+                batch.status === 'unavailable' &&
+                (batch.reason === 'incarnation_changed' || batch.reason === 'observation_lost') &&
+                request.cursor
+              )
+                throw new ProblemError('search_restart_required');
+              throw ready();
+            }
+            last = batch;
+            queried = batch.queried;
+            preparedTraversal = queried.snapshot.kind === 'prepared';
+            const { window, result } = batch;
             if (
-              batch.status === 'unavailable' &&
-              (batch.reason === 'incarnation_changed' || batch.reason === 'observation_lost') &&
-              request.cursor
+              !Number.isSafeInteger(window.examined) ||
+              window.examined < 0 ||
+              typeof window.exhausted !== 'boolean' ||
+              window.positions.length !== result.hits.length ||
+              window.positions.some(
+                (position, index) =>
+                  !Number.isSafeInteger(position) ||
+                  position < 0 ||
+                  position >= window.examined ||
+                  (index > 0 && position <= window.positions[index - 1]!),
+              )
             )
-              throw new ProblemError('search_restart_required');
-            throw ready();
-          }
-          last = batch;
-          queried = batch.queried;
-          const { window, result } = batch;
-          if (
-            !Number.isSafeInteger(window.examined) ||
-            window.examined < 0 ||
-            typeof window.exhausted !== 'boolean' ||
-            window.positions.length !== result.hits.length ||
-            window.positions.some(
-              (position, index) =>
-                !Number.isSafeInteger(position) ||
-                position < 0 ||
-                position >= window.examined ||
-                (index > 0 && position <= window.positions[index - 1]!),
-            )
-          )
-            throw ready();
-          examined += window.examined;
-          if (examined > taggedScanBound) throw ready();
-          const inSpace = new Set<string>();
-          if (spacePopulation) {
-            const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
-            for (let offset = 0; offset < subjects.length; offset += 160) {
-              const batch = subjects.slice(offset, offset + 160);
-              const members = await spacePopulation.contains(batch.map((candidate) => candidate.key.id));
-              for (let index = 0; index < batch.length; index++) {
-                const candidate = batch[index]!;
-                if (members[index]) inSpace.add(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`);
+              throw ready();
+            examined += window.examined;
+            if (examined > scanBound) throw ready();
+            const inSpace = new Set<string>();
+            if (spacePopulation) {
+              const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
+              for (let offset = 0; offset < subjects.length; offset += 160) {
+                const batch = subjects.slice(offset, offset + 160);
+                const members = await spacePopulation.contains(batch.map((candidate) => candidate.key.id));
+                for (let index = 0; index < batch.length; index++) {
+                  const candidate = batch[index]!;
+                  if (members[index]) inSpace.add(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`);
+                }
               }
             }
+            const selectedCandidates = spacePopulation
+              ? result.hits.filter((candidate) =>
+                  inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
+                )
+              : result.hits;
+            const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, {
+              ...currentContext,
+              ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
+            });
+            const selected = selectCurrentPredicatePage(selectedCandidates, current, {
+              limit: admitted.limit - hits.length,
+              exhausted: window.exhausted,
+              seen,
+            });
+            hits.push(...selected.hits);
+            for (const [kind, count] of kindWitnessCounts(selected.witnesses))
+              witnesses.set(kind, (witnesses.get(kind) ?? 0) + count);
+            consumed =
+              selected.consumed === 0 || selected.consumed === result.hits.length
+                ? window.examined
+                : window.positions[selected.consumed - 1]! + 1;
+            await coverage.consume(batch.execution, consumed);
+            exhausted = consumed === window.examined && window.exhausted;
+            if (exhausted || hits.length === admitted.limit) break;
+            const remaining = scanBound - examined;
+            const size = taggedWorkEngineWindow({
+              prepared: preparedTraversal,
+              remainingHits: admitted.limit - hits.length,
+              remainingRaw: remaining,
+            });
+            if (size < 1) break;
+            refill = {
+              execution: batch.execution,
+              consumed,
+              size,
+            };
           }
-          const selectedCandidates = spacePopulation
-            ? result.hits.filter((candidate) =>
-                inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
-              )
-            : result.hits;
-          const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, {
-            ...currentContext,
-            ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
-          });
-          const selected = selectCurrentPredicatePage(selectedCandidates, current, {
-            limit: admitted.limit - hits.length,
-            exhausted: window.exhausted,
-            seen,
-          });
-          hits.push(...selected.hits);
-          for (const [kind, count] of kindWitnessCounts(selected.witnesses))
-            witnesses.set(kind, (witnesses.get(kind) ?? 0) + count);
-          consumed =
-            selected.consumed === 0 || selected.consumed === result.hits.length
-              ? window.examined
-              : window.positions[selected.consumed - 1]! + 1;
-          await coverage.consume(batch.execution, consumed);
-          exhausted = consumed === window.examined && window.exhausted;
-          if (exhausted || hits.length === admitted.limit) break;
-          const remaining = taggedScanBound - examined;
-          if (remaining < 1) break;
-          refill = {
-            execution: batch.execution,
-            consumed,
-            size: Math.min(200, remaining, 2 * (admitted.limit - hits.length) + 1),
-          };
+          if (!last || (!exhausted && hits.length < admitted.limit)) {
+            if (taggedWork && !request.cursor && !admitted.collectionDirectory && !preparedTraversal) {
+              // Sparse direct output cannot publish a useful cursor. Retire its observation,
+              // then materialize this same admitted predicate, source and canonical order.
+              await coverage.dispose();
+              if (observationOpened) {
+                await config.consumer.closeObservation(queried, nativeContext);
+                observationOpened = false;
+              }
+              coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
+              const prepared = await coverage.capture(nativePlan, 'prepared');
+              if (prepared.status === 'preparing') {
+                await config.prepare?.(prepared.repair);
+                await config.consumer.repairStep(prepared.repair, nativeContext);
+                throw ready();
+              }
+              if (prepared.status !== 'captured') throw ready();
+              queried = prepared.queried;
+              observationOpened = true;
+              repair = prepared.repair;
+              preparedTraversal = true;
+              refill = undefined;
+              hits.length = 0;
+              seen.clear();
+              witnesses.clear();
+              last = undefined;
+              consumed = 0;
+              examined = 0;
+              exhausted = false;
+              continue scan;
+            }
+          }
+          break scan;
         }
         if (!last || (!exhausted && hits.length < admitted.limit)) {
           // Advance actual finite preparation, never publish an empty cursor chain.
