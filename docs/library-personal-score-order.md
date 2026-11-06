@@ -162,3 +162,8 @@ separate processes. One bun heap must not keep unit-test modules while Vite, Ker
 Decision: Progress window history identity uses the installed router history key with href fallback; absent optional
 window fields are omitted. Host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines
 cover native order, own-vote currentness and public aggregate. Fewer test lines than product lines.
+
+Decision: Library score and progress native children decorate `startWorker`'s live `createKernelWorkModules` list so
+Content ambient and the Semantic domain reach registrations once. `KERNEL_WORK_MODULES` remains a registration-name
+pin and is not executed as the child composition. Host-walk tests keep pinning the seeded voter, second-account and
+anonymous score journey; no extra suite for the decorator.
