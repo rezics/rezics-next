@@ -41,4 +41,4 @@ controller retains native, command acknowledgement/current-reader/focus, classif
 
 Decision: the six-persona walk for this page runs as the seeded question-management walk under worker-check, so the check owns the walk stack, its startup and its cleanup. Its acceptance stays open until a check passes every recorded step.
 
-Acceptance state, recorded per stage: specified in the held question-classification walk; implemented as `apps/web/scripts/seeded-question-management-walk.ts`; exposed to a passing check: not yet (the walk has not run past its stack start); tested by the focused mounted suites and the generator closure test; promoted: not yet.
+Acceptance state, recorded per stage: specified in the held question-classification walk; implemented as `apps/web/scripts/seeded-question-management-walk.ts`; exposed to a passing check: not yet (the walk has not run past its stack start); tested by the focused mounted suites, the generator closure test and the installed-package schema test that pins the published management and caption-history shapes (`packages/client/tests/question-management-schemas.test.ts`); promoted: not yet.
