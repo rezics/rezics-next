@@ -9,6 +9,8 @@ import { zeroScopeWork } from '../../src/search/scope-work.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkAllowance } from '../../src/library/contract/work-dimensions.ts';
 
+const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 const first = '018f0000-0000-7000-8000-00a000000001';
 const second = '018f0000-0000-7000-8000-00a000000002';
 const third = '018f0000-0000-7000-8000-00a000000003';

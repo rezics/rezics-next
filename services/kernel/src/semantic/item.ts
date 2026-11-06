@@ -145,7 +145,7 @@ export function relationSlotForStatement(
   relation?: RelationDefinition,
 ): string {
   const fallback = statementSlotId(subject, property);
-  if (!hasRelationSlots(property, relation) || !isObject(body) || !isObject(body.value)) return fallback;
+  if (!relation || !hasRelationSlots(property, relation) || !isObject(body) || !isObject(body.value)) return fallback;
   const value = body.value as { type?: unknown; content?: unknown };
   if (value.type === 'value' && typeof value.content === 'string' && routeOf(value.content) !== null) {
     const key = relation.slotKey

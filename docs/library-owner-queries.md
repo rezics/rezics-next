@@ -552,6 +552,17 @@ A separate NOT-state control includes complete no-entry cases and must not repla
 
 ## Delivery boundary and required native evidence
 
+Decision: a saved rule stays on the owner's private population unless its stored Source explicitly selects the
+catalogue; private working reads follow current membership, while public readers consume only the last complete
+explicit publication until it is replaced or removed. An admitted preparation definition always carries its resolved
+source; a boundary input that omits it is owner-compatible execution.
+
+Decision: whole-query publication takes its population from the stored Source, never from the predicate's leaves. A
+catalogue Source stages Search's public catalogue population, and every leaf must be catalogue. An owner Source stages
+its private capture and evaluates every leaf through Search's owner scope; catalogue leaves additionally pin Search's
+public catalogue observation for seal and activation. The native proofs are
+[collection-publication-catalogue.test.ts](../services/kernel/test/library/collection-publication-catalogue.test.ts).
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.

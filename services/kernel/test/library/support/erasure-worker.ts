@@ -65,6 +65,9 @@ export async function createOwnedErasureFixture() {
   const { createWriteRateLimiter } = await import('../../../src/access/write-rate.ts');
   const { bootstrapRelease, GLOBAL_CONTEXT } = await import('../../../src/semantic/definitions.ts');
   const { createWorkClient } = await import('../../../src/work/client.ts');
+  const { bindExecutionContract } = await import('../../../src/command/execution-contract.ts');
+  const { historyExecutionPort } = await import('../../../src/history/operational-work.ts');
+  const { workExecutionPort } = await import('../../../src/work/selected-runtime.ts');
   const { nativeFixture } = await import('../../access/native-account-bindings-fixture.ts');
   const { openGrowthDatabase } = await import('../../support/growth.ts');
   const { createPersonas } = await import('../../support/personas.ts');
@@ -119,7 +122,7 @@ export async function createOwnedErasureFixture() {
       })
     ).subject.id as string;
   }
-  const client = await createWorkClient(db.url);
+  const client = bindExecutionContract(await createWorkClient(db.url), workExecutionPort(), historyExecutionPort);
   let worker: Awaited<ReturnType<typeof startErasureWorker>> | undefined;
   return {
     db,

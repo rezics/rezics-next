@@ -15,7 +15,7 @@ import {
   preparationDefinitionBases,
   type MembersPreparation,
   type MembersPreparationHistory,
-  type PreparationDefinition,
+  type PreparationDefinitionInput,
   type PreparingEpisode,
 } from './members-preparation.ts';
 
@@ -63,7 +63,7 @@ export async function runMembersPreparationRequest<T>(
   input: Readonly<{
     actor: Actor;
     collectionId: string;
-    definition: PreparationDefinition;
+    definition: PreparationDefinitionInput;
     deadline?: number;
   }>,
   source: (request: MembersPreparationRequest) => Promise<T>,

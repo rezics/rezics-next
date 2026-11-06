@@ -30,9 +30,14 @@ type ReviewState =
 const buttonClass =
   'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 
-/** An owner-only private read joins the admitted rule basis to this exact dynamic results page. */
+/**
+ * An owner-only private read joins the admitted rule basis to this exact dynamic results page.
+ * A refreshed page observation resets the join through the binding, never by remounting the review, so an
+ * in-flight owner read keeps its own instance and settles on the same handler that started it.
+ */
 export function DynamicRuleResultsReview({
   page,
+  pageObservation = 0,
   viewerId,
   resultsHref,
   read = async (id) => {
@@ -41,6 +46,7 @@ export function DynamicRuleResultsReview({
   },
 }: {
   page: ResultsPage;
+  pageObservation?: number;
   viewerId: string | null;
   resultsHref: string;
   read?: (id: string) => Promise<RulePage>;
@@ -49,7 +55,16 @@ export function DynamicRuleResultsReview({
   const headingId = useId();
   const locale = getLocale();
   const ownerId = page.curatorAccountId ?? null;
-  const binding = JSON.stringify([page.id, ownerId, viewerId, owner.subject, owner.generation, owner.lifetime, locale]);
+  const binding = JSON.stringify([
+    page.id,
+    ownerId,
+    viewerId,
+    owner.subject,
+    owner.generation,
+    owner.lifetime,
+    locale,
+    pageObservation,
+  ]);
   const bindingRef = useRef(binding);
   const sequence = useRef(0);
   const ownerCurrentRef = useRef<() => boolean>(() => false);
