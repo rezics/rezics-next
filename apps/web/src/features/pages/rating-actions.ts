@@ -4,7 +4,15 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { prepareExpectedReader, type ExpectedReader } from '../../session/expected-reader';
-import { validRatingUnits, writeRatingVote, preparedRatingReader, writeOwnRating } from './subject-ratings';
+import type { PersonalScoreWriteResult } from '../../library/personal-score';
+import {
+  QUESTION,
+  readRatingQuestion,
+  validRatingUnits,
+  writeRatingVote,
+  preparedRatingReader,
+  writeOwnRating,
+} from './subject-ratings';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -36,23 +44,45 @@ export async function writeSubjectRatingForCurrentReader(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: ReturnType<typeof validateChange>,
-): Promise<boolean> {
+): Promise<PersonalScoreWriteResult> {
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
-    if (!authorization) return false;
+    if (!authorization) return 'rejected';
     const reader = await preparedRatingReader(request, authorization);
-    if (reader !== input.expectedReader) return false;
-    return writeOwnRating(client, input.subjectId, authorization, input.units, input.idempotencyKey);
+    if (reader !== input.expectedReader) return 'rejected';
+    const question = await readRatingQuestion(client);
+    if (input.units !== null && (!question || !validRatingUnits(input.units, question.scale))) return 'rejected';
+    return writeRatingVote(client, {
+      subjectId: input.subjectId,
+      questionId: QUESTION,
+      authorization,
+      units: input.units,
+      idempotencyKey: input.idempotencyKey,
+      ...(question
+        ? {
+            observation: {
+              subjectId: input.subjectId,
+              question: {
+                id: question.id,
+                revision: question.revision,
+                grain: question.grain,
+                meaning: question.meaning ?? question.label,
+                scale: question.scale,
+              },
+            },
+          }
+        : {}),
+    });
   } catch {
-    return false;
+    return 'uncertain';
   }
 }
 
 /** The enhanced rating control writes through the session held by the Worker. */
 export const changeSubjectRating = createServerFn({ method: 'POST' })
   .validator(validateChange)
-  .handler(async ({ data }): Promise<boolean> => {
+  .handler(async ({ data }): Promise<PersonalScoreWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     try {
@@ -60,7 +90,7 @@ export const changeSubjectRating = createServerFn({ method: 'POST' })
       const { kernelClient } = await import('../../kernel/client');
       return writeSubjectRatingForCurrentReader(kernelClient(), request, env as Partial<SessionEnv>, data);
     } catch {
-      return false;
+      return 'uncertain';
     }
   });
 
@@ -183,6 +213,8 @@ export async function writeQuestionBoundRatingForCurrentReader(
   input: QuestionBoundRatingInput,
 ) {
   input = validateBoundRating(input);
+  // Conditional native providers remain unavailable without their atomic participant guard.
+  if (input.question.id !== QUESTION) return 'rejected' as const;
   const authorization = await prepareExpectedReader(request, env, input);
   if (!authorization) return 'rejected' as const;
   return writeRatingVote(client, {

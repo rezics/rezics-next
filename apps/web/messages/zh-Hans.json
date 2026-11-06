@@ -1768,6 +1768,8 @@
   "subject_qualifiers": "限定条件",
   "subject_rating_control_clear": "清除评分",
   "subject_rating_control_error": "评分未能保存，已恢复为之前的评分。",
+  "subject_rating_control_uncertain": "评分结果尚未确认。请用同一保存请求重试以确认。",
+  "subject_rating_control_stale": "这次评分核对已过期。请查看当前问题后再保存。",
   "subject_rating_control_label": "你的评分",
   "subject_rating_control_save": "保存评分",
   "subject_rating_control_unrated": "尚未评分",

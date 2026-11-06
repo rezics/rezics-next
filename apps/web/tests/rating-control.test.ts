@@ -1,22 +1,19 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  QUESTION,
-  preparedRatingReader,
-  readOwnRating,
-  type RatingQuestion,
-  type SubjectOwnRating,
-} from '../src/features/pages/subject-ratings';
+import type { RatingQuestion, SubjectOwnRating } from '../src/features/pages/subject-ratings';
 import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
-import {
-  applyOptimisticRatingChange,
-  RatingControlView,
-  type RatingControlState,
-} from '../src/features/pages/rating-control';
-import { subjectOwnRatingQuery, subjectRatingQuery } from '../src/features/pages/subject-queries';
-import { m } from '../src/paraglide/messages.js';
+import type { RatingControlState } from '../src/features/pages/rating-control';
+
+const { QUESTION, preparedRatingReader, readOwnRating } = await import('../src/features/pages/subject-ratings');
+const { applyOptimisticRatingChange, RatingControlView } = await import('../src/features/pages/rating-control');
+const { subjectOwnRatingQuery, subjectRatingQuery } = await import('../src/features/pages/subject-queries');
+const { m } = await import('../src/paraglide/messages.js');
 
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const returnTo = `/en/subjects/${subjectId}/kokoro`;
@@ -345,6 +342,82 @@ test('a current write with an uncertain response keeps its optimistic value and 
   expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 15 });
   expect(failures).toEqual([{ uncertain: true }]);
   await client.cancelQueries();
+});
+
+test('an uncertain write result keeps the optimistic value for the same command', async () => {
+  const client = new QueryClient();
+  const binding = personalLease(subjectId, 'en');
+  const queryKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
+  client.setQueryData(queryKey, { reader: binding.reader, kind: 'ready', units: 0 } as const);
+  const key = '11111111-1111-4111-8111-111111111111';
+  const writes: string[] = [];
+  const failures: { uncertain: boolean; stale?: boolean }[] = [];
+
+  await expect(
+    applyOptimisticRatingChange({
+      queryClient: client,
+      subjectId,
+      locale: 'en',
+      binding,
+      units: 15,
+      pendingCommand: { units: 15, key },
+      write: async (input) => {
+        writes.push(input.idempotencyKey);
+        return 'uncertain';
+      },
+      onFailure: (failure) => failures.push(failure),
+    }),
+  ).resolves.toBe(false);
+
+  expect(writes).toEqual([key]);
+  expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 15 });
+  expect(failures).toEqual([{ uncertain: true }]);
+  await client.cancelQueries();
+});
+
+test('a stale review restores the previous value and does not reuse that command', async () => {
+  const client = new QueryClient();
+  const binding = personalLease(subjectId, 'en');
+  const queryKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
+  client.setQueryData(queryKey, { reader: binding.reader, kind: 'ready', units: 8 } as const);
+  const failures: { uncertain: boolean; stale?: boolean }[] = [];
+
+  await expect(
+    applyOptimisticRatingChange({
+      queryClient: client,
+      subjectId,
+      locale: 'en',
+      binding,
+      units: 15,
+      write: async () => 'stale',
+      onFailure: (failure) => failures.push(failure),
+    }),
+  ).resolves.toBe(false);
+
+  expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 8 });
+  expect(failures).toEqual([{ uncertain: false, stale: true }]);
+  await client.cancelQueries();
+});
+
+test('an uncertain saved value keeps Save enabled for the same units', () => {
+  const html = renderToStaticMarkup(
+    createElement(RatingControlView, {
+      question: ratingQuestion,
+      subjectId,
+      locale: 'en',
+      returnTo,
+      state: { kind: 'ready', units: 15 },
+      pending: false,
+      failure: m.subject_rating_control_uncertain({}, { locale: 'en' }),
+      retryable: true,
+      onSet: () => {},
+      onClear: () => {},
+    }),
+  );
+  const [interactive] = html.split('<noscript>') as [string, string];
+  const actions = interactive.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  expect(actions[0]).not.toContain('disabled=""');
+  expect(interactive).toContain(m.subject_rating_control_uncertain({}, { locale: 'en' }));
 });
 
 test('setting, changing and clearing each issue one bounded write', async () => {
