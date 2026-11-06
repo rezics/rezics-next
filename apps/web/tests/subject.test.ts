@@ -35,7 +35,6 @@ async function messages(locale: string): Promise<Record<string, string>> {
   return (await Bun.file(join(app, 'messages', `${locale}.json`)).json()) as Record<string, string>;
 }
 
-
 let browser: Browser | undefined;
 
 // The documented command, in its own process group so that Vite and workerd stop with it.

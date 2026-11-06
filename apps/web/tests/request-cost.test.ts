@@ -247,7 +247,7 @@ function site(): Promise<string> {
   return started;
 }
 
-afterAll(() => {
+afterAll(async () => {
   kernel.stop(true);
   await server?.stop();
 });

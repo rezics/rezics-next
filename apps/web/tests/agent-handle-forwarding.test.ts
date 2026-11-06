@@ -60,7 +60,6 @@ const kernel = Bun.serve({
   },
 });
 
-
 let base: Promise<string> | undefined;
 function mainContent(html: string): string {
   const content = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)?.[1];

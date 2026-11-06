@@ -114,8 +114,6 @@ const fake = Bun.serve({
   },
 });
 
-
-
 // The documented command, pointed at the fake through the environment it reads in development.
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;

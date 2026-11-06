@@ -179,15 +179,12 @@ const fake = Bun.serve({
   },
 });
 
-
-
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
   started ??= startDevServer({
     env: {
-      PUBLIC_ORIGIN: origin,
       KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
       WEBSITE_CLIENT_ID: 'rezics-website',

@@ -225,7 +225,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 

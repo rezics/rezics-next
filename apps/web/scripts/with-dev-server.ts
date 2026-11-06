@@ -1,9 +1,6 @@
 import { join, resolve } from 'node:path';
 import { startDevServer, type DevServerOptions } from '../tests/support/dev-server.ts';
-import {
-  sharedDevServerEnvName,
-  writeSharedDevServer,
-} from '../tests/support/dev-server-fixture.ts';
+import { sharedDevServerEnvName, writeSharedDevServer } from '../tests/support/dev-server-fixture.ts';
 import { prepareViteDepCache } from '../tests/support/vite-dep-cache.ts';
 
 const app = resolve(import.meta.dir, '..');

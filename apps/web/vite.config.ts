@@ -1,7 +1,7 @@
 import { viteNonceMarker } from './src/security/headers.ts';
 import { testFixtureEnvHeader } from './src/test-fixture-header.ts';
 import { realpathSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { defineConfig } from 'vite';
@@ -22,11 +22,38 @@ if (nativeWebTls && (nativeWebHost !== 'web.native.rezics.com' || !nativeWebCert
   throw new Error('Native web TLS requires the reserved host and its test certificate');
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
-const dependencyRoot = realpathSync(join(workspaceRoot, 'node_modules'));
 const testRuntimeBindings = fileURLToPath(new URL('./src/test-runtime-bindings.ts', import.meta.url));
-const fontDependencyRoots = ['manrope', 'source-serif-4', 'geist-mono'].map((name) =>
-  realpathSync(join(appRoot, 'node_modules', '@fontsource-variable', name)),
-);
+
+function bunInstallRoot(resolved: string): string | undefined {
+  const marker = `${sep}node_modules${sep}.bun${sep}`;
+  const index = resolved.indexOf(marker);
+  if (index === -1) return undefined;
+  return resolved.slice(0, index + `${sep}node_modules`.length);
+}
+
+function resolvedInstallRoots(): string[] {
+  const roots = new Set<string>();
+  for (const candidate of [
+    join(workspaceRoot, 'node_modules'),
+    join(appRoot, 'node_modules'),
+    join(appRoot, 'node_modules/@tanstack/react-start'),
+    ...['manrope', 'source-serif-4', 'geist-mono'].map((name) =>
+      join(appRoot, 'node_modules', '@fontsource-variable', name),
+    ),
+  ]) {
+    try {
+      const resolved = realpathSync(candidate);
+      roots.add(resolved);
+      const store = bunInstallRoot(resolved);
+      if (store) roots.add(store);
+    } catch {
+      // A missing optional package must not block config load.
+    }
+  }
+  return [...roots];
+}
+
+const dependencyRoots = resolvedInstallRoots();
 let inspectorPort: number | false = false;
 if (configuredInspectorPort !== undefined) {
   const parsedInspectorPort = Number(configuredInspectorPort);
@@ -55,12 +82,7 @@ export default defineConfig((context) => {
       ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
       // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
       fs: {
-        allow: [
-          workspaceRoot,
-          dependencyRoot,
-          ...fontDependencyRoots,
-          ...(viteCacheDir ? [resolve(viteCacheDir)] : []),
-        ],
+        allow: [workspaceRoot, ...dependencyRoots, ...(viteCacheDir ? [resolve(viteCacheDir)] : [])],
       },
     },
     html: { cspNonce: viteNonceMarker },
@@ -83,7 +105,13 @@ export default defineConfig((context) => {
         ? [
             {
               name: 'rezics-test-fixture-env',
-              configureServer(server: { middlewares: { use: (handler: (req: { headers: Record<string, unknown> }, res: unknown, next: () => void) => void) => void } }) {
+              configureServer(server: {
+                middlewares: {
+                  use: (
+                    handler: (req: { headers: Record<string, unknown> }, res: unknown, next: () => void) => void,
+                  ) => void;
+                };
+              }) {
                 const directory = process.env.WEB_TEST_STATE_DIR;
                 if (!directory) return;
                 server.middlewares.use((req, _res, next) => {

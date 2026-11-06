@@ -179,7 +179,6 @@ const fake = Bun.serve({
   },
 });
 
-
 type ResourceScope = 'suite' | 'test';
 type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
 type ResourceLease<T> = OwnedResource & { value: Promise<T> };

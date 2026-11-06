@@ -206,8 +206,6 @@ const fake = Bun.serve({
   },
 });
 
-
-
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
@@ -229,14 +227,9 @@ function site(): Promise<string> {
   return started;
 }
 
-afterAll(() => {
+afterAll(async () => {
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await server?.stop();
 });
 
 async function html(path: string, init?: RequestInit): Promise<string> {

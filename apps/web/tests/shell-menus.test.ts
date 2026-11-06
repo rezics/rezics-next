@@ -11,7 +11,6 @@ const timeout = 300_000;
 type Messages = Record<string, string>;
 const messages = async (locale: string) => (await Bun.file(join(app, 'messages', `${locale}.json`)).json()) as Messages;
 
-
 let browser: Browser | undefined;
 const issuer = Bun.serve({
   port: 0,

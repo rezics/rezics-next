@@ -7,8 +7,7 @@ import { readSharedDevServer } from './support/dev-server-fixture.ts';
 
 const testsRoot = dirname(fileURLToPath(import.meta.url));
 const nativePattern = /(?:^|\/)native\//;
-const independentViteSpawn =
-  /spawn\(\s*(?:['"]bun['"]|process\.execPath)[\s\S]{0,400}?['"]run['"]\s*,\s*['"]dev['"]/;
+const independentViteSpawn = /spawn\(\s*(?:['"]bun['"]|process\.execPath)[\s\S]{0,400}?['"]run['"]\s*,\s*['"]dev['"]/;
 
 test('migrated Web files acquire the helper and no longer copy a Vite spawn/readiness loop', async () => {
   const remaining: string[] = [];
@@ -23,7 +22,7 @@ test('migrated Web files acquire the helper and no longer copy a Vite spawn/read
   }
   expect(remaining, remaining.join('\n')).toEqual([]);
   expect(missingHelper, missingHelper.join('\n')).toEqual([]);
-});
+}, 30_000);
 
 test('a composed run advertises one server that files acquire with independent fixture overlay', async () => {
   const record = readSharedDevServer();

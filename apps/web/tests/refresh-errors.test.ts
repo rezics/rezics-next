@@ -122,7 +122,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let browser: Browser | undefined;
 let browserStarting: Promise<Browser> | undefined;
 let browserClosing: Promise<void> | undefined;

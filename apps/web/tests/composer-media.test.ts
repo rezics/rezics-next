@@ -410,7 +410,6 @@ const fake = Bun.serve({
   },
 });
 
-
 test(
   'a media refusal keeps the reply draft and identifies unusable and processing images from one server round trip',
   async () => {
@@ -531,7 +530,6 @@ test(
   },
   timeout,
 );
-
 
 // The documented command, pointed at the fake through the environment it reads in development.
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;

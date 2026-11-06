@@ -1,6 +1,5 @@
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { join } from 'node:path';
 import type { KernelClient } from '@rezics/client';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -11,7 +10,6 @@ import homePage from '../src/kernel/recorded/home-page.json' with { type: 'json'
 import subjectPage from '../src/kernel/recorded/subject-page.json' with { type: 'json' };
 import agentPage from '../src/kernel/recorded/agent-page.json' with { type: 'json' };
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const resource = 'https://api.rezics.test';
@@ -57,8 +55,6 @@ const facetTypes = [
 
 let matchCount = 1;
 let browser: Browser | undefined;
-let originPromise: Promise<string> | undefined;
-let serverOutput = '';
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -208,7 +204,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
@@ -248,7 +243,7 @@ async function openLive(path: string): Promise<Page> {
       .innerText()
       .catch(() => 'unavailable');
     throw new Error(
-      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; calls: ${JSON.stringify(calls.slice(-12))}; server: ${serverOutput}`,
+      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; calls: ${JSON.stringify(calls.slice(-12))}; server: ${server?.diagnostics() ?? ''}`,
     );
   }
   try {
@@ -259,7 +254,7 @@ async function openLive(path: string): Promise<Page> {
       .innerText()
       .catch(() => 'unavailable');
     throw new Error(
-      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; server: ${serverOutput}`,
+      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; server: ${server?.diagnostics() ?? ''}`,
     );
   }
   return page;
@@ -273,12 +268,7 @@ const expectedAcceptLanguage = (locale: (typeof locales)[number]) =>
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await server?.stop();
 });
 
 test(
@@ -308,7 +298,7 @@ test(
           await option.waitFor({ timeout: 10_000 });
         } catch (error) {
           throw new Error(
-            `${String(error)}; suggestion calls: ${JSON.stringify(calls.filter((call) => call.path.includes('suggest')))}; body: ${(await suggestionsPage.locator('body').innerText()).slice(0, 1500)}; server: ${serverOutput}`,
+            `${String(error)}; suggestion calls: ${JSON.stringify(calls.filter((call) => call.path.includes('suggest')))}; body: ${(await suggestionsPage.locator('body').innerText()).slice(0, 1500)}; server: ${server?.diagnostics() ?? ''}`,
           );
         }
         if (locale === 'zh-Hans') {

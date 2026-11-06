@@ -329,7 +329,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let teardownStarted = false;
 let serverStartupAbort: AbortController | undefined;
 const pendingServerStartups = new Set<Promise<string>>();
@@ -368,7 +367,7 @@ function cleanupSuite(): Promise<void> {
       run: () => startup,
       timeoutMs: 15_000,
     }));
-        await cleanupAll([
+    await cleanupAll([
       ...startupActions,
       { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
       { label: 'Vite process group', run: () => server?.stop(), timeoutMs: 8000 },

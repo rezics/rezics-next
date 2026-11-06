@@ -310,7 +310,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let browser: Browser | undefined;
 
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
@@ -440,12 +439,7 @@ async function deleteFromMenu(
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await server?.stop();
 });
 
 test(

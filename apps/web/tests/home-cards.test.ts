@@ -576,9 +576,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-
-let siteOutput = '';
-
 // The documented command, pointed at the fake through the environment it reads in development.
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
@@ -650,7 +647,7 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
           title: typeof body.title === 'string' ? body.title.slice(0, 64) : undefined,
         }
       : undefined;
-    const oidcDiagnostic = siteOutput
+    const oidcDiagnostic = (server?.diagnostics() ?? '')
       .split('\n')
       .filter((line) => line.includes('[web auth] OpenID authorization-code grant failed:'))
       .at(-1);

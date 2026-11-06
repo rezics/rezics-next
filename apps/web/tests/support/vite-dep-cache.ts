@@ -1,12 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -83,17 +76,14 @@ function freePort(): Promise<number> {
 async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, appRoot: string): Promise<void> {
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  const child = Bun.spawn(
-    ['bun', 'run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    {
-      cwd: appRoot,
-      env: { ...env, WEB_VITE_CACHE_DIR: stagingDirectory, REZICS_TEST_RUNTIME: '1' },
-      detached: true,
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  );
+  const child = Bun.spawn(['bun', 'run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+    cwd: appRoot,
+    env: { ...env, WEB_VITE_CACHE_DIR: stagingDirectory, REZICS_TEST_RUNTIME: '1' },
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const custody = ownBunProcess(child, { label: 'Vite dependency pre-bundle' });
   let lastError: unknown = new Error('pre-bundle has not served /en');
   try {
@@ -119,8 +109,7 @@ async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, ap
 /** Host-local Vite optimizeDeps cache keyed by bun.lock. Concurrent builders wait; a new lock gets a new directory. */
 export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): Promise<ViteDepCache> {
   const env = options.env ?? process.env;
-  const lockBytes =
-    options.lockBytes ?? readFileSync(join(options.workspaceRoot, 'bun.lock'));
+  const lockBytes = options.lockBytes ?? readFileSync(join(options.workspaceRoot, 'bun.lock'));
   const lockHash = hashLockfile(lockBytes);
   const directory = join(viteDepCacheRoot(env, options.cacheHome), lockHash);
   const pollIntervalMs = options.pollIntervalMs ?? 50;

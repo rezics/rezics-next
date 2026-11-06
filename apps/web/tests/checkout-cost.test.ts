@@ -1,6 +1,5 @@
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, mock, test } from 'bun:test';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { limitRead, readLimitKey } from '../src/rate-limit/read.ts';
 import { newCsrfToken } from '../src/session/csrf.ts';
@@ -9,8 +8,8 @@ import { prepareSession } from '../src/session/request.ts';
 let kernelOrigin = '';
 mock.module('cloudflare:workers', () => ({
   env: {
-      get KERNEL_ORIGIN() {,
-      return kernelOrigin;,
+    get KERNEL_ORIGIN() {
+      return kernelOrigin;
     },
   },
 }));
@@ -22,7 +21,6 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader() {},
 }));
 
-const app = join(import.meta.dir, '..');
 const contentId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const targetOfferId = contentId(1);
 const idempotencyKey = contentId(2);
@@ -281,11 +279,11 @@ function site(): Promise<string> {
   started ??= startDevServer({
     env: {
       KERNEL_ORIGIN: kernel.url.origin,
-        AUTH_ISSUER: `${kernel.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: 'rezics-website',
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: 'https://api.rezics.test',
-        WEBSITE_SCOPES: 'order:create order:read'
+      AUTH_ISSUER: `${kernel.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: 'rezics-website',
+      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+      API_RESOURCE: 'https://api.rezics.test',
+      WEBSITE_SCOPES: 'order:create order:read',
     },
     warmUpPaths: [],
   }).then((running) => {
@@ -295,7 +293,7 @@ function site(): Promise<string> {
   return started;
 }
 
-afterAll(() => {
+afterAll(async () => {
   kernel.stop(true);
   await server?.stop();
 });
