@@ -89,7 +89,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
           root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router })));
           await tick();
         });
-        expect(document.activeElement).toBe(outside);
+        expect(document.activeElement === outside, `${mode}: outside focus`).toBe(true);
         const opener = host.querySelector('button')!;
         expect(opener.textContent).toBe(m.sources_retry());
         let release!: (value: SourcesResult) => void;
@@ -176,22 +176,30 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         if (mode === 'empty' || mode === 'error') {
           expect(host.textContent).toContain(m.sources_empty());
-          expect(document.activeElement, `${mode}: final keyboard focus`).toBe(
-            host.querySelector('[data-slot="view-heading"] h1'),
-          );
-          expect(host.querySelector('button')).toBeNull();
+          expect(
+            document.activeElement === host.querySelector('[data-slot="view-heading"] h1'),
+            `${mode}: final keyboard focus`,
+          ).toBe(true);
+          expect(
+            [...host.querySelectorAll('button')].filter((button) => button.textContent === m.sources_retry()),
+          ).toHaveLength(0);
         } else if (mode === 'failed' || mode === 'denied') {
-          expect(document.activeElement).toBe(
-            opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1'),
-          );
+          expect(
+            document.activeElement ===
+              (opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1')),
+            `${mode}: retry focus`,
+          ).toBe(true);
           expect(host.querySelector('button')?.disabled).toBe(false);
         } else {
-          expect(document.activeElement).not.toBe(host.querySelector('[data-slot="view-heading"] h1'));
+          expect(
+            document.activeElement === host.querySelector('[data-slot="view-heading"] h1'),
+            `${mode}: retired focus`,
+          ).toBe(false);
           if (mode === 'moved' || mode === 'retired' || mode === 'revisit')
-            expect(document.activeElement).toBe(outside);
+            expect(document.activeElement === outside, `${mode}: outside focus`).toBe(true);
           if (mode === 'pointer' || ['moved-back', 'tab', 'blur', 'pointer-departure'].includes(mode))
-            expect(document.activeElement).toBe(document.body);
-          if (mode === 'unfocused') expect(document.activeElement).toBe(outside);
+            expect(document.activeElement === document.body, `${mode}: body focus`).toBe(true);
+          if (mode === 'unfocused') expect(document.activeElement === outside, `${mode}: outside focus`).toBe(true);
         }
         if (mode === 'canonical') {
           expect(router.state.location.pathname).toEndWith('/renamed/sources');
