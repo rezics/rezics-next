@@ -37,6 +37,8 @@ const sessionModule = await import('../src/session/query');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
 let joinAdvice: RealmJoinAdvice = { state: 'current', allowed: true };
 const joinAdviceReads: string[] = [];
+let membershipAction: () => Promise<unknown> = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
+const membershipActionCalls: string[] = [];
 mock.module('../src/community/realm-membership-actions', () => ({
   readRealmMembership: ({ data }: { data: { realmId: string } }) =>
     realmMembershipTestReaders.readMembership(data.realmId),
@@ -44,6 +46,16 @@ mock.module('../src/community/realm-membership-actions', () => ({
     joinAdviceReads.push(data.realmId);
     return realmMembershipTestReaders.readJoinAdvice(data.realmId);
   },
+}));
+mock.module('../src/community/space-actions', () => ({
+  changeRealmMembership: (input: { data: { realmId: string; action: string } }) => {
+    membershipActionCalls.push(`${input.data.realmId}:${input.data.action}`);
+    return membershipAction();
+  },
+  changeRealmPublication: async () => ({ kind: 'denied' }),
+  readRealmBoards: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
+  readRealmPublications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
+  readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
 }));
 const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } =
   await import('../src/community/realm-home-native');
@@ -398,6 +410,8 @@ async function paint(page: SpacePageData, source = operations, admission?: Space
 }
 beforeEach(() => {
   joinAdviceReads.length = 0;
+  membershipActionCalls.length = 0;
+  membershipAction = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
   joinAdvice = { state: 'current', allowed: true };
   realmMembershipTestReaders.readMembership = async () => null;
   realmMembershipTestReaders.readJoinAdvice = async () => joinAdvice;
@@ -406,8 +420,13 @@ afterEach(async () => {
   await settle(() => root.unmount());
   root = createRoot(host);
   client.clear();
+  router.history.push('/en/spaces/realm');
+  await router.load();
   calls.length = 0;
   joinAdviceReads.length = 0;
+  membershipActionCalls.length = 0;
+  membershipAction = async () => ({ outcome: 'accepted', workflowId: 'membership-visit' });
+  boardRead = async () => ({ status: 200, data: { items: [], next: null } });
   joinAdvice = { state: 'current', allowed: true };
   session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
   visitLocale = 'en';
@@ -721,8 +740,37 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
                               title: 'Ordinary thread',
                               comments: { state: 'current', kind: 'exact', value: 1 },
                             },
+                            {
+                              id: id(84),
+                              title: 'Popular thread',
+                              comments: { state: 'current', kind: 'lower-bound', value: 5 },
+                            },
+                            {
+                              id: id(85),
+                              title: 'Unknown replies thread',
+                              comments: { state: 'unavailable' },
+                            },
+                            {
+                              id: id(86),
+                              title: 'Beyond recent prefix',
+                              comments: { state: 'current', kind: 'exact', value: 99 },
+                            },
                           ],
                         },
+                      },
+                      {
+                        id: id(82),
+                        title: 'Quiet Board',
+                        purpose: 'discussion',
+                        visibility: 'protected',
+                        recent: { state: 'current', complete: true, threads: [] },
+                      },
+                      {
+                        id: id(83),
+                        title: 'Unavailable Board',
+                        purpose: 'discussion',
+                        visibility: 'draft',
+                        recent: { state: 'unavailable' },
                       },
                     ],
                     next: null,
@@ -742,15 +790,27 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
     await settle(() => {});
     expect(restored).toEqual(['selected-window']);
     const section = host.querySelector('[data-slot="realm-community-boards"]')!;
-    const link = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;
+    const boardLinks = [...section.querySelectorAll<HTMLAnchorElement>('[data-slot="realm-board-link"]')];
+    expect(boardLinks.map((item) => item.textContent)).toEqual(['Supplied Board', 'Quiet Board', 'Unavailable Board']);
+    const link = boardLinks[0]!;
     expect(link.textContent).toBe('Supplied Board');
     expect(link.closest('h3')).not.toBeNull();
     expect(link.textContent).not.toContain('Independent description');
     expect(link.className).not.toContain('absolute');
-    expect(section.querySelectorAll('a')).toHaveLength(2);
+    expect(section.querySelectorAll('a')).toHaveLength(6);
     const recent = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-recent-link"]')!;
     expect(recent.textContent).toBe('Ordinary thread');
     expect(section.textContent).toContain(m.realm_board_recent_replies({ count: '1' }));
+    expect(section.textContent).toContain(m.realm_board_recent_replies_more({ count: '5' }));
+    expect(section.textContent).toContain(m.realm_board_recent_replies_unavailable());
+    expect(section.querySelectorAll('[data-slot="realm-board-recent-link"]')).toHaveLength(3);
+    expect(section.textContent).not.toContain('Beyond recent prefix');
+    expect(section.querySelector('[data-slot="realm-board-recent-empty"]')?.textContent).toBe(
+      m.realm_board_recent_empty(),
+    );
+    expect(section.querySelector('[data-slot="realm-board-recent-unavailable"]')?.textContent).toBe(
+      m.realm_board_recent_unavailable(),
+    );
     const destination = new URL(link.href, 'https://site.test');
     expect(destination.pathname).toBe(`/${locale}/boards/${id(80)}`);
     expect(destination.searchParams.get('returnTo')).toBe(`${returnTo}#realm-board-${id(80)}`);
@@ -775,7 +835,103 @@ test.each(['en', 'zh-Hant', 'ja'] as const)(
   },
 );
 
-test('native home mapping admits recent discussions from the Board shelf extra fields', async () => {
+test('acknowledged native membership refresh keeps the selected Board visit current through thread return', async () => {
+  visitLocale = 'en';
+  router.history.push('/en/spaces/realm?node=boards&cursor=selected-window');
+  await router.load();
+  native = fixture(0, 'none');
+  native.presentation.members = { state: 'current', count: 7, version: 'members-7' };
+  const shelfCursorReads: string[] = [];
+  boardRead = async ({ cursor }) => {
+    shelfCursorReads.push(cursor ?? '');
+    return {
+      status: 200,
+      data: {
+        items: [
+          {
+            id: id(80),
+            realmId: id(1),
+            route: 1,
+            visibility: 'published',
+            securityRevision: '1',
+            createdAt: '2026-10-01T00:00:00Z',
+            title: 'Supplied Board',
+            purpose: 'discussion',
+            availability: 'available',
+            recent: {
+              state: 'current',
+              complete: true,
+              threads: [
+                {
+                  thread: { id: id(81), title: 'Ordinary thread' },
+                  target: { kind: 'thread', id: id(81), boardId: id(80) },
+                  comments: {
+                    state: 'current',
+                    cohort: 'public',
+                    count: { kind: 'exact', value: 1 },
+                    lastActivityAt: '2026-11-01T00:00:00Z',
+                    source: { epoch: 1, position: '16' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        next: null,
+      },
+    };
+  };
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+  const initialRead = capture();
+  const initialPage = await readNativeRealmHome(operations, input);
+  const initialAdmission = bindSpacePageResult(initialPage, initialRead, {
+    kind: 'signed-in',
+    subject: session.subject,
+  })!;
+  await paint(initialPage, operations, initialAdmission);
+  await settle(() => {});
+  expect(shelfCursorReads).toEqual(['selected-window']);
+  expect(host.querySelector('[data-slot="realm-community-boards"]')).not.toBeNull();
+
+  const join = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === m.realm_join())!;
+  await settle(() => {
+    join.focus();
+    join.click();
+  });
+  await settle(() => {});
+  expect(membershipActionCalls).toEqual([`${id(1)}:join`]);
+  expect(host.textContent).toContain(m.realm_membership_command_uncertain());
+
+  native = fixture(0, 'member');
+  native.presentation.members = { state: 'current', count: 7, version: 'members-7' };
+  const refreshedRead = capture();
+  const refreshedPage = await readNativeRealmHome(operations, input);
+  const refreshedAdmission = bindSpacePageResult(refreshedPage, refreshedRead, {
+    kind: 'signed-in',
+    subject: session.subject,
+  })!;
+  await paint(refreshedPage, operations, refreshedAdmission);
+  await settle(() => {});
+  await settle(() => {});
+
+  expect(host.querySelector('[data-slot="realm-membership"]')?.getAttribute('data-member-state')).toBe('member');
+  expect(host.querySelector('[data-slot="community-members"]')?.textContent).toBe(m.board_community_members({ count: 7 }));
+  expect(document.activeElement?.id).toBe('realm-boards-heading');
+  expect(shelfCursorReads).toEqual(['selected-window', 'selected-window']);
+  const section = host.querySelector('[data-slot="realm-community-boards"]')!;
+  const boardLink = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;
+  const realmReturn = new URL(boardLink.href, 'https://site.test').searchParams.get('returnTo');
+  expect(realmReturn).toBe(`/en/spaces/realm?node=boards&cursor=selected-window#realm-board-${id(80)}`);
+  const threadLink = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-recent-link"]')!;
+  const thread = new URL(threadLink.href, 'https://site.test');
+  const boardReturn = admittedBoardReturn(thread.searchParams.get('boardReturn'))!;
+  expect(boardReturn).toBe(boardLink.getAttribute('href'));
+  expect(boardSearch(Object.fromEntries(new URL(boardReturn, 'https://site.test').searchParams), 'en').returnTo).toBe(
+    realmReturn,
+  );
+});
+
+test('installed Home and Board shelf mappings retain native recent and Board visibility fields', async () => {
   native = fixture(0);
   native.boards = {
     items: [
@@ -783,11 +939,11 @@ test('native home mapping admits recent discussions from the Board shelf extra f
         id: id(80),
         realmId: id(1),
         route: 1,
-        visibility: 'published',
         securityRevision: '1',
         createdAt: '2026-10-01T00:00:00Z',
         title: 'Supplied Board',
         purpose: 'discussion',
+        visibility: 'protected',
         availability: 'available',
         recent: {
           state: 'current',
@@ -806,7 +962,7 @@ test('native home mapping admits recent discussions from the Board shelf extra f
             },
           ],
         },
-      } as NativeRealmHomePage['boards']['items'][number],
+      },
     ],
     next: null,
   };
@@ -816,7 +972,7 @@ test('native home mapping admits recent discussions from the Board shelf extra f
       id: id(80),
       title: 'Supplied Board',
       purpose: 'discussion',
-      visibility: 'published',
+      visibility: 'protected',
       recent: {
         state: 'current',
         complete: true,
@@ -824,4 +980,48 @@ test('native home mapping admits recent discussions from the Board shelf extra f
       },
     },
   ]);
+
+  const shelf = nativeRealmHomeShelves(
+    {
+      ...operations,
+      boardShelf: async ({ cursor }) => {
+        expect(cursor).toBe('boards-next');
+        return {
+          status: 200,
+          data: {
+            items: [
+              {
+                id: id(82),
+                realmId: id(1),
+                route: 1,
+                visibility: 'draft',
+                securityRevision: '1',
+                createdAt: '2026-10-02T00:00:00Z',
+                title: 'Continued Board',
+                purpose: 'discussion',
+                availability: 'available',
+                recent: { state: 'unavailable' },
+              },
+            ],
+            next: null,
+          },
+        };
+      },
+    },
+    input,
+  );
+  expect(await shelf.boards({ cursor: 'boards-next' })).toEqual({
+    kind: 'page',
+    items: [
+      {
+        id: id(82),
+        title: 'Continued Board',
+        purpose: 'discussion',
+        visibility: 'draft',
+        recent: { state: 'unavailable' },
+      },
+    ],
+    next: null,
+    unavailable: 0,
+  });
 });
