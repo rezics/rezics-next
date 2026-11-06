@@ -343,6 +343,14 @@ test('default finite Bangumi selection imports a direct Character image through 
   const signal = new AbortController().signal;
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
+      if (provider === 'vndb') {
+        for (const id of developmentShowcaseSelection.vndb) {
+          if (table === 'vn_titles') yield { id, lang: 'en', official: 't', title: `Selected ${id}`, latin: null };
+          if (table === 'vn') yield { id, olang: 'ja', alias: null };
+          if (table === 'entry_meta') yield { id, revision: '1', lastmod: '2026-10-25 00:00:00+00' };
+        }
+        return;
+      }
       if (provider !== 'bangumi') return;
       if (table === 'subject') {
         yield { id: 10380, name: 'STEINS;GATE', name_cn: '命运石之门', type: 2 };

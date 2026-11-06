@@ -957,6 +957,8 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     bindings: viewerBindings,
   });
   mountSubjectPagePublication(zones, resolvePublication);
+  // Route/schema compilation is startup work, before the first request's fixed deadline.
+  zones.compile();
   return zones as Kernel;
 }
 

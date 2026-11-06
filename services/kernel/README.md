@@ -523,7 +523,7 @@ Names compare exactly as native JSON strings, without case folding or Unicode no
 scopes may reuse names. Native JSON syntax and fatal UTF-8 decoding remain authoritative. Raw bodies retain
 their exact bytes; absent bodies remain absent and a present empty JSON body is invalid.
 
-A request's deadline is fixed at arrival from `requestDeadlineMs`. Code reached by a route takes its deadline from the
+The composed kernel compiles route handlers and validators at startup. A request's deadline is fixed at arrival from `requestDeadlineMs`. Code reached by a route takes its deadline from the
 route's `job.deadline` or `deadlineFor(budgetMs)`, never from `Date.now() + N` or the kernel clock, which is business
 time and tests move. Durable work gets `Date.now() + budgetMs` from the same `deadlineFor`. A deadline crossing the
 Auth service boundary still travels explicitly through the Auth contract. This costs one async context scope per
