@@ -35,7 +35,7 @@ function observation(authority: CollectionSourceObservation['authority']): Colle
     incarnation: 'incarnation',
     revision: 1,
     authority,
-    stamp: { epoch: 1 },
+    stamp: { partition: 1, epoch: 1, position: 1n },
     basis: { digest: 'digest', identity: { digest: 'identity' }, query: null, profilePins: [], projection: null },
   };
 }
@@ -95,14 +95,20 @@ function fakeCapabilities(
     searchPreparation: {
       async prepareScope(input) {
         return {
-          prepared: { filter: input.filter },
+          prepared: { basis: input.filter, filter: input.filter },
           work: receipt(input.allowance.reservationId),
           scope: {
             async sourcePrefix() {
-              return { keys: [] };
+              return {
+                candidates: [],
+                observation: observation(authority),
+                exhausted: true,
+                coveredThrough: null,
+                work: receipt(input.allowance.reservationId),
+              };
             },
-            async evaluate() {
-              return { hits: [] };
+            async evaluate(_prepared, subjects) {
+              return { values: subjects.map(() => true) };
             },
             work() {
               return receipt(input.allowance.reservationId);
@@ -333,7 +339,7 @@ test('owner-query filter uses the Search preparation capability and records nest
   const searchPreparation: LibraryCapabilities['searchPreparation'] = {
     async prepareScope(input) {
       return {
-        prepared: { filter: input.filter, releaseDigest: input.releaseDigest },
+        prepared: { basis: input.releaseDigest, filter: input.filter, releaseDigest: input.releaseDigest },
         work: {
           reservationId: input.allowance.reservationId,
           used: {
@@ -348,6 +354,18 @@ test('owner-query filter uses the Search preparation capability and records nest
           },
         },
         scope: {
+          async sourcePrefix() {
+            return {
+              candidates: [],
+              observation: observation({ kind: 'curated' }),
+              exhausted: true,
+              coveredThrough: null,
+              work: receipt(input.allowance.reservationId),
+            };
+          },
+          async evaluate(_prepared, subjects) {
+            return { values: subjects.map(() => true) };
+          },
           work() {
             return receipt(input.allowance.reservationId);
           },

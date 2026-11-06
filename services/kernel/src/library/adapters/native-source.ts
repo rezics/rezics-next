@@ -16,6 +16,7 @@ export function createNativeSourceCaptureAdapter(dependencies: {
     : createCollectionSource(dependencies);
   return {
     prepare(input) {
+      if (input.at === undefined) throw new TypeError('Collection Source prepare requires authoritative time');
       return source.prepare({
         actor: input.actor as Actor,
         collectionId: input.collectionId,

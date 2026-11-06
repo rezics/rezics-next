@@ -1,29 +1,24 @@
 /** Identity/disclosure adapter. Semantic implements Library's original/terminal port at composition. */
 
+import type { Pool } from 'pg';
 import { durableInitiatorCommitment } from '../../access/index.ts';
 import { readIdentityMappings, readRelease } from '../../semantic/identity-adapters/index.ts';
 import type { IdentityDisclosureCapability } from '../contract/index.ts';
 import type { LibraryActor } from '../contract/index.ts';
 
-export function createIdentityDisclosureAdapter(): IdentityDisclosureCapability {
+export function createIdentityDisclosureAdapter(pool?: Pool): IdentityDisclosureCapability {
   return {
     readRelease(source, digest, options) {
       return readRelease(source as Parameters<typeof readRelease>[0], digest, options);
     },
     async readOriginalTerminal(input) {
-      if (input.actor.kind !== 'account') return { original: input.subjectId, terminal: input.subjectId };
+      if (input.actor.kind !== 'account' || !pool)
+        return { original: input.subjectId, terminal: input.subjectId };
       try {
-        const mappings = await readIdentityMappings({
-          accountId: input.actor.accountId,
-          originals: [input.subjectId],
-          deadline: input.deadline,
-        } as Parameters<typeof readIdentityMappings>[0]);
-        const mapped = Array.isArray(mappings) ? mappings[0] : undefined;
-        const terminal =
-          mapped && typeof mapped === 'object' && 'terminal' in mapped
-            ? String((mapped as { terminal?: string }).terminal ?? input.subjectId)
-            : input.subjectId;
-        return { original: input.subjectId, terminal };
+        const mappings = await readIdentityMappings(pool, [input.subjectId]);
+        const mapped = mappings[0];
+        if (mapped?.state === 'mapped') return { original: mapped.original, terminal: mapped.terminal };
+        return { original: input.subjectId, terminal: input.subjectId };
       } catch {
         return { original: input.subjectId, terminal: input.subjectId };
       }

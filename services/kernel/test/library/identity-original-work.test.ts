@@ -97,7 +97,11 @@ test('literal page/current/seal declarations retain all eight axes and repeat/ro
     LIBRARY_IDENTITY_SELECTED_STATEMENTS().current.values,
   )!;
   expect(currentPoint.work).toMatchObject({ nativeRows: 7, nativePoints: 7, identityMetadataRows: 1, witnessKeys: 0 });
-  const sealPoint = declareLibraryIdentityStatement('planner', seal.sql, [])!;
+  const sealPoint = declareLibraryIdentityStatement(
+    'planner',
+    seal.sql,
+    LIBRARY_IDENTITY_SELECTED_STATEMENTS().seal.values,
+  )!;
   expect(sealPoint.work).toMatchObject({ nativeRows: 5, nativePoints: 5, identityMetadataRows: 2 });
   const commit = declareLibraryIdentityStatement('planner', 'COMMIT', [])!;
   const rollback = declareLibraryIdentityStatement('planner', 'ROLLBACK', [])!;
@@ -495,7 +499,8 @@ test('Library immutable transform preserves the minimum full-input cutoff, order
     { kind: 'merge', survivor: numberedId(3000), original: null, terminal: null, remainder_terminal: null },
     [a, b],
   );
-  const result = await pageLibraryIdentityEpochChanges(fixture.tx, { jobId: id, epoch: 1n }, null);
+  const jobId = '00000000-0000-7000-8000-000000000001';
+  const result = await pageLibraryIdentityEpochChanges(fixture.tx, { jobId, epoch: 1n }, null);
   expect(result.changes).toHaveLength(53);
   expect(result.next).toBe(numberedId(100));
   expect(result.changes[0]!.original).toBe(numberedId(1));
@@ -518,7 +523,9 @@ test('Library transform refuses malformed native operands and a third input befo
     { kind: 'unmerge', survivor: null, original: id, terminal: null, remainder_terminal: id },
   ]) {
     const fixture = transformClient(saved, [[]]);
-    await expect(pageLibraryIdentityEpochChanges(fixture.tx, { jobId: id, epoch: 1n }, null)).rejects.toThrow();
+    await expect(
+      pageLibraryIdentityEpochChanges(fixture.tx, { jobId: '00000000-0000-7000-8000-000000000001', epoch: 1n }, null),
+    ).rejects.toThrow();
     expect(fixture.calls).toHaveLength(1);
   }
   const fixture = transformClient(
@@ -526,7 +533,9 @@ test('Library transform refuses malformed native operands and a third input befo
     [],
     3,
   );
-  await expect(pageLibraryIdentityEpochChanges(fixture.tx, { jobId: id, epoch: 1n }, null)).rejects.toThrow();
+  await expect(
+    pageLibraryIdentityEpochChanges(fixture.tx, { jobId: '00000000-0000-7000-8000-000000000001', epoch: 1n }, null),
+  ).rejects.toThrow();
   expect(fixture.calls).toHaveLength(2);
 });
 
@@ -550,7 +559,11 @@ test('fixed-width Library transform preserves unmerge/repoint remainder semantic
         ],
       ],
     );
-    const result = await pageLibraryIdentityEpochChanges(fixture.tx, { jobId: id, epoch: 1n }, null);
+    const result = await pageLibraryIdentityEpochChanges(
+      fixture.tx,
+      { jobId: '00000000-0000-7000-8000-000000000001', epoch: 1n },
+      null,
+    );
     expect(result.next).toBeNull();
     expect(result.changes.map((item) => item.terminal)).toEqual([
       remainder,
@@ -562,7 +575,13 @@ test('fixed-width Library transform preserves unmerge/repoint remainder semantic
     { kind: 'unmerge', survivor: null, original, terminal: null, remainder_terminal: null },
     [[]],
   );
-  expect(await pageLibraryIdentityEpochChanges(empty.tx, { jobId: id, epoch: 1n }, null)).toEqual({
+  expect(
+    await pageLibraryIdentityEpochChanges(
+      empty.tx,
+      { jobId: '00000000-0000-7000-8000-000000000001', epoch: 1n },
+      null,
+    ),
+  ).toEqual({
     changes: [],
     next: null,
   });

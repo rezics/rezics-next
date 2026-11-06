@@ -39,7 +39,7 @@ function stubSource(): PreparedCollectionSource {
       incarnation: '',
       revision: 0,
       authority: { kind: 'curated' },
-      stamp: { epoch: 0 },
+      stamp: { partition: 0, epoch: 0, position: 0n },
       basis: { digest: '', identity: { digest: '' }, query: null, profilePins: [], projection: null },
     },
   };
@@ -55,7 +55,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
       ? createNativeSourceCaptureAdapter({
           pool: options.pool,
           access: options.access,
-          ordinaryPage: options.ordinaryPage,
+          ...(options.ordinaryPage !== undefined ? { ordinaryPage: options.ordinaryPage } : {}),
         })
       : {
           async prepare(input) {
@@ -77,18 +77,20 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
             };
           },
         });
+  const extras: { search?: unknown; access?: unknown; routeKey?: Uint8Array } = {};
+  if (options.search !== undefined) extras.search = options.search;
+  if (options.access !== undefined) extras.access = options.access;
+  if (options.routeKey !== undefined) extras.routeKey = options.routeKey;
   const capabilities: LibraryCapabilities & { search?: unknown; access?: unknown; routeKey?: Uint8Array } = {
     authorization: options.capabilities?.authorization ?? createAuthorizationAdapter(options.access),
-    identityDisclosure: options.capabilities?.identityDisclosure ?? createIdentityDisclosureAdapter(),
+    identityDisclosure: options.capabilities?.identityDisclosure ?? createIdentityDisclosureAdapter(options.pool),
     searchPreparation: options.capabilities?.searchPreparation ?? createSearchPreparationAdapter(options.search),
     contentPublication: options.capabilities?.contentPublication ?? createContentPublicationAdapter(),
     identityNative,
     sourceCapture,
     accountAdmission:
       options.capabilities?.accountAdmission ?? sumAdmission([admissionTerm('composition', { statements: 1 })]),
-    search: options.search,
-    access: options.access,
-    routeKey: options.routeKey,
+    ...extras,
   };
   return bindLibraryDomain(createLibraryApplications(capabilities));
 }

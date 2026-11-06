@@ -226,7 +226,7 @@ async function currentPublicationInput(tx: OperationalTransaction, locator: Coll
   if (!release || !current()) return null;
   let expanded: FilterDocument;
   try {
-    expanded = admitFilter(parseFilter(rule.filter), release, { owner: true });
+    expanded = admitFilter(parseFilter(rule.filter), release as FilterRelease, { owner: true });
   } catch {
     return null;
   }

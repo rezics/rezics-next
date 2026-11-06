@@ -171,7 +171,11 @@ export function LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS() {
     sourceBasis: Object.freeze(
       identity()
         .basisStatements()
-        .map((item) => Object.freeze({ sql: item.sql, values: item.values, work: item.work })),
+        .map((item) => {
+          const work = identity().sourceBasisBound(item.sql, item.values) as Bound | undefined;
+          if (!work) throw new TypeError('Identity source-basis declaration is incomplete');
+          return Object.freeze({ sql: item.sql, values: item.values, work });
+        }),
     ),
   });
 }

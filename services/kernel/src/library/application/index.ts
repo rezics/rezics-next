@@ -18,10 +18,11 @@ export { createEntryProgressApplication } from './entry-progress.ts';
 export function createLibraryApplications(
   capabilities: LibraryCapabilities & { search?: unknown; access?: unknown; routeKey?: Uint8Array },
 ): LibraryDomain {
+  const capture = createSourceCaptureApplication(capabilities);
   return {
     ...capabilities,
     ownerQuery: createOwnerQueryApplication(capabilities),
-    sourceCapture: createSourceCaptureApplication(capabilities),
+    sourceCapture: { prepare: capabilities.sourceCapture.prepare.bind(capabilities.sourceCapture), ...capture },
     memberPreparation: createMemberPreparationApplication(capabilities),
     publicationAdmission: createPublicationAdmissionApplication(capabilities),
     entryProgress: createEntryProgressApplication(capabilities),

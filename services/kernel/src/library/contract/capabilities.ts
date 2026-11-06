@@ -1,7 +1,11 @@
 /** Library-owned ports. Foreign Access, Search, Semantic and Content implement these; Library never imports them. */
 
 import type { LibraryActor } from './actors.ts';
-import type { CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
+import type {
+  CanonicalCollectionCandidate,
+  CollectionSourceObservation,
+  PreparedCollectionSource,
+} from './source.ts';
 import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
 
@@ -46,12 +50,27 @@ export interface IdentityDisclosureCapability {
 }
 
 export type PreparedSearchScope = Readonly<{
-  prepared: unknown;
+  prepared: Readonly<{ basis: unknown }>;
   work: WorkReceipt;
   scope: {
-    sourcePrefix?(prepared: unknown, input: unknown): Promise<unknown>;
-    evaluate?(prepared: unknown, subjects: readonly string[], input: unknown): Promise<unknown>;
-    work(prepared: unknown): WorkReceipt;
+    sourcePrefix(
+      prepared: unknown,
+      input: Readonly<{ afterSubjectId: string | null; allowance: WorkAllowance; candidateLimit?: number }>,
+    ): Promise<
+      Readonly<{
+        candidates: readonly CanonicalCollectionCandidate[];
+        observation: CollectionSourceObservation;
+        exhausted: boolean;
+        coveredThrough: string | null;
+        work: WorkReceipt;
+      }>
+    >;
+    evaluate(
+      prepared: unknown,
+      subjects: readonly string[],
+      input: unknown,
+    ): Promise<Readonly<{ values: readonly unknown[] }>>;
+    work(result: unknown): WorkReceipt;
   };
 }>;
 
@@ -143,7 +162,8 @@ export interface IdentityNativeCapability {
   basisStatements(): readonly Readonly<{
     sql: string;
     values: readonly unknown[];
-    work: WorkDimensions & { engineRequests: 0 };
+    work: WorkDimensions;
+    engineRequests: 0;
   }>[];
   jobSizeSQL: string;
 }

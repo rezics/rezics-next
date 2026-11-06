@@ -19,7 +19,7 @@ export function createOwnerQueryApplication(capabilities: {
         deadline: input.deadline,
         at: input.at,
         allowance: input.work.remaining(),
-        logical: input.logical,
+        ...(input.logical !== undefined ? { logical: input.logical } : {}),
       });
       input.work.native(prepared.work);
       return {

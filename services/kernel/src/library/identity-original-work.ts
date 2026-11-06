@@ -30,7 +30,10 @@ const components = new WeakSet<LibraryIdentityOriginalComponent>();
 const componentBounds = new WeakMap<LibraryIdentityOriginalComponent, Bound>();
 
 function asBound(work: WorkDimensions): Bound {
-  if (Reflect.ownKeys(work).length !== 8) throw new TypeError('Invalid Library native declaration');
+  const keys = Reflect.ownKeys(work).filter((key) => key !== 'engineRequests');
+  if (keys.length !== 8) throw new TypeError('Invalid Library native declaration');
+  if ('engineRequests' in work && (work as WorkDimensions & { engineRequests?: number }).engineRequests !== 0)
+    throw new TypeError('Library SQL cannot declare engine requests');
   return declareBound({
     candidateKeys: work.candidateKeys,
     nativeRows: work.nativeRows,

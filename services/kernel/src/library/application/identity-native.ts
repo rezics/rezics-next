@@ -1,7 +1,6 @@
 /** Identity-native application. Catalog values are bound at composition; arithmetic is core. */
 
 import type { IdentityNativeCapability, IdentityNativeCatalog, IdentityWorkHandle } from '../contract/index.ts';
-import type { WorkDimensions } from '../contract/work-dimensions.ts';
 import { createIdentityNativeBounds, identityBasisBindValues } from '../core/index.ts';
 
 export function createIdentityNativeApplication(catalog: IdentityNativeCatalog): IdentityNativeCapability {
@@ -21,11 +20,9 @@ export function createIdentityNativeApplication(catalog: IdentityNativeCatalog):
       return Object.freeze(
         catalog.basisQueries.map((query) => {
           const values = Object.freeze(identityBasisBindValues(query.params ?? []));
-          const bound = bounds.sourceBasisBound(query.sql, values) as
-            | (WorkDimensions & { engineRequests: 0 })
-            | undefined;
-          if (!bound) throw new TypeError('Identity source-basis declaration is incomplete');
-          return Object.freeze({ sql: query.sql, values, work: bound, engineRequests: 0 as const });
+          const work = bounds.sourceBasisFootprint(query.sql, values);
+          if (!work) throw new TypeError('Identity source-basis declaration is incomplete');
+          return Object.freeze({ sql: query.sql, values, work, engineRequests: 0 as const });
         }),
       );
     },

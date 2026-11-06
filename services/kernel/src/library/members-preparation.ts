@@ -42,6 +42,7 @@ import {
   DEFAULT_REQUEST_DEADLINE_MS,
   principalCommandIdentity,
   type AuthoritativeTime,
+  type CommandAuthorization,
 } from '../command/command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -412,6 +413,7 @@ export function createMembersPreparation(config: {
             digest,
             filter: item.definition.filter,
             sort: item.definition.sort,
+            source: item.definition.source,
             releaseDigest: item.definition.release.digest,
             release: item.definition.release.value,
           }),
@@ -427,14 +429,14 @@ export function createMembersPreparation(config: {
           history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }
-      const authorization = await libraryCapabilities().authorization.commandAuthorization(
+      const authorization = (await libraryCapabilities().authorization.commandAuthorization(
         config.access,
         actor,
         'collection:read',
         { route, id: collectionId },
         { pool: config.pool, deadline },
         notFound,
-      );
+      )) as CommandAuthorization;
       return runOperationalTransaction(
         config.pool,
         {
@@ -663,14 +665,14 @@ export function createMembersPreparation(config: {
       const identity = principalCommandIdentity(actor);
       if (identity.principal.kind !== 'account') return false;
       const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-      const authorization = await libraryCapabilities().authorization.commandAuthorization(
+      const authorization = (await libraryCapabilities().authorization.commandAuthorization(
         config.access,
         actor,
         'collection:read',
         { route: locator.route, id: locator.collectionId },
         { pool: config.pool, deadline },
         notFound,
-      );
+      )) as CommandAuthorization;
       return runOperationalTransaction(
         config.pool,
         {
@@ -807,8 +809,8 @@ export function createMembersPreparation(config: {
         )
       ).rows;
       if (!retained) return null;
-      return restorePreparationDefinition(locator.ownerAccountId, locator.collectionId, retained, (digest) =>
-        libraryCapabilities().identityDisclosure.readRelease(tx, digest),
+      return restorePreparationDefinition(locator.ownerAccountId, locator.collectionId, retained, async (digest) =>
+        (await libraryCapabilities().identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
       );
     },
 
@@ -841,7 +843,8 @@ export function createMembersPreparation(config: {
         locator.ownerAccountId,
         locator.collectionId,
         retained,
-        (digest) => libraryCapabilities().identityDisclosure.readRelease(tx, digest),
+        async (digest) =>
+          (await libraryCapabilities().identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
       );
       const current = await readPreparationSource(tx, locator);
       const identity = current?.scope.key.source.kind === 'library' ? current.scope.key.source.identity : null;
@@ -1084,7 +1087,10 @@ async function bindPreparationRead(
     }),
   );
   if (!release) return { status: 'unavailable' };
-  const filter = admitFilter(parseFilter(input.definition.filter), release, { saved: true, owner: true });
+  const filter = admitFilter(parseFilter(input.definition.filter), release as FilterRelease, {
+    saved: true,
+    owner: true,
+  });
   const admission = await admitSavedCollectionMemberQuery(
     deps,
     input.actor,

@@ -7,7 +7,8 @@ Layer ownership: `kernel-library-contract` (vocabulary and ports), `kernel-libra
 `kernel-library-application` (use cases over ports), `kernel-library` adapters (native SQL and foreign
 Access/Search/Semantic/Content), and `composition/library.ts` (ordinary server/worker/`createKernelRuntimeDefaults`
 binding). Application result types stay in the contract. Compatibility Source, member, publication and identity
-entries reach the composed implementation. Fewest tests: one domain-composition suite; native and publication
+entries reach the composed implementation. Selected identity seal declarations use the selected bind vector;
+transform fixtures use routable job IDs. Fewest tests: one domain-composition suite; native and publication
 growth cases keep their existing assertions.
 
 ## Collection operation costs

@@ -28,7 +28,11 @@ export type CollectionSourceAuthority =
   | { readonly kind: 'activated_output'; readonly generation: string }
   | { readonly kind: 'frozen_output'; readonly generation: string };
 
-export type CollectionSourceStamp = Readonly<{ epoch: number; [key: string]: unknown }>;
+export type CollectionSourceStamp = Readonly<{
+  partition: number;
+  epoch: number;
+  position: bigint;
+}>;
 
 export interface CollectionSourceObservation {
   readonly collectionId: string;

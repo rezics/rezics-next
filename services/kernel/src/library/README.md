@@ -98,8 +98,9 @@ Search `ScopeWork` subclassing.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
 publication and Entry/progress edges (actor, deadline, private working versus activated public, repeated ordered
-occurrences, nested admission, original/terminal disclosure). Existing native and publication growth cases keep
-their unchanged assertions.
+occurrences, nested admission, original/terminal disclosure). Selected identity seal cases keep the selected bind
+vector; transform fixtures use routable job IDs. Existing native and publication growth cases keep their unchanged
+assertions.
 
 Measured with `bun scripts/architecture.ts` against the Kernel value-import graph after this domain composition:
 record largest SCC, Library membership, all cycle files and architecture errors on the integrated base, then the
