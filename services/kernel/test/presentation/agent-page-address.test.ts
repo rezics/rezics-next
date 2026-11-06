@@ -13,6 +13,8 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
 import type { Resource } from '../../src/request/access.ts';
 import {
   completeAgentVerification,
@@ -33,7 +35,9 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const accountRoute = 0x5274;
@@ -50,7 +54,10 @@ let access: ReturnType<typeof admittedAccess>;
 let kernel: ReturnType<typeof createKernel>;
 let staff: Seeded;
 let manager: Seeded;
-const node = (type: string, id: string) => ({ type, props: { id } });
+// The production work modules publish identity epochs; verified-subject addresses depend on that publication.
+let workClient: WorkClient;
+let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+const node =(type: string, id: string) => ({ type, props: { id } });
 const document = {
   root: { props: {} },
   content: [node('SubjectHeader', 'header'), node('AccountIdentity', 'identity')],
@@ -282,6 +289,15 @@ beforeAll(async () => {
       },
     },
   });
+  workClient = await createWorkClient(db.url, pool);
+  work = await composeWork(KERNEL_WORK_MODULES, {
+    databaseUrl: db.url,
+    pool,
+    client: workClient,
+    env: workerTestEnv({ KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') }),
+    receiptKeys: testReceiptKeys(),
+  });
+  await work.launch();
   staff = await seedAccount('page_staff');
   manager = await seedAccount('page_manager');
   await bootstrapGovernance(pool, staff.id);
@@ -295,6 +311,8 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  await work?.shutdown();
+  await workClient?.close();
   await db?.close();
 });
 
