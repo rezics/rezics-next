@@ -225,6 +225,10 @@ test('recovery offers appropriate manual actions, honors Retry-After, and never 
   expect(searchRecoveryFromResponse({ status: 503, error: { code: 'index_not_ready' } })).not.toHaveProperty('retryAt');
 });
 
+test('a concealed Realm scope (HTTP 404) reads as denied, never as an empty or ready page', () => {
+  expect(searchRecoveryFromResponse({ status: 404, error: { code: 'not_found' } }).status).toBe('denied');
+});
+
 test('scoped facet readiness keeps native Retry-After and the continuation request without implying zero values', async () => {
   const facets = [{ property: 'type', size: 10, cursor: 'facet+/= opaque' }];
   const bodies: unknown[] = [];
