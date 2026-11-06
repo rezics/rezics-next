@@ -96,4 +96,5 @@ signal, reprinting the stack log on start death and on a failed journey; Playwri
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories. The seeded walk's VNDB release scan must fit the pinned dump; importer fidelity tests pin those
-table budgets and the contract overflow error.
+table budgets and the contract overflow error. The live ESM source-set owner binds itself into History so catalogue
+create shares the command maps that Subject writes began.

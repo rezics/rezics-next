@@ -12,6 +12,7 @@ import {
   validateRecordSourceSetCommitment,
 } from '../../src/history/adapters/record-source-set.ts';
 import { RecordSourceSetUnavailableError } from '../../src/history/adapters/record-source-set-native.ts';
+import { beginSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { custodyFixture, digest, kind, scope, type CustodyFixture, type Person } from './command-custody-fixture.ts';
@@ -171,16 +172,21 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     expect(() => nativeRecordSourceSetProducer()).toThrow(RecordSourceSetUnavailableError);
     return;
   }
+  expect(producer.beginSemanticRecordSourceSet).toBe(beginSemanticRecordSourceSet);
   const workId = randomUUID();
   let locator: import('../../src/semantic/record-source-set.ts').SemanticRecordSourceSetLocator | undefined;
   const result = await command(async (tx) => {
-    const set = await producer.beginSemanticRecordSourceSet(tx);
+    const set = await beginSemanticRecordSourceSet(tx);
     locator = producer.semanticRecordSourceSetLocator(tx, set);
     expect(locator.partition).toBe(currentCommand(tx).partition);
     expect(locator.transactionId).toBe(currentCommand(tx).transactionId);
     expect(() => declareCommandRecordSourceSet(tx, set)).toThrow();
     expect(() => declareCommandRecordSources(tx, [source])).toThrow();
-    await declareCommandHistory(tx, kind, scope(person));
+    const accounts = scope(person).response.accounts;
+    await declareCommandHistory(tx, kind, {
+      response: { artifactType: 'command-receipt/v1', accounts },
+      events: [{ artifactType: 'outbox-event/v1', accounts }],
+    });
     await stageHistoryWork(tx, {
       owner: 'record-purge-fixture',
       intent: {
@@ -189,7 +195,7 @@ test('History consumes the actual Semantic one-set building seal locator revisio
         workflowId: workId,
         input: { accounts: [person.accountId], source: 'native' },
       },
-      scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
+      scope: { artifactType: 'durable-work/v1', accounts },
     });
     const building = await tx.query(
       `SELECT metadata_state,member_count,snapshot_digest,native_revision FROM core.record_history_source_set
@@ -205,7 +211,12 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     // Real membership becomes known after nested work serialization, before native commit.
     await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
     await producer.sealSemanticRecordSourceSet(tx, set);
-    return noEffect({ payload: 'native set' });
+    return {
+      value: { payload: 'native set' },
+      events: [
+        { type: 'com.rezics.library.entry.purged.v1', subject: person.accountId, data: { deletionId: randomUUID() } },
+      ],
+    };
   });
   if (!locator) throw new Error('Missing native locator');
   const snapshot = await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, {
@@ -218,7 +229,11 @@ test('History consumes the actual Semantic one-set building seal locator revisio
      WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`,
     recordSourceSetStorageKey(locator),
   );
-  expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual(['command-receipt/v1', 'durable-work/v1']);
+  expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual([
+    'command-receipt/v1',
+    'durable-work/v1',
+    'outbox-event/v1',
+  ]);
   for (const copy of copies.rows) {
     expect(copy.original_transaction).toBe(result.transactionId);
     expect(BigInt(copy.original_position)).toBe(result.position);
@@ -242,9 +257,11 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     frontier = page.frontier;
   }
   expect(found).toBe(true);
+  const digest = snapshot!.digest;
+  expect(digest).toMatch(/^[0-9a-f]{64}$/);
   await command(async (tx) => {
-    expect(await producer.verifySemanticRecordSourceSet(tx, locator!, snapshot!.digest)).toBe(true);
-    expect(await producer.verifySemanticRecordSourceSet(tx, locator!, `${snapshot!.digest}changed`)).toBe(false);
+    expect(await producer.verifySemanticRecordSourceSet(tx, locator!, digest)).toBe(true);
+    expect(await producer.verifySemanticRecordSourceSet(tx, locator!, '0'.repeat(64))).toBe(false);
     await declareCommandHistory(tx, kind, scope(person));
     return noEffect(null);
   });
