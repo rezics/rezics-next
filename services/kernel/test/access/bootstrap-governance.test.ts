@@ -366,10 +366,14 @@ test('Auth-issued scopes and installed formula govern delegation, revocation and
   const definitions = ['definitions:publish', 'definitions:activate'] as const;
   const governor = await context(person, ['access:grant', ...definitions], semantic);
   expect(
-    await (await accessCheck(semantic, governor.actor, 'definitions:publish', PLATFORM_RESOURCE, governor))(pool),
+    await (
+      await accessCheck(semantic, governor.actor, 'definitions:publish', PLATFORM_RESOURCE, governor)
+    )(pool),
   ).toBe(true);
   expect(
-    await (await accessCheck(semantic, governor.actor, 'definitions:activate', PLATFORM_RESOURCE, governor))(pool),
+    await (
+      await accessCheck(semantic, governor.actor, 'definitions:activate', PLATFORM_RESOURCE, governor)
+    )(pool),
   ).toBe(true);
   await definitionGrants.create(governor, {
     resource: PLATFORM_RESOURCE,
