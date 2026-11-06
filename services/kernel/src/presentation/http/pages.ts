@@ -53,6 +53,7 @@ import {
   pageViewerActions,
   quotationPageDocuments,
   quotationTypeAdmitted,
+  recipePageDocuments,
   readQuotationPageAuthority,
   semanticPageView,
   type SemanticPageOverlay,
@@ -766,9 +767,16 @@ async function pageAnswer(input: {
   const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
-  const documents = quotationPageDocuments(
-    characterPageDocuments(
-      documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+  const documents = recipePageDocuments(
+    quotationPageDocuments(
+      characterPageDocuments(
+        documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+        input.release,
+        input.subjectType,
+        input.subject,
+        properties,
+        input.context?.id,
+      ),
       input.release,
       input.subjectType,
       input.subject,
