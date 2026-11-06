@@ -159,7 +159,10 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
         ]),
       ],
     });
-    expect(proposeBindings.results.every((result) => result.status === 201)).toBe(true);
+    expect(
+      proposeBindings.results.every((result) => result.status === 201),
+      JSON.stringify(proposeBindings.results),
+    ).toBe(true);
     await acceptAndAdopt(editor, schemeId, 'schema:url');
     for (const id of [childId, parentId]) {
       await acceptAndAdopt(editor, id, 'schema:url');
@@ -315,7 +318,10 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
           },
         })),
       });
-      expect(replacementFacts.results.every((entry) => entry.status === 201)).toBe(true);
+      expect(
+        replacementFacts.results.every((entry) => entry.status === 201),
+        JSON.stringify(replacementFacts.results),
+      ).toBe(true);
       await acceptAndAdopt(editor, replacementId, 'schema:url');
       await acceptAndAdopt(editor, replacementId, 'skos:inScheme');
       const changed = { ...binding, parentId: replacementId };

@@ -176,7 +176,10 @@ async function openPublicTagWorld() {
         }),
       ],
     });
-    expect(propose.results.every((result) => result.status === 201)).toBe(true);
+    expect(
+      propose.results.every((result) => result.status === 201),
+      JSON.stringify(propose.results),
+    ).toBe(true);
     async function candidates(subjectId: string, property: string) {
       const page = await editor.http(
         `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
@@ -455,7 +458,10 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
           },
         })),
       });
-      expect(proposals.results.every((result) => result.status === 201)).toBe(true);
+      expect(
+        proposals.results.every((result) => result.status === 201),
+        JSON.stringify(proposals.results),
+      ).toBe(true);
       await acceptAdopt(id, 'schema:url');
       await acceptAdopt(id, 'skos:inScheme');
       concepts.push({ category: 'cont' as const, code, id });

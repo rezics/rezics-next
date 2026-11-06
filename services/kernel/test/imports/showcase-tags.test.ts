@@ -241,7 +241,10 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
         },
       ],
     });
-    expect(propose.results.every((result) => result.status === 201)).toBe(true);
+    expect(
+      propose.results.every((result) => result.status === 201),
+      JSON.stringify(propose.results),
+    ).toBe(true);
     async function candidates(subjectId: string, property: string) {
       const page = await editor.http(
         `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
