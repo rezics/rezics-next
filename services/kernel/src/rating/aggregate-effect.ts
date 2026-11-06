@@ -1,7 +1,8 @@
+import { runCommand } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { RatingCounter } from '../access/rating-counter.ts';
-import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -33,7 +34,7 @@ import {
 } from './question-scale.ts';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { advanceRatingSource, ratingSourcePosition, type RatingSourcePosition } from './realm-rank-delivery.ts';
 import { convergeRatingErasureFigures } from './realm-rank-convergence.ts';
 
@@ -191,9 +192,10 @@ async function applyPartition(
   changes: readonly RatingChange[],
   partition: number,
   scales: ReadonlyMap<string, QuestionScale>,
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   try {
-    await runCommand(pool, { partition }, async (tx, command) => {
+    await (capabilities?.command ?? runCommand)(pool, { partition }, async (tx, command) => {
       const totals = new PopulationTotalCapture();
       let applied = 0;
       let received = 0;
@@ -341,7 +343,11 @@ async function applyPartition(
 }
 
 /** Apply vote changes using one target-partition command for each partition in the input. */
-export async function applyRatingChanges(pool: Pool, input: readonly RatingChange[]): Promise<void> {
+export async function applyRatingChanges(
+  pool: Pool,
+  input: readonly RatingChange[],
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   if (!Array.isArray(input)) throw new TypeError('Rating changes must be an array');
   const grouped = new Map<number, RatingChange[]>();
   for (const change of input) {
@@ -371,17 +377,28 @@ export async function applyRatingChanges(pool: Pool, input: readonly RatingChang
   // Its aggregate event plus deliveries stays below the native 1000-event command cap.
   for (const [partition, changes] of grouped)
     for (let offset = 0; offset < changes.length; offset += MAX_RATING_CHANGE_PAGE)
-      await applyPartition(pool, changes.slice(offset, offset + MAX_RATING_CHANGE_PAGE), partition, scales);
+      await applyPartition(
+        pool,
+        changes.slice(offset, offset + MAX_RATING_CHANGE_PAGE),
+        partition,
+        scales,
+        capabilities,
+      );
   // Also recover committed obligations on a vote replay: its old delta cannot be reconstructed.
   for (const [partition, changes] of grouped) {
     const populations = [...new Set(changes.map((change) => change.populationId))];
     for (let offset = 0; offset < populations.length; offset += 100)
-      await flushPopulationTotalDeliveries(pool, partition, populations.slice(offset, offset + 100));
+      await flushPopulationTotalDeliveries(pool, partition, populations.slice(offset, offset + 100), capabilities);
   }
 }
 
 /** Resolve the private counting key at the event T, then apply that vote to every listed population. */
-export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCounter, event: CloudEvent): Promise<void> {
+export async function applyRatingVoteEvent(
+  pool: Pool,
+  ratingCounter: RatingCounter,
+  event: CloudEvent,
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   if (
     event.type !== VOTE_CHANGED ||
     !Value.Check(RATING_EVENTS()[VOTE_CHANGED], event.data) ||
@@ -409,17 +426,21 @@ export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCoun
     at: event.time,
     source: ratingSourcePosition(event, data.voterId, data.revision),
   }));
-  await applyRatingChanges(pool, changes);
+  await applyRatingChanges(pool, changes, capabilities);
 }
 
 /** Register the single shared-effects consumer for rating vote changes. */
-export function createRatingAggregateEffect(pool: Pool, ratingCounter: RatingCounter): Effect {
+export function createRatingAggregateEffect(
+  pool: Pool,
+  ratingCounter: RatingCounter,
+  capabilities?: RatingCapabilities,
+): Effect {
   return {
     name: 'rating_aggregate',
     types: [VOTE_CHANGED, SEGMENT_PAGE],
     async run(event) {
-      if (event.type === SEGMENT_PAGE) await applyRatingSegmentPageEvent(pool, ratingCounter, event);
-      else await applyRatingVoteEvent(pool, ratingCounter, event);
+      if (event.type === SEGMENT_PAGE) await applyRatingSegmentPageEvent(pool, ratingCounter, event, capabilities);
+      else await applyRatingVoteEvent(pool, ratingCounter, event, capabilities);
     },
   };
 }
@@ -429,6 +450,7 @@ export async function applyRatingSegmentPageEvent(
   pool: Pool,
   ratingCounter: RatingCounter,
   event: CloudEvent,
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   if (
     event.type !== SEGMENT_PAGE ||
@@ -500,7 +522,7 @@ export async function applyRatingSegmentPageEvent(
             source: ratingSourcePosition(event, data.voterId, vote.revision),
           })),
     );
-    await applyRatingChanges(pool, changes);
+    await applyRatingChanges(pool, changes, capabilities);
     return;
   }
   const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, event.time));
@@ -543,10 +565,10 @@ export async function applyRatingSegmentPageEvent(
             return next ? [next] : [];
           }),
         );
-  await applyRatingChanges(pool, changes);
+  await applyRatingChanges(pool, changes, capabilities);
   if ('erasurePageId' in data && data.erasurePageId !== undefined) {
-    await convergeRatingErasureFigures(pool, changes);
-    await acknowledgeRatingErasurePage(pool, data.voterId, data.erasurePageId);
+    await convergeRatingErasureFigures(pool, changes, capabilities);
+    await acknowledgeRatingErasurePage(pool, data.voterId, data.erasurePageId, capabilities);
   }
 }
 

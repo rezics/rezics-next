@@ -1,8 +1,9 @@
+import { runCommand } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import { defineQuery } from 'reylo';
 import { Value } from 'typebox/value';
-import { runCommand } from '../command/command.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -33,7 +34,7 @@ import readPendingEpochPopulations from './population-total-epoch-pending.sql';
 import publicFigurePosition from './public-figure-next-position.sql';
 import markPriorRepublishPage from './public-figure-republish-mark-page.sql';
 import { flushPopulationTotalDeliveries, readPopulationTotalClock } from './population-total.ts';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 
 function readPublicFiguresStatement() {
   return memoizedValue(readPublicFiguresStatement, () =>
@@ -196,7 +197,11 @@ function priorEpochWorkEvent(
   };
 }
 
-async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulation): Promise<void> {
+async function checkPopulationPriorEpoch(
+  pool: Pool,
+  population: PendingPopulation,
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   const populationRoute = routeOf(population.populationId);
   if (populationRoute === null || routeOf(population.questionId) === null)
     throw new TypeError('Invalid rating prior epoch address');
@@ -210,7 +215,7 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
   const identity = ratingQuestionIdentity(question);
   const threshold = question.grain === 'work' || question.grain === 'release' ? 5 : 10;
   try {
-    await runCommand(pool, { partition }, async (tx) => {
+    await (capabilities?.command ?? runCommand)(pool, { partition }, async (tx) => {
       const [totals] = await lockPriorEpochTotals.run(tx, {
         route: populationRoute,
         question_id: population.questionId,
@@ -298,23 +303,27 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
   }
 }
 
-async function drainPendingPriorEpochChecks(pool: Pool): Promise<void> {
+async function drainPendingPriorEpochChecks(pool: Pool, capabilities?: RatingCapabilities): Promise<void> {
   for (;;) {
     const populations = (await readPendingEpochPopulations.run(pool, {
       limit: PRIOR_EPOCH_CHECK_BATCH,
     })) as PendingPopulation[];
     if (populations.length === 0) return;
-    await Promise.all(populations.map((population) => checkPopulationPriorEpoch(pool, population)));
+    await Promise.all(populations.map((population) => checkPopulationPriorEpoch(pool, population, capabilities)));
   }
 }
 
 /** Resume retained custom totals through the existing durable epoch/republish work. */
-export async function resumeRealmRankPublication(pool: Pool): Promise<void> {
-  await drainPendingPriorEpochChecks(pool);
-  await markPriorEpochRepublishPage(pool, MAX_DRAIN_LIMIT);
+export async function resumeRealmRankPublication(pool: Pool, capabilities?: RatingCapabilities): Promise<void> {
+  await drainPendingPriorEpochChecks(pool, capabilities);
+  await markPriorEpochRepublishPage(pool, MAX_DRAIN_LIMIT, capabilities);
 }
 
-async function markPriorEpochRepublishPage(pool: Pool, limit: number): Promise<void> {
+async function markPriorEpochRepublishPage(
+  pool: Pool,
+  limit: number,
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   const job = (await readNextPriorRepublish.run(pool, {})) as PriorRepublishJob | undefined;
   if (!job) return;
   const populationRoute = routeOf(job.populationId);
@@ -343,14 +352,18 @@ async function markPriorEpochRepublishPage(pool: Pool, limit: number): Promise<v
 
   await Promise.all(
     [...groups].map(([partition, subjectIds]) =>
-      markPublicFigurePriorPage(pool, { partition, subjectIds, prior: captured, requiredGeneration: job.generation }),
+      markPublicFigurePriorPage(
+        pool,
+        { partition, subjectIds, prior: captured, requiredGeneration: job.generation },
+        capabilities,
+      ),
     ),
   );
 
   const hasMore = candidates.length > limit;
   const afterSubjectId = page.at(-1)?.subjectId ?? null;
   try {
-    await runCommand(pool, { partition: partitionOf(populationRoute) }, async (tx) => {
+    await (capabilities?.command ?? runCommand)(pool, { partition: partitionOf(populationRoute) }, async (tx) => {
       const rows =
         hasMore && afterSubjectId !== null
           ? await advancePriorRepublish.run(tx, {
@@ -388,6 +401,7 @@ export async function markPublicFigurePriorPage(
     prior: SubjectPriorInput;
     requiredGeneration: string;
   },
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   validateAddress({
     partition: input.partition,
@@ -401,7 +415,7 @@ export async function markPublicFigurePriorPage(
   )
     throw new TypeError('Invalid rating prior subject page');
   if (input.subjectIds.length === 0 || BigInt(input.prior.generation) < BigInt(input.requiredGeneration)) return;
-  await runCommand(pool, { partition: input.partition }, async (tx) => {
+  await (capabilities?.command ?? runCommand)(pool, { partition: input.partition }, async (tx) => {
     await writeSubjectPriorInputs.run(tx, { partition_no: input.partition, inputs: [input.prior] });
     const position = await publicFigurePosition.run(tx, { partition_no: input.partition });
     if (!position) throw new Error('Rating figure partition is unavailable');
@@ -433,6 +447,7 @@ async function drainFigurePage(
   partition: number,
   limit: number,
   filter?: { questionId: string; populationId: string; subjectIds: readonly string[] },
+  capabilities?: RatingCapabilities,
 ): Promise<number> {
   const prepared = await withReadTransaction(pool, async (tx) => {
     const home = await readPartition(tx, partition);
@@ -465,10 +480,10 @@ async function drainFigurePage(
   const { keys, clock } = prepared;
   if (keys.length === 0) return 0;
   // Checks occur after the no-outstanding-delivery observation, before foreign prior capture.
-  await drainPendingPriorEpochChecks(pool);
+  await drainPendingPriorEpochChecks(pool, capabilities);
   const priorInputs = await capturePublicFigurePriorInputs(pool, keys);
   try {
-    const outcome = await runCommand(pool, { partition }, async (tx) => {
+    const outcome = await (capabilities?.command ?? runCommand)(pool, { partition }, async (tx) => {
       const current = await readPopulationTotalClock(tx, partition);
       if (current.pending !== '0' || current.generation !== clock.generation) throw new NoPendingFigures();
       await writeSubjectPriorInputs.run(tx, { partition_no: partition, inputs: priorInputs });
@@ -519,6 +534,7 @@ async function drainFigurePage(
 export async function drainErasedFigureTargets(
   pool: Pool,
   input: { partition: number; questionId: string; populationId: string; subjectIds: readonly string[] },
+  capabilities?: RatingCapabilities,
 ): Promise<boolean> {
   validateAddress(input);
   if (
@@ -527,7 +543,7 @@ export async function drainErasedFigureTargets(
   )
     throw new TypeError('Invalid rating erasure figure page');
   if (input.subjectIds.length === 0) return true;
-  await drainFigurePage(pool, input.partition, input.subjectIds.length, input);
+  await drainFigurePage(pool, input.partition, input.subjectIds.length, input, capabilities);
   return withReadTransaction(pool, async (tx) => {
     const home = await readPartition(tx, input.partition);
     if (!home || home.writeState === 'moved') throw new Error('Rating figure partition is unavailable');
@@ -549,6 +565,7 @@ async function drainPriorEpochPendingFigures(
   pool: Pool,
   limit: number,
   filter?: { questionId?: string; populationId?: string; partition?: number },
+  capabilities?: RatingCapabilities,
 ): Promise<number> {
   const group =
     filter?.questionId !== undefined && filter.populationId !== undefined
@@ -571,11 +588,17 @@ async function drainPriorEpochPendingFigures(
   }
   const results = await Promise.all(
     [...groups].map(([partition, subjectIds]) =>
-      drainFigurePage(pool, partition, subjectIds.length, {
-        questionId: group.questionId,
-        populationId: group.populationId,
-        subjectIds,
-      }),
+      drainFigurePage(
+        pool,
+        partition,
+        subjectIds.length,
+        {
+          questionId: group.questionId,
+          populationId: group.populationId,
+          subjectIds,
+        },
+        capabilities,
+      ),
     ),
   );
   return results.reduce((sum, count) => sum + count, 0);
@@ -706,21 +729,26 @@ export async function pagePublicFigures(
 }
 
 /** Publish at most one event per pending figure in a serial anchor-partition page. */
-export async function drainPublicFigures(pool: Pool, partition: number, limit = DEFAULT_DRAIN_LIMIT): Promise<number> {
+export async function drainPublicFigures(
+  pool: Pool,
+  partition: number,
+  limit = DEFAULT_DRAIN_LIMIT,
+  capabilities?: RatingCapabilities,
+): Promise<number> {
   if (!Number.isSafeInteger(partition) || partition < 0 || partition > 4095)
     throw new TypeError('Invalid public rating figure partition');
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_DRAIN_LIMIT)
     throw new TypeError('Public figure drain limit must be from 1 to 500');
 
-  await flushPopulationTotalDeliveries(pool, partition);
-  await drainPendingPriorEpochChecks(pool);
-  let priorFigures = await drainPriorEpochPendingFigures(pool, limit, { partition });
+  await flushPopulationTotalDeliveries(pool, partition, undefined, capabilities);
+  await drainPendingPriorEpochChecks(pool, capabilities);
+  let priorFigures = await drainPriorEpochPendingFigures(pool, limit, { partition }, capabilities);
   if (priorFigures === 0) {
-    await markPriorEpochRepublishPage(pool, limit);
-    priorFigures = await drainPriorEpochPendingFigures(pool, limit, { partition });
+    await markPriorEpochRepublishPage(pool, limit, capabilities);
+    priorFigures = await drainPriorEpochPendingFigures(pool, limit, { partition }, capabilities);
   }
   const remaining = limit - priorFigures;
-  const figures = remaining > 0 ? await drainFigurePage(pool, partition, remaining) : 0;
+  const figures = remaining > 0 ? await drainFigurePage(pool, partition, remaining, undefined, capabilities) : 0;
   return priorFigures + figures;
 }
 
@@ -742,13 +770,13 @@ function eventPartition(event: CloudEvent): number {
 }
 
 /** Drain the aggregate partition's pending figures after the aggregate-applied event commits. */
-export function createPublicFigureDrainEffect(pool: Pool): Effect {
+export function createPublicFigureDrainEffect(pool: Pool, capabilities?: RatingCapabilities): Effect {
   return {
     name: 'rating_public_figure',
     types: [AGGREGATE_APPLIED, PRIOR_EPOCH_WORK],
     async run(event) {
       const partition = eventPartition(event);
-      await flushPopulationTotalDeliveries(pool, partition);
+      await flushPopulationTotalDeliveries(pool, partition, undefined, capabilities);
       if (event.type === PRIOR_EPOCH_WORK) {
         if (!Value.Check(RATING_EVENTS()[PRIOR_EPOCH_WORK], event.data))
           throw new TypeError('Invalid rating prior epoch work event');
@@ -759,23 +787,28 @@ export function createPublicFigureDrainEffect(pool: Pool): Effect {
         };
         if (data.action === 'mark') {
           while (
-            (await drainPriorEpochPendingFigures(pool, MAX_DRAIN_LIMIT, {
-              questionId: data.questionId,
-              populationId: data.populationId,
-              partition,
-            })) === MAX_DRAIN_LIMIT
+            (await drainPriorEpochPendingFigures(
+              pool,
+              MAX_DRAIN_LIMIT,
+              {
+                questionId: data.questionId,
+                populationId: data.populationId,
+                partition,
+              },
+              capabilities,
+            )) === MAX_DRAIN_LIMIT
           ) {
             // A full page has a successor; each next page commits independently under the partition gate.
           }
           return;
         }
-        await markPriorEpochRepublishPage(pool, MAX_DRAIN_LIMIT);
+        await markPriorEpochRepublishPage(pool, MAX_DRAIN_LIMIT, capabilities);
         return;
       }
 
       if (event.type !== AGGREGATE_APPLIED || !Value.Check(RATING_EVENTS()[AGGREGATE_APPLIED], event.data))
         throw new TypeError('Invalid rating aggregate applied event');
-      while ((await drainPublicFigures(pool, partition)) === MAX_DRAIN_LIMIT) {
+      while ((await drainPublicFigures(pool, partition, undefined, capabilities)) === MAX_DRAIN_LIMIT) {
         // A full page has a successor; durable prior-epoch work events drive pages on other partitions.
       }
     },

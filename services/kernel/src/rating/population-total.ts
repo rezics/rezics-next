@@ -1,6 +1,7 @@
+import { runCommand, currentCommand, noEffect, type CommandTransaction } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
@@ -14,7 +15,7 @@ import {
   type PopulationTotalEvent,
 } from './events.ts';
 import applyTotal from './population-total-component-apply.sql';
-import { STANDARD_QUESTION_ID } from './votes.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import {
   assertPopulationDeliveryDelta,
@@ -147,9 +148,9 @@ async function admit(client: Queryable, data: PopulationTotalDelivery): Promise<
 }
 
 /** One exact next receipt per command; gaps stay durable and never advance the frontier. */
-async function receive(pool: Pool, item: Address): Promise<boolean> {
+async function receive(pool: Pool, item: Address, capabilities?: RatingCapabilities): Promise<boolean> {
   const key = address(item);
-  const result = await runCommand(pool, { partition: partitionOf(key[0]) }, async (tx) => {
+  const result = await (capabilities?.command ?? runCommand)(pool, { partition: partitionOf(key[0]) }, async (tx) => {
     const inbox = await tx.query<{ payload: PopulationTotalDelivery; applied: boolean }>(
       `SELECT payload,applied FROM rating.population_total_inbox
        WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
@@ -226,8 +227,8 @@ async function receive(pool: Pool, item: Address): Promise<boolean> {
 class PredecessorPending extends Error {}
 
 /** Exact source acknowledgment is a second local command, recoverable from either committed event. */
-async function acknowledge(pool: Pool, item: Address): Promise<void> {
-  await runCommand(pool, { partition: item.sourcePartition }, async (tx) => {
+async function acknowledge(pool: Pool, item: Address, capabilities?: RatingCapabilities): Promise<void> {
+  await (capabilities?.command ?? runCommand)(pool, { partition: item.sourcePartition }, async (tx) => {
     const changed = await tx.query(
       `UPDATE rating.population_total_delivery SET pending=false
        WHERE partition_no=$1 AND population_id=$2 AND serial=$3 AND pending RETURNING serial`,
@@ -244,7 +245,7 @@ async function acknowledge(pool: Pool, item: Address): Promise<void> {
   });
 }
 
-async function deliver(pool: Pool, data: PopulationTotalDelivery): Promise<void> {
+async function deliver(pool: Pool, data: PopulationTotalDelivery, capabilities?: RatingCapabilities): Promise<void> {
   await withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
@@ -255,7 +256,7 @@ async function deliver(pool: Pool, data: PopulationTotalDelivery): Promise<void>
       throw error;
     }
   });
-  if (await receive(pool, data)) await acknowledge(pool, data);
+  if (await receive(pool, data, capabilities)) await acknowledge(pool, data, capabilities);
 }
 
 /** Shared foreground completion and registered worker recovery use the identical inbox/receipt commands. */
@@ -263,6 +264,7 @@ export async function flushPopulationTotalDeliveries(
   pool: Pool,
   partition: number,
   populations?: readonly string[],
+  capabilities?: RatingCapabilities,
 ): Promise<void> {
   if (populations && (populations.length === 0 || populations.length > MAX_RATING_CHANGE_PAGE))
     throw new RangeError(
@@ -281,11 +283,11 @@ export async function flushPopulationTotalDeliveries(
       );
     });
     if (page.rows.length === 0) return;
-    for (const { payload } of page.rows) await deliver(pool, payload);
+    for (const { payload } of page.rows) await deliver(pool, payload, capabilities);
   }
 }
 
-export function createPopulationTotalEffect(pool: Pool): Effect {
+export function createPopulationTotalEffect(pool: Pool, capabilities?: RatingCapabilities): Effect {
   return {
     name: 'rating_population_total',
     types: [POPULATION_TOTAL_DELIVERY],
@@ -295,8 +297,8 @@ export function createPopulationTotalEffect(pool: Pool): Effect {
     },
     async run(event) {
       const data = parse(event);
-      if (data.action === 'deliver') return deliver(pool, data);
-      await acknowledge(pool, data);
+      if (data.action === 'deliver') return deliver(pool, data, capabilities);
+      await acknowledge(pool, data, capabilities);
       // One successor probe, not a receipt/history scan. Its commit emits its own continuation.
       if (BigInt(data.serial) < MAX_SERIAL) {
         const next = {
@@ -304,7 +306,7 @@ export function createPopulationTotalEffect(pool: Pool): Effect {
           populationId: data.populationId,
           serial: String(BigInt(data.serial) + 1n),
         };
-        if (await receive(pool, next)) await acknowledge(pool, next);
+        if (await receive(pool, next, capabilities)) await acknowledge(pool, next, capabilities);
       }
     },
   };

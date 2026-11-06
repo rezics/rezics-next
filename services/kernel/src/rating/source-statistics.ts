@@ -1,3 +1,7 @@
+import { runCommand, noEffect, principalCommandIdentity } from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
@@ -8,7 +12,6 @@ import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import type { CommandAuthorization, CommandOutcome } from '../command/command.ts';
-import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { customMethod } from '../http/custom-method.ts';
@@ -92,8 +95,15 @@ type Row = {
   observationDigest: string | null;
   figures: unknown;
 };
-type Dependencies = { pool: Pool; access: () => Access; routeKey: Uint8Array; tokens: KeyRing; clock?: KernelClock };
-type CommandDependencies = { pool: Pool; routeKey: Uint8Array; clock?: KernelClock };
+type Dependencies = {
+  pool: Pool;
+  access: () => Access;
+  routeKey: Uint8Array;
+  tokens: KeyRing;
+  capabilities?: RatingCapabilities;
+  clock?: KernelClock;
+};
+type CommandDependencies = { pool: Pool; routeKey: Uint8Array; capabilities?: RatingCapabilities; clock?: KernelClock };
 type WriteInput = {
   actor: Actor;
   subjectId: string;
@@ -332,7 +342,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
     const route = validate(input.source, input.subjectId, input.value, input.authorization);
     const tuple = tupleFor(config.routeKey, effectiveAlias(input.source, input.value), input.value.sourceRecordId);
     const preparedFence = await readFenceSnapshot(config, tuple, input.deadline);
-    const outcome = await runCommand(
+    const outcome = await (ratingCapabilities(config).command ?? runCommand)(
       config.pool,
       {
         partition: partitionOf(route),
@@ -427,7 +437,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
     if (input.actor.kind !== 'account') throw new GrantDeniedError();
     const route = validateClear(input.source, input.subjectId, input.value, input.authorization);
     const identity = principalCommandIdentity(input.actor);
-    return runCommand(
+    return (ratingCapabilities(config).command ?? runCommand)(
       config.pool,
       {
         ...identity,
@@ -508,7 +518,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
 
   async function read(
     subjectId: string,
-    deadline = Date.now() + 2_000,
+    deadline = deadlineFor(2_000),
     expectedFence?: ExpectedFenceRevision,
   ): Promise<SourceStatistic[]> {
     const initial = await readRaw(subjectId, deadline);
@@ -602,11 +612,77 @@ function failures() {
 }
 
 /** Source statistics have their own read/write routes and never enter native vote storage. */
-export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
+/** HTTP registrations are data; composition inspects these before mounting handlers. */
+export function sourceStatisticRouteDeclarations() {
+  return {
+    route1: {
+      method: 'GET' as const,
+      path: '/v1/subjects/:id/source-statistics' as const,
+      options: {
+        params: t.Object({ id }, closed),
+        response: { 200: SourceStatisticListResponseSchema(), ...failures() },
+        detail: publicReadDetail('rating.source_statistics_get', 'subject:read'),
+      },
+    },
+    route2: {
+      method: 'PUT' as const,
+      path: '/v1/subjects/:id/source-statistics/:source' as const,
+      options: {
+        params: t.Object({ id, source }, closed),
+        headers: headers(),
+        body: SourceStatisticInputSchema(),
+        response: {
+          200: withHeaders(SourceStatisticResponseSchema(), { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures(),
+        },
+        detail: detail('rating.source_statistic_put', SOURCE_STATISTIC_WRITE_ACTION, true),
+      },
+    },
+    route3: {
+      method: 'POST' as const,
+      path: customMethod('/v1/subjects/:id/source-statistics/:source', 'clear'),
+      options: {
+        params: t.Object({ id, source }, closed),
+        headers: headers(),
+        body: SourceStatisticClearInputSchema(),
+        response: { 204: withHeaders(t.Void(), { [SESSION_HEADER]: t.String() }), ...failures() },
+        detail: detail('rating.source_statistic_clear', SOURCE_STATISTIC_WRITE_ACTION, true),
+      },
+    },
+    route4: {
+      method: 'GET' as const,
+      path: '/v1/subjects/:id/source-statistics/:source/observations' as const,
+      options: {
+        params: t.Object({ id, source }, closed),
+        query: t.Object(
+          {
+            digest: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })),
+            cursor: t.Optional(t.String({ minLength: 1, maxLength: 512 })),
+            history: t.Optional(t.Literal('true')),
+          },
+          closed,
+        ),
+        response: {
+          ...failures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          200: SourceObservationReadResponseSchema(),
+        },
+        detail: detail('rating.source_observations_get', SOURCE_STATISTIC_WRITE_ACTION),
+      },
+    },
+  };
+}
+
+export function sourceStatisticRoutes(
+  app: ReturnType<typeof definitionRoutes>,
+  dependencies: Dependencies,
+  declarations = sourceStatisticRouteDeclarations(),
+) {
   const config = () => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     tokens: dependencies.tokens,
+    ...(dependencies.capabilities ? { capabilities: dependencies.capabilities } : {}),
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
   });
   const commands = () => createSourceStatisticCommands(config());
@@ -627,57 +703,40 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
   };
 
   return app
-    .get(
-      '/v1/subjects/:id/source-statistics',
-      {
-        params: t.Object({ id }, closed),
-        response: { 200: SourceStatisticListResponseSchema(), ...failures() },
-        detail: publicReadDetail('rating.source_statistics_get', 'subject:read'),
-      },
-      async ({ actor, params, admission, job }) => {
-        if (routeOf(params.id) === null) throw new ProblemError('not_found');
-        return admission.run('normal', job, async () => {
-          try {
-            const readable = await resolveSubject(
-              {
-                pool: dependencies.pool,
-                access: dependencies.access(),
-                ...(dependencies.clock ? { clock: dependencies.clock } : {}),
-              },
-              actor,
-              params.id,
-            );
-            if (!readable) throw new ProblemError('not_found');
-            const rows = await commands().read(readable.subjectId, job.deadline);
-            const current = await resolveSubject(
-              {
-                pool: dependencies.pool,
-                access: dependencies.access(),
-                ...(dependencies.clock ? { clock: dependencies.clock } : {}),
-              },
-              actor,
-              params.id,
-            );
-            if (!current || current.subjectId !== readable.subjectId) throw new ProblemError('not_found');
-            return rows;
-          } catch (error) {
-            return sourceStatisticProblem(error);
-          }
-        });
-      },
-    )
+    .get(declarations.route1.path, declarations.route1.options, async ({ actor, params, admission, job }) => {
+      if (routeOf(params.id) === null) throw new ProblemError('not_found');
+      return admission.run('normal', job, async () => {
+        try {
+          const readable = await resolveSubject(
+            {
+              pool: dependencies.pool,
+              access: dependencies.access(),
+              ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+            },
+            actor,
+            params.id,
+          );
+          if (!readable) throw new ProblemError('not_found');
+          const rows = await commands().read(readable.subjectId, job.deadline);
+          const current = await resolveSubject(
+            {
+              pool: dependencies.pool,
+              access: dependencies.access(),
+              ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+            },
+            actor,
+            params.id,
+          );
+          if (!current || current.subjectId !== readable.subjectId) throw new ProblemError('not_found');
+          return rows;
+        } catch (error) {
+          return sourceStatisticProblem(error);
+        }
+      });
+    })
     .put(
-      '/v1/subjects/:id/source-statistics/:source',
-      {
-        params: t.Object({ id, source }, closed),
-        headers: headers(),
-        body: SourceStatisticInputSchema(),
-        response: {
-          200: withHeaders(SourceStatisticResponseSchema(), { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures(),
-        },
-        detail: detail('rating.source_statistic_put', SOURCE_STATISTIC_WRITE_ACTION, true),
-      },
+      declarations.route2.path,
+      declarations.route2.options,
       async ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]);
@@ -734,14 +793,8 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       },
     )
     .post(
-      customMethod('/v1/subjects/:id/source-statistics/:source', 'clear'),
-      {
-        params: t.Object({ id, source }, closed),
-        headers: headers(),
-        body: SourceStatisticClearInputSchema(),
-        response: { 204: withHeaders(t.Void(), { [SESSION_HEADER]: t.String() }), ...failures() },
-        detail: detail('rating.source_statistic_clear', SOURCE_STATISTIC_WRITE_ACTION, true),
-      },
+      declarations.route3.path,
+      declarations.route3.options,
       async ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]);
@@ -775,24 +828,8 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       },
     )
     .get(
-      '/v1/subjects/:id/source-statistics/:source/observations',
-      {
-        params: t.Object({ id, source }, closed),
-        query: t.Object(
-          {
-            digest: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })),
-            cursor: t.Optional(t.String({ minLength: 1, maxLength: 512 })),
-            history: t.Optional(t.Literal('true')),
-          },
-          closed,
-        ),
-        response: {
-          ...failures(),
-          400: problemSchema('invalid_request', 'invalid_cursor'),
-          200: SourceObservationReadResponseSchema(),
-        },
-        detail: detail('rating.source_observations_get', SOURCE_STATISTIC_WRITE_ACTION),
-      },
+      declarations.route4.path,
+      declarations.route4.options,
       async ({ actor, params, query, authorizeCommand, admission, job }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         await authorizeCommand(root(), () => new GrantDeniedError());

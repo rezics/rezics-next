@@ -85,7 +85,9 @@ Decision: `config-check-runtime.ts` constructs check runners and reloads train s
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
-an alias edge or an allowance. Every worker prompt carries the module map generated from the manifest.
+an alias edge or an allowance. Every worker prompt carries the compact module-map rows for the modules that own the
+brief's paths, plus those modules' allowed dependencies, and a one-line pointer to `docs/architecture/modules.json` for
+the rest.
 
 The production Kernel has one `createKernel` composition for module, route, event and resource registrations. Queue
 registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event

@@ -1,12 +1,13 @@
+import { projectBatch } from '../events/log.ts';
+import { runCommand, currentCommand, noEffect, authoritativeTimeValue } from '../command/command.ts';
+import type { RatingCapabilities } from './contract/capabilities.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { ACCESS_EVENTS } from '../access/events.ts';
-import { currentCommand, noEffect, runCommand, authoritativeTimeValue } from '../command/command.ts';
 import type { CommandEvent } from '../command/command.ts';
 import type { CloudEvent, Envelope } from '../events/log.ts';
-import { projectBatch } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
@@ -130,7 +131,13 @@ async function ensureActorState(tx: Parameters<typeof actorStateRead.run>[0], ac
   return state;
 }
 
-async function applyLifecycle(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
+async function applyLifecycle(
+  pool: Pool,
+  event: CloudEvent,
+  envelope: Envelope,
+  clock?: () => Date,
+  capabilities?: RatingCapabilities,
+) {
   const type = event.type;
   if (!ACTOR_LIFECYCLE.has(type)) return;
   const schema = ACCESS_EVENTS()[type as keyof ReturnType<typeof ACCESS_EVENTS>];
@@ -139,7 +146,7 @@ async function applyLifecycle(pool: Pool, event: CloudEvent, envelope: Envelope,
   const route = routeOfRequired(accountId);
   if (event.subject !== accountId || partitionOf(route) !== envelope.partition)
     throw new TypeError('Account lifecycle event has an invalid classification ballot home');
-  await runCommand(
+  await (capabilities?.command ?? runCommand)(
     pool,
     {
       partition: envelope.partition,
@@ -175,7 +182,13 @@ async function applyLifecycle(pool: Pool, event: CloudEvent, envelope: Envelope,
   );
 }
 
-async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
+async function applyCleanup(
+  pool: Pool,
+  event: CloudEvent,
+  envelope: Envelope,
+  clock?: () => Date,
+  capabilities?: RatingCapabilities,
+) {
   if (
     event.type !== CLASSIFICATION_BALLOT_CLEANUP ||
     !Value.Check(RATING_EVENTS()[CLASSIFICATION_BALLOT_CLEANUP], event.data)
@@ -189,7 +202,7 @@ async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, c
     BigInt(data.generation) > MAX_BIGINT
   )
     throw new TypeError('Classification ballot cleanup has an invalid actor home');
-  await runCommand(
+  await (capabilities?.command ?? runCommand)(
     pool,
     {
       partition: envelope.partition,
@@ -255,7 +268,13 @@ async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, c
   );
 }
 
-async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
+async function applyChanged(
+  pool: Pool,
+  event: CloudEvent,
+  envelope: Envelope,
+  clock?: () => Date,
+  capabilities?: RatingCapabilities,
+) {
   if (
     event.type !== CLASSIFICATION_BALLOT_CHANGED ||
     !Value.Check(RATING_EVENTS()[CLASSIFICATION_BALLOT_CHANGED], event.data)
@@ -284,7 +303,7 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
     throw new TypeError('Classification ballot event has an invalid projection address');
   const bindingHash = Buffer.from(data.bindingHash, 'hex');
   const next = { assessment: data.assessment, falsePositive: data.falsePositive, eligible: data.eligible };
-  await runCommand(
+  await (capabilities?.command ?? runCommand)(
     pool,
     {
       partition: partitionOf(subjectRoute),
@@ -386,25 +405,36 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
   );
 }
 
-async function applyEnvelope(pool: Pool, envelope: Envelope, clock?: () => Date): Promise<void> {
+async function applyEnvelope(
+  pool: Pool,
+  envelope: Envelope,
+  clock?: () => Date,
+  capabilities?: RatingCapabilities,
+): Promise<void> {
   validateEnvelope(envelope);
   for (const event of envelope.events) {
     validateEventAddress(event, envelope);
-    if (ACTOR_LIFECYCLE.has(event.type)) await applyLifecycle(pool, event, envelope, clock);
-    else if (event.type === CLASSIFICATION_BALLOT_CHANGED) await applyChanged(pool, event, envelope, clock);
-    else if (event.type === CLASSIFICATION_BALLOT_CLEANUP) await applyCleanup(pool, event, envelope, clock);
+    if (ACTOR_LIFECYCLE.has(event.type)) await applyLifecycle(pool, event, envelope, clock, capabilities);
+    else if (event.type === CLASSIFICATION_BALLOT_CHANGED)
+      await applyChanged(pool, event, envelope, clock, capabilities);
+    else if (event.type === CLASSIFICATION_BALLOT_CLEANUP)
+      await applyCleanup(pool, event, envelope, clock, capabilities);
   }
 }
 
-export function createClassificationBallotRelay(pool: Pool, clock?: () => Date): Relay {
+export function createClassificationBallotRelay(
+  pool: Pool,
+  clock?: () => Date,
+  capabilities?: RatingCapabilities,
+): Relay {
   return {
     consumer: CONSUMER,
     run(partition) {
-      return projectBatch(pool, {
+      return (capabilities?.projectBatch ?? projectBatch)(pool, {
         consumer: CONSUMER,
         partition,
         apply: async (envelopes) => {
-          for (const envelope of envelopes) await applyEnvelope(pool, envelope, clock);
+          for (const envelope of envelopes) await applyEnvelope(pool, envelope, clock, capabilities);
         },
       });
     },

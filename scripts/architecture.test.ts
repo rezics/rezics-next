@@ -295,13 +295,18 @@ describe('architecture boundaries', () => {
       },
     ]);
     const output = formatModuleMap(current);
-    expect(output).toContain('core|c|l|');
+    expect(output).toContain('core|c|@/core:{.,contracts/*}|-');
     expect(output.length).toBeLessThanOrEqual(2_000);
   });
 
-  test('keeps the committed module map within the worker prompt limit', () => {
+  test('keeps a path-selected module map complete when it fits the worker map budget', () => {
     const committed = loadManifest(process.cwd());
-    expect(formatModuleMap(committed).length).toBeLessThanOrEqual(2_000);
+    const selected = formatModuleMap(committed, ['services/kernel/src/search/query.ts']);
+    expect(selected).toContain('ksearch|');
+    expect(selected).toContain('Other modules: docs/architecture/modules.json');
+    expect(selected).not.toContain('... more modules');
+    expect(selected).not.toMatch(/^wsearch\|/m);
+    expect(selected.length).toBeLessThanOrEqual(6_800);
   });
 
   test('registers extracted packages and admitted source edges at public entries', () => {

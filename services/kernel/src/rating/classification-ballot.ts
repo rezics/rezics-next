@@ -1,9 +1,11 @@
+import type { RatingCapabilities } from './contract/capabilities.ts';
+import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
-import { noEffect, type CommandEvent, type CommandTransaction } from '../command/command.ts';
+import { noEffect, type CommandEvent, type CommandTransaction, commandAttemptDeadline } from '../command/command.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import {
   readCurrentClassificationAssociation,
@@ -13,7 +15,6 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { partitionReadClientObservation } from '../database/read-snapshot.ts';
 import { createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
-import { commandAttemptDeadline } from '../command/command.ts';
 import { CLASSIFICATION_BALLOT_CHANGED, CLASSIFICATION_BALLOT_CLEANUP } from './events.ts';
 import actorStateRead from './classification-ballot-actor-state-lock.sql';
 import actorStateObserve from './classification-ballot-actor-state-read.sql';
@@ -61,7 +62,7 @@ type Aggregate = {
   generation: string;
   asOf: Date | string;
 };
-type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
+type Dependencies = { pool: Pool; access: Access; capabilities?: RatingCapabilities; clock?: KernelClock };
 
 export class ClassificationBallotNotFoundError extends Error {
   constructor() {
@@ -273,10 +274,16 @@ function assertCurrentAccount(owner: AccountActor, current: Awaited<ReturnType<t
 }
 
 export function createClassificationBallotCommands(config: Dependencies) {
-  const { pool, access, clock } = config;
+  const { pool, access } = config;
+  const capabilities = ratingCapabilities(config);
+  const clock = config.capabilities?.clock ?? config.clock;
   // The shared runner supplies actor-home receipt ordering and the current Account floor.
   // Subject/resource admission is independently anchored in Semantic before each receipt lookup.
-  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const runner = createLibraryCommandRunner({
+    ...(capabilities.command ? { command: capabilities.command } : {}),
+    pool,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   async function set(actor: Actor, input: SetClassificationBallotInput, idempotencyKey: string) {
     const owner = account(actor, CLASSIFICATION_BALLOT_SET);

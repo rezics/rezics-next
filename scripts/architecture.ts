@@ -71,7 +71,14 @@ export interface AuditResult {
   violations: BoundaryViolation[];
 }
 
-export { MANIFEST_PATH, MAX_MODULE_MAP_CHARACTERS, formatModuleMap, loadManifest } from './architecture-map.ts';
+export {
+  MANIFEST_PATH,
+  MAX_MODULE_MAP_CHARACTERS,
+  MODULE_MAP_POINTER,
+  formatModuleMap,
+  loadManifest,
+  modulesForBriefPaths,
+} from './architecture-map.ts';
 import { MANIFEST_PATH, MAX_MODULE_MAP_CHARACTERS, formatModuleMap, loadManifest } from './architecture-map.ts';
 const BASELINE_PATH = 'docs/architecture/boundary-baseline.json';
 const CACHE_PATH = '.temp/architecture/graph.json';
