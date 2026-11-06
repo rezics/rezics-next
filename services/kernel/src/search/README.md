@@ -1835,6 +1835,10 @@ current disclosure and summary hydration precede the final execution-joined stat
 arbitrary continuation are exposed. Missing native binding prepares or fails unavailable before engine execution.
 
 `public-preparation.ts` runs locator-only maintenance workflows under the existing Search WorkModule and DBOS owner.
+DBOS recovers those workflows during launch, before `addService` offers the live preparation. `createSearchServiceGate`
+holds recovered steps until the worker offers the running service, and stops the gate on composition, indexing or
+teardown failure so a recovered step cannot run without an active service. HTTP createKernel fixtures pass dedicated
+receipt keys; Search index prefixes stay within 48 characters.
 It retains one scalar scheduling locator; the native publication job owns complete key traversal and invokes
 the ordinary writer's serializer and actual versions. The delivered `SearchWriterGuard` caps its native
 write chunks at 100 keys. Claims advance their native revision,

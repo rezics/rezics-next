@@ -6,6 +6,7 @@ import { createKernel } from '../src/http/kernel.ts';
 import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
 import type { SearchService } from '../src/search/service-scope.ts';
+import { testReceiptKeys } from './support/receipt-keys.ts';
 import { Value } from 'typebox/value';
 import { testReceiptKeys } from './support/receipt-keys.ts';
 
@@ -38,6 +39,9 @@ const search: SearchService = {
   async releaseGroups() {
     throw new Error('Unexpected release groups call');
   },
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
 };
 const schema = t.Object({ integer: t.Integer(), number: t.Number(), boolean: t.Boolean(), string: t.String() });
 const valid = { integer: 2, number: 2.5, boolean: true, string: 'two' };
@@ -50,6 +54,7 @@ const detail = {
 const kernel = createKernel({
   pool,
   routeKey: new Uint8Array(32).fill(1),
+  receiptKeys: testReceiptKeys(),
   access: {
     async authenticate() {
       authentications++;

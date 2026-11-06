@@ -47,7 +47,11 @@ import { readBuiltinPublicationRule } from './builtin-materialization.ts';
 import { authorizeCollectionRule, collectionRuleActions, readSavedCollectionRule } from './collection-rules.ts';
 import { admitSavedCollectionMemberQuery, collectionMemberPrivateReads } from './owner-filter.ts';
 import { completeCollectionSourceOutput, type CollectionOutputRef } from './collection-source-output.ts';
-import { readCollectionPublicationStagingSeal } from './collection-publication-staging.ts';
+import {
+  readCollectionPublicationStagingSeal,
+  type CollectionPublicationSearch,
+} from './collection-publication-staging.ts';
+import { collectionPublicationScopeRuntime } from '../search/work.ts';
 import outputInventoryQuery from './collection-publication-final-output-inventory.sql';
 import outputCommitQuery from './collection-publication-final-output-commit.sql';
 import completeEpisodeQuery from './collection-publication-final-episode-complete.sql';
@@ -405,7 +409,11 @@ export function createCollectionPublicationFinalActivation(
           validateInventory(firstInventory, creation.source.output, before.episode.selected);
 
           // This is a fresh native query-exhaustion receipt. Phase, row count, or copied JSON cannot substitute.
-          const seal = await readCollectionPublicationStagingSeal(tx, locator, work);
+          const runtime = collectionPublicationScopeRuntime(dependencies.workContext);
+          const search: CollectionPublicationSearch | undefined = runtime
+            ? { client: runtime.client, prefix: runtime.prefix, deadline }
+            : undefined;
+          const seal = await readCollectionPublicationStagingSeal(tx, locator, work, search);
           if (!validSeal(locator, creation.source.output, seal)) throw unavailable();
 
           // Release foreign Source work, then re-read the complete local binding before output selection.
@@ -469,6 +477,7 @@ export function createCollectionPublicationFinalActivation(
             version: activationVersion,
             phase: activationEpisode.phase,
             selected: activationEpisode.selected,
+            ...(search ? { search } : {}),
           });
           // The output hook registered its actual provenance callback first. This callback only marks the
           // episode complete after that native row exists in this same Core transaction; the committed

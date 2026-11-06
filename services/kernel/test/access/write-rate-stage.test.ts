@@ -151,7 +151,12 @@ test('one opaque request charge covers duplicate stage invocation and refuses a 
 });
 
 test('the default kernel composition declares every mounted write and installs the real limiter', async () => {
-  const app = createKernel({ pool, routeKey: new Uint8Array(32), ratePeer: () => '192.0.2.1' });
+  const app = createKernel({
+    pool,
+    routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
+    ratePeer: () => '192.0.2.1',
+  });
   const writes = app.routes.filter((route) => {
     const action = route.hooks?.detail?.['x-action'];
     const readOnly = typeof action === 'string' && /^[a-z][a-z_]*:(read|list)$/.test(action);
@@ -184,6 +189,7 @@ test('createKernel subject:read POST custom search authorizes without a write ch
   const app = createKernel({
     pool,
     routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
     access: ({ actions: catalogue }) => {
       expect(catalogue.get('subject:read')).toEqual({ anonymous: true });
       return {
@@ -217,6 +223,9 @@ test('createKernel subject:read POST custom search authorizes without a write ch
         throw new Error('unused');
       },
       async releaseGroups() {
+        throw new Error('unused');
+      },
+      async savedCatalogueMembers() {
         throw new Error('unused');
       },
     },
@@ -352,6 +361,7 @@ test('createKernel payout markPaid and offer delist spend once before effect wit
   const app = createKernel({
     pool,
     routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,

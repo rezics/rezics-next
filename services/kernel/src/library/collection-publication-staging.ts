@@ -12,7 +12,12 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
-import { readCataloguePublicationPage } from '../search/catalogue-publication.ts';
+import {
+  observeCataloguePublication,
+  readCataloguePublicationPage,
+  type CataloguePublicationObservation,
+} from '../search/catalogue-publication.ts';
+import { SearchUnavailableError, type OpenSearch } from '../search/opensearch.ts';
 import { zeroScopeWork } from '../search/scope-execution.ts';
 import { createSearchScopeSource, type PreparedSearchScope, type ScopeBasis } from '../search/scope-source.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
@@ -38,6 +43,12 @@ import {
 } from './collection-publication-staging-state.ts';
 
 type Runtime = Parameters<typeof createSearchScopeSource>[0];
+/** Search client used to revalidate public catalogue generation/uuid/index at seal and readback. */
+export type CollectionPublicationSearch = Readonly<{
+  client: OpenSearch;
+  prefix: string;
+  deadline: number;
+}>;
 /** The actual Search service configuration, including its server-only work role. No driver/policy callbacks. */
 export type CollectionPublicationStagingOptions = Runtime & Readonly<{ allowance: WorkAllowance }>;
 type Binding = Readonly<{
@@ -350,8 +361,31 @@ export async function stageCollectionPublicationStep(
             return { prepared, work: scope!.work(prepared) };
           })
         ).prepared;
+    const search: CollectionPublicationSearch = {
+      client: options.client,
+      prefix: options.prefix,
+      deadline: evidence.deadline,
+    };
+    const publicCatalogue: CataloguePublicationObservation | undefined = catalogueOnly
+      ? (
+          await work.compose(async (allowance) => {
+            try {
+              return await observeCataloguePublication({
+                client: options.client,
+                prefix: options.prefix,
+                releaseDigest: native.releaseDigest,
+                deadline: evidence.deadline,
+                work: allowance,
+              });
+            } catch (error) {
+              if (error instanceof SearchUnavailableError) throw unavailable();
+              throw error;
+            }
+          })
+        ).observation
+      : undefined;
     const basis: ScopeBasis = catalogueOnly
-      ? (Object.freeze({
+      ? Object.freeze({
           release: native.releaseDigest,
           query: createHash('sha256')
             .update(canonicalize({ filter: native.definition.filter, source: 'catalogue' })!)
@@ -369,7 +403,8 @@ export async function stageCollectionPublicationStep(
             source: structuredClone(native.sourceIdentity),
             observation: structuredClone(native.observation),
           }),
-        }) as ScopeBasis)
+          publicCatalogue: publicCatalogue!,
+        })
       : ownerPrepared!.basis;
     if (
       basis.release !== native.releaseDigest ||
@@ -399,7 +434,7 @@ export async function stageCollectionPublicationStep(
         `INSERT INTO library.collection_publication_staging
          (route,collection_id,generation,publication_id,account_id,definition_digest,binding,scope_basis,
           canonical_generation,canonical_basis_digest,public_inputs,frontier,fact_fence)
-         SELECT g.route,g.collection_id,g.generation,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,false,$11::jsonb,$13
+         SELECT g.route,g.collection_id,g.generation,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$14,$11::jsonb,$13
          FROM library.collection_source_output g
          WHERE g.route=$1 AND g.collection_id=$2 AND g.generation=$3 AND g.account_id=$5
            AND g.source_generation=$12 AND g.output_mode='whole_query' AND g.expected_members IS NULL
@@ -421,6 +456,7 @@ export async function stageCollectionPublicationStep(
           json(initialCollectionPublicationFrontier()),
           native.rule.sourceGeneration,
           source.metadata.factFence,
+          catalogueOnly,
         ],
       );
       row = await checkpoint(tx, locator, work);
@@ -434,12 +470,13 @@ export async function stageCollectionPublicationStep(
       row.canonical_generation !== source.generation ||
       row.canonical_basis_digest !== source.basis.digest ||
       row.fact_fence !== source.metadata.factFence ||
-      row.public_inputs
+      row.public_inputs !== catalogueOnly ||
+      (catalogueOnly && !row.scope_basis.publicCatalogue)
     )
       throw unavailable();
     if (row.frontier.exhausted) {
       settlement.cancel();
-      const seal = await readCollectionPublicationStagingSeal(tx, locator, work);
+      const seal = await readCollectionPublicationStagingSeal(tx, locator, work, search);
       if (!seal) throw unavailable();
       return { state: 'sealed', checkpoint: publicCheckpoint(row), work: work.receipt() };
     }
@@ -450,27 +487,25 @@ export async function stageCollectionPublicationStep(
     if (!frontier.exhausted && !frontier.pending) {
       if (catalogueOnly) {
         const page = await work.compose(async (allowance) => {
-          const remaining = Math.min(16, allowance.remaining.candidateKeys);
+          const remaining = Math.min(16, allowance.remaining.candidateKeys - 1);
           if (remaining < 1) throw unavailable();
-          const result = await readCataloguePublicationPage({
-            client: options.client,
-            prefix: options.prefix,
-            filter: native.definition.filter,
-            release: native.definition.release.value,
-            after: frontier.after,
-            limit: remaining,
-          });
-          return {
-            ...result,
-            work: {
-              reservationId: allowance.reservationId,
-              used: {
-                ...zeroScopeWork(),
-                candidateKeys: result.subjects.length,
-                statements: 1,
-              },
-            },
-          };
+          try {
+            return await readCataloguePublicationPage({
+              client: options.client,
+              prefix: options.prefix,
+              filter: native.definition.filter,
+              release: native.definition.release.value,
+              releaseDigest: native.releaseDigest,
+              after: frontier.after,
+              limit: remaining,
+              deadline: evidence.deadline,
+              work: allowance,
+              ...(row.scope_basis.publicCatalogue ? { expected: row.scope_basis.publicCatalogue } : {}),
+            });
+          } catch (error) {
+            if (error instanceof SearchUnavailableError) throw unavailable();
+            throw error;
+          }
         });
         frontier = enterCataloguePublicationMembers(frontier, page.subjects, page.exhausted);
       } else {
@@ -538,7 +573,7 @@ export async function stageCollectionPublicationStep(
     )
       throw unavailable();
     await writeCollectionPublicationCheckpoint(tx, locator, row, { frontier, subject, included, references }, work);
-    if (frontier.exhausted) await sealCollectionPublicationStaging(tx, locator, work);
+    if (frontier.exhausted) await sealCollectionPublicationStaging(tx, locator, work, search);
     const updated = await checkpoint(tx, locator, work);
     if (!updated) throw conflict();
     return {
@@ -613,6 +648,31 @@ async function writeCollectionPublicationCheckpoint(
     [locator.route, locator.collectionId, row.generation, row.version, json(next.frontier)],
   );
   if (!updated) throw conflict();
+}
+
+/** Public generation/uuid/index must still match the pinned observation. Library facts never enter this proof. */
+async function currentPublicCatalogue(
+  row: Checkpoint,
+  work: NativeCollectionWork,
+  search: CollectionPublicationSearch,
+) {
+  const expected = row.scope_basis.publicCatalogue;
+  if (!expected) throw unavailable();
+  await work.compose(async (allowance) => {
+    try {
+      return await observeCataloguePublication({
+        client: search.client,
+        prefix: search.prefix,
+        releaseDigest: expected.releaseDigest,
+        deadline: search.deadline,
+        work: allowance,
+        expected,
+      });
+    } catch (error) {
+      if (error instanceof SearchUnavailableError) throw unavailable();
+      throw error;
+    }
+  });
 }
 
 /** Native source-local checks used both at exhaustion and on every final-command seal read. */
@@ -700,14 +760,14 @@ async function sealCollectionPublicationStaging(
   tx: OperationalTransaction,
   locator: CollectionPublicationLocator,
   work: NativeCollectionWork,
+  search: CollectionPublicationSearch,
 ) {
   const native = await admit(tx, locator, work);
   const row = await checkpoint(tx, locator, work);
   if (!row || row.definition_digest !== definitionDigest(native) || !row.frontier.exhausted || row.frontier.pending)
     throw unavailable();
-  // Search's current public Source/index proof is not exposed by the delivered adapter. Its index name/count
-  // or a private owner capture cannot fill that gap. Keep that foreign branch explicitly unavailable.
-  if (row.public_inputs || !row.scope_basis.nativeOwner) throw unavailable();
+  if (!row.scope_basis.nativeOwner) throw unavailable();
+  if (row.public_inputs) await currentPublicCatalogue(row, work, search);
   await currentSource(tx, row, work);
   if (!isDeepStrictEqual(await admit(tx, locator, work), native)) throw unavailable();
   const [sealed] = await query(
@@ -743,6 +803,7 @@ export async function readCollectionPublicationStagingSeal(
   tx: CommandTransaction,
   locator: CollectionPublicationLocator,
   work: NativeCollectionWork,
+  search?: CollectionPublicationSearch,
 ): Promise<CollectionPublicationStagingSeal | null> {
   let native: CollectionPublicationWorkDefinition | null = null;
   if (hasLiveOperationalTransaction(tx)) native = await admit(tx, locator, work);
@@ -766,7 +827,6 @@ export async function readCollectionPublicationStagingSeal(
   )
     throw unavailable();
   if (
-    row.public_inputs ||
     !row.scope_basis.nativeOwner ||
     !row.frontier.exhausted ||
     row.frontier.pending ||
@@ -776,6 +836,10 @@ export async function readCollectionPublicationStagingSeal(
     })
   )
     return null;
+  if (row.public_inputs) {
+    if (!search || !row.scope_basis.publicCatalogue) return null;
+    await currentPublicCatalogue(row, work, search);
+  }
   const [seal] = await query<{ members: string; native_xid: string; position: string }>(
     tx,
     work,

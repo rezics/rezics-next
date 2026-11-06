@@ -118,6 +118,9 @@ const service: SearchService = {
     if (failure) throw failure;
     return { subjects: [result], as_of: asOf };
   },
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
+  },
   async releaseGroups(principal, request) {
     calls.push(['releaseGroups', principal, request]);
     if (failure) throw failure;
@@ -132,8 +135,15 @@ const service: SearchService = {
     };
   },
 };
-const kernel = createKernel({ pool, access, tokens, routeKey, search: service });
-const offline = createKernel({ pool, access, tokens, routeKey });
+const kernel = createKernel({
+  pool,
+  access,
+  tokens,
+  receiptKeys: testReceiptKeys(),
+  routeKey,
+  search: service,
+});
+const offline = createKernel({ pool, access, tokens, receiptKeys: testReceiptKeys(), routeKey });
 
 async function call(
   app: typeof kernel,
@@ -413,6 +423,7 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
     pool,
     access,
     tokens,
+    receiptKeys: testReceiptKeys(),
     routeKey,
     clock: () => new Date(now),
     search: {

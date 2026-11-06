@@ -11,7 +11,10 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import lock from './collection-source-output-lock.sql';
-import { readCollectionPublicationStagingSeal } from './collection-publication-staging.ts';
+import {
+  readCollectionPublicationStagingSeal,
+  type CollectionPublicationSearch,
+} from './collection-publication-staging.ts';
 import {
   readCollectionPublicationEpisode,
   readCollectionPublicationEpisodeVersion,
@@ -60,6 +63,7 @@ type StagingActivation = Readonly<{
   version: string;
   phase: Extract<CollectionPublicationEpisode['phase'], 'staging' | 'awaiting_activation'>;
   selected: CollectionPublicationEpisode['selected'];
+  search?: CollectionPublicationSearch;
 }>;
 const conflict = () => new ProblemError('conflict');
 const uuid = (id: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id);
@@ -228,7 +232,7 @@ export async function completeCollectionSourceOutput(
   if (staging) {
     // Re-read the actual native full-query seal before the fresh local owner/rule/header compare.
     // No caller count, phase, checkpoint JSON or selected A may stand in for this receipt.
-    const seal = await readCollectionPublicationStagingSeal(tx, staging.locator, staging.work);
+    const seal = await readCollectionPublicationStagingSeal(tx, staging.locator, staging.work, staging.search);
     if (
       !seal ||
       seal.publicationId !== staging.locator.publicationId ||

@@ -48,7 +48,7 @@ const observed: SearchCall[] = [];
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
   async savedCatalogueMembers() {
-    throw new Error('saved membership is not used by this fixture');
+    throw new Error('Unexpected saved catalogue members call');
   },
   async search(principal, request, _time, _active, context) {
     observed.push({ principal, request, context });
