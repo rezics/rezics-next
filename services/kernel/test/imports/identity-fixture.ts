@@ -59,6 +59,8 @@ export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8A
 }
 
 export interface ImportIdentityOptions {
+  /** Full proposal/publication composition; minimal identity acceptance keeps its narrow grant. */
+  readonly publication?: true;
   /** Explicit VNDB composition; other sources retain their existing authority. */
   readonly sourceStatistics?: 'vndb';
   /** Borrowed application database, including its original capture pool. */
@@ -275,7 +277,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   configureTestReceiptKeys(database.pool);
   const counters = { authMigrationCalls: 0, baselineWorkflowCalls: { registrations: 0, keyInstalls: 0 } };
   let countingBaselineCalls = false;
-  const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];
+  const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS, ...(options.publication ? ['statement:propose'] : [])];
   const statisticScopes = options.sourceStatistics === 'vndb' ? ['source_statistic:write'] : [];
   const managementScopes = [
     ...importerScopes,
@@ -434,6 +436,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           ...IMPORT_ACTIONS,
           'statement:propose',
           'media:read_reservation',
+          ...(options.publication
+            ? ['subject:read', 'subject:context_read', 'media:read', 'context:accept', 'context:adopt']
+            : []),
           ...statisticScopes,
         ],
       };
