@@ -101,7 +101,17 @@ const fail = () =>
 export async function readIdentityEpochCutover(tx: CommandTransaction) {
   const owner = await readPartition(tx, 0);
   const row = (await tx.query(bootstrapSelectBootstrapTopology.sql)).rows[0];
-  return { state: owner?.writeState === 'active' && row?.remaining === 0 ? ('ready' as const) : ('blocked' as const) };
+  const installation = (await tx.query('SELECT valid FROM semantic.read_identity_epoch_installation()')).rows[0] as
+    | { valid: boolean }
+    | undefined;
+  const cut = (
+    await tx.query('SELECT 1 FROM semantic.identity_epoch_installation_cut WHERE partition_no=0 LIMIT 1')
+  ).rowCount;
+  const interrupted = (cut ?? 0) > 0 && installation?.valid !== true;
+  return {
+    state:
+      owner?.writeState === 'active' && row?.remaining === 0 && !interrupted ? ('ready' as const) : ('blocked' as const),
+  };
 }
 
 async function readPage(pool: Pool, partition: number): Promise<Page | null> {
@@ -590,7 +600,7 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
     const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
     if (!state || state.remaining === 0) return noEffect([]);
     const homes = (await tx.query(selectFrontier.sql, [state.next_partition])).rows.map((r) => r.source_partition);
-    if (!homes.length) throw fail();
+    if (!homes.length) return noEffect([]);
     await tx.query(advanceCursor.sql, [(homes.at(-1)! + 1) % 4096]);
     return {
       value: homes,

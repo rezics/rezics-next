@@ -4740,6 +4740,23 @@ CREATE TABLE library.follow_count_total (
 
 
 --
+-- Name: identity_epoch_coverage; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.identity_epoch_coverage (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    affected integer NOT NULL,
+    exhausted boolean NOT NULL,
+    CONSTRAINT identity_epoch_coverage_affected_check CHECK (((affected >= 0) AND (affected <= 65536))),
+    CONSTRAINT identity_epoch_coverage_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_epoch_coverage_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
 -- Name: identity_epoch_participant_work; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -7618,6 +7635,14 @@ ALTER TABLE ONLY library.follow_count_total
 
 ALTER TABLE ONLY library.follow
     ADD CONSTRAINT follow_pkey PRIMARY KEY (route, account_id, target_id);
+
+
+--
+-- Name: identity_epoch_coverage identity_epoch_coverage_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_epoch_coverage
+    ADD CONSTRAINT identity_epoch_coverage_pkey PRIMARY KEY (partition_no, job_id, job_epoch);
 
 
 --

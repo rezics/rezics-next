@@ -6,9 +6,19 @@ import { stepLibraryIdentityEpoch } from '../library/identity-epoch-participant.
 import { createSearchIdentityEpochParticipant } from '../search/identity-epoch-participant.ts';
 import { createOpenSearch } from '../search/opensearch.ts';
 import { readSearchConfig } from '../search/work.ts';
+import { subjectIndexName } from '../search/indices.ts';
+import { subjectConsumer } from '../search/consumer-name.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import { searchReceivingProductionDeclaration } from './identity-search-receiving-statements.ts';
+import { commitSearchIdentityReceivingPlans } from './identity-search-receiving-source.ts';
+import {
+  identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
+  withIdentitySourceConsumerMaintenance,
+} from './identity-source-consumer-maintenance.ts';
 import type {
   IdentityEpochParticipants,
   IdentityJobRef,
@@ -144,14 +154,31 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
   if (installations.has(context.pool)) throw new Error('Identity epoch coordinator is already registered');
   const config = readSearchConfig(context.env);
   const routeKey = config && context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : null;
+  const search = config ? createOpenSearch(config.url) : null;
+  const receiving =
+    config && routeKey && search
+      ? Object.freeze({
+          configuration: Object.freeze({
+            pool: context.pool,
+            routeKey,
+            access: context.getAuthorization().access,
+            clock: context.clock,
+            search,
+            consumer: subjectConsumer(config.prefix, 1),
+            index: subjectIndexName(config.prefix, 1),
+          }),
+          work: searchReceivingProductionDeclaration(),
+        })
+      : null;
   const participants: IdentityEpochParticipants | null =
-    config && routeKey
+    config && routeKey && search
       ? Object.freeze({
           version: 1,
           'search-canonical-index': createSearchIdentityEpochParticipant({
-            search: createOpenSearch(config.url),
+            search,
             prefix: config.prefix,
             routeKey,
+            receiving,
           }),
           'library-private-follow-counts': stepLibraryIdentityEpoch,
         })
@@ -175,12 +202,36 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
     async (job: JobLocator, step: IdentityStepName) => {
       const ref = nativeJob(job);
       const binding = installed(context.pool);
-      // The producer rereads its saved frontier and commits locally. Its home has been released on return.
-      const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
-        context.pool,
-        ref,
+      const deadline = deadlineFor(1000);
+      return withIdentitySourceConsumerMaintenance(
+        { pool: context.pool, env: context.env, clock: context.clock },
+        { deadline },
+        async (funded) => {
+          if (step === 'search-canonical-index') {
+            if (!receiving) throw unavailable('Search receiving composition is not installed');
+            const parent = identitySourceConsumerLibraryWork(
+              context.pool,
+              funded.identityConsumerWork,
+              funded.deadline,
+            );
+            const allowance = identitySourceConsumerNativeWork(
+              context.pool,
+              funded.identityConsumerWork,
+              funded.deadline,
+            );
+            if (!parent || !allowance) throw unavailable('Search requires the original live Source maintenance frame');
+            await commitSearchIdentityReceivingPlans(context.pool, ref, receiving.configuration, {
+              deadline: funded.deadline,
+              allowance,
+            });
+          }
+          const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
+            context.pool,
+            ref,
+          );
+          return { receipt: receiptLocator(ref, step, progress), state: progress.state };
+        },
       );
-      return { receipt: receiptLocator(ref, step, progress), state: progress.state };
     },
     { name: `${workflowName}.produce`, ...COMMAND_STEP_RETRIES },
   );
