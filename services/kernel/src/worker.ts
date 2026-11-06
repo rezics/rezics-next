@@ -32,9 +32,6 @@ export type WorkerConfig = {
   kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
 };
 
-/** Decorate the live default composition without replacing its ambient services or module instances. */
-export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
-
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   const receiptKeys = readReceiptKeyRing(env);
   const databaseUrl = env.DATABASE_URL;
