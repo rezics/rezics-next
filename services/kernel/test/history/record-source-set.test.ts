@@ -2,7 +2,11 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { noEffect, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
 import { declareCommandHistory } from '../../src/history/adapters/record.ts';
-import { beginRecordHistorySerialization, declareCommandRecordSources, declareCommandRecordSourceSet } from '../../src/history/adapters/record-source.ts';
+import {
+  beginRecordHistorySerialization,
+  declareCommandRecordSources,
+  declareCommandRecordSourceSet,
+} from '../../src/history/adapters/record-source.ts';
 import {
   type SemanticRecordSourceSet,
   validateRecordSourceSetCommitment,

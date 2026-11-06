@@ -26,7 +26,16 @@ import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { commandAgentIdentitySource, commandRecordSources, finalizeCommandRecordSources, hasCommandRecordSourceSet, recordCommandHistory, releaseCommandHistory, validateCommandHistory, validateCommandHistoryScope } from '../history/application/index.ts';
+import {
+  commandAgentIdentitySource,
+  commandRecordSources,
+  finalizeCommandRecordSources,
+  hasCommandRecordSourceSet,
+  recordCommandHistory,
+  releaseCommandHistory,
+  validateCommandHistory,
+  validateCommandHistoryScope,
+} from '../history/application/index.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;

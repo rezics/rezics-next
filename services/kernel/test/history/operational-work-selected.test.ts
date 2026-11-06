@@ -3,7 +3,11 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { readFileSync } from 'node:fs';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
-import { registerPositionedOperationalHistoryWork, reserveOperationalWorkTransfer, resolveCommittedOperationalWork } from '../../src/history/adapters/operational-work.ts';
+import {
+  registerPositionedOperationalHistoryWork,
+  reserveOperationalWorkTransfer,
+  resolveCommittedOperationalWork,
+} from '../../src/history/adapters/operational-work.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
 import { operationalFixture } from '../command/support/operational-fixture.ts';

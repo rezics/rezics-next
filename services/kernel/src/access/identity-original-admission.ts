@@ -813,9 +813,7 @@ export type PrepaidAgentIdentityHistoryUnit = <T>(
       clock: () => Date;
     }>,
   parent: IdentityOriginalSourceContext,
-  body: (
-    funded: IdentitySourceConsumerMaintenanceContext,
-  ) => Promise<T>,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
 ) => Promise<T>;
 
 /** Fixed native caller integration only; neither a callback parameter nor a module path
@@ -826,9 +824,7 @@ export async function withSelectedHistoryOriginalChild<T>(
     Readonly<{ env: Readonly<Record<string, string | undefined>>; clock: () => Date }>,
   token: IdentityOriginalTransfer,
   jobId: string,
-  body: (
-    funded: IdentitySourceConsumerMaintenanceContext,
-  ) => Promise<T>,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
 ): Promise<T> {
   live(deps, token, jobId);
   live(deps, token, jobId);

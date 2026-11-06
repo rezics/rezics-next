@@ -2,8 +2,15 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { newId, partitionOf, PARTITIONS } from '../../src/route/route.ts';
 import { HistoryRegistry, type HistoryBarrier, type HistoryFamilySource } from '../../src/history/contract/registry.ts';
-import { advanceHistoryFamilyCoverage, installHistoryFamilyDefinitions } from '../../src/history/adapters/family-coverage.ts';
-import { readHistoryOwnerCoverage, verifyHistoryOwnerCoverage, recordHistoryReceivingProof } from '../../src/history/adapters/receiving.ts';
+import {
+  advanceHistoryFamilyCoverage,
+  installHistoryFamilyDefinitions,
+} from '../../src/history/adapters/family-coverage.ts';
+import {
+  readHistoryOwnerCoverage,
+  verifyHistoryOwnerCoverage,
+  recordHistoryReceivingProof,
+} from '../../src/history/adapters/receiving.ts';
 import { minimizeHistoryReceipt } from '../../src/history/adapters/receipt.ts';
 import { decodeLocator } from '../../src/history/contract/locator.ts';
 import { custodyFixture, scope, type CustodyFixture } from './command-custody-fixture.ts';

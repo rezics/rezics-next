@@ -23,7 +23,10 @@ import {
   type CommandDispatchOwner,
   type SourceFenceCommandDispatchOwner,
 } from '../../src/command/dispatch-lifetime.ts';
-import { declareCommandRecordSources, declareCommandRecordSourceSet } from '../../src/history/adapters/record-source.ts';
+import {
+  declareCommandRecordSources,
+  declareCommandRecordSourceSet,
+} from '../../src/history/adapters/record-source.ts';
 import { declareAgentIdentitySource } from '../../src/history/adapters/agent-identity-source.ts';
 import { beginSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 import { writeIdentityScopeConsumerNativeCommit } from '../../src/semantic/identity-epoch-native-commit.ts';

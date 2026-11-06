@@ -8,7 +8,10 @@ import {
   type SelectedOperationalPhase,
   type SelectedIdentity,
 } from '../../src/work/selected-runtime.ts';
-import { associateSelectedEpisode, finishSelectedEpisode } from '../../src/history/adapters/operational-work-selected.ts';
+import {
+  associateSelectedEpisode,
+  finishSelectedEpisode,
+} from '../../src/history/adapters/operational-work-selected.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import {

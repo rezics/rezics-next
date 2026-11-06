@@ -13,12 +13,19 @@ import { ContentNotFoundError } from '../../src/content/commands.ts';
 import { ACCOUNT_ROLE_BITS, type HistoryArtifactType } from '../../src/history/contract/contracts.ts';
 import { decodeLocator } from '../../src/history/contract/locator.ts';
 import { declareCommandHistory, registerCommandHistoryKind } from '../../src/history/adapters/record.ts';
-import { beginRecordHistorySerialization, commandRecordSources, declareCommandRecordSources } from '../../src/history/adapters/record-source.ts';
+import {
+  beginRecordHistorySerialization,
+  commandRecordSources,
+  declareCommandRecordSources,
+} from '../../src/history/adapters/record-source.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
-import { type RecordHistorySourceReference, recordHistorySourceKey } from '../../src/history/contract/record-vocabulary.ts';
+import {
+  type RecordHistorySourceReference,
+  recordHistorySourceKey,
+} from '../../src/history/contract/record-vocabulary.ts';
 
 setDefaultTimeout(120_000);
 

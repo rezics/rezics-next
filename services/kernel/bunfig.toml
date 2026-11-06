@@ -1,4 +1,9 @@
 preload = ["reylo/register"]
 
 [test]
-preload = ["reylo/register", "./test/support/fixture-event-types.ts", "./test/support/stable-match-object.ts", "./test/support/native-history-composition.ts"]
+preload = [
+  "reylo/register",
+  "./test/support/fixture-event-types.ts",
+  "./test/support/stable-match-object.ts",
+  "./test/support/native-history-composition.ts",
+]

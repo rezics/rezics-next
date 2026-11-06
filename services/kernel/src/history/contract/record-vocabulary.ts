@@ -67,7 +67,13 @@ export function unionHistoryScope(
 
 /** The owner's exact reference to one original record source resource. */
 export type RecordHistorySourceReference =
-  | Readonly<{ kind: 'contribution'; subjectId: string; candidateId: string; revision: number; documentId: string | null }>
+  | Readonly<{
+      kind: 'contribution';
+      subjectId: string;
+      candidateId: string;
+      revision: number;
+      documentId: string | null;
+    }>
   | Readonly<{ kind: 'context'; contextId: string }>
   | Readonly<{ kind: 'zone'; zoneId: string }>;
 

@@ -4,7 +4,11 @@ import type { Pool } from 'pg';
 import { mergeVerifiedAgent } from '../../src/access/agent-verification.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/adapters/agent-identity-recovery-receiving.ts';
-import { identityHistoryCommand, nativeWork, reserveIdentityHistoryWork } from '../../src/history/adapters/agent-identity-inventory-work.ts';
+import {
+  identityHistoryCommand,
+  nativeWork,
+  reserveIdentityHistoryWork,
+} from '../../src/history/adapters/agent-identity-inventory-work.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { readAccountIdentityUndo } from '../../src/semantic/identity-epoch-binding.ts';
@@ -514,7 +518,8 @@ test('The original Source owner durably guards exact History readiness and closu
   const { lockIdentitySourceHistoryAuthority, lockIdentitySourceHistoryHandoff, IDENTITY_SOURCE_HISTORY_GUARD_COST } =
     await import('../../src/semantic/identity-source-consumer-custody.ts');
   const { readAgentIdentityRetirementStage } = await import('../../src/history/adapters/agent-identity-retirement.ts');
-  const { readAgentIdentitySDKReceivingBinding } = await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
+  const { readAgentIdentitySDKReceivingBinding } =
+    await import('../../src/history/adapters/agent-identity-sdk-fence.ts');
   const { enqueueAgentIdentityVerification } = await import('../../src/history/adapters/agent-identity-work.ts');
   const { createWorkClient } = await import('../../src/work/client.ts');
   const { readSdkWorkflowWriterState } = await import('../../src/work/sdk-retirement-fence.ts');

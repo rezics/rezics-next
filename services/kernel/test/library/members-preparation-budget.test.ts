@@ -19,7 +19,10 @@ import {
   MEMBERS_PREPARATION_STEP_CEILING,
 } from '../../src/library/members-preparation-cost.ts';
 import { declareMembersPreparationRequest } from '../../src/library/members-preparation-request.ts';
-import { OPERATIONAL_WORK_LOCAL_DECLARATION, OPERATIONAL_WORK_REGISTRATION } from '../../src/history/core/operational-work-budget.ts';
+import {
+  OPERATIONAL_WORK_LOCAL_DECLARATION,
+  OPERATIONAL_WORK_REGISTRATION,
+} from '../../src/history/core/operational-work-budget.ts';
 
 const cost = (amount: number): WorkDimensions => ({
   candidateKeys: amount,

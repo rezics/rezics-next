@@ -25,7 +25,13 @@ import {
   writeAgentVerificationPage,
   type AgentVerificationWorkflowRequest,
 } from './agent-verification.ts';
-import { agentIdentityRetirementReadiness, associateAgentIdentityWorkSource, enqueueAgentIdentityReversal, enqueueAgentIdentityVerification, verifyAgentIdentityWorkReplay } from '../history/application/index.ts';
+import {
+  agentIdentityRetirementReadiness,
+  associateAgentIdentityWorkSource,
+  enqueueAgentIdentityReversal,
+  enqueueAgentIdentityVerification,
+  verifyAgentIdentityWorkReplay,
+} from '../history/application/index.ts';
 import { AGENT_IDENTITY_WORK_OWNER } from '../history/contract/index.ts';
 
 const workflowName = 'accounts.agent-verification';

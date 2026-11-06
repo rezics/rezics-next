@@ -194,8 +194,7 @@ export type AgentIdentitySDKFenceObservation =
 /** Native expected address returned by the original Source producer. It is persisted
  * only after that producer has reconstructed and locked it, and re-resolved by the
  * original native function on every later History transition. */
-export type AgentIdentityHistoryAuthority =
-  HistoryHandle;
+export type AgentIdentityHistoryAuthority = HistoryHandle;
 
 export type AgentIdentityHistoryReadiness = Readonly<{
   binding: AgentIdentitySDKReceivingBinding;
@@ -281,7 +280,13 @@ export type AgentIdentityLockedHistory =
   | Readonly<{ state: 'guarded'; receipt: AgentIdentitySDKRetirementReceipt; writer: HistoryWriterState }>;
 
 /** Native step work: the bounded row, point, statement and byte amount one Accounts step declares. */
-export type NativeStepWork = Readonly<{ rows: number; points: number; statements: number; bytes: number; engineRequests: number }>;
+export type NativeStepWork = Readonly<{
+  rows: number;
+  points: number;
+  statements: number;
+  bytes: number;
+  engineRequests: number;
+}>;
 
 /** The accounts-work amounts the native identity owner declares, keyed by step. */
 export type IdentityHistoryAccountsLocalWork = Readonly<{
@@ -334,4 +339,3 @@ export type AgentIdentityInventoryRead =
   | AgentIdentityNativeInventory
   | Readonly<{ state: 'received'; native: 'verified'; gap: null; proof: AgentIdentityInventoryProof }>
   | Readonly<{ state: 'pending'; native: 'sealed'; gap: string; proof: AgentIdentityInventoryProof }>;
-
