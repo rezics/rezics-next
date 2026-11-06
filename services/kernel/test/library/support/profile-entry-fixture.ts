@@ -387,6 +387,9 @@ export async function createProfileEntryFixture(
       extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
+      for (const home of partitions) {
+        if (home !== 0) await catchUpIdentity(home);
+      }
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -518,7 +521,7 @@ export async function createProfileEntryFixture(
       await catchUpIdentity(partitionOf(routeOf(id)!));
       return id;
     }
-    function homeKey(accountId: string, home = 0) {
+    function homeKey(accountId: string, home = partitionOf(routeOf(accountId)!)) {
       let key = entryKey();
       while (partitionOf(subjectTarget(routeKey, accountId, key).route) !== home) key = entryKey();
       return key;
@@ -526,7 +529,7 @@ export async function createProfileEntryFixture(
     async function createHomeSubject(
       vertical: ProfileVertical,
       person: { actor: AccountActor; bearer: string },
-      home = 0,
+      home = partitionOf(routeOf(person.actor.accountId)!),
       label: string = vertical,
     ) {
       const key = homeKey(person.actor.accountId, home);

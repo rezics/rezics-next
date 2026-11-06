@@ -143,7 +143,11 @@ test.serial(
     });
     expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
 
-    await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 1, measureId: 'episode', amount: '4' });
+    await json('POST', `/v1/progressSessions/${sessionId}:record`, {
+      revision: opened.progressSession.revision,
+      measureId: 'episode',
+      amount: '4',
+    });
     const preserveReview = await select(2, { kind: 'existing', sessionId });
     const preserved = await confirmed(2, preserveReview);
     expect(preserved.outcomes[0].progress.measures).toMatchObject([{ status: 'preserved', currentAmount: '4' }]);
@@ -151,7 +155,11 @@ test.serial(
     expect(opened.progressSession.amount).toBe('4');
 
     const staleReview = await select(3, { kind: 'existing', sessionId });
-    await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 2, measureId: 'episode', amount: '6' });
+    await json('POST', `/v1/progressSessions/${sessionId}:record`, {
+      revision: opened.progressSession.revision,
+      measureId: 'episode',
+      amount: '6',
+    });
     const stale = await confirmed(3, staleReview);
     expect(stale.outcomes[0].progress.measures).toMatchObject([{ status: 'stale' }]);
     expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('6');
@@ -405,12 +413,14 @@ test.serial(
 test.serial(
   'MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer',
   async () => {
-    const actor = await native.identity(
-      [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
-      0,
-    );
+    const actor = await native.identity([
+      ...native.owner.actor.scopes,
+      'rating:vote',
+      'definitions:read',
+      'subject:read',
+    ]);
     const targets: string[] = [];
-    for (let index = 0; index < 4; index++) targets.push(await native.createHomeSubject('game', actor, 0));
+    for (let index = 0; index < 4; index++) targets.push(await native.createHomeSubject('game', actor));
     await native.grantLibraryGate(actor.actor.accountId);
     const id = (
       await json(
@@ -821,14 +831,16 @@ test.serial(
 test.serial(
   'native redirect requires a deliberate review of the canonical MAL target',
   async () => {
-    const actor = await native.identity(
-      [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
-      0,
-    );
+    const actor = await native.identity([
+      ...native.owner.actor.scopes,
+      'rating:vote',
+      'definitions:read',
+      'subject:read',
+    ]);
     await native.grantLibraryGate(actor.actor.accountId);
     const subjects = [
-      await native.createHomeSubject('game', actor, 0),
-      await native.createHomeSubject('game', actor, 0),
+      await native.createHomeSubject('game', actor),
+      await native.createHomeSubject('game', actor),
     ].sort();
     const canonical = subjects[0]!;
     const selected = subjects[1]!;

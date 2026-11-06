@@ -54,7 +54,7 @@ async function setState(state: string) {
   );
 }
 async function voteOwner() {
-  const identity = await f.identity([...f.owner.actor.scopes, 'rating:vote'], 0);
+  const identity = await f.identity([...f.owner.actor.scopes, 'rating:vote']);
   await f.grantLibraryGate(identity.actor.accountId);
   return identity;
 }
@@ -66,13 +66,13 @@ function voteFixture(voter: Awaited<ReturnType<typeof voteOwner>>) {
     commands: f.commands,
     owner: voter,
     admitSubjectMerge: (canonical: string, selected: string) => f.admitSubjectMerge(canonical, selected),
-    createSubject: (_vertical = 'game') => f.createHomeSubject('game', voter, 0),
+    createSubject: (_vertical = 'game') => f.createHomeSubject('game', voter),
     send: (persona: string, method: string, path: string, body?: unknown) =>
       f.send(persona === 'owner' ? voter.bearer : persona, method, path, body),
   };
 }
 async function admitBangumiClaim(externalId: number, label: string, digest = 'a'.repeat(64), revision = 'v0') {
-  const importer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read'], 0);
+  const importer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write', 'subject:create']);
   const made = await f.send(importer.bearer, 'POST', '/v1/subjects:batchWrite', {
     commands: [

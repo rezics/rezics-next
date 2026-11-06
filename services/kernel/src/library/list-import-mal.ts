@@ -24,6 +24,8 @@ import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { MAL_LIMITS, parseMal, type MalRow } from './list-import-mal-parser.ts';
 import {
   createVoteCommands,
+  RatingQuestionNotFoundError,
+  RatingQuestionRetiredError,
   STANDARD_QUESTION_ID,
   VoteReviewStaleError,
   VoteReviewUnavailableError,
@@ -1600,6 +1602,19 @@ export function createMalImport(deps: Dependencies) {
                   };
                   outcome.status = outcome.score.status;
                   outcome.reason = error.reason;
+                } else if (
+                  error instanceof LibraryNotFoundError ||
+                  error instanceof RatingQuestionNotFoundError ||
+                  error instanceof RatingQuestionRetiredError
+                ) {
+                  outcome.score = {
+                    action: scoreReview.action,
+                    status: 'stale',
+                    reason: 'native_target_or_question_unavailable',
+                    vote: null,
+                  };
+                  outcome.status = 'stale';
+                  outcome.reason = 'native_target_or_question_unavailable';
                 } else {
                   // Keep the started checkpoint when delivery or readback throws; never resample it.
                   throw error;

@@ -46,6 +46,7 @@ import {
   createVoteCommands,
   prepareVoteTarget,
   RatingQuestionNotFoundError,
+  RatingQuestionRetiredError,
   STANDARD_QUESTION_ID,
   type PreparedPutVote,
   type RatingQuestion,
@@ -1438,6 +1439,12 @@ export function createAniListImport(deps: Dependencies) {
             if (error instanceof VoteReviewStaleError) scoreOutcome = { status: 'stale', reason: error.reason };
             else if (error instanceof VoteReviewUnavailableError)
               scoreOutcome = { status: 'unavailable', reason: error.reason };
+            else if (
+              error instanceof LibraryNotFoundError ||
+              error instanceof RatingQuestionNotFoundError ||
+              error instanceof RatingQuestionRetiredError
+            )
+              scoreOutcome = { status: 'stale', reason: 'native_target_or_question_unavailable' };
             else throw error;
           }
           if (status === 'unsupported') status = scoreOutcome.status;
