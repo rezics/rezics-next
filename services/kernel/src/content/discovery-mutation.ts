@@ -153,7 +153,7 @@ export async function prepareDiscoveryMutation(
 }
 
 export async function readyDiscoveryMutation(pool: Pool, ref: DiscoveryOperationReference): Promise<void> {
-  const fenceGeneration = await commitDiscoveryFence(pool, ref);
+  const fenceGeneration = await commitDiscoveryFence(pool, ref, Date.now() + 30_000);
   await runCommand(pool, { partition: partitionOf(ref.route), deadline: Date.now() + 30_000 }, async (tx) => {
     const row = await read.run(tx, ref);
     if (!row) throw new Error('Discovery preparation unavailable');
@@ -332,7 +332,7 @@ export async function abortDiscoveryMutation(pool: Pool, ref: DiscoveryOperation
 }
 
 export async function projectDiscoveryMutation(pool: Pool, ref: DiscoveryOperationReference): Promise<void> {
-  await projectDiscoveryOutcome(pool, ref);
+  await projectDiscoveryOutcome(pool, ref, Date.now() + 30_000);
   await runCommand(pool, { partition: partitionOf(ref.route), deadline: Date.now() + 30_000 }, async (tx) => {
     const row = await read.run(tx, ref);
     if (!row || row.projected) return noEffect(null);
@@ -387,7 +387,7 @@ export function createDiscoveryMutationEffect(pool: Pool): Effect {
           data: event.data,
         });
         if (!original) throw new Error('Discovery delta envelope unavailable');
-        await projectDiscoveryStart(pool, delta);
+        await projectDiscoveryStart(pool, delta, Date.now() + 30_000);
         return;
       }
       const schema = DISCOVERY_OPERATION_EVENTS[event.type as keyof typeof DISCOVERY_OPERATION_EVENTS];

@@ -26,6 +26,7 @@ const deps = () => ({
   access: runtime.system.access,
   routeKey: runtime.system.routeKey,
   tokens: runtime.system.tokenKeys,
+  deadlineNow: () => Date.now(),
 });
 
 beforeAll(async () => {

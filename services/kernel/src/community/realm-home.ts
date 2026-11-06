@@ -34,8 +34,9 @@ import {
   realmHomePublicationResponse,
   type RealmHomePublicationPage,
 } from './realm-home-publications.ts';
+import type { CommunityAmbient } from './ambient.ts';
 
-export type RealmHomeDependencies = RealmDependencies & Readonly<{ tokens: KeyRing }>;
+export type RealmHomeDependencies = RealmDependencies & CommunityAmbient & Readonly<{ tokens: KeyRing }>;
 export type RealmHomeQuery = Readonly<{ languages?: readonly string[] }>;
 // The presentation producer's join projection predates the viewer observation
 // protocol. It cannot certify current standing or mounted command preconditions.

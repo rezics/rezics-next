@@ -191,14 +191,14 @@ async function board(tx: CommandTransaction, record: RealmDiscoveryCommittedChan
 export async function projectRealmDiscovery(
   pool: Pool,
   realmId: string,
-  options: { clock?: () => Date; deadline?: number } = {},
+  options: { clock: () => Date; deadlineNow: () => number; deadline?: number },
 ): Promise<boolean> {
   if (routeOf(realmId) === null) throw new TypeError('Invalid Realm discovery identity');
-  const deadline = options.deadline ?? Date.now() + 30_000;
+  const deadline = options.deadline ?? options.deadlineNow() + 30_000;
   const frontier = await discoverySnapshot(
     pool,
     DISCOVERY_PARTITION,
-    deadline,
+    { deadline, now: options.deadlineNow },
     async (client) =>
       (
         await client.query<DiscoveryState>(

@@ -102,6 +102,7 @@ import {
   selectRealmMembers,
 } from './member-page.ts';
 import { listOwnRealms } from './own-realms.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
 import { readCommunityPresentations } from '../content/community-presentation.ts';
@@ -778,10 +779,10 @@ const SITEMAP_DESCRIPTION = (kind: 'Realms' | 'Spaces') =>
   `Keyset feed of the public ${kind} for server-to-server sitemaps, evaluated as an anonymous reader. Each page ` +
   `examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.`;
 
-export type CommunityRouteDependencies = {
+export type CommunityRouteDependencies = CommunityAmbient & {
   pool: Pool;
   routeKey: Uint8Array;
-  clock?: () => Date;
+  clock: () => Date;
   access: () => Access;
   tokens: KeyRing;
   workClient: () => Promise<WorkClient>;
@@ -960,16 +961,18 @@ function memberActionAdvice(input: {
 }
 
 export function communityRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: CommunityRouteDependencies) {
-  const spaceDependencies = (): SpaceDependencies => ({
+  const spaceDependencies = (): SpaceDependencies & CommunityAmbient & { clock: () => Date } => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
+    deadlineNow: dependencies.deadlineNow,
     access: dependencies.access(),
   });
-  const realmDependencies = (): RealmDependencies => ({
+  const realmDependencies = (): RealmDependencies & CommunityAmbient & { clock: () => Date } => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
+    deadlineNow: dependencies.deadlineNow,
     access: dependencies.access(),
   });
   const banDependencies = () => ({
@@ -984,12 +987,12 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     tokens: dependencies.tokens,
     client: await dependencies.workClient(),
   });
-  const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
+  const observedAt = () => dependencies.clock().toISOString();
   const sitemapDependencies = () => ({
     pool: dependencies.pool,
     access: dependencies.access(),
     tokens: dependencies.tokens,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
   });
 
   return app
@@ -1258,6 +1261,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               access: dependencies.access(),
               tokens: dependencies.tokens,
               clock: dependencies.clock,
+              deadlineNow: dependencies.deadlineNow,
             },
             job.deadline,
             query,
@@ -1433,7 +1437,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const route = routeOf(spaceId);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: spaceId };
-        const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
+        const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource, dependencies.clock) });
         const current = await admission.run('normal', job, () =>
           readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check),
         );
@@ -1443,6 +1447,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               await readCommunityPresentations(
                 {
                   pool: dependencies.pool,
+                  deadlineNow: dependencies.deadlineNow,
                   access: dependencies.access(),
                   ...(dependencies.clock ? { clock: dependencies.clock } : {}),
                 },
@@ -1544,7 +1549,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           const route = routeOf(claim.spaceId);
           if (route === null) return null;
           const resource = { route, id: claim.spaceId };
-          const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
+          const check = await authorize({
+            ...resource,
+            eligibility: spaceReadEligibility(resource, dependencies.clock),
+          });
           return withConnection(dependencies.pool, async (client) => {
             if (!(await check(client))) return null;
             const space = await readSpace(client, claim.spaceId, observedAt());
@@ -1865,10 +1873,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
         const allowed = await admission.run('normal', job, () =>
-          createRealmParticipationCheck({ pool: dependencies.pool, access: dependencies.access() })(
-            dependencies.pool as unknown as AccessClient,
-            { realmId, actor },
-          ),
+          createRealmParticipationCheck({
+            pool: dependencies.pool,
+            access: dependencies.access(),
+            deadlineNow: dependencies.deadlineNow,
+          })(dependencies.pool as unknown as AccessClient, { realmId, actor }),
         );
         if (!allowed) {
           const readable = await admission.run('normal', job, () =>

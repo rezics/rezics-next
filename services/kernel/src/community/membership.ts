@@ -132,7 +132,9 @@ export class RealmMembershipRoleError extends Error {
 export type RealmMembershipDependencies = {
   pool: Pool;
   access: Access;
-  clock?: () => Date;
+  clock: () => Date;
+  /** Real wall time for request deadlines, supplied by composition. */
+  deadlineNow: () => number;
   /** Session key ring shared with HTTP. Authorize denies when it is absent. */
   referenceKeys?: KeyRing;
   /** Restores the initiator of a sealed workflow at every step. Without it, sealed steps fail closed. */
@@ -325,7 +327,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     const keys = config.referenceKeys;
     const payload = keys ? unseal(keys, REALM_MEMBERSHIP_SEAL_SCOPE, reference) : undefined;
     if (payload !== undefined) return authorizeSealed(payload, input);
-    const context = { pool, deadline: deadlineFor(30_000) };
+    const context = { pool, deadline: deadlineFor(30_000, config.deadlineNow) };
     const actor = await access.authenticate(reference, context);
     const accountRoute = routeOf(actor.accountId);
     denyUnless(accountRoute !== null);
@@ -568,7 +570,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     )
       throw new GrantDeniedError();
     const initiator = loaded.record.initiatorAccountId;
-    const at = (config.clock ?? (() => new Date()))().toISOString();
+    const at = config.clock().toISOString();
     const realm = await withConnection(pool, (client) =>
       readOne(readRealmHead.run(client, { route: realmRouteId, id: seal.realmId, at })),
     );
@@ -581,7 +583,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     const request: LifecycleRequest = {
       // The committed snapshot, frozen for the carrier's type only. Access never authenticated it.
       actor: Object.freeze({ ...loaded.record.actor, scopes: Object.freeze([...loaded.record.actor.scopes]) }),
-      deadline: deadlineFor(AUTHORIZE_DEADLINE_MS),
+      deadline: deadlineFor(AUTHORIZE_DEADLINE_MS, config.deadlineNow),
     };
     operations.set(request, {
       anchor,
@@ -667,7 +669,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(input.reservationId === undefined || input.reservationId === reservation.reservationId);
     denyUnless(routeOf(input.memberAccountId) !== null);
     denyUnless(routeOf(reservation.reservationId) === routeOf(input.memberAccountId));
-    denyUnless(Number.isFinite(request.deadline) && Date.now() < request.deadline);
+    denyUnless(Number.isFinite(request.deadline) && config.deadlineNow() < request.deadline);
     // This checkout ends before Realm admission. The source's immutable proof
     // slot makes a stale preflight incapable of doing another foreign effect.
     const openTransition =
@@ -836,7 +838,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
   /** Exact mechanical obligation, not a user-result command. The source lock
    * serializes cancellation with publication; no missing row is called success. */
   async function cancel(reservation: RealmMembershipTransition, key: string) {
-    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS);
+    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS, config.deadlineNow);
     const parameters = transitionParameters(reservation);
     const prior = await readTransition(deadlineClient(pool, deadline), reservation);
     if (prior) return prior;
@@ -911,7 +913,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
    * and adopted the exact historical hold under the account lock. Absence is
    * pending; only an actual live interval or terminal source point can certify. */
   async function certifyLegacy(reservation: RealmMembershipTransition, key: string) {
-    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS);
+    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS, config.deadlineNow);
     denyUnless(
       reservation.transition.generationId === reservation.reservationId &&
         reservation.transition.operationId.startsWith('legacy:'),
@@ -1006,7 +1008,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       {
         ...identity,
         partition: partitionOf(route),
-        deadline: Date.now() + 30_000,
+        deadline: config.deadlineNow() + 30_000,
         clock: config.clock,
         receipt: { kind: TERMINAL_KIND, key, digest: digest(identity, TERMINAL_KIND, body) },
       },

@@ -227,7 +227,7 @@ test('media reservation prepares native Realm participation on a max-one pool wi
   const protectedRealm = await realm('protected');
   const deniedParent = await fixture('published', undefined, protectedRealm);
   const realmActor: AccountActor = { ...actor, scopes: [...actor.scopes, 'realm:read', 'realm:participate'] };
-  const realmParticipation = createRealmParticipationCheck({ pool: db.pool, access });
+  const realmParticipation = createRealmParticipationCheck({ deadlineNow: () => Date.now(), pool: db.pool, access });
   await grant(protectedRealm, 'realm:participate');
 
   let active = 0;

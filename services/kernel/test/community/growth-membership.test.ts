@@ -121,7 +121,12 @@ beforeAll(async () => {
     actions,
     realmRoleReader: (client, input) => roleReader(client, input),
   });
-  membership = createRealmMembership({ pool: db.pool, access: production.access });
+  membership = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool: db.pool,
+    access: production.access,
+  });
   roleReader = membership.roleReader;
   probe = {
     realmId,

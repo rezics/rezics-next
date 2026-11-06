@@ -220,9 +220,9 @@ test('a terminal source CAS excludes late application, retries retain their own 
   expect(await source(target.threadId)).toEqual({ ...original, sourceVersion: '3' });
   // A delayed original delta assigns the actual current source, then becomes a
   // true no-op on replay instead of advancing the Realm generation again.
-  await projectDiscoveryStart(deps.pool, { ...original, change: 1 });
+  await projectDiscoveryStart(deps.pool, { ...original, change: 1 }, Date.now() + 30_000);
   const projected = await readRealmDiscoveryGate(deps.pool, target.realmId);
-  await projectDiscoveryStart(deps.pool, { ...original, change: 1 });
+  await projectDiscoveryStart(deps.pool, { ...original, change: 1 }, Date.now() + 30_000);
   expect(await readRealmDiscoveryGate(deps.pool, target.realmId)).toEqual(projected);
 }, 120_000);
 
@@ -293,7 +293,7 @@ test('committed discovery changes retain native predecessors, fact and gate atom
   const target = await f.createRealmTarget('Committed discovery log', 'public');
   const pool = f.system.database.pool;
   const original = (await source(target.threadId))!;
-  await projectDiscoveryStart(pool, { ...original, change: 1 });
+  await projectDiscoveryStart(pool, { ...original, change: 1 }, Date.now() + 30_000);
   const range = (afterGeneration = '0', limit = 50) =>
     readRealmDiscoveryChanges(pool, {
       realmId: target.realmId,
@@ -312,7 +312,7 @@ test('committed discovery changes retain native predecessors, fact and gate atom
   });
   expect(initial.head).toEqual({ realm_epoch: original.realmEpoch, generation: '1', settled: true });
   expect(initial.next).toBeNull();
-  await projectDiscoveryStart(pool, { ...original, change: 1 });
+  await projectDiscoveryStart(pool, { ...original, change: 1 }, Date.now() + 30_000);
   expect(await range()).toEqual(initial);
 
   const key = randomUUID();

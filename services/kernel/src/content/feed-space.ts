@@ -11,7 +11,14 @@ import type { KeyRing } from '../tokens/seal.ts';
  * This reader supplies no discovery or Continue population coverage.
  */
 export async function openFollowingSpace(
-  deps: { pool: Pool; access: Access; contentAccess: Access; tokens: KeyRing; clock?: () => Date },
+  deps: {
+    pool: Pool;
+    access: Access;
+    contentAccess: Access;
+    tokens: KeyRing;
+    clock?: () => Date;
+    deadlineNow?: () => number;
+  },
   actor: Actor,
   spaceId: string,
   deadline: number,

@@ -156,7 +156,7 @@ afterAll(async () => {
   await f?.close();
   await db?.close();
 });
-const deps = () => ({ pool: db.pool, access: f.access, routeKey });
+const deps = () => ({ pool: db.pool, access: f.access, routeKey, deadlineNow: () => Date.now() });
 
 for (const operation of ['create', 'read', 'public-read', 'update'] as const)
   test(`Realm ${operation} stays bounded across growth scales ${scales.join(', ')}`, async () => {

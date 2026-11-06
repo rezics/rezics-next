@@ -229,7 +229,7 @@ test.serial(
       access,
       tokens: testTokens(),
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({ deadlineNow: () => Date.now(), pool: world.db.pool, access }),
       async readConversationActivityBatch() {
         if (!changed) {
           changed = true;

@@ -166,6 +166,8 @@ beforeAll(async () => {
     },
   });
   membership = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool,
     access,
     referenceKeys: tokens,
@@ -840,7 +842,13 @@ test('a sealed step with no restorer, or a reference for another operation, fail
     await ports().reserve({ accountId: installed.memberId, principal, key: `closed-${crypto.randomUUID()}` })
   ).value;
   // The carrier's actor is a committed snapshot Access never authenticated: another adapter cannot use it.
-  const bare = createRealmMembership({ pool, access, referenceKeys: tokens });
+  const bare = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool,
+    access,
+    referenceKeys: tokens,
+  });
   await expect(bare.publish(carrier, input, reservation, `closed-${crypto.randomUUID()}`)).rejects.toBeInstanceOf(
     GrantDeniedError,
   );

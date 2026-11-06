@@ -28,6 +28,7 @@ test('selected questions keep their scale, private prior, threshold and continua
         ],
       );
     const source = createRealmRankSource({
+      deadlineNow: () => Date.now(),
       pool: fixture.database.pool,
       access: system.access,
       tokens: system.tokenKeys,

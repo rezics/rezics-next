@@ -337,7 +337,10 @@ function publishedModels(): void {
     >
   >();
   same<
-    Equal<reads.ContentReadDependencies, Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>>
+    Equal<
+      reads.ContentReadDependencies,
+      Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date; deadlineNow?: () => number }>
+    >
   >();
   same<
     Equal<
@@ -347,6 +350,7 @@ function publishedModels(): void {
         access: Access;
         realmParticipation?: RealmParticipationCheck;
         clock?: () => Date;
+        deadlineNow?: () => number;
         downloadContext?: DownloadContext;
       }>
     >
@@ -787,6 +791,7 @@ function publishedModels(): void {
         access: Access;
         routeKey: Uint8Array;
         clock?: () => Date;
+        deadlineNow?: () => number;
         anonymousVerifier?: TurnstileVerifier;
       }>
     >

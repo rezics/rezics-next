@@ -18,6 +18,7 @@ beforeAll(async () => {
   fixture = await mediaRealmDownloadFixture();
   deps = {
     pool: fixture.db.pool,
+    deadlineNow: () => Date.now(),
     access: testAccess({
       pool: fixture.db.pool,
       actions: actionCatalogue(fixture.kernel),

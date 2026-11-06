@@ -596,6 +596,8 @@ test('membership continuation restores the original native command through its t
   expect(workflow).not.toBeNull();
   const workInput = (workflow!.input as { authorization: string }[])[0]!;
   const membership = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     access: fixture.access,
     referenceKeys: testTokens(),

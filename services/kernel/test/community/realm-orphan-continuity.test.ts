@@ -37,6 +37,7 @@ const deps = () => ({
   pool: system.database.pool,
   access: system.access,
   routeKey: system.routeKey,
+  deadlineNow: () => Date.now(),
   clock: () => new Date(at),
 });
 async function request(
@@ -505,10 +506,18 @@ test('default committed-erasure succession uses the original root instant and re
         [routeOf(realm.realmId), realm.realmId, erased.at],
       )
     ).rows[0];
-  await eraseAccountMembershipsPage({ pool: system.database.pool, access: system.access }, person.accountId, null);
+  await eraseAccountMembershipsPage(
+    { pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() },
+    person.accountId,
+    null,
+  );
   const first = await read();
   expect(first).toMatchObject({ ownership_state: 'orphaned', original_root: true, original_deadline: true });
-  await eraseAccountMembershipsPage({ pool: system.database.pool, access: system.access }, person.accountId, null);
+  await eraseAccountMembershipsPage(
+    { pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() },
+    person.accountId,
+    null,
+  );
   expect(await read()).toEqual(first);
 });
 

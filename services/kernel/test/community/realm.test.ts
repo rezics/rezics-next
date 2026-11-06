@@ -165,7 +165,7 @@ afterAll(async () => {
   await pool?.end();
   await admin?.end();
 });
-const deps = () => ({ pool, access: f.access, routeKey });
+const deps = () => ({ pool, access: f.access, routeKey, deadlineNow: () => Date.now() });
 async function createSpace() {
   return (await space.createSpace(deps(), f.actor, { title: 'Host Space' }, context())).value.spaceId;
 }
