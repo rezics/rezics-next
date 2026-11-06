@@ -198,7 +198,17 @@ async function openWorld(
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
     siteActions: actions,
     trustedAccess: bindings.trustedAccess,
-    access: bindings.workflowPorts,
+    access: {
+      ...bindings.workflowPorts,
+      async createPending(input) {
+        try {
+          return await bindings.workflowPorts.createPending(input);
+        } catch (error) {
+          console.error('Permission fixture native createPending failed', error);
+          throw error;
+        }
+      },
+    },
     stagingKey,
     maintenanceSchedule: '0 0 1 1 *',
     executorId: `permission-${authName}`,
@@ -253,7 +263,8 @@ async function prepareFixture(): Promise<Fixture> {
   try {
     await ensureClient(world, loginClient, 'first');
     await ensureClient(world, operatorClient, 'first', [managementAction]);
-    const people = await Promise.all(Array.from({ length: SLOTS }, (_, index) => register(world, `slot${index}`)));
+    const people: Person[] = [];
+    for (let index = 0; index < SLOTS; index += 1) people.push(await register(world, `slot${index}`));
     return { ...names, people };
   } finally {
     await world.stop();

@@ -188,7 +188,7 @@ async function runWorker() {
         client: Awaited<ReturnType<typeof createWorkClient>>;
         access: Access;
         kernel: ReturnType<typeof createKernel>;
-        instant?: string;
+        instant: string | undefined;
         authPool?: Pool;
       }
     | undefined;
@@ -239,6 +239,7 @@ async function runWorker() {
           client,
           access,
           kernel,
+          instant: undefined,
           ...(config.authDatabaseUrl
             ? { authPool: new Pool({ connectionString: config.authDatabaseUrl, max: 1 }) }
             : {}),

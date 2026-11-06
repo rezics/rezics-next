@@ -2,11 +2,13 @@ import { afterEach, expect, test } from 'bun:test';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
+import { Pool } from 'pg';
 import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
 import { readContentEditionMechanicalSaleAuthority } from '../../src/content/edition-sale.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { ACCESS_WORK_AXES } from '../../src/access/work.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import {
   createNativeContentSystem,
   nativeOperator,
@@ -14,6 +16,7 @@ import {
 } from '../content/support/native-system.ts';
 import { seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { productionActions } from '../support/production-actions.ts';
 import { currentAuthorityOperands, startCurrentAuthorityWorker } from './support/current-authority-worker.ts';
 
 let native: NativeContentSystem | undefined;
@@ -46,6 +49,7 @@ test('native parent and isolated worker retain current board sale authority and 
     receiptKeys: testReceiptKeys(),
     access: system.access,
     content: { readConsent },
+    writeRate: createWriteRateLimiter({ secret: 'current-authority-native-parent-rate-secret' }),
   });
   const author = system.actors.author;
   const reader = system.actors.other;
@@ -244,19 +248,43 @@ test('native parent and isolated worker retain current board sale authority and 
     access: system.access,
   });
   composition.resolveAccess({ actions: system.actions });
+  await assertRoleReceipts(pool, composition, realmId, reader.actor.accountId);
+}, 120_000);
+
+async function assertRoleReceipts(
+  pool: Pool,
+  composition: ReturnType<typeof createKernelAccessResolver>,
+  realmId: string,
+  accountId: string,
+) {
   const roles = composition.realmRoleReader;
-  const input = { realmId, accountId: reader.actor.accountId, at: new Date().toISOString() };
+  const input = { realmId, accountId: accountId, at: new Date().toISOString() };
   const bound = roles.work!.bound(input)!;
   const result = await roles(pool, input);
   const actual = roles.work!.actual(input, result)!;
   for (const axis of ACCESS_WORK_AXES) expect(actual[axis]).toBeLessThanOrEqual(bound[axis]);
   expect(actual.points).toBeGreaterThan(0);
   expect(roles.work!.actual(input, result)).toBeUndefined();
-  const batchInput = { pairs: [{ realmId, accountId: reader.actor.accountId }], at: new Date().toISOString() };
+  const batchInput = { pairs: [{ realmId, accountId: accountId }], at: new Date().toISOString() };
   const batchBound = roles.batchWork!.bound(batchInput)!;
   const batchResult = await roles.batch!(pool, batchInput);
   const batchActual = roles.batchWork!.actual(batchInput, batchResult)!;
   for (const axis of ACCESS_WORK_AXES) expect(batchActual[axis]).toBeLessThanOrEqual(batchBound[axis]);
   expect(batchActual.points).toBeGreaterThan(0);
   expect(roles.batchWork!.actual(batchInput, batchResult)).toBeUndefined();
-}, 120_000);
+}
+
+test('lazy native Realm-role composition retains bounded receipts for an authoritative missing Realm', async () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 1 });
+  try {
+    const composition = createKernelAccessResolver({
+      pool,
+      tokens: testReceiptKeys(),
+      clock: () => new Date(),
+    });
+    composition.resolveAccess({ actions: productionActions() });
+    await assertRoleReceipts(pool, composition, newId(0x1234), newId(0x2345));
+  } finally {
+    await pool.end();
+  }
+});
