@@ -27,6 +27,8 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
     ['bun', 'run', 'generate'],
     ['bun', 'run', 'generate:routes'],
     ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+    // Tooling scripts import kernel and auth sources; their own program keeps the web program within the check memory envelope.
+    ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.scripts.json'],
   ]) {
     const code = await command(args, env);
     if (code !== 0) return code;
