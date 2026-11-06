@@ -495,7 +495,7 @@ async function startDriver(
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId = PLATFORM_RESOURCE.id,
+      resourceId: string = PLATFORM_RESOURCE.id,
       grantor: Account = governor,
     ) {
       const resource =

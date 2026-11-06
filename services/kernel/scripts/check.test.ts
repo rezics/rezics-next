@@ -154,35 +154,24 @@ test('the check database logs each error with its SQLSTATE', () => {
   expect(args[prefix - 1]).toBe('-c');
 });
 
-test('an isolated network namespace listens inside that namespace instead of publishing a host port', () => {
-  const calls: string[][] = [];
-  startPostgresContainer((args) => (calls.push(args), 'postgres-container'), {
-    networkNamespace: '/proc/1234/ns/net',
-  });
-  const args = calls[0]!;
-  expect(args).toContain('--network');
-  expect(args).toContain('ns:/proc/1234/ns/net');
-  expect(args).not.toContain('127.0.0.1::5432');
-  expect(args.some((argument) => argument.startsWith('port=') || argument.startsWith('PGPORT='))).toBe(false);
-  expect(() => startPostgresContainer((next) => next.join(' '), { listenPort: 45432 })).toThrow(
-    'Disposable PostgreSQL listen port requires a network namespace',
-  );
-});
-
-test('an isolated namespace can listen on an explicit port through PGPORT', () => {
-  const calls: string[][] = [];
-  startPostgresContainer((args) => (calls.push(args), 'postgres-container'), {
-    networkNamespace: '/proc/1234/ns/net',
-    listenPort: 45432,
-  });
-  const args = calls[0]!;
-  const image = args.findIndex((argument) => argument.startsWith('postgres:'));
-  expect(args).toContain('ns:/proc/1234/ns/net');
-  expect(args).toContain('PGPORT=45432');
-  expect(args).toContain('port=45432');
-  expect(args.indexOf('PGPORT=45432')).toBeGreaterThan(0);
-  expect(args.indexOf('PGPORT=45432')).toBeLessThan(image);
-  expect(args[args.indexOf('PGPORT=45432') - 1]).toBe('-e');
+test('an isolated walk bind-mounts a unix socket directory instead of publishing a host port', () => {
+  const socketDirectory = mkdtempSync(join(tmpdir(), 'kernel-pg-socket-'));
+  try {
+    const calls: string[][] = [];
+    startPostgresContainer((args) => (calls.push(args), 'postgres-container'), { socketDirectory });
+    const args = calls[0]!;
+    expect(args).toContain('-v');
+    expect(args).toContain(`${socketDirectory}:/rezics-pg-socket:z`);
+    expect(args).toContain('PGHOST=/rezics-pg-socket');
+    expect(args).toContain('unix_socket_directories=/rezics-pg-socket');
+    expect(args).not.toContain('127.0.0.1::5432');
+    expect(args.some((argument) => argument.startsWith('ns:') || argument.startsWith('port='))).toBe(false);
+    expect(() => startPostgresContainer((next) => next.join(' '), { socketDirectory: 'relative-socket' })).toThrow(
+      'Disposable PostgreSQL socket directory must be an absolute path',
+    );
+  } finally {
+    rmSync(socketDirectory, { recursive: true, force: true });
+  }
 });
 
 test("a failing kernel check prints the database server's errors and fatal messages by SQLSTATE", () => {

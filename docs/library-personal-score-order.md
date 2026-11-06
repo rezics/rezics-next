@@ -122,6 +122,6 @@ highest-score initial direction; do not import those architectures or their publ
 
 Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
 Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.
-Global distribution reads admit the native aggregate shape; focused `--private-network` walks attach disposable
-PostgreSQL to that loopback namespace on port 5432 when the namespace is loopback-only, differs from PID 1, or
-cannot read PID 1's netns, instead of a host-published or pre-closed ephemeral listen port.
+Global distribution reads admit the native aggregate shape; focused `--private-network` walks reach disposable
+PostgreSQL through a bind-mounted unix socket when the namespace is loopback-only, differs from PID 1, or cannot
+read PID 1's netns. Docker cannot join that netns, and a host-published port never appears on the unshared loopback.

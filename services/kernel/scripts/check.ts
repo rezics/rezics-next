@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { hostname } from 'node:os';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -754,21 +755,27 @@ export function formatConnectionRunSummary(
 }
 
 export type PostgresContainerOptions = {
-  networkNamespace?: string;
-  listenPort?: number;
+  socketDirectory?: string;
 };
+
+function postgresSocketMount(socketDirectory: string): string[] {
+  if (!isAbsolute(socketDirectory) || /[,\s]/.test(socketDirectory))
+    throw new Error('Disposable PostgreSQL socket directory must be an absolute path');
+  chmodSync(socketDirectory, 0o1777);
+  return [
+    '-v',
+    `${socketDirectory}:/rezics-pg-socket:z`,
+    '-e',
+    'PGHOST=/rezics-pg-socket',
+  ];
+}
 
 export function startPostgresContainer(
   dockerCommand: DockerCommand = docker,
   options: PostgresContainerOptions = {},
 ): string {
-  if (options.listenPort != null && options.networkNamespace == null)
-    throw new Error('Disposable PostgreSQL listen port requires a network namespace');
-  const network = options.networkNamespace
-    ? ['--network', `ns:${options.networkNamespace}`]
-    : ['-p', '127.0.0.1::5432'];
-  const listenEnv = options.listenPort === undefined ? [] : ['-e', `PGPORT=${options.listenPort}`];
-  const listen = options.listenPort === undefined ? [] : ['-c', `port=${options.listenPort}`];
+  const network = options.socketDirectory ? postgresSocketMount(options.socketDirectory) : ['-p', '127.0.0.1::5432'];
+  const socketListen = options.socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket'] : [];
   return dockerCommand([
     'run',
     '-d',
@@ -785,7 +792,6 @@ export function startPostgresContainer(
     'POSTGRES_PASSWORD=rezics',
     '-e',
     'POSTGRES_DB=rezics',
-    ...listenEnv,
     POSTGRES_IMAGE,
     '-c',
     'fsync=off',
@@ -800,7 +806,7 @@ export function startPostgresContainer(
     `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
-    ...listen,
+    ...socketListen,
   ]);
 }
 

@@ -130,10 +130,10 @@ stay on Content's installed callable; a successful write invalidates Library, Li
 Decision: uncertain own-vote writes keep the optimistic units and original idempotency key so Save retries the same
 command; a stale review rolls back and requires an explicit fresh save.
 Decision: Global distribution uses the native `/ratings` aggregate admission (exact subject identity and freshness);
-a published headline never reconstructs a histogram from an unadmitted source. Disposable native stacks attach
-PostgreSQL to the test loopback namespace when that namespace has only loopback, differs from PID 1, or cannot
-read PID 1's netns (`unshare --user`), so the owned database is reachable on that namespace's port 5432 without a
-published host port.
+a published headline never reconstructs a histogram from an unadmitted source. Disposable native stacks reach
+PostgreSQL through a bind-mounted unix socket when the test namespace has only loopback, differs from PID 1, or
+cannot read PID 1's netns (`unshare --user`). Docker does not join `ns:/proc/.../ns/net`, and a published host
+port is invisible on that loopback.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;

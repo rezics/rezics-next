@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { isolatedNetworkNamespacePath, isolatedOwnedPostgresUrl } from './owned-postgres.ts';
+import { isolatedOwnedPostgresUrl, ownedPostgresIsolated } from './owned-postgres.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { resolveBunCommand } from '../../../../scripts/gate.ts';
 import type { SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
@@ -460,20 +460,29 @@ async function waitForOwnedPostgres(container: string, databaseUrl: string): Pro
   }
 }
 
-async function startOwnedPostgres(): Promise<{ container: string; databaseUrl: string }> {
+async function startOwnedPostgres(): Promise<{
+  container: string;
+  databaseUrl: string;
+  socketDirectory?: string;
+}> {
   const { docker, startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
-  const networkNamespace = isolatedNetworkNamespacePath();
-  const container = networkNamespace
-    ? startPostgresContainer(docker, { networkNamespace })
+  // Docker does not join ns:/proc/.../ns/net (it looks up that string as a
+  // named network). A published host port is also invisible on unshare --net
+  // loopback. The unix socket is a filesystem object, so it remains reachable.
+  const socketDirectory = ownedPostgresIsolated()
+    ? await mkdtemp(join(tmpdir(), 'native-owned-pg-'))
+    : undefined;
+  const container = socketDirectory
+    ? startPostgresContainer(docker, { socketDirectory })
     : startPostgresContainer();
-  // Unshare --user cannot always read PID 1's netns, so a published host port
-  // stayed on the original loopback (ECONNREFUSED 127.0.0.1:<ephemeral>).
-  const databaseUrl = networkNamespace ? isolatedOwnedPostgresUrl : publishedPostgresUrl(container);
+  const databaseUrl = socketDirectory
+    ? isolatedOwnedPostgresUrl(socketDirectory)
+    : publishedPostgresUrl(container);
   reportStackProgress(
-    `Native web stack startup: PostgreSQL ${networkNamespace ? `namespace ${networkNamespace}` : 'published host port'} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
+    `Native web stack startup: PostgreSQL ${socketDirectory ? `unix socket ${socketDirectory}` : 'published host port'} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
   );
   await waitForOwnedPostgres(container, databaseUrl);
-  return { container, databaseUrl };
+  return socketDirectory ? { container, databaseUrl, socketDirectory } : { container, databaseUrl };
 }
 
 async function startStack(): Promise<
@@ -491,6 +500,7 @@ async function startStack(): Promise<
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
+  let postgresSocketDirectory: string | undefined;
   let runtimeDirectory: string | undefined;
   let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
@@ -623,6 +633,10 @@ async function startStack(): Promise<
           errors.push(new Error(`Could not remove owned PostgreSQL container: ${removed.stderr.toString()}`));
         postgresContainer = undefined;
       }
+      if (postgresSocketDirectory) {
+        await attempt(() => rm(postgresSocketDirectory!, { recursive: true, force: true }));
+        postgresSocketDirectory = undefined;
+      }
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
@@ -638,7 +652,12 @@ async function startStack(): Promise<
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
       const owned = await startOwnedPostgres();
       postgresContainer = owned.container;
-      if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
+      postgresSocketDirectory = owned.socketDirectory;
+      if (process.env.NATIVE_WEB_STACK_HOST === '1') {
+        process.send?.({ postgresContainer } satisfies HostReply);
+        if (owned.socketDirectory)
+          process.send?.({ postgresSocketDirectory: owned.socketDirectory } satisfies HostReply);
+      }
       process.env.DATABASE_URL = owned.databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
       migrate(owned.databaseUrl);
@@ -1298,6 +1317,7 @@ type HostReply =
   | { progress: string }
   | { ownedGroup: { label: string; pid: number; stateDirectory?: string } }
   | { postgresContainer: string }
+  | { postgresSocketDirectory: string }
   | { analysisDatabase: string };
 type HostCall = {
   id: number;
@@ -1365,6 +1385,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let analysisDatabase: string | undefined;
   let postgresContainer: string | undefined;
+  let postgresSocketDirectory: string | undefined;
   const stateDirectories = new Set<string>();
   let nativeStack: NativeWebStack | undefined;
   const ownedGroups = new Map<number, NativeProcessOwnership>();
@@ -1469,6 +1490,14 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       if (done?.code === 0 || (done && /No such container|is not running/iu.test(done.stderr)))
         postgresContainer = undefined;
     }
+    if (postgresSocketDirectory) {
+      try {
+        await rm(postgresSocketDirectory, { recursive: true, force: true });
+        postgresSocketDirectory = undefined;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     for (const directory of stateDirectories) {
       try {
         await rm(directory, { recursive: true, force: true });
@@ -1556,6 +1585,10 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     }
     if ('postgresContainer' in reply) {
       postgresContainer = reply.postgresContainer;
+      return;
+    }
+    if ('postgresSocketDirectory' in reply) {
+      postgresSocketDirectory = reply.postgresSocketDirectory;
       return;
     }
     if ('progress' in reply) {

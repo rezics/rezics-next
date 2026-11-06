@@ -1,7 +1,5 @@
 import { readFileSync, readlinkSync } from 'node:fs';
 
-export const isolatedOwnedPostgresUrl = 'postgres://rezics:rezics@127.0.0.1:5432/rezics?sslmode=disable';
-
 export type NativeOwnedPostgresIsolation = {
   pid: number;
   interfaceNames: readonly string[];
@@ -9,12 +7,15 @@ export type NativeOwnedPostgresIsolation = {
   pid1Namespace?: string;
 };
 
-/** Host-published ports never appear on an unshared loopback; join that netns and use 5432. */
-export function nativeOwnedPostgresIsolation(input: NativeOwnedPostgresIsolation): string | undefined {
-  const ownPath = `/proc/${input.pid}/ns/net`;
-  if (input.interfaceNames.length > 0 && input.interfaceNames.every((name) => name === 'lo')) return ownPath;
-  if (input.pid1Namespace === undefined || input.ownNamespace !== input.pid1Namespace) return ownPath;
-  return undefined;
+/** Host-published TCP ports never appear on an unshared loopback. */
+export function nativeOwnedPostgresIsolated(input: NativeOwnedPostgresIsolation): boolean {
+  if (input.interfaceNames.length > 0 && input.interfaceNames.every((name) => name === 'lo')) return true;
+  return input.pid1Namespace === undefined || input.ownNamespace !== input.pid1Namespace;
+}
+
+/** libpq treats a slash-prefixed host as the directory that holds `.s.PGSQL.5432`. */
+export function isolatedOwnedPostgresUrl(socketDirectory: string): string {
+  return `postgres://rezics:rezics@localhost/rezics?host=${socketDirectory}&sslmode=disable`;
 }
 
 export function networkInterfaceNames(source = '/proc/net/dev'): string[] {
@@ -27,7 +28,7 @@ export function networkInterfaceNames(source = '/proc/net/dev'): string[] {
   }
 }
 
-export function isolatedNetworkNamespacePath(): string | undefined {
+export function ownedPostgresIsolated(): boolean {
   let pid1Namespace: string | undefined;
   try {
     pid1Namespace = readlinkSync('/proc/1/ns/net');
@@ -35,13 +36,13 @@ export function isolatedNetworkNamespacePath(): string | undefined {
     pid1Namespace = undefined;
   }
   try {
-    return nativeOwnedPostgresIsolation({
+    return nativeOwnedPostgresIsolated({
       pid: process.pid,
       interfaceNames: networkInterfaceNames(),
       ownNamespace: readlinkSync('/proc/self/ns/net'),
       pid1Namespace,
     });
   } catch {
-    return undefined;
+    return false;
   }
 }
