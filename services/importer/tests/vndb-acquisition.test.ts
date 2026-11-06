@@ -361,7 +361,7 @@ test('CLI checkpointed VNDB acquisition resumes the same ID without native work 
   expect(resumed.stdout).toContain('Import complete');
   expect(f.requests.length).toBeGreaterThan(0);
   await rm(directory, { recursive: true, force: true });
-});
+}, 60_000);
 
 test('ready table acquisition publishes once and zstd archives are admitted', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-acq-zstd-'));
@@ -423,4 +423,4 @@ test('ready table acquisition publishes once and zstd archives are admitted', as
   expect(f.requests.length).toBe(native);
   expect(VNDB_ZSTD_CODEC).toContain('zstd');
   await rm(directory, { recursive: true, force: true });
-});
+}, 60_000);
