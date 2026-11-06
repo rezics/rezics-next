@@ -582,10 +582,15 @@ CREATE TABLE search.generation_publication (
     previous_target text,
     previous_uuid text,
     revision bigint DEFAULT 1 NOT NULL,
+    bootstrap text,
+    queried text,
+    execution text,
     CONSTRAINT generation_publication_binding_check CHECK ((octet_length((binding)::text) <= 8192)),
+    CONSTRAINT generation_publication_bootstrap_check CHECK (((octet_length(bootstrap) >= 1) AND (octet_length(bootstrap) <= 4096))),
     CONSTRAINT generation_publication_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
     CONSTRAINT generation_publication_consumer_check CHECK ((octet_length((consumer)::text) <= 8192)),
     CONSTRAINT generation_publication_engine_after_check CHECK ((octet_length((engine_after)::text) <= 8192)),
+    CONSTRAINT generation_publication_execution_check CHECK (((octet_length(execution) >= 1) AND (octet_length(execution) <= 4096))),
     CONSTRAINT generation_publication_family_check CHECK ((family = ANY (ARRAY['subjects'::text, 'discovery'::text]))),
     CONSTRAINT generation_publication_fence_check CHECK ((octet_length(fence) <= 8192)),
     CONSTRAINT generation_publication_generation_check CHECK (((generation >= 1) AND (generation <= '9007199254740991'::bigint))),
@@ -593,7 +598,9 @@ CREATE TABLE search.generation_publication (
     CONSTRAINT generation_publication_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT generation_publication_pass_check CHECK ((pass > 0)),
     CONSTRAINT generation_publication_phase_check CHECK ((phase = ANY (ARRAY['subject'::text, 'account'::text, 'engine'::text, 'validate'::text, 'reconciled'::text, 'fencing'::text, 'intent'::text, 'active'::text]))),
+    CONSTRAINT generation_publication_pin_shape CHECK ((((bootstrap IS NULL) = (queried IS NULL)) AND ((queried IS NULL) = (execution IS NULL)))),
     CONSTRAINT generation_publication_pit_check CHECK ((octet_length(pit) <= 65536)),
+    CONSTRAINT generation_publication_queried_check CHECK (((octet_length(queried) >= 1) AND (octet_length(queried) <= 262144))),
     CONSTRAINT generation_publication_revision_check CHECK ((revision > 0)),
     CONSTRAINT generation_publication_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095)))
 );
@@ -1986,6 +1993,13 @@ CREATE UNIQUE INDEX facet_one_building ON search.facet_generation USING btree (p
 --
 
 CREATE UNIQUE INDEX facet_one_ready ON search.facet_generation USING btree (partition_no, definition) WHERE (state = 'ready'::text);
+
+
+--
+-- Name: generation_publication_bootstrap; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX generation_publication_bootstrap ON search.generation_publication USING btree (partition_no, bootstrap) WHERE (bootstrap IS NOT NULL);
 
 
 --
