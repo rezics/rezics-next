@@ -450,18 +450,18 @@ async function runWorkspaces(
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
   const results: WorkspaceResult[] = [];
-  await Promise.all(
-    workspaces.map(async (workspace) => {
-      const workspaceEnv =
-        state && relative(root, workspace.directory) === 'services/kernel'
-          ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
-          : childEnv;
-      const result = await runWorkspace(root, workspace, workspaceEnv);
-      if (result.code === 0) write(result.block);
-      else failures.push(result.block);
-      results.push(result);
-    }),
-  );
+  // One workspace at a time: Kernel tsc/Reylo and Web generate/tsc each approach the 6 GiB
+  // per-run memory cap, so overlapping them is an OOM even when each workspace alone fits.
+  for (const workspace of workspaces) {
+    const workspaceEnv =
+      state && relative(root, workspace.directory) === 'services/kernel'
+        ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
+        : childEnv;
+    const result = await runWorkspace(root, workspace, workspaceEnv);
+    if (result.code === 0) write(result.block);
+    else failures.push(result.block);
+    results.push(result);
+  }
   for (const block of failures) write(block);
   if (failures.length === 0) return 0;
   return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;

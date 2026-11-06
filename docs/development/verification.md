@@ -52,6 +52,8 @@ Decision: private follow native/browser/growth capability stays open until the i
 Auth-persona walk pass after integration; typed transport, FULL withhold, frozen command frame and list-frontier
 return land under ordinary clean-workspace typing.
 
+Decision: root typecheck finishes each affected workspace before starting the next, so Kernel tsc/Reylo and Web generate/tsc cannot stack past the 6 GiB per-run memory cap.
+
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 

@@ -89,11 +89,38 @@ test("every workspace's typecheck runs and the run passes when all pass", async 
     expect(existsSync(join(root, 'tools/goal/ran'))).toBe(false);
     const text = output.text();
     for (const name of ['@fixture/app', '@fixture/kernel', '@fixture/filter']) {
-      expect(text).toMatch(new RegExp(`Workspace ${name} finished in \\d+\\.\\d{2}s`));
+      expect(text).toMatch(new RegExp(`Workspace ${name} finished \\d+\\.\\d{2}s`));
     }
     expect(text).not.toContain('@fixture/tools');
     expect(text).not.toContain('@fixture/nested');
     expect(text).not.toContain('@fixture/stray');
+  } finally {
+    remove();
+  }
+});
+
+test('affected workspaces typecheck one at a time so compiler memory does not stack', async () => {
+  const { root, remove } = fixture();
+  try {
+    const lock = join(root, 'active');
+    const overlap = join(root, 'overlap');
+    const script = `import { existsSync, writeFileSync, rmSync } from 'node:fs';
+if (existsSync(${JSON.stringify(lock)})) writeFileSync(${JSON.stringify(overlap)}, 'overlap');
+writeFileSync(${JSON.stringify(lock)}, process.cwd());
+await Bun.sleep(80);
+rmSync(${JSON.stringify(lock)}, { force: true });
+await Bun.write('typechecked', 'ok');
+`;
+    writeWorkspace(root, 'apps/web', '@fixture/app', 'bun pass.ts', { 'pass.ts': script });
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', { 'pass.ts': script });
+    const output = collector();
+
+    const code = await typecheck({ root, startDatabase: unusedDatabase(), stdout: output.stdout });
+
+    expect(code).toBe(0);
+    expect(existsSync(join(root, 'apps/web/typechecked'))).toBe(true);
+    expect(existsSync(join(root, 'services/kernel/typechecked'))).toBe(true);
+    expect(existsSync(overlap)).toBe(false);
   } finally {
     remove();
   }
@@ -124,7 +151,7 @@ test('a failing workspace fails the run and its output is printed under its name
     expect(diagnostic).toBeGreaterThan(failing);
     expect(text.indexOf('  Type X is not assignable')).toBeGreaterThan(diagnostic);
     expect(text).not.toContain('passing workspace output');
-    expect(text).toMatch(/Workspace @fixture\/failing finished in \d+\.\d{2}s/);
+    expect(text).toMatch(/Workspace @fixture\/failing type-errors after \d+\.\d{2}s/);
   } finally {
     remove();
   }
@@ -156,7 +183,7 @@ test('a workspace without a typecheck script falls back to tsc on its tsconfig',
       '-p',
       'tsconfig.json',
     ]);
-    expect(output.text()).toMatch(/Workspace @fixture\/plain finished in \d+\.\d{2}s/);
+    expect(output.text()).toMatch(/Workspace @fixture\/plain finished \d+\.\d{2}s/);
     expect(output.text()).toContain('node_modules/.bin/tsc --noEmit -p tsconfig.json');
   } finally {
     remove();
