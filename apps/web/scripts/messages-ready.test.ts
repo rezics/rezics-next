@@ -15,13 +15,18 @@ function makeApp(): { directory: string; cleanup: () => void; calls: string; out
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ scripts: { generate: 'bun generate.ts' } }));
   writeFileSync(
     join(directory, 'generate.ts'),
-    `import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';\n` +
+    `import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';\n` +
       `import { join } from 'node:path';\n` +
       `const root = process.cwd();\n` +
       `appendFileSync(join(root, 'generate-calls.log'), 'generate\\n');\n` +
       `if ((await import('node:fs')).existsSync(join(root, 'fail-generation'))) process.exit(37);\n` +
-      `mkdirSync(join(root, 'src/paraglide'), { recursive: true });\n` +
-      `writeFileSync(join(root, 'src/paraglide/messages.js'), 'generated');\n`,
+      `mkdirSync(join(root, 'src/paraglide/messages'), { recursive: true });\n` +
+      `writeFileSync(join(root, 'src/paraglide/messages.js'), 'generated');\n` +
+      `for (const name of readdirSync(join(root, 'messages')).filter((entry) => entry.endsWith('.json'))) {\n` +
+      `  const parsed = JSON.parse(readFileSync(join(root, 'messages', name), 'utf8'));\n` +
+      `  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;\n` +
+      `  for (const id of Object.keys(parsed)) writeFileSync(join(root, 'src/paraglide/messages', id + '.js'), 'leaf');\n` +
+      `}\n`,
   );
   return {
     directory,
@@ -80,6 +85,28 @@ test('fresh output is kept when it is newer than every message file', () => {
     expect(messagesCurrent(app.directory)).toBe(true);
     expect(ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual([]);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test('messages.js without a catalogue leaf is regenerated', () => {
+  const app = makeApp();
+  try {
+    writeFileSync(join(app.messages, 'en.json'), JSON.stringify({ access_account: 'Account' }));
+    mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
+    writeFileSync(app.output, 'partial');
+    const base = Date.now() - 60_000;
+    setMtime(join(app.messages, 'en.json'), base);
+    setMtime(app.output, base + 10_000);
+
+    expect(messagesCurrent(app.directory)).toBe(false);
+    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(recordCalls(app.calls)).toEqual(['generate']);
+    expect(existsSync(join(app.directory, 'src/paraglide/messages/access_account.js'))).toBe(true);
+    expect(messagesCurrent(app.directory)).toBe(true);
+    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(recordCalls(app.calls)).toEqual(['generate']);
   } finally {
     app.cleanup();
   }

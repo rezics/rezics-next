@@ -1,6 +1,5 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { slug } from '@rezics/definitions/slug';
 import recording from '../src/kernel/recorded/thread.json';
@@ -61,46 +60,27 @@ const fake = Bun.serve({
     return Response.json({ code: 'not_found' }, { status: 404 });
   },
 });
-let child: ReturnType<typeof spawn> | undefined;
-let output = '';
-let origin: string | undefined;
-async function site() {
-  if (origin) return origin;
-  const probe = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
-  origin = probe.url.origin;
-  await probe.stop(true);
-  await mkdir(join(app, '../../.temp/thread-urls'), { recursive: true });
-  child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'], {
-    cwd: app,
-    stdio: ['ignore', 'pipe', 'pipe'],
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
+function site(): Promise<string> {
+  started ??= startDevServer({
     env: {
-      ...process.env,
       KERNEL_ORIGIN: fake.url.origin,
       PUBLIC_ORIGIN: 'https://rezics.com',
       WEB_TEST_STATE_DIR: join(app, '../../.temp/thread-urls/state'),
       AUTH_ISSUER: '',
       WEBSITE_CLIENT_ID: '',
     },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
   });
-  child.stdout!.on('data', (chunk) => (output = (output + chunk).slice(-6000)));
-  child.stderr!.on('data', (chunk) => (output = (output + chunk).slice(-6000)));
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`${origin}/en/boards/${board.id}`);
-      if (response.status === 200) {
-        await response.text();
-        return origin;
-      }
-    } catch {}
-    if (child.exitCode !== null) throw new Error(output);
-    await Bun.sleep(250);
-  }
-  throw new Error(output);
+  return started;
 }
 afterAll(async () => {
-  child?.kill('SIGTERM');
-  if (child) await new Promise((resolve) => child!.once('close', resolve));
+  await server?.stop();
   await fake.stop(true);
 });
 async function read(path: string) {

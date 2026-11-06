@@ -5,11 +5,14 @@ import {
   placeCompilerRun,
   typecheck,
 } from '../../../scripts/typecheck.ts';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
+const kernelWorkspace = join(repository, 'services/kernel');
+/** Kernel's installed Reylo, the same driver tsc loads through Web's content mapper. */
+export const webKernelReyloPackage = join(kernelWorkspace, 'node_modules', 'reylo');
 
 async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> {
   const child = Bun.spawn(args, {

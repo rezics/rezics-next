@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const app = join(import.meta.dir, '..');
 const temporary = join(app, '../../.temp');
+const catalogue = join(app, 'messages/en.json');
 
 test('the Vite localization hook runs its compiler when Vite loads under Node', async () => {
   mkdirSync(temporary, { recursive: true });
@@ -14,6 +15,8 @@ test('the Vite localization hook runs its compiler when Vite loads under Node', 
     compiler,
     `import { writeFileSync } from 'node:fs';\nexport async function compile() { writeFileSync(${JSON.stringify(output)}, 'generated'); }\n`,
   );
+  const previous = statSync(catalogue);
+  utimesSync(catalogue, previous.atime, new Date(Date.now() + 60_000));
   try {
     const child = Bun.spawn(
       [
@@ -40,6 +43,7 @@ await hook.config({}, { command: 'serve', mode: 'development' });`,
     expect(code, `${stdout}\n${stderr}`).toBe(0);
     expect(existsSync(output)).toBe(true);
   } finally {
+    utimesSync(catalogue, previous.atime, previous.mtime);
     rmSync(directory, { recursive: true, force: true });
   }
 }, 120_000);

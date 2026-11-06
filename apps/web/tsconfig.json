@@ -8,7 +8,7 @@
     },
     "types": ["bun", "vite/client", "@cloudflare/workers-types"]
   },
-  "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }],
+  "contentMappers": [{ "package": "../../services/kernel/node_modules/reylo", "extensions": [".sql"] }],
   "include": [
     "tests/factories/**/*.ts",
     "src/**/*.ts",

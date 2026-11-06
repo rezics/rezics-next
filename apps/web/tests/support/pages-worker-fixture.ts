@@ -1,8 +1,7 @@
-import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { startDevServer } from './dev-server.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import page from '../../src/kernel/recorded/subject-page.json';
 import missing from '../../src/kernel/recorded/missing-subject-page.json';
@@ -23,27 +22,12 @@ type Call = {
   language: string | null;
 };
 
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
-
 /** Recorded public HTTP responses only: this network fixture proves no kernel/Auth behavior. */
 export async function startPagesWorker() {
   const calls: Call[] = [];
   // This upstream-only canary is deliberately never included in a public response.
   const privateSentinel = 'upstream-only-private-pages-canary';
   const state = await mkdtemp(join(tmpdir(), 'rezics-pages-worker-'));
-  let output = '';
-  const keep = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-12_000);
-  };
   const json = (recording: { status: number }, status = recording.status) => {
     const { status: _status, ...body } = recording;
     return Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -96,76 +80,29 @@ export async function startPagesWorker() {
     await rm(state, { recursive: true });
     throw cause;
   }
-  let child: ReturnType<typeof spawn> | undefined;
-  let closed: Promise<void> | undefined;
-  let ended = false;
-  let exit = 'not started';
+  let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
   let stopped: Promise<void> | undefined;
   const diagnostics = () =>
-    `app process: ${exit}\nVite/Cloudflare output (tail):\n${output}\nNetwork fixture calls:\n${JSON.stringify(calls.slice(-40))}`;
-  const groupAlive = () => {
-    if (!child?.pid) return false;
-    try {
-      process.kill(-child.pid, 0);
-      return true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
-      throw error;
-    }
-  };
-  const signal = (name: NodeJS.Signals) => {
-    if (!child?.pid) return;
-    try {
-      process.kill(-child.pid, name);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-    }
-  };
-  const waitForGroup = async (milliseconds: number) => {
-    const deadline = Date.now() + milliseconds;
-    while (!ended || groupAlive()) {
-      if (Date.now() >= deadline) return false;
-      await Bun.sleep(50);
-    }
-    await closed;
-    return true;
-  };
+    `Vite/Cloudflare output (tail):\n${server?.diagnostics() ?? '(not started)'}\nNetwork fixture calls:\n${JSON.stringify(calls.slice(-40))}`;
   const stop = () =>
     (stopped ??= (async () => {
-      let failure: Error | undefined;
-      if (child && closed) {
-        if (exit !== 'running') failure = new Error(`app exited before teardown\n${diagnostics()}`);
-        signal('SIGTERM');
-        if (!(await waitForGroup(10_000))) {
-          signal('SIGKILL');
-          // Forced termination is a failure, even when all owned processes are subsequently reaped.
-          failure = new Error(`app did not stop gracefully\n${diagnostics()}`);
-          if (!(await waitForGroup(10_000))) {
-            await network.stop(true);
-            throw new Error(`app process group remains alive; retaining owned state ${state}\n${diagnostics()}`);
-          }
-        }
-      }
+      await server?.stop();
       await network.stop(true);
       await rm(state, { recursive: true });
-      if (failure) throw failure;
     })());
   try {
-    const origin = `http://127.0.0.1:${await freePort()}`;
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
       KERNEL_ORIGIN: network.url.origin,
       REZICS_TEST_RUNTIME: '1',
       WEB_TEST_STATE_DIR: state,
       WEB_TEST_STATE_INSTANCE_DIR: state,
       PUBLIC_ORIGIN: 'https://rezics.com',
+      AUTH_ISSUER: '',
+      WEBSITE_CLIENT_ID: '',
+      API_RESOURCE: '',
+      WEBSITE_SCOPES: '',
+      WORKER_INSPECTOR_PORT: '',
     };
-    // Auth text bindings come from process.env in cloudflare.config.ts, not .dev.vars.
-    // Removing them disables Auth even when .dev.vars contains development Auth values.
-    for (const name of ['AUTH_ISSUER', 'WEBSITE_CLIENT_ID', 'API_RESOURCE', 'WEBSITE_SCOPES', 'WORKER_INSPECTOR_PORT'])
-      delete env[name];
-    // The client key is server configuration, never a visitor credential. The local .dev.vars
-    // secret takes precedence; this generated development key also covers an absent vars file.
     const { privateKey } = await generateKeyPair('ES256', { extractable: true });
     env.WEBSITE_CLIENT_KEY = JSON.stringify({
       ...(await exportJWK(privateKey)),
@@ -173,58 +110,30 @@ export async function startPagesWorker() {
       alg: 'ES256',
       use: 'sig',
     });
-    // This is the same app command/config as auth-binding.host.test.ts. Its Cloudflare plugin runs
-    // the ssr environment in workerd; the real route also imports cloudflare:workers bindings.
-    child = spawn(
-      'bun',
-      ['--no-env-file', 'run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'],
-      {
-        cwd: join(import.meta.dir, '../..'),
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env,
-      },
-    );
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    exit = 'running';
-    child.once('exit', (code, signal) => {
-      exit = `code=${code}, signal=${signal}`;
+    server = await startDevServer({
+      exclusive: true,
+      cwd: join(import.meta.dir, '../..'),
+      command: ({ port }) => [
+        'bun',
+        '--no-env-file',
+        'run',
+        'dev',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--strictPort',
+      ],
+      env,
+      warmUpPaths: [],
+      firstPath: `/en/subjects/${missingId}`,
     });
-    child.once('error', (error) => {
-      exit = error.message;
-    });
-    closed = new Promise((resolve) =>
-      child!.once('close', () => {
-        ended = true;
-        resolve();
-      }),
-    );
-    const assertRunning = () => {
-      if (output.includes('Missing required secrets'))
-        throw new Error(`app is missing local Worker configuration\n${diagnostics()}`);
-      if (ended || child!.exitCode !== null || child!.signalCode !== null || exit !== 'running')
-        throw new Error(`app exited unexpectedly\n${diagnostics()}`);
-    };
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      assertRunning();
-      try {
-        // A missing page warms the actual SSR graph without consuming the subject-page proof read.
-        const response = await fetch(`${origin}/en/subjects/${missingId}`, { signal: AbortSignal.timeout(10_000) });
-        await response.text();
-        if (response.status === 404) break;
-      } catch {}
-      if (Date.now() >= deadline) throw new Error(`app startup deadline exceeded\n${diagnostics()}`);
-      await Bun.sleep(250);
-    }
-    // Exercise the real Worker boundary: local vars must not re-enable issuer discovery.
+    const origin = server.origin;
     const signIn = await fetch(`${origin}/auth/sign-in?return_to=/en`, {
       redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
     });
     await signIn.text();
-    assertRunning();
     if (
       signIn.status !== 503 ||
       signIn.headers.has('location') ||
@@ -237,13 +146,11 @@ export async function startPagesWorker() {
       stop,
       async request(id: string) {
         try {
-          assertRunning();
           const response = await fetch(`${origin}/en/subjects/${id}`, {
             redirect: 'manual',
             signal: AbortSignal.timeout(30_000),
           });
           const html = await response.text();
-          assertRunning();
           return { response, html };
         } catch (cause) {
           throw new Error(`Workers request failed\n${diagnostics()}`, { cause });
@@ -252,7 +159,6 @@ export async function startPagesWorker() {
       async verify(assertions: () => Promise<void>) {
         try {
           await assertions();
-          assertRunning();
         } catch (cause) {
           throw new Error(`Workers SSR assertion failed\n${diagnostics()}`, { cause });
         }

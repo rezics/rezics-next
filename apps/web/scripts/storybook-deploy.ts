@@ -132,7 +132,10 @@ function getCurrentCommit(): string {
 }
 
 async function fetchLiveBuild(): Promise<{ commit?: string }> {
-  const response = await fetch('https://storybook.rezics.com/build.json', { cache: 'no-store' });
+  const response = await fetch('https://storybook.rezics.com/build.json', {
+    cache: 'no-store',
+    headers: { 'User-Agent': 'rezics-storybook-publication/1.0' },
+  });
   if (!response.ok) throw new Error(`Could not verify the live Storybook build (${response.status}).`);
   return (await response.json()) as { commit?: string };
 }
