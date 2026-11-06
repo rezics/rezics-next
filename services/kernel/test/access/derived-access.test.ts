@@ -145,6 +145,15 @@ test.serial('identity bridges resolve through every derived access level', async
   }
 });
 
+test('derived Access keeps Kind audience and page ports from the original', () => {
+  const base = createAccess({ actions: new Map() });
+  const derived = deriveAccess(base, {});
+  expect(derived.kindAudience).toBe(base.kindAudience);
+  expect(derived.preparePage).toBeDefined();
+  expect(derived.prepareReadDecisions).toBeDefined();
+  expect(derived.authorizeExplicit).toBeDefined();
+});
+
 test('registries reject installation on a derived Access', () => {
   const base = createAccess({ actions: new Map() });
   const derived = deriveAccess(base, {});

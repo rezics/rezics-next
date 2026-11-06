@@ -3,7 +3,7 @@ import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { Pool } from 'pg';
-import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
+import { createKernel, createKernelAccessResolver, realmAwareContentAccess } from '../../src/http/kernel.ts';
 import { readContentEditionMechanicalSaleAuthority } from '../../src/content/edition-sale.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -174,7 +174,8 @@ test('native parent and isolated worker retain current board sale authority and 
     authRelay: `http://127.0.0.1:${relay.port}`,
   });
   const child = worker;
-  const dependencies = { pool, access: system.access, readConsent, clock: () => new Date() };
+  const parentAccess = realmAwareContentAccess(system.access);
+  const dependencies = { pool, access: parentAccess, readConsent, clock: () => new Date() };
   const sale = await readContentEditionMechanicalSaleAuthority(dependencies, edition.editionId, {
     deadline: Date.now() + 10_000,
   });
@@ -210,6 +211,42 @@ test('native parent and isolated worker retain current board sale authority and 
   await readable(404);
   await value(call(grantor.bearer, '/v1/grants', 'POST', grant), 201);
   await readable(200);
+  const anonymous = await app.handle(new Request(`https://content.test/v1/boards/${boardId}`));
+  const anonymousChild = await child.send({
+    kind: 'http',
+    url: `https://content.test/v1/boards/${boardId}`,
+    method: 'GET',
+    headers: [],
+  });
+  expect({ parent: anonymous.status, child: anonymousChild.status }).toEqual({ parent: 404, child: 404 });
+  await seedGovernanceAuthority(pool, routeOf(realmId)!, realmId, grantor.actor.accountId, [
+    'access:grant',
+    'realm:join',
+  ]);
+  await value(
+    call(grantor.bearer, '/v1/grants', 'POST', {
+      resource: { route: routeOf(realmId)!, id: realmId },
+      subject: { kind: 'account', id: reader.actor.accountId },
+      actions: ['realm:join'],
+      valid: '(,)',
+    }),
+    201,
+  );
+  async function member(status: number) {
+    const parent = await call(reader.bearer, `/v1/realms/${realmId}/members/me`);
+    const isolated = await child.send({
+      kind: 'http',
+      url: `https://content.test/v1/realms/${realmId}/members/me`,
+      method: 'GET',
+      headers: [['authorization', `Bearer ${reader.bearer}`]],
+    });
+    expect({ parent: parent.status, child: isolated.status }).toEqual({ parent: status, child: status });
+  }
+  await member(404);
+  await value(call(reader.bearer, `/v1/realms/${realmId}/membership`, 'POST', {}), 202);
+  await member(200);
+  await value(call(reader.bearer, `/v1/realms/${realmId}/membership`, 'DELETE'), 202);
+  await member(404);
   await value(
     call(author.bearer, `/v1/realms/${realmId}/bans/${reader.actor.accountId}`, 'PUT', { reason: 'Current ban' }),
     200,
@@ -229,15 +266,25 @@ test('native parent and isolated worker retain current board sale authority and 
     await readContentEditionMechanicalSaleAuthority(dependencies, edition.editionId, { deadline: Date.now() + 10_000 }),
   ).toEqual(sale);
   expect(JSON.parse((await child.send({ kind: 'sale', editionId: edition.editionId })).body)).toEqual(sale);
-  const operands = await currentAuthorityOperands(pool, system.access, author.bearer, resource);
+  const operands = await currentAuthorityOperands(pool, parentAccess, author.bearer, resource);
   const isolatedOperands = JSON.parse((await child.send({ kind: 'operands', bearer: author.bearer, resource })).body);
   expect(isolatedOperands).toEqual(operands);
   expect(operands.roles.find(([role]) => role === 'content.board.owner')?.[1]).toContain('board:read');
+  expect(operands.boardRead).not.toBeNull();
   expect(
     operands.grants.some(
       (row) => row.subject_id === author.actor.accountId && row.grant_role === 'content.board.owner',
     ),
   ).toBe(true);
+  await system.nativeAuth.internal.revokeSessions(reader.actor.accountId);
+  const revoked = await call(reader.bearer, `/v1/boards/${boardId}`);
+  const revokedChild = await child.send({
+    kind: 'http',
+    url: `https://content.test/v1/boards/${boardId}`,
+    method: 'GET',
+    headers: [['authorization', `Bearer ${reader.bearer}`]],
+  });
+  expect({ parent: revoked.status, child: revokedChild.status }).toEqual({ parent: 401, child: 401 });
 
   // The lazy Kernel projection must carry the native owner's exact work object,
   // context and result. A proxy that forwards only the callable fails here.

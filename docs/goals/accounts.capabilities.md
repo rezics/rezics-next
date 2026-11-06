@@ -101,8 +101,9 @@ review/readback or credential effects. Seeded browser and promoted desktop/phone
 **Native acceptance:** `bun run --cwd services/kernel check test/access/permission-outcome.test.ts test/access/current-authority-permission.test.ts`.
 The original matrix preserves its assertions and compares each product request against isolated worker composition on
 the same native authority. The focused fixture covers actual publisher board roles and Auth consent, strict sale
-restoration, ordinary grant/revoke, current Realm bans and native membership work receipts. Source coverage alone
-claims neither an executed pass nor the complete Commerce receiving journey or controller-owned browser release.
+restoration, ordinary grant/revoke, Realm membership join/leave, current Realm bans, anonymous floor, session
+revocation and native membership work receipts. Source coverage alone claims neither an executed pass nor the
+complete Commerce receiving journey or controller-owned browser release.
 
 ## platform-gates
 

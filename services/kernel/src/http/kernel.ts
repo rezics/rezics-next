@@ -194,10 +194,15 @@ type ContentReadProof = Readonly<{
   valid: boolean;
 }>;
 const realmAwareAccesses = new WeakMap<Access, Access>();
+const realmAwareWraps = new WeakSet<Access>();
 
 /** A Realm's read grant gates every content item on its boards. Bind the
- * relationship before checkout, then recheck it with both read formulas at T. */
-function realmAwareContentAccess(access: Access): Access {
+ * relationship before checkout, then recheck it with both read formulas at T.
+ * Wrapping is identity-preserving: parent Content and worker authorization share
+ * one wrap of the mounted Access.
+ */
+export function realmAwareContentAccess(access: Access): Access {
+  if (realmAwareWraps.has(access)) return access;
   const existing = realmAwareAccesses.get(access);
   if (existing) return existing;
   const proofs = new WeakMap<object, ContentReadProof>();
@@ -303,6 +308,7 @@ function realmAwareContentAccess(access: Access): Access {
   const catalogue = resourceRoleCatalogue(access);
   if (catalogue) installResourceRoleCatalogue(wrapped, catalogue);
   realmAwareAccesses.set(access, wrapped);
+  realmAwareWraps.add(wrapped);
   return wrapped;
 }
 

@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { nativePolicyCatalogueForAccess } from '../../../src/access/policy-core.ts';
 import { resourceRoleCatalogue } from '../../../src/access/resource-roles.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
 import { accessCheck, AuthenticationError, type Access, type Resource } from '../../../src/request/access.ts';
@@ -48,6 +49,7 @@ export async function currentAuthorityOperands(pool: Pool, access: Access, beare
     }),
   );
   const roles = resourceRoleCatalogue(access);
+  const catalogue = nativePolicyCatalogueForAccess(access);
   const grants = await pool.query(
     `SELECT subject_kind,subject_id,subject_role,grant_role,valid::text
      FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND subject_id=ANY($3::uuid[])
@@ -67,15 +69,24 @@ export async function currentAuthorityOperands(pool: Pool, access: Access, beare
      ORDER BY subject_id,subject_role,action,reason,valid`,
     [resource.route, resource.id, ids],
   );
+  const current = await pool.query(
+    `SELECT grant_role,subject_kind,subject_id,subject_role,interval_key::text
+     FROM access.current_resource_role_key
+     WHERE route=$1 AND resource_id=$2 AND subject_id=ANY($3::uuid[])
+     ORDER BY grant_role,subject_kind,subject_id,subject_role,interval_key`,
+    [resource.route, resource.id, ids],
+  );
   return {
     database: database.rows[0]!.name,
     actor,
     accounts,
     resource,
     roles: [...(roles?.roles ?? [])],
+    boardRead: catalogue?.actionByName['board:read'] ?? null,
     grants: grants.rows,
     direct: direct.rows,
     denials: denials.rows,
+    current: current.rows,
   };
 }
 

@@ -1165,7 +1165,9 @@ the session's complete scope ceiling; it does not narrow it to the operation's a
 validated membership route/reference/Auth configuration and dedicated receipt keys. It captures Access through
 `onAccessReady` only after canonical routes, native container actions and resource-role validation finish. The
 kernel resolver supplies current Realm roles and native edition buyer facts; action names and anonymous metadata
-come from mounted declarations. This constructs no listener, request, extra pool/client or DBOS launch. The getter
+come from mounted declarations. `onAccessReady` returns the same Realm-aware wrap parent Content uses, and wrapping
+the wrap is a no-op, so worker sale restoration and parent Kernel Content share one mounted Access identity.
+This constructs no listener, request, extra pool/client or DBOS launch. The getter
 and configuration confer no authority. Accounts uses this same Access and reader for its existing membership
 restorer; Content edition sale restoration receives the identical reader through the pool's existing registry.
 Decision: the lazy Kernel Realm-role reader forwards `work` and `batchWork` from the same native
@@ -1180,17 +1182,20 @@ still issues credentials and serves its genuine JWKS; each process owns a separa
 database with the same route/reference keys. A disagreement reports both actor/account/resource/catalogue and keyed
 grant projections, including actual database identity. Faults stay at the actual database or Auth boundary.
 `test/access/current-authority-permission.test.ts` adds a genuine protected-board publisher and current Auth consent,
-compares strict native edition sale authority, then exercises ordinary grant/revoke and Realm bans before the next
-read. It also pins scalar/batch work receipt forwarding. Historical publication and command replay confer no current
-sale or read authority. These are implemented native fixtures, not evidence of promoted or browser acceptance;
-Financial's complete order/retention/expiry journey remains its receiving acceptance.
+compares strict native edition sale authority, then exercises ordinary grant/revoke, Realm membership join/leave,
+bans, anonymous floor and session revocation before the next read. A disagreement reports compiled board-read
+profiles and current role-key rows with the grant/denial projections. It also pins scalar/batch work receipt forwarding.
+Historical publication and command replay confer no current sale or read authority. These are implemented native
+fixtures, not evidence of promoted or browser acceptance; Financial's complete order/retention/expiry journey remains
+its receiving acceptance.
 The permission fixture composes native workflow/provisioning/barrier proof ports with the exact Auth-owned Pool,
 not another Pool on the same database: Auth installs native producer versions on each lease and resets them on release.
 An independent untagged writer is correctly refused by Auth before permission preparation. Worker sale restoration
 uses the same installed domain clock as worker Access, including its initial trusted instant.
 
 Typed parent page preparation and scalar preparation must both preserve an adapter's additional authorization
-requirements and their exact attempt/time/deadline association. A scalar-only requirements wrapper does not cover
+requirements and their exact attempt/time/deadline association. `deriveAccess` forwards Kind audience and page
+ports; parent creation uses that wrap rather than a scalar-only helper. A callable-only wrapper does not cover
 a typed parent page; absent evidence must continue to deny. Current-role diagnosis begins only after this preparation
 boundary succeeds, without weakening sale authority or synthesizing requirement evidence.
 
