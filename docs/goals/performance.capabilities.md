@@ -322,6 +322,40 @@ worker validation policy.
 
 Cost assertions exclude database-engine invisible MVCC versions; ordinary design-visible traversal still counts.
 
+### Auth workflow retention
+
+The [Auth owner derivation](../../services/auth/README.md#workflow-history-retention)
+admits at most 1000 raw workflow keys before eligibility and persists cutoff/upper/
+after across native maintenance ticks. This permits O(H) complete sweeps while
+bounding every page, including all rejected candidates and pending consumers.
+Fewest tests: extend the two existing growth suites, retention causal cases and SDK
+binding cases; use the existing genuine erasure fixture and consumable target helper.
+Do not substitute returned counts or a callback stub for retirement-body work.
+
+Frozen full/short, zero-eligible and drain/repeated-empty titles remain in the Auth
+inventory. Each independently grows workflow rows, old-created/recent-completed
+terminal history, request bindings and irrelevant accounts/custody roles at 256/1024/4096. The
+full/short registered maintenance path consumes actual registration results and an
+HTTP revoke request, closes native writers, deletes payload/FK families and verifies
+raw absence. Missing consumer custody stays pending. Strict ties, late inserts,
+60-page continuation, original-cut recovery, interruption and replay stay causal
+cases; old synthetic technical bindings have no source proof and must be retained.
+
+Run through the Auth owning runner:
+
+```sh
+bun run --cwd services/auth check test/retention.test.ts test/growth-retention.test.ts test/growth-empty-retention.test.ts test/sdk-retirement-binding.test.ts test/sdk-retirement-fence.test.ts
+```
+
+Acceptance remains open until integrated native execution records its source revision,
+exact command, independently seeded axes, foreground and background statements/plans,
+examined rows, hits/reads and request/response bytes, including every consumer, closure,
+FK and request trigger in the original operation context. Raw pages, not deletion
+counts, price empty work. Test existence and clean typing provide no native pass.
+The current SDK connection-retry loop has no finite attempt limit; persistent native
+failure requires producer-owned retry admission before a finite whole-operation
+failure bound can close. No SDK schema/API patch or synthetic fence is supplied here.
+
 ### Control-plane operation coverage
 
 [Delivery](../../tools/goal/README.md) retains implementation and process/container cleanup authority. Its current
