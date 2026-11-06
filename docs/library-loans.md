@@ -107,8 +107,10 @@ generate under `REZICS_TEST_RUNTIME` unless a test supplies `REZICS_PARAGLIDE_CO
 and takes a `.temp` lock when it does generate. A focused private-network check warms that cache
 on the host, then starts one shared Vite for `/en` before the suite. Copies reuses it through
 per-file Worker overlays; signed-in-routes copies that cache into a private config and compiles
-after the shared server. Vite config identity stays Node-loadable: `prepareViteDepCache` and
-Bun process custody live in `vite-dep-cache-build.ts`, not in the module `vite.config.ts` imports. `REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` keep exclusive Worker graphs off one
+after the shared server. Test Vite startup disables Miniflare's `Request.cf` metadata fetch and
+uses its deterministic fallback, so the private-network server does not depend on network geo
+metadata. Vite config identity stays Node-loadable: `prepareViteDepCache` and
+Bun process custody live in `vite-dep-cache-build.ts`, not in the module `vite.config.ts` imports. The cache alignment hook runs last, after Cloudflare's server hooks, and restamps before Vite initializes its optimizer. `REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` keep exclusive Worker graphs off one
 6 GiB slot. Isolation tests that need overlapping helpers leave that variable unset.
 `WEB_TEST_STATE_DIR` remains the focused run root; Worker persistence still allocates its own
 instance directory unless a caller passes `WEB_TEST_STATE_INSTANCE_DIR`. Return uses the mounted

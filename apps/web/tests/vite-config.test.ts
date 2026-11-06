@@ -147,6 +147,8 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
         plugin.name === 'web-vite-dep-cache-align',
     );
     expect(align).toBeTruthy();
+    expect(align && 'enforce' in align ? align.enforce : undefined).toBe('post');
+    expect(pluginNames(config).at(-1)).toBe('web-vite-dep-cache-align');
     mkdirSync(join(cacheDir, 'deps_ssr'), { recursive: true });
     const metadataPath = join(cacheDir, 'deps_ssr', '_metadata.json');
     writeFileSync(

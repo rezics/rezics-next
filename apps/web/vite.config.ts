@@ -337,16 +337,6 @@ export default defineConfig((context) => {
           },
         },
       },
-      ...(viteCacheDir
-        ? [
-            {
-              name: 'web-vite-dep-cache-align',
-              configureServer(server: { environments: Record<string, ViteDepCacheAlignEnvironment | undefined> }) {
-                return bindViteDepCacheAlign(viteCacheDir, server.environments);
-              },
-            },
-          ]
-        : []),
       ...(testRuntime
         ? [
             {
@@ -437,6 +427,17 @@ export default defineConfig((context) => {
         },
       },
       workerDeniedDependencies(),
+      ...(viteCacheDir
+        ? [
+            {
+              name: 'web-vite-dep-cache-align',
+              enforce: 'post' as const,
+              configureServer(server: { environments: Record<string, ViteDepCacheAlignEnvironment | undefined> }) {
+                return bindViteDepCacheAlign(viteCacheDir, server.environments);
+              },
+            },
+          ]
+        : []),
     ],
   };
 });

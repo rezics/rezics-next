@@ -21,6 +21,7 @@ export function sharedViteChildEnvironment(
     ...env,
     REZICS_TEST_RUNTIME: '1',
     CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+    CLOUDFLARE_CF_FETCH_ENABLED: 'false',
   };
   if (extras.cacheDirectory) child.WEB_VITE_CACHE_DIR = extras.cacheDirectory;
   return child;
