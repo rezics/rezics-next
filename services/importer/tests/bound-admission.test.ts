@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { BatchCommand } from '@rezics/definitions/bulk';
 import { admitBoundProposals, createSourceRegistration } from '../src/source-registry.ts';
 import pinned from '../../kernel/test/imports/showcase-books-source.json';
 
@@ -6,24 +7,17 @@ const alias = 'bangumi_cross_media';
 const subjectId = '00000000-0000-8000-8000-0000000000aa';
 const rows = pinned.rows as Record<string, Record<string, unknown>[]>;
 const subject = (id: number) => rows.subject!.find((row) => row.id === id)!;
-type Proposed = {
-  op: string;
-  statement?: {
-    property: { id: string };
-    value?: { type: string; content?: unknown };
-    references?: { parts: { value: { type: string; content: unknown } }[] }[];
-  };
-};
-const proposedProperties = (proposals: readonly Proposed[]) =>
-  proposals.flatMap((command) =>
-    command.op === 'propose' && command.statement ? [command.statement.property.id] : [],
-  );
-const proposed = (proposals: readonly Proposed[], property: string) =>
-  proposals.find((command) => command.op === 'propose' && command.statement?.property.id === property)?.statement;
-const bangumiCitation = (id: string) => ({
-  type: 'value',
-  content: `https://bgm.tv/subject/${id}`,
-});
+type Proposed = Extract<BatchCommand, { op: 'propose' }>;
+const proposedProperties = (proposals: readonly BatchCommand[]) =>
+  proposals.flatMap((command) => (command.op === 'propose' ? [command.statement.property.id] : []));
+const proposed = (proposals: readonly BatchCommand[], property: string) =>
+  proposals.find((command): command is Proposed => command.op === 'propose' && command.statement.property.id === property)
+    ?.statement;
+const bangumiCitation = (id: string) =>
+  ({
+    type: 'value',
+    content: `https://bgm.tv/subject/${id}`,
+  }) as const;
 
 test('bound book statements keep only what the released native profile admits', () => {
   const registration = admitBoundProposals(createSourceRegistration('bangumi', { source: alias }), (externalId) =>
