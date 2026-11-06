@@ -46,8 +46,8 @@ test advances it, so governance grants that open at bootstrap time remain curren
 The seeded creator-statement journey is the native host walk
 in `apps/web/tests/native/native-creator-statements.host.test.ts`, plus the focused statement and
 payment-reference unit files; it is not a mock server or fixture application. The unsent-reference
-prompt uses one notify-before-wait Stay/Discard owner so Refresh and router departure keep the
-choice on the current document.
+prompt opens Stay/Discard before the blocker waits and keeps the AlertDialog popup mounted, so
+Refresh and router departure keep the choice on the current document.
 
 The five current-access examples use the existing `PatternStory` provider harness. The recorded-charge page example
 uses `PageStory` and the ordinary loader with explicitly constructed financial inputs; those amounts do not amend

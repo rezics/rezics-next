@@ -6,7 +6,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import {
@@ -88,53 +87,6 @@ export function sameOriginDocumentDestination(
   return destination.href;
 }
 
-/** One Stay/Discard owner; notify before returning so the prompt is on the document while the blocker waits. */
-class PaymentReferenceDeparture {
-  private listeners = new Set<() => void>();
-  private revision = 0;
-  private decision: { resolve: (discard: boolean) => void } | null = null;
-  focusTarget: HTMLElement | null = null;
-  discarded = false;
-  approvedDocumentDeparture = false;
-
-  snapshot = () => this.revision;
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  };
-  get waiting() {
-    return this.decision !== null;
-  }
-
-  private notify() {
-    this.revision++;
-    this.listeners.forEach((listener) => listener());
-  }
-
-  request(focus: HTMLElement | null, needed: boolean): Promise<boolean> {
-    if (!needed) return Promise.resolve(true);
-    if (this.decision) return Promise.resolve(false);
-    this.focusTarget = focus;
-    this.discarded = false;
-    return new Promise((resolve) => {
-      this.decision = { resolve };
-      this.notify();
-    });
-  }
-
-  choose(discard: boolean, stayed?: () => void) {
-    const decision = this.decision;
-    if (!decision) return;
-    this.decision = null;
-    this.discarded = discard;
-    if (!discard) stayed?.();
-    this.notify();
-    decision.resolve(discard);
-  }
-}
-
 export function PaymentReferenceDraftNavigation({
   active,
   isCurrent,
@@ -146,11 +98,14 @@ export function PaymentReferenceDraftNavigation({
   draftIsCurrent?: () => boolean;
   focus: () => HTMLElement | null;
 }) {
-  const [navigation] = useState(() => new PaymentReferenceDeparture());
-  useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const live = useRef({ active, isCurrent: draftIsCurrent ?? isCurrent, focus });
   live.current = { active, isCurrent: draftIsCurrent ?? isCurrent, focus };
+  const [open, setOpen] = useState(false);
+  const pending = useRef<((discard: boolean) => void) | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
+  const discarded = useRef(false);
+  const approvedDocumentDeparture = useRef(false);
   const router = useRouter({ warn: false });
   const routerRef = useRef(router);
   routerRef.current = router;
@@ -158,22 +113,44 @@ export function PaymentReferenceDraftNavigation({
   const departureRef = useRef(departure);
   departureRef.current = departure;
   const protectedNow = () => live.current.active && live.current.isCurrent();
-  const confirm = () => navigation.request(live.current.focus(), protectedNow());
 
+  function choose(discard: boolean) {
+    const resolve = pending.current;
+    pending.current = null;
+    discarded.current = discard;
+    setOpen(false);
+    if (!discard) departureRef.current?.stayed();
+    resolve?.(discard);
+  }
+
+  function confirm(): Promise<boolean> {
+    if (!protectedNow()) return Promise.resolve(true);
+    if (pending.current) return Promise.resolve(false);
+    returnFocus.current = live.current.focus();
+    discarded.current = false;
+    setOpen(true);
+    return new Promise((resolve) => {
+      pending.current = resolve;
+    });
+  }
+
+  const confirmRef = useRef(confirm);
+  confirmRef.current = confirm;
   useLayoutEffect(() => {
-    if (navigation.waiting && !protectedNow()) navigation.choose(true);
+    if (pending.current && !protectedNow()) choose(true);
   });
   useLayoutEffect(
     () => () => {
-      navigation.choose(true);
+      pending.current?.(true);
+      pending.current = null;
     },
-    [navigation],
+    [],
   );
 
   useLayoutEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (navigation.approvedDocumentDeparture) {
-        navigation.approvedDocumentDeparture = false;
+      if (approvedDocumentDeparture.current) {
+        approvedDocumentDeparture.current = false;
         return;
       }
       if (!protectedNow()) return;
@@ -200,9 +177,9 @@ export function PaymentReferenceDraftNavigation({
         void routerRef.current.navigate({ href: destination });
         return;
       }
-      void (protectedNow() ? confirm() : Promise.resolve(true)).then((discard) => {
+      void (protectedNow() ? confirmRef.current() : Promise.resolve(true)).then((discard) => {
         if (!discard || (departureRef.current && !departureRef.current.beforeLeave(destination))) return;
-        navigation.approvedDocumentDeparture = true;
+        approvedDocumentDeparture.current = true;
         window.location.assign(destination);
       });
     };
@@ -214,44 +191,33 @@ export function PaymentReferenceDraftNavigation({
       window.removeEventListener('click', documentLink, true);
       document.removeEventListener('click', documentLink, true);
     };
-  }, [navigation]);
+  }, []);
 
   return (
     <>
       {router ? (
-        <RouterDraftBoundary protectedNow={protectedNow} confirm={confirm} departure={departure} />
+        <RouterDraftBoundary protectedNow={protectedNow} confirm={() => confirmRef.current()} departure={departure} />
       ) : null}
-      <AlertDialog
-        open={navigation.waiting && protectedNow()}
-        onOpenChange={(value) => !value && navigation.waiting && navigation.choose(false, departureRef.current?.stayed)}
-      >
-        {navigation.waiting && protectedNow() ? (
-          <AlertDialogContent
-            initialFocus={stayButton}
-            finalFocus={() =>
-              !navigation.discarded && protectedNow() && navigation.focusTarget?.isConnected
-                ? navigation.focusTarget
-                : false
-            }
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle>{m.payment_reference_draft_navigation_title()}</AlertDialogTitle>
-              <AlertDialogDescription>{m.payment_reference_draft_navigation_description()}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                ref={stayButton}
-                type="button"
-                onClick={() => navigation.choose(false, departureRef.current?.stayed)}
-              >
-                {m.payment_reference_draft_navigation_stay()}
-              </AlertDialogCancel>
-              <AlertDialogAction type="button" variant="destructive" onClick={() => navigation.choose(true)}>
-                {m.payment_reference_draft_navigation_discard()}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        ) : null}
+      <AlertDialog open={open && protectedNow()} onOpenChange={(value) => !value && pending.current && choose(false)}>
+        <AlertDialogContent
+          initialFocus={stayButton}
+          finalFocus={() =>
+            !discarded.current && protectedNow() && returnFocus.current?.isConnected ? returnFocus.current : false
+          }
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>{m.payment_reference_draft_navigation_title()}</AlertDialogTitle>
+            <AlertDialogDescription>{m.payment_reference_draft_navigation_description()}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={stayButton} type="button" onClick={() => choose(false)}>
+              {m.payment_reference_draft_navigation_stay()}
+            </AlertDialogCancel>
+            <AlertDialogAction type="button" variant="destructive" onClick={() => choose(true)}>
+              {m.payment_reference_draft_navigation_discard()}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       </AlertDialog>
     </>
   );
