@@ -6,7 +6,11 @@ import {
   searchIdentityReceivingComposition,
 } from '../../../src/search/identity-epoch-participant.ts';
 import type { OpenSearch } from '../../../src/search/opensearch.ts';
-import type { IdentityEpochStep, IdentityJobRef, IdentityStepProgress } from '../../../src/semantic/identity-epoch-contract.ts';
+import type {
+  IdentityEpochStep,
+  IdentityJobRef,
+  IdentityStepProgress,
+} from '../../../src/semantic/identity-epoch-contract.ts';
 import { searchReceivingProductionDeclaration } from '../../../src/semantic/identity-search-receiving-statements.ts';
 import { withIdentitySourceConsumerMaintenance } from '../../../src/semantic/identity-source-consumer-maintenance.ts';
 import type { Pool } from 'pg';

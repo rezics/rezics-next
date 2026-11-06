@@ -55,11 +55,7 @@ async function publishedSourceDefinition(
 ) {
   const release = await readRelease(pool, releaseDigest);
   if (!release) throw unavailable('Search receiving plans require the admitted Source release');
-  const resolved = await createPublicFilterSourceBinding(
-    pool,
-    configuration.routeKey,
-    configuration.access,
-  ).resolve(
+  const resolved = await createPublicFilterSourceBinding(pool, configuration.routeKey, configuration.access).resolve(
     {
       source: publicFilterSource(configuration),
       meaning: { digest: releaseDigest, release, type: 'schema:Thing' },
@@ -67,8 +63,7 @@ async function publishedSourceDefinition(
     },
     { deadline },
   );
-  if (resolved.status !== 'resolved')
-    throw unavailable('Search receiving plans require a published Source definition');
+  if (resolved.status !== 'resolved') throw unavailable('Search receiving plans require a published Source definition');
   return resolved.definition;
 }
 
