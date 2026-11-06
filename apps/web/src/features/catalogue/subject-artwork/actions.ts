@@ -1,6 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
 import { kernelClient } from '../../../kernel/client';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
+import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
 import { canonicalMediaId, artworkResponseBudget, readSubjectArtwork, type ArtworkResult } from './read';
 
 /** Anonymous-capable metadata read. The expected reader partitions a visit; it grants no media authority. */
@@ -18,10 +20,6 @@ export const loadSubjectArtwork = createServerFn({ method: 'POST', strict: false
   })
   .handler(async ({ data }): Promise<ArtworkResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { prepareSession, sessionSubject, viewerCredential }] = await Promise.all([
-      import('cloudflare:workers'),
-      import('../../../session/request'),
-    ]);
     const request = getRequest();
     await prepareSession(request, env);
     if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'unavailable' };
