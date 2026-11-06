@@ -855,7 +855,8 @@ export class CrossMediaGraph {
         statement,
       };
       const edgeKey = graphEdgeKey(draft);
-      const prior = releaseSupersession ? this.command(edgeKey) : null;
+      const journaled = releaseSupersession || (draft.source === 'vndb' && draft.table === 'vn_relations');
+      const prior = journaled ? this.command(edgeKey) : null;
       let sealedCommand = command;
       if (prior?.bytes) {
         const exact = (JSON.parse(prior.bytes) as { commands?: BatchCommand[] }).commands?.[0];
@@ -875,7 +876,7 @@ export class CrossMediaGraph {
           continue;
         }
         sealedCommand = exact;
-      } else if (releaseSupersession && input.journal) {
+      } else if (journaled && input.journal) {
         const prepared = input.journal.prepare(command);
         const exact = (JSON.parse(prepared.bytes) as { commands?: BatchCommand[] }).commands?.[0];
         if (!exact || exact.op !== 'propose') throw new TypeError('Cross-media release journal is invalid');

@@ -43,12 +43,19 @@ export async function createCollectionPresentationFixture() {
     const support = identitySupport(identity);
     const clientId = `collection-presentation-${randomUUID()}`;
     await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes: managementScopes });
-    const another = await support.host.workflows.register({
-      key: randomUUID(),
-      handle: 'collection_other',
-      email: 'another@identity.test',
-      password: 'private native identity fixture password',
-    });
+    await support.host.workflows.start();
+    const another = await (async () => {
+      try {
+        return await support.host.workflows.register({
+          key: randomUUID(),
+          handle: 'collection_other',
+          email: 'another@identity.test',
+          password: 'private native identity fixture password',
+        });
+      } finally {
+        await support.host.workflows.close();
+      }
+    })();
     async function credential(person: 'ordinary' | 'governance' | 'another', scopes = collectionScopes) {
       const signed = await support.request('/signin', {
         email: `${person}@identity.test`,

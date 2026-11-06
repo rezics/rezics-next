@@ -7,6 +7,7 @@ import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   crossMediaAliases,
+  emptyCrossMediaPlan,
   planCrossMediaSeed,
   seedCrossMedia,
   type CrossMediaPort,
@@ -45,12 +46,20 @@ test('synthetic selected Person and Organization images use the common authorize
   const batchCalls: string[][] = [];
   const signal = new AbortController().signal;
   try {
-    const tables: CrossMediaTables = {
-      async *rows(provider, table) {
-        if (provider === 'bangumi' && table === 'subject') yield { id: 101, name: 'STEINS;GATE', type: 2 };
-      },
-    };
-    const rawPlan = await planCrossMediaSeed(tables);
+    const rawPlan = emptyCrossMediaPlan();
+    rawPlan.records.bangumi.push({
+      source: 'bangumi',
+      key: '101',
+      revision: null,
+      payload: { id: 101, name: 'STEINS;GATE', type: 2 },
+    });
+    rawPlan.members.push({
+      source: 'bangumi',
+      key: '101',
+      kind: 'work',
+      membership: 'family',
+      franchise: 'steins-gate',
+    });
     // Synthetic detail derivative: the selected source keys are real finite-closure observations,
     // while this native fixture does not claim to reproduce their upstream selection.
     rawPlan.entities.bangumi.push(
