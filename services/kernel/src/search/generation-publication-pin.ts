@@ -1,5 +1,4 @@
 import type { PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
-import type { NativePublicFilterPublication } from '../semantic/public-filter-source-binding.ts';
 
 /** Durable publication pin. Resume and activation reuse this exact tuple, never a later cut. */
 export type GenerationPublicationPin = Readonly<{
@@ -124,7 +123,7 @@ export function decodeGenerationPublicationPin(value: string): GenerationPublica
   };
 }
 
-export function publicationPinFromNative(publication: NativePublicFilterPublication): GenerationPublicationPin {
+export function publicationPinFromNative(publication: GenerationPublicationPin): GenerationPublicationPin {
   return {
     job: publication.job,
     bootstrap: publication.bootstrap,
