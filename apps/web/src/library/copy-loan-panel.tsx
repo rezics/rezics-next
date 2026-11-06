@@ -58,15 +58,19 @@ export function CopyLoanPanel({
     let active = true;
     void (async () => {
       if (!current('copy.list')) return;
-      const { readOpenCopyLoan } = await import('./loans-actions');
-      const result = await readOpenCopyLoan({ data: { copyId: copy.id } });
-      if (!active || !current('copy.list')) return;
-      if (result.page.boundary?.today) {
-        setToday(result.page.boundary.today);
-        setStartedOn((value) => value || result.page.boundary!.today);
-        setReturnedOn(result.page.boundary.today);
+      try {
+        const { readOpenCopyLoan } = await import('./loans-actions');
+        const result = await readOpenCopyLoan({ data: { copyId: copy.id } });
+        if (!active || !current('copy.list')) return;
+        if (result.page.boundary?.today) {
+          setToday(result.page.boundary.today);
+          setStartedOn((value) => value || result.page.boundary!.today);
+          setReturnedOn(result.page.boundary.today);
+        }
+        setItem(result.item);
+      } catch {
+        if (active && current('copy.list')) setFailure(m.library_loans_failure());
       }
-      setItem(result.item);
     })();
     return () => {
       active = false;

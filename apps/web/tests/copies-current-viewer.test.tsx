@@ -199,6 +199,24 @@ mock.module('../src/kernel/exposure', () => ({
 const editionHandlers: {
   onChange: (subject: { id: string; title: string; types: string[] } | null) => void;
 }[] = [];
+mock.module('../src/library/loans-actions', () => ({
+  readOpenCopyLoan: async () => ({
+    sessionSubject: 'A',
+    copyId: id(1),
+    page: {
+      signedIn: true,
+      filter: 'open',
+      requestedCursor: null,
+      boundary: { today: '2026-11-06' },
+      items: [],
+      next: null,
+    },
+    item: null,
+  }),
+  createLoan: async () => ({ ok: false, reason: 'unavailable' }),
+  updateLoanDue: async () => ({ ok: false, reason: 'unavailable' }),
+  completeLoan: async () => ({ ok: false, reason: 'unavailable' }),
+}));
 mock.module('../src/library/copy-edition-picker', () => ({
   CopyEditionPicker: ({
     disabled,
@@ -528,6 +546,11 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
       return <CopiesCurrent initial={routeState.initial} search={routeState.search} locale="en" />;
     },
   });
+  const loansRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/library/loans',
+    component: () => <p>Loans</p>,
+  });
   const subjectRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/subject',
@@ -549,7 +572,7 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     },
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([copiesRoute, subjectRoute]),
+    routeTree: rootRoute.addChildren([copiesRoute, loansRoute, subjectRoute]),
     history: createMemoryHistory({ initialEntries: [`/library/copies?subjectId=${id(10)}`] }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
