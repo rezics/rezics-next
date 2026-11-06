@@ -160,6 +160,9 @@ function cloneSharedGit(template: string, destination: string): void {
   } catch {
     /* git clone always adds origin; keep init-like remotes. */
   }
+  // A clone does not copy the template's identity, and a check host has no global one: fixture commits must not need it.
+  for (const key of ['user.name', 'user.email'])
+    repositoryGit(destination, 'config', key, repositoryGit(template, 'config', '--get', key).trim());
 }
 
 function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => void): string {
