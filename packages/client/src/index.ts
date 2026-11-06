@@ -580,4 +580,5 @@ export type {
   ReviewedPersonRead,
   ReviewedPersonMerge,
   ReviewedPersonAdmission,
+  ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';

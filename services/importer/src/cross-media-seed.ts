@@ -30,11 +30,13 @@ import {
   observePersonIdentity,
   personIdentityForSource,
   personReviewSource,
+  publishReviewedPersonMerge,
   selectPersonReviewPair,
   showcasePersonReview,
   type CurrentPersonIdentity,
   type PersonReviewSource,
   type PersonReviewPair,
+  type ReviewedPersonPublication,
 } from './showcase-person-identity.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
@@ -3288,6 +3290,8 @@ export type CrossMediaSeedCliOptions = {
 export type CrossMediaSeedReport = CrossMediaSeedResult & {
   persona?: DevelopmentShowcaseResult;
   showcase?: ShowcasePublicationResult;
+  /** Native paired merge of the selected Person pair, observed after its identifiers were adopted. */
+  personMerge?: ReviewedPersonPublication;
 };
 
 export async function runCrossMediaSeedCli(
@@ -4417,6 +4421,16 @@ export async function runCrossMediaSeedCli(
         tagParentAcknowledgements,
         tagParentRefreshes,
       });
+    // Identifiers are adopted by the publication above; the merge then moves both originals to one canonical Person.
+    const personMerge =
+      journal && publicClient && combinedResult.personReview?.pair.state === 'selected'
+        ? await publishReviewedPersonMerge({
+            pair: combinedResult.personReview.pair.sources,
+            transport: importPort,
+            readPublic: (id) => publicClient.readSubject(id),
+            journal,
+          })
+        : undefined;
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {
       ...publicCombinedResultFields,
@@ -4429,6 +4443,7 @@ export async function runCrossMediaSeedCli(
     const report = {
       ...publicCombinedResult,
       ...(persona ? { persona } : {}),
+      ...(personMerge ? { personMerge } : {}),
       facts: {
         works: Object.fromEntries(result.facts.works),
         releases: Object.fromEntries(result.facts.releases),
@@ -4481,7 +4496,7 @@ export async function runCrossMediaSeedCli(
             '\n',
     );
     ensure(
-      !showcase || showcase.status === 'published',
+      (!showcase || showcase.status === 'published') && (!personMerge || personMerge.state === 'published'),
       'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
     );
     return report;

@@ -1,0 +1,235 @@
+import { expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { SourceRecord } from '@rezics/conversion';
+import type { ReviewedPersonRead } from '@rezics/client';
+import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import {
+  personIdentityForSource,
+  publishReviewedPersonMerge,
+  type PersonReviewSource,
+  type ReviewedPersonMergeTransport,
+} from '../src/showcase-person-identity.ts';
+import { ShowcaseJournal } from '../src/showcase-publication.ts';
+
+const bangumiOriginal = '00000000-0000-4000-8000-00000000000a';
+const vndbOriginal = '00000000-0000-4000-8000-00000000000b';
+const survivor = bangumiOriginal;
+const operation = '00000000-0000-4000-8000-0000000000c1';
+const claim = '00000000-0000-4000-8000-0000000000d1';
+
+const bangumi = personIdentityForSource('bangumi', 'person:1916', 'schema:Person')!;
+const vndb = personIdentityForSource('vndb', 's224', 'schema:Person')!;
+
+function source(identity: typeof bangumi, boundSubjectId: string, sourceAlias: string): PersonReviewSource {
+  return {
+    identity,
+    boundSubjectId,
+    sourceAlias,
+    record: { source: identity.source, key: identity.externalId, revision: 'fixture', payload: {} } as SourceRecord,
+    digest: 'a'.repeat(64),
+    converterRevision: 'fixture-1',
+  };
+}
+
+const pair = [
+  source(bangumi, bangumiOriginal, 'bangumi_cross_media'),
+  source(vndb, vndbOriginal, 'vndb_cross_media'),
+] as const;
+
+function endpoint(subject: string, identity: typeof bangumi, sourceAlias: string) {
+  return {
+    subject,
+    revision: 3,
+    securityRevision: '7',
+    source: sourceAlias,
+    externalId: identity.externalId,
+    claimTransactionId: claim,
+    property: identity.property,
+    value: identity.value,
+  };
+}
+
+function reviewed(subject: string, identity: typeof bangumi, sourceAlias: string): ReviewedPersonRead {
+  return {
+    subject: { id: subject },
+    reviewedIdentity: endpoint(subject, identity, sourceAlias),
+  } as unknown as ReviewedPersonRead;
+}
+
+function publicPerson(id: string): ReviewedSubjectRead {
+  return {
+    subject: {
+      id,
+      type: 'schema:Person',
+      statements: {
+        'wdt:P6298': [{ rank: 'normal', value: { type: 'value', content: '1916' } }],
+        'wdt:P3180': [{ rank: 'normal', value: { type: 'value', content: 's224' } }],
+      },
+    },
+  } as unknown as ReviewedSubjectRead;
+}
+
+type Calls = { merges: { body: unknown; key: string }[]; polls: number };
+
+/** Native double: admission returns an operation; completion becomes visible after `doneAfter` observations. */
+function transport(options: { doneAfter?: number; mergeError?: unknown; withholdVndb?: boolean } = {}) {
+  const calls: Calls = { merges: [], polls: 0 };
+  const native: ReviewedPersonMergeTransport = {
+    async readReviewedPersonIdentity(id) {
+      if (options.withholdVndb && id === vndbOriginal)
+        return { subject: { id }, reviewedIdentity: null } as unknown as ReviewedPersonRead;
+      return id === bangumiOriginal
+        ? reviewed(id, bangumi, 'bangumi_cross_media')
+        : reviewed(id, vndb, 'vndb_cross_media');
+    },
+    async mergeReviewedPersons(body, key) {
+      calls.merges.push({ body: structuredClone(body), key });
+      if (options.mergeError !== undefined) throw options.mergeError;
+      return { operation: { id: operation } };
+    },
+    async readReviewedPersonOperation(id) {
+      calls.polls += 1;
+      return calls.polls >= (options.doneAfter ?? 1)
+        ? { id, done: true, result: { survivor, redirected: vndbOriginal, revision: 4 } }
+        : { id, done: false };
+    },
+  };
+  return { calls, native };
+}
+
+test('a reviewed pair merges once, observes the native job and reads both identifiers on the survivor', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'person-merge-'));
+  const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
+  try {
+    const { calls, native } = transport({ doneAfter: 2 });
+    const publish = () =>
+      publishReviewedPersonMerge({
+        pair,
+        transport: native,
+        readPublic: async (id) => publicPerson(survivor),
+        journal,
+        pause: async () => {},
+      });
+    const published = await publish();
+    expect(published).toEqual({
+      state: 'published',
+      operation,
+      survivor,
+      redirected: vndbOriginal,
+      revision: 4,
+      identities: [
+        { boundSubjectId: bangumiOriginal, identity: bangumi, currentSubjectId: survivor },
+        { boundSubjectId: vndbOriginal, identity: vndb, currentSubjectId: survivor },
+      ],
+    });
+    expect(calls.merges).toHaveLength(1);
+    expect(calls.merges[0]!.body).toMatchObject({
+      subjects: [bangumiOriginal, vndbOriginal],
+      expectedIdentity: {
+        endpoints: [
+          endpoint(bangumiOriginal, bangumi, 'bangumi_cross_media'),
+          endpoint(vndbOriginal, vndb, 'vndb_cross_media'),
+        ],
+      },
+    });
+    // Reopening the journal repeats only the reads: the admitted operation is never sent again.
+    expect(await publish()).toMatchObject({ state: 'published', operation, survivor });
+    expect(calls.merges).toHaveLength(1);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('unknown delivery replays the exact sealed body and key, while a definite refusal stays terminal', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'person-merge-replay-'));
+  const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
+  const refusedJournal = new ShowcaseJournal(join(directory, 'refused.sqlite'));
+  try {
+    const lost = transport({ mergeError: new Error('connection reset') });
+    const run = (native: ReviewedPersonMergeTransport, db: ShowcaseJournal) =>
+      publishReviewedPersonMerge({
+        pair,
+        transport: native,
+        readPublic: async () => publicPerson(survivor),
+        journal: db,
+        pause: async () => {},
+      });
+    await expect(run(lost.native, journal)).rejects.toThrow('connection reset');
+    const replayed = transport();
+    expect(await run(replayed.native, journal)).toMatchObject({ state: 'published', operation });
+    expect(replayed.calls.merges).toHaveLength(1);
+    expect(replayed.calls.merges[0]).toEqual(lost.calls.merges[0]);
+
+    const refused = transport({ mergeError: Object.assign(new Error('refused'), { status: 403 }) });
+    expect(await run(refused.native, refusedJournal)).toEqual({
+      state: 'withheld',
+      reason: 'Native merge refused with HTTP 403',
+    });
+    const again = transport();
+    expect(await run(again.native, refusedJournal)).toEqual({
+      state: 'withheld',
+      reason: 'review-http-403',
+    });
+    expect(again.calls.merges).toHaveLength(0);
+  } finally {
+    journal.close();
+    refusedJournal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a pending native job resumes from its admitted operation, and disagreeing reads are never published', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'person-merge-pending-'));
+  const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
+  try {
+    const first = transport({ doneAfter: 3 });
+    const bounded = {
+      pair,
+      transport: first.native,
+      readPublic: async () => publicPerson(survivor),
+      journal,
+      pause: async () => {},
+    };
+    expect(await publishReviewedPersonMerge({ ...bounded, polls: 2 })).toEqual({ state: 'pending', operation });
+    const resumed = transport({ doneAfter: 1 });
+    expect(await publishReviewedPersonMerge({ ...bounded, transport: resumed.native, polls: 5 })).toMatchObject({
+      state: 'published',
+      operation,
+    });
+    expect(first.calls.merges).toHaveLength(1);
+    expect(resumed.calls.merges).toHaveLength(0);
+
+    const other = await publishReviewedPersonMerge({
+      ...bounded,
+      readPublic: async (id) => (id === vndbOriginal ? publicPerson(vndbOriginal) : publicPerson(survivor)),
+    });
+    expect(other).toEqual({ state: 'unconfirmed', operation });
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('an original without a coherent reviewed identity withholds the merge before any effect', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'person-merge-withheld-'));
+  const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
+  try {
+    const { calls, native } = transport({ withholdVndb: true });
+    expect(
+      await publishReviewedPersonMerge({
+        pair,
+        transport: native,
+        readPublic: async () => publicPerson(survivor),
+        journal,
+        pause: async () => {},
+      }),
+    ).toEqual({ state: 'withheld', reason: 's224 has no coherent reviewed identity' });
+    expect(calls.merges).toHaveLength(0);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
