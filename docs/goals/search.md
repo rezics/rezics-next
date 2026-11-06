@@ -33,6 +33,7 @@ Decision: this increment uses the focused CJK projection, review-readiness, alia
 Decision: typecheck repairs keep those assertions; review-population readiness fixtures pass KernelClock into createDiscoveryProducerEntry; walk `stopSpawned` accepts Bun's numeric or named `signalCode`; Library access-capabilities re-exports work types from kernel-library-contract, not the Source runtime.
 Decision: the default worker child decorates `startWorker`'s live `createKernelWorkModules` list, including Content ambient; a pre-imported substitute list is not the production composition.
 Decision: write-rate-stage Search stubs keep one `savedCatalogueMembers` method and expect the HTTP empty-recovery envelope on an empty text page; duplicate Search/library/strict-JSON fixtures stay with their owners.
+Decision: Search HTTP fixtures keep one `savedCatalogueMembers` and one `releaseGroups`; `context.complete` and `read.complete` stay. Fewest unit tests pin the current predicate, owner revalidation, kind-count proof and useful-page hydration.
 
 Decision: delayed-index disclosure recovers through the same ordinary relay. Withholding an unsafe kind preserves independently current kinds; unsafe combined execution remains withheld through sibling projection and cursor construction.
 Decision: one executed current predicate discloses hits, exclusion, order and live-facet identities after privacy changes while Search is paused; catalogue kind chips are lower bounds from that predicate and never exact totals.
