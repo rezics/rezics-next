@@ -40,10 +40,6 @@ function hit(id: string, index: string) {
   };
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function catalogueClient(options: {
   generation?: number;
   uuid?: string;
