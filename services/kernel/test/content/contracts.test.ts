@@ -93,6 +93,7 @@ function publishedSignatures(): void {
         deps: reads.ContentReadDependencies,
         id: string,
         context: model.ReadContext,
+        retain?: reads.RetainContentRead<reads.ThreadView>,
       ) => Promise<model.Anchored<reads.ThreadView | null>>
     >
   >();
@@ -346,6 +347,7 @@ function publishedModels(): void {
         tokens: KeyRing;
         clock?: () => Date;
         disclosureBarrier?: reads.DisclosureBarrier;
+        pageDisclosureBarrier?: reads.PageDisclosureBarrier;
       }>
     >
   >();

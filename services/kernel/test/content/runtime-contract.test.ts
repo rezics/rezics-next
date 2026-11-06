@@ -3,7 +3,7 @@ import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
 import type { ContentBoardDependencies } from '../../src/content/boards.ts';
-import type { DisclosureBarrier } from '../../src/content/reads.ts';
+import type { DisclosureBarrier, PageDisclosureBarrier } from '../../src/content/reads.ts';
 import * as routes from '../../src/content/routes.ts';
 import type { ContentRuntime } from '../../src/content/runtime.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
@@ -18,6 +18,7 @@ type KernelContent = ContentRuntime &
     shelfTitleInputs?: ContentShelfTitleInputs;
     // Composed-test timing seam; it is not a native port and production never sets it.
     disclosureBarrier?: DisclosureBarrier;
+    pageDisclosureBarrier?: PageDisclosureBarrier;
   };
 test('trusted optional content runtime types retain exactly the three native ports', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
@@ -72,6 +73,8 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
         ...(mask & 2 ? { workflows } : {}),
         ...(mask & 4 ? { anonymousVerifier } : {}),
         cursorNow,
+        disclosureBarrier: forbidden,
+        pageDisclosureBarrier: forbidden,
       };
       // Extra JavaScript properties cannot introduce another clock or request authority.
       const provided = {
@@ -88,6 +91,8 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.workflows).toBe(content.workflows);
       expect(received.anonymousVerifier).toBe(content.anonymousVerifier);
       expect(received.cursorNow).toBe(content.cursorNow);
+      expect(received.disclosureBarrier).toBe(content.disclosureBarrier);
+      expect(received.pageDisclosureBarrier).toBe(content.pageDisclosureBarrier);
       expect(received.pool).toBe(pool);
       expect(received.tokens).toBe(tokens);
       expect(received.routeKey).toBe(base.routeKey);
