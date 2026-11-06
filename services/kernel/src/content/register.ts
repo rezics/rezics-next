@@ -12,6 +12,7 @@ import type { KernelClock } from '../clock.ts';
 import type { Pool } from 'pg';
 import type { AccessRealmRoleReader } from '../request/access.ts';
 import { createRealmMembership } from '../community/membership.ts';
+import { systemCommunityAmbient, type CommunityAmbient } from '../community/index.ts';
 import { contentEffects, contentNoticeEffects } from './relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
@@ -27,11 +28,17 @@ import { createConversationActivityEffect } from './conversation-activity.ts';
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
  * Reads outside a command bind this kernel clock. */
-export function createContentWorkAccess(clock: KernelClock, pool?: Pool) {
+export function createContentWorkAccess(
+  clock: KernelClock,
+  pool?: Pool,
+  ambient: CommunityAmbient = systemCommunityAmbient,
+) {
   let access: ReturnType<typeof createAccess> | undefined;
   let membership: ReturnType<typeof createRealmMembership> | undefined;
   const roles = () =>
-    access && pool ? (membership ??= createRealmMembership({ pool, access, clock })).roleReader : undefined;
+    access && pool
+      ? (membership ??= createRealmMembership({ pool, access, clock, deadlineNow: ambient.deadlineNow })).roleReader
+      : undefined;
   const realmRoleReader: AccessRealmRoleReader = Object.assign(
     ((client, input) => roles()!(client, input)) as AccessRealmRoleReader,
     { batch: ((client, input) => roles()!.batch!(client, input)) as NonNullable<AccessRealmRoleReader['batch']> },

@@ -14,6 +14,8 @@ export type KernelRuntimeDefaults = {
   writeRate: WriteRateLimiter;
   rateAttribution: WriteRateStageOptions;
   clock: () => Date;
+  /** Real wall time for request deadlines. Composition supplies it; modules never read a global clock. */
+  deadlineNow: () => number;
   access: AccessFactory;
   auth?: AuthenticationConfig;
 };
@@ -25,6 +27,7 @@ export type KernelRuntimeOverrides = {
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
   clock?: () => Date;
+  deadlineNow?: () => number;
   auth?: AuthenticationConfig;
 };
 
@@ -53,6 +56,8 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
   return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
 }
 
+const systemDeadlineNow = (): number => Date.now();
+
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   const env = overrides.env ?? process.env;
@@ -77,6 +82,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     writeRate,
     rateAttribution,
     clock: overrides.clock ?? systemClock,
+    deadlineNow: overrides.deadlineNow ?? systemDeadlineNow,
     access,
     ...(auth === undefined ? {} : { auth }),
   };

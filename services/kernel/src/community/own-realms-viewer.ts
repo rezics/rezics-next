@@ -36,7 +36,7 @@ const retry = () => new ProblemError('transaction_retry_exhausted');
  * a command and never holds a checkout across another owner's observation.
  */
 export function createRealmViewerObservation(
-  deps: Pick<OwnRealmsDependencies, 'pool' | 'access'> & Readonly<{ clock?: () => Date }>,
+  deps: Pick<OwnRealmsDependencies, 'pool' | 'access' | 'deadlineNow'> & Readonly<{ clock?: () => Date }>,
 ) {
   const participation = createRealmParticipationCheck(deps);
   return async (input: RealmViewerInput) => {

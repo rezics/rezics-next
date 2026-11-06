@@ -9,6 +9,8 @@ export type OwnRealmsDependencies = {
   tokens: KeyRing;
   access: Access;
   clock: () => Date;
+  /** Real wall time for request deadlines, supplied by composition. */
+  deadlineNow: () => number;
 };
 export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & {
   epoch: number;

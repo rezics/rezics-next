@@ -1867,10 +1867,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
         const allowed = await admission.run('normal', job, () =>
-          createRealmParticipationCheck({ pool: dependencies.pool, access: dependencies.access() })(
-            dependencies.pool as unknown as AccessClient,
-            { realmId, actor },
-          ),
+          createRealmParticipationCheck({
+            pool: dependencies.pool,
+            access: dependencies.access(),
+            deadlineNow: dependencies.deadlineNow,
+          })(dependencies.pool as unknown as AccessClient, { realmId, actor }),
         );
         if (!allowed) {
           const readable = await admission.run('normal', job, () =>

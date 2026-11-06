@@ -19731,11 +19731,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/events/catalogue.ts",
-          "edge": "value import \"../community/events.ts\" #1 => services/kernel/src/community/events.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/events/catalogue.ts",
           "edge": "value import \"../content/events.ts\" #1 => services/kernel/src/content/events.ts"
         },
         {
@@ -20186,11 +20181,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/actions.ts\" #1 => services/kernel/src/community/actions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../community/following-space-targets.ts\" #1 => services/kernel/src/community/following-space-targets.ts"
         },
         {
@@ -20201,17 +20191,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/participation.ts\" #1 => services/kernel/src/community/participation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../community/realm.ts\" #1 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/routes.ts\" #1 => services/kernel/src/community/routes.ts"
         },
         {
           "rule": "rule 2",
@@ -23009,11 +22989,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/presentation/semantic-page.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/presentation/semantic-page.ts",
-          "edge": "value import \"../semantic/released-relation-direction.ts\" #1 => services/kernel/src/semantic/released-relation-direction.ts"
         },
         {
           "rule": "rule 2",

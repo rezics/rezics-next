@@ -7,7 +7,7 @@ import { mountContentEditionConsent } from '../content/edition-sale.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
-import { NATIVE_CONTAINER_ACTIONS } from '../community/actions.ts';
+import { createCommunityHttpDeclaration } from '../community/http-declaration.ts';
 import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
@@ -31,15 +31,18 @@ import {
 import { contextViewerActionResource, subjectViewerActionResources } from '../semantic/viewer-actions.ts';
 import { accountViewerActionResource } from '../access/account-viewer-actions.ts';
 import { collectionViewerActionResource } from '../library/collection-reads.ts';
-import { createCommunityDeclaration, systemCommunityAmbient } from '../community/declaration.ts';
+import {
+  createCommunityDeclaration,
+  systemCommunityAmbient,
+  type CommunityDeclaration,
+} from '../community/declaration.ts';
 import { followingSpaceTargets } from '../community/following-space-targets.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
-import { createRealmParticipationCheck, type RealmParticipationCheck } from '../community/participation.ts';
+type RealmParticipationCheck = ReturnType<CommunityDeclaration['createParticipation']>;
 import { realmReadEligibility } from '../community/realm.ts';
-import { communityRoutes } from '../community/routes.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
@@ -317,6 +320,8 @@ export function createKernelAccessResolver(options: {
   pool: Pool;
   tokens: KeyRing;
   clock: () => Date;
+  /** Real wall time for the Realm membership role reader's request deadlines. */
+  deadlineNow: () => number;
   access?: Access | AccessFactory;
   realmRoleReader?: AccessRealmRoleReader;
   /** Undefined until the kernel has mounted its last route. */
@@ -340,6 +345,7 @@ export function createKernelAccessResolver(options: {
         access,
         referenceKeys: options.tokens,
         clock: options.clock,
+        deadlineNow: options.deadlineNow,
       });
     }
     return realmMembership.roleReader;
@@ -390,6 +396,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     deadlineNow: dependencies.deadlineNow ?? systemCommunityAmbient.deadlineNow,
   };
   const communityDeclaration = createCommunityDeclaration(communityAmbient);
+  const communityHttp = createCommunityHttpDeclaration(communityAmbient);
   const tokens = dependencies.tokens ?? {
     current: 1,
     keys: new Map([[1, new Uint8Array(randomBytes(32))]]),
@@ -404,6 +411,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     composedActions: () => composedActions,
     access:
       typeof dependencies.access === 'object'
@@ -505,6 +513,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...dependencies,
     tokens,
     access: (config) => resolveAccess({ ...config, realmRoleReader }),
+    deadlineNow: communityAmbient.deadlineNow,
   });
   erasureStatusRoutes(app, {
     pool: dependencies.pool,
@@ -623,7 +632,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   let realmParticipation: RealmParticipationCheck | undefined;
   let content: ReturnType<typeof contentRoutes>;
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
-    realmParticipation ??= createRealmParticipationCheck({
+    realmParticipation ??= communityDeclaration.createParticipation({
       pool: dependencies.pool,
       access: resolveAccess({
         actions: actionCatalogue(content),
@@ -690,11 +699,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     cursorKeys: tokens,
     access: () => resolveAccess({ actions: actionCatalogue(exposed), realmRoleReader }),
   });
-  const community = communityRoutes(exposed as unknown as ReturnType<typeof definitionRoutes>, {
+  const community = communityHttp.routes(exposed as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
-    deadlineNow: communityAmbient.deadlineNow,
     access: () => resolveAccess({ actions: actionCatalogue(community), realmRoleReader }),
     tokens,
     workClient,
@@ -882,7 +890,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],
-    ...communityDeclaration.viewerResources,
+    ...communityHttp.viewerResources,
     ['semantic.zone', zoneViewerActionResource],
   ]);
   for (const [type, resource] of dependencies.viewerActionResources ?? []) {
@@ -942,7 +950,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  const actions = actionCatalogue(zones, NATIVE_CONTAINER_ACTIONS);
+  const actions = actionCatalogue(zones, communityHttp.actions);
   const consentedScopeCount = accessActionCatalogue(actions).size;
   if (consentedScopeCount > MAX_CONSENTED_SCOPES)
     throw new Error(
