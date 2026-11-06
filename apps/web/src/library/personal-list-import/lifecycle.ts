@@ -7,6 +7,7 @@ import type { VndbVisit } from './visit';
 
 /** Recorded Library identities stay independent of this private import acknowledgement. */
 export const VNDB_LIFECYCLE_UPLOAD = '00000000-0000-4000-8000-000000000001';
+export const VNDB_LIFECYCLE_CHANGED_UPLOAD = '00000000-0000-4000-8000-000000000009';
 export const VNDB_LIFECYCLE_TARGET = '00000000-0000-4000-8000-000000000002';
 export const VNDB_LIFECYCLE_REVIEW = '00000000-0000-4000-8000-000000000003';
 export const VNDB_LIFECYCLE_SCORE_REVIEW = '00000000-0000-4000-8000-000000000004';
@@ -241,13 +242,13 @@ function vndbLifecycleReviewed(command: { body: { action?: string } }): Extract<
 export function vndbLifecyclePort(page: VndbPage, overrides: Partial<VndbPort> = {}): VndbPort {
   return {
     preview: async () => ({ kind: 'previewed', value: { ...VNDB_LIFECYCLE_PREVIEW, rows: page.total } }),
-    page: async () => ({ kind: 'page', value: page }),
+    page: async (command) => ({ kind: 'page', value: { ...page, uploadId: command.uploadId } }),
     source: async () => ({ kind: 'source', xml: VNDB_LIFECYCLE_XML }),
     review: async (command) => vndbLifecycleReviewed(command),
     apply: async (command) => ({
       kind: 'applied',
       value: {
-        uploadId: VNDB_LIFECYCLE_UPLOAD,
+        uploadId: page.uploadId,
         outcomes: command.body.rows.map((row) =>
           row.scoreReviewId
             ? { ordinal: row.ordinal, scoreReviewId: row.scoreReviewId, status: 'unavailable' as const }
@@ -319,24 +320,25 @@ export async function vndbLifecycleReopenSnapshot(): Promise<VndbJourneySnapshot
 }
 
 export async function vndbLifecycleChangedReimportSnapshot(): Promise<VndbJourneySnapshot> {
-  let page = vndbLifecyclePage([vndbLifecyclePreviewRow()]);
+  let current = vndbLifecyclePage([vndbLifecyclePreviewRow()]);
   const journey = createVndbJourney({
     visit: visit(),
-    port: vndbLifecyclePort(page, {
+    port: vndbLifecyclePort(current, {
       preview: async (command) => ({
         kind: 'previewed',
         value: {
           ...VNDB_LIFECYCLE_PREVIEW,
-          uploadId: command.xml === VNDB_LIFECYCLE_CHANGED_XML ? '00000000-0000-4000-8000-000000000009' : VNDB_LIFECYCLE_UPLOAD,
+          uploadId:
+            command.xml === VNDB_LIFECYCLE_CHANGED_XML ? VNDB_LIFECYCLE_CHANGED_UPLOAD : VNDB_LIFECYCLE_UPLOAD,
           rows: 1,
         },
       }),
-      page: async () => ({ kind: 'page', value: page }),
+      page: async (command) => ({ kind: 'page', value: { ...current, uploadId: command.uploadId } }),
       delete: async () => ({ kind: 'deleted' as const }),
     }),
   });
   await journey.preview(VNDB_LIFECYCLE_XML);
-  page = vndbLifecyclePage([vndbLifecycleChangedRow()]);
+  current = vndbLifecyclePage([vndbLifecycleChangedRow()]);
   await journey.preview(VNDB_LIFECYCLE_CHANGED_XML);
   return journey.snapshot();
 }
