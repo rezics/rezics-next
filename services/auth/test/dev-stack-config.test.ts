@@ -9,6 +9,7 @@ import {
   developmentWebsiteScopeConfiguration,
   developmentWebsiteBindings,
   developmentKernelBindings,
+  retireStaleSeedJournals,
   root,
   developmentBindings,
   developmentRegistrationPassword,
@@ -33,11 +34,12 @@ test('isolated Kernel bindings verify the selected Auth issuer and bind the sele
       issuer: 'http://127.0.0.1:20021',
       audience: 'https://api.rezics.test',
       kernel: 'http://127.0.0.1:20023',
+      native: 'http://127.0.0.1:20022',
     }),
   ).toEqual({
     AUTH_ISSUER: 'http://127.0.0.1:20021',
     AUTH_AUDIENCE: 'https://api.rezics.test',
-    AUTH_JWKS_URL: 'http://127.0.0.1:20021/.well-known/jwks.json',
+    AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: '20023',
   });
@@ -171,6 +173,26 @@ test('first-run secrets remain private and stable across setup retries', async (
     expect(keys.secret).not.toBe(keys.staging);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('seed journals that name another database are archived before the current identity is written', async () => {
+  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/stale-seed-'));
+  try {
+    await mkdir(resolve(repository, '.temp/cross-media-seed'), { recursive: true });
+    await writeFile(resolve(repository, '.temp/cross-media-seed/database-identity'), '127.0.0.1:54329/rezics\n');
+    await writeFile(resolve(repository, '.temp/cross-media-seed/showcase.sqlite'), 'other-db');
+    const archived = await retireStaleSeedJournals(repository, 'postgres://rezics:rezics@127.0.0.1:20024/rezics');
+    expect(archived).toBeDefined();
+    expect(await readFile(resolve(archived!, 'showcase.sqlite'), 'utf8')).toBe('other-db');
+    expect(await readFile(resolve(repository, '.temp/cross-media-seed/database-identity'), 'utf8')).toBe(
+      '127.0.0.1:20024/rezics\n',
+    );
+    expect(
+      await retireStaleSeedJournals(repository, 'postgres://rezics:rezics@127.0.0.1:20024/rezics'),
+    ).toBeUndefined();
+  } finally {
+    await rm(repository, { recursive: true, force: true });
   }
 });
 

@@ -13,7 +13,13 @@ import {
 import { join } from 'node:path';
 import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
 import { prepareCompilerDatabase } from './compiler-database.ts';
-import { affectedWorkspaces, typecheck, type StartedDatabase } from './typecheck.ts';
+import {
+  affectedWorkspaces,
+  compilerIdentityPaths,
+  typecheck,
+  typecheckRunOrder,
+  type StartedDatabase,
+} from './typecheck.ts';
 
 function fixture(): { root: string; remove: () => void } {
   const repository = join(import.meta.dir, '..');
@@ -418,6 +424,79 @@ test('compiler cleanup and no-diagnostic compiler failures are infrastructure, n
   } finally {
     commandFixture.remove();
   }
+});
+
+test('mapper-enabled workspaces typecheck one at a time inside an admitted slice', async () => {
+  expect(
+    typecheckRunOrder([
+      { needsDatabase: false, name: 'filter' },
+      { needsDatabase: true, name: 'kernel' },
+      { needsDatabase: true, name: 'web' },
+    ]),
+  ).toEqual({
+    parallel: [{ needsDatabase: false, name: 'filter' }],
+    serial: [
+      { needsDatabase: true, name: 'kernel' },
+      { needsDatabase: true, name: 'web' },
+    ],
+  });
+  const { root, remove } = fixture();
+  try {
+    const lock = join(root, 'mapper.lock');
+    const overlap = join(root, 'overlap');
+    const mapperScript = `import { existsSync, writeFileSync, unlinkSync } from 'node:fs';
+if (existsSync(${JSON.stringify(lock)})) writeFileSync(${JSON.stringify(overlap)}, 'yes');
+writeFileSync(${JSON.stringify(lock)}, 'held');
+await Bun.sleep(80);
+unlinkSync(${JSON.stringify(lock)});
+await Bun.write('typechecked', 'ok');
+`;
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': mapperScript,
+    });
+    writeWorkspace(root, 'apps/web', '@fixture/web', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': mapperScript,
+    });
+    writeWorkspace(root, 'packages/filter', '@fixture/filter', 'bun pass.ts', { 'pass.ts': passScript });
+    expect(
+      await typecheck({
+        root,
+        recognize: () => ({
+          outcome: 'admitted',
+          runId: 'fixture',
+          scope: 'fixture.scope',
+          supervisor: { pid: 1, started: '1', group: 1 },
+        }),
+        place: async () => {
+          throw new Error('nested host admission');
+        },
+        startDatabase: unusedDatabase(),
+        stdout: collector().stdout,
+      }),
+    ).toBe(0);
+    expect(existsSync(overlap)).toBe(false);
+  } finally {
+    remove();
+  }
+});
+
+test('compiler identity includes the installed Reylo mapper and Web workspace manifests', () => {
+  expect(compilerIdentityPaths()).toEqual([
+    'package.json',
+    'bun.lock',
+    'node_modules/typescript/package.json',
+    'node_modules/reylo/package.json',
+    'services/kernel/package.json',
+    'services/kernel/tsconfig.json',
+    'services/kernel/scripts/typecheck.ts',
+    'services/auth/package.json',
+    'services/auth/tsconfig.json',
+    'services/auth/scripts/database.ts',
+    'apps/web/package.json',
+    'apps/web/tsconfig.json',
+  ]);
 });
 
 test('an admitted explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {
