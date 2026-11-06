@@ -1149,16 +1149,20 @@ once-migrated kernel template and releases its host. Focused receiving is the fi
 named suites plus failed-start relaunch and first-actual-failure cause; no extra stories.
 
 A registration whose workflow stopped reports the durable failure, and this process's
-first actual step failure rides along as its `cause`. Durable steps journal only the
-generic step message; the retained failure is bounded to 64 workflows and is never
-persisted or exposed outside the host. Expired registration terminals the stage and
-records handle release before `erase-auth-owner`, which is how the owner producer
-recognizes pending-registration cleanup. Mock workflow hosts that exercise native
-operations supply creation context, actor roles and approval bindings; they do not
-reconstruct those from an unprotected callback. `authorizeOperation` receives the
-host-bound `operationKey` on that same operation. The official dev-stack copy omits
-check-host `.last-test-file` artifacts so a concurrent check receipt cannot break
-the isolated checkout.
+first actual step failure rides along as its `cause`, including when the workflow is
+still pending. Durable steps journal only the generic step message; the retained
+failure is bounded to 64 workflows and is never persisted or exposed outside the host.
+Failed start does not shut down DBOS unless that generation launched it. Isolated
+system-store hosts still persist `auth_workflow_request` on the Auth database so
+resume can read the original operation; they still have no copy custody. Expired
+registration terminals the stage and records handle release before `erase-auth-owner`,
+which is how the owner producer recognizes pending-registration cleanup. Mock workflow
+hosts that exercise native operations supply creation context, actor roles and approval
+bindings; they do not reconstruct those from an unprotected callback. `authorizeOperation`
+receives the host-bound `operationKey` on that same operation; the shared contract
+carries the optional key so native bindings keep one port type. The official dev-stack
+copy omits check-host `.last-test-file` artifacts so a concurrent check receipt cannot
+break the isolated checkout.
 
 Before resolving, `host.start()` also registers the first-party client
 `rezics-auth-account-operations` through trusted `registerClient` in

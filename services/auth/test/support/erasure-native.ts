@@ -48,6 +48,36 @@ export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
   };
 }
 
+/** Bind operating-session evidence in the session's current producer transaction.
+ * A later INSERT cannot rewrite session role custody from another xid. */
+export async function attachOperatingOpening(
+  pool: Pool,
+  input: {
+    sessionId: string;
+    subjectAccountId: string;
+    actingHumanId: string;
+    operatorAccountId: string;
+    receiptId: string;
+  },
+) {
+  const connection = await pool.connect();
+  try {
+    await connection.query('BEGIN');
+    await connection.query('UPDATE session SET erasure_role_xid=txid_current() WHERE id=$1', [input.sessionId]);
+    await connection.query(
+      `INSERT INTO auth_session_opening (session_id,subject_account_id,acting_human_id,operator_account_id,receipt_id)
+      VALUES ($1,$2,$3,$4,$5)`,
+      [input.sessionId, input.subjectAccountId, input.actingHumanId, input.operatorAccountId, input.receiptId],
+    );
+    await connection.query('COMMIT');
+  } catch (error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 /** Real Access composition is test-only. Production Auth receives ports and an
  * Auth-only pool, never a kernel module, pool, key or credential. */
 export async function nativeFixture(options: { openPool?: (url: string) => Promise<Pool> } = {}) {

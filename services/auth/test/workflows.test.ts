@@ -516,6 +516,9 @@ test('public signup binds credentials atomically and cannot take over a trusted 
 }, 30000);
 
 test('operator fencing delegates fanout to a committed continuation and resumes Auth revocation once', async () => {
+  continuationReads.length = 0;
+  continuationAuthorizations.length = 0;
+  pageCalls.length = 0;
   const operator = 'workflow-fanout-operator';
   for (const id of [operator, ...fanoutRows.map((row) => row.subjectAccountId)]) {
     accounts.set(id, { accountId: id, kind: 'actor', state: 'active', automated: false, authnEpoch: 1 });
@@ -614,18 +617,18 @@ test('failed launch keeps the first error through cleanup failure and a later ho
       },
     });
     await expect(failing.start()).rejects.toThrow('injected launch failure');
-    const recovered = createAccountWorkflows(options);
-    await recovered.start();
-    const opened = await recovered.beginRegistration({
-      key: 'lifecycle-failed-launch',
-      handle: 'Lifecycle_Failed',
-    });
-    expect(opened.accountId).toBe('workflow-account-lifecycle-failed-launch');
-    await recovered.close();
-    workflows = recovered;
   } finally {
     DBOS.shutdown = shutdown;
   }
+  const recovered = createAccountWorkflows(options);
+  await recovered.start();
+  const opened = await recovered.beginRegistration({
+    key: 'lifecycle-failed-launch',
+    handle: 'Lifecycle_Failed',
+  });
+  expect(opened.accountId).toBe('workflow-account-lifecycle-failed-launch');
+  await recovered.close();
+  workflows = recovered;
 }, 60_000);
 
 test('a second host does not shut down a healthy owner', async () => {

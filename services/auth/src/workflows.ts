@@ -1,6 +1,6 @@
 import { registrationAccountId, registrationAcknowledgement } from '@rezics/auth-contract';
 import type {
-  AccountWorkflowPorts as ContractAccountWorkflowPorts,
+  AccountWorkflowPorts,
   AccountOperation as ContractAccountOperation,
   WorkflowMembership,
   WorkflowResponsibility,
@@ -25,6 +25,7 @@ import {
 } from './creation-party-context.ts';
 import { installNativeRoleProducer } from './erasure-coverage.ts';
 export type {
+  AccountWorkflowPorts,
   WorkflowMembership,
   WorkflowResponsibility,
   WorkflowAccount,
@@ -41,23 +42,15 @@ export type TransferAcceptanceOperation = {
   operatorAccountId: string;
   sourceOperationKey: string;
   authorization: string;
+  operationKey?: string;
 };
 /** Native hosts bind a session revocation to an approval; a callback-only historical host runs it without one. */
-export type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
-export type AccountOperation = (
+export type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string; operationKey?: string };
+export type AccountOperation =
   | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
   | RevokeOperation
   | TransferOperation
-  | TransferAcceptanceOperation
-) & { operationKey?: string };
-/** Host ports see the bound operation, including the logical key `runOperation` attaches before approval. */
-export type AccountWorkflowPorts<Context = WorkflowContext> = Omit<
-  ContractAccountWorkflowPorts<Context>,
-  'authorizeOperation' | 'authorizeUnprotectedOperation'
-> & {
-  authorizeOperation?(reference: string, operation: AccountOperation): Promise<Context>;
-  authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
-};
+  | TransferAcceptanceOperation;
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
@@ -65,6 +58,7 @@ import { authWorkflowLogger } from './diagnostics.ts';
 import {
   installCopyRecorder,
   createCopyWriter,
+  copyTransaction,
   completeCopy,
   finishCopyResult,
   type CopyRole,
@@ -295,6 +289,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return requestPartyScope(row);
   }
   let started = false;
+  let launched = false;
   let starting: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   let closed = false;
@@ -526,6 +521,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   const step = <A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>) => {
     const native = DBOS.registerStep(
       async (...args: A) => {
+        // Capture before the step body: a throw can leave the SDK without workflowID in the handler.
+        const id = DBOS.workflowID;
         try {
           return await fn(...args);
         } catch (error) {
@@ -533,7 +530,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           // Successful legacy results remain unchanged; legacy untyped errors
           // stay errors and are never inferred to be authorization refusals.
           if (isRefusal(error)) return { authStepOutcome: 'refused-v1', status: error.status } satisfies StepRefusal;
-          if (DBOS.workflowID !== undefined) retainFirstFailure(DBOS.workflowID, error);
+          if (id !== undefined) retainFirstFailure(id, error);
           const failure = new Error(stepFailureMessage(name));
           // Persist only unavailable status, never the command's
           // secret input, permission context or original error in a durable step.
@@ -1413,16 +1410,17 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   // Why a registration workflow stopped before its event. A durable failure keeps its public status and gains this
   // process's first actual failure as its cause; a workflow that stalled without failing keeps its stated status.
   async function stoppedRegistration(id: string): Promise<unknown> {
+    const cause = firstFailures.get(id);
+    const withCause = (error: unknown) => (cause === undefined ? error : Object.assign(error as object, { cause }));
     const status = await DBOS.getWorkflowStatus(id);
     if (status?.status !== 'ERROR')
-      return new Error(`Auth registration ${id} has no pending event (${status?.status ?? 'missing'})`);
+      return withCause(new Error(`Auth registration ${id} has no pending event (${status?.status ?? 'missing'})`));
     try {
       await DBOS.retrieveWorkflow(id).getResult();
     } catch (durable) {
-      const cause = firstFailures.get(id);
-      return cause === undefined ? durable : Object.assign(durable as object, { cause });
+      return withCause(durable);
     }
-    return new Error(`Auth registration ${id} has no pending event (ERROR)`);
+    return withCause(new Error(`Auth registration ${id} has no pending event (ERROR)`));
   }
   async function begin(input: { key: string; handle: string }, credential?: { email: string; password: string }) {
     active();
@@ -1659,6 +1657,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           copyClient = undefined;
           copyWriter = undefined;
           if (owner !== token) return;
+          if (!launched) return;
+          launched = false;
           await DBOS.shutdown({ deregister: true });
         }
       } finally {
@@ -1697,6 +1697,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         logger: authWorkflowLogger,
       });
       await DBOS.launch();
+      launched = true;
       if (closed) throw new Error('Auth workflow host is stopped');
       if (sameDatabase) {
         await installCopyRecorder(database);
@@ -1718,7 +1719,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             name: Parameters<ReturnType<typeof createCopyWriter>['enqueue']>[0],
             id: string,
             input: unknown,
+            roles: Parameters<ReturnType<typeof createCopyWriter>['enqueue']>[3],
           ) {
+            // Isolated stores still persist the Auth workflow request; copy custody stays native-only.
+            if (typeof roles === 'function') await copyTransaction(database, (connection) => roles(connection));
             const definition =
               name === 'accounts.registration'
                 ? registration
