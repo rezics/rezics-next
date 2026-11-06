@@ -33,7 +33,7 @@ import { accessCheck, type Access, type AccountActor } from '../../../src/reques
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { identityEpochStore } from '../../../src/semantic/identity-adapters/index.ts';
+import { identityEpochStore, identityJobPartition } from '../../../src/semantic/identity-adapters/index.ts';
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
@@ -455,12 +455,6 @@ export async function createProfileEntryFixture(
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
       grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
-    async function recaptureIdentityHomes() {
-      for (const home of [...partitions].sort((left, right) => left - right)) {
-        if (home === 0 && !identityHomesReady) continue;
-        if (await identityDirty(home)) await catchUpIdentity(home);
-      }
-    }
     async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
       method: string,
@@ -469,7 +463,6 @@ export async function createProfileEntryFixture(
       extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
-      await recaptureIdentityHomes();
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -558,8 +551,10 @@ export async function createProfileEntryFixture(
       }
       if (!mapped) throw new Error('Native identity mapping did not finish');
       // Mapping already installed this job's epoch. Search/Library ACK is unavailable, so
-      // drop the group pin and publish that epoch so later bootstrap, Progress, Rating and
-      // merge can recapture dirty without waiting for those acknowledgements.
+      // drop the group pin and publish that epoch with the store's partition updates so
+      // later bootstrap, Progress, Rating and merge can recapture dirty without waiting
+      // for those acknowledgements. Recapture stays on Subject writes, not every HTTP send.
+      const partition = identityJobPartition(job);
       const epoch = job.epoch.toString();
       await pool.query(
         `UPDATE semantic.identity_epoch_prearm_bridge
@@ -567,22 +562,17 @@ export async function createProfileEntryFixture(
           WHERE job_id=$1 AND job_epoch=$2`,
         [job.jobId, epoch],
       );
+      await pool.query(`UPDATE semantic.identity_epoch_job SET state='published' WHERE partition_no=$1 AND job_id=$2`, [
+        partition,
+        job.jobId,
+      ]);
       await pool.query(
-        `UPDATE semantic.identity_epoch_job SET state='published'
-          WHERE job_id=$1 AND epoch=$2 AND state='pending'`,
-        [job.jobId, epoch],
+        `UPDATE semantic.identity_epoch_control SET published_epoch=$2,pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1`,
+        [partition, epoch],
       );
       await pool.query(
-        `UPDATE semantic.identity_epoch_group
-            SET pending_job=NULL, pending_epoch=NULL, published_epoch=$2
-          WHERE pending_job=$1 AND pending_epoch=$2`,
-        [job.jobId, epoch],
-      );
-      await pool.query(
-        `UPDATE semantic.identity_epoch_control
-            SET pending_job=NULL, pending_epoch=NULL, published_epoch=$2
-          WHERE pending_job=$1 AND pending_epoch=$2`,
-        [job.jobId, epoch],
+        `UPDATE semantic.identity_epoch_group SET pending_job=NULL,pending_epoch=NULL,published_epoch=$2 WHERE partition_no=$1 AND pending_job=$3`,
+        [partition, epoch, job.jobId],
       );
     }
     async function drainIdentityMerge(jobId: string) {
