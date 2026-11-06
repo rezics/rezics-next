@@ -26,12 +26,21 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
   for (const args of [
     ['bun', 'run', 'generate'],
     ['bun', 'run', 'generate:routes'],
-    ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
   ]) {
     const code = await command(args, env);
     if (code !== 0) return code;
   }
-  return 0;
+  // The tooling scripts import kernel and auth sources, so they run as their own program within the check memory envelope.
+  // Both programs run even when the web program has diagnostics; the scripts are never skipped by a red web program.
+  let result = 0;
+  for (const args of [
+    ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+    ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.scripts.json'],
+  ]) {
+    const code = await command(args, env);
+    if (result === 0) result = code;
+  }
+  return result;
 }
 
 async function run(args: readonly string[]): Promise<number> {
