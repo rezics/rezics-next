@@ -1051,8 +1051,15 @@ export function createVndbImport(config: Config) {
     actor: Actor,
     identity: VndbDateAdmissionIdentity,
   ): Promise<ProgressSessionJournalAdmission> {
+    let matching: Awaited<ReturnType<typeof match>>;
+    let target: Awaited<ReturnType<typeof current>>;
     return {
       identity,
+      async prepare() {
+        const stored = await retainedRow(actor, identity.uploadId, identity.ordinal, true);
+        matching = stored.matching;
+        target = stored.target;
+      },
       assert: async (tx) => {
         const account = owner(actor),
           route = requireRoute(account.accountId),
@@ -1079,8 +1086,6 @@ export function createVndbImport(config: Config) {
           throw new LibraryConflictError();
         if (account.clientId !== identity.clientId || (account.requestedBy ?? null) !== identity.requestedBy)
           throw new LibraryConflictError();
-        const matching = await match(actor, row),
-          target = await current(actor, identity.subjectId);
         if (
           entryImportMetadataDigest(matching) !== identity.matchFingerprint ||
           !target ||

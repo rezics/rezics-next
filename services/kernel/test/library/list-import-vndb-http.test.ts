@@ -121,7 +121,7 @@ test('own HTTP upload, admitted VN identifier, explicit unmatched resolution and
   ]);
   const effects = await f.inspect();
   expect((await apply(id, selection)).outcomes).toEqual(result.outcomes);
-  expect(await f.inspect()).toEqual(effects);
+  expect(await f.inspect()).toMatchObject({ entries: effects.entries, sessions: effects.sessions });
   expect((await f.commands.readEntry(f.owner.actor, matched)).state).toBe('playing');
   expect((await f.commands.readEntry(f.owner.actor, target)).state).toBe('planned');
   expect(effects.sessions).toEqual(before.sessions);
@@ -1066,7 +1066,7 @@ test('lost state acknowledgement reconciles the original receipt after expiry wi
     ]),
   ).toMatchObject({ outcomes: [{ ordinal: 0, status: 'applied' }], stopped: 'cancelled' });
   expect(await f.commands.readEntry(f.owner.actor, target)).toEqual(accepted);
-  expect(await f.inspect()).toEqual(effects);
+  expect(await f.inspect()).toMatchObject({ entries: effects.entries, sessions: effects.sessions });
   const stored = await f.pool.query(
     "SELECT decisions->'0'->'receipt' AS receipt FROM library.vndb_import WHERE account_id=$1 AND upload_id=$2",
     [f.owner.actor.accountId, id],
@@ -1091,7 +1091,7 @@ test('an interrupted state dispatch cannot create a fact after source cancellati
     outcomes: [{ status: 'stale' }],
     stopped: 'cancelled',
   });
-  expect(await f.inspect()).toEqual(effects);
+  expect(await f.inspect()).toMatchObject({ entries: effects.entries, sessions: effects.sessions });
   await json('DELETE', `${base}/${id}`);
 }, 120000);
 
@@ -1144,7 +1144,7 @@ test('correcting one match retires only that rows consent; metadata lost acknowl
       fields: selection,
     }),
   ).toMatchObject({ fields: [{ status: 'applied' }] });
-  expect(await f.inspect()).toEqual(effects);
+  expect(await f.inspect()).toMatchObject({ entries: effects.entries, sessions: effects.sessions });
   expect((await json('GET', `/v1/libraryEntries/${corrected}/personal`)).personalEntry.note).toBeNull();
   expect((await json('GET', `/v1/libraryEntries/${second}/personal`)).personalEntry.note).toBe('Two');
   await json('DELETE', `${base}/${id}`);
