@@ -10024,7 +10024,6 @@
   "library_vndb_browse_inspection_close": "Volver a esta página",
   "library_vndb_browse_inspection_dates": "Las fechas nativas de la biblioteca se muestran en UTC.",
   "library_vndb_browse_inspection_no_progress": "Esta fila no incluye una sesión de progreso activa. Abre la obra o la biblioteca para ver los controles disponibles.",
-  "library_vndb_browse_inspection_rating": "Esta lectura no incluye valoraciones. Abre la obra para ver sus controles de valoración actuales.",
   "library_vndb_browse_inspection_work": "Abrir obra",
   "library_copy_editor_edit_description": "Edita este ejemplar y guarda o cancela para volver al inventario.",
   "library_copy_editor_create_description": "Elige una edición y su tipo y estado disponibles. Puedes añadir datos opcionales más abajo.",

@@ -10130,7 +10130,6 @@
   "library_vndb_browse_inspection_close": "Return to this page",
   "library_vndb_browse_inspection_dates": "Dates are the native Library dates, displayed in UTC.",
   "library_vndb_browse_inspection_no_progress": "This Library row supplies no active progress session. Open the work or Library for the available controls.",
-  "library_vndb_browse_inspection_rating": "Ratings are not included in this Library read. Open the work to see its current rating controls.",
   "library_vndb_browse_inspection_work": "Open work",
   "library_copy_editor_edit_description": "Edit this Copy, then save or cancel to return to your inventory.",
   "library_copy_editor_create_description": "Choose an edition and its available kind and status. Optional details can be added below.",

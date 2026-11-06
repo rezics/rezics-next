@@ -10032,7 +10032,6 @@
   "library_vndb_browse_inspection_close": "返回這一頁",
   "library_vndb_browse_inspection_dates": "日期來自原生資料庫，以 UTC 顯示。",
   "library_vndb_browse_inspection_no_progress": "這筆資料庫項目未提供進行中的進度紀錄。請開啟作品或資料庫使用可用操作。",
-  "library_vndb_browse_inspection_rating": "這次資料庫讀取未包含評分。請開啟作品查看目前的評分操作。",
   "library_vndb_browse_inspection_work": "開啟作品",
   "library_copy_editor_edit_description": "編輯此副本，儲存或取消後返回庫存。",
   "library_copy_editor_create_description": "選擇版本及可用的副本類型與狀態，亦可在下方填寫選填資料。",
