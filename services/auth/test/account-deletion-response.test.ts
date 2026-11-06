@@ -98,12 +98,10 @@ test('deletion execute confirmation matches the current handle when Access binds
   const omitted = await transport(request('execute'));
   expect(omitted.status).toBe(403);
   expect(await omitted.json()).toEqual({ error: 'account_operation_denied', effect_status: 'not_applied' });
-  const handleless = accountOperationTransport(
-    service,
-    workflows,
-    async () => new Response(null, { status: 404 }),
-    { ...access, readDeletionHandle: async () => null },
-  );
+  const handleless = accountOperationTransport(service, workflows, async () => new Response(null, { status: 404 }), {
+    ...access,
+    readDeletionHandle: async () => null,
+  });
   const handlelessReply = await handleless(request('execute'));
   expect(handlelessReply.status).toBe(200);
   expect(await handlelessReply.json()).toEqual({ accountId: 'original' });

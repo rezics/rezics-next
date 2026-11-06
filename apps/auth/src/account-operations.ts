@@ -6,7 +6,6 @@ import {
   ORGANIZATION_EXECUTION_MAX_RESPONSE_BYTES,
   parseAccountOperationApprovalResponse,
   parseDeletionExecutionResponse,
-  parseDeletionOperationRefusal,
   parseOrganizationExecutionResponse,
   parseOrganizationOperationError,
 } from '@rezics/auth-contract';
@@ -202,24 +201,18 @@ async function deletionPost(path: string, body: unknown, maxBytes: number): Prom
         controller.signal,
       );
       if (response.status === 200) return { ok: true, body: value };
-      const refused = parseDeletionOperationRefusal(value, response.status);
-      if (refused)
-        return {
-          ok: false,
-          status: response.status,
-          code: refused.error,
-          effectStatus: 'not_applied',
-          retryAfter: null,
-        };
-      if (
-        response.status === 503 &&
-        value &&
-        typeof value === 'object' &&
-        Object.keys(value).join(',') === 'error' &&
-        'error' in value &&
-        value.error === 'unavailable'
-      )
-        return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+      const error = parseOrganizationOperationError(value, response.status);
+      if (error) {
+        if ('effect_status' in error)
+          return {
+            ok: false,
+            status: response.status,
+            code: error.error,
+            effectStatus: 'not_applied',
+            retryAfter: null,
+          };
+        return { ok: false, status: response.status, code: error.error, retryAfter: null };
+      }
       return unreadable;
     } catch {
       // External transport, decoding and parsing failures provide no effect evidence.

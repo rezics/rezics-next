@@ -13,7 +13,7 @@ afterAll(() => {
   if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
   else Reflect.deleteProperty(globalThis, 'scrollTo');
 });
-const { createRootRoute, createRoute, createRouter, createBrowserHistory, RouterProvider } =
+const { createRootRoute, createRoute, createRouter, createMemoryHistory, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { Route } = await import('../src/routes/step-up');
 const passkeys = await import('../src/passkeys');
@@ -26,10 +26,10 @@ const signInQuery =
 
 async function setup(query = signInQuery) {
   window.history.replaceState(null, '', `/step-up${query}`);
-  const parent = createRootRoute();
+  const parent = createRootRoute({ component: Outlet });
   const stepUp = Route.update({ id: '/step-up', path: '/step-up', getParentRoute: () => parent } as never);
   const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => 'Away' });
-  const history = createBrowserHistory({ window: dom });
+  const history = createMemoryHistory({ initialEntries: [`/step-up${query}`] });
   const router = createRouter({ routeTree: parent.addChildren([stepUp, away]), history });
   await router.load();
   const supported = spyOn(passkeys, 'passkeysSupported').mockReturnValue(true);
@@ -38,16 +38,22 @@ async function setup(query = signInQuery) {
   const cancel = spyOn(WebAuthnAbortService, 'cancelCeremony');
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   const page = await mount(<RouterProvider router={router} />, {});
-  const navigate = (href: string) => flush(() => void router.navigate({ href }));
+  const navigate = async (href: string) => {
+    let navigation!: Promise<unknown>;
+    await flush(async () => {
+      navigation = router.navigate({ href });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    return navigation;
+  };
   const choose = (label: 'Stay' | 'Leave') =>
-    flush(() => document.querySelector<HTMLButtonElement>(`[role=alertdialog] [data-${label.toLowerCase()}]`)!.click());
+    flush(() => document.body.querySelector<HTMLButtonElement>(`[data-${label.toLowerCase()}]`)!.click());
   const unload = () => {
     const event = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event as unknown as Event);
     return event.defaultPrevented;
   };
   const dispose = () => {
-    history.destroy();
     for (const spy of [supported, signInWithPasskey, cancel, assign]) spy.mockRestore();
   };
   cleanup = dispose;
@@ -77,7 +83,7 @@ test('Stay keeps validation and masked input; replacement starts a clean request
   expect(email.getAttribute('aria-invalid')).toBe('true');
   expect(page.unload()).toBe(true);
   await page.navigate('/away');
-  expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
+  expect(document.body.querySelector('[data-stay]')).not.toBeNull();
   await page.choose('Stay');
   expect([email.value, password.value, password.type, email.getAttribute('aria-invalid')]).toEqual([
     'invalid',
@@ -128,12 +134,12 @@ test('successful confirmation releases a blocked departure and continues to its 
     send(page.host);
   });
   await page.navigate('/away');
-  expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
+  expect(document.body.querySelector('[data-stay]')).not.toBeNull();
   page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await flush(() => Promise.resolve());
   expect(page.router.history.location.pathname).toBe('/step-up');
   expect(page.assign).toHaveBeenCalledTimes(1);
-  expect(document.querySelector('[role=alertdialog]')).toBeNull();
+  expect(document.body.querySelector('[data-stay]')).toBeNull();
   expect(page.unload()).toBe(false);
 });
 

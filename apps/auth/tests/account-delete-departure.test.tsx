@@ -5,9 +5,10 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  RouterContextProvider,
+  Outlet,
+  RouterProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open, send, session } from './creation-page-fixture';
+import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
 
 import { DeleteAccountContent } from '../src/routes/account.delete';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
@@ -28,22 +29,33 @@ const props = {
   inventorySource: emptyInventory,
 };
 async function setup() {
-  const root = createRootRoute();
-  const routeTree = root.addChildren(
-    ['/account/delete', '/security'].map((path) => createRoute({ getParentRoute: () => root, path })),
-  );
+  let current: AccountDeletionPage = initial;
+  const root = createRootRoute({ component: Outlet });
+  const routeTree = root.addChildren([
+    createRoute({
+      getParentRoute: () => root,
+      path: '/account/delete',
+      component: () => <DeleteAccountContent {...props} initial={current} />,
+    }),
+    createRoute({ getParentRoute: () => root, path: '/security', component: () => 'Security' }),
+  ]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/account/delete'] }) });
-  const view = (value: AccountDeletionPage = initial) => (
-    <RouterContextProvider router={router}>
-      <DeleteAccountContent {...props} initial={value} />
-    </RouterContextProvider>
-  );
+  await router.load();
+  const view = (value: AccountDeletionPage = initial) => {
+    current = value;
+    return <RouterProvider router={router} />;
+  };
   const page = await open(view(), body);
-  const navigate = () =>
-    flush(() => {
-      void router.navigate({ to: '/security' });
+  const navigate = async () => {
+    let navigation!: Promise<unknown>;
+    await flush(async () => {
+      navigation = router.navigate({ to: '/security' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-  const choose = (label: string) => flush(() => button(document.body, label)!.click());
+    return navigation;
+  };
+  const choose = (label: string) =>
+    flush(() => document.body.querySelector<HTMLButtonElement>(`[data-${label.toLowerCase()}]`)!.click());
   const unload = () => {
     const event = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event as unknown as Event);
@@ -58,7 +70,7 @@ test('clean confirmation leaves freely', async () => {
   expect(page.unload()).toBe(false);
   await page.navigate();
   expect(page.router.history.location.pathname).toBe('/security');
-  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(document.body.querySelector('[data-stay]')).toBeNull();
 });
 test('Stay keeps the exact invalid confirmation, feedback and keyboard focus; Leave discards it', async () => {
   const page = await setup();
@@ -74,7 +86,7 @@ test('Stay keeps the exact invalid confirmation, feedback and keyboard focus; Le
       .dispatchEvent(new dom.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
   );
   expect(page.router.history.location.pathname).toBe('/account/delete');
-  expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(document.body.querySelector('[data-stay]')).not.toBeNull();
   await page.choose('Stay');
   expect(input.value).toBe('  unfinished DELETE  ');
   expect(input.getAttribute('aria-describedby')).toBe(feedback);
