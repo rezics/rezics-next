@@ -95,6 +95,7 @@ covered merely by linking a kernel test.
   integrated typing closes the diagnostic sweep, while native, served-persona and promoted acceptance remain separate.
   Land the retained recovery with main's published client types, typed repairs and closed notification-kind decoder;
   finish diagnostic work at the normal changed-workspace check, with strict settlement and server-boundary tests.
+- **Single producers**: question-management page and label-history admission uses the published `@rezics/client` decoders, and the subject page envelope filters viewer and actions once in `cataloguePageBody`; the web keeps no parallel contract copy.
 - **Personas**: Anonymous, Alice, native suspended persona; real dependency outage and projection barrier.
 - **Fixture data**: Cold subject view held behind its real worker, unavailable owner, private/unknown Collection,
   empty public list, native `suspended` persona from `services/kernel/test/support/personas.ts` with a
