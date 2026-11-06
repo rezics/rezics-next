@@ -446,7 +446,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       if (kind === 'owner-read') {
         // Cache fixture bearer credentials before stopping the stack host. The
         // served page request remains ordinary HTTP through the production web Worker.
-        for (const persona of ['alice', 'bob', 'editor', 'suspended'] as const)
+        for (const persona of ['alice', 'bob', 'editor', 'verified-agent', 'suspended'] as const)
           directCredentials.set(persona, { authorization: (await stack.authPersona(persona)).authorization });
       }
       try {

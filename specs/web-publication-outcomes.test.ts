@@ -139,7 +139,7 @@ async function traverse(view: RelationView, persona: Persona) {
 }
 
 describe('subject-traversal', () => {
-  for (const persona of ['anonymous', 'editor'] as const) {
+  for (const persona of ['anonymous', 'editor', 'verified-agent'] as const) {
     for (const view of data.traversal.views) {
       test(`subject-traversal: ${persona} reaches ${view} once in native order across full pages`, async () => {
         await traverse(view, persona);

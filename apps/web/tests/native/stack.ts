@@ -455,7 +455,7 @@ async function startStack(): Promise<
   let governorScopes: readonly string[] | undefined;
   const requests: NativeKernelRequest[] = [];
   const accountOperationActors: NativeAccountOperationActor[] = [];
-  const getAccount = (persona: string) => {
+  const getAccount = (persona: string): Promise<{ accountId: string; bearer: string }> => {
     let account = accounts.get(persona);
     if (!account) {
       account =
@@ -463,7 +463,9 @@ async function startStack(): Promise<
           ? governorScopes
             ? driver!.fixtures.person(persona, { scopes: governorScopes })
             : Promise.reject(new Error('Native governance credentials are not initialized'))
-          : driver!.fixtures.person(persona);
+          : persona === 'verified-agent'
+            ? getAccount('editor').then((operator) => driver!.fixtures.verifiedAutomated(persona, operator))
+            : driver!.fixtures.person(persona);
       accounts.set(persona, account);
     }
     return account;

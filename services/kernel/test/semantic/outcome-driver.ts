@@ -20,8 +20,6 @@ import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts'
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
-import governanceActions from '../../src/access/platform-governance.json';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -116,6 +114,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authJwksUrl: string;
     };
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
+    verifiedAutomated(name: string, operator: Account): Promise<Account>;
     signIn(account: Account): Promise<HttpResponse>;
     authenticatedAccount(account: Account): Promise<AccountActor>;
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
@@ -288,6 +287,9 @@ async function startDriver(
     // The empty migrated template may have no active release yet.
     await (await app.handle(new Request('http://kernel.test/v1/definitions/active'))).arrayBuffer();
     required(access, 'Kernel did not construct its native Access');
+    let createAutomated:
+      | ((name: string, operator: Account, email: string) => Promise<{ accountId: string }>)
+      | undefined;
     if ('bind' in auth) {
       const bindingPool = runtimePool;
       const actions = accessActionCatalogue(actionCatalogue(app));
@@ -313,6 +315,30 @@ async function startDriver(
         referenceKeys: sessionKeys,
         creationBinding: proofs.creationBinding,
       });
+      createAutomated = async (name, operator, email) => {
+        const key = `${name}-${suffix}`;
+        const handle = `${name}_${suffix}`;
+        const operation = {
+          kind: 'automated' as const,
+          registrationId: '',
+          operationKey: key,
+          operatorAccountId: operator.accountId,
+          handle,
+          authorization: 'approval-request',
+        };
+        const approval = await approvals.approve(
+          operator.bearer,
+          { operationKey: key, operation },
+          { pool: bindingPool, deadline: Date.now() + 10_000 },
+        );
+        return auth.host.workflows.createAutomated({
+          key,
+          handle,
+          operatorAccountId: operator.accountId,
+          authorization: approval.reference,
+          credential: { email, password },
+        });
+      };
       const kernelContext = (context: { pool: unknown; deadline: number }) => {
         if (context.pool !== bindingPool) throw new Error('Account operation context belongs to another Kernel');
         return { pool: bindingPool, deadline: context.deadline };
@@ -350,12 +376,13 @@ async function startDriver(
     await auth.registerClient(clientId, governanceScopes);
     timer.mark('auth side');
 
-    async function issue(email: string, scopes: readonly string[]): Promise<string> {
+    type Login = { email: string } | { account_id: string };
+    async function issue(login: Login, scopes: readonly string[]): Promise<string> {
       const signed = await service.handler(
         new Request(`${issuer}/signin`, {
           method: 'POST',
           headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ email, password, client_id: clientId, scope: scopes }),
+          body: JSON.stringify({ ...login, password, client_id: clientId, scope: scopes }),
         }),
       );
       if (signed.status !== 200) throw new Error(`Semantic fixture sign-in failed: ${signed.status}`);
@@ -374,7 +401,7 @@ async function startDriver(
       return ((await issued.json()) as { access_token: string }).access_token;
     }
 
-    const credentials = new WeakMap<Account, { email: string; scopes: readonly string[] }>();
+    const credentials = new WeakMap<Account, { login: Login; scopes: readonly string[] }>();
     async function signIn(account: Account): Promise<HttpResponse> {
       if (completion) throw new Error('Semantic outcome fixture is closed');
       const original = credentials.get(account);
@@ -384,7 +411,7 @@ async function startDriver(
           new Request(`${issuer}/signin`, {
             method: 'POST',
             headers: { origin: issuer, 'content-type': 'application/json' },
-            body: JSON.stringify({ email: original.email, password, client_id: clientId, scope: original.scopes }),
+            body: JSON.stringify({ ...original.login, password, client_id: clientId, scope: original.scopes }),
           }),
         ),
       );
@@ -415,11 +442,63 @@ async function startDriver(
           email,
           password,
         });
-        const account = { accountId: result.accountId, bearer: await issue(email, chosen) };
-        credentials.set(account, { email, scopes: chosen });
+        const account = { accountId: result.accountId, bearer: await issue({ email }, chosen) };
+        credentials.set(account, { login: { email }, scopes: chosen });
         return account;
       });
       people.set(name, { scopes: canonical, account });
+      return account;
+    }
+
+    const automatedAccounts = new Map<string, Promise<Account>>();
+    function verifiedAutomated(name: string, operator: Account): Promise<Account> {
+      const identity = `${operator.accountId}:${name}`;
+      let account = automatedAccounts.get(identity);
+      if (!account) {
+        account = Promise.resolve().then(async () => {
+          const create = required(createAutomated, 'Automated fixture creation needs the native Auth workflow host');
+          const result = await create(name, operator, `${name}-${suffix}@semantic.test`);
+          const login = { account_id: result.accountId };
+          const account = { accountId: result.accountId, bearer: await issue(login, scopes) };
+          credentials.set(account, { login, scopes });
+          const subject = await send(
+            governor,
+            'POST',
+            '/v1/subjects',
+            { type: 'schema:SoftwareApplication', labels: { en: name } },
+            { 'Idempotency-Key': key() },
+          );
+          if (subject.status !== 201)
+            throw new Error(`Automated fixture subject failed: ${subject.status}: ${JSON.stringify(subject.body)}`);
+          const verification = await send(
+            governor,
+            'POST',
+            `/v1/accounts/${account.accountId}:requestVerification`,
+            {
+              subject: (subject.body.subject as { id: string }).id,
+              statement: 'This catalogue identity belongs to this automated reader.',
+              links: [],
+            },
+            { 'Idempotency-Key': key() },
+          );
+          if (verification.status !== 201)
+            throw new Error(
+              `Automated fixture verification failed: ${verification.status}: ${JSON.stringify(verification.body)}`,
+            );
+          const requestId = (verification.body.verificationRequest as { id: string }).id;
+          const approved = await send(
+            governor,
+            'POST',
+            `/v1/verification-requests/${requestId}:approve`,
+            {},
+            { 'Idempotency-Key': key() },
+          );
+          if (approved.status !== 200)
+            throw new Error(`Automated fixture approval failed: ${approved.status}: ${JSON.stringify(approved.body)}`);
+          return account;
+        });
+        automatedAccounts.set(identity, account);
+      }
       return account;
     }
 
@@ -433,7 +512,7 @@ async function startDriver(
           throw new Error(`Scope variant must be a known subset of the original scopes: ${String(scope)}`);
       }
       const chosen = [...new Set(requested)].sort();
-      const bearer = await issue(original.email, chosen);
+      const bearer = await issue(original.login, chosen);
       const actor = await access.authenticate(bearer, { pool: pool!, deadline: Date.now() + 10_000 });
       if (
         actor.kind !== 'account' ||
@@ -442,7 +521,7 @@ async function startDriver(
       )
         throw new Error('Native scope variant changed account identity or requested scopes');
       const variant = { accountId: actor.accountId, bearer };
-      credentials.set(variant, { email: original.email, scopes: chosen });
+      credentials.set(variant, { login: original.login, scopes: chosen });
       return variant;
     }
 
@@ -454,34 +533,6 @@ async function startDriver(
       person('suspended'),
     ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
-    {
-      const claims = JSON.parse(Buffer.from(governor.bearer.split('.')[1]!, 'base64url').toString()) as Record<
-        string,
-        unknown
-      >;
-      console.error(
-        '[diag] governor token claims',
-        JSON.stringify({ keys: Object.keys(claims), scope: claims.scope, scopes: claims.scopes }),
-      );
-      console.error(
-        '[diag] catalogue',
-        JSON.stringify({
-          grantInCatalogue: actionCatalogue(app).has('access:grant'),
-          grantInScopes: scopes.includes('access:grant'),
-          scopeCount: scopes.length,
-        }),
-      );
-      const roles = resourceRoleCatalogue(access);
-      console.error(
-        '[diag] platform role',
-        JSON.stringify({
-          roleNames: roles ? [...roles.roles.keys()] : null,
-          governanceRoleActions: roles?.roles.get('platform.governance') ?? null,
-          unmountedGovernanceActions: governanceActions.actions.filter((action) => !actionCatalogue(app).has(action)),
-        }),
-      );
-    }
-
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);
@@ -604,8 +655,7 @@ async function startDriver(
       },
       async grant(persona, actions, resourceId) {
         if (persona === 'anonymous') throw new Error('Anonymous is not an account grant recipient');
-        const grantor =
-          resourceId === GLOBAL_CONTEXT || resourceId === PLATFORM_RESOURCE.id ? governor : editor;
+        const grantor = resourceId === GLOBAL_CONTEXT || resourceId === PLATFORM_RESOURCE.id ? governor : editor;
         await grantAccount(accounts[persona], actions, resourceId, grantor);
       },
       async projection(state) {
@@ -663,6 +713,7 @@ async function startDriver(
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
         },
         person,
+        verifiedAutomated,
         signIn,
         scopeVariant,
         async openFeatures(groups) {

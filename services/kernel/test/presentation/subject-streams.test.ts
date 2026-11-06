@@ -88,6 +88,14 @@ test('native HTTP selection returns the exact qualified relation window and reje
   const driver = await createSemanticDriver(undefined, { strictCleanup: true });
   const key = () => ({ 'Idempotency-Key': JSON.stringify(crypto.randomUUID()) });
   try {
+    const context = await driver.request('editor', 'POST', '/v1/contexts', { labels: { en: 'Stream review' } }, key());
+    expect(context.status, JSON.stringify(context.body)).toBe(201);
+    const operator = await driver.fixtures.person('stream-operator');
+    const automated = await driver.fixtures.verifiedAutomated('stream-reader', operator);
+    const actor = await driver.fixtures.authenticatedAccount(automated);
+    expect(actor.accountId).toBe(automated.accountId);
+    expect(actor.accountId).not.toBe(operator.accountId);
+    expect(await driver.fixtures.verifiedAutomated('stream-reader', operator)).toBe(automated);
     const person = await driver.request(
       'editor',
       'POST',
@@ -129,6 +137,13 @@ test('native HTTP selection returns the exact qualified relation window and reje
       languages: ['en'],
     });
     expect(selected.status, JSON.stringify(selected.body)).toBe(200);
+    const agentPage = await driver.fixtures.send(automated, 'POST', '/v1/pages:read', {
+      target,
+      stream: 'credit-schema-director',
+      languages: ['en'],
+    });
+    expect(agentPage.status, JSON.stringify(agentPage.body)).toBe(200);
+    expect(agentPage.body.viewer).toMatchObject({ state: 'account', account: automated.accountId });
     const body = selected.body as unknown as {
       streams: { selected: string };
       document: CompositionDocument;
@@ -144,6 +159,9 @@ test('native HTTP selection returns the exact qualified relation window and reje
     expect(body.document).toEqual(document('schema:VideoGame', 'credits'));
     const plan = planReads(platformRegistry, body.document, { subject: id });
     const result = body.reads[plan.nodes['credit-schema-director']!]!;
+    const agentResult = (agentPage.body.reads as typeof body.reads)[plan.nodes['credit-schema-director']!]!;
+    expect(agentResult.status).toBe(200);
+    expect(agentResult.body.relations).toEqual(result.body.relations);
     expect(result.status, JSON.stringify(result.body)).toBe(200);
     expect(result.body.relations).toHaveLength(1);
     expect(result.body.relations![0]!.target).toBe(personId);
