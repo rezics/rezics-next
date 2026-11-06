@@ -69,7 +69,7 @@ beforeAll(async () => {
     ...native,
     command: (pool, input, execute) => {
       executions++;
-      return native.command(pool, input, execute);
+      return 'principal' in input ? native.command(pool, input, execute) : native.command(pool, input, execute);
     },
     projectBatch: (pool, input) => {
       projections++;
@@ -147,7 +147,7 @@ test('vote execution, immutable replay and aggregate delivery use one supplied c
       clock: () => {
         throw new Error('Host clock must not replace the supplied capability');
       },
-      addEffects: (entries) => effects.push(...entries),
+      addEffects: (entries: Effect[]) => effects.push(...entries),
     } as unknown as WorkContext);
   expect(effects.map((effect) => effect.name)).toEqual(
     rating.definition.work.effects.filter((entry) => !entry.requiresClient).map((entry) => entry.name),

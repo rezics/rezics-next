@@ -150,80 +150,78 @@ async function admit(client: Queryable, data: PopulationTotalDelivery): Promise<
 /** One exact next receipt per command; gaps stay durable and never advance the frontier. */
 async function receive(pool: Pool, item: Address, capabilities?: RatingCapabilities): Promise<boolean> {
   const key = address(item);
-  const result = await capabilities
-    .command(pool, { partition: partitionOf(key[0]) }, async (tx) => {
-      const inbox = await tx.query<{ payload: PopulationTotalDelivery; applied: boolean }>(
-        `SELECT payload,applied FROM rating.population_total_inbox
+  const result = await (capabilities?.command ?? runCommand)(pool, { partition: partitionOf(key[0]) }, async (tx) => {
+    const inbox = await tx.query<{ payload: PopulationTotalDelivery; applied: boolean }>(
+      `SELECT payload,applied FROM rating.population_total_inbox
        WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
-        key,
-      );
-      const row = inbox.rows[0];
-      if (!row) return noEffect(false);
-      if (row.applied) return noEffect(true);
-      await tx.query(
-        `INSERT INTO rating.population_total_received(route,population_id,source_partition)
+      key,
+    );
+    const row = inbox.rows[0];
+    if (!row) return noEffect(false);
+    if (row.applied) return noEffect(true);
+    await tx.query(
+      `INSERT INTO rating.population_total_received(route,population_id,source_partition)
        VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-        key.slice(0, 3),
-      );
-      const stream = await tx.query<{ serial: string }>(
-        `SELECT serial::text FROM rating.population_total_received
+      key.slice(0, 3),
+    );
+    const stream = await tx.query<{ serial: string }>(
+      `SELECT serial::text FROM rating.population_total_received
        WHERE route=$1 AND population_id=$2 AND source_partition=$3 FOR UPDATE`,
-        key.slice(0, 3),
-      );
-      if (BigInt(stream.rows[0]!.serial) + 1n !== BigInt(item.serial)) {
-        // The initial stream insert must roll back too: noEffect may not conceal a domain write.
-        throw new PredecessorPending();
-      }
-      await tx.query("SELECT set_config('rating.population_total_writer','population-home-v1',true)");
-      // A first delivery may remove a pre-cutover contribution. The retained total is its baseline.
-      // Missing shards are explicitly zero; a negative update fails its CHECK and rolls back the receipt.
-      for (const delta of row.payload.deltas) {
-        await tx.query(
-          `INSERT INTO rating.population_total_component(route,question_id,population_id,shard,count,sum)
+      key.slice(0, 3),
+    );
+    if (BigInt(stream.rows[0]!.serial) + 1n !== BigInt(item.serial)) {
+      // The initial stream insert must roll back too: noEffect may not conceal a domain write.
+      throw new PredecessorPending();
+    }
+    await tx.query("SELECT set_config('rating.population_total_writer','population-home-v1',true)");
+    // A first delivery may remove a pre-cutover contribution. The retained total is its baseline.
+    // Missing shards are explicitly zero; a negative update fails its CHECK and rolls back the receipt.
+    for (const delta of row.payload.deltas) {
+      await tx.query(
+        `INSERT INTO rating.population_total_component(route,question_id,population_id,shard,count,sum)
          VALUES($1,$2,$3,$4,0,0) ON CONFLICT DO NOTHING`,
-          [key[0], delta.questionId, item.populationId, delta.shard],
-        );
-        const updated = await applyTotal.run(tx, {
-          population_route: key[0],
-          question_id: delta.questionId,
-          population_id: item.populationId,
-          shard: delta.shard,
-          count_delta: delta.count,
-          sum_delta: delta.sum,
-          check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
-        });
-        if (!updated.length)
-          throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
-      }
-      await tx.query(
-        `UPDATE rating.population_total_inbox SET applied=true
+        [key[0], delta.questionId, item.populationId, delta.shard],
+      );
+      const updated = await applyTotal.run(tx, {
+        population_route: key[0],
+        question_id: delta.questionId,
+        population_id: item.populationId,
+        shard: delta.shard,
+        count_delta: delta.count,
+        sum_delta: delta.sum,
+        check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
+      });
+      if (!updated.length)
+        throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
+    }
+    await tx.query(
+      `UPDATE rating.population_total_inbox SET applied=true
        WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
-        key,
-      );
-      await tx.query(
-        `UPDATE rating.population_total_received SET serial=$4
+      key,
+    );
+    await tx.query(
+      `UPDATE rating.population_total_received SET serial=$4
        WHERE route=$1 AND population_id=$2 AND source_partition=$3`,
-        key,
-      );
-      return {
-        value: true,
-        events: [
-          {
-            type: POPULATION_TOTAL_DELIVERY,
-            data: {
-              action: 'received',
-              sourcePartition: item.sourcePartition,
-              populationId: item.populationId,
-              serial: item.serial,
-            } satisfies PopulationTotalEvent,
-          },
-        ],
-      };
-    })
-    .catch((error: unknown) => {
-      if (error instanceof PredecessorPending) return { value: false };
-      throw error;
-    });
+      key,
+    );
+    return {
+      value: true,
+      events: [
+        {
+          type: POPULATION_TOTAL_DELIVERY,
+          data: {
+            action: 'received',
+            sourcePartition: item.sourcePartition,
+            populationId: item.populationId,
+            serial: item.serial,
+          } satisfies PopulationTotalEvent,
+        },
+      ],
+    };
+  }).catch((error: unknown) => {
+    if (error instanceof PredecessorPending) return { value: false };
+    throw error;
+  });
   return result.value;
 }
 class PredecessorPending extends Error {}

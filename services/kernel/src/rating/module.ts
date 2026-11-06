@@ -78,7 +78,11 @@ export function createRatingModule(options: {
     mount(app: Parameters<typeof ratingRoutes>[0], config: HttpDependencies) {
       const supplied = { ...config, pool, capabilities, clock: capabilities.clock };
       const native = ratingRoutes(app, supplied, definition.routes.native, definition.routes.classifications);
-      return sourceStatisticRoutes(native, supplied, definition.routes.providers) as RatingHttpApp;
+      return sourceStatisticRoutes(
+        native as unknown as Parameters<typeof sourceStatisticRoutes>[0],
+        supplied,
+        definition.routes.providers,
+      ) as RatingHttpApp;
     },
     /** Commands share the same supplied effects as their HTTP and durable adapters. */
     application(config: ApplicationDependencies) {

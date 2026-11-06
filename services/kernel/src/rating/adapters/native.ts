@@ -9,7 +9,9 @@ import type { RatingAmbient, RatingCapabilities } from '../contract/capabilities
 /** Only this adapter reaches native time, randomness and the command/effect libraries. */
 export function createNativeRatingCapabilities(ambient: Partial<RatingAmbient> = {}): RatingCapabilities {
   const command: typeof runCommand = (pool, input, execute) =>
-    runCommand(pool, { ...input, ...(ambient.clock === undefined ? {} : { clock: ambient.clock }) }, execute);
+    'principal' in input
+      ? runCommand(pool, { ...input, ...(ambient.clock === undefined ? {} : { clock: ambient.clock }) }, execute)
+      : runCommand(pool, { ...input, ...(ambient.clock === undefined ? {} : { clock: ambient.clock }) }, execute);
   return Object.freeze({
     clock: ambient.clock ?? systemClock,
     id: ambient.id ?? newId,
