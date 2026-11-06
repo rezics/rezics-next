@@ -230,9 +230,8 @@ export function explainSubjectSources(
             ? { display: statement.property.data_type === 'document' ? ('document' as const) : ('media' as const) }
             : {}),
           qualifiers: parts(statement.qualifiers.filter((snak) => snak.property.id !== 'rezics:spoilerLevel')),
-          citations: statement.references
-            .map(({ parts: citation }) => parts(citation))
-            .filter((citation) => citation.length > 0),
+          // An admitted reference with no displayable part stays attached as an empty group; no other source fills it.
+          citations: statement.references.map(({ parts: citation }) => parts(citation)),
         },
       ];
     });

@@ -6,6 +6,8 @@ Authority split: module READMEs hold current contracts and costs; this file hold
 
 Decision: preserve original showcase claim aliases, source bindings and sealed replay; distinguish native merge admission, operation publication and independent canonical public reads. Focused caller/manifest/redirect cases supplement the unchanged native and browser outcome assertions.
 
+Decision: selected-synopsis Sources reads the Subject operation's `selectedSynopsis` contract ([subject pages](../subject-pages.md)) with no separate receiving seam. General Sources retains empty citation groups, and retry focus retires on a later pointer press. Native selected-slot/Content proof and the dependent publication-to-discovery circuit remain separate acceptance.
+
 ## User outcome
 
 Maintainers and community tools import licensed records through ordinary APIs and permissions, inspect omissions, and safely refresh changed or vanished facts. Pure revisioned converters produce proposals. Independent authorized review accepts and adopts them; separate current public reads verify the result. Refresh preserves source identity, existing adoption and unrelated editorial choices.

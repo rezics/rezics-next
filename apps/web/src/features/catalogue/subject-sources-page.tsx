@@ -94,7 +94,7 @@ export function SubjectSourcesPage({
                       ? m.sources_conflict({}, o)
                       : m.sources_unavailable({}, o)}
         </p>
-        {onRetry && result.kind !== 'loading' && result.kind !== 'missing' && (
+        {onRetry && !['loading', 'missing', 'unsupported'].includes(result.kind) && (
           <Button
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
@@ -287,6 +287,9 @@ export function SubjectSourcesPage({
                             <ol className="list-decimal space-y-2 ps-5">
                               {fact.citations.map((citation, i) => (
                                 <li key={i}>
+                                  {!citation.length && (
+                                    <p className="text-sm text-muted-foreground">{m.sources_no_citations({}, o)}</p>
+                                  )}
                                   {citation.map((part, j) => (
                                     <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
                                   ))}
