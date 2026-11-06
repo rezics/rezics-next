@@ -167,6 +167,20 @@ END;
 $$;
 
 
+--
+-- Name: touch_identity_rating_repair_later_vote(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.touch_identity_rating_repair_later_vote() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM semantic.mark_identity_rating_repair_later_vote(NEW.route / 16, NEW.voter_id, NEW.question_id, NEW.target_id);
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1483,6 +1497,13 @@ CREATE TRIGGER realm_rank_publication_generation AFTER INSERT OR DELETE OR UPDAT
 
 
 --
+-- Name: vote identity_rating_repair_later_vote; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER identity_rating_repair_later_vote AFTER INSERT OR UPDATE OF question_id, target_id ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.touch_identity_rating_repair_later_vote();
+
+
+--
 -- Name: vote shelf_score_vote_lock; Type: TRIGGER; Schema: rating; Owner: -
 --
 
@@ -1501,27 +1522,6 @@ CREATE TRIGGER shelf_score_vote_sync AFTER INSERT OR DELETE OR UPDATE ON rating.
 --
 
 CREATE TRIGGER vote_initialize_counting BEFORE INSERT ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.initialize_vote_counting();
-
-
---
--- Name: touch_identity_rating_repair_later_vote(); Type: FUNCTION; Schema: rating; Owner: -
---
-
-CREATE FUNCTION rating.touch_identity_rating_repair_later_vote() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  PERFORM semantic.mark_identity_rating_repair_later_vote(NEW.route / 16, NEW.voter_id, NEW.question_id, NEW.target_id);
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: vote identity_rating_repair_later_vote; Type: TRIGGER; Schema: rating; Owner: -
---
-
-CREATE TRIGGER identity_rating_repair_later_vote AFTER INSERT OR UPDATE OF question_id, target_id ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.touch_identity_rating_repair_later_vote();
 
 
 --

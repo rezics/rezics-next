@@ -268,7 +268,7 @@ async function lockPartition(
   deadline: number,
 ): Promise<OwnerRow | undefined> {
   requireAccessDeadline(deadline);
-  return lockOwner.run(deadlineClient(tx, deadline), { partition_no: partition });
+  return (await lockOwner.run(deadlineClient(tx, deadline), { partition_no: partition })) ?? undefined;
 }
 
 async function obligationByPage(
@@ -801,14 +801,15 @@ export async function continueIdentityRatingRepair(
       ],
     };
   });
-  if (prepared.value.status !== 'current') return;
+  const current = prepared.value;
+  if (current.status !== 'current') return;
   await runCommand(pool, { partition: data.voterPartition }, async (tx) => {
     const handed = await producer.handoff(tx, {
       obligationId: data.obligationId,
       home: data.partition,
       originals: data.originals,
-      mappings: prepared.value.mappings,
-      ...(prepared.value.extraHomes ? { extraHomes: prepared.value.extraHomes } : {}),
+      mappings: current.mappings,
+      ...(current.extraHomes ? { extraHomes: current.extraHomes } : {}),
     });
     return {
       value: handed,

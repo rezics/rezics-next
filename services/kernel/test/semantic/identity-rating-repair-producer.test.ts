@@ -239,14 +239,15 @@ test('foreign homes prepare and handoff then hold exact terminals', async () => 
         events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: foreignPartition, generation: '1' } }],
       };
     });
-    expect(prepared.value.status).toBe('current');
-    if (prepared.value.status !== 'current') throw new Error('expected prepared mappings');
+    const preparedAuthority = prepared.value;
+    expect(preparedAuthority.status).toBe('current');
+    if (preparedAuthority.status !== 'current') throw new Error('expected prepared mappings');
     await runCommand(db.pool, { partition: homePartition }, async (tx) => {
       const handed = await commandProducer.handoff(tx, {
         obligationId: held.value,
         home: foreignPartition,
         originals: [foreign],
-        mappings: prepared.value.mappings,
+        mappings: preparedAuthority.mappings,
       });
       expect(handed.status).toBe('pending');
       return {
