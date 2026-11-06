@@ -662,7 +662,9 @@ export class WorkerStore implements AttemptFence {
   }
   /** Count current attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
-    return this.currentAttemptsCount(urgent, urgent, taskId, attempt);
+    // Both lanes count live sessions only. Counting parked urgent attempts filled all 8 urgent slots with checks
+    // waiting and starved every urgent start for hours (2026-11-06).
+    return this.currentAttemptsCount(urgent, false, taskId, attempt);
   }
   private currentAttemptsCount(urgent?: boolean, includeWaiting = false, taskId?: string, attempt?: number): number {
     const liveStates = "attempt_state IN ('running', 'waiting')";
