@@ -541,7 +541,13 @@ test('Realm participation preparation uses the enclosing request deadline', asyn
       return false;
     },
   };
-const check = createRealmParticipationCheck({ clock: () => new Date(), pool: {} as Pool, access, deadlineNow: () => Date.now() });  const requestDeadline = Date.now() + budgetMs;
+  const check = createRealmParticipationCheck({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool: {} as Pool,
+    access,
+  });
+  const requestDeadline = Date.now() + budgetMs;
   const started = performance.now();
   await expect(
     withRequestDeadline(requestDeadline, () =>
@@ -712,7 +718,13 @@ test.serial('native participation preparation uses one bounded connection and th
     const resource = { route, id: realmId };
     const observed: { action: string; at: string | null; client: AccessClient }[] = [];
     const checkedAccess = accessObservingTime(observed, singleAccess);
-const check = createRealmParticipationCheck({ clock: () => new Date(), pool: singlePool, access: checkedAccess, deadlineNow: () => Date.now() });    let proof: RealmParticipationResult | undefined;
+    const check = createRealmParticipationCheck({
+      clock: () => new Date(),
+      deadlineNow: () => Date.now(),
+      pool: singlePool,
+      access: checkedAccess,
+    });
+    let proof: RealmParticipationResult | undefined;
     let commandAt: string | undefined;
     let committed = false;
     try {

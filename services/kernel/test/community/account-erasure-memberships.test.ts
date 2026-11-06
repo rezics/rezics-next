@@ -63,6 +63,125 @@ beforeAll(async () => {
   production = await createProductionAccess({ actions: [...system.actions.keys()] });
   membership = createRealmMembership({
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool: system.database.pool,
+    access: production.access,
+  });
+  const changeMembership = async (realmId: string, account: Account, join: boolean) => {
+    const response = await driver.request({
+      actor: join ? fixture.owner : account,
+      method: join ? 'POST' : 'DELETE',
+      path: `/v1/realms/${realmId}/${join ? 'members' : 'membership'}`,
+      key: JSON.stringify(crypto.randomUUID()),
+      ...(join ? { body: { accountId: account.id } } : {}),
+    });
+    if (response.status !== 202) throw new Error(`Membership setup failed: ${await response.text()}`);
+    await driver.settle();
+  };
+  realms = [];
+  for (let index = 0; index < 4; index++) {
+    const { space } = await call('POST', '/v1/spaces', { title: `Erasure host ${index}` });
+    const { realm } = await call('POST', '/v1/realms', {
+      spaceId: space.spaceId,
+      title: `Erasure Realm ${index}`,
+      visibility: 'public',
+      contextId: fixture.contextId,
+    });
+    realms.push(realm.realmId);
+    await call('POST', '/v1/grants', {
+      resource: { route: routeOf(realm.realmId), id: realm.realmId },
+      subject: { kind: 'account', id: member.accountId },
+      actions: ['realm:join'],
+      valid: '(,)',
+    });
+    await changeMembership(realm.realmId, { id: member.accountId, bearer: member.bearer }, true);
+    await changeMembership(realm.realmId, fixture.outsider, true);
+  }
+  await changeMembership(realms[2]!, { id: member.accountId, bearer: member.bearer }, false);
+  // The ban removes the fourth interval through the ordinary native workflow.
+  await call('PUT', `/v1/realms/${realms[3]}/bans/${member.accountId}`, { reason: 'Erasure fixture ban' });
+  await driver.settle();
+  for (const realmId of realms) await drainEffects(system.database.pool, partitionOf(routeOf(realmId)!));
+}, 180_000);
+
+afterAll(async () => {
+  await growth?.close();
+  await closeCommunityDrivers();
+});
+
+async function locator() {
+  return (
+    await communityFixtureRuntime().system.database.pool.query<{ realm_id: string; realm_route: number }>(
+      'SELECT realm_id::text, realm_route FROM community.member_locator WHERE route=$1 AND account_id=$2 ORDER BY realm_id',
+      [routeOf(member.accountId), member.accountId],
+    )
+  ).rows;
+}
+
+// Run this before deleting the shared account so both projection and migration see historical intervals.
+test.serial(
+  'the member locator lists every Realm the account joined, including ones left before deletion',
+  async () => {
+    expect((await locator()).map((row) => row.realm_id)).toEqual([...realms].sort());
+    for (const row of await locator()) expect(row.realm_route).toBe(routeOf(row.realm_id)!);
+    const pool = communityFixtureRuntime().system.database.pool;
+    const migrationPaths = [
+      ...new Bun.Glob('db/community/migrations/*_member_locator.sql').scanSync({ cwd: `${import.meta.dir}/../..` }),
+    ];
+    expect(migrationPaths).toHaveLength(1);
+    const migration = await readFile(`${import.meta.dir}/../../${migrationPaths[0]}`, 'utf8');
+    const backfill = migration.match(/-- Backfill start\n([\s\S]*?)-- Backfill end/)?.[1];
+    expect(backfill).toBeDefined();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM community.member_locator WHERE route=$1 AND account_id=$2', [
+        routeOf(member.accountId),
+        member.accountId,
+      ]);
+      await client.query(backfill!);
+      const rows = await client.query(
+        'SELECT realm_id::text FROM community.member_locator WHERE route=$1 AND account_id=$2 ORDER BY realm_id',
+        [routeOf(member.accountId), member.accountId],
+      );
+      expect(rows.rows.map((row) => row.realm_id)).toEqual([...realms].sort());
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  },
+);
+
+test.serial(
+  "account erasure closes the account's current memberships and erases its membership history in every Realm",
+  async () => {
+    const { eraseAccountMembershipsPage } = await import('../../src/community/account-erasure-memberships.ts');
+    const { system } = communityFixtureRuntime();
+    const pool = system.database.pool;
+    const access = system.access;
+    const snapshot = async () =>
+      (
+        await pool.query(
+          `SELECT * FROM (
+    SELECT 'member' AS kind, to_jsonb(m) AS row FROM community.realm_member m WHERE account_id=$1
+    UNION ALL SELECT 'terminal', to_jsonb(t) FROM community.realm_member_terminal t WHERE account_id=$1
+    ) AS membership_rows ORDER BY kind, row::text`,
+          [fixture.outsider.id],
+        )
+      ).rows;
+    const before = await snapshot();
+    const bans = (await pool.query('SELECT * FROM community.realm_ban WHERE account_id=$1', [member.accountId])).rows;
+    expect(
+      (
+        await pool.query('SELECT realm_id FROM community.realm_member WHERE account_id=$1 AND upper_inf(valid)', [
+          member.accountId,
+        ])
+      ).rows,
+    ).toHaveLength(2);
+    expect(
+      (await pool.query('SELECT * FROM community.realm_member_terminal WHERE account_id=$1', [member.accountId])).rows,
+    ).toHaveLength(2);
+    await expect(
       eraseAccountMembershipsPage({ pool, access, deadlineNow: () => Date.now() }, fixture.outsider.id, null),
     ).rejects.toThrow();
     await deletePersona({ version: 1, pool, auth: deletion.auth }, member);
@@ -71,7 +190,8 @@ beforeAll(async () => {
     let found = 0;
     for (let step = 0; step < 20; step++) {
       const page = await eraseAccountMembershipsPage(
-        { clock: () => new Date(), pool, access, deadlineNow: () => Date.now()  },        member.accountId,
+        { pool, access, deadlineNow: () => Date.now() },
+        member.accountId,
         after,
       );
       found += page.found;
@@ -181,7 +301,8 @@ test.serial(
       async operation() {
         await restore();
         const page = await eraseAccountMembershipsPage(
-          { clock: () => new Date(), pool: growth.pool, access, deadlineNow: () => Date.now()  },          member.accountId,
+          { pool: growth.pool, access, deadlineNow: () => Date.now() },
+          member.accountId,
           null,
         );
         expect(page).toEqual({ next: expect.any(String), found: 50, pending: 0 });

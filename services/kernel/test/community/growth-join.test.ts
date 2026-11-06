@@ -293,6 +293,15 @@ beforeAll(async () => {
     pool: db.pool,
     access: production.access,
     referenceKeys: tokens,
+  });
+  roleReader = apiMembership.roleReader;
+
+  const workerMembership = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool: db.pool,
+    access: production.access,
+    referenceKeys: tokens,
     restorer: createInitiatorRestorer({
       pool: db.pool,
       access: production.access,

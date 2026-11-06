@@ -199,8 +199,649 @@ afterAll(async () => {
   await admin?.end();
 });
 
-test('closed authorization does not write membership', async () => {
-  const { join, reservation, input, carrier } = await prepare();
+async function authorize(): Promise<LifecycleRequest> {
+  throw new Error('Realm work must use the installed Realm authorization port');
+}
+
+test('Realm authorization resolves identity and current self-join or management permission through Access', async () => {
+  const installed = await install();
+  const input = {
+    kind: 'membership' as const,
+    principal: { kind: 'realm' as const, id: installed.realmId },
+    memberAccountId: installed.memberId,
+    role: 'member' as const,
+    authorization: await reference(installed.memberId),
+  };
+  const resolved = await membership.authorize(input.authorization, input);
+  expect(resolved.actor).toEqual(actor(installed.memberId));
+  expect(resolved.account?.accountId).toBe(installed.memberId);
+  expect(resolved.deadline).toBeGreaterThan(Date.now());
+  const manager = await membership.authorize(await reference(installed.managerId), input);
+  expect(manager.actor.accountId).toBe(installed.managerId);
+  await expect(membership.authorize(await reference(installed.strangerId), input)).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
+  await expect(membership.authorize('invalid-reference', input)).rejects.toThrow();
+  await expect(membership.authorize(input.authorization, { ...input, role: 'owner' })).rejects.toBeInstanceOf(
+    RealmMembershipRoleError,
+  );
+  await expect(
+    membership.authorize(input.authorization, { ...input, principal: { kind: 'organization', id: installed.realmId } }),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(
+    membership.authorize(input.authorization, { ...input, memberAccountId: 'invalid' }),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+  await admin.query('DELETE FROM access.resource_grant WHERE resource_id = $1 AND subject_id = $2', [
+    installed.realmId,
+    installed.memberId,
+  ]);
+  await expect(membership.authorize(input.authorization, input)).rejects.toBeInstanceOf(GrantDeniedError);
+});
+
+test('Realm authorization and publication share the enclosing request deadline', async () => {
+  const installed = await install();
+  const input = {
+    kind: 'membership' as const,
+    principal: { kind: 'realm' as const, id: installed.realmId },
+    memberAccountId: installed.memberId,
+    role: 'member' as const,
+    authorization: await reference(installed.memberId),
+  };
+  const requestDeadline = Date.now() + 1000;
+  const request = await withRequestDeadline(requestDeadline, () => membership.authorize(input.authorization, input));
+  expect(request.deadline).toBe(requestDeadline);
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, requestDeadline - Date.now() + 5)));
+
+  const reservation = {
+    accountId: installed.memberId,
+    principal: input.principal,
+    reservationId: newId(routeOf(installed.memberId)!),
+  };
+  await expect(
+    membership.publish(request, input, reservation, `expired-${crypto.randomUUID()}`),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+});
+
+test("accounts' membership workflow with the community Realm adapter joins an account to a Realm, and the role reader proves membership from T with a valid range", async () => {
+  const installed = await install();
+  const selfId = `realm-membership-self-${crypto.randomUUID()}`;
+  const self = await enqueueMembership(client, selfId, {
+    kind: 'membership',
+    principal: { kind: 'realm', id: installed.realmId },
+    memberAccountId: installed.memberId,
+    role: 'member',
+    authorization: await reference(installed.memberId),
+  });
+  const joined = await self.getResult();
+  expect(joined).toEqual({ status: 'completed', accountId: installed.memberId, reservationId: expect.any(String) });
+  if (joined.status !== 'completed') throw new Error('Join did not complete');
+  expect(routeOf(joined.reservationId)).toBe(routeOf(installed.memberId));
+
+  const managedMember = newId(0x2160);
+  await account(managedMember);
+  await admin.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+       VALUES ($1,$2,$3,'realm:manage','(,)',$3) ON CONFLICT DO NOTHING`,
+    [installed.route, installed.realmId, installed.managerId],
+  );
+  const managed = await (
+    await enqueueMembership(client, `realm-membership-managed-${crypto.randomUUID()}`, {
+      kind: 'membership',
+      principal: { kind: 'realm', id: installed.realmId },
+      memberAccountId: managedMember,
+      role: 'member',
+      authorization: await reference(installed.managerId),
+    })
+  ).getResult();
+  expect(managed).toMatchObject({ status: 'completed', accountId: managedMember });
+
+  const stored = (
+    await admin.query<{ open: boolean; valid: string; at: string; transaction_id: string }>(
+      `SELECT upper_inf(valid) AS open, valid::text AS valid, lower(valid)::text AS at, transaction_id::text AS transaction_id
+         FROM community.realm_member WHERE route = $1 AND realm_id = $2 AND account_id = $3`,
+      [installed.route, installed.realmId, installed.memberId],
+    )
+  ).rows;
+  expect(stored).toHaveLength(1);
+  expect(stored[0]!.open).toBe(true);
+
+  const proofs = await withConnection(pool, (connection) =>
+    membership.roleReader(connection, {
+      realmId: installed.realmId,
+      accountId: installed.memberId,
+      at: stored[0]!.at,
+    }),
+  );
+  expect(proofs?.map((proof) => proof.role)).toEqual(['owner', 'member']);
+  const owner = proofs!.find((proof) => proof.role === 'owner')!;
+  const member = proofs!.find((proof) => proof.role === 'member')!;
+  expect(owner.member).toBe(false);
+  expect(member).toEqual({ role: 'member', member: true, valid: stored[0]!.valid });
+  expect(
+    (await admin.query('SELECT $1::tstzrange @> $2::timestamptz AS covers', [owner.valid, stored[0]!.at])).rows[0]
+      .covers,
+  ).toBe(true);
+  expect(
+    (await admin.query('SELECT $1::tstzrange @> $2::timestamptz AS covers', [member.valid, stored[0]!.at])).rows[0]
+      .covers,
+  ).toBe(true);
+
+  const before = (
+    await admin.query<{ at: string }>(`SELECT ($1::timestamptz - interval '1 microsecond')::text AS at`, [
+      stored[0]!.at,
+    ])
+  ).rows[0]!.at;
+  const earlier = await withConnection(pool, (connection) =>
+    membership.roleReader(connection, { realmId: installed.realmId, accountId: installed.memberId, at: before }),
+  );
+  const earlierMember = earlier!.find((proof) => proof.role === 'member')!;
+  expect(earlierMember.member).toBe(false);
+  expect(
+    (await admin.query('SELECT $1::tstzrange @> $2::timestamptz AS covers', [earlierMember.valid, stored[0]!.at]))
+      .rows[0].covers,
+  ).toBe(false);
+  expect(
+    await withConnection(pool, (connection) =>
+      membership.roleReader(connection, {
+        realmId: newId(installed.route),
+        accountId: installed.memberId,
+        at: stored[0]!.at,
+      }),
+    ),
+  ).toBeNull();
+  const future = (
+    await admin.query<{ at: string }>(
+      `SELECT (created_at - interval '1 microsecond')::text AS at FROM community.realm WHERE realm_id = $1`,
+      [installed.realmId],
+    )
+  ).rows[0]!.at;
+  expect(
+    await withConnection(pool, (connection) =>
+      membership.roleReader(connection, { realmId: installed.realmId, accountId: installed.memberId, at: future }),
+    ),
+  ).toBeNull();
+
+  const held = {
+    accountId: installed.memberId,
+    principal: { kind: 'realm' as const, id: installed.realmId },
+    reservationId: joined.reservationId,
+  };
+  const stranger = await requestFor(installed.strangerId);
+  const ownerRejection = await membership
+    .publish(
+      stranger,
+      {
+        kind: 'membership',
+        principal: held.principal,
+        memberAccountId: installed.strangerId,
+        role: 'owner',
+        authorization: await reference(installed.strangerId),
+      },
+      { ...held, accountId: installed.strangerId, reservationId: newId(routeOf(installed.strangerId)!) },
+      `owner-${crypto.randomUUID()}`,
+    )
+    .catch((error: unknown) => error);
+  expect(ownerRejection).toBeInstanceOf(RealmMembershipRoleError);
+  expect(ownerRejection).toMatchObject({ code: 'realm_owner_membership', message: 'Realm owners are identity grants' });
+  await expect(
+    membership.publish(
+      stranger,
+      {
+        kind: 'membership',
+        principal: held.principal,
+        memberAccountId: installed.strangerId,
+        role: 'member',
+        authorization: await reference(installed.strangerId),
+      },
+      { ...held, accountId: installed.strangerId, reservationId: newId(routeOf(installed.strangerId)!) },
+      `stranger-${crypto.randomUUID()}`,
+    ),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+
+  await admin.query(
+    `INSERT INTO access.resource_grant
+         (route, resource_id, subject_id, subject_role, action, valid, transaction_id)
+       VALUES ($1,$2,$2,'member','realm:participate','(,)',$3)`,
+    [installed.route, installed.realmId, newId(installed.route)],
+  );
+  const memberRequest = await requestFor(installed.memberId);
+  const participate = await accessCheck(
+    access,
+    memberRequest.actor,
+    'realm:participate',
+    { route: installed.route, id: installed.realmId },
+    { ...memberRequest, pool },
+  );
+  expect(await withConnection(pool, (connection) => participate(connection))).toBe(true);
+
+  const replay = await membership.publish(
+    await requestFor(installed.memberId),
+    {
+      kind: 'membership',
+      principal: held.principal,
+      memberAccountId: installed.memberId,
+      role: 'member',
+      authorization: await reference(installed.memberId),
+    },
+    held,
+    `wf:${selfId}:publish`,
+  );
+  expect(replay.replayed).toBe(true);
+  expect(replay.transactionId).toBe(stored[0]!.transaction_id);
+  expect(
+    (
+      await admin.query(
+        'SELECT count(*)::int AS n FROM community.realm_member WHERE realm_id = $1 AND account_id = $2',
+        [installed.realmId, installed.memberId],
+      )
+    ).rows[0].n,
+  ).toBe(1);
+  const change = await withConnection(pool, (connection) =>
+    membership.authority.readChange(connection, {
+      accountId: installed.memberId,
+      principal: held.principal,
+      key: 'join-change',
+      sourceTransactionId: stored[0]!.transaction_id,
+    }),
+  );
+  expect(change).toEqual({
+    accountId: installed.memberId,
+    principal: held.principal,
+    key: 'join-change',
+    sourceTransactionId: stored[0]!.transaction_id,
+    reservationId: joined.reservationId,
+  });
+  expect(
+    await withConnection(pool, (connection) =>
+      membership.authority.readChange(connection, {
+        accountId: installed.memberId,
+        principal: held.principal,
+        key: 'missing-change',
+        sourceTransactionId: newId(installed.route),
+      }),
+    ),
+  ).toBeNull();
+}, 120_000);
+
+test('leave commits a terminal slot so release completes, terminalize closes only an unpublished reservation, and every step replays by its key', async () => {
+  const installed = await install(0x2240);
+  const joinId = `realm-membership-join-${crypto.randomUUID()}`;
+  const principal = { kind: 'realm' as const, id: installed.realmId };
+  const joined = await (
+    await enqueueMembership(client, joinId, {
+      kind: 'membership',
+      principal,
+      memberAccountId: installed.memberId,
+      role: 'member',
+      authorization: await reference(installed.memberId),
+    })
+  ).getResult();
+  if (joined.status !== 'completed') throw new Error('Join did not complete');
+  const held = { accountId: installed.memberId, principal, reservationId: joined.reservationId };
+  expect(await withConnection(pool, (connection) => membership.authority.readTerminal(connection, held))).toBeNull();
+  const joinedRow = (
+    await admin.query<{ transaction_id: string }>(
+      'SELECT transaction_id::text AS transaction_id FROM community.realm_member WHERE realm_id = $1 AND account_id = $2',
+      [installed.realmId, installed.memberId],
+    )
+  ).rows[0]!;
+  const joinReplay = await membership.publish(
+    await requestFor(installed.memberId),
+    {
+      kind: 'membership',
+      principal,
+      memberAccountId: installed.memberId,
+      role: 'member',
+      authorization: await reference(installed.memberId),
+    },
+    held,
+    `wf:${joinId}:publish`,
+  );
+  expect(joinReplay.replayed).toBe(true);
+  expect(joinReplay.transactionId).toBe(joinedRow.transaction_id);
+  const reserveReplay = command(
+    await ports().reserve({
+      accountId: installed.memberId,
+      principal,
+      key: `wf:${joinId}:reserve`,
+    }),
+  );
+  expect(reserveReplay.replayed).toBe(true);
+  expect(reserveReplay.value.reservationId).toBe(joined.reservationId);
+
+  const leaveId = `realm-membership-leave-${crypto.randomUUID()}`;
+  const left = await (
+    await enqueueMembership(client, leaveId, {
+      kind: 'membership',
+      principal,
+      memberAccountId: installed.memberId,
+      role: null,
+      reservationId: joined.reservationId,
+      authorization: await reference(installed.memberId),
+    })
+  ).getResult();
+  expect(left).toEqual({ status: 'completed', accountId: installed.memberId, reservationId: joined.reservationId });
+  const interval = (
+    await admin.query<{ open: boolean; transaction_id: string }>(
+      `SELECT upper_inf(valid) AS open, transaction_id::text AS transaction_id
+         FROM community.realm_member WHERE realm_id = $1 AND account_id = $2`,
+      [installed.realmId, installed.memberId],
+    )
+  ).rows;
+  expect(interval).toHaveLength(1);
+  expect(interval[0]!.open).toBe(false);
+  const terminal = await withConnection(pool, (connection) => membership.authority.readTerminal(connection, held));
+  expect(terminal?.reservationId).toBe(joined.reservationId);
+  expect(typeof terminal?.transactionId).toBe('string');
+  expect(routeOf(terminal!.transactionId)).not.toBeNull();
+  expect(
+    (
+      await admin.query('SELECT count(*)::int AS n FROM access.membership_inverse WHERE account_id = $1', [
+        installed.memberId,
+      ])
+    ).rows[0].n,
+  ).toBe(0);
+  const leaveChange = await withConnection(pool, (connection) =>
+    membership.authority.readChange(connection, {
+      accountId: installed.memberId,
+      principal,
+      key: 'leave-change',
+      sourceTransactionId: interval[0]!.transaction_id,
+    }),
+  );
+  expect(leaveChange?.reservationId).toBe(joined.reservationId);
+  const leaveReplay = await membership.publish(
+    await requestFor(installed.memberId),
+    {
+      kind: 'membership',
+      principal,
+      memberAccountId: installed.memberId,
+      role: null,
+      reservationId: joined.reservationId,
+      authorization: await reference(installed.memberId),
+    },
+    held,
+    `wf:${leaveId}:publish`,
+  );
+  expect(leaveReplay.replayed).toBe(true);
+  expect(leaveReplay.transactionId).toBe(interval[0]!.transaction_id);
+  const releaseReplay = command(await ports().release({ ...held, key: `wf:${leaveId}:release` }));
+  expect(releaseReplay.replayed).toBe(true);
+  const repeated = await (
+    await enqueueMembership(client, leaveId, {
+      kind: 'membership',
+      principal,
+      memberAccountId: installed.memberId,
+      role: null,
+      reservationId: joined.reservationId,
+      authorization: await reference(installed.memberId),
+    })
+  ).getResult();
+  expect(repeated).toEqual(left);
+  await expect(membership.terminalize(held, `terminal-published-${crypto.randomUUID()}`)).rejects.toThrow();
+  expect(
+    (
+      await admin.query(
+        'SELECT count(*)::int AS n FROM community.realm_member WHERE realm_id = $1 AND account_id = $2',
+        [installed.realmId, installed.memberId],
+      )
+    ).rows[0].n,
+  ).toBe(1);
+
+  const freshId = newId(0x2250);
+  await account(freshId);
+  const freshHeld = (
+    await ports().reserve({ accountId: freshId, principal, key: `direct-reserve-${crypto.randomUUID()}` })
+  ).value;
+  const terminalKey = `direct-terminal-${crypto.randomUUID()}`;
+  const first = command(await ports().terminalize(freshHeld, terminalKey));
+  const second = command(await ports().terminalize(freshHeld, terminalKey));
+  expect(second.replayed).toBe(true);
+  expect(second.transactionId).toBe(first.transactionId);
+  await expect(ports().terminalize(freshHeld, `direct-terminal-${crypto.randomUUID()}`)).rejects.toThrow();
+  await ports().release({ ...freshHeld, key: `direct-release-${crypto.randomUUID()}` });
+  expect(
+    (await admin.query('SELECT count(*)::int AS n FROM access.membership_inverse WHERE account_id = $1', [freshId]))
+      .rows[0].n,
+  ).toBe(0);
+  expect(
+    (await admin.query('SELECT count(*)::int AS n FROM community.realm_member WHERE account_id = $1', [freshId]))
+      .rows[0].n,
+  ).toBe(0);
+
+  const blockedId = newId(0x2260);
+  await account(blockedId);
+  await admin.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1,$2,$3,'realm:join','(,)',$3)`,
+    [installed.route, installed.realmId, blockedId],
+  );
+  const blockedReference = await reference(blockedId);
+  let resolutions = 0;
+  authenticationHooks.set(blockedReference, async () => {
+    if (++resolutions === 2) {
+      await admin.query('DELETE FROM access.resource_grant WHERE resource_id = $1 AND subject_id = $2', [
+        installed.realmId,
+        blockedId,
+      ]);
+      authenticationHooks.delete(blockedReference);
+    }
+  });
+  const failedId = `realm-membership-failed-${crypto.randomUUID()}`;
+  const failed = await enqueueMembership(client, failedId, {
+    kind: 'membership',
+    principal,
+    memberAccountId: blockedId,
+    role: 'member',
+    authorization: await reference(blockedId),
+  });
+  await expect(failed.getResult()).rejects.toThrow('Membership workflow step failed: publish');
+  expect(
+    (await admin.query('SELECT count(*)::int AS n FROM community.realm_member WHERE account_id = $1', [blockedId]))
+      .rows[0].n,
+  ).toBe(0);
+  const blockedTerminal = (
+    await admin.query<{ reservation_id: string }>(
+      'SELECT reservation_id::text AS reservation_id FROM community.realm_member_terminal WHERE account_id = $1',
+      [blockedId],
+    )
+  ).rows;
+  expect(blockedTerminal).toHaveLength(1);
+  expect(
+    (await admin.query('SELECT count(*)::int AS n FROM access.membership_inverse WHERE account_id = $1', [blockedId]))
+      .rows[0].n,
+  ).toBe(0);
+  const blockedHeld = { accountId: blockedId, principal, reservationId: blockedTerminal[0]!.reservation_id };
+  const reservedAgain = command(
+    await ports().reserve({ accountId: blockedId, principal, key: `wf:${failedId}:reserve` }),
+  );
+  expect(reservedAgain.replayed).toBe(true);
+  expect(reservedAgain.value.reservationId).toBe(blockedHeld.reservationId);
+  const terminalAgain = await membership.terminalize(blockedHeld, `wf:${failedId}:terminalize`);
+  expect(terminalAgain.replayed).toBe(true);
+  const releasedAgain = command(await ports().release({ ...blockedHeld, key: `wf:${failedId}:release` }));
+  expect(releasedAgain.replayed).toBe(true);
+}, 120_000);
+
+type CommandResult = {
+  replayed: boolean;
+  transactionId: string;
+  value: { reservationId: string };
+};
+
+/** Workflow ports type the step result as unknown. The command outcome still carries the receipt. */
+function command(value: unknown): CommandResult {
+  if (!value || typeof value !== 'object' || !('replayed' in value) || !('transactionId' in value))
+    throw new Error('Missing command result');
+  return value as CommandResult;
+}
+
+function ports() {
+  return createMembershipWorkPorts(
+    { pool, env: { KERNEL_ROUTE_KEY: routeKey } },
+    { realm: membership, access, authorize },
+  );
+}
+
+test('publish authorizes with the actor the authenticator produced, never a copy', async () => {
+  const installed = await install();
+  const input = {
+    kind: 'membership' as const,
+    principal: { kind: 'realm' as const, id: installed.realmId },
+    memberAccountId: installed.memberId,
+    role: 'member' as const,
+    authorization: await reference(installed.memberId),
+  };
+  const reservation = (
+    await ports().reserve({
+      accountId: installed.memberId,
+      principal: input.principal,
+      key: `copy-${crypto.randomUUID()}`,
+    })
+  ).value;
+  const request = await requestFor(installed.memberId);
+  // Same fields, different object: production admission knows only what its authenticator produced.
+  const copy = { ...request, actor: { ...request.actor, scopes: [...request.actor.scopes] } };
+  await expect(membership.publish(copy, input, reservation, `copy-${crypto.randomUUID()}`)).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
+  expect(
+    (
+      await admin.query('SELECT count(*)::int AS n FROM community.realm_member WHERE account_id = $1', [
+        installed.memberId,
+      ])
+    ).rows[0].n,
+  ).toBe(0);
+  const published = await membership.publish(request, input, reservation, `copy-${crypto.randomUUID()}`);
+  expect(published).toMatchObject({ replayed: false });
+  expect(
+    (
+      await admin.query('SELECT count(*)::int AS n FROM community.realm_member WHERE account_id = $1', [
+        installed.memberId,
+      ])
+    ).rows[0].n,
+  ).toBe(1);
+}, 120_000);
+
+type Accepted = { authorization: string; workflowId: string; input: Record<string, unknown> };
+
+/** Accept through the native command, but hold the workflow: the step runs when the test says. */
+function holdingClient() {
+  const stored = new Map<string, { workflowName: string; input: unknown[] }>();
+  const client = {
+    async getWorkflow(id: string) {
+      return stored.get(id);
+    },
+    async enqueue(options: { workflowName: string; workflowID: string }, body: unknown) {
+      stored.set(options.workflowID, { workflowName: options.workflowName, input: [body] });
+    },
+  };
+  return { client: client as unknown as Awaited<ReturnType<typeof createWorkClient>>, stored };
+}
+
+function acceptanceDependencies(held: ReturnType<typeof holdingClient>) {
+  return { pool, access, tokens, client: held.client };
+}
+
+function accepted(held: ReturnType<typeof holdingClient>, workflowId: string): Accepted {
+  const stored = held.stored.get(workflowId);
+  if (!stored) throw new Error('Nothing was enqueued');
+  const input = stored.input[0] as Record<string, unknown>;
+  return { authorization: input.authorization as string, workflowId, input };
+}
+
+/** Run Accounts' membership workflow with the sealed reference the acceptance produced. */
+async function runSealed(installed: Installed, value: Accepted, overrides: Record<string, unknown> = {}) {
+  const run = await enqueueMembership(client, `realm-sealed-${crypto.randomUUID()}`, {
+    kind: 'membership',
+    principal: { kind: 'realm', id: installed.realmId },
+    memberAccountId: value.input.memberAccountId as string,
+    role: value.input.role as 'member' | null,
+    ...(value.input.reservationId === undefined ? {} : { reservationId: value.input.reservationId as string }),
+    authorization: value.authorization,
+    ...overrides,
+  });
+  return run.getResult();
+}
+
+async function memberRows(realmId: string, accountId: string) {
+  return (
+    await admin.query<{ open: boolean }>(
+      'SELECT upper_inf(valid) AS open FROM community.realm_member WHERE realm_id = $1 AND account_id = $2',
+      [realmId, accountId],
+    )
+  ).rows;
+}
+
+async function accept(installed: Installed, accountId: string, memberId = accountId) {
+  const held = holdingClient();
+  const result = await enqueueRealmJoin(acceptanceDependencies(held), {
+    actor: await production.authenticate(pool, accountId, scopes),
+    realmId: installed.realmId,
+    spaceId: installed.spaceId,
+    memberAccountId: memberId,
+    idempotencyKey: crypto.randomUUID(),
+    deadline: Date.now() + 30_000,
+  });
+  return accepted(held, result.workflowId);
+}
+
+test('the sealed workflow path authorizes with the actor restoreInitiator returns over a committed operation row, never one built from the seal', async () => {
+  const installed = await install(0x2340, 'public');
+  consent.set(installed.memberId, scopes);
+  const join = await accept(installed, installed.memberId);
+  // Acceptance committed the operation and its creation receipt; the seal names it and carries no actor.
+  const operation = (
+    await admin.query<{ kind: string; initiator_account_id: string; actor_scopes: string[] }>(
+      'SELECT kind, initiator_account_id, actor_scopes FROM community.realm_membership_operation WHERE realm_id = $1',
+      [installed.realmId],
+    )
+  ).rows;
+  expect(operation).toEqual([{ kind: 'join', initiator_account_id: installed.memberId, actor_scopes: scopes }]);
+  expect(JSON.stringify(join.input)).not.toContain(installed.memberId.slice(0, 8) + 'actor');
+  const readsBefore = consentReads.length;
+  const joined = await runSealed(installed, join);
+  expect(joined).toMatchObject({ status: 'completed', accountId: installed.memberId });
+  // The step restored the initiator from Auth's current consent; the seal alone could not.
+  expect(consentReads.length).toBeGreaterThan(readsBefore);
+  expect(await memberRows(installed.realmId, installed.memberId)).toEqual([{ open: true }]);
+
+  // Leave restores the same person for realm:join and closes only their own interval.
+  const leaving = holdingClient();
+  const left = await enqueueRealmLeave(acceptanceDependencies(leaving), {
+    actor: await production.authenticate(pool, installed.memberId, scopes),
+    realmId: installed.realmId,
+    spaceId: installed.spaceId,
+    reservationId: (joined as { reservationId: string }).reservationId,
+    deadline: Date.now() + 30_000,
+  });
+  expect(await runSealed(installed, accepted(leaving, left.workflowId))).toMatchObject({ status: 'completed' });
+  expect(await memberRows(installed.realmId, installed.memberId)).toEqual([{ open: false }]);
+
+  // A manager adds another account: the manager's own realm:manage is checked at the step.
+  consent.set(installed.managerId, scopes);
+  const added = await accept(installed, installed.managerId, installed.strangerId);
+  expect(await runSealed(installed, added)).toMatchObject({ status: 'completed', accountId: installed.strangerId });
+  expect(await memberRows(installed.realmId, installed.strangerId)).toEqual([{ open: true }]);
+}, 120_000);
+
+test('a sealed step with no restorer, or a reference for another operation, fails closed', async () => {
+  const installed = await install(0x2350, 'public');
+  consent.set(installed.memberId, scopes);
+  const join = await accept(installed, installed.memberId);
+  const principal = { kind: 'realm' as const, id: installed.realmId };
+  const input = {
+    kind: 'membership' as const,
+    principal,
+    memberAccountId: installed.memberId,
+    role: 'member' as const,
+    authorization: join.authorization,
+  };
+  const carrier = await membership.authorize(join.authorization, input);
+  const reservation = (
+    await ports().reserve({ accountId: installed.memberId, principal, key: `closed-${crypto.randomUUID()}` })
+  ).value;
+  // The carrier's actor is a committed snapshot Access never authenticated: another adapter cannot use it.
   const bare = createRealmMembership({
     clock: () => new Date(),
     deadlineNow: () => Date.now(),

@@ -253,7 +253,14 @@ afterAll(async () => {
 
 test('community and content commands leave a log readBatch decodes, each emitted type closed', async () => {
   const actor = f.actor;
-const deps = () => ({ clock: () => new Date(), pool, access: f.access, routeKey });  await step('release', () => bootstrapRelease(pool, bundledRelease));
+  const deps = () => ({
+    clock: () => new Date(),
+    pool,
+    access: f.access,
+    routeKey,
+    deadlineNow: () => Date.now(),
+  });
+  await step('release', () => bootstrapRelease(pool, bundledRelease));
   await step('grant space', () => f.grant(actor.accountId, root, 'space:create'));
   await step('grant realm', () => f.grant(actor.accountId, root, 'realm:create'));
 
