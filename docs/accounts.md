@@ -169,8 +169,11 @@ handoff. Reuse eight-locale labels; retain original phone/recovery and Settings 
 
 Settings' closed current-human viewer/navigation observations admit detail only through current membership or
 management of an active, unfenced responsibility target. Concealed targets have no destination; reconciling holds
-are coordination evidence. Optional preparation failure preserves independently readable inventory with unavailable
-navigation. Detail `authActions` retains authority. Content's serial publisher derives the generated envelope
+are coordination evidence. Accounts illustrative directory fixtures follow that installed observation: admitted
+navigation for current visible managed targets, and concealed or unavailable navigation for reconciling
+coordination evidence; existing phone, window-navigation and read-recovery cases cover those modes. Optional
+preparation failure preserves independently readable inventory with unavailable navigation. Detail `authActions`
+retains authority. Content's serial publisher derives the generated envelope
 and installed callable/root from mounted Kernel; no handwritten mirrors or overrides. Until installation, directory
 identities stay unlinked. Then finish independent replacement, cursor-free restart and admitted detail/back navigation;
 transport/rendering/growth acceptance remains deferred. First duplicate wins; Next replaces its selected feed;
