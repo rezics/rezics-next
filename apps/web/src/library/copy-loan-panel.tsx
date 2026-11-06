@@ -227,7 +227,6 @@ export function CopyLoanPanel({
                 className={field}
                 value={name}
                 maxLength={300}
-                required
                 disabled={busy}
                 onChange={(event) => current() && setName(event.currentTarget.value)}
               />
@@ -238,7 +237,6 @@ export function CopyLoanPanel({
                 className={field}
                 type="date"
                 value={startedOn}
-                required
                 disabled={busy}
                 onChange={(event) => current() && setStartedOn(event.currentTarget.value)}
               />

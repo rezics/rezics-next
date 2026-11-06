@@ -556,6 +556,7 @@ export function CopyForm({
       </button>
     </div>
   ) : (
+    <>
     <form
       ref={formRef}
       method="post"
@@ -757,9 +758,6 @@ export function CopyForm({
           }
         />
       ) : null}
-      {copy && originating ? (
-        <CopyLoanPanel copy={copy} originating={originating} disabled={pending || !!intent.current || conflicted} />
-      ) : null}
       {pending ? (
         <p role="status" className="rounded-lg bg-muted p-3 text-sm">
           {m.library_copy_editor_pending()}
@@ -848,6 +846,10 @@ export function CopyForm({
         </button>
       </div>
     </form>
+    {copy && originating ? (
+      <CopyLoanPanel copy={copy} originating={originating} disabled={pending || !!intent.current || conflicted} />
+    ) : null}
+    </>
   );
 
   const navigation = (
@@ -1017,11 +1019,6 @@ export function CopyRow({
                 label: m.library_copy_edit(),
                 onSelect: () => onEdit(launcher.current),
               },
-              {
-                type: 'link',
-                label: m.library_copy_loans(),
-                href: `/${pageLocale}/library/loans`,
-              },
             ]}
           />
         </div>
@@ -1104,7 +1101,6 @@ function LoadedCopiesPage({
   const restoreIntent = useRef<{
     removal: typeof removed;
     data: { id: string; deletionId: string; revision: number; idempotencyKey: string };
-    headers: HeadersInit;
     send: typeof undoCopy;
   } | null>(null);
   const [editorKey, setEditorKey] = useState(0);
@@ -1263,15 +1259,17 @@ function LoadedCopiesPage({
       <noscript>
         {page.inventoryState === 'forbidden' ? null : <CopiesFallback page={page} csrfToken={page.csrfToken} />}
       </noscript>
-      <Exposure operation="copy.list">
-        <CopyInventoryFilters
-          subjectId={page.subjectId}
-          kind={page.kind ?? null}
-          status={page.status ?? null}
-          filterOptions={page.filterOptions}
-          current={() => currentPage('copy.list')}
-        />
-      </Exposure>
+      {page.filterOptions || page.kind || page.status ? (
+        <Exposure operation="copy.list">
+          <CopyInventoryFilters
+            subjectId={page.subjectId}
+            kind={page.kind ?? null}
+            status={page.status ?? null}
+            filterOptions={page.filterOptions}
+            current={() => currentPage('copy.list')}
+          />
+        </Exposure>
+      ) : null}
       {page.subjectId ? (
         <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span>{m.library_copy_filtered_heading({ title: filteredTitle ?? m.library_copy_this_edition() })}</span>
@@ -1457,11 +1455,10 @@ function LoadedCopiesPage({
                 restoreIntent.current = {
                   removal: removed,
                   data: { id: removed.copy.id, ...removed.result.undo, idempotencyKey },
-                  headers: new Headers(headers),
                   send: undoCopy,
                 };
               const captured = restoreIntent.current;
-              const result = await captured.send({ data: captured.data, headers: captured.headers });
+              const result = await captured.send({ data: captured.data, headers: new Headers(headers) });
               if (!result.ok && result.reason !== 'unavailable' && restoreIntent.current === captured)
                 restoreIntent.current = null;
               if (!currentPage('copy.update') || !result.ok || result.copy.id !== removed.copy.id) return false;

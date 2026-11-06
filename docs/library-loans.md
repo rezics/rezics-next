@@ -85,7 +85,8 @@ GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses o
 
 `/library/loans` lists open and returned history through the current-viewer reader, with first/more cursor moves,
 extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
-extend and return commands for the inspected holding and links to the loans page.
+extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
+links to the loans page.
 
 The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
 concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases

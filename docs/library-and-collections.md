@@ -387,7 +387,9 @@ cannot establish historical admission or replace the private detail's per-field 
 Until whole-Kernel declaration emission publishes Copy list filterOptions, condition write/detail fields and
 `copy-loans`, `@rezics/client` overlays those mounted contracts and yields when the generated envelopes exist. Web
 uses only those official types. Independent media and packaging controls, inventory comparison of recorded
-condition, Copy-editor loan commands and `/library/loans` are installed on that overlay. Native, growth, browser and
+condition, Copy-editor loan commands and `/library/loans` are installed on that overlay. Inventory filter controls
+appear when native `filterOptions` decode or the address already carries kind or status.
+Native, growth, browser and
 promoted acceptance remain with the controller.
 
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org

@@ -169,6 +169,9 @@ mock.module('@rezics/ui/menu', () => ({
     </>
   ),
 }));
+const editionHandlers: {
+  onChange: (subject: { id: string; title: string; types: string[] } | null) => void;
+}[] = [];
 mock.module('../src/library/copy-edition-picker', () => ({
   CopyEditionPicker: ({
     disabled,
@@ -176,18 +179,21 @@ mock.module('../src/library/copy-edition-picker', () => ({
   }: {
     disabled: boolean;
     onChange: (subject: { id: string; title: string; types: string[] } | null) => void;
-  }) => (
-    <select
-      aria-label="Edition"
-      disabled={disabled}
-      defaultValue=""
-      onChange={(event) => onChange({ id: event.currentTarget.value, title: 'Selected edition', types: ['Book'] })}
-    >
-      <option value="" />
-      <option value={id(10)}>First</option>
-      <option value={id(11)}>Second</option>
-    </select>
-  ),
+  }) => {
+    editionHandlers.push({ onChange });
+    return (
+      <select
+        aria-label="Edition"
+        disabled={disabled}
+        defaultValue=""
+        onChange={(event) => onChange({ id: event.currentTarget.value, title: 'Selected edition', types: ['Book'] })}
+      >
+        <option value="" />
+        <option value={id(10)}>First</option>
+        <option value={id(11)}>Second</option>
+      </select>
+    );
+  },
 }));
 const actions = await import('../src/library/copies-actions');
 const definitions = await import('../src/subject/definitions');
@@ -1168,15 +1174,13 @@ test('The actual Copies route retires retained private rows and editor state on 
       });
     await choose(id(10));
     const oldEdition = editions.at(-1)!;
-    const oldSelection = Object.entries(form().querySelector('select[aria-label="Edition"]')!).find(([key]) =>
-      key.startsWith('__reactProps$'),
-    )![1] as { onChange: (event: { currentTarget: { value: string } }) => void };
+    const oldSelection = editionHandlers.at(-1)!;
     await show(viewer('B'));
     await acceptList('B');
     await click(m.library_copy_add());
     await choose(id(11));
     const lookups = editions.length;
-    await act(async () => oldSelection.onChange({ currentTarget: { value: id(11) } }));
+    await act(async () => oldSelection.onChange({ id: id(11), title: 'Selected edition', types: ['Book'] }));
     expect(editions).toHaveLength(lookups);
     await act(async () =>
       oldEdition.resolve({
@@ -1231,7 +1235,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(removals.at(-1)!.input.data).toEqual({ id: id(1), revision: 7, idempotencyKey: id(101) });
     const uncertainRemoval = removals.at(-1)!;
     await act(async () => uncertainRemoval.reject(new Error('Uncertain native deletion')));
-    await click(m.library_copy_delete(), form());
+    await click(m.library_copy_editor_retry_delete(), form());
     await click(m.library_copy_delete_confirm(), form());
     expect(removals.at(-1)!.input.data).toEqual(uncertainRemoval.input.data);
     await act(async () => removals.at(-1)!.resolve({ ok: true, undo: { deletionId: id(80), revision: 8 } }));
@@ -1273,6 +1277,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     initial.page = { ...initial.page, copies: [], next: null, inventoryState: 'unavailable' };
     await show(viewer('B'));
     await act(async () => lists.at(-1)!.resolve(initial));
+    await tick();
     expect(host.textContent).toContain(m.library_copy_inventory_unavailable());
     expect(host.textContent).not.toContain(m.library_copy_matching_empty());
     expect(host.querySelector<HTMLSelectElement>('[name="kind"]')!.value).toBe('old.print');

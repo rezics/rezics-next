@@ -131,4 +131,8 @@ test('empty native inventories and unavailable inventories have distinct explana
   host.innerHTML = renderToStaticMarkup(<CopyInventoryFilters {...props} filterOptions={undefined} />);
   expect(host.querySelector<HTMLSelectElement>('[name="kind"]')!.value).toBe('old.print');
   expect(host.textContent).toContain(m.library_copy_filter_options_unavailable());
+  host.innerHTML = renderToStaticMarkup(
+    <CopyInventoryFilters {...props} kind={null} status={null} filterOptions={undefined} />,
+  );
+  expect(host.querySelector('form')).toBeNull();
 });
