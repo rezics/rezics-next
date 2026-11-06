@@ -30,7 +30,13 @@ export type IdentityEpochObservation = Readonly<{
   mappingComplete: boolean;
   searchComplete: boolean;
   libraryComplete: boolean;
-  control: Readonly<{ publishedEpoch: bigint; pendingJob: string | null; pendingEpoch: bigint | null }>;
+  control: Readonly<{
+    publishedEpoch: bigint;
+    pendingJob: string | null;
+    pendingEpoch: bigint | null;
+    prepareJob: string | null;
+    prepareEpoch: bigint | null;
+  }>;
 }>;
 
 /** Decide the next step of one job from its observed native state. */
@@ -41,7 +47,12 @@ export function identityEpochNext(view: IdentityEpochObservation): IdentityEpoch
       ? 'publication-control-disagrees'
       : 'published';
   if (view.jobState === 'cancelled' || view.jobState === 'cancelling') return view.jobState;
-  if (control.pendingJob !== job.jobId || control.pendingEpoch !== job.epoch) return 'reservation-lost';
+  // A preparing job holds the prepare reservation; acquisition mirrors the same job into pending before promotion.
+  const owned =
+    view.jobState === 'preparing'
+      ? control.prepareJob === job.jobId && control.prepareEpoch === job.epoch
+      : control.pendingJob === job.jobId && control.pendingEpoch === job.epoch;
+  if (!owned) return 'reservation-lost';
   if (view.jobState === 'preparing') return 'preparing';
   if (!view.mappingComplete) return 'mapping';
   if (!view.searchComplete) return 'search-canonical-index';

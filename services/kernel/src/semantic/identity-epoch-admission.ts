@@ -879,8 +879,10 @@ async function stepIdentityEpochAdmissionWithinDeadline(
   const { saved, planned, bases } = await load(pool, ref, measured);
   if (saved.state === 'published') {
     await releaseSourceHolds(pool, ref, bases);
-    const next = planned.find((p) => !p.released);
-    if (next) await releaseIdentityPrearmHome(pool, ref, next.resource_home, measured);
+    // Publication releases every planned home; each release is its own committed command at that home.
+    for (const home of planned) {
+      if (!home.released) await releaseIdentityPrearmHome(pool, ref, home.resource_home, measured);
+    }
     return { job: ref, state: saved.state, work: measured };
   }
   if (!['preparing', 'cancelling'].includes(saved.state)) return { job: ref, state: saved.state, work: measured };
