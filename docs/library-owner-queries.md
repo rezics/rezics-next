@@ -574,6 +574,11 @@ Decision: Catalogue receives Imports cold-route compilation, lazy Access and the
 Performance's Semantic domain composition, inside this same publication outcome. Native proofs stay
 `collection-publication-catalogue.test.ts` plus `collection-kind-http` and `kernel-lazy-access`; no extra stories.
 
+Decision: Catalogue consumes Search's live `KernelWorkModuleDecorator` and Copies' Library repair-latch. Publication
+keeps `startWorker`'s default composition so Content ambient and the Semantic domain reach registrations; the latch
+decorates those live modules instead of substituting `KERNEL_WORK_MODULES`. Fewest tests stay the three catalogue
+publication cases already named; no extra stories.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.
