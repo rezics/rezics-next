@@ -149,7 +149,9 @@ beforeAll(async () => {
     receiptKeys: testReceiptKeys(),
     clock: () => new Date(now),
     access: (config) => {
-      expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
+      for (const [action, metadata] of actionCatalogue(kernel)) {
+        expect(config.actions.get(action)).toEqual(metadata);
+      }
       return access;
     },
     writeRate: {
