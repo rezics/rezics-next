@@ -157,8 +157,9 @@ loopback proxy and a blocked-host analysis probe.
 
 Decision: the composed landing runs Kernel/Auth unit files, then Web unit files, then the native host walk in
 separate processes. One bun heap must not keep unit-test modules while Vite, Kernel, Auth and PostgreSQL share the
-6 GiB slot; that mix was killed at the Worker probe. Changed-workspace typecheck runs those compilers one after
-another in isolated children for the same reason. Access deadlineLive mapping stays with Accounts.
+6 GiB slot; that mix was killed at the Worker probe. Changed-workspace typecheck keeps current-main
+`typecheckRunOrder`: mapper-enabled compilers (Kernel, Auth, and Web when it maps SQL) run one after another with
+file-cache reclaim between them; other package compilers may overlap. Access deadlineLive mapping stays with Accounts.
 
 Decision: Progress window history identity uses the installed router history key with href fallback; absent optional
 window fields are omitted. Host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines
