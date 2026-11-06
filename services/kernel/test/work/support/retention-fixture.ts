@@ -127,3 +127,14 @@ export const RETENTION_OWNED_TABLES = WORKFLOW_RETENTION_PAYLOAD_FAMILIES.map((f
   table: family.table,
   key: family.key,
 })) as const;
+
+/** Payload tables have no status FK; status delete still cascades events, history, notifications and streams. */
+export async function deleteOwnedRetentionRows(
+  pool: Pick<Pool, 'query'>,
+  idPattern: string,
+): Promise<void> {
+  for (const table of ['workflow_input', 'workflow_output', 'operation_outputs'] as const) {
+    await pool.query(`DELETE FROM dbos.${table} WHERE workflow_uuid LIKE $1`, [idPattern]);
+  }
+  await pool.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [idPattern]);
+}

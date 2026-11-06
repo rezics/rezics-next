@@ -76,6 +76,11 @@ Plans must use `workflow_retention_selector` with no sequential scan. The full-b
 identity on the frozen cutoff/application, and finishes on repeated empty. Measured SQL, binds, plans, rows, blocks,
 statements, payload fanout and background attribution are logged from those native checks.
 
+Decision: pin this outcome with the four named native suites only — compact selector and migration pins, registered
+interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog/fanout/sweep — rather than
+extra stories. Each growth series uses its own application and seed identities so a selected count cannot borrow
+another series' payload.
+
 A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
 SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or
 cancelled reporting producer is introduced.

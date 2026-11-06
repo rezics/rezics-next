@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { WORK_APPLICATION, createWorkClient } from '../../src/work/client.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import {
   classifyRetentionStatement,
   retentionBatchWork,
@@ -19,6 +19,7 @@ import {
 } from '../../src/work/retention-selector.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
 import {
+  deleteOwnedRetentionRows,
   expectedRetentionInventory,
   insertRetentionPayload,
   UNIT_RETENTION_PAYLOAD,
@@ -67,9 +68,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.admin.query('DELETE FROM dbos.workflow_input WHERE workflow_uuid LIKE $1', [`${prefix}%`]);
-  await db.admin.query('DELETE FROM dbos.workflow_output WHERE workflow_uuid LIKE $1', [`${prefix}%`]);
-  await db.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [`${prefix}%`]);
+  await deleteOwnedRetentionRows(db.admin, `${prefix}%`);
   await client.close();
   await db.close();
 });
@@ -249,29 +248,39 @@ function historyCount(scale: number): number {
   return scale * historyRowsPerUnit;
 }
 
-async function growUnrelated(growth: GrowthDatabase, scale: number, previous: number): Promise<void> {
+function applicationFor(series: string): string {
+  return `${prefix}${series}`;
+}
+
+async function growUnrelated(
+  growth: GrowthDatabase,
+  series: string,
+  scale: number,
+  previous: number,
+): Promise<void> {
   const added = historyCount(scale) - historyCount(previous);
   const offset = historyCount(previous);
-  await seed(growth, 'foreign', added, offset, {
-    application: 'retention.growth.foreign',
+  const application = applicationFor(series);
+  await seed(growth, `${series}-foreign`, added, offset, {
+    application: `${application}.foreign`,
     status: 'SUCCESS',
     createdAt: origin - 400 * dayMs,
     completedAt: origin - 400 * dayMs,
   });
-  await seed(growth, 'nonterminal', added, offset, {
-    application: WORK_APPLICATION,
+  await seed(growth, `${series}-nonterminal`, added, offset, {
+    application,
     status: 'PENDING',
     createdAt: origin - 400 * dayMs,
     completedAt: null,
   });
-  await seed(growth, 'recent', added, offset, {
-    application: WORK_APPLICATION,
+  await seed(growth, `${series}-recent`, added, offset, {
+    application,
     status: 'SUCCESS',
     createdAt: origin - dayMs,
     completedAt: origin - dayMs,
   });
-  await seed(growth, 'long-lived', added, offset, {
-    application: WORK_APPLICATION,
+  await seed(growth, `${series}-long-lived`, added, offset, {
+    application,
     status: 'SUCCESS',
     createdAt: origin - 400 * dayMs,
     completedAt: origin - dayMs,
@@ -280,13 +289,14 @@ async function growUnrelated(growth: GrowthDatabase, scale: number, previous: nu
 
 async function seedEligible(
   growth: GrowthDatabase,
+  series: string,
   kind: string,
   amount: number,
   offset: number,
   fanout: RetentionPayloadFanout = UNIT_RETENTION_PAYLOAD,
 ): Promise<string[]> {
-  const ids = await seed(growth, kind, amount, offset, {
-    application: WORK_APPLICATION,
+  const ids = await seed(growth, `${series}-${kind}`, amount, offset, {
+    application: applicationFor(series),
     status: 'SUCCESS',
     createdAt: origin - 401 * dayMs,
     completedAt: origin - 400 * dayMs,
@@ -295,8 +305,14 @@ async function seedEligible(
   return ids;
 }
 
-async function runBatch(expected: number): Promise<number> {
-  const removed = await runWorkflowRetentionBatch(30, client, now, select);
+async function runBatch(expected: number, series: string): Promise<number> {
+  const removed = await runWorkflowRetentionBatch(30, client, now, select, applicationFor(series));
+  expect(removed).toBe(expected);
+  return removed;
+}
+
+async function runSweep(expected: number, series: string): Promise<number> {
+  const removed = await runWorkflowRetentionSweep(30, client, now, (batch) => batch(), select, applicationFor(series));
   expect(removed).toBe(expected);
   return removed;
 }
@@ -321,14 +337,14 @@ test('an empty retention batch stays bounded as unrelated workflow history grows
       bounds: { selected: 'constant' },
     },
     async grow(growth, scale, previous) {
-      await growUnrelated(growth, scale, previous);
+      await growUnrelated(growth, 'empty', scale, previous);
     },
     async warmup() {
-      expect(await runWorkflowRetentionBatch(30, client, now, select)).toBe(0);
+      expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('empty'))).toBe(0);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      const removed = await runBatch(0);
+      const removed = await runBatch(0, 'empty');
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
       return removed;
     },
@@ -356,18 +372,18 @@ test('a short retention batch stays bounded as unrelated workflow history grows'
       bounds: { selected: 'constant' },
     },
     async grow(growth, scale, previous) {
-      await growUnrelated(growth, scale, previous);
-      await seedEligible(growth, 'short-warmup', shortBatch, scale * shortBatch);
+      await growUnrelated(growth, 'short', scale, previous);
+      await seedEligible(growth, 'short', 'warmup', shortBatch, scale * shortBatch);
     },
     async warmup() {
-      expect(await runWorkflowRetentionBatch(30, client, now, select)).toBe(shortBatch);
+      expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('short'))).toBe(shortBatch);
     },
     async prepare(growth, scale) {
-      await seedEligible(growth, 'short-eligible', shortBatch, scale * shortBatch);
+      await seedEligible(growth, 'short', 'eligible', shortBatch, scale * shortBatch);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      const removed = await runBatch(shortBatch);
+      const removed = await runBatch(shortBatch, 'short');
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
       return removed;
     },
@@ -397,18 +413,18 @@ test('a full retention batch stays bounded as unrelated workflow history grows',
       bounds: { selected: 'constant' },
     },
     async grow(growth, scale, previous) {
-      await growUnrelated(growth, scale, previous);
-      await seedEligible(growth, 'full-warmup', fullBatch, scale * fullBatch);
+      await growUnrelated(growth, 'full', scale, previous);
+      await seedEligible(growth, 'full', 'warmup', fullBatch, scale * fullBatch);
     },
     async warmup() {
-      expect(await runWorkflowRetentionBatch(30, client, now, select)).toBe(fullBatch);
+      expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('full'))).toBe(fullBatch);
     },
     async prepare(growth, scale) {
-      await seedEligible(growth, 'full-eligible', fullBatch, scale * fullBatch);
+      await seedEligible(growth, 'full', 'eligible', fullBatch, scale * fullBatch);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      const removed = await runBatch(fullBatch);
+      const removed = await runBatch(fullBatch, 'full');
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
       return removed;
     },
@@ -439,23 +455,23 @@ test('a full retention batch stays bounded as selected-application eligible back
     },
     async grow(growth, scale, previous) {
       const added = historyCount(scale) - historyCount(previous);
-      await seed(growth, 'backlog', added, historyCount(previous), {
-        application: WORK_APPLICATION,
+      await seed(growth, 'backlog-later', added, historyCount(previous), {
+        application: applicationFor('backlog'),
         status: 'SUCCESS',
         createdAt: origin - 32 * dayMs,
         completedAt: origin - 31 * dayMs,
       });
-      await seedEligible(growth, 'backlog-warmup', fullBatch, scale * fullBatch);
+      await seedEligible(growth, 'backlog', 'warmup', fullBatch, scale * fullBatch);
     },
     async warmup() {
-      expect(await runWorkflowRetentionBatch(30, client, now, select)).toBe(fullBatch);
+      expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('backlog'))).toBe(fullBatch);
     },
     async prepare(growth, scale) {
-      await seedEligible(growth, 'backlog-eligible', fullBatch, scale * fullBatch);
+      await seedEligible(growth, 'backlog', 'eligible', fullBatch, scale * fullBatch);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      const removed = await runBatch(fullBatch);
+      const removed = await runBatch(fullBatch, 'backlog');
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
       return removed;
     },
@@ -482,22 +498,20 @@ test('a short retention batch grows linearly with owned payload fanout', async (
       bounds: { selected: 'constant', payload: 'linear' },
     },
     async grow(growth, scale) {
-      await growth.pool.query('DELETE FROM dbos.workflow_input WHERE workflow_uuid LIKE $1', [`${prefix}fanout%`]);
-      await growth.pool.query('DELETE FROM dbos.workflow_output WHERE workflow_uuid LIKE $1', [`${prefix}fanout%`]);
-      await growth.pool.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [`${prefix}fanout%`]);
+      await deleteOwnedRetentionRows(growth.pool, `${prefix}fanout-%`);
       const fanout = { ...UNIT_RETENTION_PAYLOAD, operations: scale, events: scale, history: scale, streams: scale };
-      await seedEligible(growth, 'fanout-warmup', shortBatch, 0, fanout);
+      await seedEligible(growth, 'fanout', 'warmup', shortBatch, 0, fanout);
     },
     async warmup() {
-      expect(await runWorkflowRetentionBatch(30, client, now, select)).toBe(shortBatch);
+      expect(await runWorkflowRetentionBatch(30, client, now, select, applicationFor('fanout'))).toBe(shortBatch);
     },
     async prepare(growth, scale) {
       const fanout = { ...UNIT_RETENTION_PAYLOAD, operations: scale, events: scale, history: scale, streams: scale };
-      await seedEligible(growth, 'fanout-eligible', shortBatch, 0, fanout);
+      await seedEligible(growth, 'fanout', 'eligible', shortBatch, 0, fanout);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      const removed = await runBatch(shortBatch);
+      const removed = await runBatch(shortBatch, 'fanout');
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
       return removed;
     },
@@ -535,19 +549,18 @@ test('a two-batch retention sweep stays bounded as unrelated workflow history gr
       bounds: { selected: 'constant' },
     },
     async grow(growth, scale, previous) {
-      await growUnrelated(growth, scale, previous);
-      await seedEligible(growth, 'sweep-warmup', selected, scale * selected);
+      await growUnrelated(growth, 'sweep', scale, previous);
+      await seedEligible(growth, 'sweep', 'warmup', selected, scale * selected);
     },
     async warmup() {
-      expect(await runWorkflowRetentionSweep(30, client, now, (batch) => batch(), select)).toBe(selected);
+      expect(await runSweep(selected, 'sweep')).toBe(selected);
     },
     async prepare(growth, scale) {
-      await seedEligible(growth, 'sweep-eligible', selected, scale * selected);
+      await seedEligible(growth, 'sweep', 'eligible', selected, scale * selected);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      const removed = await runWorkflowRetentionSweep(30, client, now, (batch) => batch(), select);
-      expect(removed).toBe(selected);
+      const removed = await runSweep(selected, 'sweep');
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
       return removed;
     },
