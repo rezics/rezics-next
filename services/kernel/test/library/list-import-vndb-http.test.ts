@@ -35,6 +35,7 @@ beforeAll(async () => {
   f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
   const producer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   producerBearer = producer.bearer;
+  await f.seedGlobalAction(f.steward.actor.accountId, 'subject:batch_write');
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
     { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) },
     {
