@@ -58,7 +58,10 @@ export function dockerSpawnSyncOptions(
  * Auth fixture pattern: issue `docker rm -f -v` in its own session and return. The host-lifetime supervisor still
  * waits up to 120s for labelled removal; SIGTERM handlers must not block in spawnSync.
  */
-export function beginDetachedDockerRm(id: string, extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {}): void {
+export function beginDetachedDockerRm(
+  id: string,
+  extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {},
+): void {
   if (!id || !CONTAINER_IDENTITY.test(id)) return;
   const child = spawn('docker', ['rm', '-f', '-v', id], { detached: true, stdio: 'ignore', ...extra });
   child.unref();

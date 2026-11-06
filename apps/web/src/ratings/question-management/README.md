@@ -7,6 +7,10 @@ Decision: creation acknowledgements compare scale operands by value; JSON proper
 The existing management reader and commands own admission, immutable definitions, caption compare-and-set,
 lifecycle and authorization. This consumer only navigates their current native windows.
 
+Decision: the management read calls the installed Realm management callable through the bounded client, and page and selection types derive from that installed response. Its closed management and caption-history schemas are runtime exports of `@rezics/client`: the official generator emits them as byte copies of their Kernel source (`CLIENT_RUNTIME_ENTRIES` in `services/kernel/scripts/client.ts`), so [native](native.ts) validates HTTP bodies with those published schemas and no Kernel path. The copied valibot page/history contract is removed. Caption, lifecycle and create acknowledgements use the mounted `QuestionLabelResult`, `QuestionLifecycleResult` and `QuestionCreateResult` bodies; a current question readback cannot acknowledge an uncertain command. A native.ts source-text assertion that excludes Kernel imports proves neither published schema parity nor Worker loading.
+
+Decision: a caption movement that Leave admits keeps the question visit; only a departure from the page retires it. Leave for a local caption movement does not invalidate the movement that asked for it.
+
 Decision: Previous uses admitted predecessors only; First deliberately reads the null cursor. Each independent
 stream commits its staged target only after exact admitted success. Retry reads that same failed target. A direct
 visit has no invented predecessor. A successful return truncates the abandoned branch; First clears it.
@@ -34,3 +38,9 @@ Forced retirement continues to remove private presentation synchronously through
 Empty first, sparse continuing and empty terminal windows have separate copy in every launch locale. Illustrative
 stories and focused consumer tests do not establish installed native or signed-in browser acceptance; the original
 controller retains native, command acknowledgement/current-reader/focus, classification and browser checks.
+
+Decision: the six-persona walk for this page runs as the seeded question-management walk under worker-check, so the check owns the walk stack, its startup and its cleanup. Its acceptance stays open until a check passes every recorded step.
+
+Decision: this landing typechecks the installed management receiving (the POST callable's `data` union, then the mounted 201 body). Treaty types that POST as the settled response, so acknowledgement awaits its data union instead of `ReturnType` of a Promise. Every changed workspace must pass its full typecheck; producer-contract repairs go to the failing callers. The focused mounted suites, generator closure test and installed-package schema test remain the fewest pins for this source landing; six-persona stories and signed-in browser walks stay with the original held remainder.
+
+Acceptance state, recorded per stage: specified in the held question-classification walk; implemented as `apps/web/scripts/seeded-question-management-walk.ts`; exposed to a passing check: not yet (the walk has not run past its stack start); tested by the focused mounted suites, the generator closure test and the installed-package schema test that pins the published management and caption-history shapes (`packages/client/tests/question-management-schemas.test.ts`); promoted: not yet.

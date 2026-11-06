@@ -77,13 +77,8 @@ test('the local source seam reads the paired frontier and admits a closed retire
 
 test('the management source stays on the generated Client transport and never loads Kernel SQL', async () => {
   const source = await Bun.file(new URL('../src/ratings/question-management/native.ts', import.meta.url)).text();
-  const decoders = await Bun.file(
-    new URL('../../../packages/client/src/question-management.ts', import.meta.url),
-  ).text();
   expect(source.includes('services/kernel')).toBe(false);
   expect(source.includes('.sql')).toBe(false);
-  expect(decoders.includes('services/kernel')).toBe(false);
-  expect(decoders.includes('.sql')).toBe(false);
 });
 
 test('unknown fields, a mismatched selection and oversized response bodies stay unavailable', async () => {
@@ -259,6 +254,39 @@ test('creation acknowledgment selects the exact created id and a lost acknowledg
   expect(harness.requests[0]!.url).toBe(harness.requests[1]!.url);
   expect(await client.execute(intent)).toEqual({ kind: 'uncertain' });
   expect(harness.requests).toHaveLength(3);
+});
+
+test('caption and lifecycle acknowledgements use the mounted result bodies; a mismatched head stays uncertain', async () => {
+  const captionIntent = await captureQuestionManagementIntent({
+    action: 'caption',
+    read: selectedRead,
+    visit,
+    locale: 'en',
+    csrfToken,
+    body: { expectedLabelRevision: 2, label: 'Translation precision' },
+  });
+  const restoreIntent = await captureQuestionManagementIntent({
+    action: 'restore',
+    read: selectedRead,
+    visit,
+    locale: 'en',
+    csrfToken,
+    body: { expectedLifecycleRevision: 2 },
+  });
+  const harness = clientHarness((request) => {
+    const url = new URL(request.url);
+    if (url.pathname.endsWith('/label')) {
+      return Response.json({ questionId: retiredId, labelRevision: 3, label: 'Translation precision' });
+    }
+    return Response.json({ questionId: retiredId, lifecycle: { state: 'active', revision: 2 } });
+  });
+  const client = await harness.client;
+  expect(await client.execute(captionIntent)).toEqual({ kind: 'acknowledged', questionId: retiredId });
+  expect(await client.execute(restoreIntent)).toEqual({ kind: 'uncertain' });
+  const restore = clientHarness(() =>
+    Response.json({ questionId: retiredId, lifecycle: { state: 'active', revision: 3 } }),
+  );
+  expect(await (await restore.client).execute(restoreIntent)).toEqual({ kind: 'acknowledged', questionId: retiredId });
 });
 
 test('a different credential episode cannot send a retained original intent', async () => {

@@ -20,7 +20,6 @@ mock.module('../src/community/realm-membership-actions', () => ({
     return read();
   },
 }));
-mock.module('../src/community/space-actions', () => ({ changeRealmMembership: () => send() }));
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -37,6 +36,9 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// Modules that read the DOM when they load (the session query gates reads on `window`) must load after the globals.
+const actualSpaceActions = await import('../src/community/space-actions');
+mock.module('../src/community/space-actions', () => ({ ...actualSpaceActions, changeRealmMembership: () => send() }));
 const { createRoot } = await import('react-dom/client');
 const { RealmMembership } = await import('../src/community/realm-membership');
 type Completion = import('../src/community/realm-membership').RealmMembershipCompletion;
@@ -164,3 +166,32 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
     }
   },
 );
+
+test('signed-out visitors get the Join link to sign-in, and no control appears before the session is known', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const realm = { id: 'focus-realm', visibility: 'public' as const, viewer: null };
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const section = () => host.querySelector<HTMLElement>('[data-slot="realm-membership"]');
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RealmMembership realm={realm} returnTo="/en/spaces/atlas" />
+        </QueryClientProvider>,
+      ),
+    );
+    expect(section()).toBeNull();
+    await act(async () => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
+    const join = section()?.querySelector('a');
+    expect(join?.getAttribute('href')).toBe('/auth/sign-in?return_to=%2Fen%2Fspaces%2Fatlas');
+    expect(join?.textContent).toBe(m.realm_join());
+    expect(join?.parentElement?.className).toBe('flex flex-wrap items-center gap-3');
+    expect(section()?.className).not.toContain('rounded-lg border');
+    expect(section()?.textContent).not.toContain('Sign in to join this Realm.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

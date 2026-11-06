@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -6,6 +6,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { m } from '../src/paraglide/messages.js';
 import { browserObservation } from '../src/session/observation';
 import { sessionQueryKey } from '../src/session/browser-state';
+import {
+  actionsMock,
+  departureMock,
+  intentMock,
+  sessionMock,
+  stubs,
+  type QuestionStubs,
+} from './question-management-stubs';
 import type {
   QuestionCaptionInput,
   QuestionManagementCommandResult,
@@ -111,42 +119,49 @@ const intent = Object.freeze({
   serializedBody: JSON.stringify({ expectedLabelRevision: 1, label: 'Translation clarity' }),
 }) as QuestionManagementIntent;
 
-mock.module('../src/ratings/question-management/actions', () => ({
-  readQuestionManagementForViewer: () =>
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const actualActions = await import('../src/ratings/question-management/actions');
+mock.module('../src/ratings/question-management/actions', () => actionsMock(actualActions));
+const actualIntent = await import('../src/ratings/question-management/intent');
+mock.module('../src/ratings/question-management/intent', () => intentMock(actualIntent));
+const sessionModule = await import('../src/session/query');
+mock.module('../src/session/query', () => sessionMock(sessionModule));
+const actualDeparture = await import('../src/ratings/own-votes/departure');
+mock.module('../src/ratings/own-votes/departure', () => departureMock(actualDeparture));
+beforeEach(() => {
+  stubs.session = { state: 'signed-in', subject: viewerId, csrfToken };
+  stubs.read = () =>
     new Promise<QuestionManagementRead>((resolve) => {
       reads.push({ resolve });
-    }),
-  readQuestionManagementHistory: async (input: unknown) => {
+    });
+  stubs.history = async (input: unknown) => {
     histories.push(input);
     return { state: 'unavailable', questionId, cursor: null };
-  },
-  executeQuestionManagementIntent: (input: SendRequest['input']) =>
+  };
+  stubs.execute = (input: SendRequest['input']) =>
     new Promise<QuestionManagementCommandResult>((resolve) => {
       sends.push({ input, resolve });
-    }),
-}));
-mock.module('../src/ratings/question-management/intent', () => ({
-  captureQuestionManagementIntent: (input: unknown) => {
+    });
+  stubs.capture = (input: unknown) => {
     captures.push({ input, resolve: () => {} });
     return captureFactory(input);
-  },
-  questionManagementIntentMatchesPage: () => true,
-  validQuestionManagementBody: (_action: string, value: unknown) => {
+  };
+  stubs.matchesPage = () => true;
+  stubs.validBody = (_action, value) => {
     const body = value as QuestionCaptionInput;
     return typeof body.label === 'string' && body.label.trim().length > 0;
-  },
-}));
-mock.module('../src/session/query', () => ({
-  useSession: () => ({ state: 'signed-in', subject: viewerId, csrfToken }),
-}));
-mock.module('../src/ratings/own-votes/departure', () => ({
-  OwnVotesDeparture: (props: { dirty: boolean; locked: boolean; onLeave?: () => void }) => {
-    departures.push(props);
+  };
+  stubs.departure = (props) => {
+    departures.push(props as (typeof departures)[number]);
     return null;
-  },
-}));
+  };
+});
+afterEach(() => {
+  for (const key of Object.keys(stubs) as (keyof QuestionStubs)[]) delete stubs[key];
+});
 
 const { QuestionManagementPage } = await import('../src/ratings/question-management/page');
+
 const csrfEpisode = await (async () => {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(csrfToken)));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -216,6 +231,8 @@ function mount({ focusTicket: initialTicket = null }: { focusTicket?: QuestionMa
   externalFocus.textContent = 'Outside the question page';
   window.document.body.append(externalFocus);
   const root = createRoot(host);
+  // The route memoizes its address; a fresh literal per render would be a new read address.
+  const address = { selectedQuestionId: questionId, cursor: null };
   const render = (key: string, source = initial) => {
     const currentObservation = observationStore.getSnapshot();
     const currentAddressToken = addressToken;
@@ -226,7 +243,7 @@ function mount({ focusTicket: initialTicket = null }: { focusTicket?: QuestionMa
         createElement(QuestionManagementPage, {
           key,
           initial: source,
-          address: { selectedQuestionId: questionId, cursor: null },
+          address,
           locale: 'en',
           navigate: () => {},
           onSelectQuestion: () => {},

@@ -1,9 +1,7 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { m } from '../src/paraglide/messages.js';
-import { QuestionManagementContent } from '../src/ratings/question-management/page';
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import type {
   QuestionManagementHistoryRead,
   QuestionManagementPageData,
@@ -18,7 +16,6 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   IS_REACT_ACT_ENVIRONMENT: true,
-  requestAnimationFrame: (callback: FrameRequestCallback) => callback(0),
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
@@ -28,6 +25,10 @@ afterAll(() => {
     value ? Object.defineProperty(globalThis, key, value) : Reflect.deleteProperty(globalThis, key);
   window.happyDOM.abort();
 });
+// React DOM and the page read the DOM when they load, so they load after the happy-dom globals exist.
+const { createRoot } = await import('react-dom/client');
+const { m } = await import('../src/paraglide/messages.js');
+const { QuestionManagementContent } = await import('../src/ratings/question-management/page');
 
 const realmId = '019a1b2c-3d4e-7f00-8a00-5ab1ec702001';
 const viewerId = '019a1b2c-3d4e-7f00-8a00-5ab1ec702002';

@@ -361,7 +361,14 @@ the dev verifier owns clause measurements and broader acceptance after integrati
 `selectedQuestionId` for an authenticated current reader. It returns closed `viewer`, `realmId`, `directory`,
 `actions` and `selected` fields, with `Cache-Control: private, no-store`. Unknown and concealed Realms or exact
 selections share `404`. It does not initialize a question or change any existing writer. The mounted schema is
-the complete-input publisher's source; the new method has no claimed installed public Client declaration yet.
+the complete-input publisher's source. Decision: each rating schema file keeps `closed`, `id`, `grain` and
+`revision` as same-file values so load-time schema objects never read another Kernel file. The official
+client publishes that closed management page and caption history as runtime schemas (`CLIENT_RUNTIME_ENTRIES`)
+and derives `QuestionManagementPage`, `QuestionLabelHistory`, `QuestionCreateResult`, `QuestionLabelResult`
+and `QuestionLifecycleResult` from the installed callables. Web receiving validates those schemas and
+acknowledges commands only from the matching success bodies; a current question readback cannot acknowledge
+an uncertain command. Create acknowledgement reads the installed POST data union and compares the mounted
+201 body; treaty optional-field and literal widening is not a second public type.
 
 Decision: management reuses the native active-question directory; a retired definition remains inspectable by
 exact selection, with Restore advice only when current native `realm:manage` permits it.

@@ -1,4 +1,14 @@
-import { createKernelClient, decodeQuestionManagementPage, decodeQuestionLabelHistory } from '@rezics/client';
+import {
+  createKernelClient,
+  QuestionManagementResponseSchema,
+  RatingQuestionLabelHistorySchema,
+  type KernelClient,
+  type QuestionCreateResult,
+  type QuestionLabelHistory,
+  type QuestionLabelResult,
+  type QuestionLifecycleResult,
+} from '@rezics/client';
+import { Value } from 'typebox/value';
 import { requestLanguages } from '../../kernel/languages';
 import { parseQuestionManagementIntent } from './intent';
 import type {
@@ -10,6 +20,7 @@ import type {
 } from './types';
 
 const MAX_RESPONSE_BYTES = 1_048_576;
+const QUESTION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type QuestionManagementSourceResult =
   | { state: 'ready'; page: QuestionManagementPageData }
@@ -50,15 +61,17 @@ async function boundedBody(response: Response): Promise<ArrayBuffer> {
   return body;
 }
 
+/** Bounded bytes must be exact UTF-8 before the installed client parses them; malformed bytes stay unavailable. */
 async function boundedResponse(response: Response): Promise<Response> {
   const body = await boundedBody(response);
+  new TextDecoder('utf-8', { fatal: true }).decode(body);
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 function clientFor(input: {
   origin: string;
   authorization: string;
-  csrfToken: string;
+  csrfToken?: string;
   locale: string;
   fetcher?: typeof fetch;
   signal?: AbortSignal;
@@ -71,7 +84,7 @@ function clientFor(input: {
       'accept-language',
       languages.map((language, index) => `${language}${index ? `;q=${1 - index / 10}` : ''}`).join(', '),
     );
-    headers.set('x-csrf-token', input.csrfToken);
+    if (input.csrfToken !== undefined) headers.set('x-csrf-token', input.csrfToken);
     return boundedResponse(
       await (input.fetcher ?? fetch)(url, {
         ...init,
@@ -86,16 +99,81 @@ function clientFor(input: {
   return createKernelClient(input.origin, { fetch: transport });
 }
 
-function managementPath(address: QuestionManagementAddress): string {
-  const query = new URLSearchParams();
-  if (address.selectedQuestionId) query.set('selectedQuestionId', address.selectedQuestionId);
-  if (address.cursor) query.set('cursor', address.cursor);
-  const encoded = query.toString();
-  const suffix = encoded ? `?${encoded}` : '';
-  return `/v1/realms/${encodeURIComponent(address.realmId)}/rating-questions/management${suffix}`;
+function isManagementPage(value: unknown): value is QuestionManagementPageData {
+  return Value.Check(QuestionManagementResponseSchema(), value);
 }
 
-/** Minimal local consumer seam for the mounted management source. It checks the mounted closed schema before use. */
+function isLabelHistory(value: unknown): value is QuestionLabelHistory {
+  return Value.Check(RatingQuestionLabelHistorySchema, value);
+}
+
+function commandStatus(response: {
+  status: number;
+  error?: { value?: unknown } | null;
+}): QuestionManagementCommandResult | null {
+  if (response.status === 409 || response.status === 404) return { kind: 'stale' };
+  if (response.status === 401 || response.status === 403) return { kind: 'denied' };
+  if (response.status === 400 || response.status === 422) return { kind: 'invalid' };
+  if (response.status < 200 || response.status >= 300) {
+    const problem = response.error?.value;
+    if (problem && typeof problem === 'object' && 'effect_status' in problem && problem.effect_status === 'not_applied')
+      return { kind: 'unavailable' };
+    return { kind: 'uncertain' };
+  }
+  return null;
+}
+
+type QuestionCreatePost = ReturnType<KernelClient['realms']>['rating-questions']['post'];
+type QuestionCreateData = NonNullable<
+  Awaited<QuestionCreatePost extends (...args: never[]) => infer Result ? Result : QuestionCreatePost>['data']
+>;
+
+function acknowledgedCreate(
+  data: QuestionCreateData,
+  intent: Extract<QuestionManagementIntent, { action: 'create' }>,
+): data is QuestionCreateData & { id: string } {
+  const created = data as QuestionCreateResult;
+  return (
+    QUESTION_ID.test(created.id) &&
+    created.realmId === intent.realmId &&
+    created.meaning === intent.body.meaning &&
+    created.label === intent.body.label &&
+    created.canonicalLabel === intent.body.label &&
+    created.labelRevision === 1 &&
+    created.revision === 1 &&
+    created.grain === intent.body.grain &&
+    created.scale.min === intent.body.scale.min &&
+    created.scale.max === intent.body.scale.max &&
+    created.scale.displayStep === intent.body.scale.displayStep &&
+    created.lifecycle !== undefined &&
+    created.lifecycle.state === 'active' &&
+    created.lifecycle.revision === 1
+  );
+}
+
+function acknowledgedCaption(
+  data: QuestionLabelResult,
+  intent: Extract<QuestionManagementIntent, { action: 'caption' }>,
+): boolean {
+  return (
+    data.questionId === intent.questionId &&
+    data.labelRevision === intent.body.expectedLabelRevision + 1 &&
+    data.label === intent.body.label
+  );
+}
+
+function acknowledgedLifecycle(
+  data: QuestionLifecycleResult,
+  intent: Extract<QuestionManagementIntent, { action: 'retire' | 'restore' }>,
+): boolean {
+  return (
+    data.questionId === intent.questionId &&
+    data.lifecycle.state === (intent.action === 'retire' ? 'retired' : 'active') &&
+    data.lifecycle.revision === intent.body.expectedLifecycleRevision + 1
+  );
+}
+
+/** Reads the mounted management page through the installed Realm callable, with its status, byte and shape checks. */
 export async function readQuestionManagementSource(input: {
   origin: string;
   authorization: string;
@@ -104,36 +182,26 @@ export async function readQuestionManagementSource(input: {
   fetcher?: typeof fetch;
   signal?: AbortSignal;
 }): Promise<QuestionManagementSourceResult> {
-  const languages = requestLanguages(input.locale);
-  let response: Response;
-  try {
-    response = await (input.fetcher ?? fetch)(new URL(managementPath(input.address), input.origin), {
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        authorization: input.authorization,
-        accept: 'application/json',
-        'accept-language': languages
-          .map((language, index) => `${language}${index ? `;q=${1 - index / 10}` : ''}`)
-          .join(', '),
+  const client = clientFor(input);
+  const result = await client
+    .realms({ realmId: input.address.realmId })
+    ['rating-questions'].management.get({
+      query: {
+        ...(input.address.selectedQuestionId ? { selectedQuestionId: input.address.selectedQuestionId } : {}),
+        ...(input.address.cursor ? { cursor: input.address.cursor } : {}),
       },
-      ...(input.signal ? { signal: input.signal } : {}),
-    });
-  } catch {
-    return { state: 'unavailable' };
-  }
+    })
+    .catch(() => undefined);
+  if (!result) return { state: 'unavailable' };
 
-  if (response.status === 401) return { state: 'denied' };
-  if (response.status === 403) return { state: 'denied' };
-  if (response.status === 404) return { state: 'concealed' };
-  if (response.status === 409) return { state: 'stale-cursor' };
-  if (!response.ok) return { state: 'unavailable' };
+  if (result.status === 401 || result.status === 403) return { state: 'denied' };
+  if (result.status === 404) return { state: 'concealed' };
+  if (result.status === 409) return { state: 'stale-cursor' };
+  if (result.status !== 200) return { state: 'unavailable' };
 
   try {
-    const body = await boundedBody(response);
-    const source: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
-    const page = decodeQuestionManagementPage(source);
-    if (!page) return { state: 'unavailable' };
+    if (!isManagementPage(result.data)) return { state: 'unavailable' };
+    const page = result.data;
     if (
       page.realmId !== input.address.realmId ||
       page.directory.ratingQuestions.some((question) => question.realmId !== input.address.realmId) ||
@@ -181,15 +249,14 @@ export async function createQuestionManagementClient(input: {
         query: { limit: 20, ...(cursor === null ? {} : { cursor }) },
       });
       if (result.status === 409) return unavailable('stale-cursor');
-      const page = result.status === 200 ? decodeQuestionLabelHistory(result.data) : null;
-      if (!page) return unavailable('unavailable');
+      if (result.status !== 200 || !isLabelHistory(result.data)) return unavailable('unavailable');
       if (
-        page.labels.length > 20 ||
-        (page.next !== null && page.next.length > 4096) ||
-        page.labels.some((label) => label.questionId !== questionId)
+        result.data.labels.length > 20 ||
+        (result.data.next !== null && result.data.next.length > 4096) ||
+        result.data.labels.some((label) => label.questionId !== questionId)
       )
         return unavailable('unavailable');
-      return { state: 'ready', questionId, cursor, page };
+      return { state: 'ready', questionId, cursor, page: result.data };
     } catch {
       return unavailable('unavailable');
     }
@@ -210,92 +277,35 @@ export async function createQuestionManagementClient(input: {
       },
     };
     try {
-      let response:
-        | Awaited<ReturnType<ReturnType<typeof client.realms>['rating-questions']['post']>>
-        | Awaited<ReturnType<ReturnType<(typeof client)['rating-questions']>['label']['put']>>
-        | Awaited<ReturnType<ReturnType<(typeof client)['rating-questions']>['$retire']['post']>>;
       if (intent.action === 'create') {
-        response = await client.realms({ realmId: intent.realmId })['rating-questions'].post(intent.body, options);
-      } else if (intent.action === 'caption') {
-        response = await client['rating-questions']({ questionId: intent.questionId }).label.put(intent.body, options);
-      } else if (intent.action === 'retire') {
-        response = await client['rating-questions']({ questionId: intent.questionId })['$retire'].post(
-          intent.body,
-          options,
-        );
-      } else {
-        response = await client['rating-questions']({ questionId: intent.questionId })['$restore'].post(
-          intent.body,
-          options,
-        );
-      }
-      if (response.status === 409 || response.status === 404) return { kind: 'stale' };
-      if (response.status === 401 || response.status === 403) return { kind: 'denied' };
-      if (response.status === 400 || response.status === 422) return { kind: 'invalid' };
-      if (response.status < 200 || response.status >= 300) {
-        const problem = response.error?.value;
-        if (
-          problem &&
-          typeof problem === 'object' &&
-          'effect_status' in problem &&
-          problem.effect_status === 'not_applied'
-        )
-          return { kind: 'unavailable' };
+        const response = await client
+          .realms({ realmId: intent.realmId })
+          ['rating-questions'].post(intent.body, options);
+        const failed = commandStatus(response);
+        if (failed) return failed;
+        if (response.status === 201 && response.data && acknowledgedCreate(response.data, intent))
+          return { kind: 'acknowledged', questionId: response.data.id };
         return { kind: 'uncertain' };
       }
-
-      const data = response.data as unknown as Record<string, unknown>;
-      if (intent.action === 'create') {
-        if (
-          response.status === 201 &&
-          typeof data.id === 'string' &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.id) &&
-          data.realmId === intent.realmId &&
-          data.meaning === intent.body.meaning &&
-          data.label === intent.body.label &&
-          data.canonicalLabel === intent.body.label &&
-          data.labelRevision === 1 &&
-          data.revision === 1 &&
-          data.grain === intent.body.grain &&
-          data.scale !== null &&
-          typeof data.scale === 'object' &&
-          'min' in data.scale &&
-          data.scale.min === intent.body.scale.min &&
-          'max' in data.scale &&
-          data.scale.max === intent.body.scale.max &&
-          'displayStep' in data.scale &&
-          data.scale.displayStep === intent.body.scale.displayStep &&
-          data.lifecycle !== null &&
-          typeof data.lifecycle === 'object' &&
-          'state' in data.lifecycle &&
-          data.lifecycle.state === 'active' &&
-          'revision' in data.lifecycle &&
-          data.lifecycle.revision === 1
-        )
-          return { kind: 'acknowledged', questionId: data.id };
-      } else if (intent.action === 'caption') {
-        if (
-          response.status === 200 &&
-          data.questionId === intent.questionId &&
-          data.labelRevision === intent.body.expectedLabelRevision + 1 &&
-          data.label === intent.body.label
-        )
+      if (intent.action === 'caption') {
+        const response = await client['rating-questions']({ questionId: intent.questionId }).label.put(
+          intent.body,
+          options,
+        );
+        const failed = commandStatus(response);
+        if (failed) return failed;
+        if (response.status === 200 && response.data && acknowledgedCaption(response.data, intent))
           return { kind: 'acknowledged', questionId: intent.questionId };
-      } else {
-        const lifecycle = data.lifecycle;
-        const state = intent.action === 'retire' ? 'retired' : 'active';
-        if (
-          response.status === 200 &&
-          data.questionId === intent.questionId &&
-          lifecycle &&
-          typeof lifecycle === 'object' &&
-          'state' in lifecycle &&
-          lifecycle.state === state &&
-          'revision' in lifecycle &&
-          lifecycle.revision === intent.body.expectedLifecycleRevision + 1
-        )
-          return { kind: 'acknowledged', questionId: intent.questionId };
+        return { kind: 'uncertain' };
       }
+      const response =
+        intent.action === 'retire'
+          ? await client['rating-questions']({ questionId: intent.questionId })['$retire'].post(intent.body, options)
+          : await client['rating-questions']({ questionId: intent.questionId })['$restore'].post(intent.body, options);
+      const failed = commandStatus(response);
+      if (failed) return failed;
+      if (response.status === 200 && response.data && acknowledgedLifecycle(response.data, intent))
+        return { kind: 'acknowledged', questionId: intent.questionId };
       return { kind: 'uncertain' };
     } catch {
       return { kind: 'uncertain' };

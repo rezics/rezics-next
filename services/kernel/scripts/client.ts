@@ -214,12 +214,56 @@ export function committedDeclarations(): Map<string, string> {
   }
 }
 
+/**
+ * Kernel schema modules the installed package ships as runtime code. Each entry's relative import closure is copied
+ * byte for byte to the same relative path under `packages/client/src/kernel`, so relative imports resolve unchanged.
+ * Only `elysia` may be imported from outside the closure: the package cannot depend on Kernel services.
+ */
+export const CLIENT_RUNTIME_ENTRIES = ['rating/question-management-schemas.ts'] as const;
+const RUNTIME_PACKAGES: ReadonlySet<string> = new Set(['elysia']);
+
+export function runtimeClosure(
+  entries: readonly string[] = CLIENT_RUNTIME_ENTRIES,
+  sourceRoot = resolve(KERNEL, 'src'),
+): Map<string, string> {
+  const result = new Map<string, string>();
+  const pending = [...entries];
+  while (pending.length > 0) {
+    const key = pending.pop()!;
+    if (result.has(key)) continue;
+    if (!key.endsWith('.ts') || key.endsWith('.d.ts'))
+      throw new Error(`Runtime closure entry is not a TypeScript source: ${key}`);
+    const content = readFileSync(resolve(sourceRoot, key), 'utf8');
+    result.set(key, content);
+    for (const specifier of declarationSpecifiers(content)) {
+      if (specifier.startsWith('.')) {
+        const target = relative(sourceRoot, resolve(sourceRoot, dirname(key), specifier));
+        if (target.startsWith('..') || !target.endsWith('.ts'))
+          throw new Error(`Runtime closure ${key} imports ${specifier}, outside the Kernel source tree`);
+        pending.push(target);
+      } else if (!RUNTIME_PACKAGES.has(specifier)) {
+        throw new Error(
+          `Runtime closure ${key} imports ${specifier}; the installed package provides only ${[...RUNTIME_PACKAGES].join(', ')}`,
+        );
+      }
+    }
+  }
+  return sorted(result);
+}
+
 if (import.meta.main) {
   const declarations = clientDeclarations();
   console.log(`Kernel client declaration closure: ${declarations.size} members`);
   rmSync(CLIENT_DECLARATIONS, { recursive: true, force: true });
   mkdirSync(CLIENT_DECLARATIONS, { recursive: true });
   for (const [key, content] of declarations) {
+    const path = resolve(CLIENT_DECLARATIONS, key);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, content);
+  }
+  const runtime = runtimeClosure();
+  console.log(`Kernel client runtime closure: ${runtime.size} modules`);
+  for (const [key, content] of runtime) {
     const path = resolve(CLIENT_DECLARATIONS, key);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, content);

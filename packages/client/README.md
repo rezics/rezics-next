@@ -41,3 +41,10 @@ Decision: the preparation read uses a local `KernelClient` type seam over the ge
 
 Decision: client assertions follow [Content's authoring contract](../../services/kernel/src/content/README.md):
 post creation accepts protected visibility; revisions accept only published or draft visibility.
+
+Decision: the official generator copies Realm question-management and caption-history schemas as installed runtime
+modules (`CLIENT_RUNTIME_ENTRIES` in `services/kernel/scripts/client.ts`). Public `QuestionManagementPage`,
+`QuestionLabelHistory`, `QuestionCreateResult`, `QuestionLabelResult` and `QuestionLifecycleResult` stay derived
+from the mounted callables; Web receiving uses those types and the published schemas, not a Kernel path. Create
+acknowledgement reads the installed POST data union and compares the mounted 201 body; treaty optional-field and
+literal widening is not a second public type.
