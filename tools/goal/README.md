@@ -2829,8 +2829,9 @@ readiness and starts its heartbeats right after binding its socket, before manag
 event loop every half watchdog interval. A crash, kill or stopped event loop therefore causes systemd to restart it, and
 no scheduler pass can delay a heartbeat. `KillMode=process` limits host termination to the main PID; worker scopes in
 `rezics-workers.slice` beneath `rezics.slice` and the merge train survive.
-Decision: the host event loop never waits on git, Docker, a worktree walk or a full task load. Each scheduled step runs as
-a background command or yields between bounded batches: the reaper runs Docker asynchronously and reads running attempts
+Decision: scheduled host steps do not run git, Docker, worktree walks or full task loads on the event loop. Each runs as
+a background command or yields between bounded batches; a removal fallback on the rare not-a-working-tree path and the
+256 KiB measurement read remain synchronous: the reaper runs Docker asynchronously and reads running attempts
 from the current-attempt index; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
