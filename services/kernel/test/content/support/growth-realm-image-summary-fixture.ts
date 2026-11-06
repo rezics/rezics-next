@@ -31,6 +31,7 @@ export async function realmImageSummaryFixture() {
     await native.grant(alice.accountId, realmId, ['realm:manage']);
     const deps = {
       pool: db.pool,
+      deadlineNow: () => Date.now(),
       access: testAccess({
         pool: db.pool,
         actions: actionCatalogue(native.kernel),

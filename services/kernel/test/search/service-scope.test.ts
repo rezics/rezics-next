@@ -105,6 +105,7 @@ describe('real constructor binding and native reuse', () => {
           pool: config.pool,
           tokens: config.tokens!,
           clock: config.clock ?? (() => new Date()),
+          deadlineNow: () => Date.now(),
           ...(config.access === undefined ? {} : { access: config.access }),
         });
         return createKernel({

@@ -57,6 +57,7 @@ function productionComposition(): { kernel: Kernel; access: Access } {
     pool,
     tokens: runtime.tokens,
     clock: runtime.clock,
+    deadlineNow: runtime.deadlineNow,
     access: runtime.access,
   });
   const kernel = createKernel({ pool, routeKey: testRouteKey(), ...runtime, access: accessComposition.resolveAccess });

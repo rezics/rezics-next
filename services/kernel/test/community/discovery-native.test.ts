@@ -114,7 +114,13 @@ async function catchUp(realmId: string) {
 }
 function page(sort: 'popular' | 'trending', cursor?: string, limit = 20): Promise<DiscoveryPage> {
   return listRealmDiscovery(
-    { pool: system.database.pool, access: system.access, tokens: system.tokenKeys, clock },
+    {
+      pool: system.database.pool,
+      access: system.access,
+      tokens: system.tokenKeys,
+      clock,
+      deadlineNow: () => Date.now(),
+    },
     Date.now() + 30_000,
     { sort, limit, ...(cursor ? { cursor } : {}) },
   );

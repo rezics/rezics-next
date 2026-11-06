@@ -170,6 +170,7 @@ test('platform restoration uses the installed exact Global action, independently
           access: derived,
           routeKey: system.routeKey,
           clock: () => new Date(current),
+          deadlineNow: () => Date.now(),
         },
         platform().actor,
         {

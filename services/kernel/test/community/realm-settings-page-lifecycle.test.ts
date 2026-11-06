@@ -92,9 +92,14 @@ test.serial('a manager session suspended during composition cannot receive a set
 
   let returned = false;
   try {
-    await readRealmSettingsPage({ pool: f.db.pool, access }, f.base.system.actors.other.actor, s.realmId, {
-      deadline: Date.now() + 30_000,
-    });
+    await readRealmSettingsPage(
+      { pool: f.db.pool, access, deadlineNow: () => Date.now() },
+      f.base.system.actors.other.actor,
+      s.realmId,
+      {
+        deadline: Date.now() + 30_000,
+      },
+    );
     returned = true;
   } catch {
     returned = false;

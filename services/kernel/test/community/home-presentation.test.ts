@@ -42,10 +42,14 @@ async function patch(realmId: string, head: string, body: unknown) {
 }
 
 function read(realmId: string, access = world.system.access) {
-  return readRealmHomePresentation({ pool: world.system.database.pool, access }, realmId, {
-    actor: { kind: 'anonymous' },
-    deadline: Date.now() + 30_000,
-  });
+  return readRealmHomePresentation(
+    { pool: world.system.database.pool, access, deadlineNow: () => Date.now() },
+    realmId,
+    {
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    },
+  );
 }
 
 /** The native reader releases its first home snapshot before preparing rules. */
