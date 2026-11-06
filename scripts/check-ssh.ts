@@ -228,7 +228,11 @@ async function masterControl(
 }
 
 /** True when the host's persisted master is alive and accepting multiplexed sessions. */
-export async function hostMasterIsLive(host: SshControlHost, directory: string, timeoutMs = 1_000): Promise<boolean> {
+export async function hostMasterIsLive(
+  host: SshControlHost,
+  directory: string,
+  timeoutMs = 1_000,
+): Promise<boolean> {
   const result = await masterControl(host, directory, 'check', timeoutMs);
   return result.code === 0;
 }
@@ -237,7 +241,11 @@ export async function hostMasterIsLive(host: SshControlHost, directory: string, 
  * Drop only a stale or lost master. Live masters stay up so other runs keep their connection.
  * OpenSSH `-O exit` is a no-op once the socket is already gone.
  */
-export async function dropStaleHostMaster(host: SshControlHost, directory: string, timeoutMs = 1_000): Promise<void> {
+export async function dropStaleHostMaster(
+  host: SshControlHost,
+  directory: string,
+  timeoutMs = 1_000,
+): Promise<void> {
   if (await hostMasterIsLive(host, directory, timeoutMs)) return;
   await masterControl(host, directory, 'exit', timeoutMs);
 }
