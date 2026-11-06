@@ -14,7 +14,7 @@ test('the seeded walk mints website Kernel bearers through login then OAuth, nev
   const source = readFileSync(resolve(import.meta.dir, '../scripts/managed-accounts-seeded-walk.ts'), 'utf8');
   expect(source).not.toMatch(/developerSignIn\([^)]*WEBSITE_CLIENT_ID/);
   expect(source).not.toMatch(/signIn\([^;]*WEBSITE_CLIENT_ID/);
-  expect(source).toContain("client_id: WEBSITE_CLIENT_ID");
+  expect(source).toContain('client_id: WEBSITE_CLIENT_ID');
   expect(source).toContain("grant_type: 'authorization_code'");
   expect(source).toContain("signIn(stack, person, 'login', [], secret)");
 });
