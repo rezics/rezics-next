@@ -20,10 +20,10 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(env).toMatchObject({
     OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
-    KERNEL_SEARCH_MEMORY: '512m',
-    KERNEL_DATABASE_MEMORY: '384m',
+    KERNEL_SEARCH_MEMORY: '256m',
+    KERNEL_DATABASE_MEMORY: '256m',
     KERNEL_DATABASE_BOUNDED: '1',
-    KERNEL_WORKER_POOL_SIZE: '4',
+    KERNEL_WORKER_POOL_SIZE: '1',
     REZICS_WALK_SMOL: '1',
     REZICS_WALK_DEFER_FRONTENDS: '1',
     MALLOC_ARENA_MAX: '2',
@@ -38,11 +38,11 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(environment).toContain('OPENSEARCH_JAVA_OPTS=-Xms128m -Xmx128m');
   expect(environment).toContain('node.store.allow_mmap=false');
   expect(search).toContain('--memory');
-  expect(search[search.indexOf('--memory') + 1]).toBe('512m');
-  expect(search[search.indexOf('--memory-swap') + 1]).toBe('512m');
+  expect(search[search.indexOf('--memory') + 1]).toBe('256m');
+  expect(search[search.indexOf('--memory-swap') + 1]).toBe('256m');
   const database = databaseRunArgs(env);
-  expect(database[database.indexOf('--memory') + 1]).toBe('384m');
-  expect(database[database.indexOf('--memory-swap') + 1]).toBe('384m');
+  expect(database[database.indexOf('--memory') + 1]).toBe('256m');
+  expect(database[database.indexOf('--memory-swap') + 1]).toBe('256m');
   expect(database).toContain('shared_buffers=32MB');
   expect(database).toContain('max_connections=50');
   expect(searchRunArgs('native-policy-test-image', {})).not.toContain('--memory');
@@ -50,6 +50,14 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
     'KERNEL_SEARCH_MEMORY',
   );
+});
+
+test('the seeded walk loads Playwright and the worker only after dump import', async () => {
+  const source = await Bun.file(join(import.meta.dir, '../apps/web/scripts/vndb-seeded-journey.ts')).text();
+  expect(source.includes("from 'playwright/test'")).toBe(false);
+  expect(source).toContain("await import('playwright')");
+  expect(source).toContain("await import('playwright/test')");
+  expect(source).toContain("spawn('worker')");
 });
 
 test('walk issuer forwarding keeps POST bodies for native Auth', async () => {

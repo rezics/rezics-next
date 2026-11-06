@@ -751,7 +751,7 @@ export function walkHostPersonaAccount(
   return match?.[1];
 }
 
-/** Kernel, worker and native Auth. Web and Auth pages stay down through persona/seed when deferred. */
+/** Kernel and native Auth. Web, Auth pages and the worker stay down through persona/seed when deferred. */
 export function walkStartProcesses(
   env: NodeJS.ProcessEnv = process.env,
 ): ReadonlyArray<{ command: string[]; cwd: string }> {
@@ -768,7 +768,42 @@ export function walkStartProcesses(
     env.REZICS_WALK_SMOL === '1'
       ? { command: [...bun, 'src/worker.ts'], cwd: kernel }
       : { command: [...bun, 'run', '--cwd', 'services/kernel', 'worker'], cwd: root };
-  return env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [host, server, worker] : [host, pages, web, server, worker];
+  return env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [host, server] : [host, pages, web, server, worker];
+}
+
+/** Walk `start` is a waiter; it still loads this module, so it runs under bun --smol on a walk host. */
+export function walkStackStartCommand(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [...walkBun(env), 'services/auth/scripts/dev-stack.ts', 'start'];
+}
+
+/** Durable work shares the 6 GiB slice with dump import unless the journey starts it after seed. */
+async function serveWorker() {
+  const env = {
+    ...process.env,
+    ...(await kernelEnvironment()),
+    ...developmentKernelBindings(),
+  };
+  const bun = walkBun(env);
+  const kernel = join(root, 'services/kernel');
+  const child = Bun.spawn(
+    env.REZICS_WALK_SMOL === '1' ? [...bun, 'src/worker.ts'] : [...bun, 'run', '--cwd', 'services/kernel', 'worker'],
+    {
+      cwd: env.REZICS_WALK_SMOL === '1' ? kernel : root,
+      env,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    },
+  );
+  const stop = () => child.kill('SIGTERM');
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  try {
+    process.exitCode = await child.exited;
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
 }
 
 async function start() {
@@ -917,7 +952,7 @@ async function walk(command: string[]): Promise<number> {
         }
         const log = join(root, '.temp', 'walk', task, 'stack.log');
         await mkdir(dirname(log), { recursive: true });
-        starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
+        starting = current = Bun.spawn(walkStackStartCommand(env), {
           cwd: root,
           env,
           stdin: 'ignore',
@@ -991,11 +1026,12 @@ if (import.meta.main) {
         }
       }
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
+    else if (action === 'worker') await serveWorker();
     else if (action === 'start') await start();
     else if (action === 'walk') {
       const rest = process.argv.slice(3);
       process.exitCode = await walk(rest[0] === '--' ? rest.slice(1) : rest);
-    } else throw new Error('Use setup, start, host, pages, web, persona or walk');
+    } else throw new Error('Use setup, start, host, pages, web, worker, persona or walk');
   } catch (error) {
     console.error(error);
     process.exit(1);

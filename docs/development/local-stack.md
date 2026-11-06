@@ -230,13 +230,13 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    listeners or Docker-published mappings, including containers surviving an interrupted launcher. A Docker bind that
    still reports the port allocated skips that slot and admits another. Those listeners remain untouched; when all
    slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, then starts native Auth, Kernel and the worker. It waits until native Auth
-   JWKS and Kernel health answer, for at most ten minutes. Vite/workerd for Web and Auth pages stay down through
-   persona and seed so they cannot share the 6 GiB run slice with dump import. Output goes to
+3. Runs `db up`, `search up` and `setup`, then starts native Auth and Kernel. It waits until native Auth
+   JWKS and Kernel health answer, for at most ten minutes. Vite/workerd for Web and Auth pages, Playwright and the
+   worker stay down through persona and seed so they cannot share the 6 GiB run slice with dump import. Output goes to
    `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
    inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`. A seeded browser journey starts
-   Web and Auth pages after seed, forwarding issuer JWKS through native Auth until those pages bind.
+   Web, Auth pages and the worker after seed, forwarding issuer JWKS through native Auth until those pages bind.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
@@ -248,15 +248,15 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance. Remote placement forwards the original launcher `GOAL_TASK_ID`,
 `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv. Walk search
-nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker memory ceilings (search 512m, database
-384m) so seeded volume file cache cannot fill the 6 GiB run slice. Kernel and the worker start with bun --smol against
-`src/server.ts` / `src/worker.ts` (no `--watch`). Web and Auth pages start after seed.
+nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker memory ceilings (search 256m, database
+256m) so seeded volume file cache cannot fill the 6 GiB run slice. Kernel starts with bun --smol against
+`src/server.ts` (no `--watch`); the worker pool is 1. Web, Auth pages and the worker start after seed.
 Walk admission is host-wide at `/tmp/rezics-walk-stacks` so concurrent remote-check checkouts share slots and ports;
 this task's leftover containers are removed before admission, and a Docker bind that still reports the port allocated
 skips that slot.
 `persona` inside a deferred-frontend walk reuses the host-written `seed.env` instead of assembling a second Auth+Kernel
 composition in the 6 GiB slice. Issuer JWKS and seed `POST /signin/key` are forwarded onto native Auth with the original
-request, including POST bodies, until Auth pages bind.
+request, including POST bodies, until Auth pages bind. The walk `start` waiter itself runs under bun --smol.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
@@ -281,6 +281,7 @@ admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when t
 Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
 Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in session is a second
 browser. Chromium runs one renderer without GPU or media so capture buffers do not accumulate across visits.
+Playwright is imported only after seed so its native heap cannot share the dump-import slice.
 
 Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
 defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona

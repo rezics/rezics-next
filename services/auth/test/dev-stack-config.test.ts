@@ -24,6 +24,7 @@ import {
   importerScopes,
   walkBun,
   walkHostPersonaAccount,
+  walkStackStartCommand,
   walkStartProcesses,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
@@ -314,7 +315,7 @@ test('a walk persona reuses the host-written seed.env instead of assembling a se
   ).toBeUndefined();
 });
 
-test('a walk start keeps Vite down through seed and runs Kernel without watch', () => {
+test('a walk start keeps Vite and the worker down through seed and runs Kernel without watch', () => {
   const ordinary = walkStartProcesses({});
   expect(ordinary.map((row) => row.command.join(' '))).toEqual([
     'bun services/auth/scripts/dev-stack.ts host',
@@ -325,8 +326,15 @@ test('a walk start keeps Vite down through seed and runs Kernel without watch', 
   ]);
   const walk = walkStartProcesses({ REZICS_WALK_SMOL: '1', REZICS_WALK_DEFER_FRONTENDS: '1' });
   expect(walkBun({ REZICS_WALK_SMOL: '1' })).toEqual([process.execPath, '--smol']);
-  expect(walk.map((row) => row.command.slice(-1)[0])).toEqual(['host', 'src/server.ts', 'src/worker.ts']);
+  expect(walkStackStartCommand({ REZICS_WALK_SMOL: '1' })).toEqual([
+    process.execPath,
+    '--smol',
+    'services/auth/scripts/dev-stack.ts',
+    'start',
+  ]);
+  expect(walk.map((row) => row.command.slice(-1)[0])).toEqual(['host', 'src/server.ts']);
   expect(walk.some((row) => row.command.includes('pages') || row.command.includes('web'))).toBe(false);
+  expect(walk.some((row) => row.command.includes('worker') || row.command.includes('src/worker.ts'))).toBe(false);
   expect(walk.some((row) => row.command.includes('dev'))).toBe(false);
 });
 

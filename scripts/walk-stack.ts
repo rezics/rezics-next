@@ -116,12 +116,12 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     // Seeded indexes stay on niofs; docker memory ceilings stop volume file cache filling the 6 GiB run slice.
     OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
-    KERNEL_SEARCH_MEMORY: '512m',
-    KERNEL_DATABASE_MEMORY: '384m',
+    KERNEL_SEARCH_MEMORY: '256m',
+    KERNEL_DATABASE_MEMORY: '256m',
     KERNEL_DATABASE_BOUNDED: '1',
-    KERNEL_WORKER_POOL_SIZE: '4',
+    KERNEL_WORKER_POOL_SIZE: '1',
     REZICS_WALK_SMOL: '1',
-    // Vite/workerd for Web and Auth pages stay down through persona/seed; the journey starts them for browsers.
+    // Vite/workerd, Playwright and the worker stay down through persona/seed; the journey starts them for browsers.
     REZICS_WALK_DEFER_FRONTENDS: '1',
     MALLOC_ARENA_MAX: '2',
   };

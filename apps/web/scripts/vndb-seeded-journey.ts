@@ -2,8 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright';
-import { expect } from 'playwright/test';
+import type { Browser, Page } from 'playwright';
 import { createKernelClient } from '@rezics/client';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
 import type { DevelopmentShowcaseReport } from '../../../scripts/datasets/cross-media-seed.ts';
@@ -20,6 +19,8 @@ const stack = {
   kernel: requiredOrigin('REZICS_LOCAL_STACK_KERNEL_ORIGIN'),
 };
 const bun = process.env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
+let chromium!: (typeof import('playwright'))['chromium'];
+let expect!: (typeof import('playwright/test'))['expect'];
 const report: {
   revision: string;
   browser: string;
@@ -85,7 +86,7 @@ function issuerProxy(): ReturnType<typeof Bun.serve> {
 }
 
 async function withFrontends<T>(run: () => Promise<T>): Promise<T> {
-  const spawn = (action: 'pages' | 'web') =>
+  const spawn = (action: 'pages' | 'web' | 'worker') =>
     Bun.spawn([...bun, 'services/auth/scripts/dev-stack.ts', action], {
       cwd: root,
       env: process.env,
@@ -93,12 +94,15 @@ async function withFrontends<T>(run: () => Promise<T>): Promise<T> {
       stdout: 'inherit',
       stderr: 'inherit',
     });
+  const worker = spawn('worker');
   const pages = spawn('pages');
   try {
     await untilOrigin(stack.issuer, pages);
     const web = spawn('web');
     try {
       await untilOrigin(stack.web, web);
+      if (worker.exitCode !== null || worker.signalCode !== null)
+        throw new Error(`walk worker exited (${worker.exitCode ?? worker.signalCode}) before browsers ran`);
       return await run();
     } finally {
       web.kill('SIGTERM');
@@ -106,7 +110,9 @@ async function withFrontends<T>(run: () => Promise<T>): Promise<T> {
     }
   } finally {
     pages.kill('SIGTERM');
+    worker.kill('SIGTERM');
     await pages.exited;
+    await worker.exited;
   }
 }
 
@@ -272,6 +278,8 @@ try {
   report.phases.push('actual-publication-and-native-entry');
 
   await withFrontends(async () => {
+  ({ chromium } = await import('playwright'));
+  ({ expect } = await import('playwright/test'));
   await withBrowser(async (browser) => {
     for (const locale of locales) {
       for (const [width, theme] of [
