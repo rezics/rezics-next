@@ -257,6 +257,9 @@ Decision: this landing typechecks the written managed-account lifecycle, includi
 cdae0566525fbbd87398c5f23dcfc5f2e54bed05. Native journey acceptance remains unaccepted: check
 fe93067b-b74a-41fb-8f73-88d70dd89801 passed native-ready and developer-token, then organization creation returned
 HTTP503 `account_operation_denied`/`effect_status:not_applied` at `managed-accounts-seeded-walk.ts:556`.
+Decision: receive 433f320a native stack composition: Commerce, Stripe and Work runtime modules load only after
+DATABASE_URL and environment setup. Organization walk assertions stay complete. This landing typechecks that
+composed revision and does not add stories.
 
 ## 3. Credentials, sessions and tokens
 

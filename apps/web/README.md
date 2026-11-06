@@ -153,6 +153,9 @@ and per-case owned cleanup. Ordinary host discovery and Auth database placement 
 For the original root command, set `WEB_PERSONAL_DRIVER` to the absolute path of that driver and run
 `bun test specs/web-personal-outcomes.test.ts` in the normal native integration environment.
 
+Decision: native Web stack loads Commerce, Stripe and Work runtime modules only after DATABASE_URL and environment
+setup.
+
 The adapter composes `startNativeWebStack`, `startAuthStack`, the existing Auth TLS/WebAuthn setup,
 the integrated discussion fixture and the verified Stripe provider fixture. Browser contexts begin with no login;
 served forms create their cookies. Setup uses native HTTP, profile choices come from the activated bundled release,
