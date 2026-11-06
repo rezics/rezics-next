@@ -148,7 +148,10 @@ let membershipButton: HTMLButtonElement | null = null;
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+// Other files in one test process link the membership component against these names, so the mock keeps them all.
+const actualSpaceActions = await import('../src/community/space-actions');
 mock.module('../src/community/space-actions', () => ({
+  ...actualSpaceActions,
   readSpacePage: ({ data }: { data: PageInput }) => {
     calls.pages.push(structuredClone(data));
     return pageReader(data).then((page) => ({
