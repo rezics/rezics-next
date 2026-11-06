@@ -77,6 +77,14 @@ import {
   CHECK_HOST_NAME_PATTERN,
   performanceHosts,
 } from './check-placement.ts';
+import {
+  CHECK_HOST_DUMP_CACHE,
+  CROSS_MEDIA_DUMP_CACHE_ENV,
+  assertPinnedCrossMediaDumpCache,
+  commandNeedsCrossMediaDumpCache,
+  crossMediaDumpCacheRoot,
+  dumpCacheRsyncArgs,
+} from './cross-media-dump-cache.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
 export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
@@ -3908,7 +3916,7 @@ host=$REMOTE_CHECK_HOST
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
-export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
+export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers ${CROSS_MEDIA_DUMP_CACHE_ENV}=${quote(CHECK_HOST_DUMP_CACHE)} KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
@@ -6090,6 +6098,38 @@ export function gitWorkspaceOverlay(workspace: string, files: string[]): { files
   };
 }
 
+/** Restore the launcher's pinned dumps onto the host before a seeded walk enters the 6 GiB slice. */
+async function uploadCrossMediaDumpCache(
+  host: Host,
+  connectionId: string,
+  command: readonly string[],
+  signal: AbortSignal,
+  transferLimit: number,
+): Promise<void> {
+  if (!commandNeedsCrossMediaDumpCache(command)) return;
+  const source = crossMediaDumpCacheRoot();
+  assertPinnedCrossMediaDumpCache(source);
+  const useZstd = localRsyncSupportsZstd();
+  if (!useZstd) console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
+  const started = performance.now();
+  const sync = Bun.spawn(
+    dumpCacheRsyncArgs(
+      source,
+      host.address,
+      ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
+      useZstd,
+      RSYNC_COMPRESS_LEVEL,
+    ),
+    { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+  );
+  const { code, bytesSent, vanishedFiles } = await finishedRsync(sync, signal, host, 'dump cache', transferLimit);
+  reportDuration('dump cache', started, host.name, bytesSent);
+  if (signal.aborted) throw new Aborted();
+  if ([10, 12, 30, 35, 255].includes(code)) throw new RemoteTransportError(host.name, 'dump cache', code);
+  if (code === 24) reportVanishedFiles('to', host.name, vanishedFiles);
+  else if (code !== 0) throw new Error(`rsync of dump cache to ${host.name} failed with exit code ${code}`);
+}
+
 /** Transfers the workspace before admission so upload work never owns execution capacity. */
 async function uploadRun(
   host: Host,
@@ -6284,6 +6324,7 @@ async function uploadRun(
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFiles);
     else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
+    await uploadCrossMediaDumpCache(host, connectionId, options.command, signal, transferLimit);
     return {
       host,
       id,

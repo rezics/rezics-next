@@ -586,6 +586,8 @@ remain separate questions for the existing compiler/health chain; this cohort su
    `RemoteCheck.preparationTimeoutMs` or `REMOTE_CHECK_PREPARATION_TIMEOUT_MS` for finite fixtures.
    A cold artifact miss runs `bun install --frozen-lockfile`, preserving every lifecycle script. The shared
    `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` remains a download cache; it does not substitute for lifecycle outputs.
+   Seeded VNDB/Bangumi walks restore the launcher dump cache onto `/srv/rezics-check/datasets/dumps` before the run
+   slice and set `REZICS_DATASETS_DUMP_CACHE` there, so a rotated public dump cannot replace the development pin.
    Verified installation artifacts live in `/srv/rezics-check/dependency-artifacts`. The key covers only the inputs that
    change `node_modules`: every `package.json`, `bun.lock`, `bun.lockb`, `bunfig.toml` and `patches/`, plus Linux
    platform/architecture/libc, runtime build and exact pinned Bun revision. Two runs with those same inputs on one host

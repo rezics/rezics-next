@@ -302,6 +302,9 @@ The development pin is `vndb-db-2026-11-04.tar.zst` from https://dl.vndb.org/dum
 integrity, required tables and `.header` files, and the exact timestamp before recording `vndb/manifest.json`.
 Missing or changed pinned bytes stop the seed; it does not continue with Bangumi alone. Restore the exact archive
 in the dump cache when the provider rotates it away. Changing the pin is an explicit source-generation change.
+Remote seeded walks copy that launcher cache onto `/srv/rezics-check/datasets/dumps` before the 6 GiB command slice
+and set `REZICS_DATASETS_DUMP_CACHE` there, so download and extract stay out of the run and a rotated public file
+cannot replace the pin.
 VNDB's dump metadata licence remains independent of image rights. The wrapper's returned and persisted
 `developmentShowcase.sourceSnapshots` carries the verified archive URL, filename, SHA-256 and metadata licences for
 both providers, plus VNDB's verified TIMESTAMP, even when later publication is incomplete.

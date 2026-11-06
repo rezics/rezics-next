@@ -238,4 +238,5 @@ test('`task seed:dev` documentation distinguishes its pinned snapshot from rotat
   expect(docs).toContain(DEVELOPMENT_VNDB_PIN.sha256);
   expect(docs).toContain(DEVELOPMENT_VNDB_PIN.timestamp);
   expect(docs).toContain('does not continue with Bangumi alone');
+  expect(docs).toContain('/srv/rezics-check/datasets/dumps');
 });

@@ -73,6 +73,8 @@ run slice, and start Kernel/worker with bun --smol and no `--watch`. Native Auth
 Web and Auth pages start after seed, with issuer JWKS forwarded through native Auth until the pages bind. Anonymous
 locale/viewport captures share one Chromium and own one context each; the signed-in session is a second browser.
 Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
+The walk restores the launcher's pinned dump cache onto `/srv/rezics-check/datasets/dumps` before the run slice so
+seed neither downloads a rotated VNDB file nor extracts archives inside the 6 GiB memory cap.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.
