@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
 
 const app = join(import.meta.dir, '..');
-const timeout = 300_000;
+const timeout = 780_000;
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 type Media = {
@@ -167,10 +167,10 @@ function site(): Promise<string> {
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
     const missingMedia = `${origin}/media/${randomUUID()}/original`;
-    // Cold start runs Vite's configuration, the Paraglide step and the Worker runtime before the port listens. On a
-    // loaded check host that exceeded the shared 150-second budget, so this probe allows 240 seconds; it still requires
-    // the real Worker's media response.
-    const deadline = Date.now() + 240_000;
+    // Vite's configuration, the Paraglide step and the Cloudflare plugin's Worker graph load run before the port
+    // listens. On a loaded check host that took more than four minutes, so this probe allows 720 seconds; it still
+    // requires the real Worker's media response.
+    const deadline = Date.now() + 720_000;
     let probe = 'no response yet';
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
