@@ -44,6 +44,7 @@ async function personal() {
 beforeAll(async () => {
   f = await createProfileEntryFixture();
   const importer = await f.identity(['subject:batch_write', 'subject:read']);
+  await f.seedGlobalAction(f.steward.actor.accountId, 'subject:batch_write');
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
     { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30_000 },
     {

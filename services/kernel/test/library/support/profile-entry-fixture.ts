@@ -479,6 +479,15 @@ export async function createProfileEntryFixture(
         };
       },
       setLibraryOpen,
+      /** Test-only first holder of one Global action. No command path can delegate it before a holder exists, so
+       * the row is written as the ordinary Access grant; later grants still go through the owner command. */
+      async seedGlobalAction(accountId: string, action: string) {
+        await pool.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           VALUES ($1::integer,$2::uuid,$3::uuid,$4::text,'(,)',$3::uuid)`,
+          [global.route, global.id, accountId, action],
+        );
+      },
       async grantLibraryGate(accountId: string) {
         await grant(global, accountId, ['gate:personal_library']);
       },
