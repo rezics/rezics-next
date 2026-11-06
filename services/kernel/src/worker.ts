@@ -13,8 +13,8 @@ import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
 import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
-import { createKernelWorkModules } from './composition/work-modules.ts';
 import { composeLibraryDomain } from './composition/library.ts';
+import { createKernelWorkModules } from './composition/work-modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
@@ -69,8 +69,8 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   };
 }
 
-/** Default worker registrations. Isolated tests may pass a substitute list; the Search
- * outcome child decorates this live list instead of importing a second composition. */
+/** Default worker registrations. Isolated tests may pass a substitute list; Library and Search
+ * outcome children decorate this live list instead of importing a second composition. */
 export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
 
 export async function startWorker(

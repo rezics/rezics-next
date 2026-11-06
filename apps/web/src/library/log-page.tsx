@@ -10,7 +10,7 @@ import { bindLogsReturnVisit, logsReturnBackClick, logsReturnBackHref } from './
 import { UndoNotice } from './copies-undo';
 import type { DeletionEvidence } from './copies-receipt';
 import type { PublishedLog } from './logs-read';
-import { AccountRef } from './account-ref';
+import { LogContributor } from './log-contributor';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
@@ -300,7 +300,7 @@ export function PublishedLogPageView({
         <div>
           <dt className="font-medium">{m.library_logs_account()}</dt>
           <dd>
-            <AccountRef account={log.account} />
+            <LogContributor attribution={log.attribution} account={log.account} locale={getLocale()} />
           </dd>
         </div>
         <div>

@@ -1,13 +1,16 @@
 import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import { createKernelClient } from '@rezics/client';
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import recorded from '../src/kernel/recorded/subject-page.json';
-import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 import type { PublicFigure, RatingQuestion } from '../src/features/pages/subject-ratings';
+import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 
-mock.module('cloudflare:workers', () => ({ env: {} }));
 const { RatingControlView, applyOptimisticRatingChange } = await import('../src/features/pages/rating-control');
 const { RatingsView } = await import('../src/features/pages/subject-ratings-view');
 const { subjectHead } = await import('../src/features/pages/subject-head');
@@ -90,7 +93,7 @@ test('question-driven save and clear include zero, enforce the live scale and pr
         return stored === null
           ? Response.json({ code: 'not_found' }, { status: 404 })
           : Response.json({ units: stored, revision: 1, at: '2026-10-31T00:00:00Z' });
-      expect(JSON.parse(request.headers.get('idempotency-key')!)).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(request.headers.get('idempotency-key')).toMatch(/^[0-9a-f-]{36}$/i);
       stored = request.method === 'DELETE' ? null : (await request.json()).units;
       return stored === null
         ? new Response(null, { status: 204 })

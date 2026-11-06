@@ -10,7 +10,8 @@ import type {
   FollowingSpaceDestination,
   FollowingSpaceProjection,
 } from './following-space-contract.ts';
-import { ContributionAttributionSchema } from '../access/contribution-attribution.ts';
+import { ContributionAttributionSchema, type ContributionAttribution } from '../access/contribution-attribution.ts';
+import { readContributionAttributions } from '../access/public-identity.ts';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
@@ -56,7 +57,11 @@ export function sessionFields() {
 }
 export const curatorFields = { curator: t.Optional(accountSchema) };
 export function logFields() {
-  return memoizedValue(logFields, () => ({ ...subjectFields(), account: t.Optional(accountSchema) }));
+  return memoizedValue(logFields, () => ({
+    ...subjectFields(),
+    account: t.Optional(accountSchema),
+    attribution: t.Optional(t.Union([ContributionAttributionSchema(), t.Null()])),
+  }));
 }
 export function targetFields() {
   return memoizedValue(targetFields, () => ({
@@ -79,7 +84,9 @@ type Embedding<T> = T extends readonly (infer R)[]
     ? { [K in keyof T]: Embedding<T[K]> } & (T extends { subjectId: string } ? { subject?: Summary | null } : object) &
         (T extends { versionSubjectId: string | null } ? { versionSubject?: Summary | null } : object) &
         (T extends { curatorAccountId: string } ? { curator?: AccountSummary | null } : object) &
-        (T extends { accountId: string } ? { account?: AccountSummary | null } : object) &
+        (T extends { accountId: string }
+          ? { account?: AccountSummary | null; attribution?: ContributionAttribution | null }
+          : object) &
         (T extends { targetId: string } ? { target?: Summary | null } : object) &
         (T extends { targetId: string; targetType: string }
           ? { destination?: FollowingSpaceDestination; actions?: FollowingSpaceActions }
@@ -100,6 +107,7 @@ async function bounded<T>(values: readonly T[], work: (value: T) => Promise<void
 class ViewReader {
   readonly subjects = new Map<string, Summary | null>();
   readonly accounts = new Map<string, AccountSummary | null>();
+  readonly attributions = new Map<string, ContributionAttribution | null>();
   readonly targets = new Map<string, Summary | null>();
   constructor(
     readonly deps: Dependencies,
@@ -267,6 +275,10 @@ export async function fullView<T>(
     ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
     : new Map<string, FollowingSpaceProjection>();
   await reader.loadSubjects([...subjectIds]);
+  const attributions = await withConnection(deps.pool, (client) =>
+    readContributionAttributions(deadlineClient(client, reader.deadline), [...accountIds]),
+  );
+  for (const [id, attribution] of attributions) reader.attributions.set(id, attribution);
   await bounded([...accountIds], async (id) => {
     reader.accounts.set(id, await reader.account(id));
   });
@@ -287,7 +299,12 @@ export async function fullView<T>(
       ...(typeof row.curatorAccountId === 'string'
         ? { curator: reader.accounts.get(row.curatorAccountId) ?? null }
         : {}),
-      ...(typeof row.accountId === 'string' ? { account: reader.accounts.get(row.accountId) ?? null } : {}),
+      ...(typeof row.accountId === 'string'
+        ? {
+            account: reader.accounts.get(row.accountId) ?? null,
+            attribution: reader.attributions.get(row.accountId) ?? null,
+          }
+        : {}),
       ...(typeof row.targetId === 'string'
         ? {
             target:

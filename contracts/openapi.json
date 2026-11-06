@@ -340345,6 +340345,64 @@
                             "format": "uuid",
                             "type": "string"
                           },
+                          "attribution": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "displayName": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "actor",
+                                          "organization"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "kind",
+                                      "displayName"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "displayName": {
+                                        "enum": [
+                                          "Deleted account",
+                                          "Deleted organization"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "displayName"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "completedAt": {
                             "type": [
                               "string",
@@ -342578,6 +342636,64 @@
                             "accountId": {
                               "format": "uuid",
                               "type": "string"
+                            },
+                            "attribution": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "displayName": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "id": {
+                                          "format": "uuid",
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "actor",
+                                            "organization"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "displayName"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "displayName": {
+                                          "enum": [
+                                            "Deleted account",
+                                            "Deleted organization"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "displayName"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "completedAt": {
                               "type": [

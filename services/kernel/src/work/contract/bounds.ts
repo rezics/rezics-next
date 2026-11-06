@@ -31,6 +31,17 @@ export const WORKFLOW_RETENTION_NONEMPTY_APPLICATION_STATEMENTS = 5;
 export const WORKFLOW_RETENTION_NONEMPTY_BATCH_STATEMENTS = 7;
 export const WORKFLOW_RETENTION_EMPTY_BATCH_STATEMENTS = 1;
 export const WORKFLOW_RETENTION_BATCH_ATTEMPTS = 3;
+export const WORKFLOW_RETENTION_ROLLBACK_STATEMENTS = 1;
+export const WORKFLOW_RETENTION_NESTED_FK_STATEMENTS = 4;
+export const WORKFLOW_RETENTION_STATUS_DELETE_POINTS = 5;
+export const WORKFLOW_RETENTION_STATUS_DELETE_STATEMENTS = 5;
+export const WORKFLOW_RETENTION_PAYLOAD_BYTES = 65_536;
+export const WORKFLOW_RETENTION_METADATA_BYTES = 4_096;
+export const WORKFLOW_RETENTION_EXECUTION_ROWS = 139;
+export const WORKFLOW_RETENTION_EXECUTION_BYTES = 10 * 1024 * 1024;
+export const WORKFLOW_RETENTION_PLANNER_FLOOR = 32_768;
+export const WORKFLOW_RETENTION_BYTE_SCALES = [1_024, 8_192, 65_536] as const;
+export const WORKFLOW_RETENTION_COUNT_SCALES = [1, 8, 64] as const;
 
 export const WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES = [
   'workflow_input',
@@ -47,14 +58,45 @@ export const WORKFLOW_RETENTION_CASCADE_TABLES = [
 ] as const;
 
 export const WORKFLOW_RETENTION_PAYLOAD_FAMILIES = [
-  { table: 'workflow_status', key: 'workflow_uuid', deletion: 'explicit' },
-  { table: 'workflow_input', key: 'workflow_uuid', deletion: 'explicit' },
-  { table: 'workflow_output', key: 'workflow_uuid', deletion: 'explicit' },
-  { table: 'operation_outputs', key: 'workflow_uuid', deletion: 'explicit' },
-  { table: 'workflow_events', key: 'workflow_uuid', deletion: 'cascade' },
-  { table: 'workflow_events_history', key: 'workflow_uuid', deletion: 'cascade' },
-  { table: 'notifications', key: 'destination_uuid', deletion: 'cascade' },
-  { table: 'streams', key: 'workflow_uuid', deletion: 'cascade' },
+  {
+    table: 'workflow_status',
+    key: 'workflow_uuid',
+    deletion: 'explicit',
+    copies: 1,
+    payload: ['inputs', 'output', 'error'],
+  },
+  { table: 'workflow_input', key: 'workflow_uuid', deletion: 'explicit', copies: 1, payload: ['inputs'] },
+  { table: 'workflow_output', key: 'workflow_uuid', deletion: 'explicit', copies: 1, payload: ['output', 'error'] },
+  { table: 'operation_outputs', key: 'workflow_uuid', deletion: 'explicit', copies: 64, payload: ['output', 'error'] },
+  { table: 'workflow_events', key: 'workflow_uuid', deletion: 'cascade', copies: 8, payload: ['value'] },
+  { table: 'workflow_events_history', key: 'workflow_uuid', deletion: 'cascade', copies: 64, payload: ['value'] },
+  { table: 'notifications', key: 'destination_uuid', deletion: 'cascade', copies: 64, payload: ['message'] },
+  { table: 'streams', key: 'workflow_uuid', deletion: 'cascade', copies: 64, payload: ['value'] },
+] as const;
+
+export const WORKFLOW_RETENTION_FAMILY_LIMITS = Object.freeze({
+  workflow_status: 1,
+  workflow_input: 1,
+  workflow_output: 1,
+  operation_outputs: 64,
+  workflow_events: 8,
+  workflow_events_history: 64,
+  notifications: 64,
+  streams: 64,
+});
+
+export const WORKFLOW_RETENTION_VARIABLE_FAMILIES = [
+  'operation_outputs',
+  'workflow_events',
+  'workflow_events_history',
+  'notifications',
+  'streams',
+] as const;
+
+export const WORKFLOW_RETENTION_SINGLE_COPY_FAMILIES = [
+  'workflow_status',
+  'workflow_input',
+  'workflow_output',
 ] as const;
 
 export const SELECTED_ISSUE_DEADLINE_MS = 5_000;

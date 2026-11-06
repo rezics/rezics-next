@@ -55,6 +55,14 @@ export function contributionAttribution(identity: ContributionIdentity | null | 
   return { id, kind, displayName: identity.displayName ?? null };
 }
 
+/** Observed public identity for Log and Collection views: pending or missing stays unknown. */
+export function contributionFromPublicIdentity(
+  identity: ContributionIdentity | null | undefined,
+): ContributionAttribution {
+  if (!identity || identity.state === 'pending') return null;
+  return contributionAttribution(identity);
+}
+
 /** An absent id alone cannot establish deletion on a partially assembled public view. */
 export function contributionDeleted(
   value: Pick<ContributionIdentity, 'id' | 'displayName'> | null | undefined,

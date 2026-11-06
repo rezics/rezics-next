@@ -15,11 +15,16 @@ import { WORK_QUEUES } from '../../src/work/queues.ts';
 import {
   createWorkflowRetentionSelector,
   readWorkflowRetentionFences,
-  readWorkflowRetentionPayload,
+  readWorkflowRetentionOwned,
 } from '../../src/work/retention-selector.ts';
-import { emptyWorkflowRetentionInventory } from '../../src/work/core/index.ts';
+import { emptyWorkflowRetentionInventory, retentionCompleteBatchWork } from '../../src/work/core/index.ts';
 import { readSdkWorkflowRetirement, retireSdkWorkflowWriters } from '../../src/work/sdk-retirement-fence.ts';
-import { insertRetentionPayload, RETENTION_OWNED_TABLES } from './support/retention-fixture.ts';
+import {
+  expectedRetentionInventory,
+  insertRetentionPayload,
+  MIXED_MAX_RETENTION_PAYLOAD,
+  RETENTION_OWNED_TABLES,
+} from './support/retention-fixture.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -134,7 +139,7 @@ for (const lostResult of [false, true]) {
       workflowIDs.push(workflowID);
       await enqueue(workflowID);
       await setTerminal(workflowID, status, old);
-      await insertRetentionPayload(database, [workflowID]);
+      await insertRetentionPayload(database, [workflowID], MIXED_MAX_RETENTION_PAYLOAD, 1024);
     }
 
     for (const [index, workflowID] of workflowIDs.entries()) {
@@ -143,16 +148,18 @@ for (const lostResult of [false, true]) {
         completedAt: old,
       });
     }
-    expect(await readWorkflowRetentionPayload(database, workflowIDs)).toEqual({
-      workflow_status: 4,
-      workflow_input: 4,
-      workflow_output: 4,
-      operation_outputs: 4,
-      workflow_events: 4,
-      workflow_events_history: 4,
-      notifications: 4,
-      streams: 4,
-    });
+    const before = await readWorkflowRetentionOwned(database, workflowIDs);
+    expect(before.rows).toEqual(expectedRetentionInventory(workflowIDs.length, MIXED_MAX_RETENTION_PAYLOAD));
+    expect(before.bytes.workflow_input).toBeGreaterThan(0);
+    expect(before.fences).toBe(0);
+    const derived = retentionCompleteBatchWork(workflowIDs.length, before.rows, before.bytes, before.fences);
+    expect(derived.cascadeRows).toBeGreaterThan(workflowIDs.length);
+    expect(derived.nestedFkStatements).toBe(4);
+    expect(derived.payloadBytes).toBeGreaterThan(0);
+    expect(derived.commitStatements).toBe(1);
+    expect(derived.rollbackStatements).toBe(0);
+    expect(derived.backgroundStatements).toBe(0);
+    expect(derived.exactIdDeletes).toBe(4);
     if (lostResult) {
       const sdk: WorkflowRetentionSdk = {
         async deleteWorkflows(ids, deleteChildren) {
@@ -171,7 +178,10 @@ for (const lostResult of [false, true]) {
       );
     }
 
-    expect(await readWorkflowRetentionPayload(database, workflowIDs)).toEqual(emptyWorkflowRetentionInventory());
+    const after = await readWorkflowRetentionOwned(database, workflowIDs);
+    expect(after.rows).toEqual(emptyWorkflowRetentionInventory());
+    expect(after.bytes).toEqual(emptyWorkflowRetentionInventory());
+    expect(after.fences).toBe(0);
     for (const workflowID of workflowIDs) {
       for (const { table, key } of RETENTION_OWNED_TABLES) {
         const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${key} = $1 LIMIT 1`, [workflowID]);
@@ -365,7 +375,9 @@ for (const checkpoint of ['before', 'after'] as const) {
           .filter((step) => step.name === WORKFLOW_RETENTION_BATCH_STEP)
           .map((step) => step.output),
       ).toEqual(checkpoint === 'after' ? [1000, 1] : [1]);
-      expect(await readWorkflowRetentionPayload(database, ids)).toEqual(emptyWorkflowRetentionInventory());
+      const remaining = await readWorkflowRetentionOwned(database, ids);
+      expect(remaining.rows).toEqual(emptyWorkflowRetentionInventory());
+      expect(remaining.bytes).toEqual(emptyWorkflowRetentionInventory());
       expect(await readSdkWorkflowRetirement(ids[0]!, client)).toEqual(closure);
       expect(await readWorkflowRetentionFences(database, [ids[0]!])).toBe(1);
       for (const value of [child, recent, foreign]) expect(await client.getWorkflow(value)).toBeDefined();

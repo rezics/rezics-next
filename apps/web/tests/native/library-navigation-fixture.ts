@@ -1,7 +1,37 @@
 import { expect } from 'bun:test';
+import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/governance-reach.ts';
 import type { NativeWebStack } from './stack.ts';
 
-export async function createLibraryEntry(stack: NativeWebStack, persona: string, authorization: string) {
+/** Unique typed Global grant on the mounted createGrantCommands path; must return 201.
+ * Matches grant-routes: PLATFORM_RESOURCE, account subject, open interval, governor bearer.
+ * Do not import bootstrap-governance here: that graph loads Reylo named SQL before the stack registers it.
+ */
+export async function grantGlobalCatalogueWrite(stack: NativeWebStack, accountId: string, actions: readonly string[]) {
+  return stack.kernel(
+    '/v1/grants',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
+      body: JSON.stringify({
+        resource: { route: PLATFORM_RESOURCE.route, id: PLATFORM_RESOURCE.id },
+        subject: { kind: 'account', id: accountId },
+        actions: [...actions],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+}
+
+export async function createLibraryEntry(
+  stack: NativeWebStack,
+  persona: string,
+  authorization: string,
+  cataloguePersona = 'editor',
+) {
   const openedLibrary = await stack.kernel(
     '/v1/platform/exposure/personal_library:open',
     { method: 'POST', headers: { 'idempotency-key': `"${crypto.randomUUID()}"` } },
@@ -16,7 +46,7 @@ export async function createLibraryEntry(stack: NativeWebStack, persona: string,
       headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
       body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Native library member' } }),
     },
-    'editor',
+    cataloguePersona,
   );
   expect(createdSubject.status).toBe(201);
   const { subject } = (await createdSubject.json()) as { subject: { id: string } };
