@@ -490,9 +490,11 @@ type SubjectViewPageProps = Omit<ComponentProps<typeof SubjectPage>, 'heading' |
   label: string;
   actions?: ReactNode;
   nextHref?: string;
+  /** Companion section of the same view, rendered after the view's document (for example a window's history). */
+  after?: ReactNode;
 };
 
-export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: SubjectViewPageProps) {
+export function SubjectViewPage({ frame, label, actions, nextHref, after, ...page }: SubjectViewPageProps) {
   // Full-page stream leaves already own their title and continuation. Multi-group documents still need a page title.
   const streams: { type: string; props: Record<string, unknown> }[] = [];
   function visit(nodes: readonly unknown[]) {
@@ -532,6 +534,7 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
       <PageStreamHeadingContext value={ownHeading ? String(streams[0]!.props.id) : undefined}>
         <SubjectPage {...page} framed />
       </PageStreamHeadingContext>
+      {after}
       {nextHref && !ownContinuation ? (
         <a
           data-slot="next-page"

@@ -6687,6 +6687,7 @@
   "relation_window_completed_stop": "Elementos visibles en {label}: {count}. Vuelve a empezar para continuar.",
   "relation_window_cycle": "Esta lista ha repetido un cursor de página. Vuelve a empezar para leer las entradas actuales.",
   "relation_window_limit": "Has alcanzado el límite de lectura. Vuelve a empezar desde la primera página.",
+  "relation_window_pending": "Es posible que las relaciones añadidas recientemente aún no aparezcan. Vuelve a leer antes de considerar esta lista como actual.",
   "library_rule_draft_navigation_title": "¿Salir sin guardar la regla?",
   "library_rule_draft_navigation_description": "Se perderá la regla de la colección sin guardar. Quédate para seguir editando o sal para continuar. Un guardado pendiente aún puede completarse.",
   "library_rule_draft_navigation_stay": "Quedarme",
