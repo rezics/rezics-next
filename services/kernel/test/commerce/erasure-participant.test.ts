@@ -21,6 +21,7 @@ import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import type { Access } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -193,11 +194,6 @@ describe('native genuine-order retention', () => {
     );
     const governanceId = bootstrap.rows[0]?.accountId;
     if (!governanceId) throw new Error('Native governance account is missing');
-    governance = await native.auth.issue({
-      accountId: governanceId,
-      clientId: native.auth.ordinaryClient.id,
-      scopes: native.auth.ordinaryScopes,
-    });
     client = await createWorkClient(databaseUrl);
     provider = startWorkStripe();
     stripe = createStripePort({
@@ -214,13 +210,15 @@ describe('native genuine-order retention', () => {
     const issuer = token.iss;
     const audience = typeof token.aud === 'string' ? token.aud : token.aud?.[0];
     if (!issuer || !audience) throw new Error('Native Content Auth issuer and audience are missing from the bearer');
+    const readConsent = ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
+      consent.readCurrentConsent({ actorAccountId, clientId });
     kernel = createKernel({
       pool,
       routeKey: native.routeKey,
       tokens: native.tokenKeys,
       receiptKeys: testReceiptKeys(),
       access: (config) =>
-        (access = createAccess({
+        createAccess({
           ...config,
           auth: {
             issuer,
@@ -228,25 +226,44 @@ describe('native genuine-order retention', () => {
             jwksUrl: `${issuer}/.well-known/jwks.json`,
             fetch: (input, init) => native.nativeAuth.handler(new Request(input, init)),
           },
-        })),
+        }),
+      onAccessReady: (mounted) => {
+        access = mounted;
+      },
       writeRate: createWriteRateLimiter({
         secret: 'commerce-erasure-native-secret-32-bytes',
         overrides: HIGH_RATE_OVERRIDES,
       }),
       content: {
         cursorNow: () => Date.now(),
-        readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+        readConsent,
       },
       commerce: { stripe, ...urls, webhookSecrets: [provider.fake.webhookSecret], work: createCommerceWork(client) },
       workClient: client,
     });
-    seller = { accountId: native.actors.author.actor.accountId, bearer: native.actors.author.bearer };
-    buyer = { accountId: native.actors.other.actor.accountId, bearer: native.actors.other.bearer };
+    if (!access) throw new Error('Composed Access was not resolved from the mounted catalogue');
+    const composedScopes = [...actionCatalogue(kernel).keys()].sort();
+    const composedClientId = `commerce-erasure-${crypto.randomUUID()}`;
+    await native.nativeAuth.internal.registerClient({
+      clientId: composedClientId,
+      firstParty: true,
+      scopes: composedScopes,
+    });
+    const issueComposed = async (accountId: string) => {
+      const issued = await native.auth.issue({
+        accountId,
+        clientId: composedClientId,
+        scopes: composedScopes,
+      });
+      return { accountId, bearer: issued.bearer, actor: issued.actor };
+    };
+    governance = await issueComposed(governanceId);
+    seller = await issueComposed(native.actors.author.actor.accountId);
+    buyer = await issueComposed(native.actors.other.actor.accountId);
     unused = await accountDeletionRuntime(native).person();
     await bootstrapLocalShowcaseBoardCreation(pool, governance.actor.accountId);
     for (const group of ['personal_library', 'purchases', 'selling'])
       await accepted(governance, `/v1/platform/exposure/${group}:open`, {});
-    if (!access) throw new Error('Composed Access was not resolved from the mounted catalogue');
     grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
     expect(KERNEL_WORK_MODULES.some((module) => module.name === 'commerce')).toBe(true);
     await grantAccess(seller.accountId, GLOBAL, ['board:create', 'offer:create']);
@@ -264,7 +281,12 @@ describe('native genuine-order retention', () => {
       subjectTitle: 'Native erasure source',
       body: 'Exact native content edition bytes',
     });
-    commands = createCommerceCommands({ pool, access });
+    commands = createCommerceCommands({
+      pool,
+      access,
+      clock: () => new Date(),
+      readConsent,
+    });
     await startCommerceWorker();
   }, 360_000);
 
