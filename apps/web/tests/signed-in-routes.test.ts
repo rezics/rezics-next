@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -171,6 +171,7 @@ function site() {
       directory = await mkdtemp(join(root, '.temp/signed-in-routes-'));
       const config = join(directory, 'vite.config.ts');
       const cacheDir = join(directory, 'cache');
+      if (process.env.WEB_VITE_CACHE_DIR) await cp(process.env.WEB_VITE_CACHE_DIR, cacheDir, { recursive: true });
       // Substitute only the session store boundary. Routing, queries and loaders remain real.
       await Bun.write(
         config,
@@ -194,6 +195,7 @@ function site() {
       if (teardownStarted) throw new Error('Signed-in-routes Vite acquisition began after suite teardown');
       siteAbort = new AbortController();
       siteServer = await startDevServer({
+        exclusive: true,
         cwd: app,
         firstPath: '/en',
         warmUpPaths: [],
@@ -206,6 +208,7 @@ function site() {
           AUTH_ISSUER: process.env.AUTH_ISSUER ?? 'https://auth.test',
           API_RESOURCE: process.env.API_RESOURCE ?? 'https://kernel.test',
           WEBSITE_SCOPES: process.env.WEBSITE_SCOPES ?? 'openid',
+          WEB_VITE_CACHE_DIR: cacheDir,
         },
         command: ({ port }) => [
           'bun',

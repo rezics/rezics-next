@@ -1,5 +1,5 @@
 import { createServer as createHttpServer } from 'node:http';
-import { realpathSync } from 'node:fs';
+import { mkdirSync, realpathSync, writeFileSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
@@ -8,9 +8,16 @@ import { expect, test } from 'bun:test';
 import { createServer as createViteServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
 import { shouldGenerateLocalization } from '../vite.config.ts';
+import {
+  viteEnvironmentDepHashes,
+  webViteWarmSsrEnvName,
+  webViteWorkerSsrOptimizeDeps,
+  webViteWorkerSsrResolve,
+} from './support/vite-dep-cache.ts';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
+const workerInclude = [...webViteWorkerSsrOptimizeDeps.include];
 
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
@@ -44,6 +51,143 @@ async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<stri
   }
   throw new Error(`no directory outside Vite fs.allow (${allow.join(', ')}): ${errors.join('; ')}`);
 }
+
+test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows reading it', async () => {
+  const previous = process.env.WEB_VITE_CACHE_DIR;
+  const cacheDir = await mkdtemp(join(tmpdir(), 'rezics-web-vite-cache-config-'));
+  process.env.WEB_VITE_CACHE_DIR = cacheDir;
+  try {
+    const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
+    expect(config.cacheDir).toBe(cacheDir);
+    expect(config.server?.fs?.allow).toContain(cacheDir);
+    expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+    expect(config.optimizeDeps?.entries).toEqual(['src/routes/**/*.tsx']);
+    const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const worker = plugins.find(
+      (plugin) =>
+        plugin !== null &&
+        typeof plugin === 'object' &&
+        'name' in plugin &&
+        plugin.name === 'web-worker-explicit-dependencies',
+    );
+    expect(worker).toBeTruthy();
+    expect(worker && 'enforce' in worker ? worker.enforce : undefined).toBe('post');
+    const align = plugins.find(
+      (plugin) =>
+        plugin !== null &&
+        typeof plugin === 'object' &&
+        'name' in plugin &&
+        plugin.name === 'web-vite-dep-cache-align',
+    );
+    expect(align).toBeTruthy();
+    mkdirSync(join(cacheDir, 'deps_ssr'), { recursive: true });
+    const metadataPath = join(cacheDir, 'deps_ssr', '_metadata.json');
+    writeFileSync(
+      metadataPath,
+      `${JSON.stringify({
+        hash: 'old',
+        lockfileHash: 'old-lock',
+        configHash: 'middleware',
+        browserHash: 'browser',
+        optimized: { react: { file: 'react.js', fileHash: 'x' } },
+        chunks: {},
+      })}\n`,
+    );
+    const configure =
+      align && 'configureServer' in align
+        ? typeof align.configureServer === 'function'
+          ? align.configureServer
+          : align.configureServer && 'handler' in align.configureServer
+            ? align.configureServer.handler
+            : undefined
+        : undefined;
+    expect(typeof configure).toBe('function');
+    const ssr = {
+      name: 'ssr',
+      config: {
+        root: appRoot,
+        plugins: [{ name: 'serve-plugin' }],
+        optimizeDeps: { include: ['react'] },
+        resolve: { conditions: ['ssr'] },
+        mode: 'test',
+      },
+    };
+    if (typeof configure === 'function') {
+      const after = configure.call(undefined, { environments: { ssr } }) as undefined | (() => void);
+      expect(typeof after).toBe('function');
+      after?.();
+    }
+    const rewritten = JSON.parse(readFileSync(metadataPath, 'utf8')) as {
+      hash: string;
+      lockfileHash: string;
+      configHash: string;
+      browserHash: string;
+    };
+    expect(rewritten).toMatchObject({
+      ...viteEnvironmentDepHashes(ssr),
+      browserHash: 'browser',
+    });
+    const environmentFor = (name: string) => {
+      if (!worker || !('configEnvironment' in worker)) return undefined;
+      const hook = worker.configEnvironment;
+      const handler = typeof hook === 'function' ? hook : hook && 'handler' in hook ? hook.handler : undefined;
+      return typeof handler === 'function' ? handler.call(undefined, name) : undefined;
+    };
+    const environment = environmentFor('ssr') as
+      | {
+          optimizeDeps?: { noDiscovery?: boolean; holdUntilCrawlEnd?: boolean; include?: string[]; entries?: string[] };
+        }
+      | undefined;
+    expect(environment?.optimizeDeps?.noDiscovery).toBe(true);
+    expect(environment?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+    expect(environment?.optimizeDeps?.entries).toEqual([]);
+    expect(environment?.optimizeDeps?.include).toEqual(workerInclude);
+    expect(environmentFor('client')).toBeUndefined();
+    const resolved = worker && 'configResolved' in worker ? worker.configResolved : undefined;
+    const pin =
+      typeof resolved === 'function' ? resolved : resolved && 'handler' in resolved ? resolved.handler : undefined;
+    const environments = {
+      ssr: {
+        resolve: { alias: [] as unknown[] },
+        optimizeDeps: { noDiscovery: false, entries: ['src/server.ts'], include: ['cloudflare-discovered'] },
+      },
+    };
+    if (typeof pin === 'function')
+      pin.call(undefined, { resolve: { alias: [] }, ssr: { resolve: { alias: [] } }, environments });
+    expect(environments.ssr.optimizeDeps.noDiscovery).toBe(true);
+    expect(environments.ssr.optimizeDeps.entries).toEqual([]);
+    expect(environments.ssr.optimizeDeps.include).toEqual(environment?.optimizeDeps?.include);
+  } finally {
+    if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
+    else process.env.WEB_VITE_CACHE_DIR = previous;
+    await rm(cacheDir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test('SSR warm pre-bundles Worker includes without the Cloudflare plugin or worktree source', async () => {
+  const previous = process.env[webViteWarmSsrEnvName];
+  process.env[webViteWarmSsrEnvName] = '1';
+  try {
+    const config = await resolveWebViteConfig({ command: 'serve', mode: 'development' }, appRoot);
+    expect(config.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(true);
+    expect(config.environments?.ssr?.optimizeDeps?.include).toEqual([...webViteWorkerSsrOptimizeDeps.include]);
+    expect(config.environments?.ssr?.resolve?.conditions).toEqual([...webViteWorkerSsrResolve.conditions]);
+    expect(config.ssr).toMatchObject({ target: 'webworker', noExternal: true });
+    const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    expect(
+      plugins.filter(
+        (plugin) =>
+          plugin !== null &&
+          typeof plugin === 'object' &&
+          'name' in plugin &&
+          String(plugin.name).includes('cloudflare'),
+      ),
+    ).toEqual([]);
+  } finally {
+    if (previous === undefined) delete process.env[webViteWarmSsrEnvName];
+    else process.env[webViteWarmSsrEnvName] = previous;
+  }
+}, 30_000);
 
 test('Vite serves resolved workspace dependencies while keeping files outside its roots denied', async () => {
   // This is a build-time config inspection, not a fixture runtime, so it does not allocate Worker persistence.
@@ -112,9 +256,6 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
 
 test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excludes and ESM polyfill alias', async () => {
   // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
-  // Host-b ready evidence: Worker discovery hung at scanning for 150s; empty include plus
-  // noDiscovery printed no Vite line. Explicit React/TanStack/paraglide include with
-  // noDiscovery is the composition that skips that scan.
   const result = Bun.spawnSync({
     cmd: [
       'node',
@@ -123,14 +264,8 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
       `
         import assert from 'node:assert/strict';
         import { resolveConfig } from 'vite';
-        const workerInclude = [
-          'react',
-          'react/jsx-runtime',
-          'react/jsx-dev-runtime',
-          'react-dom',
-          '@tanstack/react-router > @tanstack/react-store',
-          '@inlang/paraglide-js/urlpattern-polyfill',
-        ];
+        const workerInclude = ${JSON.stringify(workerInclude)};
+        const calendar = ['react-day-picker', 'date-fns', '@date-fns/tz'];
         for (const command of ['serve', 'build']) {
           const config = await resolveConfig({ logLevel: 'silent' }, command, 'development');
           const targets = [['ssr', config.ssr.optimizeDeps]];
@@ -157,7 +292,7 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
                 false,
                 command + ':' + name + ':not-excluded:' + pkg,
               );
-            for (const pkg of ['react-day-picker', 'date-fns', '@date-fns/tz'])
+            for (const pkg of calendar)
               assert.ok((optimizeDeps.exclude ?? []).includes(pkg), command + ':' + name + ':' + pkg);
           }
           const resolvers = [['root', config.resolve]];
@@ -229,4 +364,12 @@ test('serve skips Paraglide generate under test runtime unless a compiler module
     true,
   );
   expect(shouldGenerateLocalization({})).toBe(true);
+});
+
+test('vite.config identity stays Node-loadable without Bun process custody', () => {
+  const source = readFileSync(join(appRoot, 'vite.config.ts'), 'utf8');
+  expect(source).toContain("from './tests/support/vite-dep-cache.ts'");
+  expect(source).not.toContain('vite-dep-cache-build');
+  expect(source).not.toContain('server-custody');
+  expect(source).not.toMatch(/from ['"]bun:/);
 });

@@ -1,4 +1,5 @@
 import { viteNonceMarker } from './src/security/headers.ts';
+import { testFixtureEnvHeader } from './src/test-fixture-header.ts';
 import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -12,6 +13,16 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 import { messagesCurrent } from './scripts/messages-ready.ts';
+import { readWorkerFixtureOverlay } from './tests/support/dev-server-fixture.ts';
+import {
+  alignViteLockfileHashes,
+  bindViteDepCacheAlign,
+  webViteClientOptimizeDeps,
+  webViteWarmSsrEnvName,
+  webViteWorkerSsrEnvironment,
+  webViteWorkerSsrOptimizeDeps,
+  type ViteDepCacheAlignEnvironment,
+} from './tests/support/vite-dep-cache.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
 const nativeWebHost = process.env.NATIVE_WEB_TEST_HOST;
@@ -22,11 +33,38 @@ if (nativeWebTls && (nativeWebHost !== 'web.native.rezics.com' || !nativeWebCert
   throw new Error('Native web TLS requires the reserved host and its test certificate');
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
-const dependencyRoot = realpathSync(join(workspaceRoot, 'node_modules'));
-const fontDependencyRoots = ['manrope', 'source-serif-4', 'geist-mono'].map((name) =>
-  realpathSync(join(appRoot, 'node_modules', '@fontsource-variable', name)),
-);
+const testRuntimeBindings = fileURLToPath(new URL('./src/test-runtime-bindings.ts', import.meta.url));
 const paraglideGenerateLock = join(workspaceRoot, '.temp/paraglide-generate.lock');
+const workerSsrOptimizeDeps = webViteWorkerSsrOptimizeDeps;
+
+function bunInstallRoot(resolved: string): string | undefined {
+  const marker = `${sep}node_modules${sep}.bun${sep}`;
+  const index = resolved.indexOf(marker);
+  if (index === -1) return undefined;
+  return resolved.slice(0, index + `${sep}node_modules`.length);
+}
+
+function resolvedInstallRoots(): string[] {
+  const roots = new Set<string>();
+  for (const candidate of [
+    join(workspaceRoot, 'node_modules'),
+    join(appRoot, 'node_modules'),
+    join(appRoot, 'node_modules/@tanstack/react-start'),
+    ...['manrope', 'source-serif-4', 'geist-mono'].map((name) =>
+      join(appRoot, 'node_modules', '@fontsource-variable', name),
+    ),
+  ]) {
+    try {
+      const resolved = realpathSync(candidate);
+      roots.add(resolved);
+      const store = bunInstallRoot(resolved);
+      if (store) roots.add(store);
+    } catch {
+      // A missing optional package must not block config load.
+    }
+  }
+  return [...roots];
+}
 
 function containedWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
@@ -41,10 +79,11 @@ function linkedDependencyAllow(packageRealPath: string): string | undefined {
   return containedWithin(workspaceRoot, root) ? undefined : root;
 }
 
+const dependencyRoots = resolvedInstallRoots();
 const linkedDependencyRoot = linkedDependencyAllow(
   realpathSync(join(appRoot, 'node_modules/@tanstack/react-start')),
 );
-const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
+
 /**
  * Generated paraglide/runtime.js imports `@inlang/paraglide-js/urlpattern-polyfill`, which re-exports
  * `urlpattern-polyfill`. Workerd export-type inspection resolves with workerd/worker/module/browser,
@@ -54,18 +93,11 @@ const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as
  *
  * Host-b evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...` and then
  * nothing for 150s. Empty include plus `noDiscovery` printed no Vite line at all. The composition
- * that skips that scan is `noDiscovery` with an explicit React/TanStack/paraglide-wrapper include.
- * Leave `urlpattern-polyfill` and `react-dom/server` off include: the nested package is resolved to
- * ESM, and `react-dom/server` stays on Vite's transform path. Calendar packages stay excluded.
+ * that reaches ready is Web's host-local optimizeDeps cache plus Worker `noDiscovery` with an
+ * explicit React/TanStack/paraglide include. Leave `urlpattern-polyfill` and `react-dom/server`
+ * off include: the nested package is resolved to ESM, and `react-dom/server` stays on Vite's
+ * transform path. Calendar packages stay excluded.
  */
-const workerOptimizeInclude = [
-  'react',
-  'react/jsx-runtime',
-  'react/jsx-dev-runtime',
-  'react-dom',
-  '@tanstack/react-router > @tanstack/react-store',
-  '@inlang/paraglide-js/urlpattern-polyfill',
-] as const;
 const webRequire = createRequire(import.meta.url);
 const paraglideRequire = createRequire(webRequire.resolve('@inlang/paraglide-js'));
 const urlpatternPolyfillCjs = paraglideRequire.resolve('urlpattern-polyfill');
@@ -130,24 +162,15 @@ function workerCjsShim(code: string): string {
   return `const module = { exports: {} }; const exports = module.exports;\n${code}\nexport default module.exports;\n`;
 }
 
-function pinWorkerOptimizeDeps(optimizeDeps: {
-  include?: string[];
-  exclude?: string[];
-  noDiscovery?: boolean;
-}): void {
-  // Cloudflare enables discovery on the Worker environment. Replace the merged include list so a
-  // later plugin cannot reintroduce a whole-graph scan or the packages that hang Rolldown.
-  optimizeDeps.noDiscovery = true;
-  optimizeDeps.include = [...workerOptimizeInclude];
-  optimizeDeps.exclude = [
-    ...new Set([
-      ...(optimizeDeps.exclude ?? []).filter(
-        (packageName) =>
-          packageName !== 'react' && packageName !== 'react-dom' && packageName !== 'react-dom/server',
-      ),
-      ...calendarOptimizeDeps,
-    ]),
-  ];
+function pinWorkerSsrOptimizeDeps(environment?: { optimizeDeps?: Record<string, unknown> }): void {
+  if (!environment) return;
+  environment.optimizeDeps = {
+    ...environment.optimizeDeps,
+    ...workerSsrOptimizeDeps,
+    include: [...workerSsrOptimizeDeps.include],
+    exclude: [...workerSsrOptimizeDeps.exclude],
+    entries: [],
+  };
 }
 
 function processExists(pid: number): boolean {
@@ -232,8 +255,21 @@ function workerDeniedDependencies(): Plugin {
 }
 
 export default defineConfig((context) => {
+  const viteCacheDir = process.env.WEB_VITE_CACHE_DIR;
+  if (viteCacheDir) alignViteLockfileHashes(viteCacheDir, appRoot);
+  if (process.env[webViteWarmSsrEnvName] === '1') {
+    return {
+      ...(viteCacheDir ? { cacheDir: viteCacheDir } : {}),
+      ssr: { target: 'webworker', noExternal: true },
+      environments: { ssr: webViteWorkerSsrEnvironment },
+      resolve: { alias: [urlpatternPolyfillAlias] },
+      optimizeDeps: { noDiscovery: true, include: [] },
+    };
+  }
   const persistence = createWorkerPersistence('web', context, appRoot);
+  const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
   return {
+    ...(viteCacheDir ? { cacheDir: viteCacheDir } : {}),
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
@@ -242,9 +278,9 @@ export default defineConfig((context) => {
       fs: {
         allow: [
           workspaceRoot,
-          dependencyRoot,
+          ...dependencyRoots,
           ...(linkedDependencyRoot ? [linkedDependencyRoot] : []),
-          ...fontDependencyRoots,
+          ...(viteCacheDir ? [resolve(viteCacheDir)] : []),
         ],
       },
     },
@@ -253,19 +289,14 @@ export default defineConfig((context) => {
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
-      // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
-      // after the first page has loaded. Copies and Loans keep a locale Calendar grid; never prebundle
-      // react-day-picker/date-fns if some other graph edge still names them.
-      entries: ['src/routes/**/*.tsx'],
-      holdUntilCrawlEnd: true,
-      exclude: [...calendarOptimizeDeps],
+      ...webViteClientOptimizeDeps,
     },
     ssr: {
       resolve: { alias: [urlpatternPolyfillAlias] },
       optimizeDeps: {
-        noDiscovery: true,
-        include: [...workerOptimizeInclude],
-        exclude: [...calendarOptimizeDeps],
+        ...workerSsrOptimizeDeps,
+        include: [...workerSsrOptimizeDeps.include],
+        exclude: [...workerSsrOptimizeDeps.exclude],
       },
     },
     plugins: [
@@ -304,6 +335,50 @@ export default defineConfig((context) => {
           },
         },
       },
+      ...(viteCacheDir
+        ? [
+            {
+              name: 'web-vite-dep-cache-align',
+              configureServer(server: { environments: Record<string, ViteDepCacheAlignEnvironment | undefined> }) {
+                return bindViteDepCacheAlign(viteCacheDir, server.environments);
+              },
+            },
+          ]
+        : []),
+      ...(testRuntime
+        ? [
+            {
+              name: 'rezics-test-fixture-env',
+              configureServer(server: {
+                middlewares: {
+                  use: (
+                    handler: (req: { headers: Record<string, unknown> }, res: unknown, next: () => void) => void,
+                  ) => void;
+                };
+              }) {
+                const directory = process.env.WEB_TEST_STATE_DIR;
+                if (!directory) return;
+                server.middlewares.use((req, _res, next) => {
+                  const overlay = readWorkerFixtureOverlay(directory);
+                  if (overlay) req.headers[testFixtureEnvHeader] = JSON.stringify(overlay);
+                  next();
+                });
+              },
+            },
+            {
+              name: 'rezics-test-env-bindings',
+              enforce: 'pre' as const,
+              transform(code: string, id: string) {
+                if (id.includes('test-runtime-bindings')) return;
+                if (!code.includes("from 'cloudflare:workers'")) return;
+                return {
+                  code: code.replaceAll("from 'cloudflare:workers'", `from ${JSON.stringify(testRuntimeBindings)}`),
+                  map: null,
+                };
+              },
+            },
+          ]
+        : []),
       {
         name: 'generate-localization',
         async config(_config, { command }) {
@@ -330,37 +405,44 @@ export default defineConfig((context) => {
       ...cloudflare({
         viteEnvironment: { name: 'ssr' },
         inspectorPort,
+        remoteBindings: false,
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
+      ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
       {
-        // Cloudflare's Worker environment re-enables discovery. Pin noDiscovery and the explicit
-        // include after that merge so host-b never resumes a whole-graph scan.
-        name: 'ssr-optimize-deps-skip-calendar-packages',
-        enforce: 'post',
-        configEnvironment(name) {
+        // Cloudflare's config hook enables discovery from the Worker entry. mergeConfig concatenates `entries`, so a
+        // later configEnvironment cannot remove that crawl. Pin the resolved Worker optimizer after plugin merge.
+        name: 'web-worker-explicit-dependencies',
+        enforce: 'post' as const,
+        config() {
+          return {
+            resolve: { alias: [urlpatternPolyfillAlias] },
+            environments: { ssr: { optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] } } },
+          };
+        },
+        configEnvironment(name: string) {
           if (name === 'client') return;
           return {
             resolve: { alias: [urlpatternPolyfillAlias] },
-            optimizeDeps: {
-              noDiscovery: true,
-              include: [...workerOptimizeInclude],
-              exclude: [...calendarOptimizeDeps],
-            },
+            optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] },
           };
         },
-        configResolved(config) {
+        configResolved(config: {
+          resolve: { alias?: unknown };
+          ssr: { resolve?: { alias?: unknown }; optimizeDeps?: Record<string, unknown> };
+          environments?: Record<string, { resolve: { alias?: unknown }; optimizeDeps?: Record<string, unknown> }>;
+        }) {
           pinUrlpatternAlias(config.resolve);
           if (!config.ssr.resolve) config.ssr.resolve = {};
           pinUrlpatternAlias(config.ssr.resolve);
-          if (config.ssr.optimizeDeps) pinWorkerOptimizeDeps(config.ssr.optimizeDeps);
-          for (const [name, environment] of Object.entries(config.environments)) {
+          pinWorkerSsrOptimizeDeps(config.ssr);
+          for (const [name, environment] of Object.entries(config.environments ?? {})) {
             if (name === 'client') continue;
             pinUrlpatternAlias(environment.resolve);
-            pinWorkerOptimizeDeps(environment.optimizeDeps);
+            pinWorkerSsrOptimizeDeps(environment);
           }
         },
       },
-      ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
       workerDeniedDependencies(),
     ],
   };

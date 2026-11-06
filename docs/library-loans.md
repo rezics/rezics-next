@@ -91,23 +91,29 @@ extend and return on each eligible row, and a named-counterparty create form. Th
 extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
 links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
 or `date-fns`. Host-b ready evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...`
-and then nothing for 150s, with diagnostics showing only the storybook-dev command and no
-CJS/`module` exception. Empty `optimizeDeps.include` plus `noDiscovery` printed no Vite line.
-The composition that skips that scan is Worker `noDiscovery` with an explicit include of React,
-TanStack's server store and `@inlang/paraglide-js/urlpattern-polyfill`. Copies still aliases
+and then nothing for 150s; later `noDiscovery` plus an explicit include still printed no Vite
+line inside the isolated network, with diagnostics showing only the storybook-dev command and no
+CJS/`module` exception. The composition that reaches ready is Web's host-local `optimizeDeps`
+cache: `vite optimize --force` plus a Node middleware-mode SSR warm keyed by `bun.lock`,
+`patches/` and the pinned include/entries, then restamped onto the serve plugin list so an
+isolated start reuses it. Worker `noDiscovery` keeps an explicit include of React, TanStack's
+server store and `@inlang/paraglide-js/urlpattern-polyfill`. Copies still aliases
 `urlpattern-polyfill` to ESM `index.js`, serves those files through filtered Worker resolve/load
 hooks, and shims remaining CJS, because Workerd's export-type inspection uses
 workerd/worker/module/browser conditions, not `import`. Adding `import` hung Rolldown before
 ready. The nested package and `react-dom/server` stay off include and off exclude; calendar
 packages stay on exclude. Serve reuses current Paraglide output through `messagesCurrent`, skips
 generate under `REZICS_TEST_RUNTIME` unless a test supplies `REZICS_PARAGLIDE_COMPILER_MODULE`,
-and takes a `.temp` lock when it does generate. Return uses the mounted
+and takes a `.temp` lock when it does generate. A focused private-network check warms that cache
+on the host, then starts one shared Vite for `/en` before the suite. Copies reuses it through
+per-file Worker overlays; signed-in-routes copies that cache into a private config and compiles
+after the shared server. Vite config identity stays Node-loadable: `prepareViteDepCache` and
+Bun process custody live in `vite-dep-cache-build.ts`, not in the module `vite.config.ts` imports. `REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` keep exclusive Worker graphs off one
+6 GiB slot. Isolation tests that need overlapping helpers leave that variable unset.
+`WEB_TEST_STATE_DIR` remains the focused run root; Worker persistence still allocates its own
+instance directory unless a caller passes `WEB_TEST_STATE_INSTANCE_DIR`. Return uses the mounted
 `POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method. signed-in-routes uses
-the same `startDevServer` ready and `/en` first-response path as Copies. A focused check sets
-`REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` so Copies and signed-in-routes never compile
-two Worker graphs in one 6 GiB slot. Isolation tests that need overlapping helpers leave that
-variable unset. `WEB_TEST_STATE_DIR` remains the focused run root; Worker persistence still
-allocates its own instance directory unless a caller passes `WEB_TEST_STATE_INSTANCE_DIR`.
+the same `startDevServer` ready and `/en` first-response path as Copies.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
 page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and
