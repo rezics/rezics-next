@@ -25,8 +25,6 @@ Client emit stays before the workspace compiler so tests see source-checked decl
 Declaration entry points name recursive query results through their owning compiler's return type, so publication
 does not expand an inferred cyclic structure. Publisher failure leaves dependent workspace typing pending; missing
 generated declarations are repaired through this publisher rather than handwritten consumer contracts.
-Route composition imports a named owner return-type alias before inference crosses directories, retaining the
-owning module's relative imports in declarations. Full official publication checks the resulting closure.
 
 Decision: `CLIENT_RUNTIME_ENTRIES` copies the Realm question-management and caption-history schema closure as
 installed package source, byte for byte, beside the generated declarations. Only `elysia` may be imported from

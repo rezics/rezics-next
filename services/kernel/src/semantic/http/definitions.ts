@@ -23,7 +23,7 @@ import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import type { SubjectRoutes } from './subjects.ts';
+import type { subjectRoutes } from './subjects.ts';
 import { AuthenticationError, type Access, type AccessFactory } from '../../request/access.ts';
 import { globalReadEligibility } from '../eligibility.ts';
 import { ContextNotFoundError, editorialContextAnchor, publicContextEligibility } from '../context.ts';
@@ -260,7 +260,7 @@ const catalogueReadDetail = (operationId: string) => ({
 });
 
 export function definitionRoutes(
-  app: SubjectRoutes,
+  app: ReturnType<typeof subjectRoutes>,
   {
     pool,
     access,
