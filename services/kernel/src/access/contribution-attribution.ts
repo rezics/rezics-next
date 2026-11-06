@@ -49,6 +49,14 @@ export function contributionAttribution(identity: Identity | null | undefined): 
   return { id, displayName: identity.displayName ?? null };
 }
 
+/** Observed public identity for Log and Collection views: pending or missing stays unknown. */
+export function contributionFromPublicIdentity(
+  identity: Identity | null | undefined,
+): ContributionAttribution | null {
+  if (!identity || identity.state === 'pending') return null;
+  return contributionAttribution(identity);
+}
+
 export function contributionDeleted(value: ContributionAttribution): value is DeletedContributionAttribution {
   return !('id' in value);
 }

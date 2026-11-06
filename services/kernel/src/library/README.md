@@ -21,6 +21,7 @@ Library is the kernel module for a person's shelves and reading state, and for t
 Decision: native planner projections use Reylo's named compiled `sql` exports and refuse changed projection shapes; root boot registers the supported loader after database creation and before entry or support imports, matching persona/seed.
 The shelf-score preparation route uses operation ID `library_shelf_score.prepare`, naming score as the resource and prepare as the verb in the repository's required `<resource>.<verb>` form.
 Library outcome children decorate `startWorker`'s live `createKernelWorkModules` list so Content ambient and Semantic domain reach score and progress registrations; `KERNEL_WORK_MODULES` is a registration-name pin.
+FULL published-log views add `attribution` from Access `readContributionAttributions`: live `{id,displayName}`, an id-free Deleted account/organization label, or null unknown. Missing and pending identity stay unknown. The existing `account` summary remains the live handle/name overlay.
 
 `shelf-contract.ts` re-exports the callable `createShelfReads` and `admitShelfRead`. The default kernel installs
 `createDefaultShelfReads`: six fixed native date orders, one selected-page active-session batch, exact owner-private

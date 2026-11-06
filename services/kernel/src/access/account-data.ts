@@ -18,7 +18,11 @@ import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
-import { contributionAttribution, type ContributionAttribution } from './contribution-attribution.ts';
+import {
+  contributionAttribution,
+  contributionFromPublicIdentity,
+  type ContributionAttribution,
+} from './contribution-attribution.ts';
 import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
@@ -292,6 +296,38 @@ export async function readPublicIdentities(
     const row = found.get(`${route}:${accountIds[index]}`);
     return row ? [row] : [];
   });
+}
+
+const CONTRIBUTION_ATTRIBUTION_BATCH = 100;
+
+/** Deduplicated public contribution map; missing and pending identities stay unknown. */
+export async function readContributionAttributions(
+  client: Queryable,
+  accountIds: readonly string[],
+): Promise<ReadonlyMap<string, ContributionAttribution | null>> {
+  const unique = [...new Set(accountIds)];
+  const result = new Map<string, ContributionAttribution | null>();
+  for (let offset = 0; offset < unique.length; offset += CONTRIBUTION_ATTRIBUTION_BATCH) {
+    const batch = unique.slice(offset, offset + CONTRIBUTION_ATTRIBUTION_BATCH);
+    const requested: { id: string; route: number }[] = [];
+    for (const id of batch) {
+      const route = routeOf(id);
+      if (route === null) {
+        result.set(id, null);
+        continue;
+      }
+      requested.push({ id, route });
+    }
+    if (requested.length === 0) continue;
+    const identities = await readPublicIdentities(
+      client,
+      requested.map((item) => item.route),
+      requested.map((item) => item.id),
+    );
+    const found = new Map(identities.map((identity) => [identity.id, identity]));
+    for (const { id } of requested) result.set(id, contributionFromPublicIdentity(found.get(id)));
+  }
+  return result;
 }
 
 /**

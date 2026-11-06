@@ -174,3 +174,8 @@ Decision: Discovery maps a personal-score `stale` write to `rejected` so Search 
 requires an explicit fresh save. Worker composition keeps History's application public entries and still installs the
 native History composition plus Library domain. The root typecheck runner is not a workspace source file. Host-walk
 tests keep pinning the seeded voter, second-account and anonymous score journey; fewer test lines than product lines.
+
+Decision: FULL published-log views add Access `readContributionAttributions` in the existing enrichment: live
+`{id,displayName}`, an id-free Deleted account/organization label, or null unknown. Missing and pending identity stay
+unknown. Unit tests pin those three Log states; host-walk tests keep pinning the seeded voter, second-account and
+anonymous score journey. Fewer test lines than product lines.
