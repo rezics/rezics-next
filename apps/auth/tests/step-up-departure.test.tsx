@@ -191,10 +191,9 @@ for (const method of ['password', 'passkey'] as const)
           const observed = Promise.withResolvers<Response>();
           const observing = Promise.withResolvers<void>();
           const paths: string[] = [];
-          let signInBody: { client_id: string; scope: string[] } | undefined;
-          const request = spyOn(globalThis, 'fetch').mockImplementation((path, init) => {
+          const profile = accountOperationProfile(kind === 'organization' ? kind : 'delete');
+          const request = spyOn(globalThis, 'fetch').mockImplementation((path) => {
             paths.push(String(path));
-            if (String(path) === '/signin') signInBody = JSON.parse(String(init?.body));
             if (path === '/session') {
               observing.resolve();
               return observed.promise;
@@ -204,7 +203,7 @@ for (const method of ['password', 'passkey'] as const)
           const passkey = Promise.withResolvers<PasskeySignInResult>();
           const ceremony = spyOn(passkeys, 'signInWithPasskey').mockImplementation(() => passkey.promise);
           const authenticate = () => {
-            authentication.resolve(Response.json(nativeSignInProof(signInBody!)));
+            authentication.resolve(Response.json(nativeSignInProof(profile)));
             passkey.resolve({ ok: true });
           };
           try {
@@ -219,7 +218,6 @@ for (const method of ['password', 'passkey'] as const)
             if (replacement === null) window.sessionStorage.removeItem(storageKey);
             else window.sessionStorage.setItem(storageKey, replacement);
             authenticate();
-            const profile = accountOperationProfile(kind === 'organization' ? kind : 'delete');
             observed.resolve(
               Response.json({ account_id: accountId, client_id: profile.client_id, scope: profile.scope }),
             );

@@ -3502,6 +3502,8 @@ all grants on a dispositioned Zone from only the erased account's subject grants
 `minimizeZoneGrantPage(tx, { admission, cursor, limit })` is the Access-owned paged port. `tx` is the active
 `CommandTransaction`; Semantic locks and rechecks the Zone parent and retains the returned `next` cursor with its
 existing cleanup CAS in that transaction. Access does not admit branches or persist another progress row. The
+account-erasure Zone writer pages both grant stores against the committed barrier and CAS-persists that cursor;
+discarding `next` after the resource-grant page made role cleanup unreachable. The
 opaque admission is issued by Semantic after its authentic ordinary-expiry, early-privacy, legal-order or terminal-
 account branch check. It carries the exact Zone route/id/home epoch, resource and lifecycle revisions, deletion
 generation, cleanup progress and protection revision. The terminal account-subject form also carries the exact

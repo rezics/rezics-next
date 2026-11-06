@@ -5,6 +5,7 @@ import {
   type ZoneGrantCleanupAdmission,
   type ZoneGrantCleanupCursor,
   type ZoneGrantCleanupPage,
+  type ZoneGrantCleanupSource,
   type ZonePrimaryOwnerEvidence,
 } from '../../access/zone-grant-cleanup.ts';
 import type { CommandTransaction } from '../../command/command.ts';
@@ -72,6 +73,37 @@ async function committedBarrier(tx: CommandTransaction, accountId: string) {
   return row.rows[0] ?? null;
 }
 
+function resumeSource(
+  row: ZoneHead,
+  accountId: string,
+  barrier: Readonly<{ version: string; at: string }>,
+  resume: ZoneGrantCleanupCursor,
+): { source: ZoneGrantCleanupSource; primaryOwner: ZonePrimaryOwnerEvidence } | null {
+  const terminal = resume.scope.terminal;
+  if (
+    resume.scope.kind !== 'terminal-account-subject' ||
+    resume.scope.branch !== 'terminal-account' ||
+    resume.scope.zone.zoneId !== row.id ||
+    resume.scope.zone.route !== row.route ||
+    !terminal ||
+    terminal.accountId !== accountId ||
+    terminal.barrierVersion !== barrier.version ||
+    terminal.barrierAt !== barrier.at
+  )
+    return null;
+  return {
+    source: {
+      zone: resume.scope.zone,
+      revision: resume.scope.revision,
+      lifecycleRevision: resume.scope.lifecycleRevision,
+      generation: resume.scope.generation,
+      progress: resume.scope.progress,
+      protectionRevision: resume.scope.protectionRevision,
+    },
+    primaryOwner: terminal.primaryOwner,
+  };
+}
+
 /** Issue Access's opaque grant admission only after the Zone parent is locked in this command. */
 export async function admitZoneCleanup(
   tx: CommandTransaction,
@@ -79,8 +111,8 @@ export async function admitZoneCleanup(
   input: Readonly<{
     at: string;
     accountId?: string;
-    barrier?: Readonly<{ version: string; at: string }>;
     primaryOwner?: ZonePrimaryOwnerEvidence;
+    resume?: ZoneGrantCleanupCursor;
   }>,
 ): Promise<ZoneCleanupAdmission | null> {
   if (row.held) return null;
@@ -88,14 +120,18 @@ export async function admitZoneCleanup(
   const branch = terminal ? 'terminal-account' : intentOf(row, input.at);
   if (!branch) return null;
   if (branch === 'ordinary-expiry' && liveCoverage(row).length > 0) return null;
-  const generation = generationOf(row);
+  const barrier = terminal ? await committedBarrier(tx, input.accountId!) : undefined;
+  if (terminal && !barrier) return null;
+  const continued =
+    terminal && input.resume && barrier ? resumeSource(row, input.accountId!, barrier, input.resume) : null;
+  const generation = continued?.source.generation ?? generationOf(row);
   if (!generation) return null;
-  const barrier = terminal ? (input.barrier ?? (await committedBarrier(tx, input.accountId!))) : undefined;
-  if (terminal && (!barrier || !input.primaryOwner)) return null;
+  const primaryOwner = continued?.primaryOwner ?? input.primaryOwner;
+  if (terminal && !primaryOwner) return null;
   const route = row.route;
-  const zone = await home(tx, route);
-  const source = {
-    zone: { route, zoneId: row.id, home: zone },
+  const zone = continued?.source.zone ?? { route, zoneId: row.id, home: await home(tx, route) };
+  const source: ZoneGrantCleanupSource = continued?.source ?? {
+    zone,
     revision: row.revision,
     lifecycleRevision: row.lifecycleRevision,
     generation,
@@ -110,7 +146,7 @@ export async function admitZoneCleanup(
           source,
           accountId: input.accountId!,
           barrier,
-          primaryOwner: input.primaryOwner!,
+          primaryOwner: primaryOwner!,
           branchEvidence: evidence,
         }
       : {
@@ -124,10 +160,10 @@ export async function admitZoneCleanup(
     branch,
     zoneId: row.id,
     route,
-    revision: row.revision,
-    lifecycleRevision: row.lifecycleRevision,
-    generation,
-    protectionRevision: row.lifecycleRevision,
+    revision: source.revision,
+    lifecycleRevision: source.lifecycleRevision,
+    generation: source.generation,
+    protectionRevision: source.protectionRevision,
     grants,
   };
   issued.set(grants, admission);
