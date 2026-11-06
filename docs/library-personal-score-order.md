@@ -123,4 +123,4 @@ highest-score initial direction; do not import those architectures or their publ
 Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
 Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.
 Global distribution reads admit the native aggregate shape; focused `--private-network` walks attach disposable
-PostgreSQL to that loopback namespace instead of a host-published port.
+PostgreSQL to that loopback namespace on port 5432 instead of a host-published or pre-closed ephemeral listen port.

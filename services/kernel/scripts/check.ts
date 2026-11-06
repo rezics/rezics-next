@@ -762,12 +762,12 @@ export function startPostgresContainer(
   dockerCommand: DockerCommand = docker,
   options: PostgresContainerOptions = {},
 ): string {
-  if ((options.networkNamespace == null) !== (options.listenPort == null))
-    throw new Error('Disposable PostgreSQL network namespace and listen port must be supplied together');
-  const network =
-    options.networkNamespace && options.listenPort !== undefined
-      ? ['--network', `ns:${options.networkNamespace}`]
-      : ['-p', '127.0.0.1::5432'];
+  if (options.listenPort != null && options.networkNamespace == null)
+    throw new Error('Disposable PostgreSQL listen port requires a network namespace');
+  const network = options.networkNamespace
+    ? ['--network', `ns:${options.networkNamespace}`]
+    : ['-p', '127.0.0.1::5432'];
+  const listenEnv = options.listenPort === undefined ? [] : ['-e', `PGPORT=${options.listenPort}`];
   const listen = options.listenPort === undefined ? [] : ['-c', `port=${options.listenPort}`];
   return dockerCommand([
     'run',
@@ -785,6 +785,7 @@ export function startPostgresContainer(
     'POSTGRES_PASSWORD=rezics',
     '-e',
     'POSTGRES_DB=rezics',
+    ...listenEnv,
     POSTGRES_IMAGE,
     '-c',
     'fsync=off',

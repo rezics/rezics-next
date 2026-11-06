@@ -158,16 +158,31 @@ test('an isolated network namespace listens inside that namespace instead of pub
   const calls: string[][] = [];
   startPostgresContainer((args) => (calls.push(args), 'postgres-container'), {
     networkNamespace: '/proc/1234/ns/net',
-    listenPort: 45432,
   });
   const args = calls[0]!;
   expect(args).toContain('--network');
   expect(args).toContain('ns:/proc/1234/ns/net');
-  expect(args).toContain('port=45432');
   expect(args).not.toContain('127.0.0.1::5432');
-  expect(() => startPostgresContainer((next) => next.join(' '), { networkNamespace: '/proc/1/ns/net' })).toThrow(
-    'Disposable PostgreSQL network namespace and listen port must be supplied together',
+  expect(args.some((argument) => argument.startsWith('port=') || argument.startsWith('PGPORT='))).toBe(false);
+  expect(() => startPostgresContainer((next) => next.join(' '), { listenPort: 45432 })).toThrow(
+    'Disposable PostgreSQL listen port requires a network namespace',
   );
+});
+
+test('an isolated namespace can listen on an explicit port through PGPORT', () => {
+  const calls: string[][] = [];
+  startPostgresContainer((args) => (calls.push(args), 'postgres-container'), {
+    networkNamespace: '/proc/1234/ns/net',
+    listenPort: 45432,
+  });
+  const args = calls[0]!;
+  const image = args.findIndex((argument) => argument.startsWith('postgres:'));
+  expect(args).toContain('ns:/proc/1234/ns/net');
+  expect(args).toContain('PGPORT=45432');
+  expect(args).toContain('port=45432');
+  expect(args.indexOf('PGPORT=45432')).toBeGreaterThan(0);
+  expect(args.indexOf('PGPORT=45432')).toBeLessThan(image);
+  expect(args[args.indexOf('PGPORT=45432') - 1]).toBe('-e');
 });
 
 test("a failing kernel check prints the database server's errors and fatal messages by SQLSTATE", () => {

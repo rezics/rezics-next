@@ -5,7 +5,6 @@ import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { readlinkSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -411,23 +410,6 @@ function isolatedNetworkNamespacePath(): string | undefined {
   }
 }
 
-function allocateLoopbackPort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('Could not allocate a loopback port for disposable PostgreSQL'));
-        return;
-      }
-      const port = address.port;
-      server.close((error) => (error ? reject(error) : resolve(port)));
-    });
-  });
-}
-
 function publishedPostgresUrl(container: string): string {
   const portResult = Bun.spawnSync(['docker', 'port', container, '5432/tcp']);
   if (portResult.exitCode !== 0)
@@ -439,8 +421,15 @@ function publishedPostgresUrl(container: string): string {
 }
 
 function postgresContainerLogs(container: string): string {
+  const inspect = Bun.spawnSync([
+    'docker',
+    'inspect',
+    '-f',
+    '{{.HostConfig.NetworkMode}} {{.State.Status}}',
+    container,
+  ]);
   const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
-  return `${logs.stdout}${logs.stderr}`;
+  return `network ${inspect.stdout.toString().trim()}\n${logs.stdout}${logs.stderr}`;
 }
 
 async function waitForOwnedPostgres(container: string, databaseUrl: string): Promise<void> {
@@ -469,9 +458,10 @@ async function waitForOwnedPostgres(container: string, databaseUrl: string): Pro
       return;
     } catch (error) {
       if (Date.now() >= deadline)
-        throw new Error(`Disposable PostgreSQL did not become ready.\n${postgresContainerLogs(container)}`, {
-          cause: error,
-        });
+        throw new Error(
+          `Disposable PostgreSQL did not become ready at ${databaseUrl}.\n${postgresContainerLogs(container)}`,
+          { cause: error },
+        );
       await Bun.sleep(500);
     } finally {
       await probe.end();
@@ -482,15 +472,14 @@ async function waitForOwnedPostgres(container: string, databaseUrl: string): Pro
 async function startOwnedPostgres(): Promise<{ container: string; databaseUrl: string }> {
   const { docker, startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
   const networkNamespace = isolatedNetworkNamespacePath();
-  const listenPort = networkNamespace ? await allocateLoopbackPort() : undefined;
-  const container =
-    networkNamespace && listenPort !== undefined
-      ? startPostgresContainer(docker, { networkNamespace, listenPort })
-      : startPostgresContainer();
-  const databaseUrl =
-    listenPort === undefined
-      ? publishedPostgresUrl(container)
-      : `postgres://rezics:rezics@127.0.0.1:${listenPort}/rezics?sslmode=disable`;
+  const container = networkNamespace
+    ? startPostgresContainer(docker, { networkNamespace })
+    : startPostgresContainer();
+  // Isolated netns loopback is empty; the image listens on 5432 there. A pre-closed
+  // ephemeral host port never became the server port (logs stayed on 5432).
+  const databaseUrl = networkNamespace
+    ? 'postgres://rezics:rezics@127.0.0.1:5432/rezics?sslmode=disable'
+    : publishedPostgresUrl(container);
   await waitForOwnedPostgres(container, databaseUrl);
   return { container, databaseUrl };
 }
