@@ -10,6 +10,7 @@ import {
   ownNodeProcess,
   processHasExited,
   processIdentity,
+  observeOwnedTreeForRegression,
   processStartTicks,
   ProcessCustodyError,
   reapExitedProcessGroupMembers,
@@ -329,6 +330,48 @@ test('a descendant that leaves the group and is reparented before close is still
   } finally {
     if (escaped !== undefined && !processHasExited(escaped)) process.kill(escaped, 'SIGKILL');
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+async function readFirstChild(parent: number): Promise<number> {
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    const [first] = readFileSync(`/proc/${parent}/task/${parent}/children`, 'utf8').trim().split(/\s+/);
+    if (first && /^[0-9]+$/.test(first)) return Number(first);
+    if (Date.now() > deadline) throw new Error(`no child of ${parent} appeared`);
+    await Bun.sleep(10);
+  }
+}
+
+test('a group id recycled after its owners exit is never adopted or signalled', async () => {
+  // The leader leads a group with one member. Its recorded launch start time no longer names the live leader,
+  // as after PID reuse, so nothing in that group is ours.
+  const leader = Bun.spawn(['sh', '-c', 'sleep 60 & wait'], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  const member = await readFirstChild(leader.pid);
+  const startTicks = processStartTicks(leader.pid) ?? '';
+  const tree = observeOwnedTreeForRegression(leader.pid, { pid: leader.pid, startTicks: `${startTicks}0` });
+  try {
+    tree.sample(true);
+    const errors: unknown[] = [];
+    tree.signal('SIGKILL', errors);
+    await Bun.sleep(100);
+    expect(errors).toEqual([]);
+    expect(tree.live()).toEqual([]);
+    expect(processHasExited(member)).toBe(false);
+    expect(processHasExited(leader.pid)).toBe(false);
+  } finally {
+    tree.stop();
+    for (const pid of [member, leader.pid]) {
+      try {
+        if (!processHasExited(pid)) process.kill(pid, 'SIGKILL');
+      } catch {}
+    }
+    await leader.exited;
   }
 });
 

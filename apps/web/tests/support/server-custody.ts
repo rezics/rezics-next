@@ -328,19 +328,27 @@ type OwnedTree = {
 };
 
 /**
- * Owned processes from launch to close. A descendant is recorded while its parent is live with the recorded start
- * time, so it stays owned after leaving the group and being reparented. Settlement and signals follow only recorded
- * members whose start time still matches.
+ * Owned processes from launch to close. A descendant is recorded while it is observed alive with its parent live under
+ * the recorded start time, so it stays owned after leaving the group and being reparented. Settlement and signals
+ * follow only recorded members whose start time still matches, and a group id is adopted only while the root or a
+ * recorded live member still holds it.
+ *
+ * Real guarantee: children of live owned members are sampled every 5 to 50 ms, and the root's group is sampled every
+ * 500 ms and at close. A descendant created and reparented between two samples is not recorded unless it stays in the
+ * root's group. Full custody needs a launch-time mechanism that the launcher owns, which this module does not provide.
  */
-function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
+function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: OwnedMember | null): OwnedTree {
   const members = new Map<string, TrackedMember>();
   const keyOf = (member: OwnedMember) => `${member.pid}:${member.startTicks}`;
   const rootIdentity = processIdentity(rootPid);
-  const rootMember: OwnedMember | undefined = rootIdentity
-    ? { pid: rootPid, startTicks: rootIdentity.startTicks }
-    : undefined;
-  if (rootIdentity) {
-    const tracked = trackedOf(rootPid, rootIdentity);
+  // A launch record names the root by start time; a record that no longer matches the live PID is dead, not adopted.
+  const rootMember: OwnedMember | undefined =
+    launched === null ? undefined : (launched ?? (rootIdentity ? { pid: rootPid, startTicks: rootIdentity.startTicks } : undefined));
+  if (rootMember) {
+    const current = rootIdentity?.startTicks === rootMember.startTicks ? rootIdentity : undefined;
+    const tracked: TrackedMember = current
+      ? trackedOf(rootPid, current)
+      : { pid: rootPid, startTicks: rootMember.startTicks, ppid: -1, pgrp: rootPid };
     members.set(keyOf(tracked), tracked);
   }
   const sampleMs = Math.min(50, Math.max(5, pollIntervalMs));
@@ -349,6 +357,15 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
   let ticks = 0;
 
   const live = (): TrackedMember[] => [...members.values()].filter((member) => liveIdentity(member) !== undefined);
+
+  // The group id is ours from a launch-time observation: the root was alive, or a recorded member held the group. Once a
+  // scan observes the group empty, its number may name an unrelated group, so ownership is never reacquired.
+  let groupOwned = rootMember !== undefined && liveIdentity(rootMember) !== undefined;
+  const refreshGroupOwnership = (current: TrackedMember[]): boolean => {
+    if (rootMember !== undefined && liveIdentity(rootMember) !== undefined) groupOwned = true;
+    if (current.some((member) => processIdentity(member.pid)?.pgrp === rootPid)) groupOwned = true;
+    return groupOwned;
+  };
 
   const sample = (full: boolean) => {
     const current = live();
@@ -365,15 +382,18 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
       }
       return;
     }
-    // Group members of the root, and children of live owned members, found to a fixed point.
     const table = readProcessTable();
+    refreshGroupOwnership(current);
+    if (groupOwned && ![...table.values()].some((identity) => identity.pgrp === rootPid)) groupOwned = false;
+    // Group members are adopted only while the group is ours; children of live owned members always are.
+    const groupHeld = groupOwned;
     let grew = true;
     while (grew) {
       grew = false;
       for (const [pid, identity] of table) {
         const tracked = trackedOf(pid, identity);
         if (members.has(keyOf(tracked))) continue;
-        const groupMember = pid !== rootPid && identity.pgrp === rootPid;
+        const groupMember = groupHeld && pid !== rootPid && identity.pgrp === rootPid;
         if (!groupMember && !liveByPid.has(identity.ppid)) continue;
         members.set(keyOf(tracked), tracked);
         liveByPid.set(pid, tracked);
@@ -384,11 +404,7 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
 
   const signal = (signalName: NodeJS.Signals, errors: unknown[]) => {
     const current = live();
-    // A group id stays reserved while any member keeps it, so a live member in the group proves the group is ours.
-    const groupOwned =
-      (rootMember !== undefined && liveIdentity(rootMember) !== undefined) ||
-      current.some((member) => processIdentity(member.pid)?.pgrp === rootPid);
-    if (groupOwned) {
+    if (refreshGroupOwnership(current)) {
       try {
         process.kill(-rootPid, signalName);
       } catch (error) {
@@ -439,7 +455,8 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
   const tick = () => {
     ticks += 1;
     sample(ticks % fullEvery === 0);
-    if (live().length === 0) stop();
+    // An owned group keeps the sampler running until a scan observes it empty.
+    if (live().length === 0 && !groupOwned) stop();
   };
 
   sample(true);
@@ -456,6 +473,18 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
     remaining,
     stop,
   };
+}
+
+/**
+ * Regression seam for the shared implementation: an owned tree whose root carries an explicit launch record. A record
+ * whose start time no longer names the live PID models a PID or group number recycled after its owner exited.
+ */
+export function observeOwnedTreeForRegression(
+  rootPid: number,
+  launched: OwnedMember | null,
+  pollIntervalMs = 10,
+): Pick<OwnedTree, 'sample' | 'live' | 'signal' | 'stop'> {
+  return createOwnedTree(rootPid, pollIntervalMs, launched);
 }
 
 function makeProcessCustody(
