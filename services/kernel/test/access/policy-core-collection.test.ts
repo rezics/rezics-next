@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import {
   compileNativePolicyCatalogue,
   decideNativePermission,
+  hasNativePolicyProfile,
+  uniqueNativePolicyResourceType,
   type NativePermissionProjection,
 } from '../../src/access/policy-core.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
@@ -126,4 +128,22 @@ test('exact registered Global reach is the only alternate path, and unavailable 
 
   const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
   expect(unknown.decision).toBe('unavailable');
+});
+
+test('declared creation types stay out of unique point policy profiles', () => {
+  const compiled = compileNativePolicyCatalogue(
+    new Map([
+      ['zone:create', { anonymous: false, 'x-resource-types': ['semantic.zone'] }],
+      ['statement:propose', { anonymous: false, 'x-resource-types': ['semantic.revision'] }],
+    ]),
+    {
+      roles: new Map([['semantic.context.editor', ['statement:propose']]]),
+      types: new Map([['semantic.context', { standing: ['semantic.context.editor'] }]]),
+    },
+  );
+  expect(uniqueNativePolicyResourceType(compiled, 'zone:create')).toBeUndefined();
+  expect(hasNativePolicyProfile(compiled, 'zone:create', 'semantic.zone')).toBe(false);
+  expect(uniqueNativePolicyResourceType(compiled, 'statement:propose')).toBe('semantic.context');
+  expect(hasNativePolicyProfile(compiled, 'statement:propose', 'semantic.revision')).toBe(false);
+  expect(hasNativePolicyProfile(compiled, 'statement:propose', 'semantic.context')).toBe(true);
 });

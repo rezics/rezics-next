@@ -95,9 +95,11 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
       action,
       anonymous: metadata.anonymous,
       authority: metadata.authority === 'own-account' ? 'own-account' : 'resource',
+      // A declared type is a binding, not an authorized type: a creation route declares the child it initializes
+      // while authorizing its parent anchor. Only role-backed registrations form a profile; other points keep the
+      // SQL formula, so a parent-anchored check is never evaluated as the child's resource type.
       resourceTypes: [
         ...new Set([
-          ...(metadata['x-resource-types'] ?? []),
           ...(typesByAction.get(action) ?? []),
           ...(metadata.authority === 'own-account' ? ['access.account'] : []),
         ]),

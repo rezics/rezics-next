@@ -262,7 +262,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
 
   const pendingPublic = readSubject(await get(null, `/v1/subjects/${created.id}`));
   expect(languages(pendingPublic)).toEqual(createdEnglish);
-  expect(pendingPublic.revision).toBe(created.revision);
+  expect(pendingPublic.revision).toBe(chinese.revision);
 
   const listed = await listCandidates(created.id, 'acceptor');
   const byId = Object.fromEntries(listed.candidates.filter((row) => !row.deleted).map((row) => [row.id, row]));

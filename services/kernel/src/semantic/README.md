@@ -120,7 +120,9 @@ minimal current-disclosure revision explanations. `correctTerms` is the native c
 Ordinary authored text reads the mounted `subject.propose` operation on the fixed Global Context alongside the
 separate `subject.accept_candidate`, `subject.reject_candidate` and `subject.adopt` operations on their own current
 Context authorities. Candidate proposal authorizes that Global Context parent as `semantic.context`; Access must not
-infer the child revision type for the grant. The proposal command still reauthorizes the exact admitted target and
+infer the child revision type for the grant. Declared `x-resource-types` remain creation bindings and do not form a
+unique native policy profile. Public subject reads report the current command revision; selected statements stay at
+the last adopted facts until a later adoption. The proposal command still reauthorizes the exact admitted target and
 property at execution.
 The mounted `subject.terms` viewer-action binding observes `statement:propose` on the canonical Global Context;
 the Semantic Context resolver marks it applicable only there while Access decides the current grant. Subject Terms
