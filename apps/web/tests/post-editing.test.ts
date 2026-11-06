@@ -4,6 +4,8 @@ import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type Page } from 'playwright';
 import type { KernelClient } from '@rezics/client';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
 import { startDevServer } from './support/dev-server.ts';
 
 const timeout = 300_000;
@@ -105,6 +107,7 @@ function post(n: number, body = snapshot('Existing contribution'), threadId = id
     licence,
     subjectIds: [],
     mediaIds: [],
+    voteCitation: null,
     availability: 'available',
     body,
   };
@@ -116,6 +119,7 @@ function thread(n: number, title: string, body = snapshot('Opening contribution'
       id: id(n),
       boardId: id(1),
       authorId: id(90),
+      kind: 'discussion',
       licence,
       subjectIds: [],
       title,
@@ -203,6 +207,33 @@ function reset() {
   initialRevisedAt = null;
   current = thread(2, 'A shared reading', snapshot('Existing contribution'));
   posts = { posts: [post(12, snapshot('Existing contribution'))], next: null };
+}
+
+function actor(request: Request): string | undefined {
+  const authorization = request.headers.get('authorization');
+  if (!authorization?.startsWith('Bearer ')) return undefined;
+  return subjects.get(authorization.slice('Bearer '.length));
+}
+
+function readingPage(request: Request): ReadingPage {
+  const opening = current.thread.firstPost;
+  const replies = posts.posts.filter((entry) => entry.id !== opening.id) as ReadingPage['replies']['items'];
+  const authors = [
+    ...new Set(
+      [opening, ...replies].flatMap((entry) =>
+        entry.availability === 'available' && 'authorId' in entry ? [entry.authorId] : [],
+      ),
+    ),
+  ].map((authorId) => ({ id: authorId, displayName: null, handle: null, avatar: null }));
+  const page = authoredReadingPage(current.thread as ReadingPage['thread'], replies, authors);
+  const viewerId = actor(request);
+  if (viewerId) {
+    page.viewer = { kind: 'account', id: viewerId };
+    page.watch = { state: 'unavailable', retryable: true };
+    page.currentness.watch = 'unavailable';
+  }
+  page.query.cursor = new URL(request.url).searchParams.get('cursor');
+  return page;
 }
 
 // OpenID provider copied from posting.test.ts; tokens grant posting and media scopes.
@@ -379,7 +410,7 @@ const fake = Bun.serve({
     }
     if (url.pathname === postPath && request.method === 'DELETE') {
       const selected = posts.posts.find((entry) => entry.id === id(12)) ?? current.thread.firstPost;
-      const erased = { ...selected, body: null, availability: 'erased', removed: true };
+      const erased = { ...selected, body: null, sha256: null, availability: 'erased' as const, removed: true as const };
       posts = { ...posts, posts: posts.posts.map((entry) => (entry.id === id(12) ? erased : entry)) };
       current = { thread: { ...current.thread, firstPost: erased } };
       return new Response(null, { status: 204 });
@@ -439,7 +470,9 @@ const fake = Bun.serve({
         return json(page);
       }
       if (url.pathname === `/v1/threads/${current.thread.id}`) return json(current);
+      if (url.pathname === `/v1/threads/${current.thread.id}/reading-page`) return json(readingPage(request));
       if (url.pathname === `/v1/threads/${current.thread.id}/posts`) return json(posts);
+      if (/\/v1\/(?:posts|threads)\/[^/]+\/reaction$/.test(url.pathname)) return json({ kind: null });
     }
     if (
       request.method === 'POST' &&

@@ -322,9 +322,9 @@ export function ThreadReading({
     };
   const commandAuthority = retainedCommandAuthority.current;
   const commandSession = pageCurrent ? session : (commandAuthority?.session ?? session);
-  const commandViewerId = pageCurrent ? currentPersonal?.viewerId : commandAuthority?.viewerId;
+  const commandViewerId = pageCurrent ? (currentPersonal?.viewerId ?? page.viewerId) : commandAuthority?.viewerId;
   const commandPersonalReady = pageCurrent
-    ? session !== 'signed-in' || currentPersonal !== undefined
+    ? session !== 'signed-in' || currentPersonal !== undefined || page.viewerId !== undefined
     : (commandAuthority?.personalReady ?? false);
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => authorErasureSessionSource(client), [client]);

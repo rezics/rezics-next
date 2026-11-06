@@ -37,6 +37,8 @@ claims are covered here, including uploader identity, parent disclosure and life
 
 Decision: reading-card `placeId` is the Board identity. Subject discussion pages confirm the Subject on the
 disclosed thread and the Board home separately; they do not pass the Board id to `readSubjectThread` as a place.
+Focused post-editing browser cases remain the fewest that pin the mounted edit/delete journey; they consume the
+composed reading-page rather than split thread and post lists.
 
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

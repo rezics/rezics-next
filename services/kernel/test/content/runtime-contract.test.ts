@@ -22,6 +22,7 @@ type KernelContent = ContentRuntime &
     disclosureBarrier?: DisclosureBarrier;
     pageDisclosureBarrier?: PageDisclosureBarrier;
   };
+
 test('trusted optional content runtime types retain exactly the native ports and the Auth consent reader', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
     Readonly<{
@@ -44,9 +45,7 @@ test('trusted optional content runtime types retain exactly the native ports and
   expect({} satisfies ContentRuntime).toEqual({});
 });
 
-test(
-  'kernel forwards native ports unchanged without executing jobs, I/O, access or its sole clock',
-  async () => {
+test('kernel forwards native ports unchanged without executing jobs, I/O, access or its sole clock', async () => {
   const forbidden = mock((): never => {
     throw new Error('Composition must not execute a dependency');
   });
