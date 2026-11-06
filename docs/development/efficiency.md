@@ -108,8 +108,8 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the threshold.
 - Managers challenge any rule or instruction, the supermanager's included, as soon as evidence shows it produces bad
   results.
-Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
-Keep allowance balances, account selection and operating ceilings in private configuration.
+  Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
+  Keep allowance balances, account selection and operating ceilings in private configuration.
 
 Token efficiency is a primary measure, beside output: allowance spent per landed product line and per landed
 outcome, tracked per Goal, task class and model profile. It improves in three ways:
