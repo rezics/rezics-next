@@ -342,54 +342,7 @@ function inferredPolicyResourceType(
   return isPlatformResource(resource) ? undefined : uniqueNativePolicyResourceType(catalogue, action);
 }
 
-// DIAG-TEMP: deny-reason probe; remove after the grant and Collection read denials are explained.
-let diagDenies = 0;
-let diagPrepares = 0;
-let diagReturns = 0;
-let diagRows = 0;
-function diagReturn<T>(evidence: T, line: number, action: string): T {
-  if (diagReturns++ < 400 && action === 'collection:read') console.error('DIAG-TEMP prepare early return', JSON.stringify({ line, action }));
-  return evidence;
-}
 async function checkPreparedPermission(
-  client: AccessClient,
-  actor: Actor,
-  action: string,
-  resource: Resource,
-  evidence?: unknown,
-  time?: AuthoritativeTime,
-  clock?: () => Date,
-  page?: ResourcePage,
-  includeExplicit = false,
-): Promise<AccessDecision & { decisions?: Readonly<Record<string, boolean>> }> {
-  const decision = await checkPreparedPermissionCore(client, actor, action, resource, evidence, time, clock, page, includeExplicit);
-  if (!decision.allowed && diagDenies++ < 300) {
-    const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
-    console.error(
-      'DIAG-TEMP permission deny',
-      JSON.stringify({
-        action,
-        resource: resource.id,
-        actor: actor.kind,
-        hasFacts: facts !== undefined,
-        scope: facts?.scope,
-        anonymous: facts?.anonymous,
-        admitsAnonymous: facts?.admitsAnonymous,
-        bindingOk: facts ? facts.binding === bind(actor, action, resource, page) : null,
-        capabilityOk: facts ? facts.capability === (resource.eligibility ?? resource.anonymousEligibility) : null,
-        workTimeOk: facts ? facts.work === undefined || facts.time === time : null,
-        hasTime: time !== undefined,
-        grantRoles: facts?.grantRoles,
-        principalId: facts?.principalId ?? null,
-        ownAccount: facts?.ownAccount,
-        policyTypes: facts ? (facts.policyCatalogue.actionByName[action]?.resourceTypes ?? null) : null,
-      }),
-    );
-  }
-  return decision;
-}
-
-async function checkPreparedPermissionCore(
   client: AccessClient,
   actor: Actor,
   action: string,
@@ -484,19 +437,6 @@ async function checkPreparedPermissionCore(
           project(row),
         ),
       );
-      // DIAG-TEMP: own-account row facts for deny analysis; remove after the cause is explained.
-      if (action === 'library_entry:update' && diagRows++ < 40)
-        console.error(
-          'DIAG-TEMP policy rows',
-          JSON.stringify({
-            resourceType,
-            floor,
-            scope: facts.scope,
-            principal: hasPrincipal,
-            rows: rows.slice(0, 2).map((row) => project(row)),
-            ordinary: ordinary.slice(0, 2),
-          }),
-        );
       const explicit = canEvaluateExplicit
         ? rows.map((row) =>
             decideNativePermission(
@@ -667,33 +607,6 @@ export function createAccess(config: PermissionConfig): Access {
     perId = false,
   ) {
     const evidence = Object.freeze({});
-    // DIAG-TEMP: remove after the Collection read denial origin is known.
-    if (action === 'collection:read' && diagPrepares++ < 80) {
-      const account =
-        actor.kind === 'account' ? (standingAccounts.get(actor) ?? config.accountEvidence(actor, context)) : undefined;
-      console.error(
-        'DIAG-TEMP prepare collection:read',
-        JSON.stringify({
-          metadata: actions.has(action),
-          routeOk: routeOf(resource.id) === resource.route,
-          actor: actor.kind,
-          clientIdSet: actor.kind === 'account' ? !!actor.clientId : null,
-          authnEpoch: actor.kind === 'account' ? (actor.authnEpoch ?? null) : null,
-          scopeCount: actor.kind === 'account' ? actor.scopes.length : null,
-          account: account
-            ? {
-                kind: account.kind,
-                state: account.state,
-                fenced: account.fenced,
-                minimumAuthnEpoch: String(account.minimumAuthnEpoch),
-                route: account.route,
-                sameAccount: actor.kind === 'account' && account.accountId === actor.accountId,
-              }
-            : null,
-          eligible: account && actor.kind === 'account' ? eligible(account, actor) : null,
-        }),
-      );
-    }
     const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
     try {
       requireAccessDeadline(deadline);
@@ -707,11 +620,11 @@ export function createAccess(config: PermissionConfig): Access {
         routeOf(resource.id) !== resource.route ||
         !Number.isFinite(context.deadline)
       )
-        return diagReturn(evidence, 691, action);
+        return evidence;
       if (metadata.authority === 'own-account' && (actor.kind !== 'account' || resource.id !== actor.accountId || page))
-        return diagReturn(evidence, 693, action);
+        return evidence;
       const attempt = accessCommandAttempt(context);
-      if (attempt && context.time !== undefined && context.time !== attempt.time) return diagReturn(evidence, 695, action);
+      if (attempt && context.time !== undefined && context.time !== attempt.time) return evidence;
       const time = attempt?.time ?? context.time;
       if (time) authoritativeTimeValue(time);
       if (context.work && !time)
@@ -728,24 +641,24 @@ export function createAccess(config: PermissionConfig): Access {
           resource.route !== benefit.resource.route ||
           resource.id !== benefit.resource.id)
       )
-        return diagReturn(evidence, 712, action);
+        return evidence;
       // The native read caller owns mintReadTime/releaseOperationalTime. Access
       // does not introduce another clock or a hidden time lifetime for benefits.
-      if (benefit && !time) return diagReturn(evidence, 715, action);
+      if (benefit && !time) return evidence;
       const ownAccount = metadata.authority === 'own-account';
       const binding = bind(actor, action, resource, page);
       let account: PermissionAccount | null | undefined;
       if (actor.kind === 'anonymous') {
-        if (!metadata.anonymous) return diagReturn(evidence, 720, action);
+        if (!metadata.anonymous) return evidence;
       } else {
         if (
           !uuidPattern.test(actor.accountId) ||
           !actor.clientId ||
           actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))
         )
-          return diagReturn(evidence, 727, action);
+          return evidence;
         account = standingAccounts.get(actor) ?? config.accountEvidence(actor, context);
-        if (!account || !eligible(account, actor)) return diagReturn(evidence, 729, action);
+        if (!account || !eligible(account, actor)) return evidence;
       }
       const verifyFloor = await prepareAnonymousEligibility(
         { actor, action, resource: Object.freeze({ ...resource }), deadline },
@@ -754,7 +667,7 @@ export function createAccess(config: PermissionConfig): Access {
       // Every query uses the pool independently before resource checkout. None
       // of these reads holds a connection while another partition is consulted.
       const recorded = await readPermissionTime(context.pool, config.clock, context.work);
-      if (!recorded?.databaseAt) return diagReturn(evidence, 738, action);
+      if (!recorded?.databaseAt) return evidence;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
       const at = time ? authoritativeTimeValue(time) : recorded.at;
@@ -766,7 +679,7 @@ export function createAccess(config: PermissionConfig): Access {
         members.push({ accountId: actor.accountId, automated: account.operatorAccountId !== null });
         if (actor.requestedBy !== null) {
           const request = requestedByPattern.exec(actor.requestedBy);
-          if (!request) return diagReturn(evidence, 750, action);
+          if (!request) return evidence;
           const principal = request[1]!;
           assignmentRoute = routeOf(principal);
           assignmentRequestId = request[2]!;
@@ -786,7 +699,7 @@ export function createAccess(config: PermissionConfig): Access {
             assignment.state !== 'active' ||
             assignment.fenced !== false
           )
-            return diagReturn(evidence, 770, action);
+            return evidence;
           principalId = principal;
           if (principal === actor.accountId) members[0]!.automated ||= assignment.operatorAccountId !== null;
           else members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
@@ -818,7 +731,7 @@ export function createAccess(config: PermissionConfig): Access {
           }
           requireAccessDeadline(deadline);
           if (fact !== null) {
-            if (!matchesContentEditionBuyerFact(fact, input)) return diagReturn(evidence, 802, action);
+            if (!matchesContentEditionBuyerFact(fact, input)) return evidence;
             buyers.set(buyerAccountId, fact);
           }
         }
@@ -839,7 +752,7 @@ export function createAccess(config: PermissionConfig): Access {
               ),
             ),
           );
-          if (!rows.length || rows.some((r) => r.complete !== true)) return diagReturn(evidence, 823, action);
+          if (!rows.length || rows.some((r) => r.complete !== true)) return evidence;
           const inverse: MembershipPrincipal[] = [];
           for (const row of rows) {
             if (row.kind === null && row.id === null) continue;
@@ -849,11 +762,11 @@ export function createAccess(config: PermissionConfig): Access {
               row.id === member.accountId ||
               !uuidPattern.test(row.id)
             )
-              return diagReturn(evidence, 833, action);
+              return evidence;
             inverse.push({ kind: row.kind, id: row.id });
           }
           if (inverse.length > MEMBERSHIP_LIMIT || new Set(inverse.map((g) => g.id)).size !== inverse.length)
-            return diagReturn(evidence, 837, action);
+            return evidence;
           for (const group of inverse)
             for (const role of ['owner', 'member'] as const)
               roles.push({
@@ -996,7 +909,7 @@ export function createAccess(config: PermissionConfig): Access {
             }
           // Per-id pages retain empty proof ranges so SQL denies only ids
           // that need an unresolved role. Ordinary page admission stays fail-closed.
-          if (!perId && results.some((result) => result.status === 'rejected' || !result.value)) return diagReturn(evidence, 980, action);
+          if (!perId && results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
         }
       }
       // Short-lived account/assignment/membership observations never survive the
@@ -1005,10 +918,10 @@ export function createAccess(config: PermissionConfig): Access {
       // the budget left when databaseAt was read, compared only with observed_at.
       // The wall-clock check above stays local.
       const origin = Date.parse(recorded.databaseAt);
-      if (!Number.isFinite(origin)) return diagReturn(evidence, 989, action);
+      if (!Number.isFinite(origin)) return evidence;
       const databaseDeadline = new Date(origin + Math.max(0, deadline - recorded.observedAt)).toISOString();
       requireAccessDeadline(deadline);
-      if (binding !== bind(actor, action, resource, page)) return diagReturn(evidence, 992, action);
+      if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
         policyCatalogue,
         ...(context.work ? { work: context.work } : {}),

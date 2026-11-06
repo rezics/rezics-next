@@ -525,8 +525,6 @@ export function createCollectionReads(
           sink.row = { ...sink.row, curatorAccountId: null };
         }
       }
-      // DIAG-TEMP: remove after the members 404 origin is known.
-      console.error('DIAG-TEMP loadCollection', JSON.stringify({ id, allowed, seen: sink.seen, visibility: sink.row?.visibility ?? null, curator: sink.row?.curatorAccountId ?? null, kind: sink.row?.membershipKind ?? null, account: account ? { state: account.state } : null, viewerKind: viewer.kind }));
       return disclose(sink.row, allowed, account, viewer);
     });
   }
