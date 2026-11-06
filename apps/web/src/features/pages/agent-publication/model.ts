@@ -36,7 +36,9 @@ export function agentPublicationReading(
   });
   if (!fields.length) return;
   const type =
-    subject.type === 'schema:Organization' || subject.type === 'schema:SoftwareApplication' || subject.type === 'schema:Person'
+    subject.type === 'schema:Organization' ||
+    subject.type === 'schema:SoftwareApplication' ||
+    subject.type === 'schema:Person'
       ? subject.type
       : 'schema:SoftwareApplication';
   return { type, fields };

@@ -94,7 +94,8 @@ export function gamePageInitial(
     if (
       admitted &&
       !expected[kind].some(
-        (property) => definitions.types[subject.type]?.properties.includes(property) && definitions.properties[property],
+        (property) =>
+          definitions.types[subject.type]?.properties.includes(property) && definitions.properties[property],
       )
     )
       unsupported.push(kind);

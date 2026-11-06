@@ -328,23 +328,26 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
 });
 
 test('production locale navigation escapes the current-locale rewrite and honors a dirty reader', async () => {
-  await withReader(async ({ window, act, waitFor, setDraft, setCanLeave, confirmCount, openLanguage, chooseLanguage }) => {
-    const chooseJapanese = async () => {
-      await openLanguage('Language: English');
-      await chooseLanguage(/日本語/);
-    };
-    await act(async () => setDraft(true));
-    setCanLeave(false);
-    await chooseJapanese();
-    await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
-    expect(window.location.href).toBe(`https://site.invalid${entry}`);
+  await withReader(
+    async ({ window, act, waitFor, setDraft, setCanLeave, confirmCount, openLanguage, chooseLanguage }) => {
+      const chooseJapanese = async () => {
+        await openLanguage('Language: English');
+        await chooseLanguage(/日本語/);
+      };
+      await act(async () => setDraft(true));
+      setCanLeave(false);
+      await chooseJapanese();
+      await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
+      expect(window.location.href).toBe(`https://site.invalid${entry}`);
 
-    setCanLeave(true);
-    await chooseJapanese();
-    await waitFor(() => expect(window.location.pathname).toBe('/ja/subjects/reader-01'));
-    expect(window.location.search).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
-    expect(window.location.hash).toBe('#chapter-4');
-  }, true);
+      setCanLeave(true);
+      await chooseJapanese();
+      await waitFor(() => expect(window.location.pathname).toBe('/ja/subjects/reader-01'));
+      expect(window.location.search).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
+      expect(window.location.hash).toBe('#chapter-4');
+    },
+    true,
+  );
 });
 
 test('navigation failure offers the current safe reader and an obsolete completion cannot replace a newer visit', async () => {

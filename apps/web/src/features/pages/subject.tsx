@@ -223,10 +223,7 @@ function cataloguePageViewer(
 
 /** Quotation action arrays stay off the catalogue envelope; viewer-actions objects remain. */
 function cataloguePageActions(
-  actions:
-    | SubjectPageData['actions']
-    | { action: string; operationId: string; state: string }[]
-    | undefined,
+  actions: SubjectPageData['actions'] | { action: string; operationId: string; state: string }[] | undefined,
 ): SubjectPageData['actions'] | undefined {
   return actions && !Array.isArray(actions) ? actions : undefined;
 }

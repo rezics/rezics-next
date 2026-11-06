@@ -19,12 +19,8 @@ const { gamePageInitial, gamePublicationReading } = await import('../src/feature
 const { AgentPublicationEntry } = await import('../src/features/pages/agent-publication');
 const { agentPublicationReading } = await import('../src/features/pages/agent-publication/model');
 const { literarySelected } = await import('../src/features/catalogue/literary-reader/model');
-const {
-  publicationPropertiesFor,
-  publicPublicationStatements,
-  relatedSameAs,
-  subjectPublicationFields,
-} = await import('../src/features/pages/subject-metadata');
+const { publicationPropertiesFor, publicPublicationStatements, relatedSameAs, subjectPublicationFields } =
+  await import('../src/features/pages/subject-metadata');
 const { subjectPageJsonLd } = await import('../src/features/pages/subject');
 
 const diet = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11';
@@ -367,7 +363,9 @@ test('Person, Organization and automated agent JSON-LD publish sameAs and omit w
       },
     };
     page.catalogue = { state: 'released', type, digest: bundledDigest, definitions };
-    const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin, schemaOrgType: `https://schema.org/${schemaType}` })!);
+    const json = JSON.parse(
+      subjectPageJsonLd(page, 'en', { origin, schemaOrgType: `https://schema.org/${schemaType}` })!,
+    );
     expect(json['@type']).toBe(schemaType);
     expect(json.sameAs).toBe('https://wikidata.org/entity/Q1');
     expect(JSON.stringify(json)).not.toContain(hidden);

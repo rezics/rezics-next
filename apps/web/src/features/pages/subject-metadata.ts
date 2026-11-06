@@ -55,11 +55,7 @@ function typeIsA(
   return (definitions.types[type]?.bases ?? []).some((candidate) => typeIsA(definitions, candidate, base, seen));
 }
 
-function matchesType(
-  type: string,
-  bases: readonly string[],
-  definitions: PublicationDefinitions | undefined,
-): boolean {
+function matchesType(type: string, bases: readonly string[], definitions: PublicationDefinitions | undefined): boolean {
   return bases.some((base) => typeIsA(definitions, type, base) || type === base);
 }
 
