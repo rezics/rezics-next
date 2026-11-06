@@ -20,7 +20,7 @@ import {
 import { usePreferenceRetry } from './preference-failure-retry';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { verificationNeedsNavigationDecision } from './settings-draft-state';
-import { VerificationSubjectChooser } from './verification-subject-chooser';
+import { VerificationSubjectChooser, type Search as SubjectSearch } from './verification-subject-chooser';
 import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
 import {
   validateVerificationDraft,
@@ -41,6 +41,7 @@ import {
   readVerificationState,
   readVerificationSubjectTitle,
   requestVerificationAction,
+  searchVerificationSubjects,
   withdrawVerificationAction,
 } from './verification-actions';
 import { withVerificationDeadline } from './verification-request-deadline';
@@ -53,6 +54,8 @@ import {
   useSettingsDisposal,
 } from './settings-session-owner';
 
+/** The chooser's native transport is supplied here, so chooser tests never replace the server actions module. */
+const searchSubjects: SubjectSearch = (query, signal) => searchVerificationSubjects({ data: { query }, signal });
 const verificationActionClassName =
   'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
 const verificationSummaryClassName =
@@ -484,6 +487,7 @@ export function VerificationCard({
                   setConfirmation(null);
                 }}
                 disabled={pending || !csrfToken}
+                search={searchSubjects}
               />
               <Field data-invalid={errors.has(`${id}-statement`)}>
                 <FieldLabel htmlFor={`${id}-statement`}>{m.settings_verification_statement()}</FieldLabel>

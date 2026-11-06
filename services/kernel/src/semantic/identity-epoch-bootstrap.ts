@@ -49,7 +49,13 @@ import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
 import advanceCursor from './identity-epoch-bootstrap-advance-cursor.sql';
 import installGate from './identity-epoch-bootstrap-install-gate.sql';
 import type { Pool } from 'pg';
-import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  CommandUnavailableError,
+  noEffect,
+  registerCommandCallback,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -101,7 +107,18 @@ const fail = () =>
 export async function readIdentityEpochCutover(tx: CommandTransaction) {
   const owner = await readPartition(tx, 0);
   const row = (await tx.query(bootstrapSelectBootstrapTopology.sql)).rows[0];
-  return { state: owner?.writeState === 'active' && row?.remaining === 0 ? ('ready' as const) : ('blocked' as const) };
+  const installation = (await tx.query('SELECT valid FROM semantic.read_identity_epoch_installation()')).rows[0] as
+    | { valid: boolean }
+    | undefined;
+  const cut = (await tx.query('SELECT 1 FROM semantic.identity_epoch_installation_cut WHERE partition_no=0 LIMIT 1'))
+    .rowCount;
+  const interrupted = (cut ?? 0) > 0 && installation?.valid !== true;
+  return {
+    state:
+      owner?.writeState === 'active' && row?.remaining === 0 && !interrupted
+        ? ('ready' as const)
+        : ('blocked' as const),
+  };
 }
 
 async function readPage(pool: Pool, partition: number): Promise<Page | null> {
@@ -581,6 +598,32 @@ export async function stepIdentityEpochBootstrapWork(
   return progress;
 }
 
+type TopologyClosure = {
+  source_partition: number;
+  source_generation: string;
+  source_epoch: number;
+  source_transaction_id: string;
+  source_position: string;
+};
+
+async function readBootstrapClosure(pool: Pool, partition: number): Promise<TopologyClosure | null> {
+  return withReadTransaction(pool, async (tx) => {
+    const owner = await readPartition(tx, partition);
+    const home = (await tx.query(closureReceipt.sql, [partition])).rows[0];
+    return owner?.writeState === 'active' &&
+      owner.epoch === home?.sealed_epoch &&
+      BigInt(home.sealed_position) <= owner.position
+      ? {
+          source_partition: partition,
+          source_generation: home.sealed_generation,
+          source_epoch: home.sealed_epoch,
+          source_transaction_id: home.sealed_transaction_id,
+          source_position: home.sealed_position,
+        }
+      : null;
+  });
+}
+
 /** One effect claims at most 100 local topology slots, then releases the topology connection.
  * Every selected home still executes its actual retained export/receiving/source-ACK protocol.
  * Selection and custody are amortized over the bounded frontier, never over foreign source rows.
@@ -590,7 +633,7 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
     const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
     if (!state || state.remaining === 0) return noEffect([]);
     const homes = (await tx.query(selectFrontier.sql, [state.next_partition])).rows.map((r) => r.source_partition);
-    if (!homes.length) throw fail();
+    if (!homes.length) return noEffect([]);
     await tx.query(advanceCursor.sql, [(homes.at(-1)! + 1) % 4096]);
     return {
       value: homes,
@@ -613,19 +656,17 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
       Array.from({ length: 4 }, async () => {
         while (!done && issued < 100) {
           const index = issued++;
-          if (!(await stepIdentityEpochBootstrapWork(pool, index === 0))) done = true;
+          try {
+            if (!(await stepIdentityEpochBootstrapWork(pool, index === 0))) done = true;
+          } catch (error) {
+            if (!(error instanceof CommandUnavailableError) || error.reason !== 'contention') throw error;
+          }
         }
       }),
     );
     return;
   }
-  const closures: {
-    source_partition: number;
-    source_generation: string;
-    source_epoch: number;
-    source_transaction_id: string;
-    source_position: string;
-  }[] = [];
+  const closures: TopologyClosure[] = [];
   let issued = 0;
   // At most eight released pipelines; the existing pool and all queues keep their normal limits.
   await Promise.all(
@@ -633,9 +674,9 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
       while (issued < selected.value.length) {
         const index = issued++;
         const partition = selected.value[index]!;
-        const empty = await closeInitialEmptyHome(pool, partition, index === 0);
-        if (empty) {
-          if (empty.sealed)
+        try {
+          const empty = await closeInitialEmptyHome(pool, partition, index === 0);
+          if (empty?.sealed) {
             closures.push({
               source_partition: partition,
               source_generation: '1',
@@ -643,28 +684,22 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
               source_transaction_id: empty.transactionId,
               source_position: empty.position.toString(),
             });
-          continue;
+            continue;
+          }
+          const retained = await readBootstrapClosure(pool, partition);
+          if (retained) {
+            closures.push(retained);
+            continue;
+          }
+          if (empty) continue;
+          // The continuation belongs to the real first source ACK, not the shared topology queue key.
+          // A crash before that ACK is recovered by this already durable DBOS effect.
+          await stepBootstrapHome(pool, partition, index === 0);
+          const evidence = await readBootstrapClosure(pool, partition);
+          if (evidence) closures.push(evidence);
+        } catch (error) {
+          if (!(error instanceof CommandUnavailableError) || error.reason !== 'contention') throw error;
         }
-        // The continuation belongs to the real first source ACK, not the shared topology queue key.
-        // A crash before that ACK is recovered by this already durable DBOS effect.
-        await stepBootstrapHome(pool, partition, index === 0);
-        const evidence = await withReadTransaction(pool, async (tx) => {
-          const owner = await readPartition(tx, partition);
-          const home = (await tx.query(closureReceipt.sql, [partition])).rows[0];
-          return owner?.writeState === 'active' &&
-            owner.epoch === home?.sealed_epoch &&
-            BigInt(home.sealed_position) <= owner.position
-            ? home
-            : null;
-        });
-        if (evidence)
-          closures.push({
-            source_partition: partition,
-            source_generation: evidence.sealed_generation,
-            source_epoch: evidence.sealed_epoch,
-            source_transaction_id: evidence.sealed_transaction_id,
-            source_position: evidence.sealed_position,
-          });
       }
     }),
   );

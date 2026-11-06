@@ -33,7 +33,8 @@ export type IdentityPendingEvidence = Readonly<{
   partition_no: number;
   terminal: string;
   pending_job: string | null;
-  pending_epoch: Integer;
+  /** Null only with `pending_job`; a published group stores the paired nulls. */
+  pending_epoch: Integer | null;
 }>;
 export type IdentityControlEvidence = Readonly<{
   partition_no: number;
@@ -154,17 +155,15 @@ export function classifyIdentityMappings(
     )
       return { state: 'unavailable', reason: 'bootstrap' };
     const claim = claimByHome.get(source.control_partition)?.get(source.control_group);
-    if (claim?.pending_job) {
+    const pendingJob = claim?.pending_job ?? null;
+    const pendingEpoch = claim?.pending_epoch ?? null;
+    if ((pendingJob === null) !== (pendingEpoch === null)) return { state: 'unavailable', reason: 'bootstrap' };
+    if (pendingJob !== null && pendingEpoch !== null) {
       const job = installedJob;
       // The actual mapping must already be installed for THIS job, with its ordinary
       // source/owner/dirty/redirect checks above intact. Old mappings cannot borrow
       // a pending destination's identity, and another job never gains availability.
-      if (
-        job &&
-        claim.pending_job === job.jobId &&
-        BigInt(claim.pending_epoch) === job.epoch &&
-        BigInt(source.epoch) === job.epoch
-      )
+      if (job && pendingJob === job.jobId && BigInt(pendingEpoch) === job.epoch && BigInt(source.epoch) === job.epoch)
         return {
           state: 'mapped',
           original,
@@ -174,7 +173,7 @@ export function classifyIdentityMappings(
       return {
         state: 'pending',
         original,
-        job: { jobId: claim.pending_job, epoch: BigInt(claim.pending_epoch) },
+        job: { jobId: pendingJob, epoch: BigInt(pendingEpoch) },
       };
     }
     return { state: 'mapped', original, terminal: source.terminal, epoch: BigInt(basis.published_epoch) };

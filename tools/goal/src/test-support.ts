@@ -20,7 +20,9 @@ import { gateRunner, type GateRunner } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import {
   checkedProcessGroup,
+  groupMembers,
   inspectProcessIdentity,
+  inspectProcessSnapshot,
   sameProcess,
   signalProcessIdentity,
   waitForWorkerExit,
@@ -62,6 +64,20 @@ function boundedFixtureWorkerScript(script: string): string {
   return script.replace(/^(#![^\n]*\n)/, `$1${guard}`);
 }
 
+/**
+ * A dead leader keeps its kernel group until its parent reaps it, so the group looks present with no visible member.
+ * It is empty when that same leader is all that remains: a zombie keeps its PID reserved, so nothing can reuse it.
+ */
+function leaderIsDeadAlone(identity: ProcessIdentity): boolean {
+  const snapshot = inspectProcessSnapshot(identity.pid, '/proc');
+  return (
+    snapshot?.dead === true &&
+    snapshot.identity.start === identity.start &&
+    snapshot.identity.boot === identity.boot &&
+    groupMembers(identity.group).length === 0
+  );
+}
+
 function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
   return checkedProcessGroup(identity);
 }
@@ -80,7 +96,8 @@ async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: num
 }
 
 async function reapFixtureGroup(identity: ProcessIdentity): Promise<void> {
-  if (!checkedFixtureGroup(identity).length) return;
+  // Teardown only: a dead leader's group is empty here. Liveness checks during the run keep the strict custody check.
+  if (leaderIsDeadAlone(identity) || !checkedFixtureGroup(identity).length) return;
   await signalFixtureGroup(identity, 'SIGTERM');
   if (await waitForFixtureGroupExit(identity, FIXTURE_TERM_GRACE_MS)) return;
   await signalFixtureGroup(identity, 'SIGKILL');
@@ -152,7 +169,7 @@ const CHECK_SCRIPT_PATHS = [
   'scripts/check-host/docker',
 ] as const;
 
-function cloneSharedGit(template: string, destination: string): void {
+function cloneSharedGit(template: string, destination: string, identity: { name: string; email: string }): void {
   mkdirSync(destination, { recursive: true });
   repositoryGit(destination, 'clone', '--quiet', '--shared', '--no-hardlinks', template, '.');
   try {
@@ -160,6 +177,9 @@ function cloneSharedGit(template: string, destination: string): void {
   } catch {
     /* git clone always adds origin; keep init-like remotes. */
   }
+  // A clone does not copy the template's identity; check hosts have no global one, so set it here.
+  repositoryGit(destination, 'config', 'user.name', identity.name);
+  repositoryGit(destination, 'config', 'user.email', identity.email);
 }
 
 function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => void): string {
@@ -197,6 +217,10 @@ function harnessGitTemplate(): string {
     writeFileSync(
       join(root, 'scripts/architecture.ts'),
       readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
+    );
+    writeFileSync(
+      join(root, 'scripts/architecture-map.ts'),
+      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture-map.ts'), 'utf8'),
     );
     mkdirSync(join(root, 'docs/architecture'), { recursive: true });
     writeFileSync(
@@ -366,7 +390,7 @@ export function temporaryDirectory(): { path: string; close(): void } {
 export function repository() {
   const temporary = temporaryDirectory();
   const main = join(temporary.path, 'main');
-  cloneSharedGit(repositoryGitTemplate(), main);
+  cloneSharedGit(repositoryGitTemplate(), main, { name: 'Test', email: 'test@example.invalid' });
   return {
     ...temporary,
     main,
@@ -506,7 +530,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   disposeAsync(options?: { beforeRemove?: () => void | Promise<void> }): Promise<void>;
 } {
   const root = tempDirectory();
-  cloneSharedGit(harnessGitTemplate(), root);
+  cloneSharedGit(harnessGitTemplate(), root, { name: 'Fixture', email: 'fixture@example.invalid' });
   const state = join(root, '.temp/goal');
   mkdirSync(state, { recursive: true });
   const command = join(state, 'codex');

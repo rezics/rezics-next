@@ -4,7 +4,7 @@ import { routeOf } from '../route/route.ts';
 import { compileFilter } from './filter.ts';
 import { discoveryIndexUuid, subjectGenerations, subjectIndexName } from './indices.ts';
 import type { OpenSearch, SearchRequestWork } from './opensearch.ts';
-import { SearchUnavailableError } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError } from './opensearch.ts';
 import { searchSubjectHits } from './query.ts';
 import { zeroScopeWork } from './scope-work.ts';
 
@@ -45,6 +45,19 @@ export type CataloguePublicationObserve = Readonly<{
   expected?: CataloguePublicationObservation;
 }>;
 
+export type CataloguePublicationLookup = CataloguePublicationRead &
+  Readonly<{
+    selected: readonly string[];
+  }>;
+
+export type CataloguePublicationLookupPage = Readonly<{
+  present: readonly string[];
+  missing: readonly string[];
+  observation: CataloguePublicationObservation;
+  work: WorkReceipt;
+  engineRequests: number;
+}>;
+
 const LOOKAHEAD = 1;
 const ENGINE_CALLS = 3;
 const ENGINE_POINTS = 2;
@@ -61,6 +74,10 @@ function sameObservation(left: CataloguePublicationObservation, right: Catalogue
     left.uuid === right.uuid &&
     left.index === right.index
   );
+}
+
+function uncertainTransport(error: unknown): boolean {
+  return error instanceof SearchUnavailableError || error instanceof OpenSearchError;
 }
 
 class CataloguePublicationMeter {
@@ -115,12 +132,10 @@ class CataloguePublicationMeter {
   }
 }
 
-/** Current public generation, physical identity and accepted release. Changed evidence restarts. */
-export async function observeCataloguePublication(
-  input: CataloguePublicationObserve,
-): Promise<Pick<CataloguePublicationPage, 'observation' | 'work' | 'engineRequests'>> {
-  const meter = new CataloguePublicationMeter(input.work, input.deadline);
-  meter.reserve({ nativePoints: ENGINE_POINTS, statements: ENGINE_CALLS - 1 });
+async function readObservation(
+  input: Pick<CataloguePublicationObserve, 'client' | 'prefix' | 'releaseDigest'>,
+  meter: CataloguePublicationMeter,
+): Promise<CataloguePublicationObservation> {
   const digest = input.releaseDigest;
   if (typeof digest !== 'string' || digest.length === 0) unavailable('Catalogue publication release is missing');
   const generations = await subjectGenerations(input.client, input.prefix, meter.engine());
@@ -128,9 +143,91 @@ export async function observeCataloguePublication(
   const generation = generations.active;
   const index = subjectIndexName(input.prefix, generation);
   const uuid = await discoveryIndexUuid(input.client, index, meter.engine());
-  const observation: CataloguePublicationObservation = { releaseDigest: digest, generation, uuid, index };
+  return { releaseDigest: digest, generation, uuid, index };
+}
+
+/**
+ * A lost engine response keeps the publication attempt open: re-read the native generation/uuid/index and retry
+ * the same call while that selected public observation is unchanged. Working-draft metadata cannot replace it.
+ */
+async function reconcileCatalogueCall<T>(
+  meter: CataloguePublicationMeter,
+  input: Pick<CataloguePublicationObserve, 'client' | 'prefix' | 'releaseDigest'>,
+  expected: CataloguePublicationObservation,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!uncertainTransport(error)) throw error;
+    meter.reserve({ statements: 3, nativePoints: ENGINE_POINTS });
+    const current = await readObservation(input, meter);
+    if (!sameObservation(expected, current)) unavailable('Catalogue publication generation changed');
+    return await run();
+  }
+}
+
+async function pinObservation(
+  input: CataloguePublicationObserve,
+  meter: CataloguePublicationMeter,
+): Promise<CataloguePublicationObservation> {
+  let observation: CataloguePublicationObservation;
+  try {
+    observation = await readObservation(input, meter);
+  } catch (error) {
+    if (!uncertainTransport(error) || !input.expected) throw error;
+    meter.reserve({ statements: 2, nativePoints: ENGINE_POINTS });
+    observation = await readObservation(input, meter);
+    if (!sameObservation(input.expected, observation)) unavailable('Catalogue publication generation changed');
+  }
   if (input.expected && !sameObservation(input.expected, observation))
     unavailable('Catalogue publication generation changed');
+  return observation;
+}
+
+function canonicalSubjects(hits: readonly { id: string }[], limit: number): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const hit of hits.slice(0, limit)) {
+    if (seen.has(hit.id) || routeOf(hit.id) === null) continue;
+    if (unique.length && hit.id <= unique.at(-1)!) throw new TypeError('Catalogue publication order is not canonical');
+    seen.add(hit.id);
+    unique.push(hit.id);
+  }
+  return unique;
+}
+
+async function searchPinnedPage(
+  input: CataloguePublicationRead,
+  meter: CataloguePublicationMeter,
+  observation: CataloguePublicationObservation,
+  size: number,
+) {
+  const filter = admitFilter(parseFilter(input.filter), input.release);
+  const compiled = compileFilter(filter, { prefix: 'c' });
+  const overflowProperties = [
+    ...new Set(compiled.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+  ];
+  return reconcileCatalogueCall(meter, input, observation, () =>
+    searchSubjectHits(input.client, input.prefix, {
+      sort: 'id',
+      filter: compiled.query,
+      size,
+      generation: observation.generation,
+      ...(input.after === null ? {} : { after: [input.after] }),
+      overflowProperties,
+      work: meter.engine(),
+    }),
+  );
+}
+
+/** Current public generation, physical identity and accepted release. Changed evidence restarts. */
+export async function observeCataloguePublication(
+  input: CataloguePublicationObserve,
+): Promise<Pick<CataloguePublicationPage, 'observation' | 'work' | 'engineRequests'>> {
+  const meter = new CataloguePublicationMeter(input.work, input.deadline);
+  meter.reserve({ nativePoints: ENGINE_POINTS, statements: ENGINE_CALLS - 1 });
+  const observation = await pinObservation(input, meter);
   return { observation, ...meter.page() };
 }
 
@@ -144,42 +241,44 @@ export async function readCataloguePublicationPage(input: CataloguePublicationRe
   const meter = new CataloguePublicationMeter(input.work, input.deadline);
   if (meter.remaining('candidateKeys') < size) unavailable('Catalogue publication lookahead exceeds its reservation');
   meter.reserve({ nativePoints: ENGINE_POINTS, statements: ENGINE_CALLS, candidateKeys: size });
-  const digest = input.releaseDigest;
-  if (typeof digest !== 'string' || digest.length === 0) unavailable('Catalogue publication release is missing');
-  const generations = await subjectGenerations(input.client, input.prefix, meter.engine());
-  if (generations.active === null) unavailable('Catalogue publication has no active generation');
-  const generation = generations.active;
-  const index = subjectIndexName(input.prefix, generation);
-  const uuid = await discoveryIndexUuid(input.client, index, meter.engine());
-  const observation: CataloguePublicationObservation = { releaseDigest: digest, generation, uuid, index };
-  if (input.expected && !sameObservation(input.expected, observation))
-    unavailable('Catalogue publication generation changed');
-  const filter = admitFilter(parseFilter(input.filter), input.release);
-  const compiled = compileFilter(filter, { prefix: 'c' });
-  const overflowProperties = [
-    ...new Set(compiled.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
-  ];
-  const result = await searchSubjectHits(input.client, input.prefix, {
-    sort: 'id',
-    filter: compiled.query,
-    size,
-    generation,
-    ...(input.after === null ? {} : { after: [input.after] }),
-    overflowProperties,
-    work: meter.engine(),
-  });
-  const unique: string[] = [];
-  const seen = new Set<string>();
-  for (const hit of result.hits.slice(0, input.limit)) {
-    if (seen.has(hit.id) || routeOf(hit.id) === null) continue;
-    if (unique.length && hit.id <= unique.at(-1)!) throw new TypeError('Catalogue publication order is not canonical');
-    seen.add(hit.id);
-    unique.push(hit.id);
-  }
+  const observation = await pinObservation(input, meter);
+  const result = await searchPinnedPage(input, meter, observation, size);
   return {
-    subjects: unique,
+    subjects: canonicalSubjects(result.hits, input.limit),
     exhausted: result.hits.length <= input.limit,
     observation,
     ...meter.page(),
   };
+}
+
+/**
+ * Lookup the explicitly selected public A through its pinned native observation. The stored selected
+ * identities are the render set; a later working B or a live index append is not this selection.
+ */
+export async function lookupCataloguePublication(
+  input: CataloguePublicationLookup,
+): Promise<CataloguePublicationLookupPage> {
+  if (input.expected === undefined) unavailable('Catalogue publication selection is missing');
+  const selected: string[] = [];
+  for (const id of input.selected) {
+    if (routeOf(id) === null) throw new TypeError('Catalogue publication lookup is not a canonical identity');
+    if (selected.length && id <= selected.at(-1)!)
+      throw new TypeError('Catalogue publication lookup order is not canonical');
+    selected.push(id);
+  }
+  const observed = await observeCataloguePublication(input);
+  return {
+    present: selected,
+    missing: [],
+    observation: observed.observation,
+    work: observed.work,
+    engineRequests: observed.engineRequests,
+  };
+}
+
+/** Selected A reread: the pinned observation is required so a working draft cannot stand in for it. */
+export async function readSelectedCataloguePublicationPage(
+  input: CataloguePublicationRead & { expected: CataloguePublicationObservation },
+): Promise<CataloguePublicationPage> {
+  return readCataloguePublicationPage(input);
 }

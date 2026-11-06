@@ -81,6 +81,15 @@ function controlLocatorsOf(sourceRows: readonly IdentitySourceEvidence[]): Ident
   return result;
 }
 
+function selectedPendingEvidence(row: Record<string, unknown>): IdentityPendingEvidence {
+  return {
+    partition_no: row.partition_no as number,
+    terminal: row.terminal as string,
+    pending_job: row.pending_job == null ? null : String(row.pending_job),
+    pending_epoch: row.pending_epoch == null ? null : String(row.pending_epoch),
+  };
+}
+
 function selectedSourceEvidence(row: Record<string, unknown>): IdentitySourceEvidence {
   return {
     subject_id: row.subject_id as string,
@@ -167,7 +176,7 @@ async function controlPhase(
       pairs.map((row) => row.original),
     ]);
     ownersRows.push(...(ownerResult.rows as unknown as IdentityOwnerEvidence[]));
-    pendingRows.push(...(pendingResult.rows as unknown as IdentityPendingEvidence[]));
+    pendingRows.push(...pendingResult.rows.map(selectedPendingEvidence));
     currentRows.push(...(currentResult.rows as unknown as IdentityControlEvidence[]));
   }
   return { owners: ownersRows, pending: pendingRows, current: currentRows };
@@ -359,7 +368,9 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
       await withReadTransaction(pool, async (tx) => {
         controlOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
         pendingRows.push(
-          ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows,
+          ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows.map(
+            selectedPendingEvidence,
+          ),
         );
         currentRows.push(
           ...(

@@ -119,6 +119,7 @@ test('Known local SQL has all eight explicit axes; copied five-field bounds and 
   expect(accountHistoryWorkDeclaration(addNativeWork(known, nativeWork(0, 0, 1, 0)))).toBeUndefined();
   expect(d.missingTerms.some((term) => term.startsWith('LibraryAllReachedCalls:'))).toBe(true);
   expect(d.missingTerms.some((term) => term.startsWith('RecoveryReceivingEnrollment:'))).toBe(true);
+  expect(Object.values(d.multiplicities).every((count) => Number.isSafeInteger(count) && count >= 1)).toBe(true);
   expect('work' in d).toBe(false); // An incomplete subdeclaration cannot pass original admission as a total.
 });
 

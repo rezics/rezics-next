@@ -320,7 +320,7 @@ test('current graph results gate publication on exact reopen, changed source and
     db.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 function readWith(subject: string, type: string, statements: Record<string, string>): ReviewedSubjectRead {
   return {

@@ -307,6 +307,11 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       } catch (error) {
         console.error(error);
       }
+      try {
+        runtime.dispatchArchitectureRepairs?.();
+      } catch (error) {
+        console.error(error);
+      }
     };
     remind();
     // The train promotes only when its queue empties; with a steady backlog that never happens, so the host starts

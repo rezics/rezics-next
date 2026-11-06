@@ -61,6 +61,7 @@ export async function executeScopedSuggestions(options: {
   releaseIsCurrent(): Promise<boolean>;
   complete?(page: SuggestedPage): Promise<void>;
   prepare?(): Promise<void>;
+  admitCanonical?(subjects: readonly IndexedSubject[]): Promise<readonly IndexedSubject[]>;
 }): Promise<SuggestedPage> {
   if (options.scope && (!options.preparedScope || !options.scopeWork)) notReady();
 
@@ -84,28 +85,31 @@ export async function executeScopedSuggestions(options: {
       }),
     );
     const acceptedById = new Map(passed.map(({ hit, subject }) => [hit.id, subject]));
-    const accepted = new Map(
+    let accepted = new Map(
       hits.flatMap((hit) => {
         const subject = acceptedById.get(hit.id);
         return subject ? [[hit, subject] as const] : [];
       }),
     );
-    if (!options.scope || !options.preparedScope || !options.scopeWork) return accepted;
-
-    const ids = passed.map(({ subject }) => subject.id);
-    const evaluated = await options.readSource(() =>
-      options.scope!.evaluate(options.preparedScope!, ids, scopeReservation(options.scopeWork!, ids.length)),
-    );
-    options.scopeWork.native(options.scope.work(evaluated));
-    if (
-      evaluated.basis.canonical !== options.preparedScope.basis.canonical ||
-      evaluated.values.length !== ids.length ||
-      evaluated.progress !== null ||
-      evaluated.values.includes('not_proven')
-    )
-      notReady();
-    const acceptedScope = new Set(ids.filter((_, index) => evaluated.values[index] === true));
-    return new Map([...accepted].filter(([, subject]) => acceptedScope.has(subject.id)));
+    if (options.scope && options.preparedScope && options.scopeWork) {
+      const ids = passed.map(({ subject }) => subject.id);
+      const evaluated = await options.readSource(() =>
+        options.scope!.evaluate(options.preparedScope!, ids, scopeReservation(options.scopeWork!, ids.length)),
+      );
+      options.scopeWork.native(options.scope.work(evaluated));
+      if (
+        evaluated.basis.canonical !== options.preparedScope.basis.canonical ||
+        evaluated.values.length !== ids.length ||
+        evaluated.progress !== null ||
+        evaluated.values.includes('not_proven')
+      )
+        notReady();
+      const acceptedScope = new Set(ids.filter((_, index) => evaluated.values[index] === true));
+      accepted = new Map([...accepted].filter(([, subject]) => acceptedScope.has(subject.id)));
+    }
+    if (!options.admitCanonical) return accepted;
+    const terminals = new Set((await options.admitCanonical([...accepted.values()])).map((subject) => subject.id));
+    return new Map([...accepted].filter(([, subject]) => terminals.has(subject.id)));
   };
 
   const page = await collectRetainedUsefulPage<IndexedSubject>({

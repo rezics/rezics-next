@@ -240,3 +240,15 @@ export function composeIdentitySourceReachedCosts(
     ? Object.freeze({ state: 'missing', missing: Object.freeze(missing) })
     : Object.freeze({ state: 'complete', work: Object.freeze(total), engineRequests: 0 });
 }
+
+/** Add already-classified Source declarations. This never invents an axis or
+ * treats a five-field envelope as an implicit eight-axis child. */
+export function sumIdentitySourceWork(
+  parts: readonly Readonly<{ work: WorkDimensions; engineRequests: 0 }>[],
+): Readonly<{ work: WorkDimensions; engineRequests: 0 }> {
+  const composed = composeIdentitySourceReachedCosts(
+    parts.map((declaration, index) => ({ name: `part.${index}`, calls: 1, declaration })),
+  );
+  if (composed.state !== 'complete') throw new TypeError('Source work sum requires complete children');
+  return Object.freeze({ work: composed.work, engineRequests: 0 as const });
+}

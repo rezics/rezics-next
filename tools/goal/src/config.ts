@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
 import { defaultPolicy } from './policy.ts';
+import { commitPublishedOn, dispatchArchitectureRepairs } from './architecture-repair.ts';
 import type { Settings } from './types.ts';
 import { configurationProblem, reportedConfigurationProblem } from './local-settings.ts';
 import {
@@ -491,6 +492,19 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         new Date(),
         (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
       );
+    },
+    dispatchArchitectureRepairs() {
+      dispatchArchitectureRepairs({
+        db,
+        // The host tick runs every minute: read only unsettled tasks, as the daily audit does.
+        unsettled: store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
+        published: commitPublishedOn(settings.mainCheckout, `refs/heads/${settings.integrationBranch}`),
+        dispatch: (briefFile) => tasks.dispatch(briefFile, null, true, 'verifier'),
+        notify: (managerId, taskId, summary) => inbox.deliver({ managerId, taskId, kind: 'instruction', summary }),
+        reportFailure: (summary) =>
+          inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+        stateDirectory: settings.stateDirectory,
+      });
     },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
       await job.recoverOrphans(options);

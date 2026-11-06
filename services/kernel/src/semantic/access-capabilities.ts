@@ -9,4 +9,5 @@ export {
 export { withReadTransaction } from './read.ts';
 export { activeIdentitySourceConsumerMaintenance } from './identity-source-consumer-maintenance.ts';
 export type { IdentitySourceConsumerMaintenanceContext } from './identity-source-consumer-maintenance.ts';
+export { IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION } from './identity-source-consumer-custody.ts';
 export { IdentityEpochStoreError } from './identity-adapters/index.ts';

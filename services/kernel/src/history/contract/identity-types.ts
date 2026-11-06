@@ -334,6 +334,58 @@ export type IdentityHistoryAccountsLocalWork = Readonly<{
   receivingInvalidation: NativeStepWork;
 }>;
 
+/** Eight-axis Accounts History body. Candidate, identity-metadata and witness axes stay zero. */
+export type IdentityHistoryWorkDimensions = Readonly<{
+  candidateKeys: number;
+  nativeRows: number;
+  identityMetadataRows: number;
+  nativePoints: number;
+  witnessKeys: number;
+  statements: number;
+  bytes: number;
+  emptySeeks: number;
+}>;
+
+export type IdentityHistoryCommandDispatchPrice = Readonly<{
+  work: IdentityHistoryWorkDimensions;
+  engineRequests: 0;
+}>;
+
+/** Installed Accounts subdeclaration. Reached multiplicities are finite counts, not prose. */
+export type IdentityHistoryAccountsDeclaration = Readonly<{
+  version: 1;
+  interface: 'withPrepaidAgentIdentityHistoryUnit';
+  sourceReceiver: 'withPrepaidIdentitySourceConsumerMaintenance';
+  axes: readonly [
+    'candidateKeys',
+    'nativeRows',
+    'identityMetadataRows',
+    'nativePoints',
+    'witnessKeys',
+    'statements',
+    'bytes',
+    'emptySeeks',
+  ];
+  engineRequests: 0;
+  selectedCommand: Readonly<{
+    profile: 'single-no-effect';
+    effect: IdentityHistoryCommandDispatchPrice;
+    cleanup: IdentityHistoryCommandDispatchPrice;
+    total: IdentityHistoryCommandDispatchPrice;
+    components: Readonly<Record<string, IdentityHistoryCommandDispatchPrice>>;
+  }>;
+  selectedCommandCalls: Readonly<{
+    retirement: number;
+    physicalMinimization: number;
+    physicalFenceReceiving: number;
+    selectedContinuation: number;
+  }>;
+  local: Readonly<Record<string, IdentityHistoryWorkDimensions>>;
+  sdk: Readonly<Record<string, IdentityHistoryWorkDimensions>>;
+  multiplicities: Readonly<Record<string, number>>;
+  missingTerms: readonly string[];
+}>;
+
 /** The inventory read as the native owner returns it: the sealed snapshot, or its receiving verdict. */
 export type AgentIdentityInventoryRead =
   | AgentIdentityNativeInventory

@@ -10,6 +10,7 @@ import { ConceptAssociations, ConceptAliases, ConceptWorksDisclosure } from './s
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './source-concept-reading/hierarchy';
+import { ConceptMembershipReading } from './source-concept-reading/membership';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
 import {
@@ -334,6 +335,15 @@ function ConceptVisitView({
               />
 
               <ConceptHierarchy visit={visit} locale={locale} returnTo={returnTo} hrefFor={hierarchyHrefFor} />
+
+              <ConceptMembershipReading
+                membership={read.membership}
+                locale={locale}
+                returnTo={returnTo}
+                hrefFor={(base, row) => subjectVisitHref(base, addressFor({ section: 'works', row: row.id }))}
+                busy={busy}
+                onRetry={() => void visit.refresh()}
+              />
 
               <section className="space-y-2" aria-labelledby="concept-actions-heading">
                 <h2 id="concept-actions-heading" className="font-sans text-lg font-semibold">

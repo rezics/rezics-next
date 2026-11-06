@@ -72,6 +72,8 @@ Applicant verification requests use the same ten-second account budget, includin
 
 **Decision:** Applicant verification is proven by the existing recovery, chooser and journey checks plus one setup-envelope and receipt-without-retry assertion; named current-status and recovery stories stay, with no extra stories.
 
+**Decision:** The subject chooser receives its native search transport from the verification card, so no Settings test replaces the verification actions module; the recovery cases run the real installed action exports in the same `bun test` process as the chooser.
+
 ### Cost: session preparation
 
 - Touches: one current website session credential read through `prepareSession`, including headers and body, under the existing ten-second managed deadline and the caller's cancellation.

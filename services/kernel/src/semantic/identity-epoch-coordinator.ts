@@ -4,6 +4,7 @@ import { runCommand } from '../command/command.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import { withIdentitySourceConsumerMaintenance } from './identity-source-consumer-maintenance.ts';
 import type {
   IdentityJobRef,
   IdentityStepName,
@@ -50,8 +51,6 @@ const noProgress = () =>
     'identity_epoch_no_progress',
     'Native identity work did not advance its committed receipt',
   );
-const sameJob = (a: IdentityJobRef, b: IdentityJobRef) => a.jobId === b.jobId && a.epoch === b.epoch;
-
 function locator(job: IdentityJobRef): JobLocator {
   identityJobPartition(job);
   if (typeof job.epoch !== 'bigint' || job.epoch <= 0n) throw new TypeError('Invalid native identity epoch');
@@ -125,6 +124,7 @@ function installed(pool: Pool): Installation & { identity: IdentityCoordination<
 
 /** Trusted registration only. The composition root supplies the fixed participants; null leaves the coordinator
  * unavailable. There is no caller-selected participant list or mutable installation setter.
+ * Produce runs inside the original Source maintenance frame; Search commits its own native plans there.
  */
 export function registerIdentityEpochCoordinator(
   context: WorkContext,
@@ -151,9 +151,15 @@ export function registerIdentityEpochCoordinator(
       const ref = nativeJob(job);
       const dispatched = installed(context.pool).identity.dispatch(step, stepIdentityEpochMapping);
       if ('kind' in dispatched) throw unavailable('Identity coordinator received a control step');
-      // The producer rereads its saved frontier and commits locally. Its home has been released on return.
-      const progress = await dispatched.run(context.pool, ref);
-      return { receipt: receiptLocator(ref, step, progress), state: progress.state };
+      return withIdentitySourceConsumerMaintenance(
+        { pool: context.pool, env: context.env, clock: context.clock },
+        { deadline: Date.now() + 5_000 },
+        async () => {
+          // The producer rereads its saved frontier and commits locally. Its home has been released on return.
+          const progress = await dispatched.run(context.pool, ref);
+          return { receipt: receiptLocator(ref, step, progress), state: progress.state };
+        },
+      );
     },
     { name: `${workflowName}.produce`, ...COMMAND_STEP_RETRIES },
   );

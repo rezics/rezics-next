@@ -1,13 +1,7 @@
-import { expect, mock, spyOn, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-mock.module('../src/settings/verification-actions', () => ({
-  searchVerificationSubjects: async () => ({ ok: true, value: [] }),
-}));
-mock.module('../src/session/query', () => ({
-  useSession: () => ({ state: 'signed-in', subject: 'alice', csrfToken: 'test-token' }),
-}));
 const { VerificationSubjectSearch, VerificationSubjectChooserView } =
   await import('../src/settings/verification-subject-chooser');
 type Subject = import('../src/settings/verification-subject-chooser').VerificationSubject;
@@ -15,6 +9,8 @@ type SearchResult = import('../src/settings/verification-core').VerificationSear
 const person: Subject = { id: 'native-person-id', title: 'Avery', type: 'Person' };
 const organization: Subject = { id: 'native-organization-id', title: 'Avery Studio', type: 'Organization' };
 const success = (subjects: Subject[]): SearchResult => ({ ok: true, value: subjects });
+// Static markup never starts a search; the transport is supplied by the consumer, not a module replacement.
+const unusedSearch = async (): Promise<SearchResult> => success([]);
 const unavailable: SearchResult = {
   ok: false,
   failure: { kind: 'unavailable', status: 0, message: 'Subject search is unavailable.' },
@@ -109,14 +105,19 @@ test('failed search stays visibly failed until explicit retry; empty and account
 
 test('the chooser exposes a labelled bounded combobox and selected presentation keeps Change separate from form submission', () => {
   const html = renderToStaticMarkup(
-    createElement(VerificationSubjectChooserView, { selected: null, onSelect: () => {} }),
+    createElement(VerificationSubjectChooserView, { selected: null, onSelect: () => {}, search: unusedSearch }),
   );
   expect(html).toContain('role="combobox"');
   expect(html).toContain('aria-autocomplete="list"');
   expect(html).toContain('maxLength="100"');
   expect(html).toContain('aria-describedby=');
   const selected = renderToStaticMarkup(
-    createElement(VerificationSubjectChooserView, { selected: person, onSelect: () => {}, disabled: true }),
+    createElement(VerificationSubjectChooserView, {
+      selected: person,
+      onSelect: () => {},
+      disabled: true,
+      search: unusedSearch,
+    }),
   );
   expect(selected).toContain('Avery');
   expect(selected).toContain('type="button"');

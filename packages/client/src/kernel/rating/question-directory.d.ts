@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
-import questionRead from './question-read.sql';
+import questionRead from './question-read.sql.d.ts';
 import type { QuestionGrain } from './question-authoring.ts';
 type Dependencies = {
     pool: Pool;

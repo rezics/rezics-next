@@ -22,6 +22,9 @@ export class CommandUnavailableError extends Error {
 /** Constant-time classification shared by Access, commands, HTTP, and durable work. */
 export function classifyUnavailability(error: unknown): CommandUnavailableError['reason'] | undefined {
   if (error instanceof AccessUnavailableError || error instanceof CommandUnavailableError) return error.reason;
+  // An expired AbortSignal.timeout is the request budget running out, not a credential refusal.
+  if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'TimeoutError')
+    return 'deadline';
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
   if (code === '57014' || (error instanceof Error && /query read timeout/i.test(error.message))) return 'deadline';
   if (code === '40001' || code === '40P01' || code === '55P03') return 'contention';

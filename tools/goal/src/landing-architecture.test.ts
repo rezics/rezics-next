@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { withAgentAdapter } from './agents.ts';
 import { codexAdapter } from './agents/codex.ts';
+import { architectureRepairStatus, commitPublishedOn, dispatchArchitectureRepairs } from './architecture-repair.ts';
 import { checkLandingArchitectureCandidate } from './landing-architecture.ts';
 import { integrationHarness, temporaryDirectory } from './test-support.ts';
 
@@ -14,6 +15,50 @@ function git(cwd: string, ...args: string[]): string {
 function put(root: string, path: string, content: string): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), content);
+}
+
+const FILE = 'packages/fixture/architecture-boundary.ts';
+const VIOLATING = "import 'node:fs';\nexport const value = true;\n";
+const CLEAN = 'export const value = true;\n';
+const VIOLATION = `rule 4: ${FILE}: value import "node:fs"`;
+
+type Harness = ReturnType<typeof integrationHarness>;
+
+/** Makes the fixture module a core, so a `node:fs` value import is a rule 4 violation. */
+function makeFixtureCore(h: Harness): void {
+  const manifestPath = 'docs/architecture/modules.json';
+  const manifest = JSON.parse(readFileSync(join(h.root, manifestPath), 'utf8')) as {
+    modules: { kind: string }[];
+  };
+  manifest.modules[0]!.kind = 'core';
+  writeFileSync(join(h.root, manifestPath), `${JSON.stringify(manifest)}\n`);
+  git(h.root, 'add', manifestPath);
+  git(h.root, 'commit', '-m', 'Set fixture module as a core');
+  h.ensureDev();
+}
+
+/** Starts a fixture task whose worker commits `content` to FILE. */
+async function runFixtureWorker(h: Harness, content: string) {
+  const task = h.dispatch(FILE);
+  writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file: FILE, content }));
+  await h.start(task);
+  return task;
+}
+
+/** One controller tick of the daily repair, dispatching through the fixture's real task service. */
+function repairTick(h: Harness, now = new Date()) {
+  return dispatchArchitectureRepairs({
+    db: h.store.db,
+    unsettled: h.store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
+    published: commitPublishedOn(h.root, 'refs/heads/dev'),
+    dispatch: (briefFile) => h.tasks.dispatch(briefFile, null, true, 'verifier'),
+    notify: () => {},
+    reportFailure: (summary) => {
+      throw new Error(summary);
+    },
+    stateDirectory: h.settings.stateDirectory,
+    now,
+  });
 }
 
 test('a final candidate returns only new architecture violations and lets existing base violations land', async () => {
@@ -28,6 +73,11 @@ test('a final candidate returns only new architecture violations and lets existi
       root,
       'scripts/architecture.ts',
       readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
+    );
+    put(
+      root,
+      'scripts/architecture-map.ts',
+      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture-map.ts'), 'utf8'),
     );
     put(
       root,
@@ -107,24 +157,73 @@ test('a final candidate returns only new architecture violations and lets existi
   }
 });
 
-test("a new boundary violation returns to the author's session and the repaired candidate lands", async () => {
+test('a new boundary violation lands and is recorded against its Goal instead of returning to the author', async () => {
   const h = integrationHarness();
-  const file = 'packages/fixture/architecture-boundary.ts';
+  try {
+    h.settings.integration.devLandingChecks = false;
+    makeFixtureCore(h);
+    const task = await runFixtureWorker(h, VIOLATING);
+    await h.train();
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(git(h.root, 'show', `dev:${FILE}`)).toBe(VIOLATING.trim());
+    expect(h.store.events(task.id, 1).some((event) => event.kind === 'dev-landing-transpile-returned')).toBe(false);
+    const statuses = architectureRepairStatus(h.store.db, (id) => h.store.task(id).state);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toMatchObject({ goal: 'fixture', openViolations: 1, repair: null });
+    expect(statuses[0]!.violations[0]).toContain(VIOLATION);
+  } finally {
+    h.dispose();
+  }
+}, 120_000);
+
+test('a landed violation gets one urgent repair and resolves once a later candidate on dev no longer reports it', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    makeFixtureCore(h);
+    await runFixtureWorker(h, VIOLATING);
+    await h.train();
+    const [repair] = repairTick(h);
+    expect(repair).toBeDefined();
+    expect(h.store.task(repair!.id).brief).toMatchObject({
+      goal: 'fixture',
+      manager: 'fixture',
+      urgent: true,
+      estimate: { lines: 15, files: 1 },
+    });
+    expect(repairTick(h)).toEqual([]);
+    const fix = await runFixtureWorker(h, CLEAN);
+    await h.train();
+    expect(h.store.task(fix.id).state).toBe('integrated');
+    expect(git(h.root, 'show', `dev:${FILE}`)).toBe(CLEAN.trim());
+    expect(repairTick(h)).toEqual([]);
+    expect(architectureRepairStatus(h.store.db, (id) => h.store.task(id).state)).toEqual([]);
+    expect(
+      h.store.db.query('SELECT resolved_at FROM architecture_repair_runs WHERE task_id = ?').get(repair!.id),
+    ).toMatchObject({
+      resolved_at: expect.any(String),
+    });
+  } finally {
+    h.dispose();
+  }
+}, 120_000);
+
+test('a transpile failure still returns to the author and records no boundary violation', async () => {
+  const h = integrationHarness();
+  const file = FILE;
   let resumedSession: string | undefined;
-  let repairPrompt = '';
+  // The first attempt commits invalid TypeScript; the resumed session commits the repaired file.
   const script = `
     const fs = require('node:fs');
     const path = require('node:path');
     const { spawnSync } = require('node:child_process');
     const file = ${JSON.stringify(file)};
-    const content = process.env.GOAL_ATTEMPT === '1'
-      ? "import 'node:fs';\\nexport const value = true;\\n"
-      : 'export const value = true;\\n';
+    const content = process.env.GOAL_ATTEMPT === '1' ? 'export const value: = ;\\n' : 'export const value = true;\\n';
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, content);
     const committed = spawnSync('git', ['add', '--', file], { stdio: 'ignore' });
-    if (committed.status !== 0 || spawnSync('git', ['commit', '-qm', 'Worker architecture fixture']).status !== 0) process.exit(2);
-    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'architecture-repair-session' }));
+    if (committed.status !== 0 || spawnSync('git', ['commit', '-qm', 'Worker transpile fixture']).status !== 0) process.exit(2);
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'transpile-repair-session' }));
     console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: success' } }));
     console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 2 } }));
   `;
@@ -135,43 +234,25 @@ test("a new boundary violation returns to the author's session and the repaired 
     },
     resume(options: Parameters<NonNullable<typeof codexAdapter.resume>>[0]) {
       resumedSession = options.session;
-      repairPrompt = options.prompt;
       return [process.execPath, ['-e', script]] as [string, string[]];
     },
   };
   try {
     h.settings.integration.devLandingChecks = false;
-    const manifestPath = 'docs/architecture/modules.json';
-    const manifest = JSON.parse(readFileSync(join(h.root, manifestPath), 'utf8')) as {
-      modules: { kind: string }[];
-    };
-    manifest.modules[0]!.kind = 'core';
-    writeFileSync(join(h.root, manifestPath), `${JSON.stringify(manifest)}\n`);
-    git(h.root, 'add', manifestPath);
-    git(h.root, 'commit', '-m', 'Set fixture module as a core');
-    h.ensureDev();
+    makeFixtureCore(h);
     const task = h.dispatch(file);
     await withAgentAdapter(adapter, async () => {
       await h.start(task);
-      const rejectedSource = git(task.worktree, 'rev-parse', 'HEAD');
       await h.train();
-      expect(resumedSession).toBe('architecture-repair-session');
-      expect(repairPrompt).toContain('Architecture check rejected dev candidate');
-      expect(repairPrompt).toContain(`rule 4: ${file}: value import "node:fs"`);
-      expect(repairPrompt).toContain('Retained architecture log:');
-      expect(git(task.worktree, 'rev-parse', 'HEAD')).not.toBe(rejectedSource);
+      expect(resumedSession).toBe('transpile-repair-session');
       await h.train();
     });
-
     const handback = h.store.events(task.id, 1).find((event) => event.kind === 'dev-landing-transpile-returned');
-    const details = JSON.parse(handback!.body) as { guard: string; diagnostic: string; logPath: string };
-    expect(details.guard).toBe('dev-landing-architecture');
-    expect(details.diagnostic).toContain(`rule 4: ${file}: value import "node:fs"`);
-    expect(existsSync(details.logPath)).toBe(true);
-    expect(h.store.record({ taskId: task.id, attempt: 1 })?.guardIds).toContain('dev-landing-architecture');
+    expect(JSON.parse(handback!.body)).toMatchObject({ guard: 'dev-landing-transpile' });
     expect(h.store.task(task.id).state).toBe('integrated');
-    expect(git(h.root, 'show', `dev:${file}`)).toBe('export const value = true;');
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(CLEAN.trim());
+    expect(architectureRepairStatus(h.store.db, (id) => h.store.task(id).state)).toEqual([]);
   } finally {
     h.dispose();
   }
-});
+}, 120_000);

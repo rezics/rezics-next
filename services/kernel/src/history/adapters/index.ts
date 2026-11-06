@@ -10,6 +10,7 @@ export {
   identityHistoryConnection,
   unpricedIdentityHistoryWork,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
+  IDENTITY_HISTORY_ACCOUNTS_DECLARATION,
 } from './agent-identity-inventory-work.ts';
 export {
   readAgentIdentityInventory,

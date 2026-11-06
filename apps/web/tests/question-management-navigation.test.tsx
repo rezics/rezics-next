@@ -1,10 +1,11 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { QuestionWindow, questionManagementWindows } from '../src/ratings/question-management/window-navigation';
 import { sessionQueryKey } from '../src/session/browser-state';
 import { m } from '../src/paraglide/messages.js';
+import { actionsMock, sessionMock, stubs, type QuestionStubs } from './question-management-stubs';
 import type { BrowserObservationSnapshot } from '../src/session/observation';
 import type {
   QuestionManagementHistoryRead,
@@ -76,22 +77,26 @@ type HistoryRequest = {
 const reads: ReadRequest[] = [];
 const histories: HistoryRequest[] = [];
 const sends: unknown[] = [];
-mock.module('../src/session/query', () => ({ useSession: () => ({ state: 'signed-in', subject: viewer, csrfToken }) }));
-mock.module('../src/session/guard', () => ({ requireSignedIn: () => {} }));
-mock.module('../src/ratings/question-management/actions', () => ({
-  prepareQuestionManagementVisit: async ({ data }: { data: Partial<QuestionManagementVisit> }) => ({
-    ...visit,
-    ...data,
-  }),
-  readQuestionManagementForViewer: ({ data }: { data: Pick<ReadRequest, 'visit' | 'address'> }) =>
-    new Promise<QuestionManagementRead>((resolve) => reads.push({ ...data, resolve })),
-  readQuestionManagementHistory: ({ data }: { data: { questionId: string; cursor: string | null } }) =>
-    new Promise<QuestionManagementHistoryRead>((resolve) => histories.push({ ...data, resolve })),
-  executeQuestionManagementIntent: async (input: unknown) => {
+const sessionModule = await import('../src/session/query');
+mock.module('../src/session/query', () => sessionMock(sessionModule));
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const actualActions = await import('../src/ratings/question-management/actions');
+mock.module('../src/ratings/question-management/actions', () => actionsMock(actualActions));
+beforeEach(() => {
+  stubs.session = { state: 'signed-in', subject: viewer, csrfToken };
+  stubs.prepare = async (input: { data: Partial<QuestionManagementVisit> }) => ({ ...visit, ...input.data });
+  stubs.read = ({ data }: { data: Pick<ReadRequest, 'visit' | 'address'> }) =>
+    new Promise<QuestionManagementRead>((resolve) => reads.push({ ...data, resolve }));
+  stubs.history = ({ data }: { data: { questionId: string; cursor: string | null } }) =>
+    new Promise<QuestionManagementHistoryRead>((resolve) => histories.push({ ...data, resolve }));
+  stubs.execute = async (input: unknown) => {
     sends.push(input);
     return { kind: 'uncertain' };
-  },
-}));
+  };
+});
+afterEach(() => {
+  for (const key of Object.keys(stubs) as (keyof QuestionStubs)[]) delete stubs[key];
+});
 mock.module('../src/shell/head-context', () => ({ pageHeadContext: () => ({}) }));
 mock.module('../src/shell/head', () => ({ pageHead: () => ({}) }));
 const { Route } = await import('../src/routes/realms/$id_.questions');

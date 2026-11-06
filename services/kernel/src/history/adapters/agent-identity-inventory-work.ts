@@ -9,7 +9,11 @@ import { COMMAND_DISPATCH_ALLOWANCE } from '../../command/dispatch-lifetime.ts';
 import type { IdentityUnit } from './agent-identity-retirement.ts';
 import { historyComposition } from '../application/composition.ts';
 import { withPrepaidAgentIdentityHistoryUnit } from '../application/identity.ts';
-import { type HistoryReceivingContext, IdentityHistoryWorkUnavailable } from '../contract/index.ts';
+import {
+  type HistoryReceivingContext,
+  type IdentityHistoryAccountsDeclaration,
+  IdentityHistoryWorkUnavailable,
+} from '../contract/index.ts';
 const prepaidOf = (unit: { readonly prepaid?: unknown }) => unit.prepaid as NonNullable<IdentityUnit['prepaid']>;
 
 const declarations = new WeakMap<NativeStepWork, WorkDimensions>();
@@ -205,7 +209,7 @@ const sdkWork = Object.freeze({
 /** The Accounts subdeclaration is deliberately separate from Semantic's complete
  * original declaration. Its missing operands cannot be added as zero or as null
  * totals. Per-call terms below compose cumulatively in the ONE original ledger. */
-export function IDENTITY_HISTORY_ACCOUNTS_DECLARATION() {
+export function IDENTITY_HISTORY_ACCOUNTS_DECLARATION(): IdentityHistoryAccountsDeclaration {
   return memoizedValue(IDENTITY_HISTORY_ACCOUNTS_DECLARATION, () =>
     Object.freeze({
       version: 1,
@@ -242,20 +246,19 @@ export function IDENTITY_HISTORY_ACCOUNTS_DECLARATION() {
       sdk: Object.freeze(
         Object.fromEntries(Object.entries(sdkWork).map(([name, amount]) => [name, declarations.get(amount)!])),
       ),
+      // Reached maxima from the selected-command schedule and owner table, not prose.
       multiplicities: Object.freeze({
-        mapping: 'one initial lookup; every receiving binding repeats its own mapping',
-        receivingBinding: 'one initial; one per retirement receiver; two per released fence observation',
-        readiness: 'one per registered identity owner readiness call',
-        nativeInventory:
-          'one initial and one per final current-cut recheck; at most three copies, 64 roles each plus sentinel',
-        recoveryInventory: 'one per initial/repeated recovery cut; exactly two copies, 64 roles each plus sentinel',
-        sdkWriterObservation: 'two retirement observations; one before physical deletion',
-        sdkRetire: 'at most one single attempt; rollback+begin+settings+lock+retire+commit',
-        sdkDelete: 'at most one single attempt; rollback+begin+settings+lock+four deletes+commit',
-        physical: 'two inspections; eight LIMIT+1 probes per inspection; limits 1,1,1,64,8,64,0,0',
-        commands:
-          'one selectedCommand.total per reached selected noEffect command, atomically including disjoint cleanup before checkout; independent commands use local.command instead',
-        progress: 'one held selected job/barrier and cursor update, followed by original producer progress control',
+        mapping: 1,
+        receivingBinding: 8,
+        readiness: 8,
+        nativeInventory: 2,
+        recoveryInventory: 2,
+        sdkWriterObservation: 3,
+        sdkRetire: 1,
+        sdkDelete: 1,
+        physical: 2,
+        commands: 16,
+        progress: 1,
       }),
       missingTerms: Object.freeze([
         'SourceHistoryNativeAllReachedCalls: original source, accepted recovery, custody, native handoff and final verification',

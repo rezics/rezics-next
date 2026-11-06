@@ -9,6 +9,7 @@ import {
 } from '../identity-source-consumer-maintenance.ts';
 import {
   readAccountIdentitySource,
+  loadAccountIdentitySource,
   assertAccountIdentitySource,
   type AccountIdentitySource,
   type AccountIdentityReversalSettlement,
@@ -145,6 +146,23 @@ export function assertIdentityBindingSource(
   const source = accountSources.get(binding);
   if (!source) throw new TypeError('Missing released Accounts source custody');
   assertAccountIdentitySource(source, receipt);
+}
+
+export type AccountAgentReceipt = Extract<
+  IdentityAdmissionInput['receipt'],
+  { kind: 'account-agent.verify' | 'account-agent.unverify' }
+>;
+
+/** Admitted mapping custody. The account home re-reads the original Access source for this exact intent and
+ * releases that home before any destination work; a moved, fenced or absent source is retryable unavailability.
+ */
+export async function admittedAccountMappingSource(
+  pool: Pool,
+  receipt: AccountAgentReceipt,
+  intent: IdentityAdmissionInput['intent'],
+): Promise<void> {
+  const source = await loadAccountIdentitySource(pool, receipt);
+  assertAccountIdentitySource(source, receipt, intent);
 }
 function proof(row: BindingRow): IdentityReceiptBinding {
   if (!row.binding_transaction_id) throw new TypeError('Receipt migration needs native released confirmation');

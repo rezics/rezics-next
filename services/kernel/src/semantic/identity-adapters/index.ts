@@ -14,10 +14,12 @@ import admissionReceipt from '../identity-epoch-admission-receipt.sql';
 import admissionCustodyPrepare from '../identity-epoch-admission-custody-prepare.sql';
 import admissionCustodyAcquire from '../identity-epoch-admission-custody-acquire.sql';
 import admissionPromote from '../identity-epoch-admission-promote.sql';
-import { bindSemanticProducerRoles } from '../erasure-producer.ts';
+import { bindSemanticProducerRoles, identityErasureRoles } from '../erasure-producer.ts';
+export { bindSemanticProducerRoles, identityErasureRoles };
 import { readAccountIdentitySource } from '../../access/agent-verification-identity.ts';
 import { admitIdentityReceivingEffect } from '../identity-receiving-effects.ts';
 import {
+  admittedAccountMappingSource,
   identityBindingData,
   assertIdentityBindingSource,
   identityBindingDigest,
@@ -729,6 +731,7 @@ export function identityEpochStore(): IdentityEpochStore {
           group.generation !== effect.controlGroup.generation
         )
           throw stale();
+        await tx.query("SELECT set_config('semantic.identity_prearm_effect_job',$1,true)", [effect.job.jobId]);
         return;
       }
       const destination = effect.kind === 'follow-count' ? effect.terminal : (effect.destination ?? effect.original);
@@ -896,7 +899,6 @@ export function identityEpochStore(): IdentityEpochStore {
 }
 
 export { readIdentityMappings, readIdentityRatingReview };
-export type { IdentitySourceConsumerMaintenanceContext } from '../identity-source-consumer-maintenance.ts';
 export type { IdentityReceivingSelection } from '../identity-receiving-effects-types.ts';
 export type {
   IdentityRatingControlLocator,
@@ -905,3 +907,4 @@ export type {
   IdentityRatingReviewUnavailableReason,
 } from './read.ts';
 export type * from './identity-epoch-contract.ts';
+export { admittedAccountMappingSource };

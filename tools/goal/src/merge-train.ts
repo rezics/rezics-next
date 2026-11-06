@@ -50,9 +50,20 @@ import {
 } from './landing-transpile.ts';
 import {
   LandingArchitectureInterruptedError,
+  architectureDiagnosticFile,
+  auditLandingArchitecture,
   checkLandingArchitectureCandidate,
+  landableArchitectureViolation,
   type LandingArchitectureResult,
 } from './landing-architecture.ts';
+import {
+  commitPublishedOn,
+  hasOpenArchitectureViolations,
+  recordArchitectureViolations,
+  settleArchitectureObservations,
+  storeArchitectureObservation,
+  type ArchitectureViolation,
+} from './architecture-repair.ts';
 import { regenerateLandingSchema, SCHEMA_MIGRATION_PATHS, type LandingSchemaResult } from './landing-schema.ts';
 import {
   importLandingKernelCandidate,
@@ -1506,11 +1517,9 @@ function architectureOwner<T>(
   members: readonly T[],
   changedFilesOf: (member: T) => readonly string[],
   cwd: string,
-  result: LandingArchitectureResult,
+  diagnostics: readonly string[],
 ): T {
-  const diagnosticFile = result.diagnostics
-    .map((line) => /^(?:rule\s+\d+|parser):\s+([^:]+):/.exec(line)?.[1])
-    .find((file): file is string => Boolean(file));
+  const diagnosticFile = diagnostics.map(architectureDiagnosticFile).find((file): file is string => Boolean(file));
   return (
     (diagnosticFile
       ? members.find((member) =>
@@ -1711,7 +1720,7 @@ export class MergeTrain {
   private recordDevArchitectureCheck(
     request: LandingRequest,
     result: LandingArchitectureResult,
-    outcome: 'passed' | 'unavailable',
+    outcome: 'passed' | 'diagnostic' | 'unavailable',
   ): void {
     if (!(this.options.fence instanceof WorkerStore)) return;
     recordFlow(this.options.fence.db, {
@@ -1725,10 +1734,58 @@ export class MergeTrain {
         candidate: result.candidate,
         changedFileCount: result.changedFileCount,
         elapsedMs: result.elapsedMs,
+        violations: result.diagnostics.filter(landableArchitectureViolation).length,
         logPath: result.logPath,
         infrastructureError: result.infrastructureError ?? null,
       }),
     });
+  }
+
+  /**
+   * Records a dev candidate's landable boundary violations against the Goals of the tasks that own them, then lets it
+   * land. Earlier open lines are settled first, against the complete audit of this candidate when any are open. Rows
+   * are written before publication; the controller only dispatches repairs for lines whose candidate is on dev.
+   */
+  private async recordDevArchitecture(
+    cwd: string,
+    candidate: string,
+    architecture: LandingArchitectureResult,
+    owners: readonly { taskId: string; changedFiles: readonly string[] }[],
+    logPath: string,
+  ): Promise<void> {
+    const fence = this.options.fence;
+    if (!(fence instanceof WorkerStore)) return;
+    const published = commitPublishedOn(
+      this.options.mainCheckout,
+      `refs/heads/${this.options.integrationBranch ?? 'dev'}`,
+    );
+    settleArchitectureObservations(fence.db, published, true);
+    if (hasOpenArchitectureViolations(fence.db)) {
+      const audit = await auditLandingArchitecture({ cwd, logPath });
+      if (audit.outcome === 'unavailable')
+        appendFileSync(logPath, `Architecture resolution skipped: ${audit.infrastructureError ?? 'unavailable'}\n`);
+      else storeArchitectureObservation(fence.db, candidate, audit.diagnostics);
+    }
+    const violations: ArchitectureViolation[] = architecture.diagnostics
+      .filter(landableArchitectureViolation)
+      .map((line) => {
+        const owner = architectureOwner(owners, (item) => item.changedFiles, cwd, [line]);
+        const brief = fence.task(owner.taskId).brief;
+        const file = architectureDiagnosticFile(line);
+        const production = owner.changedFiles.filter((path) => /\.(?:ts|tsx|mts|cts)$/.test(path));
+        return {
+          goal: brief.goal,
+          manager: brief.manager,
+          line,
+          paths: file ? [file] : production.length ? production : [...owner.changedFiles],
+        };
+      });
+    if (!violations.length) return;
+    recordArchitectureViolations(fence.db, candidate, violations);
+    appendFileSync(
+      logPath,
+      `Candidate ${candidate} lands with ${violations.length} recorded boundary violation line${violations.length === 1 ? '' : 's'}; the same-day repair brief lists them.\n`,
+    );
   }
 
   private recordUnavailableDevKernelImport(request: LandingRequest, result: LandingKernelImportResult): void {
@@ -2635,8 +2692,17 @@ export class MergeTrain {
             retry = true;
             continue;
           }
-          if (architecture.outcome === 'diagnostic') {
-            const owner = architectureOwner(prepared, (member) => member.result.changedFiles, trainTree, architecture);
+          if (architecture.outcome === 'unavailable') {
+            this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, 'unavailable');
+            throw new LandingArchitectureUnavailableError(architecture);
+          }
+          if (architecture.diagnostics.some((line) => !landableArchitectureViolation(line))) {
+            const owner = architectureOwner(
+              prepared,
+              (member) => member.result.changedFiles,
+              trainTree,
+              architecture.diagnostics,
+            );
             return returnRepair(
               owner,
               architectureHandoff(
@@ -2647,11 +2713,17 @@ export class MergeTrain {
               ),
             );
           }
-          if (architecture.outcome === 'unavailable') {
-            this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, 'unavailable');
-            throw new LandingArchitectureUnavailableError(architecture);
-          }
-          this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, 'passed');
+          await this.recordDevArchitecture(
+            trainTree,
+            finalCandidate,
+            architecture,
+            prepared.map((member) => ({
+              taskId: member.entry.request.taskId,
+              changedFiles: member.result.changedFiles,
+            })),
+            batchLog,
+          );
+          this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, architecture.outcome);
         }
         if (
           !existsSync(join(trainTree, 'node_modules')) &&
@@ -4195,10 +4267,14 @@ export class MergeTrain {
           });
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
-          if (architecture.outcome === 'diagnostic') {
+          if (architecture.outcome === 'unavailable') {
+            this.recordDevArchitectureCheck(request, architecture, 'unavailable');
+            throw new LandingArchitectureUnavailableError(architecture);
+          }
+          if (architecture.diagnostics.some((line) => !landableArchitectureViolation(line))) {
             appendFileSync(
               logPath,
-              `Candidate ${candidate} was not published; returning its architecture violations to task ${request.taskId} attempt ${request.attempt}.\n`,
+              `Candidate ${candidate} was not published; returning its architecture check failure to task ${request.taskId} attempt ${request.attempt}.\n`,
             );
             return architectureHandoff(
               entry,
@@ -4207,11 +4283,14 @@ export class MergeTrain {
               architecture,
             );
           }
-          if (architecture.outcome === 'unavailable') {
-            this.recordDevArchitectureCheck(request, architecture, 'unavailable');
-            throw new LandingArchitectureUnavailableError(architecture);
-          }
-          this.recordDevArchitectureCheck(request, architecture, 'passed');
+          await this.recordDevArchitecture(
+            trainTree,
+            candidate,
+            architecture,
+            [{ taskId: request.taskId, changedFiles: result.changedFiles }],
+            logPath,
+          );
+          this.recordDevArchitectureCheck(request, architecture, architecture.outcome);
           stage = 'gate';
           if (
             !existsSync(join(trainTree, 'node_modules')) &&
@@ -7619,17 +7698,29 @@ export class MergeTrain {
         });
         for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
         if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
-        if (architecture.outcome === 'diagnostic') {
-          const owner = architectureOwner(devLanding.owners, (item) => item.changedFiles, tree, architecture);
-          return {
-            transpileHandoff: architectureHandoff(owner.entry, owner.sourceCommit, changed, architecture),
-          };
-        }
         if (architecture.outcome === 'unavailable') {
           this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, 'unavailable');
           throw new LandingArchitectureUnavailableError(architecture);
         }
-        this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, 'passed');
+        if (architecture.diagnostics.some((line) => !landableArchitectureViolation(line))) {
+          const owner = architectureOwner(
+            devLanding.owners,
+            (item) => item.changedFiles,
+            tree,
+            architecture.diagnostics,
+          );
+          return {
+            transpileHandoff: architectureHandoff(owner.entry, owner.sourceCommit, changed, architecture),
+          };
+        }
+        await this.recordDevArchitecture(
+          tree,
+          commit,
+          architecture,
+          devLanding.owners.map((item) => ({ taskId: item.entry.request.taskId, changedFiles: item.changedFiles })),
+          logPath,
+        );
+        this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, architecture.outcome);
         const imported = await importLandingKernelCandidate({
           cwd: tree,
           base: targetHead,

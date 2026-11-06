@@ -4,6 +4,7 @@ import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../com
 import {
   accountAgentId,
   activeIdentitySourceConsumerMaintenance,
+  IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION,
   readOriginalAccountAgentIdentity,
   verifyOriginalAccountAgentIdentity,
   withReadTransaction,
@@ -149,7 +150,7 @@ export function createNativeAccessPorts(): AccessApplicationPorts {
     },
     originalWork: {
       async readHistoryOriginalSourceDeclaration() {
-        return null;
+        return declarationOf(IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION);
       },
       async readHistoryOriginalLibraryDeclaration() {
         return declarationOf(IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION);

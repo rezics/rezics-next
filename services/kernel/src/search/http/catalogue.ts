@@ -194,5 +194,17 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
     };
   }
 
-  return { fill, publicBases };
+  async function renderSelected(
+    subjects: readonly string[],
+    authorize: (resource: Resource) => Promise<AccessCheck>,
+    languages: readonly string[] = [],
+    active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
+  ) {
+    const release = active === undefined ? await activeRelease(pool) : active;
+    const shells = subjects.map((id) => ({ id, type: '', labels: {} as Record<string, string> }));
+    const filled = await fill({ subjects: shells }, authorize, languages, release);
+    return publicBases(filled, languages, release);
+  }
+
+  return { fill, publicBases, renderSelected };
 }

@@ -1,7 +1,10 @@
 import { ConfigError } from '../commerce/config.ts';
 import { isDeepStrictEqual } from 'node:util';
+import type { Pool } from 'pg';
 import { currentCommand, noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
+import type { KernelClock } from '../clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import type { Access } from '../request/access.ts';
 import type {
   IdentityEpochStep,
   IdentityStepProgress,
@@ -10,13 +13,20 @@ import type {
   IdentityNativeReceipt,
 } from '../semantic/identity-epoch-contract.ts';
 import {
+  bindSemanticProducerRoles,
   identityEpochStore,
+  identityErasureRoles,
   identityJobPartition,
   IdentityEpochStoreError,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
-import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
+import {
+  activeIdentitySourceConsumerMaintenance,
+  currentIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
+} from '../semantic/identity-source-consumer-maintenance.ts';
 import {
   installSearchIdentityReceivingNative,
   lookupIdentityReceivingEffect,
@@ -25,14 +35,10 @@ import {
   reconcileIdentityReceivingEffect,
   type SearchReceivingWorkDeclaration,
 } from '../semantic/identity-receiving-effects.ts';
-import {
-  currentIdentitySourceConsumerMaintenance,
-  identitySourceConsumerLibraryWork,
-  identitySourceConsumerNativeWork,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { subjectAlias } from './indices.ts';
+import { subjectAlias, subjectIndexName } from './indices.ts';
+import { subjectConsumer } from './consumer-name.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
@@ -40,7 +46,81 @@ import nextSql from './identity-epoch-participant-next.sql';
 import stepSql from './identity-epoch-participant-step.sql';
 import advanceSql from './identity-epoch-participant-advance.sql';
 import replaySql from './identity-epoch-participant-replay.sql';
+import completeSql from './identity-epoch-participant-complete.sql';
+import directorySql from './identity-epoch-participant-directory.sql';
+import jobScopeSql from './identity-epoch-participant-job-scope.sql';
+import enrollSql from './identity-search-receiving-enroll.sql';
+import existingPlansSql from './identity-search-receiving-existing-plans.sql';
 import { validSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
+import {
+  commitSearchIdentityReceivingPlans,
+  enrollSearchIdentityReceivingPlans,
+} from './identity-search-receiving-source.ts';
+
+export type { SearchReceivingConfiguration };
+
+const participantStatementWork = (
+  nativeRows: number,
+  nativePoints: number,
+  statements: number,
+  bytes: number,
+  emptySeeks: number,
+): WorkDimensions =>
+  Object.freeze({
+    candidateKeys: 0,
+    identityMetadataRows: 0,
+    nativeRows,
+    nativePoints,
+    witnessKeys: 0,
+    statements,
+    bytes,
+    emptySeeks,
+  });
+
+function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
+  return Object.freeze([
+    Object.freeze({ sql: completeSql.sql, work: participantStatementWork(6, 6, 6, 4096, 0) }),
+    Object.freeze({ sql: directorySql.sql, work: participantStatementWork(8, 8, 1, 16384, 1) }),
+    Object.freeze({ sql: existingPlansSql.sql, work: participantStatementWork(100, 2, 1, 8192, 1) }),
+    Object.freeze({ sql: jobScopeSql.sql, work: participantStatementWork(1, 1, 1, 256, 1) }),
+    Object.freeze({ sql: enrollSql.sql, work: participantStatementWork(8, 8, 1, 16384, 1) }),
+  ]);
+}
+
+/** Trusted Search receiving binding for the composition root: same-Pool Access, clock, generation-1
+ * consumer/index and the six-operation production declaration plus this participant's SQL costs.
+ */
+export function searchIdentityReceivingComposition(options: {
+  pool: Pool;
+  search: OpenSearch;
+  prefix: string;
+  routeKey: Uint8Array;
+  access: Access;
+  clock: KernelClock;
+  work: SearchReceivingWorkDeclaration;
+}): {
+  configuration: SearchReceivingConfiguration;
+  work: SearchReceivingWorkDeclaration;
+} {
+  subjectAlias(options.prefix);
+  if (!(options.routeKey instanceof Uint8Array) || options.routeKey.byteLength !== 32)
+    throw new ConfigError('KERNEL_ROUTE_KEY');
+  return Object.freeze({
+    configuration: Object.freeze({
+      pool: options.pool,
+      routeKey: Uint8Array.from(options.routeKey),
+      access: options.access,
+      clock: options.clock,
+      search: options.search,
+      consumer: subjectConsumer(options.prefix, 1),
+      index: subjectIndexName(options.prefix, 1),
+    }),
+    work: Object.freeze({
+      statements: Object.freeze([...options.work.statements, ...searchIdentityParticipantStatementCosts()]),
+      native: options.work.native,
+    }),
+  });
+}
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 
@@ -84,7 +164,8 @@ export function createSearchIdentityEpochParticipant(options: {
       throw unavailable(
         'Source has not installed the same-Pool receiving Access, clock, physical owner and transitive work declaration',
       );
-    const deadline = deadlineFor(1000);
+    const funded = activeIdentitySourceConsumerMaintenance(pool);
+    const deadline = funded?.deadline ?? deadlineFor(1000);
     const token = currentIdentitySourceConsumerMaintenance(pool, deadline);
     const parent = identitySourceConsumerLibraryWork(pool, token ?? undefined, deadline);
     const allowance = identitySourceConsumerNativeWork(pool, token ?? undefined, deadline);
@@ -152,16 +233,91 @@ export function createSearchIdentityEpochParticipant(options: {
           throw unavailable('Unfinished Search cancellation requires the original Source writer disposition');
         if (saved.mapping?.state !== 'complete')
           throw unavailable('Search requires authoritative native mapping custody');
+        await commitSearchIdentityReceivingPlans(pool, ref, configured.configuration, { deadline, allowance });
+        const enrolled = await enrollSearchIdentityReceivingPlans(pool, ref);
         const row = await withReadTransaction(
           pool,
           async (tx) =>
             (await tx.query(nextSql.sql, [identityJobPartition(ref), ref.jobId, String(ref.epoch)])).rows[0],
           deadline,
         );
-        if (!row)
-          throw unavailable(
-            'Complete Source receiving-plan discovery and its sealed original/copy directory are not installed',
+        if (!row) {
+          const directory = await withReadTransaction(
+            pool,
+            async (tx) =>
+              (
+                await tx.query<{ pending: number; originals: number; plans: number }>(directorySql.sql, [
+                  identityJobPartition(ref),
+                  ref.jobId,
+                  String(ref.epoch),
+                ])
+              ).rows[0],
+            deadline,
           );
+          if (
+            !directory ||
+            directory.pending !== 0 ||
+            directory.originals < 1 ||
+            directory.plans !== directory.originals ||
+            enrolled !== 'ready'
+          )
+            throw unavailable(
+              'Complete Source receiving-plan discovery and its sealed original/copy directory are not installed',
+            );
+          const roles = await identityErasureRoles(pool, ref.jobId);
+          const frontier = { after: ['directory', directory.originals], segment: 0 };
+          const scope = await withReadTransaction(
+            pool,
+            async (tx) =>
+              (
+                await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [
+                  identityJobPartition(ref),
+                  ref.jobId,
+                  String(ref.epoch),
+                ])
+              ).rows[0]?.scope_digest,
+            deadline,
+          );
+          if (!scope) throw unavailable('Search completion lost the admitted job scope');
+          const sealed = await runCommand(
+            pool,
+            { partition: identityJobPartition(ref), deadline, clock: configured.configuration.clock },
+            async (tx) => {
+              bindSemanticProducerRoles(tx, roles);
+              recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
+              registerCommandCallback(tx, async (id) => {
+                const inserted = await tx.query(completeSql.sql, [
+                  currentCommand(tx).partition,
+                  id,
+                  ref.jobId,
+                  String(ref.epoch),
+                  scope,
+                  json(frontier),
+                  json(used(allowance, identitySourceConsumerNativeWork(pool, token, deadline))),
+                ]);
+                if (inserted.rowCount !== 1) throw unavailable('Search completion lost its native step');
+              });
+              return { value: null, events: searchIdentityWriterChanged() };
+            },
+          );
+          return {
+            job: ref,
+            frontier,
+            state: 'complete' as const,
+            receipt: {
+              job: ref,
+              step: 'search-canonical-index' as const,
+              version: 1 as const,
+              native: {
+                partition: sealed.partition,
+                transactionId: sealed.transactionId,
+                epoch: sealed.epoch,
+                position: sealed.position,
+              },
+            },
+            work: used(allowance, identitySourceConsumerNativeWork(pool, token, deadline)),
+          };
+        }
         const b = row.binding;
         const s = b?.source;
         if (

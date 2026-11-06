@@ -14,6 +14,9 @@ Decision: Search, suggest and facet HTTP problems share one typed family (`inval
 `closed`, `denied`, `restart`, `index-not-ready`, `source-not-ready`, `unavailable`, `ready`) before a reader
 publishes ready. `503 semantic_not_ready` is source preparation, never an empty success. Generation or identity
 change restarts the executed request. Suggest `503` documents `semantic_not_ready` with the other unavailable codes.
+HTTP search, grouped releases, facets, typeahead and mixed discovery classify those families through
+`searchHttpExecute`; optional problem fields are omitted rather than passed as undefined. An original with no identity
+source row is its own terminal on the disclosed page. Four native HTTP cases pin executed-request recovery.
 
 Decision: native identity receiving refuses a missing or incomplete Source directory definition with typed unavailable;
 a complete unchanged retained definition must reach the native reader. Immutable projection meaning alone cannot
@@ -184,6 +187,12 @@ explicit retry may resend it with the same target, direction, key and reader/cre
 closes the action; conflict requires deliberate current-page review. Accepted settlement and review use the host's
 bounded aggregate refresh, never a per-target read or an optimistic following value. The host retires private
 rows and focus with its reader/source episode; public Collection cards remain usable during recovery.
+
+Decision: Collection directory runs only when a ready Collection adapter advertises `collectionDirectory`;
+missing capability is `index_not_ready` before admission. Recency/popularity order the complete hydrated frontier;
+identity-ordered `source.page` is the indexing walk. Selected public catalogue A is the pinned generation/uuid/index
+plus stored identities; a lost engine response rereads that native observation and retries, and working B cannot
+replace it. Owner: [collection discovery](collection-discovery.md).
 
 `discovery-http.ts` retains the stable exports. Catalogue, grouped releases/children, facets and suggestions own
 their response definitions and adapters in `http/{catalogue,releases,facets,suggest}.ts`; `http/routes.ts` registers,

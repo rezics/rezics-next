@@ -1422,6 +1422,7 @@ export function QuestionManagementPage({
         dirty={dirty && !postAcknowledgementRead}
         locked={Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')}
         isCurrent={() => sessionCurrent === true && initial.state === 'preparing' && isVisitCurrent()}
+        // A caption movement that Leave admits keeps this visit; only a departure from the page retires it.
         onLeave={() => {
           setDirty(false);
           setInspectionKey((value) => value + 1);

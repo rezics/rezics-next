@@ -159,7 +159,16 @@ BEGIN
  SELECT * INTO STRICT s FROM semantic.subject WHERE route=r AND subject_id=id FOR UPDATE;
  SELECT target,sequence INTO actual,sequence_no FROM semantic.redirect WHERE route=r AND subject_id=id ORDER BY sequence DESC LIMIT 1;
  IF m.terminal<>previous OR (destination<>id AND coalesce(actual,id)<>previous)
-   OR (s.visibility<>'visible' AND previous=id) OR EXISTS(SELECT 1 FROM semantic.account_agent_subject WHERE route=r AND subject_id=id)
+   OR (s.visibility<>'visible' AND previous=id)
+   OR (
+     EXISTS(SELECT 1 FROM semantic.account_agent_subject WHERE route=r AND subject_id=id)
+     AND NOT EXISTS(
+       SELECT 1 FROM semantic.identity_epoch_mapping_fence f
+       JOIN semantic.identity_epoch_job j ON j.job_id=f.job_id AND j.epoch=f.job_epoch
+       WHERE f.route=r AND f.destination=id AND f.transaction_id=tid
+         AND j.receipt->>'kind' IN ('account-agent.verify','account-agent.unverify')
+     )
+   )
  THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  IF previous=destination THEN RETURN true; END IF;
  SELECT revision INTO STRICT revision_no FROM semantic.revision WHERE route=r AND subject_id=id ORDER BY revision DESC LIMIT 1;
@@ -2322,12 +2331,17 @@ $$;
 CREATE FUNCTION semantic.identity_epoch_bootstrap_remaining() RETURNS integer
     LANGUAGE sql STABLE
     AS $$
-  SELECT CASE WHEN (i.mode IS NOT NULL AND NOT i.valid)
+  SELECT CASE
+    WHEN (i.mode IS NOT NULL AND NOT i.valid)
       OR (i.mode IS NULL AND EXISTS (
-        SELECT 1 FROM semantic.identity_epoch_installation_cut WHERE partition_no=0)) THEN 4096
-    WHEN i.mode='absence' AND i.valid THEN 0 ELSE t.remaining END
+        SELECT 1 FROM semantic.identity_epoch_installation_cut WHERE partition_no=0))
+    THEN (SELECT count(*)::integer FROM semantic.identity_epoch_bootstrap_topology_home
+          WHERE partition_no=0 AND NOT closed)
+    WHEN i.mode='absence' AND i.valid THEN 0
+    ELSE t.remaining END
   FROM semantic.identity_epoch_bootstrap_topology t
-  LEFT JOIN semantic.read_identity_epoch_installation() i ON true WHERE t.partition_no=0;
+  LEFT JOIN semantic.read_identity_epoch_installation() i ON true
+  WHERE t.partition_no=0;
 $$;
 
 

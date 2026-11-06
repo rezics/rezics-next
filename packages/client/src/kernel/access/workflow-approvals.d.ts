@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
-import credentialRead from './auth-credential-capability-workflow-read.sql';
+import credentialRead from './auth-credential-capability-workflow-read.sql.d.ts';
 export declare const MAX_WORKFLOW_APPROVAL_LIFETIME_MS = 300000;
 /** Host composition registers these workflow actions without a kernel HTTP route. */
 export declare const WORKFLOW_APPROVAL_ACTIONS: ActionCatalogue;

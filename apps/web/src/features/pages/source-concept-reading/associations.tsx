@@ -62,6 +62,17 @@ function AssociationValue({
       </a>
     );
   }
+  if (
+    (part.property.data_type === 'url' || part.property.id === 'schema:url') &&
+    part.value.type === 'value' &&
+    typeof part.value.content === 'string'
+  ) {
+    return (
+      <a className={linkClass} href={part.value.content} data-source-citation={part.value.content} rel="noreferrer">
+        {part.value.content}
+      </a>
+    );
+  }
   return <CandidateValue snak={part} related={read.related} subject={read.subject.id} locale={locale} />;
 }
 

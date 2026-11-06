@@ -67,7 +67,11 @@ import {
 } from '../work/sdk-retirement-fence.ts';
 import type { IdentitySourceConsumerMaintenanceWork } from './identity-source-consumer-maintenance.ts';
 import {
+  composeIdentitySourceReachedCosts,
   identitySourceConsumerDirectoryPlan,
+  IDENTITY_SOURCE_ORIGINAL_SCHEDULE,
+  sumIdentitySourceWork,
+  type IdentitySourceReachedDeclaration,
   type IdentitySourceScheduledOperation,
 } from './identity-source-maintenance-config.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
@@ -354,6 +358,200 @@ export function IDENTITY_SOURCE_LOCAL_CALLS() {
       }),
     }),
   );
+}
+
+const classified = (nativeRows: number, nativePoints: number, statements: number, bytes: number, emptySeeks: number) =>
+  Object.freeze({
+    engineRequests: 0 as const,
+    work: Object.freeze({
+      candidateKeys: 0,
+      nativeRows,
+      identityMetadataRows: 0,
+      nativePoints,
+      witnessKeys: 0,
+      statements,
+      bytes,
+      emptySeeks,
+    }),
+  });
+
+/** Directory planning envelope, classified on all eight axes. Native five-field
+ * remaining balances never become this declaration. */
+export function IDENTITY_SOURCE_DIRECTORY_PLAN_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_DIRECTORY_PLAN_DECLARATION, () => classified(100, 200, 36, 229376, 1));
+}
+
+/** recordSemanticSourceCommit: partition owner plus the same-transaction insert. */
+export function IDENTITY_SOURCE_COMMIT_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_COMMIT_DECLARATION, () =>
+    classified(
+      2,
+      1,
+      1,
+      Buffer.byteLength(
+        `INSERT INTO semantic.erasure_source_commit(partition_no,transaction_id,epoch,position)
+     SELECT partition_no,$2,epoch,position+1 FROM core.partition WHERE partition_no=$1 AND write_state='active'
+     ON CONFLICT DO NOTHING`,
+      ) +
+        4 +
+        36,
+      0,
+    ),
+  );
+}
+
+/** bindSemanticProducerRoles deferred insert: set_config plus at most eight roles. */
+export function IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION, () => classified(8, 2, 2, 512, 0));
+}
+
+/** Receiving locator at the Source home. Native hold revalidation stays Library-owned. */
+export function IDENTITY_SOURCE_RECEIVING_SELECTION_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_RECEIVING_SELECTION_DECLARATION, () => classified(3, 3, 1, 512, 1));
+}
+
+export function IDENTITY_SOURCE_RECEIVING_RECONCILE_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_RECEIVING_RECONCILE_DECLARATION, () => classified(8, 8, 1, 16384, 1));
+}
+
+export function IDENTITY_SOURCE_RECEIVING_COMMAND_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_RECEIVING_COMMAND_DECLARATION, () => classified(10, 10, 9, 8320, 0));
+}
+
+/** Current owner, retained source, claim and native commit: nine exact points. */
+export function IDENTITY_SOURCE_SCOPE_ADMISSION_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_SCOPE_ADMISSION_DECLARATION, () => classified(9, 9, 5, 8192, 9));
+}
+
+/** Accepted-account technical receiver: binding, claim, commit, native T and owner. */
+export function IDENTITY_SOURCE_ACCOUNT_RECEIVER_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_ACCOUNT_RECEIVER_DECLARATION, () => classified(5, 5, 1, 8192, 1));
+}
+
+/** Original job/inputs and retained directory fences, not brand equality. */
+export function IDENTITY_SOURCE_BINDING_CUT_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_BINDING_CUT_DECLARATION, () => classified(16, 16, 8, 32768, 8));
+}
+
+function sourceCallWork(name: keyof ReturnType<typeof IDENTITY_SOURCE_LOCAL_CALLS>) {
+  const call = IDENTITY_SOURCE_LOCAL_CALLS()[name];
+  const reads = IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS();
+  const mutations = IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS();
+  const parts: Readonly<{ work: WorkDimensions; engineRequests: 0 }>[] = [];
+  if ('controls' in call && call.controls === COMMAND_DISPATCH_ALLOWANCE) parts.push(COMMAND_DISPATCH_ALLOWANCE.total);
+  if (call.reads)
+    for (const [read, count] of Object.entries(call.reads) as readonly [keyof typeof reads, number][])
+      for (let n = 0; n < count; n++) parts.push(reads[read]);
+  if ('mutation' in call && call.mutation) parts.push(mutations[call.mutation].body);
+  return sumIdentitySourceWork(parts);
+}
+
+/** Source-owned reached bodies on the original schedule. Access original-source,
+ * Mapping/Search/Library reconcile and Core event-callback profiles stay foreign. */
+export function IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS(): readonly IdentitySourceReachedDeclaration[] {
+  return memoizedValue(IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS, () => {
+    const schedule = IDENTITY_SOURCE_ORIGINAL_SCHEDULE.source;
+    return Object.freeze([
+      {
+        name: 'Source.retainedDiscovery',
+        calls: schedule.retainedDiscovery,
+        declaration: sourceCallWork('retainedDiscovery'),
+      },
+      {
+        name: 'Source.acceptedBinding',
+        calls: schedule.acceptedBinding,
+        declaration: sourceCallWork('acceptedBinding'),
+      },
+      { name: 'Source.published', calls: schedule.published, declaration: sourceCallWork('published') },
+      { name: 'Source.terminalVerify', calls: schedule.terminalVerify, declaration: sourceCallWork('terminalVerify') },
+      { name: 'Source.progress', calls: schedule.progress, declaration: sourceCallWork('progress') },
+      { name: 'Source.prepare', calls: schedule.prepare, declaration: sourceCallWork('prepare') },
+      { name: 'Source.checkpoint', calls: schedule.checkpoint, declaration: sourceCallWork('checkpoint') },
+      { name: 'Source.finish', calls: schedule.finish, declaration: sourceCallWork('finish') },
+      {
+        name: 'Source.retainedFallback',
+        calls: schedule.retainedFallback,
+        declaration: sourceCallWork('retainedDiscovery'),
+      },
+      {
+        name: 'Source.historyAuthority',
+        calls: schedule.historyAuthority,
+        declaration: IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION(),
+      },
+      {
+        name: 'Source.historyHandoffNativeGuard',
+        calls: schedule.historyHandoff,
+        declaration: IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION(),
+      },
+      {
+        name: 'Source.directory',
+        calls: schedule.directory,
+        declaration: IDENTITY_SOURCE_DIRECTORY_PLAN_DECLARATION(),
+      },
+      {
+        name: 'Source.directoryRecheck',
+        calls: schedule.directoryRecheck,
+        declaration: IDENTITY_SOURCE_DIRECTORY_PLAN_DECLARATION(),
+      },
+      {
+        name: 'Source.receivingSelection',
+        calls: schedule.receivingSelection,
+        declaration: IDENTITY_SOURCE_RECEIVING_SELECTION_DECLARATION(),
+      },
+      {
+        name: 'Source.receivingReconcile',
+        calls: schedule.receivingReconcile,
+        declaration: IDENTITY_SOURCE_RECEIVING_RECONCILE_DECLARATION(),
+      },
+      {
+        name: 'Source.receivingCommand',
+        calls: schedule.receivingCommand,
+        declaration: IDENTITY_SOURCE_RECEIVING_COMMAND_DECLARATION(),
+      },
+      {
+        name: 'Source.scopeAdmission',
+        calls: schedule.scopeAdmission,
+        declaration: IDENTITY_SOURCE_SCOPE_ADMISSION_DECLARATION(),
+      },
+      { name: 'Source.prepareCommit', calls: schedule.prepare, declaration: IDENTITY_SOURCE_COMMIT_DECLARATION() },
+      {
+        name: 'Source.checkpointCommit',
+        calls: schedule.checkpoint,
+        declaration: IDENTITY_SOURCE_COMMIT_DECLARATION(),
+      },
+      {
+        name: 'Source.prepareRoles',
+        calls: schedule.prepare,
+        declaration: IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION(),
+      },
+      {
+        name: 'Source.checkpointRoles',
+        calls: schedule.checkpoint,
+        declaration: IDENTITY_SOURCE_PRODUCER_ROLE_DECLARATION(),
+      },
+      {
+        name: 'Source.finishBindingCut',
+        calls: schedule.finish,
+        declaration: IDENTITY_SOURCE_BINDING_CUT_DECLARATION(),
+      },
+      {
+        name: 'Source.finishAccountReceiver',
+        calls: schedule.finish,
+        declaration: IDENTITY_SOURCE_ACCOUNT_RECEIVER_DECLARATION(),
+      },
+    ]);
+  });
+}
+
+/** Installed Source child only. Whole-parent admission still needs Access original-source,
+ * participant-reconcile and Core's event-callback profile. History's typed getter
+ * already supplies eight-axis children and reached multiplicities. */
+export function IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION() {
+  return memoizedValue(IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION, () => {
+    const composed = composeIdentitySourceReachedCosts(IDENTITY_SOURCE_OWNED_REACHED_DECLARATIONS());
+    if (composed.state !== 'complete') throw new TypeError('Installed Source declaration is incomplete');
+    return Object.freeze({ work: composed.work, engineRequests: 0 as const });
+  });
 }
 
 export function identitySourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {

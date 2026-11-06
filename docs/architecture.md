@@ -93,6 +93,11 @@ A fake-port application loads without those implementations. Native authority an
 Compact landing tests pin a fake-port domain and ordinary native composition; rating-review numeric bounds live in
 the literal-only identity-core leaf `rating-review-bounds.ts`. After wiring, kernel-semantic baseline rule 2/3 is
 361/383 (from 521/384); Kernel files in value cycles 398; largest value SCC 381.
+Identity receiving publishes Library listing counts and Semantic read, subject source, receiving effects and the
+production declaration as public entries; Search and composition import those ports. Accounts resume/wait stay on
+`identity-epoch-coordinator.ts` so the Semantic barrel does not close a coordinator value cycle. Search and Library
+import Source maintenance from `identity-source-consumer-maintenance.ts`; identity-adapters does not re-export those
+values, because that edge closed a maintenance cycle.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 

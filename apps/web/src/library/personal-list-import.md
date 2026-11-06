@@ -82,7 +82,9 @@ client contract and does not add a second parser or provider synchronizer.
 
 Decision: after apply, an explicit fresh read shows up to eight current Library entries in activity order, with
 native status, Progress and counted own-vote facts. Zero, absence and unavailable remain distinct in all layouts and
-inspection. Facts stay in native occurrence order; source scores and apply receipts cannot fill a missing read.
+inspection. Vote rows and question come only from `viewerFacts.state === "current"`; other viewer-fact states omit
+votes while keeping disclosed entries and occurrence order. Facts stay in native occurrence order; source scores and
+apply receipts cannot fill a missing read.
 One FULL page supplies these facts with no per-row query. Normal Library navigation owns continuation; returning
 to source review repeats its native page read. Result and Library work links retain the public-safe return landmark
 without carrying the private upload address.
@@ -104,4 +106,7 @@ review ID, rather than offer replacement operands. Progress and vote adoption re
 - Growth check: focused journey tests cover reopen, current refusal, native outcome restoration and exact retry;
   native owner/privacy, seeded browser and physical growth acceptance remain separate checks.
 
-Decision: reopen, library-return and generated Progress fixtures are the Web pins for this landing; native guard and exact-self cases remain Kernel capability repairs.
+Decision: reopen, library-return and generated Progress fixtures are the Web pins for this landing. Pin current
+versus non-current Library vote omission with one focused return test, and keep generated `progress: null` on the
+existing reopened state-decision fixtures; add no extra stories. Native guard and exact-self cases remain Kernel
+capability repairs.

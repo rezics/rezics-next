@@ -6,12 +6,12 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { searchRetryAt, useSearchRetryWait } from '../search/search-recovery-retry';
 import { useSession } from '../session/query';
-import { searchVerificationSubjects } from './verification-actions';
 import { withVerificationDeadline } from './verification-request-deadline';
 import type { VerificationSearchFailure, VerificationSearchResult } from './verification-core';
 
 export type VerificationSubject = { id: string; title: string; type: string };
-type Search = (query: string, signal: AbortSignal) => Promise<VerificationSearchResult<VerificationSubject[]>>;
+/** The consumer supplies the native transport; this module never loads the server actions itself. */
+export type Search = (query: string, signal: AbortSignal) => Promise<VerificationSearchResult<VerificationSubject[]>>;
 type SearchState = {
   query: string;
   phase: 'idle' | 'pending' | 'loading' | 'ready' | 'failed';
@@ -176,8 +176,8 @@ type Props = {
   selected: VerificationSubject | null;
   onSelect: (subject: VerificationSubject | null) => void;
   disabled?: boolean;
+  search: Search;
 };
-const nativeSearch: Search = (query, signal) => searchVerificationSubjects({ data: { query }, signal });
 
 export function VerificationSubjectChooser(props: Props) {
   const session = useSession();
@@ -208,13 +208,8 @@ export function VerificationSubjectChooser(props: Props) {
   );
 }
 
-/** The production chooser with an injectable transport for focused interface stories. */
-export function VerificationSubjectChooserView({
-  selected,
-  onSelect,
-  disabled = false,
-  search = nativeSearch,
-}: Props & { search?: Search }) {
+/** The chooser view; stories and the production consumer both pass the transport explicitly. */
+export function VerificationSubjectChooserView({ selected, onSelect, disabled = false, search }: Props) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const change = useRef<HTMLButtonElement>(null);

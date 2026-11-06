@@ -583,6 +583,10 @@ Decision: Web diary and import consumers take Diary, Bangumi and MAL tag types f
 public entry, not Kernel source. Saved-results rule and publish links stay in the first HTML from page viewerActions.
 Fewest tests remain the existing catalogue publication cases plus `saved-query-results.test.ts`.
 
+Decision: Catalogue receives origin/dev producer and consumer typecheck repairs through a merge. Diary pages import
+the generated `@rezics/client` Diary types; Bangumi and MAL tag types stay on that same public entry. Probe routes
+keep the trusted module mount. Fewest tests stay the three catalogue publication cases plus `saved-query-results.test.ts`.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.

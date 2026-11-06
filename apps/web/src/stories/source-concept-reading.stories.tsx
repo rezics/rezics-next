@@ -33,7 +33,9 @@ type State =
   | 'retained'
   | 'recovery'
   | 'denied'
-  | 'returning';
+  | 'returning'
+  | 'membership'
+  | 'membership-unavailable';
 
 /** Finite native response fixtures demonstrate caller states; they do not assert producer success. */
 function fixture(state: State, locale: string) {
@@ -109,44 +111,95 @@ function fixture(state: State, locale: string) {
         subjects: () => ({
           get: async () => ({ status: 200, data: source, headers: { 'rezics-session-token': 'original-receipt' } }),
           links: {
-            get: async () =>
-              failure || state === 'preparing'
-                ? {
-                    status: 503,
-                    data: { code: state === 'preparing' ? 'semantic_not_ready' : 'dependency_unavailable' },
-                  }
-                : {
-                    status: 200,
-                    data: {
-                      links:
-                        state === 'empty'
-                          ? []
-                          : [
-                              {
-                                subject: disclosed,
-                                property: 'skos:broader',
-                                statement: disclosed,
-                                related: {},
-                                summary: {
-                                  id: disclosed,
-                                  type: 'skos:Concept',
-                                  types: ['skos:Concept'],
-                                  creativeWork: false,
-                                  cover: null,
-                                  label: {
-                                    value: input.cursor
-                                      ? '次の階層 — الصفحة التالية'
-                                      : '元の下位概念 — Concept plus spécifique',
-                                    language: 'ja',
+            get: async ({ query }: { query: { property?: string; cursor?: string } }) => {
+              const membership = query.property === 'schema:genre' || query.property === 'schema:keywords';
+              if (state === 'membership-unavailable' && membership)
+                return { status: 503, data: { code: 'dependency_unavailable' } };
+              if ((failure || state === 'preparing') && !membership)
+                return {
+                  status: 503,
+                  data: { code: state === 'preparing' ? 'semantic_not_ready' : 'dependency_unavailable' },
+                };
+              if (membership) {
+                const work = '00000000-0000-4000-8000-00000000c010';
+                return {
+                  status: 200,
+                  data: {
+                    links:
+                      state === 'empty' || state === 'membership-unavailable'
+                        ? []
+                        : [
+                            {
+                              subject: work,
+                              property: query.property,
+                              statement: work,
+                              related: {},
+                              assertion: {
+                                id: work,
+                                rank: 'normal',
+                                property: { id: query.property, data_type: 'wikibase-item' },
+                                value: { type: 'value', content: id },
+                                qualifiers: [],
+                                references: [
+                                  {
+                                    parts: [
+                                      {
+                                        property: { id: 'schema:url', data_type: 'url' },
+                                        value: { type: 'value', content: 'https://vndb.org/v17' },
+                                      },
+                                    ],
                                   },
-                                },
+                                ],
                               },
-                            ],
-                      next: input.cursor || state === 'empty' ? null : 'native-next',
-                      freshness: { consistency: 'eventual', target_seconds: 10, caught_up: state !== 'lagging' },
-                      ...(state === 'empty' ? { count: { value: 0, exact: true } } : {}),
-                    },
+                              summary: {
+                                id: work,
+                                type: 'schema:VideoGame',
+                                types: ['schema:VideoGame'],
+                                creativeWork: true,
+                                cover: null,
+                                label: { value: 'Selected current work', language: 'en' },
+                              },
+                            },
+                          ],
+                    next: null,
+                    freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
+                    count: { value: state === 'empty' ? 0 : 1, exact: true },
                   },
+                };
+              }
+              return {
+                status: 200,
+                data: {
+                  links:
+                    state === 'empty'
+                      ? []
+                      : [
+                          {
+                            subject: disclosed,
+                            property: 'skos:broader',
+                            statement: disclosed,
+                            related: {},
+                            summary: {
+                              id: disclosed,
+                              type: 'skos:Concept',
+                              types: ['skos:Concept'],
+                              creativeWork: false,
+                              cover: null,
+                              label: {
+                                value: input.cursor
+                                  ? '次の階層 — الصفحة التالية'
+                                  : '元の下位概念 — Concept plus spécifique',
+                                language: 'ja',
+                              },
+                            },
+                          },
+                        ],
+                  next: input.cursor || state === 'empty' ? null : 'native-next',
+                  freshness: { consistency: 'eventual', target_seconds: 10, caught_up: state !== 'lagging' },
+                  ...(state === 'empty' ? { count: { value: 0, exact: true } } : {}),
+                },
+              };
+            },
           },
         }),
       } as unknown as KernelClient;
@@ -235,6 +288,12 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const CurrentHierarchy: Story = {};
 export const DesktopHierarchy: Story = { globals: { viewport: { value: 'desktop1440' } } };
+export const CurrentMembershipPhone: Story = { args: { state: 'membership' } };
+export const CurrentMembershipDesktop: Story = {
+  args: { state: 'membership' },
+  globals: { viewport: { value: 'desktop1440' } },
+};
+export const UnavailableMembership: Story = { args: { state: 'membership-unavailable' } };
 export const SpoilerAssociation: Story = { args: { state: 'spoiler' } };
 export const InitialLoading: Story = { args: { state: 'loading' } };
 export const NoAdmittedConcept: Story = { args: { state: 'not-concept' } };

@@ -40,6 +40,8 @@ export type IntegrationRuntime = {
   verify?(): Promise<void>;
   evaluateFlow?(): void | Promise<void>;
   dispatchDailyStepAudit?(): void;
+  /** Settles architecture observations and dispatches at most one repair per Goal per day. */
+  dispatchArchitectureRepairs?(): void;
   db: Database;
   mainCheckout: string;
   stateDirectory: string;

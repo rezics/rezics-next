@@ -8,11 +8,8 @@ import {
   verifyLibraryScopeEffectsSeal,
   type LibraryScopeEffectsPage,
 } from './identity-scope-effects.ts';
-import type {
-  IdentitySourceConsumerMaintenanceContext,
-  IdentityReceivingSelection,
-  IdentityJobRef,
-} from '../semantic/identity-adapters/index.ts';
+import type { IdentityReceivingSelection, IdentityJobRef } from '../semantic/identity-adapters/index.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 import type { LibraryIdentityPlanInput, LibraryIdentityPlanResult } from './identity-native-planner-types.ts';
 import {
   advanceLibraryIdentityNativeScope,
