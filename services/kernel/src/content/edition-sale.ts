@@ -4,10 +4,11 @@ import type { Access } from '../request/access.ts';
 import type { ContentEditionSaleAuthority } from './edition-model.ts';
 import type { EditionRow } from './edition-store.ts';
 import type { ReadContext } from './model.ts';
-export { mountContentEditionConsent } from './edition-sale-consent.ts';
 
 // Commerce imports this port while initializing its catalogue. Defer the native
 // Content/community/Access dependency graph until a read actually starts.
+export type { ContentEditionConsentReader } from './edition-sale-native.ts';
+
 export async function readContentEditionSaleAuthority(
   dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
   editionId: string,

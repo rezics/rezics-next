@@ -2,7 +2,12 @@ import { memoizedValue } from '../memoized.ts';
 import { BenefitAcquisitionError } from './acquisition.ts';
 import { listSubjectOffers } from './subject-offers.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
-import { ContentEditionUnavailableError, contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
+import {
+  ContentEditionUnavailableError,
+  contentEditionTermsView,
+  decodeCapturedContentEdition,
+  type SaleDependencies,
+} from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { t } from 'elysia';
@@ -44,9 +49,11 @@ type Dependencies = {
   routeKey: Uint8Array;
   tokens: KeyRing;
   access: () => Access;
+  readConsent?: SaleDependencies['readConsent'];
   commerce?: CommerceDependencies;
   moneyPolicy?: CommerceMoneyPolicy;
 };
+const saleConsent = (deps: Dependencies) => (deps.readConsent === undefined ? {} : { readConsent: deps.readConsent });
 const object = { additionalProperties: false } as const;
 const id = t.String();
 const nullableId = t.Union([id, t.Null()]);
@@ -512,6 +519,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               tokens,
               routeKey: deps.routeKey,
               access: deps.access(),
+              ...saleConsent(deps),
             },
             actor,
             params.id,
@@ -696,7 +704,12 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
-            () => createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).createOffer(actor, body, key),
+            () =>
+              createCommerceCommands({ pool, access: deps.access(), moneyPolicy, ...saleConsent(deps) }).createOffer(
+                actor,
+                body,
+                key,
+              ),
             'forbidden',
           ),
         );
@@ -747,7 +760,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const result = await admission.run('normal', job, () =>
           command(
             () =>
-              createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).reviseOffer(
+              createCommerceCommands({ pool, access: deps.access(), moneyPolicy, ...saleConsent(deps) }).reviseOffer(
                 actor,
                 params.offerId,
                 body,
@@ -794,7 +807,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const result = await admission.run('normal', job, () =>
           command(
             () =>
-              createCommerceCommands({ pool, access: deps.access(), moneyPolicy }).delistOffer(
+              createCommerceCommands({ pool, access: deps.access(), moneyPolicy, ...saleConsent(deps) }).delistOffer(
                 actor,
                 params.offerId,
                 key,
@@ -854,7 +867,11 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           command(
             () =>
               checkout(
-                { pool, commands: createCommerceCommands({ pool, access: deps.access(), moneyPolicy }), ...commerce },
+                {
+                  pool,
+                  commands: createCommerceCommands({ pool, access: deps.access(), moneyPolicy, ...saleConsent(deps) }),
+                  ...commerce,
+                },
                 actor,
                 body.offerId,
                 body.expectedOfferRevision,

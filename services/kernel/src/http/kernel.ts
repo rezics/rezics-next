@@ -3,7 +3,6 @@ import { contentViewerActionResources } from '../content/viewer-actions.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { FEED_OPERATION_DECLARATIONS } from '../content/feed-operation-declarations.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
-import { mountContentEditionConsent } from '../content/edition-sale.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
@@ -153,7 +152,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   commerce?: CommerceDependencies;
   moneyPolicy?: CommerceMoneyPolicy;
   content?: ContentRuntime &
-    Pick<ContentBoardDependencies, 'cursorNow'> & {
+    Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
       readConsent?: CurrentConsentReader;
       /** Complete-input title observations; absent until Content installs its native producer. */
       shelfTitleInputs?: ContentShelfTitleInputs;
@@ -377,8 +376,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...LIBRARY_OPERATION_DECLARATIONS,
     ...FEED_OPERATION_DECLARATIONS,
   ]);
-  if (dependencies.content?.readConsent)
-    mountContentEditionConsent(dependencies.pool, dependencies.content.readConsent);
   const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
     const instant = sourceClock();
@@ -516,6 +513,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
+    ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
   let progress: ReturnType<typeof progressRoutes>;
@@ -631,7 +629,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     clock,
     cursorNow,
+    now: () => clock().getTime(),
     tokens,
+    ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),

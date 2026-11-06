@@ -12,6 +12,7 @@ import {
   requireMechanicalContentEdition,
   sameCapturedContentEdition,
   withoutUnverifiedBenefit,
+  type SaleDependencies,
 } from './benefit.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
@@ -209,10 +210,12 @@ function withSalePreparation<T>(
 export function createCommerceCommands(config: {
   pool: Pool;
   access: Access;
+  readConsent?: SaleDependencies['readConsent'];
   royaltyBasisPoints?: number;
   moneyPolicy?: CommerceMoneyPolicy;
 }) {
   const { pool, access } = config;
+  const saleConsent = config.readConsent === undefined ? {} : { readConsent: config.readConsent };
   const moneyPolicy = config.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   const royaltyBasisPoints = config.royaltyBasisPoints ?? 9000;
   // Never written to a receipt or workflow result. Only this physical invocation's
@@ -301,7 +304,7 @@ export function createCommerceCommands(config: {
       },
     });
     const sale = withSalePreparation(accountAuthorization(actor, authorization), async (_attempt, deadline) =>
-      captureCurrentContentEdition(input.contentEditionId ?? '', { pool, access }, { actor, deadline }),
+      captureCurrentContentEdition(input.contentEditionId ?? '', { pool, access, ...saleConsent }, { actor, deadline }),
     );
     return runCommand(
       pool,

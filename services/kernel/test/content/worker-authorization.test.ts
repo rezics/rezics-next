@@ -4,8 +4,9 @@ import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { ConfigError } from '../../src/commerce/config.ts';
 import { receiptKeysFor } from '../../src/command/receipt-key.ts';
-import { mountedContentEditionConsent } from '../../src/content/edition-sale-consent.ts';
-import { createContentWorkAccess, registerContent } from '../../src/content/register.ts';
+import { createContentWorkAccess, createContentWorkModule } from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import * as relays from '../../src/content/relays.ts';
 import * as work from '../../src/content/work.ts';
 import { createWorkerAuthorization, type WorkerAuthorization } from '../../src/work/authorization.ts';
@@ -85,7 +86,6 @@ test('default Content work and notice disclosure receive the actual fully mounte
     expect(options.readConsent).toBe(authorization.readConsent);
     expect(f.notices).toHaveBeenCalledWith(f.context.pool, authorization.access);
     expect(f.register).toHaveBeenCalledWith(f.context);
-    expect(mountedContentEditionConsent(f.context.pool)).toBe(options.readConsent);
     expect(receiptKeysFor(f.context.pool)).toEqual(f.receiptKeys);
     const catalogue = resourceRoleCatalogue(options.access)!;
     expect(catalogue.types.get('content.post')?.owner).toBe('content.post.owner');
@@ -122,7 +122,7 @@ test('default Content restores through the same canonical reader and observes cu
     const input = { actorAccountId: 'author', clientId: 'client', deadline: Date.now() + 1000 };
     expect((await options.readConsent(input))?.scopes).toEqual(['post:erase']);
     scopes = [];
-    expect((await mountedContentEditionConsent(f.context.pool)!(input))?.scopes).toEqual([]);
+    expect((await options.readConsent(input))?.scopes).toEqual([]);
     expect(options.readConsent).toBe(f.context.getAuthorization().readConsent);
     expect(f.fetch).toHaveBeenCalledTimes(2);
   } finally {

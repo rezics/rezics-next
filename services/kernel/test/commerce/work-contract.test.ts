@@ -19,7 +19,8 @@ test('Default paid fulfilment uses real mounted worker Access and native current
   expect(module).toContain('}).register(context)');
   expect(module).not.toContain('createAccess');
   expect(benefit).toContain('readContentEditionMechanicalSaleAuthority(dependencies, editionId, context)');
-  expect(sale).toContain('mountedContentEditionConsent(deps.pool)');
+  expect(sale).toContain('const readConsent = deps.readConsent;');
+  expect(sale).not.toContain('process.env');
   expect(sale).toContain('readConsent,');
   expect(sale).toContain("action: 'edition:sell'");
   expect(sale).toContain("action: 'post:revise'");

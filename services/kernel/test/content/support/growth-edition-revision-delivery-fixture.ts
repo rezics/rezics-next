@@ -9,7 +9,6 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import permission from '../../../src/access/permission-check.sql';
 import { revisePost } from '../../../src/content/commands.ts';
 import type { ContentEditionRevisionView } from '../../../src/content/edition-model.ts';
-import { mountContentEditionConsent } from '../../../src/content/edition-sale.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -61,12 +60,10 @@ async function createSharedHarness(): Promise<SharedHarness> {
     };
     const readConsent = ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
       consent.readCurrentConsent({ actorAccountId, clientId });
-    mountContentEditionConsent(db.pool, readConsent);
     const writeRate = createWriteRateLimiter({ secret: 'edition-delivery-native-write-rate-secret-32-bytes' });
-    const app = testKernel({ pool: db.pool, auth: authConfig, writeRate });
+    const app = testKernel({ pool: db.pool, auth: authConfig, writeRate, content: { readConsent } });
     const mutationPool = db.openPool({ max: 2 });
-    mountContentEditionConsent(mutationPool, readConsent);
-    const mutationApp = testKernel({ pool: mutationPool, auth: authConfig, writeRate });
+    const mutationApp = testKernel({ pool: mutationPool, auth: authConfig, writeRate, content: { readConsent } });
     const scopes = [...actionCatalogue(app).keys()].filter((action) => action !== 'media:complete').sort();
     const clientId = `edition_growth_${randomUUID()}`;
     await registerTestClient(native.host.service, { clientId, firstParty: true, scopes });

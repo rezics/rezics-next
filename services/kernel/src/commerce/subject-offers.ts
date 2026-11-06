@@ -13,7 +13,12 @@ import { readCurrentSubjectSummaries } from '../semantic/current-subject-summari
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { captureCurrentContentEdition, contentEditionTermsView, sameCapturedContentEdition } from './benefit.ts';
+import {
+  captureCurrentContentEdition,
+  contentEditionTermsView,
+  sameCapturedContentEdition,
+  type SaleDependencies,
+} from './benefit.ts';
 import type { Offer, PublicOfferCard, SubjectOffersPage } from './model.ts';
 import { readOffer } from './store.ts';
 import references from './subject-offers-page.sql';
@@ -21,7 +26,13 @@ import bootstrap from './subject-offers-bootstrap.sql';
 
 export const SUBJECT_OFFER_RAW_LIMIT = 20;
 export const SUBJECT_OFFER_START = '00000000-0000-0000-0000-000000000000';
-type Dependencies = { pool: Pool; access: Access; routeKey: Uint8Array; tokens: KeyRing };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  routeKey: Uint8Array;
+  tokens: KeyRing;
+  readConsent?: NonNullable<SaleDependencies['readConsent']>;
+};
 
 /** Native creator-home point. This never consults directory prices or permission copies. */
 export async function readSubjectOfferSource(pool: Pool, id: string, deadline: number): Promise<Offer | null> {
