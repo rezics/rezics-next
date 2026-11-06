@@ -128,7 +128,7 @@ rename select each named operand once in the one-row request and read those colu
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
-implementations. Search filter-leaf classification is a composition port; publication-staging admits catalogue-only versus owner-only through that capability and core arithmetic. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read
+implementations. Search filter-leaf classification is a composition port. Publication-staging takes population from the stored Source: a catalogue Source requires catalogue leaves and stages Search's public population; an owner Source evaluates every leaf through Search's owner scope and pins the public catalogue observation when catalogue leaves are present. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read
 without a bound Access adapter is unbound and also defers; an explicit deny still refuses. Journal date preparation stays
 before the owner transaction and does not admit a session id as a Collection.
 
