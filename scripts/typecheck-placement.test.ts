@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -624,7 +624,7 @@ test('auth removes its compiler database when starting tsc fails', async () => {
     },
   );
 
-  await expect(result).rejects.toBe(failure);
+  expect(await result).toBe(75);
   expect(events).toEqual(['tsc', 'removed']);
 });
 
@@ -835,4 +835,100 @@ assert.deepEqual(commands().slice(2), [['rm', '-f', '-v', 'owned-container']]);
   });
   expect(result.stderr).toBe('');
   expect(result.status).toBe(0);
+});
+
+test('direct compiler placement retains native statuses and reports infrastructure status with the original phase', async () => {
+  const output = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (const run of [runKernelTypecheck, runAuthTypecheck]) {
+      for (const status of [0, 1, 2, 23, 75, 124, 130, 143]) {
+        output.mockClear();
+        expect(await run({}, { place: async () => status }, [])).toBe(
+          [75, 124, 130, 143].includes(status) ? 75 : status,
+        );
+        if ([75, 124, 130, 143].includes(status)) {
+          expect(output.mock.calls.flat().join('\n')).toContain(
+            `phase=placement: check-host execution ended with status ${status}`,
+          );
+        } else expect(output).not.toHaveBeenCalled();
+      }
+      output.mockClear();
+      expect(
+        await run(
+          {},
+          {
+            place: async () => {
+              throw new Error('SSH master channel lost');
+            },
+          },
+          [],
+        ),
+      ).toBe(75);
+      expect(output.mock.calls.flat().join('\n')).toContain('phase=placement: SSH master channel lost');
+    }
+  } finally {
+    output.mockRestore();
+  }
+});
+
+test('direct compiler setup, launch and cleanup failures keep their cause, phase and owned cleanup', async () => {
+  const output = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (const workspace of ['kernel', 'auth']) {
+      for (const failedPhase of ['database-setup', 'compiler', 'database-cleanup']) {
+        output.mockClear();
+        let removed = 0;
+        let compiled = 0;
+        const prepare = async () => {
+          if (failedPhase === 'database-setup') throw new Error('docker run ETIMEDOUT');
+          return {
+            url: 'postgres://fixture/typecheck',
+            remove: async () => {
+              removed++;
+              if (failedPhase === 'database-cleanup') throw new Error('docker rm ETIMEDOUT');
+            },
+          };
+        };
+        const typecheck = async () => {
+          compiled++;
+          if (failedPhase === 'compiler') throw new Error('spawn tsc ENOENT');
+          return 23;
+        };
+        const dependencies = { recognize, typecheck };
+        const result =
+          workspace === 'auth'
+            ? await runAuthTypecheck({}, { ...dependencies, prepareCompilerDatabase: prepare }, [])
+            : await runKernelTypecheck(
+                {},
+                {
+                  ...dependencies,
+                  withThrowawayDatabase: async (work) => {
+                    const database = await prepare();
+                    try {
+                      return await work({ DATABASE_URL: database.url });
+                    } finally {
+                      await database.remove();
+                    }
+                  },
+                },
+                [],
+              );
+        expect(result).toBe(75);
+        expect(removed).toBe(failedPhase === 'database-setup' ? 0 : 1);
+        expect(compiled).toBe(failedPhase === 'database-setup' ? 0 : 1);
+        const diagnostic = output.mock.calls.flat().join('\n');
+        expect(diagnostic).toContain(`phase=${failedPhase}`);
+        expect(diagnostic).toContain(
+          failedPhase === 'compiler'
+            ? 'spawn tsc ENOENT'
+            : failedPhase === 'database-setup'
+              ? 'docker run ETIMEDOUT'
+              : 'docker rm ETIMEDOUT',
+        );
+        if (failedPhase === 'database-cleanup') expect(diagnostic).toContain('compiler status 23');
+      }
+    }
+  } finally {
+    output.mockRestore();
+  }
 });

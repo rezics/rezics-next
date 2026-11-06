@@ -64,18 +64,31 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. A stale or lost master is recovered with `-O check` then `-O exit` before the next auto connection.
+idle sockets. A failed probe never stops a master: a busy master times out too, and `-O exit` would cut every run
+multiplexed through it (their rsync sessions end with exit 255). A socket file left by a killed master is removed when
+`-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
+multiplexing` and every connection pays a full handshake.
+Expired immutable bases are renamed aside under `bases/.lock` and deleted after it is released, so a base lookup never
+waits behind another run's recursive delete.
 Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted
 execution. `--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
 including the 11 GiB wait that still places on host b.
 
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
-labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, a labelled volume rather than 1 GiB tmpfs, nonce
-reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container
-`pg_isready` plus a protocol reply; host-lifetime Python cleanup uses those same 120s/5s bounds and does not classify a
-`docker rm` timeout as install/preparation; SIGTERM removal is detached. Original remote context stays on those same tests. Management walk
-idle-in-transaction is that lifetime, not a second launcher. Original walks remain open.
+labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
+rather than 1 GiB tmpfs, nonce reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix
+forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
+returns a string or a Buffer; cleanup retains the original failure and the exact cleanup diagnostic. Host-lifetime
+Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;
+SIGTERM removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
+remote typing share one workspace. Mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web
+compilers do not share an admitted 6GiB slice. Admitted runs reclaim inactive file pages in that slice after install
+and before each mapper compiler. Vite starts only after complete Paraglide modules exist, and `/en` is
+ready only as HTML without a missing-module overlay. Readiness reports the observed probe, fetch or child-exit
+cause; only an actual ECONNREFUSED is hydration startup. Original
+remote context stays on those same tests. Management walk idle-in-transaction
+is that lifetime, not a second launcher. Original walks remain open.
 `GROWTH_PROFILE`, when set to a file inside the workspace, is forwarded to stack runs on check hosts as a
 workspace-relative path and returned with the run result. Existing local profile lines are preserved when the
 returned file is merged.
@@ -323,7 +336,11 @@ already admitted physical check-host run because credentials cannot be relocated
 
 Root typecheck preserves every compiler diagnostic with its file and line. Database setup or cleanup failure, check-host
 loss, timeout and compiler launch failure without diagnostics are reported as infrastructure or execution results,
-never as type errors without diagnostics. The local prelanding cache is copy-on-write from the dev commit to the
+never as type errors without diagnostics. A `.sql` file diagnostic with its line (Reylo SQL analysis) is a type error;
+a `tsconfig.json` diagnostic such as TS18075 is infrastructure. Root, Kernel and Auth report a placed check-host signal or
+infrastructure exit (75, 124, 130, 143) as infrastructure status 75 with its raw status and placement phase.
+Placement, database setup/cleanup and compiler launch exceptions retain their original message and phase; ordinary
+compiler statuses remain native. See [compiler placement](../docs/development/compiler-check-placement.md#execution-failure-classification). The local prelanding cache is copy-on-write from the dev commit to the
 candidate commit and includes compiler, lockfile, Reylo configuration, Kernel/Auth SQL sources and migrations.
 
 Kernel SQL analysis uses the immutable host-local Reylo cache described in the [Kernel scripts owner document](../services/kernel/scripts/README.md).
@@ -345,6 +362,18 @@ Observation: On 2026-11-05 (UTC), a focused `bun run --cwd services/kernel check
 
 Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
 root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.
+
+Mapper preparation: the Reylo content mapper (`contentMappers` in `apps/web`, `services/kernel`, `services/auth`
+tsconfig files) is resolved by TypeScript 7 from the tsconfig's own directory upward, through the `reylo` link that
+`bun install --frozen-lockfile` creates in each declaring workspace's `node_modules`. Its native engine is loaded only
+for SQL analysis, so the engine package is not what TS18075 reports. Observed on 2026-11-06: in this checkout a direct
+`tsc --noEmit --runExternalCode -p tsconfig.json` in `apps/web` loads the mapper and reports only the expected missing
+`DATABASE_URL` per `.sql` file; a tsconfig with no `reylo` link in any ancestor `node_modules` reports
+`TS18075: The content mapper package 'reylo' could not be resolved` at the `contentMappers` value. A run that reports
+TS18075 therefore has a dependency root or workspace link that differs from the lockfile install. The workspace block classifies
+such a run as `infrastructure` unless the same output also carries `file(line,col): error` diagnostics, which makes it
+`type-errors`; the TS18075 line is a `tsconfig.json` diagnostic, so it alone matches neither. The failing remote identity
+was not recorded in any local log, so the remote preparation that produced it remains unverified.
 
 ### Controller-reserved proof binding
 
@@ -520,10 +549,10 @@ existing owners. Keep reclaim and disk stopgap evidence separate; runner deploym
 either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration
 remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
-1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
-   using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and
-   probe once more; the second failure is `RemoteTransportError` for the host and `control probe` stage. A check never
-   closes another run's control path.
+1. Select a responding eligible host and verify its shared SSH control master with a trivial command before using it.
+   The probe is bounded to ninety seconds. A failed probe never stops the master, because a busy master times out too;
+   only a socket whose listener `-O check` reports refused is removed. The probe then runs once more; the second
+   failure is `RemoteTransportError` for the host and `control probe` stage. No run ever `-O exit`s a master.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
    slot.
    Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in
@@ -909,7 +938,7 @@ Validation failure restores the previous drop-in and does not reload sshd.
 Start with a small slice and slot count. Allow at least two effective slots for ordinary runs and three for gates.
 The controller machine reaches the check hosts through its local proxy (`~/.ssh/config`: `ProxyCommand` with
 `ncat --proxy 127.0.0.1:7897 --proxy-type socks5`, falling back to a direct connection). The direct route lost 20-40%
-of packets at about 290 ms on 2026-11-06. Control probes wait 20 s by default, because fresh SSH setup takes 3 to 7 s.
+of packets at about 290 ms on 2026-11-06. Control probes wait 90 s by default: ConnectTimeout covers TCP only, and a cold master on a loaded host has taken 57 s.
 Install the `rezics-docker-prune.timer` system unit on every host. Every 15 minutes it runs
 `docker container prune -f --filter until=1h`. Check code from older worktrees starts throwaway databases without
 `--rm`, and on 2026-11-06 about 475 stopped containers on host b slowed `docker run` past its 120 s startup limit.

@@ -38,6 +38,22 @@ Its bounded versioned bundle uses the existing physical return pipeline. Source,
 must validate before whole-tree publication, including deletions. Already admitted direct execution and nested placement
 use that same profile; external projects remain unsupported.
 
+## Execution failure classification
+
+Decision: Root, Kernel and Auth classify placed host statuses 75, 124, 130 and 143 as infrastructure status 75,
+retaining the raw host status and `phase=placement` in diagnostics. Other placed statuses and ordinary compiler
+statuses remain native. Exceptions at placement, database setup, executable launch and database cleanup are
+infrastructure failures, not compiler diagnostics. Direct wrappers report `placement`, `database-setup`, `compiler`
+or `database-cleanup`; Kernel output publication has its own phase. Cleanup still runs after compiler failure, and
+cleanup diagnostics retain the original compiler error or native status. Invalid external configuration continues
+to fail validation before any placement or database starts.
+
+The existing direct-wrapper acceptance in `scripts/typecheck-placement.test.ts` pins these cases with inert
+placement, database and compiler boundaries. Its old Auth executable-launch assertion expected a rejected promise;
+it now expects status 75 while retaining the original cleanup assertion. Compiler diagnostic/status, selection,
+output and physical admission assertions remain unchanged. Native, browser and full root journeys remain separate
+acceptance; focused execution does not establish them.
+
 ## Authored acceptance and execution receipts
 
 The root composition regression was committed before implementation. It exercises the real selection and database

@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ensureMessagesReady, messagesCurrent } from './messages-ready.ts';
+import {
+  REQUIRED_PER_MESSAGE_MODULE,
+  ensureMessagesReady,
+  generatedMessageModules,
+  messagesCurrent,
+} from './messages-ready.ts';
 
 const wrapperSource = readFileSync(join(import.meta.dir, 'isolated.ts'), 'utf8');
 
@@ -21,7 +26,8 @@ function makeApp(): { directory: string; cleanup: () => void; calls: string; out
       `appendFileSync(join(root, 'generate-calls.log'), 'generate\\n');\n` +
       `if ((await import('node:fs')).existsSync(join(root, 'fail-generation'))) process.exit(37);\n` +
       `mkdirSync(join(root, 'src/paraglide'), { recursive: true });\n` +
-      `writeFileSync(join(root, 'src/paraglide/messages.js'), 'generated');\n`,
+      `writeFileSync(join(root, 'src/paraglide/messages.js'), 'export const m = { access_account() { return "Account"; } };\\n');\n` +
+      `writeFileSync(join(root, 'src/paraglide/runtime.js'), 'export const locales = ["en"];\\n');\n`,
   );
   return {
     directory,
@@ -73,9 +79,11 @@ test('fresh output is kept when it is newer than every message file', () => {
     for (const name of messageFiles) writeFileSync(join(app.messages, name), '{}');
     mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
     writeFileSync(app.output, 'fresh');
+    writeFileSync(join(app.directory, 'src/paraglide/runtime.js'), 'fresh');
     const base = Date.now() - 60_000;
     for (const [index, name] of messageFiles.entries()) setMtime(join(app.messages, name), base + index * 1000);
     setMtime(app.output, base + 10_000);
+    setMtime(join(app.directory, 'src/paraglide/runtime.js'), base + 10_000);
 
     expect(messagesCurrent(app.directory)).toBe(true);
     expect(ensureMessagesReady(app.directory)).toBe(0);
@@ -92,8 +100,10 @@ test('messages newer than the output cause generation again', () => {
     writeFileSync(message, '{}');
     mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
     writeFileSync(app.output, 'stale');
+    writeFileSync(join(app.directory, 'src/paraglide/runtime.js'), 'stale');
     const base = Date.now() - 60_000;
     setMtime(app.output, base);
+    setMtime(join(app.directory, 'src/paraglide/runtime.js'), base);
     setMtime(message, base + 10_000);
 
     expect(ensureMessagesReady(app.directory)).toBe(0);
@@ -120,6 +130,26 @@ test('generation failure returns its exit code and prevents tests from starting'
     expect(readinessCall).toBeGreaterThan(callbackStart);
     expect(spawn).toBeGreaterThan(readinessCall);
     expect(wrapperSource.slice(readinessCall, spawn)).toMatch(/if \(messageCode !== 0\) return messageCode;/u);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test('a barrel that imports per-message modules is not current until access_account.js exists', () => {
+  const app = makeApp();
+  try {
+    writeFileSync(join(app.messages, 'en.json'), '{"access_account":"Account"}');
+    mkdirSync(join(app.directory, 'src/paraglide/messages'), { recursive: true });
+    const barrel = `export { access_account } from './messages/${REQUIRED_PER_MESSAGE_MODULE}';\n`;
+    writeFileSync(app.output, barrel);
+    writeFileSync(join(app.directory, 'src/paraglide/runtime.js'), 'export const locales = ["en"];\n');
+    expect(generatedMessageModules(barrel)).toEqual([`./messages/${REQUIRED_PER_MESSAGE_MODULE}`]);
+    expect(messagesCurrent(app.directory)).toBe(false);
+    writeFileSync(
+      join(app.directory, 'src/paraglide/messages', REQUIRED_PER_MESSAGE_MODULE),
+      'export const access_account = () => "Account";\n',
+    );
+    expect(messagesCurrent(app.directory)).toBe(true);
   } finally {
     app.cleanup();
   }

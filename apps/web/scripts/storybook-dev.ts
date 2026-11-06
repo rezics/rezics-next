@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { requireWebCheckCustody } from './check-placement.ts';
+import { ensureMessagesReady } from './messages-ready.ts';
 import { operatorEntry } from './operator-entry.ts';
 
 const webRoot = resolve(import.meta.dir, '..');
@@ -93,6 +94,11 @@ export function storybookLaunchPlan(
   };
 }
 
+/** Vite must see complete Paraglide modules before it scans routes; generating inside config races SSR of /en. */
+export function webServeNeedsGeneratedMessages(kind: LaunchPlan['kind']): boolean {
+  return kind === 'app' || kind === 'vite';
+}
+
 async function runChild(command: string, args: string[], cwd: string): Promise<void> {
   const child = Bun.spawn([command, ...args], {
     cwd,
@@ -117,7 +123,13 @@ if (import.meta.main) {
   try {
     const plan = storybookLaunchPlan(process.argv.slice(2));
     if (plan.kind === 'vite') requireWebCheckCustody(repoRoot, webRoot);
-    await runChild(plan.command, plan.args, plan.cwd);
+    const generated = webServeNeedsGeneratedMessages(plan.kind) ? ensureMessagesReady(webRoot) : 0;
+    if (generated !== 0) {
+      console.error(`Paraglide generation exited ${generated} before Vite started`);
+      process.exitCode = generated;
+    } else {
+      await runChild(plan.command, plan.args, plan.cwd);
+    }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 75;

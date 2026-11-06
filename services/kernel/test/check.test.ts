@@ -1,7 +1,16 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { checkPlan, cleanup, fileEnvironment, ownDiagnostics, startPostgresContainer } from '../scripts/check.ts';
+import {
+  KERNEL_CHECK_NONCE_LABEL,
+  KERNEL_CHECK_PID_LABEL,
+  checkPlan,
+  cleanup,
+  fileEnvironment,
+  ownDiagnostics,
+  searchCheckRunArgs,
+  startPostgresContainer,
+} from '../scripts/check.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
 
@@ -138,6 +147,7 @@ test("the check's PostgreSQL container keeps its logs when it exits early and is
 
   expect(calls[0]?.[0]).toBe('run');
   expect(calls[0]).toContain('--rm');
+  expect(calls[0]).toContain('shared_buffers=32MB');
   expect(postgresContainer).toBe('postgres-container');
 
   cleanup(['search-container', postgresContainer], stubDocker);
@@ -145,4 +155,30 @@ test("the check's PostgreSQL container keeps its logs when it exits early and is
     ['rm', '-f', '-v', 'search-container'],
     ['rm', '-f', '-v', 'postgres-container'],
   ]);
+});
+
+test('a failed postgres create reaps the check nonce', () => {
+  const calls: string[][] = [];
+  const docker = (args: string[]): string => {
+    calls.push(args);
+    if (args[0] === 'run') throw new Error('spawnSync docker ETIMEDOUT');
+    return args[0] === 'ps' ? 'half-pg' : '';
+  };
+  expect(() => startPostgresContainer(docker, { nonce: 'nonce-check' })).toThrow(/ETIMEDOUT/);
+  expect(calls[0]).toContain(`${KERNEL_CHECK_PID_LABEL}=${process.pid}`);
+  expect(calls[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
+  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
+  expect(calls[2]).toEqual(['rm', '-f', '-v', 'half-pg']);
+});
+
+test('OpenSearch check run carries a nonce and cleanup surfaces docker rm failure', () => {
+  const args = searchCheckRunArgs('rezics-search:test', 'search-nonce');
+  expect(args[0]).toBe('run');
+  expect(args).toContain(`${KERNEL_CHECK_NONCE_LABEL}=search-nonce`);
+  expect(() =>
+    cleanup(['search-only'], (command) => {
+      if (command[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+      return '';
+    }),
+  ).toThrow('docker rm ETIMEDOUT');
 });

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { storybookLaunchPlan } from './storybook-dev.ts';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { storybookLaunchPlan, webServeNeedsGeneratedMessages } from './storybook-dev.ts';
 import { scripts } from '../package.json';
 
 const roots = { web: '/work/apps/web', ui: '/work/packages/ui' };
@@ -49,4 +51,17 @@ test('starts the ordinary local app without test runtime or check admission', ()
 test('refuses a non-loopback bind address', () => {
   expect(() => storybookLaunchPlan(['--host', '0.0.0.0'], {}, roots)).toThrow('loopback address');
   expect(() => storybookLaunchPlan(['--app', '--host=0.0.0.0'], {}, roots)).toThrow('loopback address');
+});
+
+test('Vite app and finite test serving generate Paraglide messages before the child starts', () => {
+  expect(webServeNeedsGeneratedMessages('app')).toBe(true);
+  expect(webServeNeedsGeneratedMessages('vite')).toBe(true);
+  expect(webServeNeedsGeneratedMessages('storybook')).toBe(false);
+  const source = readFileSync(resolve(import.meta.dir, 'storybook-dev.ts'), 'utf8');
+  expect(source.indexOf('ensureMessagesReady(webRoot)')).toBeGreaterThan(
+    source.indexOf('webServeNeedsGeneratedMessages(plan.kind)'),
+  );
+  expect(source.indexOf('await runChild(plan.command, plan.args, plan.cwd)')).toBeGreaterThan(
+    source.indexOf('ensureMessagesReady(webRoot)'),
+  );
 });

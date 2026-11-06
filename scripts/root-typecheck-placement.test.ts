@@ -88,7 +88,11 @@ test.each([0, 23, 75, 130, 143])(
       f.events.push('placement');
       return status;
     };
-    expect(await typecheck({ ...f, env: {}, recognize: refused, place })).toBe(status);
+    // The root reports check-host signal and infrastructure exits as infrastructure (75); the direct wrappers return
+    // the placed status unchanged.
+    expect(await typecheck({ ...f, env: {}, recognize: refused, place })).toBe(
+      [75, 124, 130, 143].includes(status) ? 75 : status,
+    );
     const dependencies = {
       place,
       recognize: refused,
@@ -114,7 +118,8 @@ test('placement exceptions and false null admissions cannot start root or direct
   const fail = async () => {
     throw failure;
   };
-  await expect(typecheck({ ...f, env: {}, recognize: refused, place: fail })).rejects.toBe(failure);
+  // A root placement exception is check-host loss: infrastructure with the original message, not a rejection.
+  expect(await typecheck({ ...f, env: {}, recognize: refused, place: fail })).toBe(75);
   await expect(runKernelTypecheck({}, { place: fail, recognize: refused }, [])).rejects.toBe(failure);
   await expect(runAuthTypecheck({}, { place: fail, recognize: refused })).rejects.toBe(failure);
   expect(await typecheck({ ...f, env: {}, recognize: refused, place: async () => null })).toBe(75);
@@ -274,19 +279,30 @@ appendFileSync(${JSON.stringify(join(f.root, 'consumers'))}, JSON.stringify({ na
 test('admitted root DB startup failures preserve the original error without compiler execution', async () => {
   const f = fixture();
   const failure = new Error('migration failed: exact diagnostic');
-  await expect(
-    typecheck({
-      ...f,
-      env: {},
-      recognize: admitted,
-      startDatabase: async () => {
-        throw failure;
-      },
-      place: async () => {
-        throw new Error('nested admission');
-      },
-    }),
-  ).rejects.toBe(failure);
+  const messages: string[] = [];
+  const reportError = console.error;
+  console.error = (...parts: unknown[]) => {
+    messages.push(parts.join(' '));
+  };
+  try {
+    expect(
+      await typecheck({
+        ...f,
+        env: {},
+        recognize: admitted,
+        startDatabase: async () => {
+          throw failure;
+        },
+        place: async () => {
+          throw new Error('nested admission');
+        },
+      }),
+    ).toBe(75);
+  } finally {
+    console.error = reportError;
+  }
+  // Database setup failure is infrastructure, and the original diagnostic stays in the report.
+  expect(messages.join('\n')).toContain('compiler database setup could not be proven: migration failed: exact diagnostic');
   expect(f.events).toEqual([]);
 });
 
@@ -339,10 +355,12 @@ test('root failures retain exact compiler diagnostics in their workspace block a
       },
     }),
   ).toBe(1);
-  expect(output.replace(/finished in \d+\.\d{2}s/, 'finished in <duration>')).toBe(
-    `Checking 1 of 4 workspaces the change can affect.\nWorkspace auth finished in <duration>\n` +
+  // The workspace label names its outcome, and the batch closes with its own timing line.
+  expect(output.replace(/\d+\.\d{2}s/g, '<duration>')).toBe(
+    `Checking 1 of 4 workspaces the change can affect.\nWorkspace auth type-errors after <duration>\n` +
       `$ bun run typecheck  (services/auth)\n${stdout}\n$ bun consumer.ts\n${stderr}\n` +
-      'error: script "typecheck" exited with code 23\n\n',
+      'error: script "typecheck" exited with code 23\n\n' +
+      'Typecheck batch completed in <duration> (1 changed paths; 1 workspaces).\n',
   );
   expect(f.events).toEqual(['database', 'cleanup']);
 });
@@ -436,8 +454,9 @@ test('real placement composes configured performance hosts, selected argv, nativ
       );
     const env = { KERNEL_CHECK_REMOTE: hosts, REZICS_STACK_REMOTE: 'off' };
     const expected = outcome === 'cancelled' ? 143 : outcome;
+    // A cancelled check host is infrastructure at the root (75); the direct wrappers return the placed status.
     expect(await typecheck({ ...f, env, recognize: refused, place, changedFiles: ['services/auth/x.ts'] })).toBe(
-      expected,
+      outcome === 'cancelled' ? 75 : expected,
     );
     expect(await runKernelTypecheck(env, { recognize: refused, place }, [])).toBe(expected);
     expect(await runAuthTypecheck(env, { recognize: refused, place }, [])).toBe(expected);

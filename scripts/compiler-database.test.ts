@@ -6,12 +6,14 @@ import { tmpdir } from 'node:os';
 import {
   COMPILER_NONCE_LABEL,
   COMPILER_PID_LABEL,
+  DOCKER_BUILD_TIMEOUT_MS,
   DOCKER_PROBE_TIMEOUT_MS,
   DOCKER_RUN_TIMEOUT_MS,
   cleanupStaleCompilerDatabases,
   compilerDatabaseListenUrl,
   compilerDatabaseRunArgs,
   dockerNetworkArgs,
+  dockerProcessText,
   dockerSpawnSyncOptions,
   dockerTimeoutMs,
   isolatedPostgresSocketDir,
@@ -20,6 +22,8 @@ import {
   postgresPublishArgs,
   postgresReadyProbe,
   reapCompilerNonce,
+  reapLabeledContainers,
+  retainOriginalAndCleanupFailure,
   sharesIsolatedStackNetwork,
   startCompilerContainer,
   startPostgresForwarder,
@@ -39,6 +43,7 @@ test('docker run, create and forced rm use Auth run timeout; probes stay short',
   expect(dockerTimeoutMs(['run', '-d', '--rm', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['create', '--name', 'x', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['rm', '-f', '-v', 'x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['build', '--tag', 'x', '.'])).toBe(DOCKER_BUILD_TIMEOUT_MS);
   expect(dockerTimeoutMs(['exec', 'x', 'pg_isready'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(dockerTimeoutMs(['ps', '-a'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(dockerTimeoutMs(['port', 'x', '5432/tcp'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
@@ -61,6 +66,9 @@ test('the one-run compiler database uses --rm and a labelled volume, not a 1 GiB
   expect(args).toContain(`type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=9`);
   expect(args).not.toContain('--tmpfs');
   expect(args).toContain('-p');
+  expect(args).toContain('shared_buffers=32MB');
+  expect(args).toContain('max_connections=40');
+  expect(args).toContain('huge_pages=off');
 });
 
 test('a failed docker run reaps the nonce before the error escapes', () => {
@@ -292,6 +300,28 @@ else process.stdout.write('child-' + childReply + '\\n');
     await echo.close();
   }
 }, 15_000);
+
+test('docker stdout and stderr are UTF-8 text whether the runtime returns a string or a Buffer', () => {
+  expect(dockerProcessText('  abc\n')).toBe('abc');
+  expect(dockerProcessText(Buffer.from('  id\n'))).toBe('id');
+  expect(dockerProcessText(undefined)).toBe('');
+  expect(dockerProcessText(null)).toBe('');
+  const combined = retainOriginalAndCleanupFailure(
+    new Error('OpenSearch run timed out'),
+    new Error('docker rm ETIMEDOUT'),
+    'Kernel check failed',
+  );
+  expect(combined.message).toContain('OpenSearch run timed out');
+  expect(combined.message).toContain('docker rm ETIMEDOUT');
+  expect(combined.message).toContain('cleanup could not be proven');
+  const calls: string[][] = [];
+  reapLabeledContainers('rezics.kernel.check.nonce', 'n1', (args) => {
+    calls.push(args);
+    return args[0] === 'ps' ? 'half-created\n' : '';
+  });
+  expect(calls[0]).toEqual(['ps', '-aq', '--filter', 'label=rezics.kernel.check.nonce=n1']);
+  expect(calls[1]).toEqual(['rm', '-f', '-v', 'half-created']);
+});
 
 test('the forwarder child exits when the owner closes stdin', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pg-forward-exit-'));

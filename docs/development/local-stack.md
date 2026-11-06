@@ -256,17 +256,20 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    earlier slot cannot occupy a later slot's names.
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
-   Kernel answer, for at most twenty minutes. Readiness first checks that the port accepts TCP, then fetches with the
-   remaining window so a short abort cannot strand Vite's first compile. A hard request budget also bounds a listener
-   that never writes. `db up` and `search up` retry once; a failed database bring-up first retires this task's containers.
-   The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that exits, so a native host
-   registration timeout or worker database blip does not tear down a ready Web. Teardown SIGKILLs a stack process
-   that ignores SIGTERM, then docker-kills and `docker rm -f -v` this task's containers with a bounded wait. Its output
-   goes to `.temp/walk/<task>/stack.log`.
+3. Runs `db up`, `search up` and `setup`, retires seed journals that name another database, then starts native Auth,
+   the worker and Kernel. Kernel fetches issuer JWKS from native Auth. An admitted stack runs Kernel without `--watch`
+   and does not start Auth pages or Web: its journey seeds first and then starts them. The walk `start` process waits
+   for native JWKS and Kernel `/v1/definitions`, for at most twenty minutes. Readiness first checks that the port
+   accepts TCP, then fetches with the remaining window so a short abort cannot strand a compile; a hard request budget
+   also bounds a listener that never writes. `db up` and `search up` retry once; a failed database bring-up first
+   retires this task's containers. The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that
+   exits, so a native host registration timeout or worker database blip does not tear down the stack. Teardown SIGKILLs
+   a stack process that ignores SIGTERM, then docker-kills and `docker rm -f -v` this task's containers with a bounded
+   wait. Its output goes to `.temp/walk/<task>/stack.log` with the owner process identity.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Inside that command, run
    `bun services/auth/scripts/dev-stack.ts persona`, load its private `seed.env`, then run
    `bun scripts/datasets/cross-media-seed.ts --dev`, as described in [Seeded journey walks](#seeded-journey-walks).
+   Ratings/reviews journeys run from `apps/web` so root Bun preloads cannot redirect them.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
@@ -293,10 +296,24 @@ SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck 
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
 
+Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
+through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
+compiles while the seed runs.
+
+Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and report the observed probe,
+fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener probe does not invent
+that code. A barrel without `messages/access_account.js` is not current. Original native walks remain open.
+
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
 tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification
 remain separate acceptance outcomes.
+
+Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel without watch, and defer Auth pages and Web
+until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
+keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
+inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each
+mapper compiler. Original native acceptance remains open.
 
 ## Seeded journey walks
 

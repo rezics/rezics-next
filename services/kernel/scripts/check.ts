@@ -42,11 +42,14 @@ import {
 import {
   beginDetachedDockerRm,
   dockerNetworkArgs,
-  dockerSpawnSyncOptions,
   isolatedPostgresSocketDir,
+  newCompilerNonce,
   ownerProcessIdentity,
   postgresPublishArgs,
+  reapLabeledContainers,
+  retainOriginalAndCleanupFailure,
   resolvePostgresListenUrl,
+  runDocker,
   type PostgresListen,
 } from '../../../scripts/compiler-database.ts';
 
@@ -578,11 +581,11 @@ async function psql(sql: string): Promise<void> {
   if (result.status !== 0) throw new Error(`psql -c ${sql} failed:\n${result.output}`);
 }
 
+export const KERNEL_CHECK_PID_LABEL = 'rezics.kernel.check.pid';
+export const KERNEL_CHECK_NONCE_LABEL = 'rezics.kernel.check.nonce';
+
 export function docker(args: string[]): string {
-  const result = spawnSync('docker', args, dockerSpawnSyncOptions(args, { cwd: directory, env: process.env }));
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return String(result.stdout ?? '').trim();
+  return runDocker(args, { cwd: directory, env: process.env });
 }
 
 type DockerCommand = (args: string[]) => string;
@@ -770,6 +773,8 @@ export function formatConnectionRunSummary(
 export type PostgresContainerOptions = {
   /** Host directory bind-mounted so callers in a private network namespace can use the Unix socket. */
   socketDirectory?: string;
+  /** Labels this start's container so a failed `docker run` can reap it; a fresh nonce by default. */
+  nonce?: string;
 };
 
 export function startPostgresContainer(
@@ -777,48 +782,87 @@ export function startPostgresContainer(
   options: PostgresContainerOptions = {},
 ): string {
   const network = dockerNetworkArgs();
+  const nonce = options.nonce ?? newCompilerNonce(Number(pid));
   const socketDirectory = options.socketDirectory;
   if (socketDirectory !== undefined && (!isAbsolute(socketDirectory) || /[:\n\r,]/.test(socketDirectory)))
     throw new Error('PostgreSQL socket directory must be an absolute path without delimiters');
-  return dockerCommand([
+  try {
+    return dockerCommand([
+      'run',
+      '-d',
+      '--stop-timeout',
+      '2',
+      '--rm',
+      ...network,
+      ...cgroupArgs(),
+      '--label',
+      `${KERNEL_CHECK_PID_LABEL}=${pid}`,
+      '--label',
+      `${KERNEL_CHECK_NONCE_LABEL}=${nonce}`,
+      ...postgresPublishArgs(Number(pid), network),
+      // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
+      '--mount',
+      `type=volume,destination=/var/lib/postgresql,volume-label=${KERNEL_CHECK_PID_LABEL}=${pid}`,
+      ...(socketDirectory ? ['-v', `${socketDirectory}:/rezics-pg-socket`] : []),
+      '-e',
+      'POSTGRES_USER=rezics',
+      '-e',
+      'POSTGRES_PASSWORD=rezics',
+      '-e',
+      'POSTGRES_DB=rezics',
+      POSTGRES_IMAGE,
+      '-c',
+      'fsync=off',
+      '-c',
+      'synchronous_commit=off',
+      '-c',
+      'full_page_writes=off',
+      '-c',
+      'shared_buffers=32MB',
+      '-c',
+      'work_mem=8MB',
+      '-c',
+      'max_wal_size=256MB',
+      // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
+      '-c',
+      `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
+      '-c',
+      'log_line_prefix=%m [%p] [%e] ',
+      // Keep /var/run/postgresql so the image entrypoint can finish init; the bind
+      // mount is the extra host-visible socket for private-network callers.
+      ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket,/var/run/postgresql'] : []),
+    ]);
+  } catch (error) {
+    reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, nonce, dockerCommand);
+    throw error;
+  }
+}
+
+export function searchCheckRunArgs(image: string, nonce: string): string[] {
+  return [
     'run',
     '-d',
-    '--stop-timeout',
-    '2',
-    '--rm',
-    ...network,
     ...cgroupArgs(),
     '--label',
-    `rezics.kernel.check.pid=${pid}`,
-    ...postgresPublishArgs(Number(pid), network),
-    // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
-    '--mount',
-    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
-    ...(socketDirectory ? ['-v', `${socketDirectory}:/rezics-pg-socket`] : []),
+    `${KERNEL_CHECK_PID_LABEL}=${pid}`,
+    '--label',
+    `${KERNEL_CHECK_NONCE_LABEL}=${nonce}`,
+    '-p',
+    '127.0.0.1::9200',
+    '--tmpfs',
+    '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
     '-e',
-    'POSTGRES_USER=rezics',
+    'discovery.type=single-node',
     '-e',
-    'POSTGRES_PASSWORD=rezics',
+    subjectAutoCreateIndexSetting,
     '-e',
-    'POSTGRES_DB=rezics',
-    POSTGRES_IMAGE,
-    '-c',
-    'fsync=off',
-    '-c',
-    'synchronous_commit=off',
-    '-c',
-    'full_page_writes=off',
-    '-c',
-    'max_wal_size=256MB',
-    // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
-    '-c',
-    `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
-    '-c',
-    'log_line_prefix=%m [%p] [%e] ',
-    // Keep /var/run/postgresql so the image entrypoint can finish init; the bind
-    // mount is the extra host-visible socket for private-network callers.
-    ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket,/var/run/postgresql'] : []),
-  ]);
+    'DISABLE_SECURITY_PLUGIN=true',
+    '-e',
+    'DISABLE_INSTALL_DEMO_CONFIG=true',
+    '-e',
+    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+    image,
+  ];
 }
 
 export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand: DockerCommand = docker): void {
@@ -857,6 +901,7 @@ export function cleanup(
   postgresListen?.stop();
   postgresListen = undefined;
   rmSync(isolatedPostgresSocketDir(Number(pid)), { recursive: true, force: true });
+  const failures: unknown[] = [];
   for (const id of containers) {
     if (!id) continue;
     if (!wait) {
@@ -866,11 +911,12 @@ export function cleanup(
     try {
       dockerCommand(['rm', '-f', '-v', id]);
     } catch (error) {
-      console.error(error);
+      failures.push(error);
     }
   }
   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
   analysisDispose?.();
+  if (failures[0]) throw failures[0];
 }
 
 function fail(message: string): never {
@@ -1052,28 +1098,13 @@ async function main(): Promise<void> {
     async () =>
       withCommandPhase('database-image', async () => {
         const searchImage = buildSearchImage();
-        searchContainer = docker([
-          'run',
-          '-d',
-          ...cgroupArgs(),
-          '--label',
-          `rezics.kernel.check.pid=${pid}`,
-          '-p',
-          '127.0.0.1::9200',
-          '--tmpfs',
-          '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
-          '-e',
-          'discovery.type=single-node',
-          '-e',
-          subjectAutoCreateIndexSetting,
-          '-e',
-          'DISABLE_SECURITY_PLUGIN=true',
-          '-e',
-          'DISABLE_INSTALL_DEMO_CONFIG=true',
-          '-e',
-          'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
-          searchImage,
-        ]);
+        const searchNonce = newCompilerNonce(Number(pid));
+        try {
+          searchContainer = docker(searchCheckRunArgs(searchImage, searchNonce));
+        } catch (error) {
+          reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, searchNonce, docker);
+          throw error;
+        }
         const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
         const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
         if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
@@ -1190,12 +1221,24 @@ if (import.meta.main) {
     process.exit(143);
   });
 
+  let original: unknown;
   try {
     await main();
   } catch (error) {
+    original = error;
     process.exitCode = reportCheckFailure(container, failedFileOutputs);
     console.error(error);
   } finally {
-    await withCommandPhase('cleanup', () => cleanup());
+    try {
+      await withCommandPhase('cleanup', () => cleanup());
+    } catch (cleanupError) {
+      const combined = retainOriginalAndCleanupFailure(
+        original ?? cleanupError,
+        cleanupError,
+        original ? 'Kernel check failed' : 'Kernel check cleanup failed',
+      );
+      if (original) console.error(combined);
+      else throw combined;
+    }
   }
 }
