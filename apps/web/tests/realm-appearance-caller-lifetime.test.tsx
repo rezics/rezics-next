@@ -128,7 +128,14 @@ const { createRealmAppearance } = await import('../src/community/realm-presentat
 const { createRealmAppearanceCallerLifetime } = await import('../src/community/realm-appearance-caller-lifetime');
 const { configured, image } = await import('../src/kernel/fake/community');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
+const paraglide = await import('../src/paraglide/runtime.js');
+const originalGetLocale = paraglide.getLocale;
+let visitLocale = 'en';
+paraglide.overwriteGetLocale(() => visitLocale);
+async function setVisitLocale(next: 'en' | 'fr') {
+  visitLocale = next;
+  await paraglide.setLocale(next, { reload: false });
+}
 const { within, userEvent } = await import('storybook/test');
 
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -288,11 +295,12 @@ afterEach(async () => {
   panelRealmId = appearanceRealmId;
   renderMarker = 0;
   settingsInitial = ready();
-  await setLocale('en', { reload: false });
+  await setVisitLocale('en');
 });
 
 afterAll(async () => {
   mock.restore();
+  paraglide.overwriteGetLocale(originalGetLocale);
   host.remove();
   window.happyDOM.abort();
   for (const [key, descriptor] of previous) {
@@ -362,7 +370,7 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     operations.change = async () => currentWrite.promise;
     await user.click(within(host).getByRole('button', { name: m.realm_appearance_save() }));
     const currentCommand = structuredClone(calls.changes.at(-1)!.command);
-    await setLocale('fr', { reload: false });
+    await setVisitLocale('fr');
     await rerenderPanel();
     currentWrite.resolve({
       kind: 'confirmed',
