@@ -81,11 +81,7 @@ export function getFollowPoint(
   });
 }
 
-export function putFollow(
-  client: KernelClient,
-  targetId: string,
-  headers: FollowWriteHeaders,
-): Promise<PointPutCall> {
+export function putFollow(client: KernelClient, targetId: string, headers: FollowWriteHeaders): Promise<PointPutCall> {
   return followsPoint(client, targetId).put(null, { headers });
 }
 

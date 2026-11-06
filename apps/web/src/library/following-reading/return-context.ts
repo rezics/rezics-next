@@ -125,14 +125,7 @@ export function followingDestinationClick(
     event.preventDefault();
     return false;
   }
-  if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  )
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return false;
   if (frontier) captureFollowingReturn(frontier);
   return true;

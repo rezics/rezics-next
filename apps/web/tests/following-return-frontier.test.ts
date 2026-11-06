@@ -26,7 +26,11 @@ test('Following return keeps the private list frontier on this history entry and
   );
   expect(followingReturnFrontierFromState(followingReturnLocationState(frontier!), 'zh', subject)).toBeNull();
   expect(
-    followingReturnFrontierFromState({ [FOLLOWING_RETURN_STATE]: { ...frontier, targetId: 'not-a-uuid' } }, locale, subject),
+    followingReturnFrontierFromState(
+      { [FOLLOWING_RETURN_STATE]: { ...frontier, targetId: 'not-a-uuid' } },
+      locale,
+      subject,
+    ),
   ).toBeNull();
   expect(followingReturnMatchesWindow(frontier!, cursor, 'subject')).toBe(true);
   expect(followingReturnMatchesWindow(frontier!, null, 'subject')).toBe(false);

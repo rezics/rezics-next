@@ -3,13 +3,7 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import {
-  deleteFollow,
-  followStateOf,
-  followWriteHeaders,
-  getFollowPoint,
-  putFollow,
-} from './follow-transport';
+import { deleteFollow, followStateOf, followWriteHeaders, getFollowPoint, putFollow } from './follow-transport';
 
 export type { FollowTargetType } from './follow-transport';
 

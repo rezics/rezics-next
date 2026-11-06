@@ -518,7 +518,9 @@ test('follow replay returns the acknowledged own edge and other viewers keep the
   const removeKey = randomUUID();
   const removed = await json(await request('DELETE', `/v1/follows/${targetId}`, undefined, 'owner', removeKey));
   expect(removed.follow.state).toBe('unfollowed');
-  expect(await json(await request('DELETE', `/v1/follows/${targetId}`, undefined, 'owner', removeKey))).toEqual(removed);
+  expect(await json(await request('DELETE', `/v1/follows/${targetId}`, undefined, 'owner', removeKey))).toEqual(
+    removed,
+  );
   expect(
     (await json(await request('GET', '/v1/follows?view=FULL'))).follows.some(
       (row: { targetId: string }) => row.targetId === targetId,
