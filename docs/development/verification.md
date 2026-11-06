@@ -74,8 +74,16 @@ reclaim them once through `memory.reclaim` before treating a host as full; a mis
 the previous probe and does not fail the run. After dependency-artifact eviction, a host below its configured free-disk
 floor takes no new run; the slot-wait status reports that free space and the run is placed on another host. A check waiting for a slot is queued; let it run. Park workers until completion or meaningful output instead of
 waking the model for “still running”. Worker admission and heavy-check admission are separate controls.
-Remote-check stderr splits Git snapshot staging, GitHub fetch and rsync; overlay rsync after a successful fetch is
-the expected upload. Remaining command-time cost is `bun install` and the admitted command.
+Remote-check stderr splits connection work, Git snapshot staging, GitHub fetch and rsync; overlay rsync after a
+successful fetch is the expected upload. Remaining command-time cost is `bun install` and the admitted command.
+Connection count is bounded by configured hosts, not by polls or concurrent runs: one ControlMaster socket per host
+under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow).
+Throwaway Kernel/compiler PostgreSQL uses `--rm` plus labelled owner-pid cleanup so a killed owner or failed startup
+leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout, including host-lifetime Python
+cleanup; inspect/exec/ps/port probes use 5 seconds. Signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
+PostgreSQL through an independent TCP-to-Unix child rather than a same-process proxy, and wait for in-container
+`pg_isready` plus a protocol reply before migrations. Empty-directory source and result manifests share the
+`directory\0` digest.
 Diagnostic reruns remain visible. A load-sensitive diagnostic rerun may address an actual load signal in a mixed
 failure; cleanup failures are not eligible. Do not scale security TTLs, explicit deadlines or work budgets to hide
 failures. A proposed test deadline multiplier is not evidence of deployment. Distinguish a reproducible

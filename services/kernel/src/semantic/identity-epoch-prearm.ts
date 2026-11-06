@@ -345,7 +345,7 @@ async function acceptPage(
           tx,
           `UPDATE semantic.identity_epoch_prearm_directory
         SET sequence=$4,after_original=$5,after_scope=$6,after_registration=$7,
-        exhausted=$8,sealed_transaction_id=CASE WHEN $8 THEN $9 ELSE NULL END
+        exhausted=$8,sealed_transaction_id=CASE WHEN $8 THEN $9::uuid ELSE NULL END
         WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
           [
             page.partition_no,
@@ -424,8 +424,8 @@ async function copyPage(pool: Pool, ref: IdentityJobRef, page: Page, work: Work)
       await query(
         tx,
         `UPDATE semantic.identity_epoch_input SET prearm_sequence=$4,
-        prearm_transaction_id=CASE WHEN $5 THEN $6 ELSE NULL END,
-        prearm_epoch=CASE WHEN $5 THEN $7 ELSE NULL END,prearm_position=CASE WHEN $5 THEN $8 ELSE NULL END
+        prearm_transaction_id=CASE WHEN $5 THEN $6::uuid ELSE NULL END,
+        prearm_epoch=CASE WHEN $5 THEN $7::integer ELSE NULL END,prearm_position=CASE WHEN $5 THEN $8::bigint ELSE NULL END
         WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
         [
           identityJobPartition(ref),
@@ -855,7 +855,7 @@ export async function stepIdentityPrearmCancellation(
         await query(
           tx,
           `UPDATE semantic.identity_epoch_prearm_directory
-          SET cancel_sequence=$4,cancelled_transaction_id=CASE WHEN $5 THEN $6 ELSE NULL END
+          SET cancel_sequence=$4,cancelled_transaction_id=CASE WHEN $5 THEN $6::uuid ELSE NULL END
           WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
           [home, ref.jobId, generation, page ? page.sequence : d.cancel_sequence, !page, id],
           work,

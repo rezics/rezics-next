@@ -1,3 +1,4 @@
+import type { Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 
@@ -5,5 +6,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
  * until fresh execution, so original receipts remain usable after a lost acknowledgement. */
 export type LabelCommandAdmission = {
   input: unknown;
+  /** Static preparation/source-fence work owned by the importer that built this admission. */
+  work?: Bound;
   prepare(at: AuthoritativeTime): Promise<(tx: Pick<PoolClient, 'query'>) => Promise<void>>;
 };

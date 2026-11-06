@@ -22,3 +22,4 @@ apps/web/storybook-static/
 services/kernel/.temp/schema-diagnostics/
 # Authenticated client publication receipts and interrupted receiving state are local artifacts.
 /packages/client/src/.kernel-output-tree/
+/packages/client/.temp/

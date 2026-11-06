@@ -16,7 +16,8 @@ const nativePolicyCatalogues = new WeakMap<ResolvedResourceRoles, PolicyCatalogu
 /** Primitive projection returned by the existing bounded permission statement. */
 export type NativePermissionProjection = Readonly<{
   assignmentValid: boolean | null;
-  deadlineLive: boolean | null;
+  /** The point check's liveness column, emitted as `live` by permission-check.sql. */
+  live: boolean | null;
   localDenied: boolean | null;
   actorActionGrant: boolean | null;
   actorResourceRoleGrant: boolean | null;
@@ -164,7 +165,7 @@ export function decideNativePermission(
   const facts: PolicyFacts = {
     standing: true,
     assignment: row.assignmentValid,
-    deadlineLive: row.deadlineLive,
+    deadlineLive: row.live,
     scope: input.scope,
     localDenial: explicit ? row.explicitLocalDenied : row.localDenied,
     publicFloor: explicit ? false : input.floor,

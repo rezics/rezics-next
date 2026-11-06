@@ -6,11 +6,12 @@ import { createWorkClient } from './work/client.ts';
 import { bindExecutionContract } from './command/execution-contract.ts';
 import { historyExecutionPort } from './history/operational-work.ts';
 import { workExecutionPort } from './work/selected-runtime.ts';
-import { createKernelWorkModules } from './work/modules.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticIdentityParticipants } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
+import { composeWorkApplication } from './composition/work.ts';
+import { createKernelWorkModules } from './composition/work-modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
@@ -75,6 +76,7 @@ export async function startWorker(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   composeAccessApplication();
+  composeWorkApplication();
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   const pool = config.kernelPool

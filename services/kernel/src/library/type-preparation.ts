@@ -138,7 +138,12 @@ export function createNativeTypePreparationPorts(
     body: () => Promise<T>,
   ) => Promise<T>,
 ): TypePreparationPorts {
-  const runner = createLibraryCommandRunner(deps);
+  // Owner Access is admitEntryAttempt/resolveSubject. The nested command matches putEntry:
+  // active account and library_entry:update scope, not a second resource-grant formula.
+  const runner = createLibraryCommandRunner({
+    pool: deps.pool,
+    ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+  });
   function fullDependencies(): TypePreparationDependencies {
     if (!('access' in deps))
       throw new TypeError('User preparation requires the installed Access and full source observer');

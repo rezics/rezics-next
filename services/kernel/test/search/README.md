@@ -30,7 +30,7 @@ The [Auth fixture](../semantic/outcome-auth.ts) keeps Auth's SDK in the supervis
 
 ## Run and observe the default worker
 
-In the worker child, call `startWorker` with the imported [default module list](../../src/work/modules.ts). Decorate
+In the worker child, call `startWorker` with the imported [default module list](../../src/composition/work-modules.ts). Decorate
 every imported default registration in place: preserve the full list, order and configuration, invoke each original
 `register` exactly once, and do not filter or replace registrations. Observe service starters only when the real
 [`composeWork`](../../src/work/registry.ts) invokes them after SDK launch. Registration may create a starter without

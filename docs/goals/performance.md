@@ -69,6 +69,17 @@ the affected Web/root checks; fast copy-on-write preparation does not establish 
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
 for evidence and check-host placement.
 
+## Kernel Work domain inversion
+
+Decision: Compact `domain-composition` tests are the fewest pins for Work enqueue, registration, selected admission
+and retirement against fake ports; worker and kernel landing tests carry `KERNEL_RECEIPT_KEYS` through
+`workerTestEnv`. The existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
+sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Search tombstone registration
+includes both `search_account_erasure` and `search_erasure`. Contract/core/application load no downstream
+implementations. Native adapters are bound by ordinary `createKernel`/`server`/`worker` composition, with product
+assembly in `composition/work-modules.ts` using `ratingNativeWorkModule`. The split adds no query or extra
+statement; observed cost stays the existing admitted-path declarations.
+
 ## Kernel Access domain inversion
 
 Decision: Compact causal tests pin Access allow/deny, identity recovery with the original actor/request/deadline, and
@@ -76,3 +87,20 @@ original-work admission against fake ports; the existing native membership growt
 proof. Contract/core/application load no downstream implementations. Native adapters are bound by ordinary
 `createKernel`/`server`/`worker` composition. The split adds no query or extra statement; cost stays the existing
 producer declarations composed through `admitOriginalWork` and Kind-audience work vectors.
+Decision: pin this increment's user-visible check-infrastructure behaviour with the existing remote-check, check-ssh,
+compiler-database, Kernel script and page-data unit files rather than a second suite, including the 120s host-lifetime
+`docker rm` and detached SIGTERM cleanup. Observed bounds: one OpenSSH
+ControlMaster per configured host under a short owned `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when
+unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `docker run`/`rm -f` spawn 120s (Auth
+`DEFAULT_RUN_TIMEOUT`) and exec/ps/port probes 5s, because a 10s cap timed out a live host-b `database-image` at 10.012s
+and a 3s host-lifetime `docker rm -f` timed out on SIGTERM cleanup; signal-path removal is detached so the 200ms
+supervisor SIGKILL cannot abort it;
+labelled volume not 1 GiB tmpfs; a failed create reaps its nonce; `container:<id>` isolated-stack
+attachment with an independent TCP-to-Unix forwarder; migrations wait for in-container `pg_isready` and a protocol
+reply, not a TCP accept that EOFs; empty-directory manifests hash `directory\0`; page-data boot keeps the first
+substantive error after Task `$ ` echoes. After output-tree restore, candidate fingerprints ignore the published
+kernel-client root. Inherited Library `@rezics/bounds` imports and the two ClassDeclaration `extends` reads stay with
+kernel-library and kernel zones.
+Decision: Management walk setup idle-in-transaction and Access-deadline termination is received through that same
+throwaway/isolated-stack database lifetime. Content keeps the launcher, stack and cleanup. Original walks remain
+open. Driver main versus canonical publication is a control-plane owner item.

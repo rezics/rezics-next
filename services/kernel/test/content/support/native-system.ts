@@ -22,6 +22,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createRealmMembership } from '../../../src/community/membership.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
+import { accessCheck } from '../../../src/request/access.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { installIdentityGrants } from '../../support/trusted-grants.ts';
@@ -444,6 +445,16 @@ async function createNativeContentSystemWithOptions(
     };
     const governance = await person('governance');
     await bootstrapGovernance(pool, governance.actor.accountId);
+    // Fixture provisioning uses its own native client, independent of the suite's
+    // ordinary scope ceiling. Bootstrap installs grants, never client consent.
+    const grantorClientId = `${namespace}_grantor`;
+    const grantorScopes = ['access:grant', 'space:create', 'realm:create', 'subject:create', 'account:suspend'];
+    await nativeAuth.internal.registerClient({ clientId: grantorClientId, firstParty: true, scopes: grantorScopes });
+    const grantor = await issue({
+      accountId: governance.actor.accountId,
+      clientId: grantorClientId,
+      scopes: grantorScopes,
+    });
     const [author, other, moderator, suspended] = await Promise.all([
       person('author'),
       person('other'),
@@ -455,13 +466,26 @@ async function createNativeContentSystemWithOptions(
       const request = new Request(`${audience}${path}`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${governance.bearer}`,
+          authorization: `Bearer ${grantor.bearer}`,
           'content-type': 'application/json',
           'idempotency-key': JSON.stringify(crypto.randomUUID()),
         },
         body: JSON.stringify(body),
       });
-      await assertSetupResponse(await kernel.handle(request), request, status);
+      const response = await kernel.handle(request);
+      if (response.status === 403) {
+        const context = { pool, deadline: Date.now() + 10_000 };
+        const actor = await access.authenticate(grantor.bearer, context);
+        const authority = [];
+        for (const action of grantorScopes) {
+          const check = await accessCheck(access, actor, action, PLATFORM_RESOURCE, context);
+          authority.push({ action, allowed: await check(pool) });
+        }
+        throw new Error(
+          `Native setup ${path} denied: ${await response.text()}; current grantor authority ${JSON.stringify(authority)}`,
+        );
+      }
+      await assertSetupResponse(response, request, status);
     };
     // Parent creation permissions only, installed on the platform parent as trusted fixture authority
     // (not through the grant command). Product resource ownership/standing remains the responsibility

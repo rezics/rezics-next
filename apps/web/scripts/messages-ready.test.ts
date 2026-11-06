@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ensureMessagesReady } from './messages-ready.ts';
+import { ensureMessagesReady, messagesCurrent } from './messages-ready.ts';
 
 const wrapperSource = readFileSync(join(import.meta.dir, 'isolated.ts'), 'utf8');
 
@@ -77,6 +77,7 @@ test('fresh output is kept when it is newer than every message file', () => {
     for (const [index, name] of messageFiles.entries()) setMtime(join(app.messages, name), base + index * 1000);
     setMtime(app.output, base + 10_000);
 
+    expect(messagesCurrent(app.directory)).toBe(true);
     expect(ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual([]);
   } finally {

@@ -4,19 +4,12 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { fixture } from './support/process.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const routeKey = Buffer.alloc(32, 41).toString('base64url');
-const workerEnvironment = {
-  KERNEL_ROUTE_KEY: routeKey,
-  KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
-  KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 42).toString('base64url')}`,
-  AUTH_ISSUER: 'https://auth.worker.test',
-  AUTH_AUDIENCE: 'https://kernel.worker.test',
-  AUTH_JWKS_URL: 'https://auth.worker.test/.well-known/jwks.json',
-};
+const workerEnvironment = workerTestEnv();
 const elapsedSeconds = (started: number) => Math.round(((performance.now() - started) / 1000) * 10_000) / 10_000;
 const reportFixturePhases = (phases: Record<string, number>) =>
   process.stdout.write(`REZICS_KERNEL_FIXTURE_PHASES=${JSON.stringify(phases)}\n`);
@@ -26,6 +19,7 @@ test('worker configuration names invalid variables without revealing values', ()
   expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
     'accounts',
     'account_erasure',
+    'shared_history',
     'rating',
     'commerce',
     'library',
@@ -45,12 +39,21 @@ test('worker configuration names invalid variables without revealing values', ()
     'import',
     'maintenance',
   ]);
-  expect(readWorkerConfig({ DATABASE_URL: databaseUrl })).toMatchObject({ databaseUrl, poolSize: 10 });
+  expect(readWorkerConfig({ ...workerEnvironment, DATABASE_URL: databaseUrl })).toMatchObject({
+    databaseUrl,
+    poolSize: 10,
+  });
   expect(
-    readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel', NOMAD_ALLOC_INDEX: '3' }),
+    readWorkerConfig({
+      ...workerEnvironment,
+      DATABASE_URL: databaseUrl,
+      NOMAD_JOB_NAME: 'kernel',
+      NOMAD_ALLOC_INDEX: '3',
+    }),
   ).toMatchObject({ executorId: 'kernel-3' });
   expect(
     readWorkerConfig({
+      ...workerEnvironment,
       DATABASE_URL: databaseUrl,
       KERNEL_EXECUTOR_ID: 'dedicated',
       NOMAD_JOB_NAME: 'kernel',
@@ -70,7 +73,7 @@ test('worker configuration names invalid variables without revealing values', ()
   ] as const) {
     let error: unknown;
     try {
-      readWorkerConfig({ DATABASE_URL: databaseUrl, [variable]: value });
+      readWorkerConfig({ ...workerEnvironment, DATABASE_URL: databaseUrl, [variable]: value });
     } catch (caught) {
       error = caught;
     }
@@ -78,7 +81,9 @@ test('worker configuration names invalid variables without revealing values', ()
     expect((error as Error).message).toContain(variable);
     if (value) expect((error as Error).message).not.toContain(value);
   }
-  expect(() => readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel' })).toThrow('NOMAD_ALLOC_INDEX');
+  expect(() => readWorkerConfig({ ...workerEnvironment, DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel' })).toThrow(
+    'NOMAD_ALLOC_INDEX',
+  );
 });
 
 const valid: Record<string, string> = {
@@ -122,7 +127,7 @@ test('a worker missing or rejecting commerce configuration names the variable an
     import { readWorkerConfig, startWorker } from './src/worker.ts';
     import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
     import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(
       createDiscoveryProducerEntry,

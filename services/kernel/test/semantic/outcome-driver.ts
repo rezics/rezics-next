@@ -509,7 +509,7 @@ async function startDriver(
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId = GLOBAL_CONTEXT,
+      resourceId: string = GLOBAL_CONTEXT,
       grantor: Account = governor,
     ) {
       const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
@@ -527,7 +527,9 @@ async function startDriver(
         { 'Idempotency-Key': key() },
       );
       if (response.status !== 201)
-        throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
+        throw new Error(
+          `Grant administration failed for ${actions.join(',')} on ${resourceId}: ${response.status}: ${JSON.stringify(response.body)}`,
+        );
     }
 
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);

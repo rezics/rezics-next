@@ -201,7 +201,7 @@ test('accounts registers once before shared launch, schedules one admitted route
     import { composeWork } from './src/work/registry.ts';
     import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
     import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(
       createDiscoveryProducerEntry,
@@ -213,7 +213,7 @@ test('accounts registers once before shared launch, schedules one admitted route
     assert.ok(accountsWorkModule);
     const pool = new pg.Pool({connectionString:process.env.DATABASE_URL});
     const client=await createWorkClient(process.env.DATABASE_URL,pool);
-    const options={databaseUrl:process.env.DATABASE_URL,pool,client,env:{KERNEL_WRITE_RATE_EXPIRY_PARTITION:'1841',KERNEL_WRITE_RATE_EXPIRY_NODE:'b',KERNEL_ROUTE_KEY:Buffer.alloc(32,59).toString('base64url'),KERNEL_WORKFLOW_REFERENCE_KEYS:JSON.stringify({current:1,keys:{1:Buffer.alloc(32,60).toString('base64url')}}),AUTH_ISSUER:'https://accounts.test',AUTH_AUDIENCE:'https://api.test',AUTH_JWKS_URL:'https://accounts.test/.well-known/jwks.json'}};
+    const options={databaseUrl:process.env.DATABASE_URL,pool,client,env:{KERNEL_WRITE_RATE_EXPIRY_PARTITION:'1841',KERNEL_WRITE_RATE_EXPIRY_NODE:'b',KERNEL_ROUTE_KEY:Buffer.alloc(32,59).toString('base64url'),KERNEL_WORKFLOW_REFERENCE_KEYS:JSON.stringify({current:1,keys:{1:Buffer.alloc(32,60).toString('base64url')}}),KERNEL_SESSION_KEYS:'1:'+Buffer.alloc(32,42).toString('base64url'),KERNEL_RECEIPT_KEYS:'1:'+Buffer.alloc(32,17).toString('base64url'),AUTH_ISSUER:'https://accounts.test',AUTH_AUDIENCE:'https://api.test',AUTH_JWKS_URL:'https://accounts.test/.well-known/jwks.json'}};
     await assert.rejects(composeWork([accountsWorkModule,accountsWorkModule],options),/Duplicate work module/);
     const work=await composeWork([accountsWorkModule],options);
     assert.equal(DBOS.isInitialized(),false);

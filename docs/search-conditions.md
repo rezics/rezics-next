@@ -160,6 +160,13 @@ resource references remain rejected, without recursion. No query-time account se
   membership/disclosure and community composition; Web keeps the shared page shell and mounts Search's section with
   the actual Realm identity.
 
+  Decision: Realm catalogue visits bind the route's Realm before comparing query addresses, including anonymous
+  readers verified by the installed session resolver. Canonical Space redirects preserve Search intent and keep
+  shelf and work cursors separate. Continuations replace a single 20-row window; pending or failed reads retain
+  only the prior rows, while facets and counts require the current response's aggregate proof.
+  Decision: focused Realm entry, scoped-reader and recovery regressions pin that committed window, concealment
+  and reader restart; no extra stories. Workspace typecheck and seeded or hydrated Realm matrix stay deferred.
+
 - Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
   definition revision. Original `definitions:read` precedes enumeration for every reference, including under
   NOT or true OR. A Semantic Subject, including a catalogue Agent, requires a live readable review of that
@@ -548,3 +555,9 @@ These cases are future native delivery requirements, not tests supplied or passe
 No invented callable ABI closes them. Full Scope, original Goal acceptance and main/root gates remain unchanged.
 
 When a reader corrects or removes malformed shared-search filter input, clear `cursor` because either change alters the hit set.
+
+Decision: the default discovery relay dispatches native events to their owning producer before routing UUID
+identities. Unrelated handle events have handle-string subjects and do not invalidate Search documents; Space
+invalidation keeps its native event resolver instead of passing through Subject UUID routing. Search consumes
+that resolver through Community's public Space-discovery entry and retains only Spaces whose routed identity
+belongs to the current relay partition.

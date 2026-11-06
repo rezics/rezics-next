@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { isolatedPostgresSocketDir } from '../../../scripts/compiler-database.ts';
 import { cleanup, cleanupStale, startPostgresContainer } from './check.ts';
 
 test('the check database keeps its data on a disk-backed volume, not a memory-capped tmpfs', () => {
@@ -12,6 +13,8 @@ test('the check database keeps its data on a disk-backed volume, not a memory-ca
 
   const run = calls[0]!;
   expect(run[0]).toBe('run');
+  expect(run).toContain('--stop-timeout');
+  expect(run).toContain('--rm');
   expect(run).toContain('--mount');
   expect(run).toContain(
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${process.pid}`,
@@ -21,6 +24,26 @@ test('the check database keeps its data on a disk-backed volume, not a memory-ca
   expect(run).toContain('fsync=off');
   expect(run).toContain('synchronous_commit=off');
   expect(run).toContain('full_page_writes=off');
+});
+
+test('isolated check databases bind a unix socket instead of publishing a port', () => {
+  const previous = process.env.REZICS_ISOLATED_STACK_CONTAINER;
+  process.env.REZICS_ISOLATED_STACK_CONTAINER = 'pause-stack-1';
+  try {
+    const calls: string[][] = [];
+    startPostgresContainer((args) => {
+      calls.push(args);
+      return 'postgres-container';
+    });
+    const run = calls[0]!;
+    expect(run).toContain('--network');
+    expect(run).toContain('container:pause-stack-1');
+    expect(run).toContain(`${isolatedPostgresSocketDir(process.pid)}:/var/run/postgresql`);
+    expect(run).not.toContain('-p');
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_ISOLATED_STACK_CONTAINER;
+    else process.env.REZICS_ISOLATED_STACK_CONTAINER = previous;
+  }
 });
 
 test('removing a check database container removes its volume', () => {

@@ -13,6 +13,16 @@ Kind-preparation producers; `admitOriginalWork` composes their declared vectors 
 `originalControlWork(0, 4, 13, statementBytes)`. Compact tests cover allow/deny and identity recovery; native
 membership growth remains the bounded-work check.
 
+## Work domain composition
+
+Decision: Work contract/core/application add no SQL, scan or extra statement. Native SDK, SQL, clock, authorization,
+receipt association and selected-admission adapters stay in `kernel-platform` and are bound by ordinary
+`createKernel` / `createKernelRuntimeDefaults` / `server` / `worker` composition. Product module assembly lives in
+`composition/work-modules.ts`. Compact `domain-composition` tests pin enqueue, registration, selected admission and
+retirement against fake ports; the existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
+sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Derived cost stays on the existing
+admitted path.
+
 ## Finite bounds
 
 Producer bounds are immutable, closed declarations over all nine axes. Composition uses overflow-safe sums, applies

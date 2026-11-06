@@ -1,6 +1,17 @@
-import { safeParse } from 'valibot';
-import { isSearchResourceScope, searchResourceScopeAction } from '../search/advanced-scope';
-import { searchParams } from '../search/search-params';
+import * as v from 'valibot';
+import { isWithinGlobalSearchQueryLimit } from '../search/query-text-limit';
+import { realmReadingSearch } from './realm-reading-return';
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const pageSearch = v.record(v.string(), v.unknown());
+
+/** Search and the native shelves share an address, but retain separate continuations. */
+export function realmCataloguePageSearch(value: Record<string, unknown>) {
+  const search = { ...v.parse(pageSearch, value) };
+  delete search.node;
+  delete search.cursor;
+  return { ...search, ...realmReadingSearch(value) };
+}
 
 /** A handoff has no stored Search state, cursor, facets, sort or rating population. */
 export type RealmCatalogueEntry = Readonly<{
@@ -12,23 +23,21 @@ export type RealmCatalogueEntry = Readonly<{
 
 /** Only the admitted Realm identity can supply membership. Never pass a Space as a fallback. */
 export function realmCatalogueEntry(realmId: string | null | undefined, locale: string): RealmCatalogueEntry | null {
-  const scope = { kind: 'realm', id: realmId };
-  if (!isSearchResourceScope(scope)) return null;
-  const browseHref = searchResourceScopeAction(locale, scope);
-  const separator = browseHref.indexOf('?');
-  const filter = new URLSearchParams(browseHref.slice(separator + 1)).get('filter');
-  if (!filter) return null;
+  if (!realmId || !uuid.test(realmId)) return null;
+  const id = realmId.toLowerCase();
+  const filter = JSON.stringify({ realm: { id } });
+  const action = `/${encodeURIComponent(locale)}/search`;
   return {
-    realmId: scope.id.toLowerCase(),
-    browseHref,
-    action: browseHref.slice(0, separator),
+    realmId: id,
+    browseHref: `${action}?filter=${encodeURIComponent(filter)}`,
+    action,
     filter,
   };
 }
 
 /** Search is the authority for the UTF-8 limit. The early guard bounds work on pasted input too. */
 export function realmCatalogueQueryAdmitted(query: string): boolean {
-  return query.length <= 512 && safeParse(searchParams, { q: query }).success;
+  return query.length <= 512 && isWithinGlobalSearchQueryLimit(query);
 }
 
 /** Preserve accepted bytes, including leading/trailing spaces; the Search owner normalizes its own defaults. */

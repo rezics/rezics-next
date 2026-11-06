@@ -67,6 +67,7 @@ type RefinementProps = {
   load: Load;
   showSummary?: boolean;
   onNavigate?: (href: string) => void;
+  hrefForConditions?: ((conditions: RefinementConditions) => string) | undefined;
   rangeDraftKey?: string;
   rangeDraftState?: RangeDraftState;
   onRangeDraftChange?: (property: string, draft: RangeDraft) => void;
@@ -114,6 +115,7 @@ function RefinementInstance({
   load,
   showSummary = true,
   onNavigate,
+  hrefForConditions,
   rangeDraftKey,
   rangeDraftState: suppliedRangeDraftState,
   onRangeDraftChange,
@@ -223,7 +225,7 @@ function RefinementInstance({
     }
     statusRegion.current?.focus();
   }, [pages, state, propertyStates, busy, shown, queryIdentity]);
-  const href = (next: RefinementConditions) => refinementHref(locale, query, next, sort);
+  const href = (next: RefinementConditions) => hrefForConditions?.(next) ?? refinementHref(locale, query, next, sort);
   const changeConditions = (next: RefinementConditions) => {
     if (onConditionsChange) onConditionsChange(next);
     else navigate(href(next));

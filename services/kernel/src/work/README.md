@@ -1,3 +1,23 @@
+# Work domain inversion
+
+Decision: Work follows Access. Contract, core and application load no downstream behaviour. Native SDK, SQL, clock,
+authorization, receipt association and selected-admission adapters are bound by ordinary `createKernel` /
+`createKernelRuntimeDefaults` / `server` / `worker` composition. Existing facades call that composed application.
+Product module assembly lives in `composition/work-modules.ts` and imports each domain work module through a
+declared public entry, including `ratingNativeWorkModule`. Compact `domain-composition` tests are the fewest pins
+for fake-port enqueue, registration, selected admission and retirement; worker and kernel landing tests use
+`workerTestEnv` so receipt keys travel with ordinary `createKernel`/`server`/`worker` composition. The existing
+growth-work-client, selected-runtime-native, sdk-transaction-fence, sdk-retirement-fence and growth-retention
+fixtures remain the causal native set. Search keeps both `search_account_erasure` and `search_erasure` tombstone
+effects.
+
+Public entries: `work/contract/index.ts`, `work/contract/bounds.ts`, `work/contract/vocabulary.ts`,
+`work/contract/cost.ts`, `work/core/index.ts`, `work/application/index.ts`, `work/adapters/index.ts`,
+and the stable facades `client.ts`, `registry.ts`, `retries.ts`, `queues.ts`, `selected-runtime.ts`,
+`selected-runtime-cost.ts`, `history-enqueue.ts`, `sdk-retirement-fence.ts`, `authorization.ts`, `retention.ts`.
+Adapters stay in `kernel-platform` so Work does not form a new module cycle with Command, History and Events.
+Contract leaves are literal-only so core and facades may read those values at load.
+
 # Installed queue controls and cleanup replay
 
 `WorkIntent` forwards `queuePartitionKey`, `deduplicationID`, `priority` and `delaySeconds` to the installed

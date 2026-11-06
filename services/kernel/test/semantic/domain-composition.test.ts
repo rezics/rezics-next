@@ -21,7 +21,13 @@ function observation(overrides: Partial<IdentityEpochObservation> = {}): Identit
     mappingComplete: true,
     searchComplete: true,
     libraryComplete: true,
-    control: { publishedEpoch: 6n, pendingJob: job.jobId, pendingEpoch: job.epoch },
+    control: {
+      publishedEpoch: 6n,
+      pendingJob: job.jobId,
+      pendingEpoch: job.epoch,
+      prepareJob: job.jobId,
+      prepareEpoch: job.epoch,
+    },
     ...overrides,
   };
 }
@@ -78,6 +84,14 @@ test('fixed participant composition keeps exactly the two named ports and is fro
 
 test('next-step derivation orders mapping, Search, Library and publication, and refuses contradictory control', () => {
   expect(identityEpochNext(observation({ jobState: 'preparing', mappingComplete: false }))).toBe('preparing');
+  expect(
+    identityEpochNext(
+      observation({
+        jobState: 'preparing',
+        control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
+    ),
+  ).toBe('reservation-lost');
   expect(identityEpochNext(observation({ mappingComplete: false }))).toBe('mapping');
   expect(identityEpochNext(observation({ searchComplete: false }))).toBe('search-canonical-index');
   expect(identityEpochNext(observation({ searchComplete: true, libraryComplete: false }))).toBe(
@@ -87,16 +101,26 @@ test('next-step derivation orders mapping, Search, Library and publication, and 
   expect(identityEpochNext(observation({ jobState: 'cancelling' }))).toBe('cancelling');
   expect(
     identityEpochNext(
-      observation({ jobState: 'published', control: { publishedEpoch: 7n, pendingJob: null, pendingEpoch: null } }),
+      observation({
+        jobState: 'published',
+        control: { publishedEpoch: 7n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
     ),
   ).toBe('published');
   expect(
     identityEpochNext(
-      observation({ jobState: 'published', control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null } }),
+      observation({
+        jobState: 'published',
+        control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
     ),
   ).toBe('publication-control-disagrees');
   expect(
-    identityEpochNext(observation({ control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null } })),
+    identityEpochNext(
+      observation({
+        control: { publishedEpoch: 6n, pendingJob: null, pendingEpoch: null, prepareJob: null, prepareEpoch: null },
+      }),
+    ),
   ).toBe('reservation-lost');
 });
 

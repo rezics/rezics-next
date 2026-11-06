@@ -1,5 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
@@ -157,6 +158,8 @@ function detail(operation: string, action = 'library_entry:update', write = true
     operationId: `library_label.${operation}`,
     'x-action': action,
     'x-exposure': 'gate:personal_library',
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': Object.keys(bundledRelease.types),
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };

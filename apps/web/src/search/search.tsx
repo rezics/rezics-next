@@ -22,6 +22,7 @@ export type {
 } from './search-params';
 export { SearchInputRecovery } from './search-input-recovery';
 import { useSearchWindow } from './search-window';
+import { realmCatalogueWindow } from './realm-catalogue-window';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
@@ -408,7 +409,7 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
         request,
         (body) =>
           kernelClient(data.locale).subjects.$search.post(body, {
-            ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+            ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
             fetch: { signal: requestContext.signal, cache: 'no-store' },
           }),
         requestContext.signal,
@@ -447,7 +448,7 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
       data.kindCursor,
       async (body) => {
         const response = await kernelClient(data.locale).subjects.$search.post(body, {
-          ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+          ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
           fetch: { signal: getRequest().signal, cache: 'no-store' },
         });
         if (response.error || response.status !== 200)
@@ -468,7 +469,7 @@ const prepareShareWithLocale = createServerFn({ method: 'GET' })
     const response = await kernelClient(data.locale).subjects.$search.post(
       { ...body, prepareShare: true },
       {
-        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+        ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
         fetch: { signal: getRequest().signal, cache: 'no-store' },
       },
     );
@@ -536,7 +537,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0],
     ) => {
       const response = await kernelClient(data.locale).subjects.$search.post(request, {
-        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+        ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
         fetch: { signal, cache: 'no-store' },
       });
       return response;
@@ -597,7 +598,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         if (optionRequest.facets)
           facetResult = await readFacetPage(optionRequest.facets, (request) =>
             kernelClient(data.locale).subjects.$facets.post(request, {
-              ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+              ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
               fetch: { signal, cache: 'no-store' },
             }),
           ).catch((error): FacetState => {
@@ -1187,6 +1188,8 @@ export function SearchPage({
       currentSearchHref={searchHref}
       personal={personal}
       windowNavigation={windowNavigation}
+      hrefForState={hrefFor}
+      formAction={formAction}
     />
   );
   const navigate = (href: string, removingCondition = false) => {
@@ -1564,6 +1567,17 @@ export function SearchPage({
           data={{ ...data.refinement, properties: filterRefinementProperties }}
           showSummary={false}
           onNavigate={navigate}
+          hrefForConditions={
+            hrefForState
+              ? (next) =>
+                  hrefFor({
+                    ...committedState,
+                    ...next,
+                    facets: next.facetValues,
+                    cursor: undefined,
+                  })
+              : undefined
+          }
           clearActions={
             resourceLanguage?.actions.clear
               ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
@@ -1829,21 +1843,17 @@ export function RealmCatalogueSearch({
   const browserSession = useSession();
   const reader = searchSessionOwner(browserSession);
   const search = location.search as Record<string, unknown>;
-  const authored = realmCatalogueSearchLoaderDeps(search);
-  const resourceScope: SearchResourceScope = { kind: 'realm', id: realmId.toLowerCase() };
-  const queryState: SearchLoaderDeps = {
-    ...authored,
-    resourceScope,
-    filter: authored.invalidInput ? authored.filter : searchFilterWithScope(authored.filter, resourceScope),
-  };
-  const pathname = `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(realmId)}`;
+  const queryState = realmCatalogueSearchLoaderDeps(search, realmId);
+  const resourceScope = queryState.resourceScope!;
+  const pathname = location.pathname;
+  const publicPathname = new URL(location.publicHref, 'https://rezics.invalid').pathname;
   const pageSearch = new URLSearchParams();
   if (search.node === 'boards' || search.node === 'publications') pageSearch.set('node', search.node);
   if (typeof search.cursor === 'string' && search.cursor) pageSearch.set('cursor', search.cursor);
-  const action = `${pathname}${pageSearch.size ? `?${pageSearch}` : ''}`;
+  const action = `${publicPathname}${pageSearch.size ? `?${pageSearch}` : ''}`;
   const hrefForState = (state: SearchLoaderDeps) => {
     const url = new URL(
-      discoverySearchHref(locale, state, { pathname, cursorParam: 'searchCursor' }),
+      discoverySearchHref(locale, state, { pathname: publicPathname, cursorParam: 'searchCursor' }),
       'https://rezics.invalid',
     );
     if (search.node === 'boards' || search.node === 'publications') url.searchParams.set('node', search.node);
@@ -1855,7 +1865,7 @@ export function RealmCatalogueSearch({
   const heading = (
     <h2 className="text-xl font-semibold">{m.realm_catalogue_works_heading({}, messageOptions(locale))}</h2>
   );
-  if (searchRequiresCurrentReader(queryState) && (browserSession.state !== 'signed-in' || !reader))
+  if (searchRequiresCurrentReader(queryState) && !reader)
     return (
       <SearchPage
         query={queryState.query}
@@ -1919,13 +1929,20 @@ function LoadedRealmCatalogueSearch({
     {
       pathname,
       cursorParam: 'searchCursor',
+      realmId: queryState.resourceScope!.id,
     },
     active,
   );
+  const retained = useRef<{ owner: string; page: SearchPageData } | undefined>(undefined);
+  if (retained.current?.owner !== readerOwner) retained.current = undefined;
+  if (data.recovery?.status === 'ready') retained.current = { owner: readerOwner, page: data };
+  else if (!['loading', 'unavailable', 'index-not-ready', 'source-not-ready'].includes(data.recovery?.status ?? ''))
+    retained.current = undefined;
+  const visible = realmCatalogueWindow(data, retained.current?.page);
   return (
     <SearchPage
       query={queryState.query}
-      data={data}
+      data={visible}
       locale={locale}
       session={reader ?? null}
       readerOwner={readerOwner}

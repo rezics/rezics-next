@@ -1,15 +1,16 @@
 import { viteNonceMarker } from './src/security/headers.ts';
-import { realpathSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
+import { messagesCurrent } from './scripts/messages-ready.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
 const nativeWebHost = process.env.NATIVE_WEB_TEST_HOST;
@@ -40,6 +41,26 @@ if (configuredInspectorPort !== undefined) {
   inspectorPort = parsedInspectorPort;
 }
 
+/** The Cloudflare plugin denies every dependency of cloudflare.config.ts to browser file serving. The site Worker
+ * imports one of those dependencies, so only the Worker environment may load them from disk. The browser
+ * environment keeps the deny list, and the loaded file stays watched. */
+function workerDeniedDependencies(): Plugin {
+  let denied = new Set<string>();
+  return {
+    name: 'worker-denied-dependencies',
+    enforce: 'post',
+    configResolved(resolved) {
+      denied = new Set(resolved.server.fs.deny.filter((entry) => isAbsolute(entry)));
+    },
+    load(id) {
+      const file = id.split('?', 1)[0]!;
+      if (this.environment.name !== 'ssr' || !denied.has(file)) return null;
+      this.addWatchFile(file);
+      return readFileSync(file, 'utf8');
+    },
+  };
+}
+
 export default defineConfig((context) => {
   const persistence = createWorkerPersistence('web', context, appRoot);
   return {
@@ -68,8 +89,9 @@ export default defineConfig((context) => {
       {
         name: 'generate-localization',
         async config(_config, { command }) {
-          // Create generated localization modules before Vite scans the browser routes.
-          if (command === 'serve') {
+          // Create generated localization modules before Vite scans the browser routes. A check or `bun run generate`
+          // that already compiled current catalogues is reused, so a cold start compiles them once.
+          if (command === 'serve' && !messagesCurrent(appRoot)) {
             await new Promise<void>((resolve, reject) => {
               const child = spawn('bun', ['scripts/generate.ts'], { stdio: 'inherit' });
               child.once('error', reject);
@@ -91,6 +113,7 @@ export default defineConfig((context) => {
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
+      workerDeniedDependencies(),
     ],
   };
 });

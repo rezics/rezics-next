@@ -43,6 +43,7 @@ import {
   followNativeWork,
   withFollowCommandWork,
 } from './follow-operation-bounds.ts';
+import { consumeLabelCommandAttempt, withLabelCommandAttempt } from './label-operation-bounds.ts';
 
 export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
@@ -100,6 +101,8 @@ export type OwnAccountCommand = {
   execution?: LibraryCommandExecutionBinding;
   /** Complete static operation cost, separate from a custom caller execution wrapper. */
   executionPlan?: LibraryCommandExecutionPlan;
+  /** One native attempt's closed cost, consumed again on each Core retry. */
+  attemptPlan?: LibraryCommandExecutionPlan;
   sessionOperation?: SessionOperationKind;
   sessionPreparation?: boolean;
   deadline?: number;
@@ -280,6 +283,7 @@ export function createLibraryCommandRunner(config: {
       denied: () => (receiptOnly ? new ReceiptNotFoundError() : new GrantDeniedError()),
       async prepare(attempt) {
         await plan?.consumeAttempt();
+        if (request.attemptPlan) await consumeLabelCommandAttempt(request.attemptPlan);
         const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
         return evidence;
@@ -356,11 +360,13 @@ export function createLibraryCommandRunner(config: {
       );
     return runLibraryCommand(
       () =>
-        followPlan
-          ? withFollowCommandWork(followPlan, execute)
-          : plan
-            ? withSessionCommandPlan(plan, execute)
-            : execute(),
+        withLabelCommandAttempt(request.attemptPlan?.total, () =>
+          followPlan
+            ? withFollowCommandWork(followPlan, execute)
+            : plan
+              ? withSessionCommandPlan(plan, execute)
+              : execute(),
+        ),
       request.execution,
       request.executionPlan,
     );

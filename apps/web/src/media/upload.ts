@@ -21,8 +21,13 @@ function requestAbortError(): DOMException {
   return new DOMException('The request was aborted', 'AbortError');
 }
 
+// R2 refuses a body whose SHA-256 differs from the declared digest. That is the caller's bytes, not a storage outage.
+const checksumMismatch = (error: unknown): boolean =>
+  error instanceof Error && /checksum you specified did not match/u.test(error.message);
+
 function transferProblem(failure: TransferFailure): Error {
   if (failure.kind === 'pump') return failure.error instanceof MediaProblem ? failure.error : invalidRequest();
+  if (failure.kind === 'storage' && checksumMismatch(failure.error)) return invalidRequest();
   return dependencyUnavailable();
 }
 
@@ -189,7 +194,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
       },
     );
 
-    let writing: Promise<R2Object | null>;
+    let writing: Promise<unknown>;
     try {
       writeBegan = true;
       writing = Promise.resolve(

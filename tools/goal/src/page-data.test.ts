@@ -15,6 +15,7 @@ import {
   pageDataClassCounts,
   parsePageDataOutput,
   PageDataStackError,
+  firstSubstantiveErrorLine,
   runPageDataCycle,
   type PageDataSection,
   type PageDataRepair,
@@ -77,6 +78,17 @@ const section = (className: PageDataSection['class']): PageDataSection => ({
   goal: 'web',
   files: ['apps/web/src/routes/index.tsx'],
   ...(className === 'API' ? { firstErrorLine: 'home anonymous feed API' } : {}),
+});
+
+test('page-data boot diagnostics keep the first substantive error, not the Task command echo', () => {
+  expect(
+    firstSubstantiveErrorLine(
+      '$ bun scripts/database.ts up\ntask: [database] bun scripts/database.ts up\nerror: role "rezics" does not exist\nsee /tmp/stack.log',
+    ),
+  ).toBe('error: role "rezics" does not exist; see /tmp/stack.log');
+  expect(firstSubstantiveErrorLine('$ bun scripts/database.ts up\npassword=supersecret failed to bind')).toBe(
+    '[redacted] failed to bind',
+  );
 });
 
 test('the policy interval, defect transition, section output and per-run report preserve page classes', async () => {

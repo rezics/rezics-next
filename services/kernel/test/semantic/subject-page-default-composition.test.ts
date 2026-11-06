@@ -7,6 +7,7 @@ import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createRealAccess } from './real-access.ts';
 import type { PublicationRunner, PublicationStore } from './subject-page-local-publication.test.ts';
@@ -30,6 +31,7 @@ function options() {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     clock,
     writeRate: real.writeRate,
     access(config: Parameters<typeof real.access>[0]) {
@@ -252,7 +254,7 @@ test('default worker registers semantic publication and Relay once and shuts dow
     import * as relay from './src/semantic/subject-page-publication-relay.ts';
     import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
     import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/work/modules.ts';
+    import { createKernelWorkModules } from './src/composition/work-modules.ts';
     import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
     const KERNEL_WORK_MODULES = createKernelWorkModules(
       createDiscoveryProducerEntry,

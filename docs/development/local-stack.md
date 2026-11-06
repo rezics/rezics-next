@@ -169,6 +169,24 @@ group fails with the name of its first missing variable.
 Decision: local development uses the existing media port with a fixed 20 MiB-per-object file store and the exact
 Bangumi media host `lain.bgm.tv`; R2 remains the only production storage configuration.
 
+The site uses the same original and derivative files through a private loopback object transport on the native
+host. Setup writes its purpose-bound credential and origin into the ignored Web bindings. With both
+`LOCAL_MEDIA_ORIGIN` and `LOCAL_MEDIA_TOKEN` present, Worker configuration binds the origin and secret instead
+of the development R2 bucket so the site and native worker share the same objects. The existing site
+reservation, uploader-bound upload, completion and current download handlers remain the only browser media
+transport; their Auth/Access decisions run before object access. The object endpoint accepts at most 20 MiB per
+original, confines keys to the native media layout and exposes neither its credential nor storage URLs to pages.
+Upload cleanup deletes the failed original only, preserving any independently produced derivatives.
+
+Decision: local media serving adapts the existing site object port to the native file store; it adds no upload
+writer, public object URL or production endpoint. Focused transport acceptance covers unauthorized access,
+invalid keys, oversized external bytes, range reads, producer readback and exact original cleanup.
+Native mounted-scope composition acceptance runs in the Kernel check host, which supplies its migrated SQL
+analysis database; pure local binding acceptance stays in the Auth script suite.
+
+Decision: local media acceptance starts the supported `setup`/`start` composition against its owning check's
+isolated database and search node, with separate loopback application ports, before testing site media admission.
+
 ## Keys and reset
 
 Generated Auth signing, website, importer, and staging keys and the persona password live under
@@ -240,7 +258,11 @@ name alone does not admit a container. Walk stacks do not change check placement
 hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
-brief lists native or browser acceptance.
+brief lists native or browser acceptance. Local stack-lease tests set `KERNEL_CHECK_REMOTE` to a missing hosts file
+before spawn so they exercise the local lease rather than falling back to shared check hosts. Isolated-stack compiler
+and Kernel databases attach with `container:<id>` and an independent TCP-to-Unix forwarder; walk stacks keep published
+loopback ports. Management walk setup idle-in-transaction is received through that database lifetime; Content retains
+launcher, stack and cleanup. Original walks remain open.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
