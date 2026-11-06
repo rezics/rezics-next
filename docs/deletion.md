@@ -294,3 +294,6 @@ Page coverage rebinds by identity while routes stay in canonical order. Live tak
 the owner. Native kernel journeys and two web mapping tests pin Zone lifecycle; no Storybook stories or
 expanded served walks on this landing. Catalogue commands live in lifecycle-zone-commands.ts so the
 matching tsx controls keep a distinct bun --no-bundle output path.
+Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
+New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
+command/history value cycle. Fewest tests remain the native journeys and two web mapping tests.

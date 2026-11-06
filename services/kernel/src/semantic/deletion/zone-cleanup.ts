@@ -8,10 +8,9 @@ import {
   type ZonePrimaryOwnerEvidence,
 } from '../../access/zone-grant-cleanup.ts';
 import type { CommandTransaction } from '../../command/command.ts';
-import { currentCommand } from '../../command/command.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { liveCoverage, purgeIntent } from '../../zones/cleanup-intent.ts';
-import type { ZoneHead } from '../../zones/resource-store.ts';
+import type { ZoneHead } from '../../zones/resource-head.ts';
 
 export type ZoneCleanupIntent = 'ordinary-expiry' | 'early-privacy' | 'legal-order' | 'terminal-account';
 
@@ -51,7 +50,6 @@ function intentOf(row: ZoneHead, at: string): ZoneCleanupIntent | null {
 
 async function home(tx: CommandTransaction, route: number) {
   const partition = partitionOf(route);
-  if (currentCommand(tx).partition !== partition) throw new RangeError('Zone cleanup is in another home');
   const row = await tx.query<{ epoch: string }>(
     `SELECT epoch::text FROM core.partition WHERE partition_no=$1 AND write_state='active' AND moved_to IS NULL`,
     [partition],

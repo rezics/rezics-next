@@ -886,16 +886,21 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
           a.scope_key,
         ])
       ) {
-        await removePlatformNativeInverse(tx, {
-          home: c.home,
-          generation: c.generation,
-          original: c.original,
-          sourcePartition: l.partition,
-          captureId: l.captureId,
-          registration: a.binding.holdId,
-          scopeKey: directoryKey,
-          sourceKey: a.scope_key,
-        });
+        const live = currentCommand(tx);
+        await removePlatformNativeInverse(
+          tx,
+          {
+            home: c.home,
+            generation: c.generation,
+            original: c.original,
+            sourcePartition: l.partition,
+            captureId: l.captureId,
+            registration: a.binding.holdId,
+            scopeKey: directoryKey,
+            sourceKey: a.scope_key,
+          },
+          { partition: live.partition, basis: live.basis, transactionId: live.transactionId },
+        );
       }
       const n = await component(tx, 'identity-scope-directory-release');
       await tx.query(settingSQL.sql, [n.transactionId]);

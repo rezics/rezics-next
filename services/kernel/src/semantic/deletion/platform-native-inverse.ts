@@ -1,5 +1,5 @@
 import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';
-import { currentCommand, type CommandTransaction } from '../../command/command.ts';
+import type { CommandTransaction } from '../../command/command.ts';
 import sourceCommit from './platform-native-inverse-commit.sql';
 import prearmDelete from './platform-native-inverse-prearm.sql';
 import scopeDelete from './platform-native-inverse-scope.sql';
@@ -15,6 +15,12 @@ export type PlatformNativeInverseLocator = Readonly<{
   registration: string;
   scopeKey: string;
   sourceKey: string;
+}>;
+
+export type PlatformNativeInverseCommand = Readonly<{
+  partition: number;
+  basis: unknown;
+  transactionId: string;
 }>;
 
 /** Source-commit plus two inverse deletes. Native commit stays the caller's existing purpose. */
@@ -36,8 +42,8 @@ export function platformNativeInverseRemovalCost(): WorkDimensions {
 export async function removePlatformNativeInverse(
   tx: CommandTransaction,
   locator: PlatformNativeInverseLocator,
+  command: PlatformNativeInverseCommand,
 ): Promise<void> {
-  const command = currentCommand(tx);
   if (command.basis !== null) throw new TypeError('Identity maintenance requires native admitted platform work');
   if (command.partition !== locator.home) throw new RangeError('Platform inverse removal is in another home');
   await tx.query(sourceCommit.sql, [locator.home, command.transactionId]);

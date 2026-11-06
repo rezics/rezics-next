@@ -6,7 +6,7 @@ import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publicat
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { bindCommandHistoryEvidence } from '../history/record.ts';
+import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -372,14 +372,7 @@ export async function verifyAccountAgent(
   const node = await readAgentSubject(pool, agentId);
   const catalogue = await readAgentSubject(pool, options.catalogue);
   const before = await accountAgentForNode(pool, agentId);
-  if (
-    !node ||
-    !catalogue ||
-    catalogue.redirect ||
-    !before ||
-    before.account !== account ||
-    before.agent_id !== agentId
-  )
+  if (!node || !catalogue || catalogue.redirect || !before || before.account !== account || before.agent_id !== agentId)
     throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
   if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
     throw new AccountAgentVerificationError('Only person and organization account agents can be verified');

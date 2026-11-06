@@ -215,6 +215,7 @@
         "services/kernel/src/access/membership-work.ts",
         "services/kernel/src/access/durable-initiator.ts",
         "services/kernel/src/access/erasure.ts",
+        "services/kernel/src/access/zone-grant-cleanup.ts",
         "services/kernel/src/access/adapters/index.ts"
       ],
       "allowedDependencies": [
@@ -524,7 +525,9 @@
         "services/kernel/src/semantic/access-capabilities.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",
         "services/kernel/src/semantic/adapters/index.ts",
-        "services/kernel/src/semantic/credit-search.ts"
+        "services/kernel/src/semantic/credit-search.ts",
+        "services/kernel/src/semantic/deletion/index.ts",
+        "services/kernel/src/semantic/record-purge-custody.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -558,7 +561,11 @@
       "kind": "adapter",
       "owner": "semantic",
       "paths": ["services/kernel/src/zones/**", "services/kernel/db/zones/**"],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/zones/resource-head.ts",
+        "services/kernel/src/zones/cleanup-intent.ts",
+        "services/kernel/src/zones/account-erasure-zone.ts"
+      ],
       "allowedDependencies": [
         "composition",
         "filter",
@@ -614,6 +621,9 @@
         "services/kernel/src/events/relays.ts",
         "services/kernel/src/request/deadline.ts",
         "services/kernel/src/history/work.ts",
+        "services/kernel/src/history/contracts.ts",
+        "services/kernel/src/history/command-evidence.ts",
+        "services/kernel/src/http/problem-error.ts",
         "services/kernel/src/imports/erasure.ts",
         "services/kernel/src/work/adapters/index.ts",
         "services/kernel/src/work/authorization.ts",
@@ -1051,6 +1061,8 @@
         "apps/web/src/kernel/client.ts",
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
+        "apps/web/src/session/client.ts",
+        "apps/web/src/session/request.ts",
         "apps/web/src/subject/reader.ts",
         "apps/web/src/subject/definitions.ts",
         "apps/web/src/subject/quantity-presentation.ts",

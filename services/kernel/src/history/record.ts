@@ -8,7 +8,9 @@ import {
 } from './agent-identity-source.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand } from '../command/command.ts';
+import { boundCommandHistoryEvidence, releaseCommandHistoryEvidence } from './command-evidence.ts';
 import { ACCOUNT_ROLE_BITS, classifyEvent } from './contracts.ts';
+export { bindCommandHistoryEvidence, commandHistoryIdentityAccounts } from './command-evidence.ts';
 import { encodeLocator, validateScope, type AccountReference, type HistoryScope } from './locator.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import insert from './record.sql';
@@ -94,19 +96,7 @@ export const COMMAND_HISTORY_COVERAGE = Object.freeze({
 export const MAX_HISTORY_PAYLOAD_BYTES = 65_536;
 export type CommandHistoryScopes = Readonly<{ response: HistoryScope; events: readonly HistoryScope[] }>;
 type Declaration = CommandHistoryScopes & { kind: CommandHistoryKind; partition: number };
-const identities = new WeakMap<CommandTransaction, readonly AccountReference[]>();
 const declarations = new WeakMap<CommandTransaction, Declaration>();
-
-/** Access calls this only with opaque verified permission evidence, once per executor attempt.
- * This server module is never an HTTP JSON input or an alternate permission evaluator. */
-export function bindCommandHistoryEvidence(tx: CommandTransaction, accounts: readonly AccountReference[]): void {
-  identities.set(tx, structuredClone(accounts));
-}
-
-/** The already verified evidence for this attempt, used only to enroll native data roles. */
-export function commandHistoryIdentityAccounts(tx: CommandTransaction): readonly AccountReference[] {
-  return structuredClone(identities.get(tx) ?? []);
-}
 
 export function unionHistoryScope(
   type: HistoryScope['artifactType'],
@@ -133,7 +123,7 @@ export async function declareCommandHistory(
   const command = currentCommand(tx);
   if (!commandKinds.has(kind) || declarations.has(tx))
     throw new TypeError('Invalid or repeated command history declaration');
-  const identity = identities.get(tx);
+  const identity = boundCommandHistoryEvidence(tx);
   if (!identity) throw new TypeError('Missing command history evidence: verified actor/principal/human/delegate');
   if (scopes.events.length > 1000) throw new TypeError('Too many history event scopes');
   const response = unionHistoryScope(
@@ -259,7 +249,7 @@ export async function recordCommandHistory(
 export function releaseCommandHistory(tx: CommandTransaction): void {
   releaseAgentIdentitySource(tx);
   releaseCommandRecordSources(tx);
-  identities.delete(tx);
+  releaseCommandHistoryEvidence(tx);
   declarations.delete(tx);
 }
 

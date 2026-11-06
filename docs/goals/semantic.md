@@ -52,6 +52,10 @@ Decision: live takedown keys are JSON pointers; `custody` is the retained-origin
 pointer-key assertions. Internal Zone purge pages bind mechanical history evidence from the owner, the same
 way library entry due-purge does, because they never enter Access admission.
 
+Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
+New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
+command/history value cycle.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.

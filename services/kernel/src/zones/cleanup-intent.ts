@@ -1,6 +1,6 @@
 import type { Json } from 'reylo';
 import { jsonParameter } from '../database/json.ts';
-import type { ZoneHead } from './resource-store.ts';
+import type { ZoneHead } from './resource-head.ts';
 
 /** Non-pointer withholding key. Live takedown filters never match it. */
 export const PURGE_INTENT = 'purge';

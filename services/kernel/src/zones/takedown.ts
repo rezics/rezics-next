@@ -1,8 +1,8 @@
 import type { ZoneConfiguration } from '@rezics/composition';
 import type { Json } from 'reylo';
 import { jsonParameter } from '../database/json.ts';
-import { ProblemError } from '../http/problem.ts';
-import type { ZoneHead } from './resource-store.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { ZoneHead } from './resource-head.ts';
 
 /**
  * Takedown state lives in `zones.zone.withholding`. Keys that are pointers (`''` or starting with `/`) are live

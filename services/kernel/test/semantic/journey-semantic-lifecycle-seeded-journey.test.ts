@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { readZoneCleanupParticipants } from '../../src/semantic/deletion/index.ts';
+import { readZoneCleanupParticipants } from '../../src/semantic/deletion/participants.ts';
 import { createBody, page, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 
 let f: ResourceFixture;

@@ -3,10 +3,10 @@ import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { bindCommandHistoryEvidence } from '../history/record.ts';
+import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { liveCoverage, purgeIntent, retainCoveredPayload, withPurgeIntent } from './cleanup-intent.ts';
-import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-store.ts';
+import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-head.ts';
 
 export type ZonePurgePageInput = Readonly<{
   pool: Pool;
