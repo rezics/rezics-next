@@ -241,7 +241,7 @@ afterEach(async () => {
 afterAll(async () => {
   mock.restore();
   host.remove();
-  window.happyDOM.abort();
+  await window.happyDOM.close();
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);

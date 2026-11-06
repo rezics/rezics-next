@@ -935,18 +935,27 @@ export class SpacePageLifetime {
     this.connected = true;
     activeAdmissions.set(this.admission, this);
     if (!this.stopWatching && this.runtime) {
-      const onChange = () => {
-        if (!this.disposed && (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime))) this.retire();
+      const onSessionChange = () => {
+        if (this.disposed) return;
+        if (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime)) this.retire();
         else this.publish();
       };
-      const stopSession = this.runtime.source.subscribe(onChange);
+      const stopSession = this.runtime.source.subscribe(onSessionChange);
       const ownedQuery = this.runtime.queryRead?.query;
       const routeSignal = this.runtime.routeSignal;
       const onRouteAbort = () => this.retire();
       routeSignal?.addEventListener('abort', onRouteAbort, { once: true });
       const stopQuery = ownedQuery
         ? this.runtime.client.getQueryCache().subscribe((event) => {
-            if (event.query === ownedQuery) onChange();
+            if (event.query !== ownedQuery) return;
+            if (event.type === 'removed') {
+              this.retire();
+              return;
+            }
+            if (event.type !== 'updated' || !('action' in event)) return;
+            const action = event.action;
+            if (action.type !== 'success' && action.type !== 'error' && action.type !== 'setState') return;
+            if (!this.runtime || !runtimeIsCurrent(this.admission, this.runtime)) this.retire();
           })
         : undefined;
       this.stopWatching = () => {

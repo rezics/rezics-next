@@ -625,6 +625,7 @@ function SpaceHome({
   const readingReturnRef = useRef(readingReturn);
   readingReturnRef.current = readingReturn;
   const updateReadingReturn = useCallback((href: string) => {
+    if (href === readingReturnRef.current) return;
     const current = realmReadingSelection(readingReturnRef.current);
     const next = realmReadingSelection(href);
     const regionId =

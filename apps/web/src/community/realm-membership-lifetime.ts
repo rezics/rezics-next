@@ -97,7 +97,11 @@ export class RealmMembershipLifetimeStore {
 
   constructor(readonly client: QueryClient) {
     this.snapshot = readSessionSnapshot(client);
-    client.getQueryCache().subscribe(() => this.onQueryCacheChange());
+    client.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey;
+      if (key.length === 1 && key[0] === 'session') this.onQueryCacheChange();
+      else this.cleanupReads();
+    });
   }
 
   currentSession(): SessionSnapshot | null {
