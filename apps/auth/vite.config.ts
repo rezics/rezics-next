@@ -20,6 +20,17 @@ export default defineConfig((context) => {
     // Fonts stay on the page origin under default-src 'self'.
     build: { assetsInlineLimit: 0 },
     server: { cors: false, allowedHosts: ['rezics.com'] },
+    optimizeDeps: {
+      // Discover lazy route dependencies before a person starts entering credentials.
+      // A late optimizer reload replaces the document and retires the mounted journey.
+      entries: ['src/routes/**/*.tsx'],
+      holdUntilCrawlEnd: true,
+    },
+    ssr: {
+      optimizeDeps: {
+        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+      },
+    },
     define: {
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
     },
