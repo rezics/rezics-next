@@ -286,7 +286,7 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(rows()[1]!.querySelector('[data-slot="review-citation"]')?.getAttribute('data-state')).toBe(
             'unscored',
           );
-          expect(rows()[1]!.textContent).toContain(m.subject_community_reactions_none());
+          expect(rows()[1]!.textContent).toContain(m.subject_community_reactions_none({}, options));
           expect(rows()[2]!.textContent).toContain(m.subject_community_citation_unavailable({}, options));
         }
         expect(rows()[1]!.querySelector('[data-content-item-slot="preview"]')).toBeNull();

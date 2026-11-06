@@ -1869,13 +1869,23 @@ export function RatingSummary(props: Record<string, unknown>) {
   );
 }
 
+const emptyCommunityAuthors = {};
+
 function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 'review' | 'discussion' }) {
   const state = useOverview(props.id);
   const node = String(props.id);
   const data = useSubjectCommunity(kind, node);
   const subject = state?.value.subject;
+  const section = state?.section;
+  const fallbackBody = section?.ok ? section.body : undefined;
+  const fallbackRegion = useMemo(
+    () => composedCommunityRegion(fallbackBody !== undefined ? { status: 200, body: fallbackBody } : undefined),
+    [fallbackBody],
+  );
+  const standaloneNow = useRef<string | undefined>(undefined);
+  standaloneNow.current ??= new Date().toISOString();
   if (!state || !subject) return null;
-  const { value, section } = state;
+  const { value } = state;
   const view = kind === 'review' ? 'reviews' : 'discussion';
   const href = viewHref(value, view);
   if (!href) return null;
@@ -1887,9 +1897,9 @@ function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 're
         id={node}
         node={node}
         kind={kind}
-        region={data?.region ?? composedCommunityRegion(section?.ok ? { status: 200, body: section.body } : undefined)}
-        authors={data?.authors ?? {}}
-        now={data?.now ?? new Date().toISOString()}
+        region={data?.region ?? fallbackRegion}
+        authors={data?.authors ?? emptyCommunityAuthors}
+        now={data?.now ?? standaloneNow.current}
         subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
         locale={value.locale}
         href={href}

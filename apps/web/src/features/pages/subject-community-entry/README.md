@@ -50,8 +50,10 @@ replies and pagination retain the same address. Changing the originating URL ret
 reading until a new source observation arrives, even when its full-list destination stays the same.
 
 Decision: bind each mounted region to the shared browser observation and its exact composition query; use cached
-external-store snapshots for standalone ReviewList/ThreadList mounts. Fetching, invalidation and equal successful
-source replacement retire the old reading before a queued click can use it. Unrelated cache keys supply no authority.
+external-store snapshots for standalone ReviewList/ThreadList mounts, returning that same cached value for client and
+server reads until a subscription fires. Fetching, invalidation and equal successful source replacement retire the old
+reading before a queued click can use it. Unrelated cache keys supply no authority. Standalone lists without a source
+observation key treat equal descriptors as one visit.
 
 The exact showcase `community.source.subjectId` / `community.board.id` pair is passed in the Subject URL as `board`.
 An explicit Global Board read prepares the current viewer just like a Realm read; ordinary unselected public reads
@@ -63,3 +65,6 @@ The seeded participation walk runs with
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/vndb-seeded-journey.ts`.
 It consumes the wrapper's published Subject/Board pair, follows actual author links, reads durable native effects
 independently, and records the exact profile occurrence return. The walk owns its stack through the existing runner.
+
+Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
+no extra stories.

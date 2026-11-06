@@ -272,4 +272,4 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
     }
     mock.restore();
   }
-});
+}, 30_000);

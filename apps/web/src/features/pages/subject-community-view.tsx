@@ -30,6 +30,10 @@ export const SubjectCommunityRefreshContext = createContext<(() => Promise<void>
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const actionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const isDomElement = (value: EventTarget | null | undefined): value is Element => {
+  const ctor = globalThis.Element;
+  return typeof ctor === 'function' && value instanceof ctor;
+};
 
 /**
  * The creation entry for the supplied Board. Each state keeps its own copy; only current allowed advice links
@@ -144,37 +148,39 @@ export function SubjectCommunityRegion({
   const community = useContext(SubjectCommunityContext);
   const verification = useContext(SubjectCommunityVerificationContext);
   const refreshAdvice = useContext(SubjectCommunityRefreshContext);
+  const descriptor = JSON.stringify([
+    id,
+    node,
+    subject.id,
+    kind,
+    locale,
+    href,
+    currentHref,
+    paged,
+    community?.contextId,
+    region.state,
+    region.request,
+    region.state === 'ready' ? region.context : null,
+    region.state === 'ready' ? region.reactionsAsOf : null,
+    region.state === 'ready' ? region.entry : null,
+    region.state === 'ready'
+      ? region.threads.map(({ id, rowKey, position, postRevisionId, card, nativeCard, actions }) => [
+          id,
+          rowKey,
+          position,
+          postRevisionId,
+          card,
+          nativeCard,
+          actions,
+        ])
+      : null,
+  ]);
   const reading = useSubjectCommunityReading({
-    source: community?.sourceKey ?? region,
+    // Standalone ReviewList/ThreadList mounts have no observation key; equal descriptors are one visit.
+    source: community?.sourceKey ?? descriptor,
     reader: community?.reader ?? null,
     queryKey: community?.queryKey,
-    descriptor: JSON.stringify([
-      id,
-      node,
-      subject.id,
-      kind,
-      locale,
-      href,
-      currentHref,
-      paged,
-      community?.contextId,
-      region.state,
-      region.request,
-      region.state === 'ready' ? region.context : null,
-      region.state === 'ready' ? region.reactionsAsOf : null,
-      region.state === 'ready' ? region.entry : null,
-      region.state === 'ready'
-        ? region.threads.map(({ id, rowKey, position, postRevisionId, card, nativeCard, actions }) => [
-            id,
-            rowKey,
-            position,
-            postRevisionId,
-            card,
-            nativeCard,
-            actions,
-          ])
-        : null,
-    ]),
+    descriptor,
   });
   if (!reading.available) region = { state: 'unavailable' };
   const viewerActionsCurrent = community?.reader == null || reading.privateActionsCurrent();
@@ -188,7 +194,7 @@ export function SubjectCommunityRegion({
   const focused = useRef<EventTarget | null>(null);
   useLayoutEffect(() => {
     // A replacing page removes its focused card. Keep keyboard recovery at this region's stable heading.
-    if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
+    if (isDomElement(focused.current) && !focused.current.isConnected && document.activeElement === document.body)
       heading.current?.focus();
   }, [reading.key, reading.available]);
   const review = kind === 'review';
@@ -236,7 +242,7 @@ export function SubjectCommunityRegion({
       onClickCapture={(event) => {
         // A queued private command cannot outlive its observation; public body links remain usable.
         const target = event.target;
-        const privateControl = target instanceof Element && target.closest('[data-slot="community-actions"]');
+        const privateControl = isDomElement(target) && target.closest('[data-slot="community-actions"]');
         if (!reading.available || !reading.isCurrent() || (privateControl && !viewerActionsCurrent)) {
           event.preventDefault();
           event.stopPropagation();
