@@ -37,7 +37,10 @@ import {
 } from './support/order-retention-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
 import { HIGH_RATE_OVERRIDES } from '../content/support/disclosure-fixtures.ts';
-import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from '../content/support/native-system.ts';
+import {
+  createNativeContentSystemWithWriteRateOverrides,
+  type NativeContentSystem,
+} from '../content/support/native-system.ts';
 
 async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolean, ms = 90_000): Promise<T> {
   const deadline = Date.now() + ms;
@@ -339,10 +342,7 @@ describe('native genuine-order retention', () => {
         'SELECT entitlement_id FROM commerce.entitlement WHERE route=$1 AND account_id=$2 FOR UPDATE',
         [routeOf(buyer.accountId), buyer.accountId],
       );
-      const buyerBarrier = await deletePersona(
-        { version: 1, pool, auth: accountDeletionRuntime(native).auth },
-        buyer,
-      );
+      const buyerBarrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, buyer);
       await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
       expect(await entitlementRows(buyer.accountId)).toHaveLength(1);
       expect(await commerceOutcome(buyer.accountId)).toEqual({ outcome: 'pending', retained: [] });
