@@ -3,17 +3,18 @@ import { checkBatchWrite } from '@rezics/definitions/bulk';
 import bangumi from '../../../specs/fixtures/imports/bangumi/subject.json';
 import vndb from '../../../specs/fixtures/imports/vndb/record.json';
 import wikidata from '../../../specs/fixtures/imports/wikidata/entity.json';
+import { converter_revision as wikidataRevision } from '@rezics/conversion/wikidata';
 import { createSourceRegistration } from '../src/source-registry';
 
 test('Wikidata registration consumes the current exported recipe converter revision', () => {
   const registration = createSourceRegistration('wikidata');
-  expect(registration.converter_revision).toBe('wikidata-5');
+  expect(registration.converter_revision).toBe(wikidataRevision);
   const output = registration.convert(
     { external_id: wikidata.id, record_revision: String(wikidata.lastrevid), record: wikidata },
     { source: registration.source },
   );
   expect(output.proposals).toHaveLength(1);
-  expect(output.proposals.every((command) => command.source.converter_revision === 'wikidata-5')).toBe(true);
+  expect(output.proposals.every((command) => command.source.converter_revision === wikidataRevision)).toBe(true);
 });
 
 const fixtures = [

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
+import { converter_revision as bangumiConverterRevision } from '../../../../packages/conversion/src/bangumi.ts';
+import { converter_revision as openLibraryConverterRevision } from '../../../../packages/conversion/src/open-library.ts';
 import { converter_revision as wikidataConverterRevision } from '../../../../packages/conversion/src/wikidata.ts';
 import bangumi from '../../../../specs/fixtures/imports/bangumi/subject.json';
 import edition from '../../../../specs/fixtures/imports/open-library/edition.json';
@@ -300,7 +302,7 @@ test('Bangumi account-key CLI imports refreshes reopens and safely stops the nat
     refresh = lines(changed);
   const feed: Feed = {
     source: 'bangumi',
-    converter: 'bangumi@3',
+    converter: bangumiConverterRevision,
     first: bytes,
     refreshed: refresh,
     malformed: lines([unsealed[0]]) + '{"id":',
@@ -391,7 +393,7 @@ test('Open Library account-key CLI imports refreshes reopens and safely stops th
     refresh = tsv(changed);
   const feed: Feed = {
     source: 'openlibrary',
-    converter: 'open-library@4',
+    converter: openLibraryConverterRevision,
     first: bytes,
     refreshed: refresh,
     malformed: tsv([unsealed[1]]) + '/type/edition\tbroken\n',
