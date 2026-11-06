@@ -152,6 +152,11 @@ retained Checkout record, not a whole-account disposition.
 
 ## Native fixture boundary
 
+Genuine purchase targets are published Content editions on Content's isolated native system. Access grants
+`board:create`/`offer:create` as account subjects on Global through the ordinary grant command; the Score
+Auth-handler capture (`nativeAuth.handler`) authenticates the same kernel. Shared-database board-read current-role
+projection repair stays with Accounts. `prepareNativeRetainedOrder` is the Accounts terminal-graph export.
+
 The Auth/persona/fresh-deletion fixture stays in the test parent. Only kernel worker setup runs in a child using
 actual `startWorker`/`readWorkerConfig` and the default module list against the same owned database and loopback
 Stripe endpoint. The child owns and closes its pool/client on SIGTERM. Positive purchase targets are real subjects

@@ -994,6 +994,8 @@ The native live-copy purpose extends existing lifecycle coordination; it adds no
 The [Commerce erasure participant](erasure-participant.md) owns the fixed native-test order-retention seam, Checkout
 minimization, deadline purge and separate Access resolution; it distinguishes this fixture policy from unresolved
 production financial retention and remaining shared custody.
+Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
+history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Preserve the unused-account test's `none`

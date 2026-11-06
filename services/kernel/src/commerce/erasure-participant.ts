@@ -424,7 +424,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         throw new Error('Commerce retained-order metadata is incomplete');
       exceptions.push({
         store: retained.store,
-        fields: [...NATIVE_TEST_ORDER_RETENTION_FIELDS],
+        fields: retained.fields,
         purpose: retained.purpose,
         expiresAt: new Date(retained.expiresAt),
       });
