@@ -2,6 +2,8 @@
 
 Decision: Keep the current workspace and capability boundaries, assign each module to its documented Goal owner, and snapshot existing imports as explicit dependencies while grandfathering their violations for gradual removal.
 
+Decision: Library work-dimension vocabulary is the contract module `kernel-library-contract` with one public entry, `services/kernel/src/library/contract/work-dimensions.ts`. Access, Platform, Search, Semantic, Content and Zones import those shapes from it, never from the Source runtime.
+
 Decision: Register Access, Bounds, and Operations as pure core modules with only their exported package entries; grant dependencies to the concrete Kernel adapter modules that actually import them, and keep native implementation choice in composition roots.
 
 Decision: The client declaration closure depends on the public Access, Bounds, Money, Operations, Progress and
