@@ -2169,8 +2169,7 @@ export function createVndbImport(config: Config) {
           if (
             !stored?.active ||
             stored.decision.score?.reviewId !== score.reviewId ||
-            entryImportMetadataDigest(stored.row) !== score.sourceDigest ||
-            entryImportMetadataDigest(stored.decision.score) !== entryImportMetadataDigest(score)
+            entryImportMetadataDigest(stored.row) !== score.sourceDigest
           )
             throw new LibraryConflictError();
         };
@@ -2179,22 +2178,59 @@ export function createVndbImport(config: Config) {
   }
 
   function scoreCommandInput(score: ScoreDecision): PreparedPutVote['input'] {
+    const identity = score.nativeGuard.subject.identity;
     return {
       questionId: score.question.id,
       targetId: score.targetId,
-      units: score.units,
-      guard: score.nativeGuard,
+      units: score.units === null ? null : Number(score.units),
+      guard: {
+        version: 1,
+        question: {
+          revision: Number(score.nativeGuard.question.revision),
+          lifecycleRevision: Number(score.nativeGuard.question.lifecycleRevision),
+        },
+        subject: {
+          canonicalId: score.nativeGuard.subject.canonicalId,
+          epochs: score.nativeGuard.subject.epochs.map((entry) => ({
+            partition: Number(entry.partition),
+            epoch: String(entry.epoch),
+          })),
+          ...(identity === undefined
+            ? {}
+            : {
+                identity: {
+                  version: 1,
+                  requestedOriginalId: identity.requestedOriginalId,
+                  canonicalTerminalId: identity.canonicalTerminalId,
+                  sourceIdentities: [...identity.sourceIdentities],
+                  sourceHomes: identity.sourceHomes.map((home) => Number(home)),
+                  controlLocators: identity.controlLocators.map((locator) => ({
+                    partition: Number(locator.partition),
+                    group: locator.group,
+                  })),
+                  evidence: identity.evidence,
+                },
+              }),
+        },
+        ownVote: {
+          state: score.nativeGuard.ownVote.state,
+          observation:
+            typeof score.nativeGuard.ownVote.observation === 'string'
+              ? score.nativeGuard.ownVote.observation
+              : JSON.stringify(score.nativeGuard.ownVote.observation),
+        },
+      },
       observation: {
         subjectId: score.nativeGuard.subject.canonicalId,
         question: {
           id: score.question.id,
-          revision: score.question.revision,
+          revision: Number(score.question.revision),
           grain: score.question.grain,
           meaning: score.question.meaning ?? score.question.label,
           scale: {
-            min: score.question.scale.min,
-            max: score.question.scale.max,
-            displayStep: score.question.scale.step,
+            min: Number(score.question.scale.min),
+            max: Number(score.question.scale.max),
+            displayStep: Number(score.question.scale.step),
           },
         },
       },

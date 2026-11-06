@@ -148,6 +148,8 @@ Apply uses Content’s `preparePutVote` to retain the normalized body and receip
 actor credential before dispatch. The existing native vote writer receives that frozen body, guard, observation
 and key, plus the source owner’s admission. Source operands join the native receipt digest;
 fresh execution checks the locked retained row, review, lifetime and cancellation after native receipt lookup.
+The prepared vote envelope is not that source witness. Apply rebuilds the closed Semantic identity operand from the
+retained guard so PostgreSQL JSONB key order and numeric coercions cannot fail `participant.prepare`.
 Known source or native witness changes return stale. An unexpected error propagates while preserving the original
 dispatch for exact retry. Current authorization precedes receipt disclosure. Cancellation or expiry permits only
 reconciliation of a pending original command; no later action starts. Success reads current own state through
@@ -320,4 +322,4 @@ The seeded caller sends an explicit Accept-Language preference (English by defau
 
 After a lost metadata acknowledgement, the retained VNDB review can reconcile only its original native annotation or provenance receipt after source expiry. Receipt lookup binds the owner, client, requested-by identity, row, source review, metadata review, selection, command key and digest under the retained upload lock. It cannot dispatch a fresh effect, recover retired matching consent or disclose the expired source page; deletion or pruning removes this linkage.
 
-Decision: focused importer, Kernel HTTP/coordinator and Web reopen/return tests pin preview, sealed review/apply, JSONB operand identity, Accept-Language, generated Progress and expired metadata-receipt recovery. Remaining native guard and exact-self failures stay capability repairs.
+Decision: focused importer, Kernel HTTP/coordinator and Web reopen/return tests pin preview, sealed review/apply, JSONB operand identity, Accept-Language, generated Progress and expired metadata-receipt recovery. Keep those existing assertions; apply rebuilds the closed vote-guard identity instead of adding tests. Remaining exact-self failures stay capability repairs.
