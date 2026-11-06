@@ -1,6 +1,4 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
-import { loadThreadPage } from '../src/threads/thread-page';
 import { createRecordedKernelFetch, deletedOrganizationId, mentionThreadId } from '../src/kernel/fake';
 import { answerFakeRoute } from '../src/kernel/fake-modules';
 import { traversalSubjects } from '../src/kernel/fake/edition-work';
@@ -77,27 +75,6 @@ test('Settings profile recording handles only its exact scene and single owned t
     const agentRequest = accountRequest(`agent=${agentSubject}`);
     expect(await answerFakeRoute('story', agentRequest)).toEqual({ status: 200, accounts: [], next: null });
     expect(await (await fetchRecorded(agentRequest)).json()).toEqual({ accounts: [], next: null });
-
-    const requests: URL[] = [];
-    const kernel = createKernelClient(kernelUrl, {
-      fetch: (async (input, init) => {
-        const request = new Request(input, init);
-        requests.push(new URL(request.url));
-        return fetchRecorded(request);
-      }) as typeof fetch,
-    });
-    const page = await loadThreadPage(
-      kernel,
-      new Request(`https://site.test/en/threads/${mentionThreadId}`),
-      {},
-      { id: mentionThreadId },
-      { sitekey: '', scriptUrl: '' },
-      'anonymous',
-    );
-    expect(page.mentions).toEqual({ [mira.id]: { handle: 'mira' } });
-    const mentionLookup = requests.find((url) => url.pathname === '/v1/accounts');
-    expect(mentionLookup?.searchParams.get('ids')).toContain(mira.id);
-    expect(mentionLookup?.searchParams.get('ids')).toContain(deletedOrganizationId);
 
     story(`/en/threads/${mentionThreadId}/thread`);
     const unrelatedScene = accountRequest(`ids=${storyViewerId}`);

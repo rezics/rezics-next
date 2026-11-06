@@ -41,6 +41,13 @@ function ordered<Value>(files: Record<string, Value>): [string, Value][] {
   return Object.entries(files).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 }
 
+/** Bun `require` of JSON may add a synthetic default; Vite glob already imports default. */
+function jsonModule<Value>(loaded: Value): Value {
+  if (!loaded || typeof loaded !== 'object' || !('default' in loaded)) return loaded;
+  const value = (loaded as { default: Value }).default;
+  return value && typeof value === 'object' ? value : loaded;
+}
+
 /** Bun's synchronous counterpart to Vite's eager glob imports. Runs only in an unbundled Bun process. */
 function bunFiles<Value>(pattern: string): Record<string, Value> {
   return Object.fromEntries(
@@ -86,10 +93,10 @@ function discover(): Discovered {
       }).flatMap(([, module]) => module.routes ?? []),
     ],
     recordings: Object.fromEntries(
-      ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), recording]),
+      ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), jsonModule(recording)]),
     ),
     fixtures: [
-      ...ordered(fixtures).map(([, fixture]) => fixture),
+      ...ordered(fixtures).map(([, fixture]) => jsonModule(fixture)),
       {
         subjects: storySubjects.map((subject) => ({
           id: subject.id,

@@ -194,7 +194,7 @@ function requestedRecording(name: string, request: Request, recordings: Record<s
 }
 
 /** Keys of a recording that describe the request it answers; the rest is the response body. */
-const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle', 'headers']);
+const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle', 'headers', 'default']);
 
 function recordedResponse(recording: KernelRecording): Response {
   const recordedHeaders = new Headers({

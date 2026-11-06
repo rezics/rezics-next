@@ -1,6 +1,10 @@
 import type { FakeRoute } from '../fake-modules.ts';
-import type { ProfileLink, ProfileValues } from '../../settings/profile-data';
-import { officialProfileRead, type EditableProfile } from '../../settings/editable-profile-source';
+import type { ObservedProfile, ProfileLink, ProfileValues } from '../../settings/profile-data';
+import {
+  closedProfileEditing,
+  officialProfileRead,
+  type EditableProfile,
+} from '../../settings/editable-profile-source';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 import { storyViewerId } from './identities';
 
@@ -28,6 +32,13 @@ export function profileStoryValues(kind: 'actor' | 'organization' = 'actor'): Pr
   };
 }
 
+function observedStory(values: ProfileValues): ObservedProfile {
+  return {
+    ...structuredClone(values),
+    editing: closedProfileEditing({ id: values.accountId, kind: values.kind }),
+  };
+}
+
 /** Interface-only IO. The same editor and cards consume this in Patterns and the real BFF in Pages. */
 export function createProfileStoryIO(scenario: ProfileScenario): ProfileEditorIO {
   let current = profileStoryValues(scenario === 'organization' ? 'organization' : 'actor');
@@ -40,7 +51,7 @@ export function createProfileStoryIO(scenario: ProfileScenario): ProfileEditorIO
         failed = true;
         throw new Error('Profile unavailable');
       }
-      return structuredClone(current);
+      return observedStory(current);
     },
     save: async (attempt) => {
       if (scenario === 'pending') await new Promise<void>(() => {});

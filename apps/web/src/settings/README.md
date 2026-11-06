@@ -41,7 +41,7 @@ and public Profile journeys remain unaccepted; integration owns their native, br
 focus and exact-account cost assertions. Named phone and desktop admission, recovery and keyboard-return stories stay;
 no extra pages. Native, browser and root acceptance remain with integration.
 
-**Decision:** Combined Profile–Watches–Profile focused suites consume the installed `{ profile, editing }` GET recording and Settings Structured Field command-key encoding; they do not import Kernel SQL modules. Existing named suites remain the fewest pins for edit/save/readback, draft/focus return, Watch admission and original removal.
+**Decision:** Combined Profile–Watches–Profile focused suites consume the installed `{ profile, editing }` GET recording and Settings Structured Field command-key encoding; they do not import Kernel SQL modules. Existing named suites remain the fewest pins for edit/save/readback, draft/focus return, Watch admission and original removal. Canonical account batches, handles and agent selectors pin Settings exact-scene isolation; thread mention identity is the reading-page projection, not a second accounts GET. Save Retry-After gates only the command retry; current-read reload uses its own deadline.
 
 Same-tab Watch visits carry the current Profile draft and last keyboard field. Return restores that draft onto the
 current native profile. Keyboard section return focuses only that exact current field; pointer return leaves focus

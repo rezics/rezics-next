@@ -135,7 +135,15 @@ test('Profile save, unsaved draft, both Watch kinds, withheld target, original r
     expectedRevision: 5,
     credential: identity.csrfToken,
   });
-  boardRows = [managed({ ...withheldBoard, revision: 9 })];
+  boardRows = [
+    managed({
+      subscriptionId: withheldBoard.subscriptionId,
+      kind: 'board',
+      revision: 9,
+      createdAt: withheldBoard.createdAt,
+      target: null,
+    }),
+  ];
   await controller.refresh();
   expect(controller.snapshot().rows[0]?.revision).toBe(9);
   expect(controller.snapshot().command).toBe(original);
