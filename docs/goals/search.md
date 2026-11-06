@@ -29,6 +29,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 ## Scope
 
 Decision: one composition runtime; lost SDK responses keep publication outcomes unknown.
+Decision: Path 17 walk first-compile HTTP uses the remaining readiness window; session modules stay in the route graph rather than Vite URL entries. Focused tests pin alias-locale fallback; the seeded matrix is the native/browser proof.
 
 Decision: Empty Search recovery drafts bind to the executed request, reader, locale, checkpoint and native page response; valid text uses shared query admission, and explicit retry focuses only the still-current result owner after settlement.
 Decision: released CreativeWork inheritance selects ordinary-page tag metadata; Web passes definitions to the shared reader only when the catalogue digest matches the Subject's exact release.

@@ -59,13 +59,13 @@ export default defineConfig((context) => {
     optimizeDeps: {
       // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
       // after the first page has loaded.
-      entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
+      entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
       holdUntilCrawlEnd: true,
     },
     ssr: {
       optimizeDeps: {
         include: ['@inlang/paraglide-js/urlpattern-polyfill'],
-        entries: ['src/server.ts', 'src/session/routes.ts', 'src/session/website-scopes.ts'],
+        entries: ['src/server.ts', 'src/session/routes.ts'],
       },
     },
     plugins: [

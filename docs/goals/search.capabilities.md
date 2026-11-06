@@ -334,7 +334,7 @@ Decision: retained-stack multilingual acceptance reuses its existing source iden
 publication lifecycle. Isolated analyzer checks and unavailable page walks supply no positive journey evidence.
 Walk stacks prove that journey: checks stay on hosts a/b, while `dev-stack.ts walk` stays on the worker host so
 `GOAL_ACCEPTANCE_REQUIRES` is not stripped. The worktree docker wrapper omits `--cgroup-parent` for walk containers.
-Readiness probes TCP before a two-minute first-compile fetch. Walk `start` stays up until SIGTERM and restarts
+Readiness probes TCP before a remaining-window first-compile fetch. Walk `start` stays up until SIGTERM and restarts
 children, so a host registration timeout or worker database blip cannot tear down a ready Web.
 Retry-After waits preserve identical server and initial hydration markup even when the deadline expires in transit;
 the mounted clock enables manual retry without dispatching a request.

@@ -22,8 +22,8 @@ import {
   walkStackPorts,
   WALK_DOCKER_REMOVE_MS,
   WALK_READY_DEADLINE_MS,
-  WALK_READY_FETCH_MS,
   WALK_READY_POLL_MS,
+  walkReadyFetchTimeoutMs,
   stopSpawned,
   walkOriginListening,
   type WalkNames,
@@ -829,31 +829,41 @@ function removeWalkStack(names: WalkNames): void {
 
 /** Resolves when every URL answers; fails when the stack exits first or the compile window elapses. */
 async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
-  const answers = async (url: string) => {
-    if (!(await walkOriginListening(url))) return false;
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(WALK_READY_FETCH_MS) });
-      return response.status < 500;
-    } catch {
-      return false;
-    }
-  };
   const deadline = Date.now() + WALK_READY_DEADLINE_MS;
-  let lastReport = 0;
-  for (;;) {
-    const ready = await Promise.all(urls.map(async (url) => [url, await answers(url)] as const));
-    if (ready.every(([, ok]) => ok)) return;
+  const failed = () => {
     if (starting.exitCode !== null || starting.signalCode !== null)
       throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
-    if (Date.now() > deadline) {
-      const waiting = ready.filter(([, ok]) => !ok).map(([url]) => url);
-      throw new Error(`walk: the local stack was not ready after ${WALK_READY_DEADLINE_MS} ms (${waiting.join(', ')})`);
-    }
-    if (Date.now() - lastReport >= 30_000) {
-      const waiting = ready.filter(([, ok]) => !ok).map(([url]) => url);
-      console.error(`walk: waiting for ${waiting.join(', ')}`);
-      lastReport = Date.now();
-    }
+    if (Date.now() > deadline)
+      throw new Error(`walk: the local stack was not ready after ${WALK_READY_DEADLINE_MS} ms (${urls.join(', ')})`);
+  };
+  let lastReport = 0;
+  const report = (waiting: string[]) => {
+    if (Date.now() - lastReport < 30_000) return;
+    console.error(`walk: waiting for ${waiting.join(', ')}`);
+    lastReport = Date.now();
+  };
+  for (;;) {
+    failed();
+    const listening = await Promise.all(urls.map(async (url) => [url, await walkOriginListening(url)] as const));
+    if (listening.every(([, open]) => open)) break;
+    report(listening.filter(([, open]) => !open).map(([url]) => url));
+    await Bun.sleep(WALK_READY_POLL_MS);
+  }
+  for (;;) {
+    failed();
+    const remaining = deadline - Date.now();
+    const ready = await Promise.all(
+      urls.map(async (url) => {
+        try {
+          const response = await fetch(url, { signal: AbortSignal.timeout(walkReadyFetchTimeoutMs(remaining)) });
+          return [url, response.status < 500] as const;
+        } catch {
+          return [url, false] as const;
+        }
+      }),
+    );
+    if (ready.every(([, ok]) => ok)) return;
+    report(ready.filter(([, ok]) => !ok).map(([url]) => url));
     await Bun.sleep(WALK_READY_POLL_MS);
   }
 }

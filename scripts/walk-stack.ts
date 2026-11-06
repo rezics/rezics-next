@@ -64,6 +64,11 @@ export const WALK_READY_POLL_MS = 2_000;
 export const WALK_DOCKER_REMOVE_MS = 120_000;
 export const WALK_PROCESS_STOP_MS = 8_000;
 
+/** Use the remaining window, never a short abort that strands Vite's first compile. */
+export function walkReadyFetchTimeoutMs(remainingMs: number): number {
+  return Math.max(WALK_READY_FETCH_MS, remainingMs);
+}
+
 /** True when something already accepts TCP on the origin; connection refused is not a hung compile. */
 export function walkOriginListening(url: string, timeoutMs = 500): Promise<boolean> {
   const parsed = new URL(url);
