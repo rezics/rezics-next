@@ -60,6 +60,13 @@ async function thread(boardId: string, position: number, title: string) {
   const revision = newId(threadRoute);
   const at = `2026-10-24T00:00:0${position}.000Z`;
   const bytes = Buffer.from(JSON.stringify(fromPlainText(title)));
+  // The thread references its Board's visible concept, as Subject threads do; public reads need that reference.
+  const concept = (
+    await db.pool.query<{ concept: string }>(
+      'SELECT subject_id::text AS concept FROM content.board WHERE route=$1 AND board_id=$2',
+      [boardRoute, boardId],
+    )
+  ).rows[0]!.concept;
   await runCommand(db.pool, { partition: partitionOf(threadRoute) }, async (tx) => {
     await tx.query(
       `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at)
@@ -73,8 +80,8 @@ async function thread(boardId: string, position: number, title: string) {
     );
     await tx.query(
       `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-       VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT','{}',$7,'available',$4)`,
-      [threadRoute, id, post, revision, bytes, title, boardId],
+       VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT',$8::uuid[],$7,'available',$4)`,
+      [threadRoute, id, post, revision, bytes, title, boardId, [concept]],
     );
     return {
       value: null,
@@ -105,7 +112,7 @@ async function reply(threadId: string, position: number) {
     );
     await tx.query(
       `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-       VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT','{}',(SELECT board_id FROM content.thread WHERE route=$1 AND thread_id=$2),'available',$4)`,
+       VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT',ARRAY(SELECT b.subject_id FROM content.thread t JOIN content.board b ON b.board_id=t.board_id WHERE t.route=$1 AND t.thread_id=$2),(SELECT board_id FROM content.thread WHERE route=$1 AND thread_id=$2),'available',$4)`,
       [threadRoute, threadId, post, revision, bytes, `Controlled reply ${position}`],
     );
     return {

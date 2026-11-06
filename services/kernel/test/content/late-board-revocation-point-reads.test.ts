@@ -70,6 +70,13 @@ async function thread(boardId: string, text = 'Controlled late opening') {
   const post = newId(threadRoute);
   const revision = newId(threadRoute);
   const bytes = Buffer.from(JSON.stringify(fromPlainText(text)));
+  // The thread references its Board's visible concept, as Subject threads do; public reads need that reference.
+  const concept = (
+    await db.pool.query<{ concept: string }>(
+      'SELECT subject_id::text AS concept FROM content.board WHERE route=$1 AND board_id=$2',
+      [boardRoute, boardId],
+    )
+  ).rows[0]!.concept;
   await runCommand(db.pool, { partition: partitionOf(threadRoute) }, async (tx) => {
     await tx.query(
       `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at)
@@ -83,8 +90,8 @@ async function thread(boardId: string, text = 'Controlled late opening') {
     );
     await tx.query(
       `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-       VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT','{}',$7,'available',$4)`,
-      [threadRoute, id, post, revision, bytes, text, boardId],
+       VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT',$8::uuid[],$7,'available',$4)`,
+      [threadRoute, id, post, revision, bytes, text, boardId, [concept]],
     );
     return {
       value: null,
