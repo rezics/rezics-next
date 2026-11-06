@@ -171,7 +171,7 @@ test('family volume, publisher, counterpart, voice and staff statements stay bes
       },
     ],
   })!;
-  expect(uncoveredWorkDestinations(subject, related, familyDefinitions, windowed).map(({ property }) => property)).toEqual(
-    ['rezics:crossMediaCounterpart', 'schema:publisher', 'wdt:P725', 'schema:director'],
-  );
+  expect(
+    uncoveredWorkDestinations(subject, related, familyDefinitions, windowed).map(({ property }) => property),
+  ).toEqual(['rezics:crossMediaCounterpart', 'schema:publisher', 'wdt:P725', 'schema:director']);
 });

@@ -97,7 +97,11 @@ function FamiliesJourney() {
   const related = {
     [volumeGirl]: { type: 'schema:Book', types: ['schema:Book'], labels: { und: '“文学少女”と死にたがりの道化' } },
     [volumeKara]: { type: 'schema:Book', types: ['schema:Book'], labels: { und: '空の境界' } },
-    [publisherGirl]: { type: 'schema:Organization', types: ['schema:Organization'], labels: { und: 'エンターブレイン' } },
+    [publisherGirl]: {
+      type: 'schema:Organization',
+      types: ['schema:Organization'],
+      labels: { und: 'エンターブレイン' },
+    },
     [publisherKara]: { type: 'schema:Organization', types: ['schema:Organization'], labels: { und: '講談社' } },
     [anime]: { type: 'schema:TVSeries', types: ['schema:TVSeries'], labels: { und: '空の境界' } },
     [kara]: { type: 'schema:BookSeries', types: ['schema:BookSeries'], labels: { und: '空の境界' } },
@@ -199,12 +203,7 @@ function FamiliesJourney() {
     },
   } as unknown as OverviewValue;
   const route = `/${locale}/subjects/${bookGirl}/bungaku-shoujo`;
-  const overview = (
-    subject: Subject,
-    windows: ProfileRelationWindow[],
-    label: string,
-    returnTo: string,
-  ) => (
+  const overview = (subject: Subject, windows: ProfileRelationWindow[], label: string, returnTo: string) => (
     <OverviewContext.Provider value={{ ...value, subject: subject.id, subjectLabel: label }}>
       <WorkFranchiseOverview
         subject={subject}
