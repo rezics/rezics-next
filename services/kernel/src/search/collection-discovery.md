@@ -114,7 +114,9 @@ selected realm. TypeList completion, revocation and suspension reuse that same s
 Decision: typecheck repairs keep those assertions; fixtures carry `source` (owner unless catalogue), omit
 undefined `expected`, and FULL members pages pass only cursor, limit and languages. Catalogue publication
 observation uses the stored accepted release digest; it does not hash FilterRelease as Release. HTTP
-createKernel fixtures pass dedicated receipt keys; Search index prefixes stay within 48 characters.
+createKernel fixtures pass dedicated receipt keys, open gate:search exposure, call the official SearchService
+`complete` callback, and keep index prefixes within 48 characters. Native kind-metadata fixtures install the
+released templates before indexing.
 
 ## Readiness
 

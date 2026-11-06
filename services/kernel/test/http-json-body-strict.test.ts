@@ -1,5 +1,6 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Elysia, t } from 'elysia';
+import { readExposure } from '../src/access/gates/catalogue.ts';
 import { strictContentSchema } from '../src/content/schemas.ts';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel } from '../src/http/kernel.ts';
@@ -12,7 +13,22 @@ import { Value } from 'typebox/value';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
-afterAll(() => pool.end());
+const opening = Bun.randomUUIDv7();
+beforeAll(async () => {
+  for (const group of ['search', 'search_advanced']) {
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open) {
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         VALUES ($1, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2)`,
+        [group, opening],
+      );
+    }
+  }
+});
+afterAll(async () => {
+  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  await pool.end();
+});
 
 process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
   .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
@@ -27,16 +43,20 @@ const search: SearchService = {
   async savedCatalogueMembers() {
     throw new Error('Unexpected saved catalogue members call');
   },
-  async search(_principal, request) {
+  async search(_principal, request, _now, _active, context) {
     searches.push(request);
-    return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };
+    const page = { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };
+    await context?.complete(page);
+    return page;
   },
   async facets() {
     throw new Error('Unexpected facets call');
   },
-  async suggest(q, limit) {
+  async suggest(q, limit, _languages, read) {
     suggestions.push({ q, limit });
-    return { subjects: [], as_of: '2026-10-26T00:00:00Z' };
+    const page = { subjects: [], as_of: '2026-10-26T00:00:00Z' };
+    await read?.complete(page);
+    return page;
   },
 };
 const schema = t.Object({ integer: t.Integer(), number: t.Number(), boolean: t.Boolean(), string: t.String() });

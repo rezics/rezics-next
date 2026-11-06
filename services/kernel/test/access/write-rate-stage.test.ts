@@ -1,6 +1,7 @@
-import { afterAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { t } from 'elysia';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { newId } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -59,11 +60,26 @@ const request = (path: string, count?: number, headers: Record<string, string> =
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(count === undefined ? {} : { commands: Array.from({ length: count }, () => ({ value: 1 })) }),
   });
+const opening = Bun.randomUUIDv7();
+beforeAll(async () => {
+  for (const group of ['search', 'search_advanced']) {
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open) {
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         VALUES ($1, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2)`,
+        [group, opening],
+      );
+    }
+  }
+});
 beforeEach(async () => {
   effects = 0;
   await pool.query('TRUNCATE access.write_rate_counter');
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  await pool.end();
+});
 
 test('native HTTP stage spends the complete batch once before effects and preserves rejected expiry', async () => {
   const app = fixture();
@@ -182,7 +198,6 @@ test('createKernel subject:read POST custom search authorizes without a write ch
   let spends = 0;
   const result = {
     subjects: [],
-    total: { value: 0, relation: 'exact' as const },
     next: null,
     as_of: '2026-10-25T00:00:00.000Z',
   };
@@ -215,8 +230,9 @@ test('createKernel subject:read POST custom search authorizes without a write ch
       async savedCatalogueMembers() {
         throw new Error('unused');
       },
-      async search(principal, body) {
+      async search(principal, body, _now, _active, context) {
         searches.push([principal, body]);
+        await context?.complete(result);
         return result;
       },
       async suggest() {

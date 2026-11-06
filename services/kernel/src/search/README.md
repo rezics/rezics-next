@@ -1838,7 +1838,8 @@ arbitrary continuation are exposed. Missing native binding prepares or fails una
 DBOS recovers those workflows during launch, before `addService` offers the live preparation. `createSearchServiceGate`
 holds recovered steps until the worker offers the running service, and stops the gate on composition, indexing or
 teardown failure so a recovered step cannot run without an active service. HTTP createKernel fixtures pass dedicated
-receipt keys; Search index prefixes stay within 48 characters.
+receipt keys, open gate:search exposure and call the official SearchService `complete` callback; Search index
+prefixes stay within 48 characters. Native kind-metadata fixtures install the released templates before indexing.
 It retains one scalar scheduling locator; the native publication job owns complete key traversal and invokes
 the ordinary writer's serializer and actual versions. The delivered `SearchWriterGuard` caps its native
 write chunks at 100 keys. Claims advance their native revision,

@@ -12,7 +12,15 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
-import { compileKinds, kindDigest } from '../../src/search/query.ts';
+import {
+  compileKinds,
+  FACET_TEMPLATE,
+  HIT_TEMPLATE,
+  installTemplates,
+  kindDigest,
+  SEARCH_TEMPLATE,
+  SUGGEST_TEMPLATE,
+} from '../../src/search/query.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import type { IndexedSubject } from '../../src/search/source.ts';
@@ -87,14 +95,16 @@ process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
   .join(',');
 let failure: ProblemError | null = null;
 const service: SearchService = {
-  async search(principal, request) {
+  async search(principal, request, _now, _active, context) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return {
-      subjects: [{ ...result, figure: missingFigure, matchEvidence: { state: 'absent' } }],
+    const page = {
+      subjects: [{ ...result, figure: missingFigure, matchEvidence: { state: 'absent' as const } }],
       next: null,
       as_of: asOf,
     };
+    await context?.complete(page);
+    return page;
   },
   async facets(principal, request) {
     calls.push(['facets', principal, request]);
@@ -110,10 +120,12 @@ const service: SearchService = {
       as_of: asOf,
     };
   },
-  async suggest(q, limit) {
+  async suggest(q, limit, _languages, read) {
     calls.push(['suggest', q, limit]);
     if (failure) throw failure;
-    return { subjects: [result], as_of: asOf };
+    const page = { subjects: [result], as_of: asOf };
+    await read?.complete(page);
+    return page;
   },
   async savedCatalogueMembers() {
     throw new Error('Unexpected saved catalogue members call');
@@ -425,10 +437,12 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
     clock: () => new Date(now),
     search: {
       ...service,
-      async search(_principal, _request, instant) {
+      async search(_principal, _request, instant, _active, context) {
         forwarded.push(instant!);
         deadlines.push(deadlineFor(1));
-        return { subjects: [], next: null, as_of: asOf };
+        const page = { subjects: [], next: null, as_of: asOf };
+        await context?.complete(page);
+        return page;
       },
       async facets(_principal, _request, instant) {
         forwarded.push(instant!);
@@ -518,6 +532,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     statements: [],
   }));
   beforeAll(async () => {
+    await installTemplates(native, prefix);
     await createSubjectIndex(native, prefix, 1);
     for (const subject of subjects) fake.put(subject);
     await native.bulk(
@@ -534,7 +549,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
   });
   afterAll(async () => {
     await native.request('DELETE', `/${index}`);
-    for (const name of ['subjects-hits-v1', 'subjects-search-v2', 'subjects-suggest-v1', 'subjects-facets-v1'])
+    for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
       await native.request('DELETE', `/_scripts/${prefix}${name}`);
     await pool.end();
   });
