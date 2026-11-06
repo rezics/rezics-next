@@ -239,6 +239,8 @@ The declaration commit preceded the implementation for consumer integration. The
 native implementation and declarations; declaration-only revisions establish no closure. Native proof and
 participant completion remain separate from source integration and typing. The native cases in
 [sdk-retirement-fence.test.ts](../../test/work/sdk-retirement-fence.test.ts) await post-integration execution.
+Decision: pin the funded bound on that same file with five cases (persistent connect failure, lock deadline,
+transient recovery, exhausted attempts, lost COMMIT); keep original fence, scan and transaction assertions; no stories.
 
 Retirement establishes technical SDK writer closure only. Genuine Source, consumer and root admission belong to
 their owners. SUCCESS, cancellation, an empty status read or a caller boolean cannot supply that authority. This

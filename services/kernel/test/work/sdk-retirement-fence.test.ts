@@ -272,14 +272,14 @@ test('Native SDK permanent workflow writer fence', async () => {
   }
 }, 120_000);
 
-async function fundedClient() {
+const fundedClient = async () => {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const sdk = await DBOSClient.create({
     systemDatabaseUrl: databaseUrl,
     systemDatabasePool: pool,
   });
   return { pool, sdk };
-}
+};
 
 function chargedReserve() {
   const charged: unknown[] = [];
@@ -439,6 +439,7 @@ test('lost retirement COMMIT converges on a later funded invocation without reop
       ),
     ).rejects.toBeInstanceOf(WorkflowRetirementBudgetError);
     const receipt = await readSdkWorkflowRetirement(workflowID, oldClient);
+    if (receipt === null) throw new Error('lost COMMIT must leave a permanent native closure');
     expect(receipt).toMatchObject({ workflowID, generation: '2' });
     const outcome = await invokeSdkWorkflowRetirement(
       workflowID,
