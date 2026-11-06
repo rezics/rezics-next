@@ -2,7 +2,19 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type AddressInfo } from 'node:net';
 import { acquireStackSlot } from './stack-lease.ts';
-import { walkPortsAvailable } from './walk-stack.ts';
+import { walkPortsAvailable, walkProcessEnvironment } from './walk-stack.ts';
+import { cgroupArgs } from '../services/kernel/scripts/search.ts';
+
+test('walk process environment does not inherit check-host cgroup placement', () => {
+  const env = walkProcessEnvironment('6a6ca25b-b24d-431b-bc8f-615cef277eda', 3, {
+    KERNEL_CHECK_ON_REMOTE: '1',
+    REZICS_CHECK_SLICE: 'rezics-check.slice',
+    PATH: '/bin',
+  });
+  expect(env.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
+  expect(env.REZICS_WALK_STACK_SLOT).toBe('3');
+  expect(cgroupArgs(env)).toEqual([]);
+});
 
 test('walk admission skips a foreign listener and leaves it running after releasing its own slot', async () => {
   const foreign = createServer();

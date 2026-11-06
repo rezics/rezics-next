@@ -16,7 +16,7 @@ import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
-  walkStackEnvironment,
+  walkProcessEnvironment,
   walkStackNames,
   walkStackPorts,
   type WalkNames,
@@ -807,7 +807,7 @@ async function walk(command: string[]): Promise<number> {
   let code = 0;
   try {
     slot = await admitWalkStack(task, process.env, root, controller.signal);
-    const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
+    const env = walkProcessEnvironment(task, slot.index!);
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     try {

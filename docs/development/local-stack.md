@@ -251,6 +251,8 @@ brief lists native or browser acceptance.
 Admission skips slots whose application or infrastructure ports are already listening, including containers left by
 another interrupted task after its lease was released. It leaves those processes and containers running and queues
 when no slot has free ports; port collisions do not authorize stopping another task's stack.
+Walk stacks do not inherit check-host cgroup placement; OpenSearch and database run on the host's ordinary container
+slice. Worker checks still run on hosts a and b.
 
 ## Cross-media dump cache
 

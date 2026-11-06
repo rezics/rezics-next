@@ -96,6 +96,19 @@ export function walkStackEnvironment(task: string, index: number): Record<string
   };
 }
 
+/** Stack processes keep check-host cgroup placement off; worker checks still run on hosts a and b. */
+export function walkProcessEnvironment(
+  task: string,
+  index: number,
+  env: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE') merged[name] = value;
+  }
+  return { ...merged, ...walkStackEnvironment(task, index) };
+}
+
 /**
  * Waits for one of the host's walk slots. The queue is the stack-lease FIFO, in the walk directory with the walk
  * capacity, so developers' stacks and check slots are not counted here.
