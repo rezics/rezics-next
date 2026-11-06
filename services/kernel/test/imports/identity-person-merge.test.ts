@@ -21,7 +21,7 @@ test('a reviewed Person pair merges once through the native contract and both or
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
     const port = captureShowcaseCommands(runtime.importTransport, journal);
-    const editor = await openApiObserver(runtime);
+    const editor = await openApiObserver(runtime, { reviewedMerge: true });
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
       fetch: fixtureFetch(async (input) => {
