@@ -885,18 +885,6 @@
               "maxLength": 64,
               "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
             },
-            "direction": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "const": "forward"
-                },
-                {
-                  "type": "string",
-                  "const": "inverse"
-                }
-              ]
-            },
             "property": {
               "type": "string",
               "maxLength": 128,
@@ -921,6 +909,42 @@
             },
             "paged": {
               "type": "boolean"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120,
+                  "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+                  },
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*(?![\\s\\S])"
+                  },
+                  "minProperties": 1,
+                  "maxProperties": 16
+                }
+              ]
+            },
+            "direction": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "forward"
+                },
+                {
+                  "type": "string",
+                  "const": "inverse"
+                }
+              ]
             }
           }
         }
