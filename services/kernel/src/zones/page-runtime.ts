@@ -1,4 +1,10 @@
-import { documentRead, planReads, platformRegistry, readCost } from '@rezics/composition';
+import {
+  documentRead,
+  planReads,
+  platformRegistry,
+  readCost,
+  type PageRead as CompositionPageRead,
+} from '@rezics/composition';
 import { parseFilter, type FilterDocument } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
@@ -47,7 +53,7 @@ export function zoneObservedReadKey(descriptor: PageRead, languages?: readonly s
 async function zoneTypeListMembership(
   dependencies: ZoneSourceDependencies,
   input: Parameters<typeof createZoneMembership>[1] & {
-    descriptor: Extract<PageRead, { kind: 'search' } | { kind: 'members' }>;
+    descriptor: Extract<CompositionPageRead, { kind: 'search' } | { kind: 'members' }>;
   },
 ): Promise<ZoneMembership | { status: 404; body: { code: 'not_found' } }> {
   const { descriptor, ...base } = input;

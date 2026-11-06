@@ -28,7 +28,6 @@ const definition = (sort: 'id' | 'ordinal', filter: FilterDocument = presence): 
   sort,
   source: { kind: 'owner' },
   release: { digest: bundledDigest, value: bundledRelease },
-  source: { kind: 'owner' },
 });
 
 /** One finite original, explicitly settled across prepare, prefixes, evaluation and replay. */
