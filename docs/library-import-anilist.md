@@ -60,6 +60,7 @@ each HTTP send once a Subject is mapped on that home, and before direct Rating a
 vote writes cannot leave Mapping pending. They drain held prearm after mapping completes; unpublished
 Search/Library acknowledgements do not pin the group against later Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed;
 native import tests then publish that job so later bootstrap can recapture dirty and a later merge or vote job can start.
+A home is current for later Progress, Rating and merge only after those jobs are published and control pending/prepare pins are empty; mapping-complete pending classification alone does not free home capacity.
 Apply commits selected scores and Progress before independent state so Entry writes cannot dirty the vote or occurrence target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
 `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty
 before Rating, Progress or merge resolve the mapping. Guarded Rating apply uses the same `rating:vote`
