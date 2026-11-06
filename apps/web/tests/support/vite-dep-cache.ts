@@ -33,6 +33,10 @@ export const webViteWorkerSsrOptimizeDeps = {
     'react-dom/server.edge',
     '@tanstack/react-router > @tanstack/react-store',
     '@inlang/paraglide-js/urlpattern-polyfill',
+    // CommonJS packages a Worker graph walk reached raw. Nested parents are not resolvable from the app root.
+    'satori/standalone',
+    '@puckeditor/core > flat',
+    '@puckeditor/core > object-hash',
   ],
   exclude: [...webViteCalendarOptimizeDeps],
 };

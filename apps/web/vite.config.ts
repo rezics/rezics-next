@@ -93,10 +93,12 @@ const linkedDependencyRoot = linkedDependencyAllow(
  * Host-b evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...` and then
  * nothing for 150s. Empty include plus `noDiscovery` printed no Vite line at all. The composition
  * that reaches ready is Web's host-local optimizeDeps cache plus Worker `noDiscovery` with an
- * explicit React/TanStack/paraglide include. The generic `react-dom/server` entry is listed because app source
- * imports it, and under the Worker conditions it resolves to the CommonJS `react-dom/server.edge.js`. An import whose
- * specifier is not listed is served raw, and Worker inspection then fails with `require is not defined`.
- * `react-dom/server.edge` stays listed for any direct import of that entry.
+ * explicit React/TanStack/paraglide include. Every CommonJS package the Worker graph reaches must be listed here or
+ * replaced at load, since a served CommonJS module fails Worker inspection with `require is not defined`. A graph walk
+ * found `react-dom/server` (app source imports it; under the Worker conditions it resolves to `server.edge.js`),
+ * `satori/standalone`, and Puck's `flat` and `object-hash`, which are nested under `@puckeditor/core` because they are
+ * not resolvable from the app root. TipTap imports the `use-sync-external-store` shim files by path, so the selector
+ * plugin replaces them at load. That plugin must run before the denied-dependency loader, which returns raw contents.
  * Calendar packages stay excluded.
  */
 const webRequire = createRequire(import.meta.url);
@@ -467,7 +469,7 @@ export default defineConfig((context) => {
           }
         },
       },
-      workerDeniedDependencies(),
+      // Before the denied-dependency loader, which returns raw file contents for denied paths.
       {
         name: 'web-worker-selector-esm',
         enforce: 'pre',
@@ -478,7 +480,18 @@ export default defineConfig((context) => {
           if (id === workerSelectorImport || id === `${workerSelectorImport}.js`) return workerSelectorShimPath;
           return null;
         },
+        // Raw CommonJS shims are replaced by file identity: TipTap imports these files by path, which bypasses the
+        // bare-specifier mapping above. React exports useSyncExternalStore itself, so the index needs no shim.
+        load(id) {
+          const path = filePathOf(id);
+          if (path.endsWith('/use-sync-external-store/shim/index.js'))
+            return { code: "export { useSyncExternalStore } from 'react';\n", map: null };
+          if (path.endsWith('/use-sync-external-store/shim/with-selector.js'))
+            return { code: `export * from ${JSON.stringify(workerSelectorShimPath)};\n`, map: null };
+          return null;
+        },
       },
+      workerDeniedDependencies(),
     ],
   };
 });
