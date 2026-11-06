@@ -103,7 +103,9 @@ mock.module('../src/community/space-actions', () => ({
     return operations.select(data);
   },
 }));
+const uploadModule = await import('../src/threads/upload');
 mock.module('../src/threads/upload', () => ({
+  ...uploadModule,
   uploadRealmImage: async (realmId: string, purpose: string, _file: File, signal: AbortSignal) => {
     calls.uploads.push({ realmId, purpose, signal });
     return operations.upload(realmId, purpose, signal);

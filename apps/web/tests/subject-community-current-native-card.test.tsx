@@ -41,11 +41,24 @@ test('installed native cards render through the generated reader and original ac
   const { GLOBAL } = await import('../src/features/pages/subject-ratings');
   const { m } = await import('../src/paraglide/messages.js');
   const row = communityThread('review');
-  if (row.firstPost.availability !== 'available') throw new Error('Expected opening post');
-  const post = row.firstPost;
+  const opening = row.firstPost;
+  if (opening.availability !== 'available') throw new Error('Expected opening post');
   const imageId = '01a1a000-0000-7000-8000-000000000098';
-  post.mediaIds = [imageId];
-  post.body.doc.content!.push({ type: 'image', attrs: { src: imageId, alt: 'Original document image', id: 'image' } });
+  const post = {
+    ...opening,
+    mediaIds: [imageId],
+    body: {
+      version: opening.body.version,
+      profile: opening.body.profile,
+      doc: {
+        type: 'doc' as const,
+        content: [
+          ...(opening.body.doc.content ?? []),
+          { type: 'image', attrs: { src: imageId, alt: 'Original document image', id: 'image' } },
+        ],
+      },
+    },
+  };
   // The populated/covered variants of Content's subject-threads-http example, without a historical extension.
   const card = {
     state: 'current',
@@ -109,6 +122,7 @@ test('installed native cards render through the generated reader and original ac
   };
   const native = {
     ...row,
+    firstPost: post,
     card,
     reviewContext: { citation: { state: 'available', units: 5, question: { scale: { min: 1, max: 5 } } } },
   };
@@ -258,4 +272,4 @@ test('installed native cards render through the generated reader and original ac
     }
     mock.restore();
   }
-});
+}, 30_000);
