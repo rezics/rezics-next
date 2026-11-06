@@ -5,6 +5,7 @@ import { HomeFeed } from '../src/features/pages/home-feed';
 import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
 import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
+import { discoveryCollectionCard } from '../src/kernel/fake/discovery-collection-card';
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
 import { threadLocation } from '../src/threads/thread-href';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
@@ -87,7 +88,19 @@ function collectionRow(source: 'following' | 'discovery' = 'following'): FeedIte
         ? { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId }
         : { owner: 'library', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: '2026-11-03T00:00:00Z',
-    summary: { id: collectionId, title: 'Books I come back to', description: 'Short novels.' },
+    summary:
+      source === 'discovery'
+        ? {
+            id: collectionId,
+            title: 'Books I come back to',
+            description: 'Short novels.',
+            card: discoveryCollectionCard({
+              id: collectionId,
+              title: 'Books I come back to',
+              description: 'Short novels.',
+            }),
+          }
+        : { id: collectionId, title: 'Books I come back to', description: 'Short novels.' },
     destination: { kind: 'collection', id: collectionId, title: 'Books I come back to' },
   };
 }

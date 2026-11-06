@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HomeFeed } from '../features/pages/home-feed';
 import type { FeedPage } from '../features/pages/home-feed-read';
+import { discoveryCollectionCard } from '../kernel/fake/discovery-collection-card';
 import { getLocale } from '../paraglide/runtime.js';
 
 const id = '00000000-0000-7000-8000-000000000001';
@@ -13,7 +14,16 @@ const page: FeedPage = {
       source: 'discovery',
       occurredAt: null,
       key: { owner: 'commerce', kind: 'collection', route: 0, id },
-      summary: { id, title: 'Books to revisit', description: 'A small selection for slow reading.' },
+      summary: {
+        id,
+        title: 'Books to revisit',
+        description: 'A small selection for slow reading.',
+        card: discoveryCollectionCard({
+          id,
+          title: 'Books to revisit',
+          description: 'A small selection for slow reading.',
+        }),
+      },
       destination: { kind: 'collection', id, title: 'Books to revisit' },
     },
     {

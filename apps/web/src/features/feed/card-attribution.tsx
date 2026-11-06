@@ -374,7 +374,14 @@ export function FeedCardAttribution({ item, kind, locale }: { item: FeedItem; ki
   const summary = item.summary;
   const options = { locale: locale as Locale };
   const content = kind === 'discussion' || kind === 'reply' || kind === 'review';
-  const cover = 'cover' in summary ? summary.cover : 'avatar' in summary ? summary.avatar : undefined;
+  const cover =
+    'cover' in summary
+      ? summary.cover
+      : 'avatar' in summary
+        ? summary.avatar
+        : 'card' in summary
+          ? summary.card.cover
+          : undefined;
   const authorCover =
     'author' in summary && summary.author && 'avatar' in summary.author ? summary.author.avatar : undefined;
   return (

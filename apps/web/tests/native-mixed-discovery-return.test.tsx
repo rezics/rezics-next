@@ -5,6 +5,7 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { HomeFeed } from '../src/features/pages/home-feed';
 import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
 import { createHomeSpaceSelection, type HomeSpaceResult } from '../src/features/pages/home-feed-spaces';
+import { discoveryCollectionCard } from '../src/kernel/fake/discovery-collection-card';
 import {
   createHomeFeedWindow,
   HOME_FEED_LIMIT,
@@ -53,7 +54,12 @@ function mixedRows(): FeedItem[] {
     source: 'discovery',
     key: { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: null,
-    summary: { id: collectionId, title: 'Reading shelf', description: 'Short novels.' },
+    summary: {
+      id: collectionId,
+      title: 'Reading shelf',
+      description: 'Short novels.',
+      card: discoveryCollectionCard({ id: collectionId, title: 'Reading shelf', description: 'Short novels.' }),
+    },
     destination: { kind: 'collection', id: collectionId, title: 'Reading shelf' },
   };
   const review: FeedItem = {
