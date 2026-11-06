@@ -1,6 +1,5 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, mock, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { limitRead, readLimitKey } from '../src/rate-limit/read.ts';
@@ -10,8 +9,8 @@ import { prepareSession } from '../src/session/request.ts';
 let kernelOrigin = '';
 mock.module('cloudflare:workers', () => ({
   env: {
-    get KERNEL_ORIGIN() {
-      return kernelOrigin;
+      get KERNEL_ORIGIN() {,
+      return kernelOrigin;,
     },
   },
 }));
@@ -275,59 +274,30 @@ function orderRequest(id: string) {
   });
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
+
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000));
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: kernel.url.origin,
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: kernel.url.origin,
         AUTH_ISSUER: `${kernel.url.origin}/auth`,
         WEBSITE_CLIENT_ID: 'rezics-website',
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
         API_RESOURCE: 'https://api.rezics.test',
-        WEBSITE_SCOPES: 'order:create order:read',
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        if ((await fetch(`${origin}/en/`, { redirect: 'manual' })).status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not start:\n${output}`);
-      await Bun.sleep(250);
-    }
-  })();
+        WEBSITE_SCOPES: 'order:create order:read'
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
 afterAll(() => {
   kernel.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 test('checkout start stays within its bound as s grows', async () => {

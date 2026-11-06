@@ -1,13 +1,12 @@
+import { startDevServer } from './support/dev-server.ts';
 import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { waitForPersonalRead } from './session-token';
 
 const app = join(import.meta.dir, '..');
@@ -517,52 +516,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    let closePromise: Promise<void> | undefined;
-    const closeListeningProbe = () =>
-      new Promise<void>((complete, fail) => {
-        probe.close((error) => (error ? fail(error) : complete()));
-      });
-    const closeProbe = () => {
-      if (closePromise) return closePromise;
-      if (probe.listening) {
-        closePromise = closeListeningProbe();
-        return closePromise;
-      }
-      closePromise = new Promise<void>((complete, fail) => {
-        const onListening = () => {
-          probe.off('error', onError);
-          void closeListeningProbe().then(complete, fail);
-        };
-        const onError = () => {
-          probe.off('listening', onListening);
-          complete();
-        };
-        probe.once('listening', onListening);
-        probe.once('error', onError);
-      });
-      return closePromise;
-    };
-    const release = lifetime.retainCleanup(`${label} port probe`, closeProbe);
-    probe.once('error', (error) => {
-      release();
-      reject(error);
-    });
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      void closeProbe().then(() => {
-        release();
-        resolve(port);
-      }, reject);
-    });
-  });
-}
 
-let child: ChildProcess | undefined;
-let serverCustody: ProcessCustody | undefined;
-let started: Promise<string> | undefined;
 const browsers = new Set<Browser>();
 const contexts = new Set<BrowserContext>();
 const browserClosures = new WeakMap<Browser, Promise<void>>();
@@ -593,71 +547,24 @@ function closeContext(context: BrowserContext): Promise<void> {
 }
 
 // The documented command, pointed at the fake through the environment it reads in development.
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
 function site(): Promise<string> {
-  started ??= startWithPort(
-    suiteLifetime,
-    'Home Continue Vite startup',
-    () => freePort(suiteLifetime, 'Home Continue Vite startup'),
-    async (port) => {
-      suiteLifetime.assertActive('Home Continue Vite spawn');
-      child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          KERNEL_ORIGIN: fake.url.origin,
-          AUTH_ISSUER: `${fake.url.origin}/auth`,
-          WEBSITE_CLIENT_ID: clientId,
-          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-          API_RESOURCE: resource,
-          WEBSITE_SCOPES: scopes.join(' '),
-        },
-      });
-      const custody = (serverCustody = ownNodeProcess(child, {
-        label: 'Home Continue Vite server',
-        outputLimit: 8000,
-      }));
-      let spawnError: Error | undefined;
-      child.once('error', (error) => {
-        spawnError = error;
-      });
-      const origin = `http://127.0.0.1:${port}`;
-      const deadline = Date.now() + 150_000;
-      try {
-        for (;;) {
-          suiteLifetime.assertActive('Home Continue Vite readiness');
-          if (spawnError)
-            throw new Error(
-              `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
-              {
-                cause: spawnError,
-              },
-            );
-          const exit = child.exitCode ?? child.signalCode;
-          if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
-          try {
-            const response = await fetch(`${origin}/en`, {
-              redirect: 'manual',
-              signal: AbortSignal.timeout(60_000),
-            });
-            suiteLifetime.assertActive('Home Continue Vite readiness after response');
-            if (response.status < 500) return origin;
-          } catch (error) {
-            if (suiteLifetime.retired) throw error;
-            // The dev server is still starting.
-          }
-          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
-          await Bun.sleep(500);
-          suiteLifetime.assertActive('Home Continue Vite readiness after delay');
-        }
-      } catch (error) {
-        return await withCleanup(async () => {
-          throw error;
-        }, [{ label: 'Home Continue Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
-      }
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: fake.url.origin,
+      AUTH_ISSUER: `${fake.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: clientId,
+      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+      API_RESOURCE: resource,
+      WEBSITE_SCOPES: scopes.join(' '),
     },
-  );
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
@@ -905,7 +812,7 @@ afterAll(() =>
       timeoutMs: 6000,
     })),
     { label: 'Home Continue fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
-    { label: 'Home Continue Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
+    { label: 'Home Continue Vite process group', run: () => server?.stop(), timeoutMs: 7000 },
   ]),
 );
 

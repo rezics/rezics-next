@@ -1,6 +1,5 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
@@ -225,40 +224,20 @@ const kernel = Bun.serve({
 });
 let server: ChildProcess | undefined;
 let originPromise: Promise<string> | undefined;
-function site() {
-  return (originPromise ??= (async () => {
-    const port = await new Promise<number>((resolve, reject) => {
-      const probe = createServer();
-      probe.once('error', reject);
-      probe.listen(0, '127.0.0.1', () => {
-        const { port } = probe.address() as { port: number };
-        probe.close(() => resolve(port));
-      });
-    });
-    const origin = `http://127.0.0.1:${port}`;
-    let output = '';
-    server = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: join(import.meta.dir, '..'),
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KERNEL_ORIGIN: kernel.url.origin, PUBLIC_ORIGIN: origin },
-    });
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    server.stdout!.on('data', keep);
-    server.stderr!.on('data', keep);
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (server.exitCode !== null) throw new Error(`dev server exited: ${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not start: ${output}`);
-      await Bun.sleep(500);
-    }
-  })());
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
+function site(): Promise<string> {
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: kernel.url.origin, PUBLIC_ORIGIN: origin,
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
+  return started;
 }
 afterAll(() => {
   kernel.stop(true);

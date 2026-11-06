@@ -15,6 +15,7 @@ async function runFocused(appDirectory: string, command: string[]): Promise<{ st
   const status = await runFocusedCommand(command, {
     appDirectory,
     prepare: () => 0,
+    place: async () => null,
     onOutput(_stream, chunk) {
       output += new TextDecoder().decode(chunk);
     },
@@ -110,6 +111,44 @@ test('an explicit nested host file executes when bunfig excludes host discovery'
   }
 });
 
+test('a bun test command reuses one with-dev-server wrapper when the app has Vite', async () => {
+  mkdirSync(join(workspace, '.temp'), { recursive: true });
+  const project = mkdtempSync(join(workspace, '.temp/focused-shared-wrap-'));
+  try {
+    mkdirSync(join(project, 'scripts'), { recursive: true });
+    mkdirSync(join(project, 'tests'), { recursive: true });
+    writeFileSync(join(project, 'vite.config.ts'), 'export default {};\n');
+    writeFileSync(
+      join(project, 'scripts', 'with-dev-server.ts'),
+      [
+        "const separator = process.argv.indexOf('--');",
+        'const command = separator < 0 ? process.argv.slice(2) : process.argv.slice(separator + 1);',
+        "const env = { ...process.env, WEB_TEST_DEV_SERVER: 'shared-descriptor.json' };",
+        "console.log('SHARED_WRAP ' + command.join(' '));",
+        "const child = Bun.spawn(command, { stdout: 'inherit', stderr: 'inherit', env });",
+        'process.exitCode = await child.exited;',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(
+      join(project, 'tests', 'one.test.ts'),
+      "import { expect, test } from 'bun:test';\ntest('one', () => { console.log('FILE_ONE ' + process.env.WEB_TEST_DEV_SERVER); expect(process.env.WEB_TEST_DEV_SERVER).toBe('shared-descriptor.json'); });\n",
+    );
+    writeFileSync(
+      join(project, 'tests', 'two.test.ts'),
+      "import { expect, test } from 'bun:test';\ntest('two', () => { console.log('FILE_TWO ' + process.env.WEB_TEST_DEV_SERVER); expect(process.env.WEB_TEST_DEV_SERVER).toBe('shared-descriptor.json'); });\n",
+    );
+    const result = await runFocused(project, ['bun', 'test', 'tests/one.test.ts', 'tests/two.test.ts']);
+    expect(result.status, result.output).toBe(0);
+    expect(result.output).toContain('SHARED_WRAP bun test tests/one.test.ts tests/two.test.ts');
+    expect(result.output.match(/SHARED_WRAP /g)?.length).toBe(1);
+    expect(result.output).toContain('FILE_ONE shared-descriptor.json');
+    expect(result.output).toContain('FILE_TWO shared-descriptor.json');
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('forwards the focused command, uses owned test state, and never requests a stack lease', async () => {
   const leaseDirectory = join(temporary, 'must-not-be-created');
   const output = outputGate('ARGUMENTS:');
@@ -118,6 +157,7 @@ test('forwards the focused command, uses owned test state, and never requests a 
   const status = await runFocusedCommand(
     command("console.log('ARGUMENTS:' + JSON.stringify(process.argv.slice(-2)))", ['one argument', 'two']),
     {
+      place: async () => null,
       env: {
         GOAL_TASK_ID: '',
         REZICS_STACK_REMOTE: 'off',
@@ -154,6 +194,7 @@ test('keeps simultaneous focused children isolated and cleans each owner after i
       "const fs=require('node:fs'); const path=require('node:path'); const dir=process.env.WEB_TEST_STATE_DIR; fs.writeFileSync(path.join(dir,'first-state'),'kept'); const keepAlive=setInterval(()=>{},60000); process.once('SIGUSR1',()=>{ clearInterval(keepAlive); console.log('FIRST_RELEASED'); process.exit(0) }); console.log('FIRST_READY');",
     ),
     {
+      place: async () => null,
       prepare: () => 0,
       onStart: (runtime) => (firstRuntime = runtime),
       onOutput: firstReady.onOutput,
@@ -170,6 +211,7 @@ test('keeps simultaneous focused children isolated and cleans each owner after i
         "const fs=require('node:fs'); const path=require('node:path'); const dir=process.env.WEB_TEST_STATE_DIR; fs.writeFileSync(path.join(dir,'second-state'),'private'); console.log('SECOND_DONE');",
       ),
       {
+        place: async () => null,
         prepare: () => 0,
         onStart: (runtime) => (secondStateDirectory = runtime.stateDirectory),
         onOutput: secondOutput.onOutput,
@@ -204,6 +246,7 @@ test('forwards a runner signal to its child and removes owned state after shutdo
   const wrapperSource = [
     `import { runFocusedCommand } from ${JSON.stringify(runnerPath)};`,
     `process.exitCode = await runFocusedCommand([process.execPath, '-e', ${JSON.stringify(childSource)}], {`,
+    '  place: async () => null,',
     '  prepare: () => 0,',
     '  onStart: ({ stateDirectory }) => console.log(`STATE:${stateDirectory}`),',
     '});',

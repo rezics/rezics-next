@@ -1,13 +1,12 @@
+import { startDevServer } from './support/dev-server.ts';
 import { waitForPersonalRead } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
-import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
-import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, withCleanup } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
@@ -164,19 +163,7 @@ const kernel = Bun.serve({
   fetch: () => json({ error: 'not_found' }, 404),
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
-let custody: ProcessCustody | undefined;
-let started: Promise<string> | undefined;
 type ResourceScope = 'suite' | 'test';
 type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
 type ResourceLease<T> = OwnedResource & { value: Promise<T> };
@@ -263,48 +250,25 @@ function lifetimeTest(name: string, operation: () => Promise<void>, timeoutMs?: 
 }
 
 // The documented command, pointed at the fakes through the environment it reads in development.
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    const origin = `http://127.0.0.1:${port}`;
-    try {
-      if (teardownStarted) throw new Error('Session-controls Vite acquisition began after suite teardown');
-      const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          KERNEL_ORIGIN: kernel.url.origin,
-          PUBLIC_ORIGIN: origin,
-          AUTH_ISSUER: `${fake.url.origin}/auth`,
-          WEBSITE_CLIENT_ID: clientId,
-          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-          API_RESOURCE: resource,
-          WEBSITE_SCOPES: scopes.join(' '),
-        },
-      });
-      custody = ownNodeProcess(child, { label: 'Session-controls Vite server', outputLimit: 8000 });
-      const deadline = Date.now() + 150_000;
-      for (;;) {
-        if (teardownStarted) throw new Error('Session-controls Vite readiness ended when suite teardown began');
-        if (child.exitCode !== null)
-          throw new Error(`dev server exited with ${child.exitCode}:\n${custody.diagnostics()}`);
-        try {
-          const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-          if (response.status < 500) return origin;
-        } catch {}
-        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
-        await Bun.sleep(500);
-      }
-    } catch (error) {
-      if (!custody) throw error;
-      await withCleanup(async () => {
-        throw error;
-      }, [{ label: 'Session-controls Vite startup', run: () => custody!.close(), timeoutMs: 7000 }]);
-      throw error;
-    }
-  })();
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: kernel.url.origin,
+      PUBLIC_ORIGIN: origin,
+      AUTH_ISSUER: `${fake.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: clientId,
+      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+      API_RESOURCE: resource,
+      WEBSITE_SCOPES: scopes.join(' '),
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
@@ -347,7 +311,7 @@ afterAll(async () => {
     () => cleanupAll(resourceCleanupActions('test')),
     [
       ...resourceCleanupActions('suite'),
-      { label: 'Session-controls Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+      { label: 'Session-controls Vite server', run: () => server?.stop(), timeoutMs: 7000 },
       { label: 'Session-controls Auth fake', run: () => fake.stop(true), timeoutMs: 5000 },
       { label: 'Session-controls kernel fake', run: () => kernel.stop(true), timeoutMs: 5000 },
     ],

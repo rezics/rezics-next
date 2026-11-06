@@ -16,6 +16,22 @@ function isWithin(parent: string, child: string): boolean {
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
+test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows reading it', async () => {
+  const previous = process.env.WEB_VITE_CACHE_DIR;
+  const cacheDir = join(tmpdir(), 'rezics-web-vite-cache-config');
+  process.env.WEB_VITE_CACHE_DIR = cacheDir;
+  try {
+    const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
+    expect(config.cacheDir).toBe(cacheDir);
+    expect(config.server?.fs?.allow).toContain(cacheDir);
+    expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+    expect(config.ssr?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
+    else process.env.WEB_VITE_CACHE_DIR = previous;
+  }
+});
+
 test('Vite serves resolved workspace dependencies while keeping files outside its roots denied', async () => {
   // This is a build-time config inspection, not a fixture runtime, so it does not allocate Worker persistence.
   const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
