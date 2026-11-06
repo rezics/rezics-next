@@ -116,17 +116,22 @@ function isPresentation(value: unknown): value is NativeCopyPresentation {
   );
 }
 
-const omittedCondition: CopyConditionPresentation = {
+const omittedCondition = {
   mediaCondition: { state: 'not_recorded' },
   packagingCondition: { state: 'not_recorded' },
   conditionEditing: { state: 'unavailable', currentness: 'unavailable', reason: 'current_source_unavailable' },
-};
+} satisfies CopyConditionPresentation;
 
-function conditionPresentation(presentation: NativeCopyPresentation): CopyConditionPresentation {
+function conditionPresentation(
+  presentation: NativeCopyPresentation,
+): Pick<NativeCopyPresentation, 'mediaCondition' | 'packagingCondition' | 'conditionEditing'> {
   return {
     mediaCondition: presentation.mediaCondition ?? omittedCondition.mediaCondition,
     packagingCondition: presentation.packagingCondition ?? omittedCondition.packagingCondition,
-    conditionEditing: presentation.conditionEditing ?? omittedCondition.conditionEditing,
+    conditionEditing:
+      presentation.conditionEditing.state === 'supported'
+        ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
+        : presentation.conditionEditing,
   };
 }
 

@@ -1,4 +1,5 @@
 import { m } from '../paraglide/messages.js';
+import { copyConditionDraftOf } from './copy-condition';
 import type { CopyDraft } from './copy-fields';
 import type { CopyItem } from './copies-read';
 
@@ -17,6 +18,8 @@ export function adoptCopyConflictDraft(
     acquiredOn: empty(incoming.acquiredOn),
     disposedOn: empty(incoming.disposedOn),
     note: empty(incoming.note),
+    mediaCondition: copyConditionDraftOf(incoming.mediaCondition),
+    packagingCondition: copyConditionDraftOf(incoming.packagingCondition),
   };
   const draft = { ...incomingDraft };
   for (const key of Object.keys(incomingDraft) as (keyof CopyDraft)[]) {

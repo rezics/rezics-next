@@ -283,7 +283,10 @@ export function CopyConditionFields({
   onChange: <K extends keyof CopyDraft>(field: K, value: CopyDraft[K]) => void;
 }) {
   const supported = editing?.state === 'supported';
-  const choices = supported && editing.choices.length ? editing.choices : copyConditionChoices();
+  const choices =
+    supported && editing.choices.length
+      ? editing.choices.map(({ id, label }) => ({ id, label }))
+      : copyConditionChoices();
   return (
     <section className="min-w-0 space-y-4">
       <header className="space-y-1">

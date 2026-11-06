@@ -4,6 +4,7 @@ import type { GatedOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { CalendarDayField } from './calendar-day-field';
 import type { CopyItem } from './copies-read';
+import type { OpenCopyLoanRead } from './loans-actions';
 import type { LoanWriteResult, LoansPageData } from './loans-read';
 
 const button =
@@ -62,7 +63,7 @@ export function CopyLoanPanel({
       if (!originatingRef.current.isCurrent('copy.list')) return;
       try {
         const { readOpenCopyLoan } = await import('./loans-actions');
-        const result = await readOpenCopyLoan({ data: { copyId: copy.id } });
+        const result = (await readOpenCopyLoan({ data: { copyId: copy.id } })) as OpenCopyLoanRead;
         if (!active || !originatingRef.current.isCurrent('copy.list')) return;
         if (result.page.boundary?.today) {
           setToday(result.page.boundary.today);
