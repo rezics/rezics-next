@@ -384,3 +384,5 @@ Decision: receive Catalogue 3e85da05fe saved-query consumer as pageObservation l
 Decision: typecheck repairs keep NativePermissionProjection.deadlineLive, one savedCatalogueMembers fixture method, shelf hrefs that omit a null cursor, and received-entry incarnation identity as null rather than undefined.
 
 Decision: Kernel typecheck keeps SearchHit.matchEvidence on the saved-catalogue page fixture, one unused savedCatalogueMembers method on SearchService test doubles, and removes the duplicate second-scope method.
+
+Decision: check b33b1673 is the landing gate; type errors it printed sit outside changed files on base, so this landing does not repair whole-workspace web typecheck:root or loop the recorded native/web failures.
