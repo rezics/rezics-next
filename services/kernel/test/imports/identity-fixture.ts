@@ -278,6 +278,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   const statisticScopes = options.sourceStatistics === 'vndb' ? ['source_statistic:write'] : [];
   const managementScopes = [
     ...importerScopes,
+    'statement:propose',
     ...statisticScopes,
     ...(options.sourceStatistics === 'vndb' ? ['exposure:open'] : []),
     'access:grant',
