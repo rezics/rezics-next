@@ -293,6 +293,15 @@ function button(host: HTMLElement, label: string): HTMLButtonElement {
   if (!match) throw new Error(`Missing button: ${label}`);
   return match;
 }
+function setInput(host: HTMLElement, selector: string, value: string) {
+  const target = host.querySelector<HTMLInputElement>(selector);
+  if (!target) throw new Error(`Missing input: ${selector}`);
+  const key = Object.keys(target).find((entry) => entry.startsWith('__reactProps$'));
+  const onChange = key && Reflect.get(target, key)?.onChange;
+  target.value = value;
+  if (typeof onChange === 'function') onChange({ target, currentTarget: target });
+  else target.dispatchEvent(new window.Event('input', { bubbles: true }));
+}
 
 test('Mounted Zone editor Delete1 Restore2 save and uncertain replay share the current reading', async () => {
   setLocale('en', { reload: false });
@@ -360,9 +369,8 @@ test('Mounted Zone editor Delete1 Restore2 save and uncertain replay share the c
     expect(restore.data.key).not.toBe(lifecycleCalls[0]!.data.key);
     expect(button(host, 'Delete zone')).toBeTruthy();
     expect(host.textContent).toContain(m.zone_editor_saved_head({ revision: '3' }));
-    const name = host.querySelector<HTMLInputElement>('#zone-label-en')!;
-    name.value = 'Saved before lifecycle';
-    name.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await settle(() => setInput(host, '#zone-label-en', 'Saved before lifecycle'));
+    await until(() => !button(host, m.zone_editor_save()).disabled);
     await settle(() => button(host, m.zone_editor_save()).click());
     await until(() => mutateCalls.length === 1 && !host.querySelector('[aria-busy="true"]'));
     expect(mutateCalls[0]!.revision).toBe('3');

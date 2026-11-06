@@ -487,6 +487,7 @@ test('mounted My Zones to publish journey keeps async state in its original read
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
+  try {
   await settle(() =>
     root.render(
       <StrictMode>
@@ -615,7 +616,11 @@ test('mounted My Zones to publish journey keeps async state in its original read
   lateCreate.resolve({ kind: 'saved', zone: fixtureZone(), ownerObservation: createCalls.at(-1)!.capture });
   await flush();
   expect(navigations).toHaveLength(1);
-  await settle(() => root.unmount());
+  } finally {
+    await settle(() => root.unmount());
+    host.remove();
+    await settle(() => router.navigate({ to: '/my/zones' }));
+  }
 });
 
 test('ZoneEditorSession ignores delayed results after error, removal, replacement, ABA, and unmount', async () => {
@@ -788,12 +793,6 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
 test('mounted editor lifecycle stays on its captured owner visit after replacement', async () => {
   const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
   try {
-    if (editorLoaded.resource.kind === 'ready') {
-      editorLoaded.resource.value.zone.revision = '1';
-      editorLoaded.resource.value.zone.deletedAt = null;
-    }
-    await settle(() => visit.router.invalidate());
-    await until(() => !!visit.host.querySelector('#zone-label-en') && !!button(visit.host, 'Delete zone'));
     const pending = deferred<Result<LifecycleReading>>();
     heldEditorLifecycle = pending;
     const before = editorLifecycles.length;
