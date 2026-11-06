@@ -177,6 +177,10 @@ the board projection. Shared-database board-read current-role projection repair 
 `grant.create` re-authenticates the governance bearer on that Access so command admission binds the same actor
 snapshot; Content's `native.auth.issue` actor object is not admitted there.
 Order and Checkout sale capture use the same Auth consent reader as offer create.
+Paid genuine-order settlement for this fixture is applied through that same parent Access and
+Auth-database consent reader. The worker child compiles a second Access and cannot restore mechanical
+sale authority while Accounts' board current-role projection remains unrepaired; its webhook then
+replays the committed payment.
 `prepareNativeRetainedOrder` is the Accounts terminal-graph export. Fresh `POST /v1/offers` sends only
 `contentEditionId` and ordinary commercial terms; `targetSubjectId` is the historical-replay body and is rejected
 on the same object. Native `POST /v1/orders` binds `expectedOfferRevision` from public `GET /v1/offers/:offerId`;

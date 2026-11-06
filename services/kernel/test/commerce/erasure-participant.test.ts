@@ -367,13 +367,15 @@ describe('native genuine-order retention', () => {
     ).order as { id: string };
     const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;
     provider.fake.pay(firstNative.checkoutSessionId!);
+    // Paid settlement uses this kernel's Content Access and Auth-database consent.
+    // The worker child compiles a second Access; that is Accounts' Diagnostic7 seam.
+    await commands.applyCheckoutSnapshot(
+      await stripe.readCheckout(firstNative.checkoutSessionId!),
+      crypto.randomUUID(),
+    );
+    const entitlement = (await entitlementRows(buyer.accountId))[0]?.entitlement_id as string | undefined;
+    if (!entitlement) throw new Error('Native paid order did not grant an entitlement');
     await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
-    const entitlement = (
-      await waitUntil(
-        async () => entitlementRows(buyer.accountId),
-        (rows) => rows.length === 1,
-      )
-    )[0]!.entitlement_id as string;
     const second = (
       await accepted(buyer, '/v1/orders', { offerId: lateOffer.id, expectedOfferRevision: lateOffer.revision })
     ).order as { id: string };

@@ -1016,6 +1016,9 @@ page stays that owner's repair. Financial outcome-driver children use the same l
 the effects consumer to catch up and the 5ms queue poll. Tombstone drain waits for that envelope, not a moving
 partition head. Paid-order checks wait for committed entitlement and settlement rows. Ceiling is 120s.
 The board-read current-role projection stays with Accounts.
+Decision: paid genuine-order settlement uses the parent kernel's Content Access and Auth-database
+consent; the worker child's second Access cannot restore mechanical sale authority until that
+projection is repaired, and its webhook replays the committed payment.
 Decision: fresh native `POST /v1/offers` sends only `contentEditionId` and ordinary commercial terms;
 `targetSubjectId` is the historical-replay body and is rejected on the same object. Native genuine-order
 acceptance reads `expectedOfferRevision` from public `GET /v1/offers/:offerId`; seller create responses stay
