@@ -902,6 +902,7 @@ async function stepIdentityEpochAdmissionWithinDeadline(
         return { job: ref, state: 'cancelling', work: measured };
       }
       // A real wake commits with source-validation custody; no fanout is hidden in this step.
+      measured.rows += 1;
       return { job: ref, state: saved.state, work: measured };
     }
     try {
@@ -911,6 +912,8 @@ async function stepIdentityEpochAdmissionWithinDeadline(
       await cancelIdentityEpochAdmission(pool, ref);
       return { job: ref, state: 'cancelling', work: measured };
     }
+    // A committed prearm page or phase is progress; the coordinator treats a step without rows as stalled.
+    measured.rows += 1;
     return { job: ref, state: saved.state, work: measured };
   }
   const next = planned.find((p) =>
@@ -937,6 +940,8 @@ async function stepIdentityEpochAdmissionWithinDeadline(
         identityJobPartition(ref),
       ]);
       if (recorded.rowCount !== 1) throw stale();
+      // A committed custody record is one row of progress, independent of its point and byte accounting.
+      measured.rows += 1;
       if (stage === 'acquired')
         await query(
           tx,
