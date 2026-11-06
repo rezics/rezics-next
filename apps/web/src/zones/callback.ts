@@ -1,5 +1,5 @@
 import type { ZoneVisit } from './visit.ts';
-import { zoneVisitIdentity } from './visit.ts';
+import { zoneVisitIdentity, zoneVisitWithoutCursor } from './visit.ts';
 
 /** Stable Zone callback identity: locale, Zone, target and quoted revision. Not a second scope engine. */
 export type ZoneCallbackIdentity = {
@@ -22,7 +22,7 @@ export function replaceZoneCallback(
   nextRevision: string,
 ): ZoneCallbackIdentity | undefined {
   if (current.revision === nextRevision) return current;
-  return zoneCallbackIdentity({ ...current.visit, cursor: undefined }, nextRevision);
+  return zoneCallbackIdentity(zoneVisitWithoutCursor(current.visit), nextRevision);
 }
 
 /** Keep one callback for the current visit; a new revision or target retires the previous identity. */

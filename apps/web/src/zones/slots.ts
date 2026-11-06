@@ -78,7 +78,7 @@ export function projectZoneSlots(page: ReceivedZonePage, visit: ZoneVisit): Zone
     listHref: (node, cursor) => {
       if (visit.target.kind !== 'route') return undefined;
       void node;
-      return zoneListHref(routeVisit as Extract<ZoneVisit, { target: { kind: 'route' } }>, cursor);
+      return zoneListHref(routeVisit, cursor);
     },
     memberHref: (subject) => zoneMemberHref(visit, subject),
     canonicalHref: (subject) => zoneCanonicalSubjectHref(visit, subject),

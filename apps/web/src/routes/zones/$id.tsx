@@ -4,19 +4,19 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { ZoneComposedPage } from '../../zones/page';
 import { ZoneReadBoundary, zonePageTitle } from '../../zones/zone-shell';
 import { readZonePageRequest } from '../../zones/zone-read';
-import { zonePageSearch } from '../../zones/visit';
+import { zoneLocationSearch, zonePageSearch } from '../../zones/visit';
 
 export const Route = createFileRoute('/zones/$id')({
   staticData: { sessionReread: true },
   validateSearch: (search: Record<string, unknown>) => zonePageSearch(search),
-  loader: ({ params, context, search }) =>
+  loader: ({ params, context, location }) =>
     readZonePageRequest({
       data: {
         id: params.id,
         locale: getLocale(),
         target: { route: '' },
         credentialMode: context.credentialMode,
-        ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+        ...zoneLocationSearch(location.search),
       },
     }),
   head: ({ loaderData }) => ({
@@ -32,7 +32,7 @@ export const Route = createFileRoute('/zones/$id')({
 
 function ZoneHomeRoute() {
   const { id } = Route.useParams();
-  const search = Route.useSearch();
+  const search = zoneLocationSearch(Route.useSearch());
   const initial = Route.useLoaderData();
   const { credentialMode } = Route.useRouteContext();
   const locale = getLocale();
@@ -45,7 +45,7 @@ function ZoneHomeRoute() {
         locale,
         target: { route: '' },
         credentialMode,
-        ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+        ...search,
       }}
     >
       {(outcome) => (
@@ -55,7 +55,7 @@ function ZoneHomeRoute() {
             locale,
             zoneId: id,
             target: { kind: 'route', route: '' },
-            ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+            ...search,
           }}
           {...(nonce !== undefined ? { nonce } : {})}
         />

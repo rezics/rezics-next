@@ -463,11 +463,9 @@ export function MemberList({
           value={value}
           label={title}
           memberFacts={memberFacts}
-          itemVisit={
-            value.memberHref
-              ? (item) => ({ href: value.memberHref!({ id: item.id, label: item.label.text }) })
-              : undefined
-          }
+          {...(value.memberHref
+            ? { itemVisit: (item: Item) => ({ href: value.memberHref!({ id: item.id, label: item.label.text }) }) }
+            : {})}
         />
       )}
       {failed && failed.status !== 202 ? (

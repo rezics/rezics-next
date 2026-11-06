@@ -3,13 +3,13 @@ import type { ComponentProps, ReactNode } from 'react';
 import { RoutePage, type RoutePageData } from '../features/pages/route';
 import { subjectPageMessages } from '../features/pages/route-support';
 import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
-import type { PageLink } from '../features/pages/shared';
+import type { LinkProps, PageLink } from '../features/pages/shared';
 import { ZonePageSurface, ZoneShell, zonePageTitle, zoneRouteHeading } from './zone-shell';
 import type { ReceivedZonePage } from './receive.ts';
 import { projectZoneSlots } from './slots.ts';
-import { zoneVisitHref, type ZoneVisit } from './visit.ts';
+import { zoneVisitWithoutCursor, zoneVisitHref, type ZoneVisit } from './visit.ts';
 
-function ZoneMemberLink({ href, lang, className, children }: Parameters<PageLink>[0]) {
+function ZoneMemberLink({ href, lang, className, children }: LinkProps) {
   return (
     <a href={href} lang={lang} className={className}>
       {children}
@@ -71,7 +71,7 @@ export function ZoneComposedPage({
 }
 
 export function zoneReturnTo(visit: ZoneVisit): string {
-  return zoneVisitHref({ ...visit, cursor: undefined });
+  return zoneVisitHref(zoneVisitWithoutCursor(visit));
 }
 
 export type ZoneComposedPageProps = ComponentProps<typeof ZoneComposedPage>;

@@ -4,7 +4,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { ZoneComposedPage } from '../../zones/page';
 import { ZoneReadBoundary, zonePageTitle } from '../../zones/zone-shell';
 import { readZonePageRequest } from '../../zones/zone-read';
-import { zoneConfiguredRoute, zonePageSearch } from '../../zones/visit';
+import { zoneConfiguredRoute, zoneLocationSearch, zonePageSearch } from '../../zones/visit';
 
 function routeOf(value: string | undefined): string {
   const route = zoneConfiguredRoute(value);
@@ -15,7 +15,7 @@ function routeOf(value: string | undefined): string {
 export const Route = createFileRoute('/zones/$id_/$')({
   staticData: { sessionReread: true },
   validateSearch: (search: Record<string, unknown>) => zonePageSearch(search),
-  loader: ({ params, context, search }) => {
+  loader: ({ params, context, location }) => {
     const route = routeOf(params._splat);
     return readZonePageRequest({
       data: {
@@ -23,7 +23,7 @@ export const Route = createFileRoute('/zones/$id_/$')({
         locale: getLocale(),
         target: { route },
         credentialMode: context.credentialMode,
-        ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+        ...zoneLocationSearch(location.search),
       },
     });
   },
@@ -43,7 +43,7 @@ export const Route = createFileRoute('/zones/$id_/$')({
 function ConfiguredZoneRoute() {
   const { id } = Route.useParams();
   const route = routeOf(Route.useParams()._splat);
-  const search = Route.useSearch();
+  const search = zoneLocationSearch(Route.useSearch());
   const initial = Route.useLoaderData();
   const { credentialMode } = Route.useRouteContext();
   const locale = getLocale();
@@ -57,7 +57,7 @@ function ConfiguredZoneRoute() {
         locale,
         target,
         credentialMode,
-        ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+        ...search,
       }}
     >
       {(outcome) => (
@@ -67,7 +67,7 @@ function ConfiguredZoneRoute() {
             locale,
             zoneId: id,
             target: { kind: 'route', route },
-            ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+            ...search,
           }}
           {...(nonce !== undefined ? { nonce } : {})}
         />

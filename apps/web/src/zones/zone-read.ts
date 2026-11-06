@@ -11,7 +11,7 @@ import type { SessionEnv } from '../session/client';
 import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject';
 import { loadViewPages } from '../features/pages/subject-frame';
 import { locales } from '../paraglide/runtime.js';
-import { isolatePublicZonePage, receiveZonePage } from './receive.ts';
+import { isolatePublicZonePage, receiveZonePage, type ReceivedZonePage } from './receive.ts';
 import { nextKernelSession, zoneKernelHeaders } from './session.ts';
 import { applyZoneTransport, zoneRequestTransport, zoneTransportHeaders } from './transport.ts';
 import { validZoneCursor } from './visit.ts';
@@ -33,7 +33,7 @@ type ZoneRouteClient = {
 };
 
 export type ZonePageOutcome =
-  | { kind: 'page'; page: ZonePageResponse }
+  | { kind: 'page'; page: ReceivedZonePage }
   | { kind: 'preparing'; cursor?: string; retryAfter: string }
   | { kind: 'unavailable'; retryAfter: string }
   | { kind: 'missing' }
@@ -42,7 +42,7 @@ export type ZonePageOutcome =
 export type ZonePageRouteOutcome =
   | {
       kind: 'page';
-      page: ZonePageResponse;
+      page: ReceivedZonePage;
       common?: {
         page: SubjectPageData;
         overview: SubjectPageData;
@@ -144,12 +144,18 @@ export async function readZonePage(
   for (let attempt = 0; attempt <= (follow ? 4 : 0); attempt++) {
     let result: Awaited<ReturnType<typeof zone.$readPage.post>>;
     try {
-      result = await zone.$readPage.post(request, {
-        ...(cursor === undefined ? {} : { query: { cursor } }),
-        ...(zoneKernelHeaders({ authorization: options.authorization, kernelSession })
-          ? { headers: zoneKernelHeaders({ authorization: options.authorization, kernelSession }) }
-          : {}),
-      });
+      const binding = {
+        ...(options.authorization === undefined ? {} : { authorization: options.authorization }),
+        ...(kernelSession === undefined ? {} : { kernelSession }),
+      };
+      const headers = zoneKernelHeaders(binding);
+      const call: {
+        query?: ZonePageQuery;
+        headers?: NonNullable<ReturnType<typeof zoneKernelHeaders>>;
+      } = {};
+      if (cursor !== undefined) call.query = { cursor };
+      if (headers !== undefined) call.headers = headers;
+      result = await zone.$readPage.post(request, call);
     } catch {
       return { kind: 'error' };
     }
@@ -166,10 +172,7 @@ export async function readZonePage(
       if (!received) return { kind: 'error' };
       return {
         kind: 'page',
-        page: isolatePublicZonePage(
-          received,
-          options.session === true && options.authorization !== undefined,
-        ) as ZonePageResponse,
+        page: isolatePublicZonePage(received, options.session === true && options.authorization !== undefined),
       };
     }
     if (result.status === 503) return { kind: 'unavailable', retryAfter: retryAfter(result.response) };

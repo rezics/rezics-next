@@ -106,13 +106,13 @@ export function TypeList(props: Record<string, unknown>) {
               label={title.text}
               preview={full !== id}
               memberCatalogue={Object.fromEntries((page?.subjects ?? []).map((hit) => [hit.id, hit.catalogue]))}
-              itemVisit={
-                memberHref || value.memberHref
-                  ? (item) => ({
+              {...(memberHref || value.memberHref
+                ? {
+                    itemVisit: (item) => ({
                       href: (memberHref ?? value.memberHref)!({ id: item.id, label: item.label.text }),
-                    })
-                  : undefined
-              }
+                    }),
+                  }
+                : {})}
             />
           ) : (
             <p role="status">{m.search_no_results({}, options)}</p>

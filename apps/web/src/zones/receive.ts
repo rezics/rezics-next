@@ -94,17 +94,18 @@ export function receiveZonePublic(value: unknown): ZonePublic | undefined {
       (typeof value.primaryLanguage !== 'string' || !(UI_LOCALES as readonly string[]).includes(value.primaryLanguage)))
   )
     return;
-  return {
+  const zone: ZonePublic = {
     id: value.id,
     revision: value.revision,
     labels,
-    ...(typeof value.primaryLanguage === 'string'
-      ? { primaryLanguage: value.primaryLanguage as ZonePublic['primaryLanguage'] }
-      : {}),
     visibility: value.visibility as ZonePublic['visibility'],
     appearance,
     navigation: items,
   };
+  if (typeof value.primaryLanguage === 'string') {
+    zone.primaryLanguage = value.primaryLanguage as NonNullable<ZonePublic['primaryLanguage']>;
+  }
+  return zone;
 }
 
 function template(value: unknown): ZonePageResponse['template'] | undefined {
@@ -119,7 +120,7 @@ function template(value: unknown): ZonePageResponse['template'] | undefined {
 
 function documentOf(value: unknown): CompositionDocument | undefined {
   if (!isRecord(value) || !isRecord(value.root) || !isRecord(value.root.props) || !Array.isArray(value.content)) return;
-  return value as CompositionDocument;
+  return value as unknown as CompositionDocument;
 }
 
 export type ReceivedRead = { status: number; body: unknown; retryAt?: number };

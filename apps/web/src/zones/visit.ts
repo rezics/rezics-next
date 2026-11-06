@@ -86,8 +86,19 @@ export function zoneVisitHref(visit: ZoneVisit): string {
   return zoneRouteHref(visit.locale, visit.zoneId, visit.target.route, visit.cursor);
 }
 
-export function zoneListHref(visit: Extract<ZoneVisit, { target: { kind: 'route' } }>, cursor?: string): string {
-  return zoneRouteHref(visit.locale, visit.zoneId, visit.target.route, cursor);
+export function zoneListHref(visit: ZoneVisit, cursor?: string): string {
+  const route = visit.target.kind === 'route' ? visit.target.route : '';
+  return zoneRouteHref(visit.locale, visit.zoneId, route, cursor);
+}
+
+/** Drop continuation without assigning `cursor: undefined` under exact optional properties. */
+export function zoneVisitWithoutCursor(visit: ZoneVisit): ZoneVisit {
+  return { locale: visit.locale, zoneId: visit.zoneId, target: visit.target };
+}
+
+export function zoneLocationSearch(search: unknown): ZonePageSearch {
+  if (search === null || typeof search !== 'object' || Array.isArray(search)) return {};
+  return zonePageSearch(search as Record<string, unknown>);
 }
 
 export function zoneMemberHref(visit: ZoneVisit, subject: { id: string }): string {
