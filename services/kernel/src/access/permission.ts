@@ -332,8 +332,19 @@ export async function checkPermission(
   return (await checkPreparedPermission(client, actor, action, resource, evidence, time, clock)).allowed;
 }
 
+/** A point Resource omits its type, so only a single registered type is inferable. The Global Context has no
+ * type: platform governance holds its actions as exact role grants there, so SQL booleans decide that resource. */
+function inferredPolicyResourceType(
+  catalogue: Prepared['policyCatalogue'],
+  action: string,
+  resource: Resource,
+): string | undefined {
+  return isPlatformResource(resource) ? undefined : uniqueNativePolicyResourceType(catalogue, action);
+}
+
 // DIAG-TEMP: deny-reason probe; remove after the grant and Collection read denials are explained.
 let diagDenies = 0;
+let diagPrepares = 0;
 async function checkPreparedPermission(
   client: AccessClient,
   actor: Actor,
@@ -427,7 +438,7 @@ async function checkPreparedPermissionCore(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const policyResourceType = page?.resourceType ?? uniqueNativePolicyResourceType(facts.policyCatalogue, action);
+    const policyResourceType = page?.resourceType ?? inferredPolicyResourceType(facts.policyCatalogue, action, resource);
     const policyCore =
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
@@ -568,7 +579,7 @@ function preparedCheckWork(
     if (facts.verifyFloor && !owner) return undefined;
     // false is the larger serialized boolean; the mounted native plan is identical
     // for either eligibility outcome. Undispatched branches settle at zero.
-    const resourceType = uniqueNativePolicyResourceType(facts.policyCatalogue, action);
+    const resourceType = inferredPolicyResourceType(facts.policyCatalogue, action, resource);
     const policyCore =
       resourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, resourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, false, policyCore);
@@ -637,6 +648,33 @@ export function createAccess(config: PermissionConfig): Access {
     perId = false,
   ) {
     const evidence = Object.freeze({});
+    // DIAG-TEMP: remove after the Collection read denial origin is known.
+    if (action === 'collection:read' && diagPrepares++ < 80) {
+      const account =
+        actor.kind === 'account' ? (standingAccounts.get(actor) ?? config.accountEvidence(actor, context)) : undefined;
+      console.error(
+        'DIAG-TEMP prepare collection:read',
+        JSON.stringify({
+          metadata: actions.has(action),
+          routeOk: routeOf(resource.id) === resource.route,
+          actor: actor.kind,
+          clientIdSet: actor.kind === 'account' ? !!actor.clientId : null,
+          authnEpoch: actor.kind === 'account' ? (actor.authnEpoch ?? null) : null,
+          scopeCount: actor.kind === 'account' ? actor.scopes.length : null,
+          account: account
+            ? {
+                kind: account.kind,
+                state: account.state,
+                fenced: account.fenced,
+                minimumAuthnEpoch: String(account.minimumAuthnEpoch),
+                route: account.route,
+                sameAccount: actor.kind === 'account' && account.accountId === actor.accountId,
+              }
+            : null,
+          eligible: account && actor.kind === 'account' ? eligible(account, actor) : null,
+        }),
+      );
+    }
     const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
     try {
       requireAccessDeadline(deadline);
