@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'bun:test';
-import { bundledRelease } from '../src/bundled.ts';
+import { bundledDigest, bundledRelease } from '../src/bundled.ts';
+import { releaseDigest, validateRelease } from '../src/index.ts';
 
 const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
 const filterable = ['wikibase-item', 'time', 'quantity'];
@@ -125,6 +126,17 @@ test('a series carries its own Bangumi identifier, source-precision date and sum
     multivalued: true,
     value: { required: ['language', 'document'] },
   });
+});
+
+test('the current series release is a new digest and previous pinned releases still load', () => {
+  expect(bundledRelease.catalogue.version).toBe('1.0.10');
+  expect(bundledDigest).toBe(releaseDigest(bundledRelease));
+  expect(bundledDigest).not.toBe('sha256:d7e378a79c42f9b7b0f846352903734f08d555ede7d21627c7cfc0af2a377f97');
+  const historical = JSON.parse(
+    readFileSync(new URL('./fixtures/bundled-historical-construction.json', import.meta.url), 'utf8'),
+  );
+  expect(historical.catalogue.version).toBe('1.0.0');
+  expect(validateRelease(historical)).toEqual([]);
 });
 
 test('VNDB and Bangumi series fields are bundled or omitted with a reason', () => {
