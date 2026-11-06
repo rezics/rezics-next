@@ -1,10 +1,13 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
+import { act, createElement, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
 import type { CopiesCurrentRead, CopyDetailCurrentRead, CopySubjectCurrentRead } from '../src/library/copies-actions';
 import type { CopiesPageData, CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
 import type { SessionEnv } from '../src/session/client';
+import { CopyConflictReview } from '../src/library/copy-conflict-review';
+import { m } from '../src/paraglide/messages.js';
 
 // UNRUN at this source boundary. Installed DOM, real route, CopyForm and UndoNotice;
 // native services and visual/browser acceptance remain the controller's later proof.
@@ -97,6 +100,19 @@ mock.module('@tanstack/react-start', () => ({
     server: (handler: (...args: never[]) => unknown) => ({ client: () => handler }),
   }),
 }));
+
+test('closed conflict review reports the platform recovery state', () => {
+  const markup = renderToStaticMarkup(
+    createElement(CopyConflictReview, {
+      review: { state: 'closed' },
+      disabled: false,
+      onReview: () => {},
+      onAccept: () => {},
+    }),
+  );
+  expect(markup).toContain('role="status"');
+  expect(markup).toContain(m.platform_closed_message());
+});
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest,

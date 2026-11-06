@@ -7,15 +7,18 @@ import {
   liveProcessGroupMemberIds,
   ownBunProcess,
   processHasExited,
-  ProcessCustodyError,
   withCleanup,
 } from './server-custody.ts';
 import {
-  acquireWorkerFixture,
+  bindWorkerFixtureOrigins,
   readSharedDevServer,
   sharedDevServerEnvName,
+  workerFixtureBindingsCompatible,
   workerFixtureOverlay,
+  type SharedDevServerRecord,
+  type WorkerFixtureOverlay,
 } from './dev-server-fixture.ts';
+import { testWorkerBindingsEnvName } from '../../src/test-runtime-binding-config.ts';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
@@ -84,6 +87,7 @@ export type DevServerHandle = {
   origin: string;
   pid: number | undefined;
   shared: boolean;
+  workerBindings: WorkerFixtureOverlay;
   stop: () => Promise<void>;
   diagnostics: () => string;
 };
@@ -102,15 +106,6 @@ function freePort(): Promise<number> {
       probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
-}
-
-function settledCancellation(error: unknown): boolean {
-  if (error instanceof ProcessCustodyError)
-    return error.groupSettled && error.childSettled && error.outputSettled;
-  if (error instanceof AggregateError) return error.errors.every(settledCancellation);
-  const cause =
-    error && typeof error === 'object' && 'cause' in error ? (error as { cause: unknown }).cause : undefined;
-  return cause !== undefined && settledCancellation(cause);
 }
 
 async function waitForFirstResponse(
@@ -143,93 +138,80 @@ async function waitForFirstResponse(
   }
 }
 
-async function acquireSharedDevServer(options: DevServerOptions): Promise<DevServerHandle | undefined> {
-  if (options.command || options.exclusive) return undefined;
-  const record = readSharedDevServer();
-  if (!record) return undefined;
+async function acquireSharedDevServer(
+  options: DevServerOptions,
+  record: SharedDevServerRecord | undefined,
+): Promise<DevServerHandle | undefined> {
+  if (options.command || options.exclusive || !record) return undefined;
   const now = options.now ?? Date.now;
-  const overlay = workerFixtureOverlay(options.env) ?? {};
-  for (const key of ['PUBLIC_ORIGIN', 'SITE_ORIGINS'] as const) {
-    const bound = bindOrigin(overlay[key], record.origin);
-    if (bound !== undefined) overlay[key] = bound;
-  }
-  const release = await acquireWorkerFixture(record.fixtureDirectory, overlay);
+  const requestedBindings = bindWorkerFixtureOrigins(workerFixtureOverlay(options.env) ?? {}, record.origin);
+  if (!workerFixtureBindingsCompatible(requestedBindings, record.workerBindings)) return undefined;
   const firstPath = options.firstPath ?? '/en';
   const budgets = { ...phaseBudgets, ...options.budgets };
   const spawnedAt = now();
-  let stopped: Promise<void> | undefined;
-  const stop = () =>
-    (stopped ??= (async () => {
-      release();
-    })());
-  try {
-    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
-    let lastError: unknown = new Error(`no response from ${firstPath}`);
-    await waitForFirstResponse(record.origin, firstPath, {
-      deadline: spawnedAt + budgets.firstResponse,
-      now,
-      pollIntervalMs: options.pollIntervalMs ?? 500,
-      onError: (error) => {
-        lastError = error;
-      },
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
-    options.onPhase?.({ phase: 'first response', path: firstPath, elapsedMs: now() - spawnedAt });
-    if (options.warmUpPaths.length > 0) {
-      const deadline = now() + budgets.warmUp;
-      let browser: Browser | undefined;
-      try {
-        browser = await chromium.launch({ timeout: Math.max(1, deadline - now()) });
-        const context = await browser.newContext({
-          ...options.contextOptions,
-          javaScriptEnabled: options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true,
-        });
-        await withCleanup(async () => {
-          const page = await context.newPage();
-          for (const warmUpPath of options.warmUpPaths) {
-            const began = now();
-            const response = await page.goto(`${record.origin}${warmUpPath}`, {
-              waitUntil: 'networkidle',
+  if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+  let lastError: unknown = new Error(`no response from ${firstPath}`);
+  await waitForFirstResponse(record.origin, firstPath, {
+    deadline: spawnedAt + budgets.firstResponse,
+    now,
+    pollIntervalMs: options.pollIntervalMs ?? 500,
+    onError: (error) => {
+      lastError = error;
+    },
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  options.onPhase?.({ phase: 'first response', path: firstPath, elapsedMs: now() - spawnedAt });
+  if (options.warmUpPaths.length > 0) {
+    const deadline = now() + budgets.warmUp;
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ timeout: Math.max(1, deadline - now()) });
+      const context = await browser.newContext({
+        ...options.contextOptions,
+        javaScriptEnabled: options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true,
+      });
+      await withCleanup(async () => {
+        const page = await context.newPage();
+        for (const warmUpPath of options.warmUpPaths) {
+          const began = now();
+          const response = await page.goto(`${record.origin}${warmUpPath}`, {
+            waitUntil: 'networkidle',
+            timeout: Math.max(1, deadline - now()),
+          });
+          if (!response || response.status() >= 500)
+            throw new Error(`HTTP ${response?.status() ?? 'no response'} for ${warmUpPath}`);
+          if (options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true)
+            await page.locator('html[data-hydrated]').waitFor({
+              state: 'attached',
               timeout: Math.max(1, deadline - now()),
             });
-            if (!response || response.status() >= 500)
-              throw new Error(`HTTP ${response?.status() ?? 'no response'} for ${warmUpPath}`);
-            if (options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true)
-              await page.locator('html[data-hydrated]').waitFor({
-                state: 'attached',
-                timeout: Math.max(1, deadline - now()),
-              });
-            options.onPhase?.({ phase: 'warm-up', path: warmUpPath, elapsedMs: now() - began });
-          }
-        }, [{ label: 'dev-server warm-up context', run: () => context.close(), timeoutMs: 5000 }]);
-      } catch (error) {
-        throw new Error(
-          `dev server warm-up failed for ${options.warmUpPaths[0]}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\n${lastError}`,
-          { cause: error },
-        );
-      } finally {
-        await browser?.close();
-      }
+          options.onPhase?.({ phase: 'warm-up', path: warmUpPath, elapsedMs: now() - began });
+        }
+      }, [{ label: 'dev-server warm-up context', run: () => context.close(), timeoutMs: 5000 }]);
+    } catch (error) {
+      throw new Error(
+        `dev server warm-up failed for ${options.warmUpPaths[0]}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\n${lastError}`,
+        { cause: error },
+      );
+    } finally {
+      await browser?.close();
     }
-    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
-    return {
-      origin: record.origin,
-      pid: record.pid,
-      shared: true,
-      stop,
-      diagnostics: () => `shared ${sharedDevServerEnvName} ${record.origin} pid=${record.pid}`,
-    };
-  } catch (error) {
-    await withCleanup(async () => {
-      throw error;
-    }, [{ label: 'shared dev-server fixture lease', run: stop, timeoutMs: 2000 }]);
-    throw error;
   }
+  if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+  return {
+    origin: record.origin,
+    pid: record.pid,
+    shared: true,
+    workerBindings: record.workerBindings,
+    stop: async () => {},
+    diagnostics: () => `shared ${sharedDevServerEnvName} ${record.origin} pid=${record.pid}`,
+  };
 }
 
 /** One process group and one warm-up for each browser test file, or the shared run server when advertised. Always await stop() in afterAll. */
 export async function startDevServer(options: DevServerOptions): Promise<DevServerHandle> {
-  const shared = await acquireSharedDevServer(options);
+  const sharedRecord = options.command || options.exclusive ? undefined : readSharedDevServer();
+  const shared = await acquireSharedDevServer(options, sharedRecord);
   if (shared) return shared;
   const port = await freePort();
   if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
@@ -275,6 +257,7 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
   };
   let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | undefined;
   let custody: ReturnType<typeof ownBunProcess> | undefined;
+  let workerBindings: WorkerFixtureOverlay = {};
   const captured = () => {
     const pid = child?.pid;
     const members = pid === undefined ? [] : liveProcessGroupMemberIds(pid);
@@ -300,6 +283,10 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
       childEnvironment.SITE_ORIGINS = bindOrigin(childEnvironment.SITE_ORIGINS, origin);
     if (options.env?.WEB_TEST_STATE_DIR && !options.env.WEB_TEST_STATE_INSTANCE_DIR)
       childEnvironment.WEB_TEST_STATE_INSTANCE_DIR = options.env.WEB_TEST_STATE_DIR;
+    if (!childEnvironment.WEB_VITE_CACHE_DIR && sharedRecord?.cacheDirectory)
+      childEnvironment.WEB_VITE_CACHE_DIR = sharedRecord.cacheDirectory;
+    workerBindings = bindWorkerFixtureOrigins(workerFixtureOverlay(childEnvironment) ?? {}, origin);
+    childEnvironment[testWorkerBindingsEnvName] = JSON.stringify(workerBindings);
     child = Bun.spawn(command, {
       cwd: options.cwd ?? join(import.meta.dir, '../..'),
       env: childEnvironment,
@@ -369,7 +356,6 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
     })());
   abortServer = () => {
     void stop().catch((error) => {
-      if (settledCancellation(error)) return;
       abortCleanupError = error;
     });
   };
@@ -480,6 +466,7 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
       origin,
       pid: child.pid,
       shared: false,
+      workerBindings,
       stop,
       diagnostics: () =>
         abortCleanupError ? `${captured()}\nCleanup error: ${String(abortCleanupError)}` : captured(),
@@ -495,12 +482,7 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
         throw primary;
       }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 18_000 }]);
     } catch (cleanupError) {
-      if (
-        cleanupError instanceof AggregateError &&
-        cleanupError.errors.some((entry) => entry === primary) &&
-        cleanupError.errors.slice(1).every(settledCancellation)
-      )
-        throw primary;
+      if (cleanupError === primary) throw primary;
       throw cleanupError;
     }
     throw primary;

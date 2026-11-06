@@ -56,20 +56,12 @@ function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
-/** Killing a group closes its pipes; that abort is settlement, not a fixture defect. */
-function isIgnorableCloseError(error: unknown): boolean {
-  const name =
-    error && typeof error === 'object' && 'name' in error ? String((error as { name: unknown }).name) : '';
-  const cause =
-    error && typeof error === 'object' && 'cause' in error ? (error as { cause: unknown }).cause : undefined;
-  const text = `${name} ${errorText(error)}${cause === undefined ? '' : ` ${errorText(cause)}`}`;
-  return (
-    name === 'AbortError' ||
-    (cause !== undefined && isIgnorableCloseError(cause)) ||
-    /AbortError|ERR_STREAM_PREMATURE_CLOSE|EPIPE|ECONNRESET|\bcancel(?:led|ed)?\b|\baborted\b|\bpremature close\b/i.test(
-      text,
-    )
-  );
+/** Bun may reject a drained pipe with one of these codes after this owner starts stopping the group. */
+function isExpectedStoppedStreamClose(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === 'AbortError') return true;
+  const code = 'code' in error ? String((error as Error & { code: unknown }).code) : '';
+  return ['ABORT_ERR', 'ERR_STREAM_PREMATURE_CLOSE', 'EPIPE', 'ECONNRESET'].includes(code);
 }
 
 function asCleanupError(label: string, error: unknown): Error {
@@ -291,6 +283,7 @@ function makeProcessCustody(
   errors: unknown[],
   options: ProcessCustodyOptions,
   diagnostics: () => string,
+  onCloseRequested?: () => void,
 ): ProcessCustody {
   const label = options.label ?? 'Child process group';
   const termGraceMs = options.termGraceMs ?? 1000;
@@ -363,9 +356,8 @@ function makeProcessCustody(
     childSettled = completions[0]?.status === 'fulfilled';
     outputIsSettled = completions[1]?.status === 'fulfilled';
     for (const completion of completions)
-      if (completion.status === 'rejected' && !isIgnorableCloseError(completion.reason))
-        cleanupErrors.push(completion.reason);
-    cleanupErrors.push(...errors.filter((error) => !isIgnorableCloseError(error)));
+      if (completion.status === 'rejected') cleanupErrors.push(completion.reason);
+    cleanupErrors.push(...errors);
 
     isSettled = groupSettled && childSettled && outputIsSettled;
     if (cleanupErrors.length > 0) {
@@ -384,7 +376,13 @@ function makeProcessCustody(
       return isSettled;
     },
     diagnostics,
-    close: () => (closing ??= closeOnce()),
+    close: () => {
+      if (!closing) {
+        onCloseRequested?.();
+        closing = closeOnce();
+      }
+      return closing;
+    },
   };
   return custody;
 }
@@ -393,12 +391,13 @@ function makeProcessCustody(
 export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOptions = {}): ProcessCustody {
   const errors: unknown[] = [];
   const recorder = makeOutputRecorder(options, errors);
+  let stopRequested = false;
   const drain = async (stream: ReadableStream<Uint8Array> | null, name: ProcessOutputStream) => {
     if (!stream) return;
     try {
       for await (const chunk of stream) recorder.recordOutput(chunk, name);
     } catch (error) {
-      if (isIgnorableCloseError(error)) return;
+      if (stopRequested && isExpectedStoppedStreamClose(error)) return;
       errors.push(
         new Error(`${options.label ?? 'Child process group'} ${name} capture failed: ${errorText(error)}`, {
           cause: error,
@@ -426,7 +425,17 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
   );
   void outputCompletion.catch(() => {});
   void childCompletion.catch(() => {});
-  return makeProcessCustody(child.pid, childCompletion, outputCompletion, errors, options, recorder.diagnostics);
+  return makeProcessCustody(
+    child.pid,
+    childCompletion,
+    outputCompletion,
+    errors,
+    options,
+    recorder.diagnostics,
+    () => {
+      stopRequested = true;
+    },
+  );
 }
 
 /** Take ownership of a Node child_process.spawn child and observe exit, close, and both output streams. */

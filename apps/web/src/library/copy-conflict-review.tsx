@@ -41,7 +41,7 @@ export function adoptCopyConflictDraft(
 }
 
 export type ConflictReview =
-  | { state: 'idle' | 'loading' | 'unavailable' | 'forbidden' }
+  | { state: 'idle' | 'loading' | 'unavailable' | 'forbidden' | 'closed' }
   | { state: 'ready'; copy: CopyItem };
 
 export function CopyConflictReview({
@@ -69,6 +69,7 @@ export function CopyConflictReview({
       {review.state === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
       {review.state === 'unavailable' ? <p role="status">{m.library_copy_detail_unavailable()}</p> : null}
       {review.state === 'forbidden' ? <p role="alert">{m.library_copy_detail_forbidden()}</p> : null}
+      {review.state === 'closed' ? <p role="status">{m.platform_closed_message()}</p> : null}
       {copy ? (
         <>
           <h3 className="font-medium">{m.library_copy_conflict_review_title()}</h3>

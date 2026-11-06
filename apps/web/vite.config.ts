@@ -1,5 +1,5 @@
 import { viteNonceMarker } from './src/security/headers.ts';
-import { testFixtureEnvHeader } from './src/test-fixture-header.ts';
+import { testWorkerBindingsEnvName } from './src/test-runtime-binding-config.ts';
 import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -13,7 +13,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 import { messagesCurrent } from './scripts/messages-ready.ts';
-import { readWorkerFixtureOverlay } from './tests/support/dev-server-fixture.ts';
 import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
@@ -270,6 +269,9 @@ export default defineConfig((context) => {
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
   return {
     ...(viteCacheDir ? { cacheDir: viteCacheDir } : {}),
+    define: testRuntime
+      ? { __REZICS_TEST_WORKER_BINDINGS__: process.env[testWorkerBindingsEnvName] ?? '{}' }
+      : {},
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
@@ -347,24 +349,6 @@ export default defineConfig((context) => {
         : []),
       ...(testRuntime
         ? [
-            {
-              name: 'rezics-test-fixture-env',
-              configureServer(server: {
-                middlewares: {
-                  use: (
-                    handler: (req: { headers: Record<string, unknown> }, res: unknown, next: () => void) => void,
-                  ) => void;
-                };
-              }) {
-                const directory = process.env.WEB_TEST_STATE_DIR;
-                if (!directory) return;
-                server.middlewares.use((req, _res, next) => {
-                  const overlay = readWorkerFixtureOverlay(directory);
-                  if (overlay) req.headers[testFixtureEnvHeader] = JSON.stringify(overlay);
-                  next();
-                });
-              },
-            },
             {
               name: 'rezics-test-env-bindings',
               enforce: 'pre' as const,

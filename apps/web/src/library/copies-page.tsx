@@ -1035,7 +1035,7 @@ export function CopiesPage({
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
-  windows?: CopiesWindowsControls;
+  windows?: CopiesWindowsControls | undefined;
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [loaded, setLoaded] = useState({ page, generation: 0 });
@@ -1063,7 +1063,7 @@ function LoadedCopiesPage({
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
-  windows?: CopiesWindowsControls;
+  windows?: CopiesWindowsControls | undefined;
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [copies, setCopies] = useState(page.copies);

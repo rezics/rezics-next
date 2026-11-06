@@ -1,45 +1,23 @@
 import { env as workerEnv, DurableObject, WorkflowEntrypoint } from 'cloudflare:workers';
-import { testFixtureEnvHeader } from './test-fixture-header.ts';
 
-export { DurableObject, WorkflowEntrypoint, testFixtureEnvHeader };
+export { DurableObject, WorkflowEntrypoint };
 export type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 
-export type TestFixtureOverlay = Record<string, string>;
+export type TestWorkerBindings = Readonly<Record<string, string>>;
 
-let active: TestFixtureOverlay | undefined;
-let depth = 0;
+declare const __REZICS_TEST_WORKER_BINDINGS__: Record<string, string>;
+const testWorkerBindings: TestWorkerBindings = Object.freeze({ ...__REZICS_TEST_WORKER_BINDINGS__ });
 
-export function readTestFixtureOverlay(request: Request): TestFixtureOverlay | undefined {
-  const raw = request.headers.get(testFixtureEnvHeader);
-  if (!raw) return undefined;
-  return JSON.parse(raw) as TestFixtureOverlay;
-}
-
-export async function withTestFixtureEnv<T>(
-  overlay: TestFixtureOverlay | undefined,
-  run: () => T | Promise<T>,
-): Promise<T> {
-  if (!overlay) return await run();
-  const previous = active;
-  active = overlay;
-  depth += 1;
-  try {
-    return await run();
-  } finally {
-    depth -= 1;
-    active = depth === 0 ? undefined : previous;
-  }
-}
-
+/** Test-only Worker env bindings are fixed when this module starts; requests cannot change them. */
 export const env = new Proxy(workerEnv as object, {
   get(target, property, receiver) {
-    if (typeof property === 'string' && active && Object.prototype.hasOwnProperty.call(active, property))
-      return active[property];
+    if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(testWorkerBindings, property))
+      return testWorkerBindings[property];
     return Reflect.get(target, property, receiver);
   },
   has(target, property) {
-    if (typeof property === 'string' && active && Object.prototype.hasOwnProperty.call(active, property))
-      return active[property] !== '';
+    if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(testWorkerBindings, property))
+      return testWorkerBindings[property] !== '';
     return Reflect.has(target, property);
   },
 }) as typeof workerEnv;

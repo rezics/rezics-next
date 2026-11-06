@@ -126,6 +126,8 @@ serialization, retention and cleanup remain unverified.
 
 ## Verification
 
+Product-first landing decision: finish the production outcome and changed workspace typechecks, then land with the exact one-shot journey results recorded; non-money test failures may accompany landing, and landing alone is not end-to-end acceptance.
+
 `bun run --cwd services/kernel check test/library/loan-http.test.ts` executed the mounted native journey: 1 test
 passed with 29 assertions. It covers exact create receipt replay, conflicting open create, due-day inclusivity,
 next-day overdue state, extension and stale revision, refusal to dispose or delete an open-loan copy, return replay,

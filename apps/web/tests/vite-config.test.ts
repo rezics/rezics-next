@@ -19,10 +19,55 @@ const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
 const workerInclude = [...webViteWorkerSsrOptimizeDeps.include];
 
+function pluginNames(config: Awaited<ReturnType<typeof resolveWebViteConfig>>): string[] {
+  return (config.plugins ?? [])
+    .flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]))
+    .flatMap((plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin ? [String(plugin.name)] : [],
+    );
+}
+
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
+
+test('test Worker bindings are startup-only and production has no fixture header path', async () => {
+  const serverSource = readFileSync(join(appRoot, 'src/server.ts'), 'utf8');
+  const bindingsSource = readFileSync(join(appRoot, 'src/test-runtime-bindings.ts'), 'utf8');
+  const viteSource = readFileSync(join(appRoot, 'vite.config.ts'), 'utf8');
+  expect(serverSource).not.toContain('x-rezics-test-env');
+  expect(serverSource).not.toContain('readTestFixtureOverlay');
+  expect(serverSource).not.toContain('./test-runtime-bindings.ts');
+  expect(bindingsSource).toContain('__REZICS_TEST_WORKER_BINDINGS__');
+  expect(bindingsSource).not.toContain('process.env');
+  expect(bindingsSource).not.toContain('active');
+  expect(bindingsSource).not.toContain('depth');
+  expect(bindingsSource).not.toContain('request.headers');
+  expect(viteSource).toContain('WEB_TEST_WORKER_BINDINGS');
+
+  const previous = process.env.REZICS_TEST_RUNTIME;
+  const previousBindings = process.env.WEB_TEST_WORKER_BINDINGS;
+  try {
+    delete process.env.REZICS_TEST_RUNTIME;
+    const production = await resolveWebViteConfig({ command: 'build', mode: 'production' }, appRoot);
+    expect(pluginNames(production)).not.toContain('rezics-test-env-bindings');
+    expect(production.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
+
+    process.env.REZICS_TEST_RUNTIME = '1';
+    process.env.WEB_TEST_WORKER_BINDINGS = '{"KERNEL_ORIGIN":"https://test.example"}';
+    const testRuntime = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+    expect(pluginNames(testRuntime)).toContain('rezics-test-env-bindings');
+    expect(testRuntime.define).toMatchObject({
+      __REZICS_TEST_WORKER_BINDINGS__: process.env.WEB_TEST_WORKER_BINDINGS,
+    });
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_TEST_RUNTIME;
+    else process.env.REZICS_TEST_RUNTIME = previous;
+    if (previousBindings === undefined) delete process.env.WEB_TEST_WORKER_BINDINGS;
+    else process.env.WEB_TEST_WORKER_BINDINGS = previousBindings;
+  }
+});
 
 async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<string> {
   const candidates = [tmpdir(), '/tmp', '/var/tmp', '/dev/shm'];

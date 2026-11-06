@@ -5,6 +5,7 @@ import {
   liveProcessGroupMemberIds,
   ownBunProcess,
   ownNodeProcess,
+  ProcessCustodyError,
   reapExitedProcessGroupMembers,
   withCleanup,
   type ProcessCustody,
@@ -216,6 +217,41 @@ test('Bun process custody settles a parent-exited group whose descendant still h
   expect(fixture.custody.settled).toBe(true);
   expect(liveProcessGroupMemberIds(fixture.pid!)).toEqual([]);
   expect(outputSettled).toBe(true);
+});
+
+test('Bun process custody preserves an AbortError captured before stop starts', async () => {
+  const child = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  const streamFailure = new DOMException('cancelled before stop', 'AbortError');
+  const stdout = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.error(streamFailure);
+    },
+  });
+  const custody = ownBunProcess(child, {
+    label: 'pre-stop stream fixture',
+    streams: { stdout, stderr: null },
+    termGraceMs: 80,
+    settleTimeoutMs: 1500,
+    pollIntervalMs: 10,
+  });
+  await custody.outputSettled;
+
+  let failure: unknown;
+  try {
+    await custody.close();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(ProcessCustodyError);
+  expect((failure as ProcessCustodyError).errors).toEqual(
+    expect.arrayContaining([expect.objectContaining({ cause: streamFailure })]),
+  );
+  expect(custody.settled).toBe(true);
 });
 
 test('server group cleanup runs even when browser close rejects', async () => {
