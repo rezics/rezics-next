@@ -16,7 +16,8 @@ function summary(subjectId: string, type = 'schema:Book') {
   return { id: subjectId, type, types: [type], label: null, creativeWork: true, cover: null };
 }
 
-function renderPage(body: unknown) {
+function renderPage(body: unknown, options: { types?: string[]; read?: unknown } = {}) {
+  const types = options.types ?? ['schema:Book'];
   const value = {
     locale: 'en',
     subject: null,
@@ -24,7 +25,17 @@ function renderPage(body: unknown) {
     reader: { suitability: 'blur' },
     labels: { cover: 'Cover' },
     sections: new Map([
-      [node, { ok: true, read: { kind: 'search', body: { filter: {}, sort: 'name', limit: 24 } }, body }],
+      [
+        node,
+        {
+          ok: true,
+          read: options.read ?? {
+            kind: 'search',
+            body: { filter: { type: { in: types } }, sort: 'name', limit: 24 },
+          },
+          body,
+        },
+      ],
     ]),
   };
   return renderToString(
@@ -34,7 +45,7 @@ function renderPage(body: unknown) {
       createElement(
         TypeListContext.Provider,
         { value: { target: { route: '/' } } },
-        createElement(TypeList, { id: node, title: 'Books', types: ['schema:Book'] }),
+        createElement(TypeList, { id: node, title: 'Books', types, sort: 'name', limit: 24 }),
       ),
     ),
   );
@@ -62,6 +73,46 @@ test('a malformed or mismatched native row makes the whole TypeList unavailable'
     expect(html).not.toContain('role="status"');
     expect(html).not.toContain('Native book');
   }
+});
+
+test('a page from another configured type or a mismatched Search descriptor cannot leak rows', () => {
+  const movie = hit({
+    id: anotherId,
+    type: 'schema:Movie',
+    labels: { en: 'Unrelated movie' },
+    summary: summary(anotherId, 'schema:Movie'),
+  });
+  const mixed = renderPage({ subjects: [hit(), movie], next: null });
+  expect(mixed).toContain('role="alert"');
+  expect(mixed).not.toContain('Native book');
+  expect(mixed).not.toContain('Unrelated movie');
+  expect(mixed).not.toContain('role="status"');
+
+  const wrongProducer = renderPage(
+    { subjects: [hit()], next: null },
+    {
+      read: {
+        kind: 'search',
+        body: { filter: { type: { in: ['schema:Movie'] } }, sort: 'name', limit: 24 },
+      },
+    },
+  );
+  expect(wrongProducer).toContain('role="alert"');
+  expect(wrongProducer).not.toContain('Native book');
+  expect(wrongProducer).not.toContain('role="status"');
+
+  const wrongSort = renderPage(
+    { subjects: [hit()], next: null },
+    {
+      read: {
+        kind: 'search',
+        body: { filter: { type: { in: ['schema:Book'] } }, sort: 'collections', limit: 24 },
+      },
+    },
+  );
+  expect(wrongSort).toContain('role="alert"');
+  expect(wrongSort).not.toContain('Native book');
+  expect(wrongSort).not.toContain('role="status"');
 });
 
 test('sparse summaries, native continuation and terminal empty pages render', () => {

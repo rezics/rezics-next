@@ -52,7 +52,7 @@ function renderList(body: unknown, options: { limit: number; full?: boolean; tar
       createElement(
         TypeListContext.Provider,
         { value: { target: options.target, ...(options.full ? { full: node } : {}) } },
-        createElement(TypeList, { id: node, title: 'Books', types: ['schema:Book'] }),
+        createElement(TypeList, { id: node, title: 'Books', types: ['schema:Book'], sort: 'name', limit }),
       ),
     ),
   );
@@ -123,6 +123,19 @@ test('a non-search descriptor makes the TypeList unavailable as a whole before s
   expect(html).not.toContain('Native first');
   expect(html).not.toContain('Native last');
   expect(html).not.toContain('role="status"');
+  expect(html).not.toContain('data-slot="next-page"');
+  expect(html).not.toContain(cursor);
+});
+
+test('a larger Search descriptor from another list cannot raise this node\'s row budget', () => {
+  const cursor = 'foreign-list-cursor';
+  const html = renderList(
+    { subjects: [hit(0, 'Native first'), hit(1, 'Native last')], next: cursor },
+    { limit: 1, target: routeTarget, read: plannedRead(2) },
+  );
+  expect(html).toContain('role="alert"');
+  expect(html).not.toContain('Native first');
+  expect(html).not.toContain('Native last');
   expect(html).not.toContain('data-slot="next-page"');
   expect(html).not.toContain(cursor);
 });
