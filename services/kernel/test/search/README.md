@@ -85,3 +85,8 @@ native final pass for all homes and complete engine identities and settled exter
 engine extras; legacy coverage certificates and equal counts do not stand in for native publication.
 The publication suite separately pins filtered/terminal native cursors and maintenance resumption, and
 the metadata suite pins released calendar metadata under an applied-but-lost write response.
+
+Native identity receiving suites construct `searchIdentityReceivingComposition` and run each step inside
+Semantic's Source maintenance frame. They consume published mappings and the resolved public-filter
+definition; a missing mapping is unavailable, not a self binding. Accounts original-funded transfer
+is observed on the next native run.

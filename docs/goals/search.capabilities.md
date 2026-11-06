@@ -258,6 +258,9 @@ terminal pages separately from browser and promoted-main proof.
 Decision: those four native HTTP cases are the fewest user-visible recovery pins; canonical self is admitted only from
 a published mapped-self row supplied by revision-1 creation or bounded original recovery, while absent mappings stay
 in the existing preparation path.
+Decision: identity receiving stores the resolved public-filter definition, not a release digest; OLD/NEW/first-apply
+follow published mappings and retained copies. Native suites wire searchIdentityReceivingComposition and the Source
+maintenance frame. Library cutover fixtures include collection:delete so Access compiles the collection owner role.
 
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |

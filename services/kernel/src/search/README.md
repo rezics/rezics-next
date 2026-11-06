@@ -25,7 +25,8 @@ absent mappings use the existing preparation path. Four native HTTP cases pin ex
 
 Decision: native identity receiving refuses a missing or incomplete Source directory definition with typed unavailable;
 a complete unchanged retained definition must reach the native reader. Immutable projection meaning alone cannot
-substitute for the Source binding, capture and dependency keys.
+substitute for the Source binding, capture and dependency keys. Plan preparation resolves that definition through the
+installed public-filter binding and refuses an unpublished mapping instead of treating it as a self binding.
 
 Decision: the exported native receiving statement catalogue is SearchNativeReceivingSql-indexed `{ sql: string }`;
 consumers use that SQL text, so reylo generator metadata stays off the declaration surface.

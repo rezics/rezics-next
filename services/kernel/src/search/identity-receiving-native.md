@@ -111,7 +111,8 @@ entering the next home. Engine work belongs exclusively to the existing Source w
 ## Custody boundary
 
 A plan UUID and its native receipt are locators. Selection requires an immutable committed per-original plan at
-its document's receiving home. OLD selects the original document; NEW and first-apply select the terminal document;
+its document's receiving home. Plan preparation stores the resolved public-filter definition id, not a release
+digest, and refuses an unpublished mapping rather than treating it as a self binding. OLD selects the original document; NEW and first-apply select the terminal document;
 handoff retains the predecessor's document. Each plan must preserve independent original membership, exact effect
 and scope, current owner, consumer, physical UUID, allocation alias, physical generation, enrollment/fence
 generations, original close and the bounded complete-support/definition/release/preparation/copy references.

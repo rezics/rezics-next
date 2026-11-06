@@ -371,6 +371,7 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
     'collection:create',
     'collection:read',
     'collection:update',
+    'collection:delete',
     'subject:read',
     'follow:create',
     'follow:delete',
