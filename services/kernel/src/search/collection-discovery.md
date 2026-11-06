@@ -89,6 +89,9 @@ eligible identity appears in its global position; continuation is a sort keyset,
 owner recency or the selected publication generation.
 Decision: Collection directory consumes `COLLECTION_DISCOVERY_BATCH_SIZE` at execution for identity-frontier
 pages and hydration batches; it does not alias that imported value at module initialization.
+Decision: directory occupancy walks `COLLECTION_DIRECTORY_SCAN_BOUND` (600), not mixed-search `min(600, 6L+3)`,
+so a tail past the first owner batch of 100 can finish; an occupancy that cannot exhaust inside that bound stays
+readiness rather than a partial listing.
 
 ## Cost Touches / Bound / Growth check
 
@@ -101,9 +104,11 @@ pages and hydration batches; it does not alias that imported value at module ini
   bounded four-member preview, optional exact Subject membership and follow-count operands. It adds bounded
   Account/Subject disclosure observations, cover resolution and a final source currentness read, without
   per-candidate full Collection reads. Direct hydrate admits 100 duplicate-inclusive IDs in one partition.
-- The installed owner caller admits 200 IDs. For distinct partition populations n[p], native batch calls total
-  sum(ceil(n[p]/100)), bounded by 200; one partition needs at most two. Only authorized cover resolution inside
-  Commerce may scale with visible covers. Unrelated rows/history do not add Search reads.
+- The installed owner caller admits 200 IDs. Directory occupancy finishes inside 600 identities with hydration
+  and revalidation in batches of 100, so each owner call stays inside that 200-key admission. For distinct
+  partition populations n[p], native batch calls total sum(ceil(n[p]/100)); one partition needs at most two per
+  200-key caller window. Only authorized cover resolution inside Commerce may scale with visible covers.
+  Unrelated rows/history do not add Search reads.
 - Focused tests pin raw sparse/zero-eligible continuation, routed collisions, unavailable census, current-reader
   withdrawal/restoration, exact membership beyond preview, explicit mixed kind, current popularity changes,
   deterministic count ties, exact recency, completed empty A during B, absent A and expired deletion retention.
@@ -114,14 +119,16 @@ pages and hydration batches; it does not alias that imported value at module ini
   Decision: the fewest tests pin capability absent/present, an identity-page tail, recency ties, popularity, owner
   removal, a resumed sort-keyset cursor, query-wide currentness, lost-response reconcile against native
   generation/uuid/index, selected A lookup after a later working identity, and one native directory/publication
-  group on released public owners and the live subject index. Browser and main acceptance stay held.
+  group on released public owners and the live subject index. That native group shares one fixture and runs one
+  at a time. Browser and main acceptance stay held.
 
 Decision: catalogue Collection publication snapshots public Search population into selected A through
 `observeCataloguePublication`/`readCataloguePublicationPage`/`lookupCataloguePublication`. A lost OpenSearch
 response rereads the native generation/uuid/index and retries once while that observation is unchanged; a
-changed generation restarts rather than failing the attempt as a lost transport. Lookup renders the stored
-selected identities of A; a later working B or live append is not this selection. HTTP `renderSelected` fills
-those identities through the shared catalogue adapter. The producer carries the original deadline and
+changed generation restarts rather than failing the attempt as a lost transport. A lost observation without a
+pinned selection stays unknown until a later native reconcile. Lookup reads those stored identities from the
+pinned generation; present/missing are that selection, not a live population search. HTTP `renderSelected`
+fills the present identities through `selectedCataloguePublicationShells` and the shared catalogue adapter. The producer carries the original deadline and
 `SearchRequestWork`, reserves limit+1 candidates before dispatch, and fails closed when generation, UUID or
 release currentness change. Library stages, seals and rereads that observation; working membership B stays
 private. Omitted-source HTTP stays its existing owner contract. Configured TypeList BFF prepares the session on every read and attaches credentials only for a

@@ -8,6 +8,7 @@ import type { PublicCollectionDiscoveryOperand } from '../library/collection-dis
 import {
   COLLECTION_DISCOVERY_BATCH_SIZE,
   CollectionDiscoveryReadinessError,
+  collectionDiscoveryOperandMatches,
   compareCollectionDiscoveryOperands,
 } from './collection-discovery.ts';
 import type { SearchSortValue } from './cursor.ts';
@@ -21,6 +22,12 @@ import type {
   DiscoveryOwnerHit,
 } from './discovery.ts';
 
+/**
+ * Occupied identity walk for one directory page. Mixed Search uses `min(600, 6L+3)` useful-page raw
+ * candidates; directory must finish the indexed frontier so recency/popularity can place a newly
+ * eligible identity in its global position, including a tail past the first owner batch of 100.
+ */
+export const COLLECTION_DIRECTORY_SCAN_BOUND = 600;
 export type CollectionDirectoryOrder = 'recency' | 'popularity';
 export type CollectionDirectoryRow = Readonly<{
   key: CollectionDiscoveryKey;
@@ -300,27 +307,52 @@ export type CollectionDirectoryExecute = Readonly<{
   limit: number;
 }>;
 
+async function revalidateCollectionDirectory(
+  revalidate: CollectionDirectoryExecute['revalidate'],
+  hydrated: ReadonlyMap<string, DiscoveryOwnerMetadataSummary<'collection'>>,
+  context: DiscoveryReadContext,
+): Promise<Map<string, DiscoveryOwnerMetadataSummary<'collection'>>> {
+  const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
+  const ids = [...hydrated.keys()];
+  for (let offset = 0; offset < ids.length; offset += COLLECTION_DISCOVERY_BATCH_SIZE) {
+    const batchIds = ids.slice(offset, offset + COLLECTION_DISCOVERY_BATCH_SIZE);
+    const batch = new Map(
+      batchIds.flatMap((id) => (hydrated.has(id) ? [[id, hydrated.get(id)!] as const] : [])),
+    );
+    const revalidated = await revalidate(batch, context);
+    for (const [id, summary] of revalidated) current.set(id, summary);
+  }
+  return current;
+}
+
 /**
  * Hydrate the complete eligible frontier with `collectionQuery`, apply recency/popularity, then page by sort
  * keyset. A newly eligible identity belongs in its global position; continuation is never an OpenSearch prefix.
  *
  * Cost
- * - Touches: `ceil(n/100)` current reads plus one revalidation of the accepted rows.
- * - Bound: n is the identity frontier already bounded by the scan; each current read is 100 identities.
- * - Growth check: focused tests cover a resumed cursor, recency ties, popularity, removal and owner changes.
+ * - Touches: `ceil(n/100)` current reads plus `ceil(n/100)` revalidations of the accepted rows.
+ * - Bound: n is the identity frontier already bounded by the occupancy scan (600); each current read is 100
+ *   identities, inside the installed owner caller's 200-key admission.
+ * - Growth check: focused tests cover a resumed cursor, recency ties, popularity, removal, an identity-page
+ *   tail past the first owner batch of 100, and owner changes.
  */
 export async function executeCollectionDirectory(input: CollectionDirectoryExecute): Promise<CollectionDirectoryPage> {
   if (!Number.isSafeInteger(input.limit) || input.limit < 1)
     throw new RangeError('Collection directory page limit is invalid');
   const hydrated = await hydrateCollectionDirectory(input.readCurrent, input.identities, input.context);
-  const current = await input.revalidate(hydrated, input.context);
+  const current = await revalidateCollectionDirectory(input.revalidate, hydrated, input.context);
+  const query = collectionDirectoryQuery(input.selection);
   const order = collectionDirectoryOrder(input.selection);
-  const paged = pageCollectionDirectory(
-    sortCollectionDirectory(collectionDirectoryRows(current), order),
-    order,
-    input.after,
-    input.limit,
+  const eligible = collectionDirectoryRows(current).filter((row) =>
+    collectionDiscoveryOperandMatches(row.summary.operands, query),
   );
+  if (order === 'popularity') {
+    for (const row of eligible) {
+      if (!row.summary.operands.popularity)
+        throw new CollectionDiscoveryReadinessError('unavailable', 'follow_count_unavailable');
+    }
+  }
+  const paged = pageCollectionDirectory(sortCollectionDirectory(eligible, order), order, input.after, input.limit);
   return {
     items: paged.items,
     nextAfter: paged.nextAfter,

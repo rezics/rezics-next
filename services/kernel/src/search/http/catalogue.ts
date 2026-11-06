@@ -201,10 +201,23 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
     active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
   ) {
     const release = active === undefined ? await activeRelease(pool) : active;
-    const shells = subjects.map((id) => ({ id, type: '', labels: {} as Record<string, string> }));
-    const filled = await fill({ subjects: shells }, authorize, languages, release);
+    const filled = await fill(
+      { subjects: selectedCataloguePublicationShells(subjects) },
+      authorize,
+      languages,
+      release,
+    );
     return publicBases(filled, languages, release);
   }
 
   return { fill, publicBases, renderSelected };
+}
+
+/** Stored selected A identities become catalogue shells; a later working B is not in this list. */
+export function selectedCataloguePublicationShells(ids: readonly string[]): {
+  id: string;
+  type: string;
+  labels: Record<string, string>;
+}[] {
+  return ids.map((id) => ({ id, type: '', labels: {} }));
 }

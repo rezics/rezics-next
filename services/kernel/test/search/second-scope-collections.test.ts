@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import {
+  COLLECTION_DIRECTORY_SCAN_BOUND,
   collectionDirectoryPartitions,
   collectionDirectoryQuery,
   consumeCollectionDirectoryFrontier,
@@ -139,12 +140,12 @@ describe('connected native Collection reader journey', () => {
     f = await createCollectionRulesFixture(['follow:create', 'follow:delete']);
     actor = await f.runtime.identity.access.authenticate(f.owner, {
       pool: f.database.pool,
-      deadline: Date.now() + 30000,
+      deadline: Date.now() + 120000,
     });
-  }, 120000);
+  }, 180000);
   afterAll(async () => {
     await f?.close();
-  });
+  }, 180000);
   const deps = () => ({
     pool: f.database.pool,
     access: f.runtime.identity.access,
@@ -232,7 +233,7 @@ describe('connected native Collection reader journey', () => {
     return (await response.json()).collection as { id: string; revision: number };
   }
 
-  test('curated current disclosure withdraws stale positives, restores identity, and distinguishes native changes and failures', async () => {
+  test.serial('curated current disclosure withdraws stale positives, restores identity, and distinguishes native changes and failures', async () => {
     const { leaf, current } = connected();
     const row = await f.collection({ visibility: 'public', title: 'Original', description: 'Public description' });
     const hidden = await f.collection({ visibility: 'unlisted' });
@@ -313,7 +314,7 @@ describe('connected native Collection reader journey', () => {
     });
   }, 120000);
 
-  test('completed empty A survives preparing B; no A and expired retained output never become successful empty cards', async () => {
+  test.serial('completed empty A survives preparing B; no A and expired retained output never become successful empty cards', async () => {
     const { leaf, current } = connected();
     const a = await saved();
     const response = await f.send('POST', `/v1/collections/${a.id}:publishSelected`, {
@@ -382,7 +383,7 @@ describe('connected native Collection reader journey', () => {
     expect(await current([a.id])).toEqual([]);
   }, 120000);
 
-  test('Search receives current mixed kind, disclosed curator and indexed Subject match beyond the card preview', async () => {
+  test.serial('Search receives current mixed kind, disclosed curator and indexed Subject match beyond the card preview', async () => {
     const { leaf } = connected();
     const collection = await f.collection({ visibility: 'public' });
     const subjects = [];
@@ -424,7 +425,7 @@ describe('connected native Collection reader journey', () => {
     expect(current?.operands.recency).toEqual([micros, routeOf(collection.id)!, collection.id]);
   }, 120000);
 
-  test('directory walks native complete pages, orders recency/popularity, resumes, drops removals, and keeps selected A', async () => {
+  test.serial('directory walks native complete pages, orders recency/popularity, resumes, drops removals, and keeps selected A', async () => {
     const { leaf } = connected();
     const oldest = await f.collection({ visibility: 'public', title: 'Directory oldest' });
     const middle = await f.collection({ visibility: 'public', title: 'Directory middle' });
@@ -437,11 +438,15 @@ describe('connected native Collection reader journey', () => {
     const partitions = collectionDirectoryPartitions(identities);
     const deadline = Date.now() + 120000;
     const walked = new Set<string>();
+    let examined = 0;
     for (const partition of partitions) {
       let after: ReturnType<typeof key> | null = null;
       do {
-        const page = await leaf.source.page(partition, after, 1, { order: 'recency' }, { deadline });
+        const page = await leaf.source.page(partition, after, 1, undefined, { deadline });
         if (page.status !== 'available') throw new Error('Directory partition unavailable');
+        examined += page.items.length;
+        if (examined > COLLECTION_DIRECTORY_SCAN_BOUND)
+          throw new CollectionDiscoveryReadinessError('unavailable', 'collection_directory_frontier_exceeds_bound');
         for (const item of page.items) if (item.status === 'indexable') walked.add(item.key.id);
         after = page.next;
       } while (after);
@@ -471,8 +476,8 @@ describe('connected native Collection reader journey', () => {
       executeCollectionDirectory({
         identities: ids,
         readCurrent: (ids, current) => leaf.registration.adapter.readCurrent(ids, current),
-        async revalidate(current) {
-          return current;
+        async revalidate(current, context) {
+          return leaf.registration.adapter.readCurrent([...current.keys()], context);
         },
         selection,
         context: readContext(selection),

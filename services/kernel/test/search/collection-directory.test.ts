@@ -7,6 +7,7 @@ import type {
 } from '../../src/library/collection-discovery-source.ts';
 import type { PublicCollectionDiscoveryOperand } from '../../src/library/collection-discovery-summaries.ts';
 import {
+  COLLECTION_DIRECTORY_SCAN_BOUND,
   collectionDirectoryOrder,
   collectionDirectoryPartitions,
   collectionDirectoryQuery,
@@ -20,7 +21,10 @@ import {
   sortCollectionDirectory,
   type CollectionDirectoryRow,
 } from '../../src/search/collection-directory.ts';
-import { CollectionDiscoveryReadinessError } from '../../src/search/collection-discovery.ts';
+import {
+  COLLECTION_DISCOVERY_BATCH_SIZE,
+  CollectionDiscoveryReadinessError,
+} from '../../src/search/collection-discovery.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import type { DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from '../../src/search/discovery.ts';
@@ -355,6 +359,19 @@ test('native complete pages walk a tail beyond the first owner batch and stay id
   expect(frontier.examined).toBe(4);
   expect(frontier.identities).toEqual([older, newer, popular, inserted]);
   expect(collectionDirectoryPartitions(frontier.identities)).toEqual([partition]);
+  const tail = Array.from({ length: COLLECTION_DISCOVERY_BATCH_SIZE + 1 }, (_, index) =>
+    indexed(`018f0000-0000-7000-8000-00a000000${String(index + 1).padStart(3, '0')}`),
+  );
+  const walked = await consumeCollectionDirectoryFrontier({
+    source: source(tail, COLLECTION_DISCOVERY_BATCH_SIZE),
+    partitions: [partition],
+    query: { order: 'recency' },
+    deadline: Date.now() + 30_000,
+    scanBound: COLLECTION_DIRECTORY_SCAN_BOUND,
+  });
+  expect(walked.exhausted).toBe(true);
+  expect(walked.examined).toBe(COLLECTION_DISCOVERY_BATCH_SIZE + 1);
+  expect(walked.identities).toEqual(tail.map((item) => item.key.id));
 });
 
 test('an over-bound native frontier stays readiness rather than a partial listing', async () => {
@@ -368,6 +385,42 @@ test('an over-bound native frontier stays readiness rather than a partial listin
       scanBound: 2,
     }),
   ).rejects.toBeInstanceOf(CollectionDiscoveryReadinessError);
+});
+
+test('directory revalidates occupancy in owner batches of 100 so a tail past the first batch stays admitted', async () => {
+  const identities = Array.from(
+    { length: COLLECTION_DISCOVERY_BATCH_SIZE + 1 },
+    (_, index) => `018f0000-0000-7000-8000-00a000000${String(index + 1).padStart(3, '0')}`,
+  );
+  const context: DiscoveryReadContext = {
+    access: new Proxy({} as Access, {
+      get() {
+        throw new Error('Unexpected Access read');
+      },
+    }),
+    actor: { kind: 'anonymous' },
+    deadline: Date.now() + 30_000,
+  };
+  const sizes: number[] = [];
+  const page = await executeCollectionDirectory({
+    identities,
+    async readCurrent(ids) {
+      return new Map(
+        ids.map((id) => [id, row(id, { recency: ['1', route, id], popularity: { followers: '1' } }).summary]),
+      );
+    },
+    async revalidate(current) {
+      sizes.push(current.size);
+      return current;
+    },
+    selection: { order: 'recent' },
+    context,
+    after: [],
+    limit: 2,
+  });
+  expect(sizes).toEqual([COLLECTION_DISCOVERY_BATCH_SIZE, 1]);
+  expect(page.items).toHaveLength(2);
+  expect(page.exhausted).toBe(false);
 });
 
 test('executeCollectionDirectory hydrates, orders by recency and resumes a sort-keyset cursor', async () => {
@@ -480,4 +533,31 @@ test('popularity order, owner removal and a currentness change are query-wide', 
       limit: 1,
     }),
   ).rejects.toMatchObject({ reason: 'current_source_changed' });
+  const withheld = row(older, { recency: ['40', route, older], popularity: { followers: '9' } });
+  const filtered = await executeCollectionDirectory({
+    identities: [older, newer],
+    async readCurrent() {
+      return new Map([
+        [
+          older,
+          {
+            ...withheld.summary,
+            operands: {
+              ...withheld.summary.operands,
+              eligible: { presentationKind: true, curator: false, subject: true },
+            },
+          },
+        ],
+        [newer, live.get(newer)!],
+      ]);
+    },
+    async revalidate(current) {
+      return current;
+    },
+    selection: { order: 'popular', curator: older },
+    context,
+    after: [],
+    limit: 10,
+  });
+  expect(filtered.items.map((item) => item.key.id)).toEqual([newer]);
 });
