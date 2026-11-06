@@ -7,6 +7,13 @@ import type { PageContinuation } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { RelationHistoryPane } from '../../features/pages/relation-history-pane';
+import { RelationEvidencePane } from '../../features/pages/relation-evidence-pane';
+import {
+  RelationEvidenceContext,
+  relationEvidenceClose,
+  relationEvidenceHref,
+  type RelationEvidenceSlot,
+} from '../../features/pages/relation-evidence-context';
 import { RelationsView } from '../../features/pages/relations-view';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
@@ -40,6 +47,13 @@ import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pag
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const curiePattern = /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9_.-]+$/;
+const slotIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Undefined when absent, the id when it is a UUID, and null when malformed. */
+function validateSlotId(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  return typeof value === 'string' && slotIdPattern.test(value) ? value : null;
+}
 
 const readRelations = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {
@@ -121,6 +135,21 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         (node === undefined || streamProperty === undefined || streamDirection === undefined))
     )
       throw notFound();
+    // An evidence slot is one exact relation slot of the window; a malformed one is not a page.
+    const evidence = validateSlotId(search.evidence);
+    const evidenceKey = validateSlotId(search.evidenceKey);
+    const evidenceProperty = search.evidenceProperty;
+    if (
+      evidence === null ||
+      evidenceKey === null ||
+      (evidenceProperty !== undefined &&
+        (typeof evidenceProperty !== 'string' ||
+          evidenceProperty.length > 128 ||
+          !curiePattern.test(evidenceProperty))) ||
+      (evidence === undefined) !== (evidenceProperty === undefined) ||
+      (evidenceKey !== undefined && evidence === undefined)
+    )
+      throw notFound();
     return {
       ...(typeof search.property === 'string' && search.property.length <= 128 ? { property: search.property } : {}),
       cursor: search.cursor,
@@ -128,6 +157,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       node,
       ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
       ...(validatedStreamDirection ? { streamDirection: validatedStreamDirection } : {}),
+      ...(evidence ? { evidence } : {}),
+      ...(typeof evidenceProperty === 'string' ? { evidenceProperty } : {}),
+      ...(evidenceKey ? { evidenceKey } : {}),
       via: subjectVisitReturn(search.via, getLocale()),
     };
   },
@@ -313,7 +345,7 @@ function RelationsRoute() {
     enabled: currentReader,
   });
   const reader = personal.reader;
-  const { property } = Route.useSearch();
+  const { property, evidence, evidenceProperty, evidenceKey } = Route.useSearch();
   const onWorkContinue = (continuation: PageContinuation) => {
     void navigate({
       search: (previous) => ({ ...previous, node: continuation.node, cursor: continuation.cursor }),
@@ -340,48 +372,72 @@ function RelationsRoute() {
       library={<SubjectLibraryLeaf frame={frame} locale={getLocale()} session={browserSession} />}
     />
   );
-  if (data.configured)
-    return (
-      <SubjectViewPage
-        page={data.page}
-        {...(data.via ? { returnTo: data.via } : {})}
-        currentHref={currentHref}
-        selectedNode={data.configured ? data.node : undefined}
-        selectedStreamProperty={data.configured ? data.streamProperty : undefined}
-        selectedStreamDirection={data.configured ? data.streamDirection : undefined}
-        selectedCursor={data.cursor}
-        after={
-          // Global windows only: a Realm reading's history is a separate reader.
-          !realm && data.node && data.streamProperty && data.streamDirection ? (
-            <RelationHistoryPane
-              selection={{
-                subject: frame.id,
-                label: frame.title.text,
-                locale: getLocale(),
-                view: 'relations',
-                node: data.node,
-                property: data.streamProperty,
-                direction: data.streamDirection,
-                cursor: data.cursor ?? null,
-              }}
-              reader={data.reader}
-            />
-          ) : undefined
-        }
-        onWorkContinue={onWorkContinue}
-        finiteWorkRegionReader={WorkFranchiseReading}
-        subjectLabel={frame.title.text}
-        locale={getLocale()}
-        messages={subjectPageMessages()}
-        reader={reader}
-        link={SubjectLink}
-        view="relations"
-        label={m.subject_relations()}
-        relations={relations}
-        frame={frameElement}
-        renderJsonLd={false}
-      />
+  if (data.configured) {
+    // Global readings only: a Realm reading's history and evidence are separate readers.
+    const relationWindow =
+      !realm && data.node && data.streamProperty && data.streamDirection
+        ? { node: data.node, property: data.streamProperty, direction: data.streamDirection }
+        : undefined;
+    const evidenceLinks = realm
+      ? undefined
+      : { href: (slot: RelationEvidenceSlot) => relationEvidenceHref(currentHref, slot) };
+    const after = (
+      <>
+        {!realm && evidence && evidenceProperty ? (
+          <RelationEvidencePane
+            subject={frame.id}
+            locale={getLocale()}
+            reader={data.reader}
+            property={evidenceProperty}
+            target={evidence}
+            slotKey={evidenceKey}
+            close={relationEvidenceClose(currentHref)}
+          />
+        ) : null}
+        {relationWindow ? (
+          <RelationHistoryPane
+            selection={{
+              subject: frame.id,
+              label: frame.title.text,
+              locale: getLocale(),
+              view: 'relations',
+              node: relationWindow.node,
+              property: relationWindow.property,
+              direction: relationWindow.direction,
+              cursor: data.cursor ?? null,
+            }}
+            reader={data.reader}
+          />
+        ) : null}
+      </>
     );
+    return (
+      <RelationEvidenceContext value={evidenceLinks}>
+        <SubjectViewPage
+          page={data.page}
+          {...(data.via ? { returnTo: data.via } : {})}
+          currentHref={currentHref}
+          selectedNode={data.configured ? data.node : undefined}
+          selectedStreamProperty={data.configured ? data.streamProperty : undefined}
+          selectedStreamDirection={data.configured ? data.streamDirection : undefined}
+          selectedCursor={data.cursor}
+          after={after}
+          onWorkContinue={onWorkContinue}
+          finiteWorkRegionReader={WorkFranchiseReading}
+          subjectLabel={frame.title.text}
+          locale={getLocale()}
+          messages={subjectPageMessages()}
+          reader={reader}
+          link={SubjectLink}
+          view="relations"
+          label={m.subject_relations()}
+          relations={relations}
+          frame={frameElement}
+          renderJsonLd={false}
+        />
+      </RelationEvidenceContext>
+    );
+  }
   return (
     <RelationsView
       locale={getLocale()}

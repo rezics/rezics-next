@@ -1,6 +1,6 @@
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useRouter, useRouterState } from '@tanstack/react-router';
-import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { isView } from '@rezics/composition';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -24,6 +24,7 @@ import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from '
 import { admitRelationPage } from './relation-page-admission';
 import { sameRelationStream } from './relation-stream-descriptor';
 import { isRecord } from './shared';
+import { RelationEvidenceContext } from './relation-evidence-context';
 import {
   advanceRelationProgress,
   relationCursor,
@@ -401,6 +402,29 @@ function StreamState({
       actualReading?.admitted === true);
   const readerUnavailable = owner.expectedReader !== null && !currentSession;
   const visiblePage = currentSession ? page : undefined;
+  // A relation window whose enclosing view offers evidence links each item to its exact slot's candidates.
+  const evidenceLinks = useContext(RelationEvidenceContext);
+  const windowProperty = section.ok && section.read.kind === 'relations' ? section.read.property : undefined;
+  const itemVisit =
+    evidenceLinks && windowProperty !== undefined
+      ? (item: Item) => {
+          const property = item.property ?? windowProperty;
+          const href = evidenceLinks.href({ property, target: item.id, key: item.credit?.slot?.key });
+          return href
+            ? {
+                details: (
+                  <a
+                    data-slot="relation-evidence-link"
+                    href={href}
+                    className={cn(buttonVariants({ variant: 'link' }), actionClass)}
+                  >
+                    {m.relation_evidence_link({}, { locale: value.locale as never })}
+                  </a>
+                ),
+              }
+            : undefined;
+        }
+      : undefined;
   // The native projection reports whether this window had caught up; a window that had not is not presented as current.
   const incomingPending =
     visiblePage?.ok === true && isRecord(visiblePage.body.freshness) && visiblePage.body.freshness.caught_up === false;
@@ -712,7 +736,13 @@ function StreamState({
           navigation={castNavigation}
         />
       ) : items.length ? (
-        <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
+        <CoverList
+          items={items}
+          value={value}
+          label={title}
+          creditVisit={currentCreditVisit}
+          {...(itemVisit ? { itemVisit } : {})}
+        />
       ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
