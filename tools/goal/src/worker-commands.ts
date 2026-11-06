@@ -25,6 +25,11 @@ import { countAllowanceWaiting, poolBurnStatus } from './allowance.ts';
 import { defaultPolicy } from './policy.ts';
 import { readRetainedPoolReadings } from './pacing.ts';
 import { admissionProfiles, readRouting } from './routing.ts';
+import {
+  workerCheckBudgetDirectory,
+  workerCheckHostBudgetLimit,
+  workerCheckHostRunsUsed,
+} from './worker-check-budget.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -181,9 +186,18 @@ export async function runWorkerCommand(
                 reason: 'start',
               })
             : undefined;
+        const liveAttempt = current?.attempt.state === 'running' || current?.attempt.state === 'waiting';
         return {
           ...task,
           urgent: task.brief.urgent === true,
+          ...(liveAttempt
+            ? {
+                checksUsed: workerCheckHostRunsUsed(
+                  workerCheckBudgetDirectory(settings.stateDirectory, task.id, task.currentAttempt),
+                ),
+                checkBudget: workerCheckHostBudgetLimit(task, task.currentAttempt),
+              }
+            : {}),
           ...(terminationRequest ? { terminationRequest } : {}),
           ...(task.state === 'held'
             ? {

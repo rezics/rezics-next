@@ -74,6 +74,8 @@ test('worker and promotion gate environments carry KERNEL_CHECK_REMOTE when the 
       EDITOR: 'nano',
       KERNEL_CHECK_REMOTE: hosts,
       GOAL_CHECK_WAIT_FILE: join(present.directory, 'runs', 'task', '2.check-wait'),
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: join(present.directory, 'runs', 'task', '2.check-host-runs'),
     });
     expect(attemptEnvironment({ id: 'task', base: 'abc123' }, { attempt: 2 }, absent.directory)).not.toHaveProperty(
       'KERNEL_CHECK_REMOTE',

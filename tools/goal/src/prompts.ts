@@ -67,7 +67,7 @@ const REGRESSION = `Do not run the root typecheck or other regression suites you
 const MINIMAL_SESSION_COMMANDS =
   'Commands that finish locally in under a minute (`bun test` of a few plain unit files, oxfmt, tsc on tools/goal) still run in the session.';
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
-  'minimal-verification': `${MINIMAL_SESSION_COMMANDS} ${OWN_TESTS} ${WRAPPER_RESULT}`.trimEnd(),
+  'minimal-verification': `${MINIMAL_SESSION_COMMANDS} ${WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
   wrapper: `${WAIT} ${REGRESSION}`,
   'no-wrapper': `${WAIT} ${REGRESSION}`,

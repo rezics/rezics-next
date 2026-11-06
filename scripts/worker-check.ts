@@ -44,6 +44,7 @@ import {
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { hostsLocation } from './stack-run.ts';
 import { classifyCheck, isCheckHostRun, performanceHosts, splitEnvironmentCommand } from './check-placement.ts';
+import { refuseExcessWorkerCheckHostRun } from '../tools/goal/src/worker-check-budget.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
@@ -2342,12 +2343,20 @@ async function scheduleOverloadRerun(
   }
 }
 
+function wrapperExecutionArgv(argv: readonly string[]): string[] {
+  let index = 0;
+  while (argv[index] === '--local' || argv[index] === '--returns') index += argv[index] === '--returns' ? 2 : 1;
+  if (argv[index] === '--') index += 1;
+  return argv.slice(index);
+}
+
 /** Start a detached check whose durable result can be retrieved by id after this process exits. */
 export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): string {
   if (argv.length === 0) throw new Error('A check command is required');
   const root = resolve(cwd);
   const ownership = ownershipFromEnvironment(process.env);
   registryForStart(process.env, ownership);
+  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(wrapperExecutionArgv(argv), root));
   const id = randomUUID();
   const physicalRunId = randomUUID();
   const file = logPath(root, id);

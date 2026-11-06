@@ -296,7 +296,7 @@ test('worker and manager prompts trust repository callers and let dev repair con
   }
 });
 
-test('minimal verification permits a focused check and keeps acceptance deferred', () => {
+test('minimal verification asks for one combined check after the outcome is written', () => {
   const directory = temporaryDirectory();
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
@@ -304,9 +304,9 @@ test('minimal verification permits a focused check and keeps acceptance deferred
     expect(prompt).toContain(
       'Acceptance, native, browser and root checks run after integration; you need not run them.',
     );
-    expect(prompt).toContain(
-      'Run a focused check yourself only when you cannot finish the outcome without seeing it, for example a page you changed.',
-    );
+    expect(prompt).toContain('After the whole outcome is written, run one check');
+    expect(prompt).toContain('one wrapper invocation joining with &&');
+    expect(prompt).toContain('Rerun it once after a fixed failure');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
   } finally {
@@ -322,9 +322,9 @@ test('minimal verification parks check-host commands on the wrapper and keeps sh
     writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
     const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
     expect(prompt).toContain('through the check wrapper (`bun scripts/worker-check.ts -- <command...>`');
-    expect(prompt).toContain('services/kernel check and typecheck');
+    expect(prompt).toContain('services/kernel: `bun run --cwd services/kernel check <files>`');
     expect(prompt).toContain('services/auth');
-    expect(prompt).toContain('apps/web focused runs');
+    expect(prompt).toContain('apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`');
     expect(prompt).toContain('`bun scripts/typecheck.ts`');
     expect(prompt).toContain(
       '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
@@ -555,19 +555,21 @@ test('a worker is told where reference projects are and to read the ones its con
 
 /** The behaviour the minimal verification policy must state wherever it is rendered. */
 const MINIMAL_RULES = [
-  'Run a focused check yourself only when you cannot finish the outcome without seeing it',
-  'type-check each workspace you changed',
+  'After the whole outcome is written, run one check',
+  'one wrapper invocation joining with &&',
+  'typecheck of each changed workspace',
+  'the changed test files',
   'services/kernel and services/auth may use the compiler database or a check host',
   'do not force `env -u KERNEL_CHECK_REMOTE` or local placement',
   'through the check wrapper (`bun scripts/worker-check.ts -- <command...>`',
-  'services/kernel check and typecheck',
-  'apps/web focused runs',
+  'services/kernel: `bun run --cwd services/kernel check <files>`',
+  'apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`',
   '`bun scripts/typecheck.ts`',
   '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
   'Never wait for it yourself: no `--wait`',
   'Commands that finish locally in under a minute',
   '`bun test` of a few plain unit files, oxfmt, tsc on tools/goal',
-  "run the test files you created or changed once, with the landing's command",
+  'Rerun it once after a fixed failure',
   'return success (blocker null, `"checks":[]`)',
   'the deferred acceptance, which is neither a blocker nor a reason to wait',
   'return waiting only for a still-running check UUID this attempt started',
@@ -576,6 +578,8 @@ const MINIMAL_FORBIDDEN = [
   'Wait for a long command, even one queued for a test slot',
   'in its open session with one yield of at least 300 seconds',
   '`yield_time_ms: 300000`',
+  'Run a focused check yourself only when you cannot finish the outcome without seeing it',
+  "run the test files you created or changed once, with the landing's command",
 ];
 
 test('minimal product policy keeps supported compiler placement and parks check-host commands on the wrapper', () => {

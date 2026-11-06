@@ -97,13 +97,19 @@ does not add a wrapper. Workers do not run the root typecheck or other regressio
 run the tests in the test files they created or changed once, with the command the landing's verification uses for
 them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
-call with a yield of at least 300 seconds, except under minimal verification: own tests and workspace typechecks that
-may place on a check host (services/kernel check and typecheck, services/auth, apps/web focused runs,
-`bun scripts/typecheck.ts`) use the wrapper parking protocol above, and the worker ends the turn with `waiting` and
-the printed check id instead of holding the live session. Commands that finish locally in under a minute still run in
-the session. A supplied acceptance command defines the worker's check. For an ordinary
+call with a yield of at least 300 seconds, except under minimal verification: after the whole outcome is written the
+worker runs one wrapper invocation joining with `&&` the typecheck of each changed workspace and the changed test
+files, and may rerun that command once after a fixed failure. Host-placing commands use the wrapper parking protocol
+above, and the worker ends the turn with `waiting` and the printed check id instead of holding the live session.
+Commands that finish locally in under a minute still run in the session. A supplied acceptance command defines the
+worker's check. For an ordinary
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
+A worker attempt may start at most two check-host runs through the wrapper: that one check, and one rerun after it
+failed. The controller keeps the count per attempt in its state directory, not the worktree. A third request in the
+same attempt is refused before any host is reserved, with a one-line message to finish the outcome and return success
+or a blocker. Proof-run, registered-proof and acceptance-requiring briefs keep their declared checks; urgent and
+control-plane tasks are exempt. `status` shows `checksUsed` and `checkBudget` on each running or waiting attempt.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
 Decision: an owner decision that does not fit the prompt points to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 
@@ -246,8 +252,9 @@ tail. Missing, unreadable, mismatched or truncated evidence is identified as unk
 attempt log are not used as substitutes.
 
 When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
-receives the current source-completion policy alongside its canonical contract. Workers finish their contract and the
-typing of the workspaces they changed, run the tests of the test files they changed once, then commit and return
+receives the current source-completion policy alongside its canonical contract. Workers finish their contract, then
+run one combined check (workspace typechecks and the changed test files in one wrapper invocation), rerun it once
+after a fixed failure, then commit and return
 `success`, `blocker:null`, `checks:[]`, naming the code completed and the original acceptance/native obligations
 deferred until after integration. This source result does not claim whole-feature, native or Goal completion.
 Unfinished work is not a blocker: a worker whose contract does not fit commits a coherent working part and returns
@@ -257,14 +264,16 @@ attempt; an empty list, completed command or product blocker cannot justify it. 
 or host failure has that command rerun once before the worker reports a `tool` blocker. Normal mode retains the wrapper
 continuation protocol above.
 
-Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking and for
-the tests of the test files the worker changed, with its real leases, results and terminal status preserved. It grants
-no acceptance, native, browser or root permission. Those own tests and workspace typechecks that may place on a check
-host run through the worker-check wrapper; the worker ends the turn with `waiting` and the printed check id, and Goal
-parks the session until the result arrives. Commands that finish locally in under a minute stay in the session. Workers
-must not invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or
-interrupt a live wrapper. The controller forwards this policy through its existing prompt seam; it does not steer live
-sessions.
+Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for that one combined
+check, with its real leases, results and terminal status preserved. It grants
+no acceptance, native, browser or root permission. The combined typecheck and changed-test command that may place on a
+check host runs through the worker-check wrapper; the worker ends the turn with `waiting` and the printed check id, and
+Goal parks the session until the result arrives. Commands that finish locally in under a minute stay in the session.
+Workers must not invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate
+commands or interrupt a live wrapper. The controller forwards this policy through its existing prompt seam; it does not
+steer live sessions. The second rerun is where the check-host queue grows, so the wrapper refuses a third request in
+the same attempt before it reserves a host. The refusal decides nothing about correctness; the landing train and the
+dev verifier still check every candidate.
 Decision: a live worker slot holds a session that is writing code; check-host placement parks on the wrapper the way
 acceptance already does.
 
@@ -1269,7 +1278,8 @@ main/stabilize releases and verification work, and without frozen acceptance fil
 routing ceiling of 1,500 lines and 24 files. With no command, acceptance is worker-owned: the worker chooses or adds a
 focused check, runs it under the normal check protocol, and reports the exact command and observed result. The parser
 does not insert a passing command. Under minimal verification, the worker supplies outcome tests and runs them with
-the landing's command; host-placing landing commands go through the wrapper. Broader acceptance stays deferred. The
+workspace typechecks in one wrapper invocation after the outcome is written; host-placing landing commands go through
+the wrapper. Broader acceptance stays deferred. The
 dev verifier keeps its affected and sibling checks and executes only supplied acceptance commands; omission earns no
 task acceptance pass. Any supplied `acceptance` fields keep their existing behavior; a supplied command
 still requires non-empty `tests`, and an implementation with supplied acceptance keeps the existing failing-test
