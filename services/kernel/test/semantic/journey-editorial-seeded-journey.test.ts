@@ -210,6 +210,11 @@ beforeAll(async () => {
     await real.grant(global, 'editor', action);
   for (const action of ['subject:read', 'context:accept', 'context:adopt', 'subject:merge'] as const)
     await real.grant(global, 'acceptor', action);
+  await admin.query(
+    `INSERT INTO access.resource_role_grant(route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+     VALUES ($1,$2,'identity',$3,'','semantic.context.owner','(,)',$3)`,
+    [global.route, global.id, accounts.acceptor],
+  );
   await real.grant(global, 'delegated', 'subject:read');
   await real.grant(global, 'delegated', 'statement:propose');
   for (const action of ['subject:create', 'statement:propose', 'context:create'] as const)
@@ -289,22 +294,16 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   expect(continued.candidates).toHaveLength(1);
   expect(continued.candidates[0]!.id).not.toBe(paged.candidates[0]!.id);
 
-  expect(
-    (
-      await write('acceptor', `/v1/subjects/${created.id}/candidates/${japanese.id}:accept`, {
-        context: GLOBAL_CONTEXT,
-        expected_head: byId[japanese.id]?.head ?? null,
-      })
-    ).status,
-  ).toBe(200);
-  expect(
-    (
-      await write('acceptor', `/v1/subjects/${created.id}/candidates/${korean.id}:reject`, {
-        context: GLOBAL_CONTEXT,
-        expected_head: byId[korean.id]?.head ?? null,
-      })
-    ).status,
-  ).toBe(200);
+  const accepted = await write('acceptor', `/v1/subjects/${created.id}/candidates/${japanese.id}:accept`, {
+    context: GLOBAL_CONTEXT,
+    expected_head: byId[japanese.id]?.head ?? null,
+  });
+  expect(accepted.status, JSON.stringify(accepted.body)).toBe(200);
+  const rejected = await write('acceptor', `/v1/subjects/${created.id}/candidates/${korean.id}:reject`, {
+    context: GLOBAL_CONTEXT,
+    expected_head: byId[korean.id]?.head ?? null,
+  });
+  expect(rejected.status, JSON.stringify(rejected.body)).toBe(200);
   const afterDecision = await listCandidates(created.id, 'acceptor');
   const decided = Object.fromEntries(
     afterDecision.candidates.filter((row) => !row.deleted).map((row) => [row.id, row]),
@@ -343,6 +342,11 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   const contextResource = { route: routeOf(contextId)!, id: contextId };
   await real.grant(contextResource, 'acceptor', 'context:accept');
   await real.grant(contextResource, 'acceptor', 'context:adopt');
+  await admin.query(
+    `INSERT INTO access.resource_role_grant(route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+     VALUES ($1,$2,'identity',$3,'','semantic.context.owner','(,)',$3)`,
+    [contextResource.route, contextResource.id, accounts.acceptor],
+  );
   const suppressed = await write('acceptor', `/v1/subjects/${created.id}:adopt`, {
     context: contextId,
     property: language,

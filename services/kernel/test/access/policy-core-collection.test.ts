@@ -156,3 +156,30 @@ test('declared creation types stay out of unique point policy profiles', () => {
   expect(hasNativePolicyProfile(compiled, 'statement:propose', 'semantic.revision')).toBe(false);
   expect(hasNativePolicyProfile(compiled, 'statement:propose', 'semantic.context')).toBe(true);
 });
+
+test('a direct Context action grant allows accept without a resource role', () => {
+  const compiled = compileNativePolicyCatalogue(new Map([['context:accept', { anonymous: false }]]), {
+    roles: new Map([
+      ['semantic.context.owner', ['context:accept']],
+      ['semantic.context.moderator', ['context:accept']],
+    ]),
+    types: new Map([['semantic.context', { owner: 'semantic.context.owner', standing: [] }]]),
+  });
+  expect(uniqueNativePolicyResourceType(compiled, 'context:accept')).toBe('semantic.context');
+  expect(
+    decideNativePermission(
+      compiled,
+      {
+        action: 'context:accept',
+        resourceType: 'semantic.context',
+        anonymous: false,
+        hasPrincipal: false,
+        authenticatedBenefit: false,
+        scope: true,
+        floor: false,
+        mode: 'ordinary',
+      },
+      projection({ actorActionGrant: true }),
+    ).decision,
+  ).toBe('allow');
+});

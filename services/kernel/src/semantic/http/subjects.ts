@@ -37,7 +37,11 @@ import { isRelationProperty, relationSlotForApi, SubjectInputError, type Item, t
 import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
 import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
-import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
+import {
+  resourceAuthorization,
+  resourceAuthorizationPage,
+  type AuthorizationAnchor,
+} from '../../access/resource-authorization.ts';
 import { createResourceCreationManifest, parentCreationAuthorization } from '../../access/index.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
 import { effectiveRelease } from '../extensions.ts';
@@ -616,13 +620,28 @@ async function authorizeSemanticWrite(input: {
   access: Access;
   actor: AccountActor;
   action: string;
-  anchor: AuthorizationAnchor;
+  anchor: AuthorizationAnchor & { resourceType?: string };
   pool: Pool;
   deadline: number;
   targetPartition: number;
   authorizeCommand: CommandAuthorizer;
   denied: () => Error;
 }): Promise<CommandAuthorization> {
+  const parentType = input.anchor.resourceType;
+  const context = { pool: input.pool, deadline: input.deadline, partition: input.targetPartition };
+  if (parentType !== undefined && input.access.preparePage && input.access.authorizePage)
+    return resourceAuthorizationPage({
+      access: input.access,
+      actor: input.actor,
+      action: input.action,
+      anchor: {
+        route: input.anchor.resource.route,
+        resourceType: parentType,
+        ids: Object.freeze([input.anchor.resource.id]),
+        validate: input.anchor.validate.bind(input.anchor),
+      },
+      context,
+    });
   if (partitionOf(input.anchor.resource.route) === input.targetPartition)
     return input.authorizeCommand(input.anchor.resource, input.denied);
   return resourceAuthorization({
@@ -630,7 +649,7 @@ async function authorizeSemanticWrite(input: {
     actor: input.actor,
     action: input.action,
     anchor: input.anchor,
-    context: { pool: input.pool, deadline: input.deadline, partition: input.targetPartition },
+    context,
   });
 }
 
