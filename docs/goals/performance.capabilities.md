@@ -240,8 +240,13 @@ resumption, and withdrawal verifies that repeated cancellation retains the prior
 These are Rating transaction/page seam scenarios with an explicitly injected producer fixture. The production
 unavailable-producer scenario must stay pending with unchanged selection/checkpoint and no effects or receipt;
 local withdrawal uses no producer. Production Semantic exact currentness and held obligations remain unavailable
-and separately owned. The suite is registered for future acceptance; no native pass follows from a preparation
-failure or from its presence in this inventory.
+in ordinary composition: `rating/module.ts` supplies no identity producer, and `identity-repair.ts` defaults to
+`unavailableRatingIdentityProducer`. Content owns completing the installed repair with Semantic's native mapping
+and retained-obligation authority; Performance receives its complete nested cost and independent growth evidence.
+Acceptance requires native admission through the empty terminal receipt, counted effects and checkpoint readback,
+including identity changes, rollback and same-input recovery. Injected success or permanent pending cannot establish
+that outcome. The suite is registered for future acceptance; no native pass follows from a preparation failure or
+from its presence in this inventory.
 
 Use these explicit groups through their existing workspace runners; each group contains at most twelve files.
 These commands specify future acceptance, with no execution or promotion claim:
