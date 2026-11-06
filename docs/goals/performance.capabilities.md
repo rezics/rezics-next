@@ -16,7 +16,10 @@ suites and the five retained Search scope/work-context suites, plus affected Web
 Source and the My Logs history-state return frontier are pinned on those suites. Full native Auth walk,
 64/512/4096 growth and rendered 720-hour retention remain open until observed passing. Verification.md keeps general
 check policy; these suites and the deferred native walk live here and in Library owners. Fewest tests: extend
-operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin.
+operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin. A retired completed
+session clears `completedAt` (`progress_session_check3`). FULL publication keeps the current public-account and
+`targetFields` unions, including deleted/pending curator/log-account cases; Accounts optional contribution-attribution
+producer is not in this checkout.
 
 Executable scenarios, user-case acceptance and promotion require separate evidence. A scenario name alone proves
 nothing; it becomes frozen with its executable acceptance. Existing frozen tests remain unchanged. Promotion requires

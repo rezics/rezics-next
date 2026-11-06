@@ -710,7 +710,10 @@ Access work. A changed Source on FULL published-log is withheld (`subject: null`
 leave the snapshot readable. The native interceptor catalogues reached SQL and skips consume while the enclosing
 operation reservation is open; an empty subject list is the zero operand. Growth suites keep scales 1/4/16 until
 native receiving observes 64/512/4096. Fewest tests: extend the existing operation-bounds composition suite and the
-retract causal for exact Undo, plus one FULL withhold, rather than a second lifecycle file.
+retract causal for exact Undo, plus one FULL withhold, rather than a second lifecycle file. A later private
+retirement of the source session clears `completedAt`. FULL account/target embeddings stay the current unions,
+including deleted/pending curator and log-account cases; Accounts optional contribution attribution is received
+when that producer lands.
 
 ## Private Collection pin operations
 
