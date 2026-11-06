@@ -124,6 +124,7 @@ test('the platform profile has an overview ending in Sources and a Details view 
   expect(work).toEqual([
     'overview',
     'editions',
+    'contents',
     'characters',
     'credits',
     'relations',

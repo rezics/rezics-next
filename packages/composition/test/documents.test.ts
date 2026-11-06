@@ -100,13 +100,20 @@ test('document selection follows current best rank, unknown snaks and the reader
   ]);
 });
 
-test('the shipped Recipe page uses the generic template and its shared summary', () => {
+test('the shipped Recipe page uses its released template and the shared summary', () => {
   const resolved = resolveTemplate(profile as PresentationProfile, { type: 'schema:Recipe' });
-  expect(resolved).toMatchObject({ scope: 'generic', key: null });
+  expect(resolved).toMatchObject({ scope: 'type', key: 'schema:Recipe' });
   expect(documentRead(resolved.document, id, [], candidate)).toEqual({
     kind: 'documents',
     id,
     context: candidate,
-    properties: ['schema:abstract'],
+    properties: [
+      'schema:abstract',
+      'schema:cookTime',
+      'schema:recipeIngredient',
+      'schema:recipeInstructions',
+      'schema:recipeYield',
+      'schema:suitableForDiet',
+    ],
   });
 });
