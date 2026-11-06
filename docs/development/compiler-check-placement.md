@@ -27,7 +27,7 @@ status 75 explicitly refuses relocation: the current producer has no declared sa
 credentials and SQL semantics. It neither copies credentials nor substitutes a fresh database. A normal admitted
 root run prepares one database with both schemas, shares it with the selected workspaces and removes it after all
 consumers finish. Direct Kernel and Auth retain their existing migration, SQL analysis, construct, diagnostic,
-failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged.
+failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged. A workspace whose tsconfig names a content mapper declares that mapper's package itself, so the mapper resolves from that workspace (Web declares `reylo` 0.7.0 beside its `contentMappers` entry).
 
 Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving
 entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
