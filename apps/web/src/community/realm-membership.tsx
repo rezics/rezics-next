@@ -8,7 +8,7 @@ import type { RealmHome } from './space';
 import { RealmParticipationView, type MembershipProblem, type MembershipRefreshState } from './realm-participation';
 import { changeRealmMembership } from './space-actions';
 import { readRealmJoinAdvice } from './realm-membership-actions';
-import { realmMembershipQuery, refreshRealmMembership } from './realm-membership-queries';
+import { realmMembershipQuery, refreshRealmMembership, type RealmViewer } from './realm-membership-queries';
 import {
   beginRealmMembershipRead,
   hasCurrentRealmMembership,
@@ -471,7 +471,9 @@ function PersonalMembership({
   const [completed, setCompleted] = useState<RealmMembershipCompletion | null>(null);
   const delivered = useRef(new WeakSet<RealmMembershipCompletion>());
   const standingIsCurrent = hasCurrentRealmMembership(client, realm.id, subject, caller);
-  const viewer = standingIsCurrent ? query.data : undefined;
+  const viewer = standingIsCurrent
+    ? (query.data ?? client.getQueryData<RealmViewer>(realmMembershipQuery(realm.id, subject).queryKey))
+    : undefined;
   const currentPending = pending?.caller.isCurrent() ? pending : null;
   const currentBusy = busy?.caller.isCurrent() ? busy.value : false;
   const currentProblem = viewer || problem?.outcome === 'closed' ? problem : null;
@@ -796,11 +798,12 @@ function PersonalMembership({
             ? 'pending'
             : currentRecovery && viewer
               ? viewer.state
-              : viewer
-                ? viewer.state
-                : !caller.isReady() || query.isPending || query.isFetching
-                  ? 'loading'
-                  : 'unavailable'
+              : currentRefresh === 'checking' ||
+                  (!viewer && (!caller.isReady() || query.isPending || query.isFetching))
+                ? 'loading'
+                : !viewer || currentRefresh === 'unavailable'
+                  ? 'unavailable'
+                  : viewer.state
         }
         visibility={realm.visibility}
         busy={currentBusy}
