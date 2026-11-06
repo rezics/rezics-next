@@ -1773,7 +1773,7 @@ export function createVndbImport(config: Config) {
           decision.receipt = {
             partition: result.partition,
             epoch: result.epoch,
-            position: result.position,
+            position: result.position.toString(),
             transactionId: result.transactionId,
           };
           record(result);
@@ -1808,7 +1808,7 @@ export function createVndbImport(config: Config) {
         decision.receipt = {
           partition: result.partition,
           epoch: result.epoch,
-          position: result.position,
+          position: result.position.toString(),
           transactionId: result.transactionId,
         };
         record(result);

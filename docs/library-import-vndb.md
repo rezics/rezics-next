@@ -307,3 +307,5 @@ their indexes/fences, retained receipt work and export cleanup/background partic
 remain separate from growth in unrelated owners/history. The V4 exporter uses its existing indexed evidence pages;
 it does not reinterpret V1/V2/V3 or make V4 recoverable. Independent all-pool 64/512/4096 executed measurements,
 composed V4 fidelity/recovery refusal and terminal cases remain controller acceptance, not results of this derivation.
+
+Native source consent binds the canonical identity epoch, accepting type, profile release and owner epoch. A private review write advancing the partition position does not change that source. Entry command receipt positions are retained as decimal strings so retry evidence remains JSON serializable.
