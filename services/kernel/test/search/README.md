@@ -88,5 +88,6 @@ the metadata suite pins released calendar metadata under an applied-but-lost wri
 
 Native identity receiving suites construct `searchIdentityReceivingComposition` and run each step inside
 Semantic's Source maintenance frame. They consume published mappings and the resolved public-filter
-definition; a missing mapping is unavailable, not a self binding. Accounts original-funded transfer
-is observed on the next native run.
+definition; a missing mapping is unavailable, not a self binding. Collection source setup composes the
+Library domain through `composeLibraryDomain`; Collection create does not invent a Search presentation
+path. Accounts original-funded transfer is observed on the next native run.

@@ -15,8 +15,9 @@ digests, not Semantic support bodies or another common receipt ledger. Bigints u
 The six-method factory is implemented in [identity-receiving-native.ts](identity-receiving-native.ts). Its trusted
 configuration derives `Parameters<typeof createIdentitySourceSupportReader>[0]` and adds the actual Search client,
 consumer and physical index. Search aliases extract the canonical native unions; the public Library aliases and
-API remain Library-only. Common preparation and exact selection resolve committed native plan custody. A plan
-receipt still grants no complete Source or publication authority.
+API remain Library-only. Native suites compose the Library domain through `composeLibraryDomain` before Collection
+source setup; Collection create does not invent a Search presentation path. Common preparation and exact selection
+resolve committed native plan custody. A plan receipt still grants no complete Source or publication authority.
 
 Terminal reconciliation reads the complete bounded original directory through the installed Source support reader,
 requires the selected origin and terminal mapping to appear across its pages, separately closes their native

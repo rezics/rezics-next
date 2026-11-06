@@ -260,7 +260,8 @@ a published mapped-self row supplied by revision-1 creation or bounded original 
 in the existing preparation path.
 Decision: identity receiving stores the resolved public-filter definition, not a release digest; OLD/NEW/first-apply
 follow published mappings and retained copies. Native suites wire searchIdentityReceivingComposition and the Source
-maintenance frame. Library cutover fixtures include collection:delete so Access compiles the collection owner role.
+maintenance frame. Library cutover fixtures include collection:delete so Access compiles the collection owner role,
+and compose the Library domain through composeLibraryDomain before Collection source setup.
 
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
