@@ -25,6 +25,11 @@ import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { harvestContinuations } from './continuation.ts';
 import type { Task } from './types.ts';
 import { defaultPolicy } from './policy.ts';
+import {
+  workerCheckBudgetDirectory,
+  workerCheckHostBudgetLimit,
+  workerCheckHostTypingSettlement,
+} from './worker-check-budget.ts';
 
 function readAttemptStderr(logPath: string): string {
   try {
@@ -374,6 +379,21 @@ export async function settle(
         finalMeasurement.failureKind = 'tool';
         finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${detail}`;
         if (transportLine) finalMeasurement.blocker = transportLine;
+      }
+      if (
+        !finalMeasurement.failureKind &&
+        !finalMeasurement.blocker &&
+        reportsSuccess(finalMeasurement.result, agentAdapter(attempt.profile.cli))
+      ) {
+        const typing = workerCheckHostTypingSettlement({
+          directory: workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt),
+          worktree: task.worktree,
+          limit: workerCheckHostBudgetLimit(task, ref.attempt),
+        });
+        if (!typing.ok) {
+          finalMeasurement.failureKind = 'tool';
+          finalMeasurement.result = typing.result;
+        }
       }
       store.updateAttempt(ref, (a) => {
         a.session = finalMeasurement.session ?? a.session;
