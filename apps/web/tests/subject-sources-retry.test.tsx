@@ -13,7 +13,10 @@ let reader = 'alice';
 let read: () => Promise<SourcesResult>;
 const calls: unknown[] = [];
 const queries = await import('../src/features/pages/subject-queries');
-mock.module('../src/features/pages/subject-queries', () => ({ ...queries, subjectRequestReader: async () => reader }));
+mock.module('../src/features/pages/subject-queries', () => ({
+  ...queries,
+  subjectRequestReader: async ({ data }: { data: { realm?: string } }) => (data.realm ? reader : null),
+}));
 mock.module('../src/features/catalogue/subject-sources-actions', () => ({
   loadSubjectSources: async ({ data }: { data: unknown }) => {
     calls.push(data);
@@ -114,7 +117,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
           await tick();
         });
         expect(calls).toHaveLength(2);
-        expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm, reader: 'alice' });
+        expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm, reader: realm ? 'alice' : null });
         // Suspense can retain the error article hidden alongside the visible pending presentation.
         const visibleArticles = Array.from(host.querySelectorAll('article')).filter(
           (article) => !article.closest('[style*="display: none"]'),
