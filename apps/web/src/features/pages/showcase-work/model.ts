@@ -7,7 +7,7 @@ import { bestRank, isRecord, type Stmt } from '../shared';
 import { relationItemRows } from '../relation-item-identity';
 import type { ProfileRelationWindow } from '../views';
 
-/** Relation target kinds. `showcaseWorkKind` decides whether a Subject is a Work; `workTargetKind` adds people and organizations. */
+/** Relation target kinds. `showcaseWorkKind` decides whether a Subject is a Work; `workTargetKind` adds people, organizations and episodes. */
 export type ShowcaseWorkKind =
   | 'visual-novel'
   | 'game'
@@ -39,7 +39,8 @@ export function showcaseWorkKind(
   if (declared.includes('wd:Q689445')) return 'visual-novel';
   if (declared.includes('schema:BookSeries')) return 'book-series';
   if (declared.includes('schema:Book')) return 'book';
-  if (declared.includes('schema:Episode')) return 'episode';
+  // Episodes are screen grain, never a Work reader. Keep them as relation targets only.
+  if (declared.includes('schema:Episode')) return;
   if (declared.some(isScreenType)) return 'screen';
   if (gameReaderEntry(type ?? '', types)) return 'game';
 }
@@ -53,6 +54,7 @@ export function workTargetKind(type: string | undefined, types: readonly string[
   const kind = showcaseWorkKind(type, types);
   if (kind) return kind;
   const declared = [type, ...types];
+  if (declared.includes('schema:Episode')) return 'episode';
   if (declared.includes('schema:Person')) return 'person';
   if (declared.includes('schema:Organization')) return 'organization';
 }
@@ -109,6 +111,19 @@ export type DirectedWorkRelation = {
   kind: ShowcaseWorkKind;
   related: Related;
 };
+
+/** Statement destinations the current windows did not already disclose, so publishers and credits stay beside inverse members. */
+export function uncoveredWorkDestinations(
+  subject: Subject,
+  related: Related,
+  definitions: Record<string, RelationDefinition>,
+  relations: readonly DirectedWorkRelation[],
+): WorkDestination[] {
+  const covered = new Set(relations.map((relation) => `${relation.property}\0${relation.id}`));
+  return workDestinations(subject, related, definitions).filter(
+    (destination) => !covered.has(`${destination.property}\0${destination.id}`),
+  );
+}
 
 /** Convert only identity-checked native summaries, including the assertion's own qualifier/citation summaries. */
 export function relationRelated(value: unknown): Related {

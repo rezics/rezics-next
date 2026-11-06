@@ -2258,7 +2258,7 @@ actor. Existing character and generic catalogue editors retain all command, admi
 
 Decision: a Work overview's connections keep a released relation target's own kind when it is a person (staff, cast or
 performer), an organization (publisher) or an episode, beside the Work's original statement and its citation. Only
-works open a Work reader: a person or organization Subject never enters Work mode because of such a target.
+works open a Work reader: a person, organization or episode never enters Work mode from such a target.
 
 Each of Relations, Characters and Credits owns one selected property/direction and one current page of at most
 12 rows. Changing that selection or choosing Next removes its prior page before requesting the replacement; Previous

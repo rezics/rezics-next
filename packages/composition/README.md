@@ -555,8 +555,8 @@ template does not define falls back to those.
 `Credits` of `schema:contributor`) and reviews. Its `Statements` properties are the work facts the bundled
 release defines, in this order: `schema:author`, `schema:illustrator`, `schema:translator`,
 `schema:publisher`, `schema:datePublished`, `schema:inLanguage`, `schema:genre`,
-`schema:isPartOf`. The series template has the same sections with contents instead of editions: `SubjectList`s for
-works in the series (`wdt:P179`) and parts (`schema:isPartOf`).
+`schema:isPartOf`. The series template uses contents not editions: series works (`wdt:P179`), parts (`schema:isPartOf`)
+and inverse `rezics:crossMediaCounterpart`.
 
 `types` has four templates. Recipe remains a home `TypeList` vertical and uses the generic page; it has no type template.
 Each list is a `SubjectList` after the header, with its title in the eight UI locales, and

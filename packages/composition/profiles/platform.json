@@ -940,6 +940,24 @@
               }
             },
             {
+              "type": "RelationGroups",
+              "props": {
+                "id": "counterparts",
+                "title": {
+                  "en": "Cross-media counterparts",
+                  "zh-Hant": "跨媒體對應作品",
+                  "zh-Hans": "跨媒体对应作品",
+                  "ja": "別メディアの関連作品",
+                  "ko": "다른 매체의 대응 작품",
+                  "de": "Werke in einem anderen Medium",
+                  "fr": "Œuvres dans un autre média",
+                  "es": "Obras en otro medio"
+                },
+                "property": "rezics:crossMediaCounterpart",
+                "limit": 3
+              }
+            },
+            {
               "type": "RatingSummary",
               "props": {
                 "id": "ratings"
