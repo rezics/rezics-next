@@ -79,6 +79,31 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
   }
 });
 
+test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environment merge', async () => {
+  // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
+  const result = Bun.spawnSync({
+    cmd: [
+      'node',
+      '--input-type=module',
+      '-e',
+      `
+        import assert from 'node:assert/strict';
+        import { resolveConfig } from 'vite';
+        const config = await resolveConfig({ logLevel: 'silent' }, 'build', 'development');
+        const optimizeDeps = config.environments.ssr.optimizeDeps;
+        assert.equal(optimizeDeps.noDiscovery, true);
+        for (const name of ['react-day-picker', 'date-fns', '@date-fns/tz'])
+          assert.ok(optimizeDeps.exclude.includes(name), name);
+      `,
+    ],
+    cwd: appRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
+  expect(result.exitCode).toBe(0);
+});
+
 test('Workers resolve both share-card public Wasm exports through the installed dependency links', async () => {
   // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
   const result = Bun.spawnSync({

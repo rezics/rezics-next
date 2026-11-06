@@ -62,10 +62,6 @@ export default defineConfig((context) => {
     ssr: {
       optimizeDeps: {
         include: ['@inlang/paraglide-js/urlpattern-polyfill'],
-        // Copies and Loans keep a locale Calendar grid. Discovering react-day-picker/date-fns
-        // during SSR prebundle prevents Vite from printing ready for signed-in routes.
-        noDiscovery: true,
-        exclude: ['react-day-picker', 'date-fns', '@date-fns/tz'],
       },
     },
     plugins: [
@@ -94,6 +90,33 @@ export default defineConfig((context) => {
         inspectorPort,
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
+      {
+        // Cloudflare's Worker environment turns SSR discovery back on. Keep it off so Copies and
+        // other signed-in routes can print ready without prebundling react-day-picker/date-fns.
+        name: 'ssr-optimize-deps-skip-calendar-packages',
+        enforce: 'post',
+        config() {
+          return {
+            environments: {
+              ssr: {
+                optimizeDeps: {
+                  noDiscovery: true,
+                  exclude: ['react-day-picker', 'date-fns', '@date-fns/tz'],
+                },
+              },
+            },
+          };
+        },
+        configResolved(config) {
+          const optimizeDeps = config.environments.ssr?.optimizeDeps;
+          if (!optimizeDeps) return;
+          optimizeDeps.noDiscovery = true;
+          optimizeDeps.exclude ??= [];
+          for (const name of ['react-day-picker', 'date-fns', '@date-fns/tz']) {
+            if (!optimizeDeps.exclude.includes(name)) optimizeDeps.exclude.push(name);
+          }
+        },
+      },
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
     ],
   };
