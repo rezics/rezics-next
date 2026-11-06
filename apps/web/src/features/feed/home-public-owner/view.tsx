@@ -119,7 +119,13 @@ function HomeCollectionPreview({
             <li key={member.id} data-collection-member-id={member.id} className="min-w-0">
               <a
                 lang={member.subject.label?.language}
-                href={homeCollectionMemberHref({ id: member.subject.id, label, locale, collectionHref: href, memberId: member.id })}
+                href={homeCollectionMemberHref({
+                  id: member.subject.id,
+                  label,
+                  locale,
+                  collectionHref: href,
+                  memberId: member.id,
+                })}
                 className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
               >
                 <bdi>{label || m.subject_value_unlabelled({}, options)}</bdi>

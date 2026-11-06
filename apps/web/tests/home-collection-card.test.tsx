@@ -166,9 +166,9 @@ test('Home member destinations are the same occurrence-bound links Library build
   for (const locale of ['en', 'ja']) {
     const currentHref = `/${locale}/collections/${collectionId}`;
     for (const label of ['Dune', 'Dune & Co / 2', '東京物語']) {
-      expect(
-        homeCollectionMemberHref({ id: subjectId, label, locale, collectionHref: currentHref, memberId }),
-      ).toBe(collectionComparisonHref(subjectId, label, locale, currentHref, memberId));
+      expect(homeCollectionMemberHref({ id: subjectId, label, locale, collectionHref: currentHref, memberId })).toBe(
+        collectionComparisonHref(subjectId, label, locale, currentHref, memberId),
+      );
     }
     // A malformed occurrence keeps the plain Subject destination in both implementations.
     expect(
