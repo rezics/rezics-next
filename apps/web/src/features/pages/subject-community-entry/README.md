@@ -66,5 +66,9 @@ The seeded participation walk runs with
 It consumes the wrapper's published Subject/Board pair, follows actual author links, reads durable native effects
 independently, and records the exact profile occurrence return. The walk owns its stack through the existing runner.
 
+Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and
+`GOAL_ACCEPTANCE_REQUIRES` into that walk command without rewriting recorded argv; browser captures stay
+viewport-sized so the seeded stack fits the host run memory limit.
+
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.

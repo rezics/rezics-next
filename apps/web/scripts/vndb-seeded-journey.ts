@@ -95,7 +95,7 @@ async function capture(page: Page, name: string): Promise<void> {
   assert((await page.title()).trim().length > 0, 'Page has no identity');
   await expect(page.locator('main')).toBeVisible();
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
-  await page.screenshot({ path: resolve(evidence, `${name}.png`), fullPage: true });
+  await page.screenshot({ path: resolve(evidence, `${name}.png`) });
   await writeFile(resolve(evidence, `${name}.txt`), await page.locator('main').innerText(), { mode: 0o600 });
 }
 
@@ -146,7 +146,10 @@ try {
   assert.equal(unselected.entry.state, 'not_selected');
   report.phases.push('actual-publication-and-native-entry');
 
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    args: ['--disable-dev-shm-usage', '--disable-gpu', '--renderer-process-limit=2'],
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
@@ -160,14 +163,16 @@ try {
     ] as const) {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: theme });
-      const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`);
+      const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
+        waitUntil: 'domcontentloaded',
+      });
       assert.equal(response?.status(), 200);
       await expect(page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
       await capture(page, `anonymous-${locale}-${width}-${theme}`);
       report.visits.push({ url: page.url(), locale, width, theme });
     }
   }
-  await page.goto(`${stack.web}${workPath}`);
+  await page.goto(`${stack.web}${workPath}`, { waitUntil: 'domcontentloaded' });
   const signin = page.locator('[data-slot="community-entry"] a[href^="/auth/sign-in"]').first();
   const signinHref = await signin.getAttribute('href');
   assert(signinHref, 'Subject entry must sign in to the supplied composer');

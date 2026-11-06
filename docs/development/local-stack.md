@@ -240,7 +240,8 @@ name alone does not admit a container. Walk stacks do not change check placement
 hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
-brief lists native or browser acceptance.
+brief lists native or browser acceptance. Remote placement forwards the original launcher `GOAL_TASK_ID`,
+`GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

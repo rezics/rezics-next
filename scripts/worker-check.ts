@@ -283,6 +283,24 @@ function applyTaskPriority(root: string, env: NodeJS.ProcessEnv): void {
   }
 }
 
+/** Launcher task/attempt/acceptance that remote argv must not rewrite. */
+export const ORIGINAL_CONTEXT_VARIABLES = ['GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_ACCEPTANCE_REQUIRES'] as const;
+
+export function originalContextAssignments(env: NodeJS.ProcessEnv = process.env): string[] {
+  return ORIGINAL_CONTEXT_VARIABLES.flatMap((name) => {
+    const value = env[name];
+    return value ? [`${name}=${value}`] : [];
+  });
+}
+
+/** Prefix the remote command with original launcher context without changing recorded argv. */
+export function withOriginalContext(command: readonly string[], env: NodeJS.ProcessEnv = process.env): string[] {
+  const assignments = originalContextAssignments(env);
+  if (assignments.length === 0) return [...command];
+  if (command[0] === 'env') return ['env', ...assignments, ...command.slice(1)];
+  return ['env', ...assignments, ...command];
+}
+
 type CheckMonitor = {
   stallMs?: number;
   pollMs?: number;
@@ -1479,18 +1497,21 @@ export async function runWorkerCheck(
       growthProfileRelative === undefined
         ? [...argv]
         : ['sh', '-c', 'export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"', 'sh', growthProfileRelative, ...argv];
-    const handedOffCommand = artifactPrepared
-      ? [
-          'env',
-          `REZICS_CHECK_ARTIFACTS_DIR=${artifactRelative}`,
-          `REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID=${physicalRunId}`,
-          'sh',
-          '-c',
-          'bun scripts/check-artifacts.ts prepare || printf "%s\\n" "worker-check: remote artifact staging unavailable" >&2; exec "$@"',
-          'worker-check-artifacts',
-          ...remoteCommand,
-        ]
-      : remoteCommand;
+    const handedOffCommand = withOriginalContext(
+      artifactPrepared
+        ? [
+            'env',
+            `REZICS_CHECK_ARTIFACTS_DIR=${artifactRelative}`,
+            `REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID=${physicalRunId}`,
+            'sh',
+            '-c',
+            'bun scripts/check-artifacts.ts prepare || printf "%s\\n" "worker-check: remote artifact staging unavailable" >&2; exec "$@"',
+            'worker-check-artifacts',
+            ...remoteCommand,
+          ]
+        : remoteCommand,
+      env,
+    );
     let remote: ReturnType<typeof spawn>;
     try {
       const spawnRemote = () =>
