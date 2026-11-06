@@ -10,9 +10,10 @@ binding). Installed capabilities: authorization, identityDisclosure, searchPrepa
 identityNative, sourceCapture. Application result types stay in the contract. Compatibility Source, member,
 publication, command-support and identity entries reach the composed implementation. Native identity matching stays
 the installed `identity-native-bounds.ts` declarations; composition binds that adapter. Selected identity seal
-declarations use the selected bind vector; transform fixtures use routable job IDs. Fewest tests: one
-domain-composition suite covering fake capabilities and ordinary native adapter install; native and publication
-growth cases keep their existing assertions.
+declarations use the selected bind vector; Search/current basis miss slots compose selected `emptySeeks=70`;
+transform fixtures use routable job IDs. Fewest tests: one
+domain-composition suite covering fake capabilities and ordinary native adapter install; native identity,
+Source/member/publication and publication growth cases keep their existing assertions.
 
 ## Collection operation costs
 
@@ -220,7 +221,9 @@ physical custody or infer destination erasure.
   UTF-8 bytes plus JSON-serialized original bind bytes plus its closed schema/native projection bound. Repeats and
   page ranges use `sumBounds`, `repeatBound` and `withinCeiling`; overflow and unrecognized SQL remain refused.
   Native Source basis declarations take each imported query's own `params`, so arity and serialized bind bytes
-  track the actual query owner.
+  track the actual query owner. Search/current basis statements reserve one empty seek per native point (the
+  indexed miss slot), including Core ownership, publication and proof; three selected current paths compose
+  `emptySeeks=70`.
   A range admits LIMIT plus one indexed EOF slot, not result count. Effects page: `n` candidate keys,
   `n+1` native rows, zero identity metadata, one native point, zero witnesses, one statement,
   SQL+serialized binds+`512n` bytes, one empty seek. The native page projects only the producer's

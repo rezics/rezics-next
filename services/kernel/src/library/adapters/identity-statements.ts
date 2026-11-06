@@ -131,7 +131,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativeRows: 16,
         nativePoints: 1,
         identityMetadataRows: 0,
-        emptySeeks: 0,
+        emptySeeks: 1,
         resultBytes: Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal })),
       },
       {
@@ -139,7 +139,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativeRows: 16,
         nativePoints: 1,
         identityMetadataRows: 0,
-        emptySeeks: 0,
+        emptySeeks: 1,
         resultBytes: Buffer.byteLength(
           JSON.stringify({
             accountId: boundId,
@@ -158,7 +158,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativeRows: 56,
         nativePoints: 7,
         identityMetadataRows: 1,
-        emptySeeks: 1,
+        emptySeeks: 7,
         resultBytes: Buffer.byteLength(
           JSON.stringify({
             generation: boundId,
@@ -176,7 +176,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativeRows: 32,
         nativePoints: 2,
         identityMetadataRows: 0,
-        emptySeeks: 0,
+        emptySeeks: 2,
         resultBytes: Buffer.byteLength(
           JSON.stringify([
             { kind: 'collection', generation: boundDecimal },
@@ -189,7 +189,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativeRows: 32,
         nativePoints: 1,
         identityMetadataRows: 0,
-        emptySeeks: 0,
+        emptySeeks: 1,
         resultBytes: currentCaptureProjectionBytes,
       },
       {
@@ -197,7 +197,7 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         nativeRows: 64,
         nativePoints: 3,
         identityMetadataRows: 1,
-        emptySeeks: 1,
+        emptySeeks: 3,
         resultBytes: Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal })),
       },
     ]),

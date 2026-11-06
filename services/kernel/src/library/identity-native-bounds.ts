@@ -333,16 +333,17 @@ function basisWork() {
     basisWork,
     () =>
       new Map<Query, Bound>([
+        // Search/current basis: each native point keeps its indexed miss slot.
         [
           nativeIdentityPartitionQuery,
           bound({ nativeRows: 16, nativePoints: 1, identityMetadataRows: 1, emptySeeks: 1 }),
         ],
-        [accountQuery, bound({ nativeRows: 16, nativePoints: 1 })],
-        [sourceQuery, bound({ nativeRows: 16, nativePoints: 1 })],
-        [outputQuery, bound({ nativeRows: 56, nativePoints: 7, identityMetadataRows: 1, emptySeeks: 1 })],
-        [fencesQuery, bound({ nativeRows: 32, nativePoints: 2 })],
-        [identityCapture, bound({ nativeRows: 32, nativePoints: 1 })],
-        [proofQuery, bound({ nativeRows: 64, nativePoints: 3, identityMetadataRows: 1, emptySeeks: 1 })],
+        [accountQuery, bound({ nativeRows: 16, nativePoints: 1, emptySeeks: 1 })],
+        [sourceQuery, bound({ nativeRows: 16, nativePoints: 1, emptySeeks: 1 })],
+        [outputQuery, bound({ nativeRows: 56, nativePoints: 7, identityMetadataRows: 1, emptySeeks: 7 })],
+        [fencesQuery, bound({ nativeRows: 32, nativePoints: 2, emptySeeks: 2 })],
+        [identityCapture, bound({ nativeRows: 32, nativePoints: 1, emptySeeks: 1 })],
+        [proofQuery, bound({ nativeRows: 64, nativePoints: 3, identityMetadataRows: 1, emptySeeks: 3 })],
       ]),
   );
 }

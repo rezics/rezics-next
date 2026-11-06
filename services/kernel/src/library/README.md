@@ -95,7 +95,8 @@ server and the worker call `composeLibraryDomain`. Compatibility entries (`ident
 Installed capabilities, bound by ordinary process composition: `authorization` (Access command, fence, deadline and
 lifecycle), `identityDisclosure` (Semantic original/terminal and release), `searchPreparation` (Search scope and
 owner-leaf), `contentPublication` (private working versus activated public), `identityNative` (installed
-`identity-native-bounds.ts` matching) and `sourceCapture` (native Collection Source when pool and Access are present). Public entries:
+`identity-native-bounds.ts` matching, including Search/current basis miss slots that compose selected
+`emptySeeks=70`) and `sourceCapture` (native Collection Source when pool and Access are present). Public entries:
 `kernel-library-contract` `contract/work-dimensions.ts` and `contract/index.ts`; `kernel-library-core`
 `core/index.ts`; `kernel-library-application` `application/index.ts`; adapter `adapters/index.ts` and
 `domain-binding.ts` plus the existing Library discovery and Access-capability entries.
@@ -3447,7 +3448,9 @@ tie. Each current-basis statement prices its actual closed projection. Shared qu
 surface and perform no checkout. Independent custody retains its own bounded timeout.
 
 The base selected identity SQL term has candidateKeys=1, nativeRows=785, identityMetadataRows=66,
-nativePoints=127, witnessKeys=0, statements=34 and emptySeeks=70. The selected page now composes one finite
+nativePoints=127, witnessKeys=0, statements=34 and emptySeeks=70. Search/current basis statements reserve
+`emptySeeks` equal to `nativePoints` (indexed miss slots on partition, account, Collection, publication, two
+fences, capture and proof); three current paths compose that 70. The selected page now composes one finite
 native custody capture-step ceiling with that term; the installed selected declaration is the resulting sum.
 Bytes are the sum of literal SQL, owner-derived maximum serialized binds and each bounded native projection;
 the callable assembly returns the exact value. No configured allowance or population estimate enters this derivation. Core controls
