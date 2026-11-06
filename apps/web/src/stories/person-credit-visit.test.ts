@@ -118,3 +118,44 @@ test('Person credit visits retain each admitted VN and anime window and its exac
     connectionCreditVisit(value, { ...vn, stream: { ...vn.stream, property: 'schema:contributor' } }),
   ).toBeUndefined();
 });
+
+test('Character credit visits use the live inverse window when RelationGroups nodes are absent', () => {
+  const vn = credit('schema:author', id(10), 'VN');
+  const value = {
+    subject: person,
+    context: { id: id(20), population: { kind: 'global' } },
+    releaseDigest: release,
+    unlabelled: 'Unlabelled',
+    relations: { 'schema:author': { forwardLabel: 'Author' } },
+    relationDirections: [{ state: 'admitted', property: 'schema:author', direction: 'inverse', release }],
+    relationNodes: [],
+    candidatePropertyLabel: (property: string) =>
+      ({ 'wdt:P1932': 'Credited name', 'wdt:P3831': 'Credit role' })[property],
+  } as unknown as OverviewValue;
+  expect(connectionCreditVisit(value, vn)).toMatchObject({
+    person,
+    node: 'in:schema:author',
+    stream: { kind: 'links', id: person, property: 'schema:author', limit: 12, cursor: 'cursor:VN' },
+    propertyLabel: 'Author',
+  });
+  expect(
+    connectionCreditVisit(
+      { ...value, relationNodes: [{ id: 'other', props: { property: 'wdt:P725' } }] } as unknown as OverviewValue,
+      vn,
+    ),
+  ).toBeUndefined();
+});
+
+test('Person and Character visits keep the active subpage, search and hash on a canonical redirect', async () => {
+  const { canonicalRedirect, keepSearch } = await import('../subject/subject-href');
+  const search = '?context=00000000-0000-4000-8000-000000000020&cursor=native-next';
+  const hash = '#connections';
+  expect(keepSearch('/en/subjects/survivor/slug/people', search, hash)).toBe(
+    `/en/subjects/survivor/slug/people${search}${hash}`,
+  );
+  expect(canonicalRedirect('/en/subjects/survivor/slug/character-relationships', search, hash)).toEqual({
+    href: `/en/subjects/survivor/slug/character-relationships${search}${hash}`,
+    statusCode: 301,
+    headers: { 'Cache-Control': 'private, no-store' },
+  });
+});

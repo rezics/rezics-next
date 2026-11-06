@@ -55,7 +55,9 @@ export type ConnectionVisit =
 export function connectionCreditVisit(value: OverviewValue, current: ConnectionSection): CreditVisit | undefined {
   if (current.stream.group !== 'credits' || !current.section.ok) return;
   const node = value.relationNodes.find(({ props }) => props.property === current.stream.property);
-  return node ? creditVisit(value, node.id, current.section, 'works') : undefined;
+  // Character pages have no RelationGroups nodes; the live inverse window is the locator.
+  const locator = node ?? (value.relationNodes.length === 0 ? { id: current.stream.key } : undefined);
+  return locator ? creditVisit(value, locator.id, current.section, 'works') : undefined;
 }
 
 /** Metadata, not a catalogue traversal: emitted bases already contain the effective type ancestry. */

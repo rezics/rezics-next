@@ -31,9 +31,15 @@ import {
   personIdentityForSource,
   personReviewSource,
   publishReviewedPersonMerge,
+  rereadCanonicalPersonIdentities,
+  readAdoptedCharacters,
+  readCombinedPersonCredits,
+  characterIdentityForSource,
   selectPersonReviewPair,
   showcasePersonReview,
-  type CurrentPersonIdentity,
+  type AdoptedCharacterCurrent,
+  type BoundPersonIdentity,
+  type CombinedPersonCredits,
   type PersonReviewSource,
   type PersonReviewPair,
   type ReviewedPersonPublication,
@@ -2140,7 +2146,7 @@ export type CrossMediaReading = {
   route: string;
   selection: 'selected' | 'proposed';
 };
-export type CrossMediaPersonIdentity = CurrentPersonIdentity & { boundSubjectId: string };
+export type CrossMediaPersonIdentity = BoundPersonIdentity;
 export type CrossMediaSeedResult = {
   status: 'imported' | 'imported-with-gaps';
   franchises: CrossMediaPlan['franchises'];
@@ -2149,6 +2155,12 @@ export type CrossMediaSeedResult = {
   readings: CrossMediaReading[];
   /** Current native identities for exact source records, including their durable original binding. */
   personIdentities: CrossMediaPersonIdentity[];
+  /** Current canonical Person beside each credit Person's durable original source key. */
+  canonicalPersons: Record<string, string>;
+  /** Independently reread adopted Character names, traits, measurements, links and served image. */
+  characterCurrents?: readonly AdoptedCharacterCurrent[];
+  /** Angel Beats and CLANNAD credit windows on one canonical Person after merge. */
+  combinedCredits?: CombinedPersonCredits;
   /** Private comparison inputs from actual admitted records, independent of canonical read availability. */
   personReviewSources?: readonly PersonReviewSource[];
   personReview?: typeof showcasePersonReview & { pair: PersonReviewPair };
@@ -3092,6 +3104,9 @@ export async function seedCrossMedia(
       runs,
       readings,
       personIdentities,
+      canonicalPersons: Object.fromEntries(
+        personIdentities.map((entry) => [entry.identity.externalId, entry.currentSubjectId]),
+      ),
       personReviewSources,
       personReview: {
         ...showcasePersonReview,
@@ -3351,6 +3366,10 @@ export async function seedCrossMedia(
       runs,
       readings,
       personIdentities,
+      canonicalPersons: {
+        ...Object.fromEntries(personIdentities.map((entry) => [entry.identity.externalId, entry.currentSubjectId])),
+        ...credits.canonicalPersons,
+      },
       personReviewSources,
       personReview: baseResult.personReview!,
       mediaOutcomes,
@@ -4539,10 +4558,72 @@ export async function runCrossMediaSeedCli(
             journal,
           })
         : undefined;
+    const afterMerge =
+      personMerge?.state === 'published' && publicClient
+        ? await rereadCanonicalPersonIdentities({
+            identities: combinedResult.personIdentities,
+            readPublic: (id) => publicClient.readSubject(id),
+          })
+        : undefined;
+    const adoptedCharacters = publicClient
+      ? combinedResult.readings.flatMap((reading) => {
+          const identity = characterIdentityForSource(
+            reading.source,
+            reading.externalId,
+            (reading.subject.subject as { type?: string }).type,
+          );
+          const bound = reading.boundSubjectId ?? reading.subject.subject.id;
+          return identity ? [{ identity, boundSubjectId: bound }] : [];
+        })
+      : [];
+    const characterCurrents =
+      publicClient && adoptedCharacters.length
+        ? await readAdoptedCharacters({
+            characters: adoptedCharacters,
+            readPublic: (id) => publicClient.readSubject(id),
+            authorizeMediaVariant: (mediaId, variant) => importPort.authorizeMediaVariant(mediaId, variant),
+          })
+        : undefined;
+    const canonicalPersonId =
+      afterMerge?.identities[0]?.currentSubjectId ??
+      combinedResult.personIdentities.find((entry) => entry.identity.externalId === 'person:1916')?.currentSubjectId;
+    const creditWorks = publicClient
+      ? combinedResult.readings.flatMap((reading) =>
+          reading.externalId === '1851' || reading.externalId === 'v4'
+            ? [{ externalId: reading.externalId, boundSubjectId: reading.boundSubjectId ?? reading.subject.subject.id }]
+            : [],
+        )
+      : [];
+    const combinedCredits =
+      publicClient && canonicalPersonId && creditWorks.length
+        ? await readCombinedPersonCredits({
+            canonicalPersonId,
+            originals: combinedResult.personIdentities.map((entry) => ({
+              boundPersonId: entry.boundSubjectId,
+              personExternalId: entry.identity.externalId,
+            })),
+            works: creditWorks,
+            readPublic: (id) => publicClient.readSubject(id),
+          })
+        : undefined;
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {
       ...publicCombinedResultFields,
       vndbWorkRelations: showcase?.vndbWorkRelations ?? combinedResult.vndbWorkRelations,
+      ...(afterMerge
+        ? {
+            personIdentities: afterMerge.identities,
+            canonicalPersons: { ...combinedResult.canonicalPersons, ...afterMerge.canonicalPersons },
+            ...(afterMerge.unconfirmed.length ? { status: 'imported-with-gaps' as const } : {}),
+          }
+        : {}),
+      ...(characterCurrents
+        ? {
+            characterCurrents: characterCurrents.currents,
+            ...(characterCurrents.unconfirmed.length ? { status: 'imported-with-gaps' as const } : {}),
+          }
+        : {}),
+      ...(combinedCredits && !('state' in combinedCredits) ? { combinedCredits } : {}),
     };
     const persona =
       options.composePersona && journal && options.selection

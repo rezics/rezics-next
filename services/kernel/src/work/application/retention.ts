@@ -1,9 +1,11 @@
 import {
-  TERMINAL_WORKFLOW_STATUSES,
+  WORKFLOW_RETENTION_BATCH_ATTEMPTS,
   WORKFLOW_RETENTION_BATCH_SIZE,
+  WORKFLOW_RETENTION_BATCH_STEP,
   WORKFLOW_RETENTION_MAX_BATCHES,
   WORKFLOW_RETENTION_SCHEDULE,
   WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
+  WORKFLOW_RETENTION_START_STEP,
   WORKFLOW_RETENTION_WORKFLOW,
 } from '../contract/bounds.ts';
 import { WORK_APPLICATION } from '../contract/vocabulary.ts';
@@ -11,8 +13,9 @@ import type { WorkApplicationPorts, WorkPool, WorkQueueOptions, WorkSdkClient } 
 import {
   assertRetentionDays,
   clampRetentionBatch,
+  freezeWorkflowRetentionStart,
   readWorkflowRetentionConfig,
-  retentionCutoff,
+  retentionSelectionBinds,
 } from '../core/index.ts';
 
 type Selector = (
@@ -35,14 +38,7 @@ export function createRetention(ports: Pick<WorkApplicationPorts, 'sdkRuntime' |
     deleter: Deleter = (ids, descendants) => ports.sdkRuntime.deleteWorkflows(ids, descendants),
   ): Promise<number> {
     assertRetentionDays(retentionDays);
-    const ids = clampRetentionBatch(
-      await select({
-        applicationName,
-        statuses: TERMINAL_WORKFLOW_STATUSES,
-        completedBefore: retentionCutoff(now, retentionDays),
-        limit: WORKFLOW_RETENTION_BATCH_SIZE,
-      }),
-    );
+    const ids = clampRetentionBatch(await select(retentionSelectionBinds(now, retentionDays, applicationName)));
     if (ids.length > 0) await deleter(ids, false);
     return ids.length;
   }
@@ -55,9 +51,12 @@ export function createRetention(ports: Pick<WorkApplicationPorts, 'sdkRuntime' |
     applicationName: string,
     deleter?: Deleter,
   ): Promise<number> {
+    const start = freezeWorkflowRetentionStart(retentionDays, now.getTime(), applicationName);
     let deleted = 0;
     for (let batch = 0; batch < WORKFLOW_RETENTION_MAX_BATCHES; batch++) {
-      const removed = await step(() => runRetentionBatch(retentionDays, now, select, applicationName, deleter));
+      const removed = await step(() =>
+        runRetentionBatch(start.retentionDays, new Date(start.now), select, start.applicationName, deleter),
+      );
       deleted += removed;
       if (removed < WORKFLOW_RETENTION_BATCH_SIZE) break;
     }
@@ -82,20 +81,21 @@ export function createRetention(ports: Pick<WorkApplicationPorts, 'sdkRuntime' |
         (context.client as { deleteWorkflows: Deleter }).deleteWorkflows(ids, descendants);
       ports.sdkRuntime.registerWorkflow(
         async () => {
-          const start = await ports.sdkRuntime.runStep(async () => ({ retentionDays, now: ports.now() }), {
-            name: 'kernel.workflowRetention.start',
-          });
+          const start = await ports.sdkRuntime.runStep(
+            async () => freezeWorkflowRetentionStart(retentionDays, ports.now(), applicationName),
+            { name: WORKFLOW_RETENTION_START_STEP },
+          );
           return runRetentionSweep(
             start.retentionDays,
             new Date(start.now),
             (batch) =>
               ports.sdkRuntime.runStep(batch, {
-                name: 'kernel.workflowRetention.batch',
+                name: WORKFLOW_RETENTION_BATCH_STEP,
                 retriesAllowed: true,
-                maxAttempts: 3,
+                maxAttempts: WORKFLOW_RETENTION_BATCH_ATTEMPTS,
               }),
             select,
-            applicationName,
+            start.applicationName,
             deleter,
           );
         },

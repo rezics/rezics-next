@@ -242,6 +242,8 @@ function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
   return body as ImportSourceStatisticValue;
 }
 
+export type ImportTransportPhase = 'readiness' | 'merge403' | 'SubjectGET503';
+
 /** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
 export class ImportTransportError extends Error {
   constructor(
@@ -250,8 +252,9 @@ export class ImportTransportError extends Error {
     readonly code?: string,
     readonly retryable = false,
     readonly retry?: ImportRetryState,
+    readonly phase?: ImportTransportPhase,
   ) {
-    super('Import transport request failed');
+    super(phase ? `Import transport request failed at ${phase}` : 'Import transport request failed');
     this.name = 'ImportTransportError';
   }
 }
@@ -747,10 +750,23 @@ export function createImportTransport(options: ImportTransportOptions) {
         fetch: { ...(signal === undefined ? {} : { signal }), redirect: 'manual', cache: 'no-store' },
       });
       if (reply.status !== 308) {
-        const result = await response(async () => reply, 200, signal);
-        const read = result.body as ReviewedSubjectRead;
-        ensure(read?.subject?.id === current);
-        return read;
+        try {
+          const result = await response(async () => reply, 200, signal);
+          const read = result.body as ReviewedSubjectRead;
+          ensure(read?.subject?.id === current);
+          return read;
+        } catch (error) {
+          if (error instanceof ImportTransportError && error.status === 503 && error.phase === undefined)
+            throw new ImportTransportError(
+              503,
+              error.type,
+              error.code,
+              error.retryable,
+              error.retry,
+              error.type === 'https://rezics.com/problems/semantic_not_ready' ? 'readiness' : 'SubjectGET503',
+            );
+          throw error;
+        }
       }
       const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
         redirect?: { from?: unknown; to?: unknown };
@@ -792,18 +808,24 @@ export function createImportTransport(options: ImportTransportOptions) {
     signal?: AbortSignal,
   ): Promise<ReviewedPersonAdmission> {
     const safe = snapshot(body, BODY_BYTES) as ReviewedPersonMerge;
-    const reply = await response(
-      () =>
-        reviewedPersonRequests(client).merge(safe, {
-          headers: { 'idempotency-key': idempotencyKey(key) },
-          ...fetchOptions(signal),
-        }),
-      202,
-      signal,
-    );
-    const result = reply.body as ReviewedPersonAdmission;
-    ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
-    return result;
+    try {
+      const reply = await response(
+        () =>
+          reviewedPersonRequests(client).merge(safe, {
+            headers: { 'idempotency-key': idempotencyKey(key) },
+            ...fetchOptions(signal),
+          }),
+        202,
+        signal,
+      );
+      const result = reply.body as ReviewedPersonAdmission;
+      ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
+      return result;
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 403)
+        throw new ImportTransportError(403, error.type, error.code, false, error.retry, 'merge403');
+      throw error;
+    }
   }
   /** Admission is not completion: callers observe the native job until its survivor and redirect are final. */
   async function readReviewedPersonOperation(id: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {

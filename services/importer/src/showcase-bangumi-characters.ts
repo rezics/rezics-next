@@ -392,6 +392,15 @@ export async function prepareShowcaseBangumiCharacterVocabulary(input: {
   };
 }
 
+export {
+  characterIdentityForSource,
+  observeCharacterIdentity,
+  readAdoptedCharacter,
+  readAdoptedCharacters,
+  type AdoptedCharacterCurrent,
+  type CharacterIdentity,
+} from './showcase-person-identity.ts';
+
 /** Resolve only journal-acknowledged UUIDs after exact current public vocabulary checks. */
 export async function readShowcaseBangumiCharacterVocabulary(input: {
   plan: CrossMediaPlan;

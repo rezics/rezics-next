@@ -32,8 +32,15 @@ receipt association and selected-admission adapters stay in `kernel-platform` an
 `createKernel` / `createKernelRuntimeDefaults` / `server` / `worker` composition. Product module assembly lives in
 `composition/work-modules.ts`. Compact `domain-composition` tests pin enqueue, registration, selected admission and
 retirement against fake ports; the existing growth-work-client, selected-runtime-native, sdk-transaction-fence,
-sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Derived cost stays on the existing
-admitted path.
+sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Retention deletion cost is selected
+IDs plus owned payload/FK cascade rows; a selected count alone cannot bound that payload. The growth-retention suite
+uses one folded capture per measured batch or sweep: nested SDK-delete auto_explain notices exceed the 32 MiB raw
+cap and the 20,000 retained-entry cap at a 1,000-id batch. Selector-plan notices from acquired pool clients prove
+`workflow_retention_selector`. Payload tables share the 32,768-row planner floor so fanout 1/8/64 keeps indexed
+equality deletes of `operation_outputs`; cascade families stay unit copies. Measured nonempty batches are five
+application statements plus two control. Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1,
+short 90/5+2, full/backlog 107304/5+2, fanout 90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0.
+Folded notice envelopes and walk occupancy are released after each summary.
 
 ## Semantic domain composition
 
@@ -278,7 +285,8 @@ production-write concurrency inside `grow` is unchanged.
 Native plan trees are bounded to 10,000 nodes and depth 256 (root depth 0); cycles, sparse children and invalid child
 collections fail with their plan location. One cost or report traversal of a capture shares a 20,000-node envelope
 with retained capture evidence entries and refuses a child collection before it would exceed remaining capacity.
-These are evidence input limits, not growth verdicts.
+Folded streaming walks release that occupancy after each notice is summarised, so later nested notices reuse the
+envelope; raw captures keep the cumulative walk. These are evidence input limits, not growth verdicts.
 Measured-run write discovery uses those same admitted EXPLAIN document envelopes and the native plan walk; a
 ModifyTable without Relation Name fails at that node path, a missing Schema defaults to public, and malformed
 documents fail at their location instead of omitting writes. Each write target keeps its schema, relation name and
@@ -452,12 +460,16 @@ the query shape.
 
 ## Native growth capture memory
 
-Decision: keep the shared capture cap at 32 MiB; folded captures release each eight-times notice reservation only
-after bounded cost and provenance summaries are charged, while raw captures retain native documents.
+Decision: keep the shared capture cap at 32 MiB and 20,000 retained entries. Folded captures reserve each native
+notice at eight times its UTF-8 size and one envelope entry, charge bounded cost and provenance summaries, then
+release that reservation and the plan-walk occupancy of the folded tree. Raw captures retain native documents and
+visited plan nodes. Unmeasured warmup and prepare captures record only top-level plans for write discovery; nested
+trigger and SPI notices are not charged.
 
 Each capture has hard caps of 20,000 evidence entries and 32 MiB of charged bytes shared by foreground and background
-evidence. Entries count statement text, retained statement error messages, native notice envelopes and plan nodes
-visited by the bounded plan walker. Statement and error strings use their UTF-8 byte size; native plan notices are
-charged at eight times their UTF-8 size to account for parsed-object expansion. A native notice is limited to 1 MiB,
-and its byte charge is reserved before JSON parsing. A focused capture may tighten these caps but cannot raise them.
-Exhaustion fails the capture after its operation and tracked queries drain, so no partial capture or cost is returned.
+evidence. Entries count retained statement text, retained statement error messages, currently reserved native notice
+envelopes and, for raw captures, plan nodes visited by the bounded plan walker. Statement and error strings use their
+UTF-8 byte size; native plan notices are charged at eight times their UTF-8 size to account for parsed-object
+expansion. A native notice is limited to 1 MiB, and its byte charge is reserved before JSON parsing. A focused capture
+may tighten these caps but cannot raise them. Exhaustion fails the capture after its operation and tracked queries
+drain, so no partial capture or cost is returned.

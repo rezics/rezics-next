@@ -14,6 +14,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
+import '../support/native-history-composition.ts';
 
 test('a reviewed Person pair merges once through the native contract and both originals read the canonical Person', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });

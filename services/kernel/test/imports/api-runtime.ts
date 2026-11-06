@@ -41,6 +41,7 @@ import { createMediaBoundary } from './media-boundary.ts';
 import { createApiCapture } from './api-capture.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import '../support/native-history-composition.ts';
 
 type GrowthSqliteCapture = {
   instrument(database: Database): Database;
