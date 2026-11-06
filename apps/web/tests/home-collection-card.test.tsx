@@ -6,6 +6,8 @@ import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeCollectionMemberHref } = await import('../src/features/feed/home-public-owner/member-destination');
+const { collectionComparisonHref } = await import('../src/library/collection-comparison/model');
 
 type CollectionCard = Extract<FeedItem['summary'], { card: unknown }>['card'];
 
@@ -158,4 +160,19 @@ test('an unavailable curator, an unnamed curator and a dynamic Collection keep t
   expect(dynamic).toContain('data-home-collection-presentation="dynamic"');
   expect(dynamic).toContain('data-collection-cover-source="pending"');
   expect(dynamic).not.toContain('data-collection-member-id');
+});
+
+test('Home member destinations are the same occurrence-bound links Library builds for its Collection pages', () => {
+  for (const locale of ['en', 'ja']) {
+    const currentHref = `/${locale}/collections/${collectionId}`;
+    for (const label of ['Dune', 'Dune & Co / 2', '東京物語']) {
+      expect(
+        homeCollectionMemberHref({ id: subjectId, label, locale, collectionHref: currentHref, memberId }),
+      ).toBe(collectionComparisonHref(subjectId, label, locale, currentHref, memberId));
+    }
+    // A malformed occurrence keeps the plain Subject destination in both implementations.
+    expect(
+      homeCollectionMemberHref({ id: subjectId, label: 'Dune', locale, collectionHref: currentHref, memberId: 'x' }),
+    ).toBe(collectionComparisonHref(subjectId, 'Dune', locale, currentHref, 'x'));
+  }
 });

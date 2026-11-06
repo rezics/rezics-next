@@ -12,7 +12,6 @@ import type {
   HomeWorkLibraryProjection,
   HomeWorkLibraryScope,
 } from '../feed/home-work-library/contract';
-import { homeWorkLibraryFeedProjection } from '../feed/home-work-library/page';
 import { HomeReactionRecovery, useHomeReactionRecovery } from '../feed/home-reaction-currentness-recovery';
 import { homeFeedDestination } from './home-feed-destination';
 import { useHomeReactionCurrentness } from '../feed/home-reaction-currentness';
@@ -689,19 +688,16 @@ export function HomeFeedConsumer({
     locale,
     route: '/',
   };
-  // The installed page supplies personal facts for its own rows; no second query is started here.
+  // The installed page supplies personal facts for its own rows; the provider maps them under this window's lease.
   const personal = snapshot.result.state === 'ready' ? snapshot.result.page.viewerPersonalActions : undefined;
-  const pageProjection =
-    personal && reader
-      ? homeWorkLibraryFeedProjection({ native: personal, scope: homeWorkLibraryScope, lease: feedLease })
-      : undefined;
-  const projection = homeWorkLibrary ?? pageProjection;
   return (
     <HomeWorkLibraryProvider
       expectedScope={homeWorkLibraryScope}
       signedIn={signedIn}
       enabled
-      {...(projection ? { projection } : {})}
+      {...(homeWorkLibrary ? { projection: homeWorkLibrary } : {})}
+      {...(personal ? { personal } : {})}
+      feedLease={feedLease}
     >
       <HomeFeed
         result={snapshot.result}
