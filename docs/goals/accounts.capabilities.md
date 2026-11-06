@@ -94,12 +94,21 @@ recovery. Auth response and page transport suites pin fixed RP receiving, exact 
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/gates/platform-gates-outcome.test.ts`.
 
-**Worker repair evidence:** Focused Web operation/lifetime regressions passed (4 tests), including a new explicit
-review after a recorded operation; local Auth binding regressions passed (16 tests), including deployment scope
-artifact preservation. Both workspace typechecks reached compilation after compiler-Docker startup retries and
-reported retained-source errors in Web community/catalogue pages and Kernel library/search/semantic dependencies.
-These worker checks do not accept the seeded persona/API/browser cycle or the original native suite; those remain
-for integration verification.
+**Native evidence:** Installed declaration, gate/admission, ordinary grant/revoke and generated discovery suites
+retain their original assertions. Global grant review additionally receives the native prepared Context owner,
+its authoritative T and mounted gate delegation advice. The native composition regression in
+`services/kernel/test/access/realm-claim.test.ts` covers fixed Global approval metadata, source denial mapping,
+opaque source custody, atomic rollback, HTTP replay and ordinary Global gate grant/revoke readback.
+A later Realm on an already-committed Space copies discovery-reference tuples into remove-work without binding
+`producer_epoch` to the INSERT target. Architecture repair of Access/application boundaries keeps these tests
+and adds no stories. Live grant authorization uses Community's public eligibility entry; no extra grant-read stories.
+
+**Mounted evidence:** The session-bound operator page retains immutable open/close review and retry and links to
+the existing ordinary Global grant screen. `apps/web/tests/platform-exposure.test.ts` covers that navigation and
+withheld mutation advice with authored transport fixtures. These are not recorded native API/browser evidence.
+
+**Promoted evidence:** Seeded persona exposure cycling, original native acceptance, recorded responses and mounted
+desktop/phone review remain integration verification; no promoted execution is established by source presence.
 
 ## agent-identity
 
@@ -222,6 +231,18 @@ acceptance remain deferred to integration; this consumer check does not establis
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/ban-precedence-outcomes.test.ts test/access/viewer-actions-outcomes.test.ts test/community/ban-protected-http.test.ts`.
 
+**Native evidence:** The existing ban-precedence, viewer-actions and held-cleanup HTTP scenarios remain the native
+acceptance boundary. Protected-ban fences, membership/follow cleanup and explicit readmission use their installed
+writers. The owner-defined Realm model has member/self-leave, direct manager-add and separate ordinary resource
+roles; unsupported roster removal or membership-role revision remains unavailable. Space follow is not membership.
+
+**Mounted evidence:** Existing membership and ban controls consume their own native advice and retain immutable
+uncertain intent. Operator tester grants reuse ordinary Global resource access. Consumer fixtures do not establish
+held native cleanup, persisted-row readback or recorded desktop/phone execution.
+
+**Promoted evidence:** Native deployment/readback and mounted persona journeys remain integration verification.
+No new promotion claim follows from the receiving repairs or authored regressions.
+
 ## notification-preferences
 
 **User job:** A person chooses per-kind notification preferences and receives content notices only when current send-time access permits delivery.
@@ -245,7 +266,11 @@ acceptance remain deferred to integration; this consumer check does not establis
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/notification-preferences.test.ts test/content/notification-outcomes.test.ts`.
 
-**Implementation choice:** Native fixtures establish parent creation rows on the Global Context through the shared trusted installer (`services/kernel/test/support/trusted-grants.ts`), the rows the other native fixtures use; they never substitute SQL-created Spaces or Realms. Whether Access admits Space and Realm creation on that parent is an Access producer decision that this base denies; it is carried by `.temp/continuation/access-parent-creation.md`.
+**Implementation choice:** Native fixtures issue parent-creation grants on the Global Context through ordinary `POST /v1/grants` receipts, using the grantor client's `access:grant` token, the same train Space HTTP and board-create fixtures use. Source boards are created through native Space, Realm, scheme, concept and board routes by the governance operator so Content delivery does not wait on Access admitting Space creation for ordinary accounts. Whether Access admits those ordinary-account rows remains an Access producer decision; it is carried by `.temp/continuation/access-parent-creation.md`. Community's current `refresh_space_discovery_tuple_witness` (`20261106043000_space_discovery_witness_locals.sql`) copies reference removals from the Space witness producer epoch; this consumer does not add a second Community migration. `space_discovery_tuple_reference` has no `producer_epoch` column, and selecting it failed `POST /v1/spaces` then `POST /v1/realms`. Kernel typecheck keeps one `deadlineLive` operand column and the consumed `live` column in `permission-check.sql`; the trailing duplicate alias is dropped so SQL analysis can name the row. Native reply-notice consumers keep `accounts.grant` and `GrowthDatabase` (`url`, instrumented `pool`, unexplained `admin`); grant writes ordinary receipts. Library `collection-source.ts` re-exports the work-dimension types its public facade already named.
+
+**Decision:** Settings verification keeps original-command retry only while the command is uncertain without a matching receipt; a receipt never offers original retry, and matching payload alone does not prove success.
+
+**Decision:** Existing Access preference, Content notification-outcome, notice-finalization, publication-driver, account-erasure-notices and Settings focused suites pin the installed lifecycle; no extra stories.
 
 **Native evidence:** landing-command files on `eddee3c801` (check `9ac9f3f3`): `test/access/preferences-erasure.test.ts` 4 pass; `test/access/preferences.test.ts` 12 pass; `test/access/notification-preference-page.test.ts` 3 pass; `test/access/notification-preferences.test.ts` 10 pass and 1 fail (the client-declaration test, blocked by Library type errors on base). Acceptance `test/content/notification-outcomes.test.ts` 0 of 10 pass: every scenario stops at `POST /v1/spaces`, denied by Access on base. `test/content/notice-finalization.test.ts` 0 of 2 and `test/content/publication-driver.test.ts` fail for the same two reasons; `test/content/account-erasure-notices.test.ts` 1 of 3 passes. Kernel workspace typecheck (check `ed955086`) exits 2 with 11 errors in nine files, none in changed files; the list is in the continuation. Failures are named in the continuation.
 

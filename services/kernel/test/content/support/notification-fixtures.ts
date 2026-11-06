@@ -1,17 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import type { AccountActor } from '../../../src/request/access.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
+import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
+import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
-import { installIdentityGrants } from '../../support/trusted-grants.ts';
 import type { Pool } from 'pg';
 import {
   createNativeContentSystemWithWriteRateOverrides,
+  nativeGrantor,
+  nativeOperator,
   registerNativeContentAccount,
   type NativeContentSystem,
 } from './native-system.ts';
+import { grantAccountActions, provisionNativeDiscussionBoard } from './native-board-host.ts';
 import type { ApiResult, Fixture, NoticeKind, Persona } from '../../../../../specs/content-notification-driver.ts';
 
 const AUDIENCE = 'https://content.test';
@@ -165,120 +168,14 @@ async function registerPersona(
 
 async function createBoard(
   system: NativeContentSystem,
-  creator: Persona,
   label: string,
   realmVisibility: 'public' | 'protected',
 ): Promise<BoardResult> {
-  const spaceResult = await api<{ space: { spaceId: string } }>(
-    system,
-    creator,
-    'POST',
-    '/v1/spaces',
-    {
-      title: `${label} notification space`,
-      summary: `${label} notification fixture`,
-    },
-    `${label}-space`,
-  );
-  await expectStatus(spaceResult.response, 201, 'Notification space creation');
-  const spaceId = spaceResult.value?.space.spaceId;
-  if (!spaceId) throw new Error('Notification space response is missing its id');
-
-  const realmResult = await api<{ realm: { realmId: string; headRevisionId: string } }>(
-    system,
-    creator,
-    'POST',
-    '/v1/realms',
-    {
-      spaceId,
-      title: `${label} notification Realm`,
-      summary: `${label} notification fixture`,
-      // Create as public, then use the production update path when a protected
-      // Realm is needed. That path installs the native member group grant.
-      visibility: 'public',
-      contextId: GLOBAL_CONTEXT,
-    },
-    `${label}-realm`,
-  );
-  await expectStatus(realmResult.response, 201, 'Notification Realm creation');
-  const realm = realmResult.value?.realm;
-  if (!realm) throw new Error('Notification Realm response is missing its identity');
-  await installGrant(system, realm.realmId, creator.id, ['realm:read', 'realm:manage', 'board:create']);
-  let realmHeadRevisionId = realm.headRevisionId;
-  if (realmVisibility === 'protected') {
-    const protectedResult = await api<{ realm: { headRevisionId: string } }>(
-      system,
-      creator,
-      'PATCH',
-      `/v1/realms/${realm.realmId}`,
-      { visibility: 'protected' },
-      `${label}-protect-realm`,
-      { 'if-match': JSON.stringify(realmHeadRevisionId) },
-    );
-    await expectStatus(protectedResult.response, 200, 'Notification Realm protection');
-    realmHeadRevisionId = protectedResult.value?.realm.headRevisionId ?? '';
-    if (!realmHeadRevisionId) throw new Error('Protected notification Realm response is missing its head');
-  }
-
-  const schemeResult = await api<{ subject: { id: string } }>(
-    system,
-    creator,
-    'POST',
-    '/v1/subjects',
-    {
-      type: 'skos:ConceptScheme',
-      labels: { en: `${label} notification scheme` },
-    },
-    `${label}-scheme`,
-  );
-  await expectStatus(schemeResult.response, 201, 'Notification subject scheme creation');
-  const schemeId = schemeResult.value?.subject.id;
-  if (!schemeId) throw new Error('Notification scheme response is missing its id');
-  await installGrant(system, schemeId, creator.id, ['subject:read']);
-
-  const conceptResult = await api<{ subject: { id: string } }>(
-    system,
-    creator,
-    'POST',
-    '/v1/subjects',
-    {
-      type: 'skos:Concept',
-      labels: { en: `${label} notification concept` },
-      statements: {
-        'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
-      },
-    },
-    `${label}-concept`,
-  );
-  await expectStatus(conceptResult.response, 201, 'Notification subject concept creation');
-  const conceptId = conceptResult.value?.subject.id;
-  if (!conceptId) throw new Error('Notification concept response is missing its id');
-  await installGrant(system, conceptId, creator.id, ['subject:read']);
-
-  const schemeUpdated = await api(
-    system,
-    creator,
-    'PUT',
-    `/v1/realms/${realm.realmId}/boardScheme`,
-    {
-      schemeId,
-    },
-    `${label}-board-scheme`,
-    { 'if-match': JSON.stringify(realmHeadRevisionId) },
-  );
-  await expectStatus(schemeUpdated.response, 200, 'Notification Realm board scheme update');
-  const boardResult = await api<{ board: { id: string } }>(
-    system,
-    creator,
-    'POST',
-    `/v1/realms/${realm.realmId}/boards`,
-    { conceptId, title: `${label} notification board`, visibility: 'published' },
-    `${label}-board`,
-  );
-  await expectStatus(boardResult.response, 201, 'Notification board creation');
-  const boardId = boardResult.value?.board.id;
-  if (!boardId) throw new Error('Notification board response is missing its id');
-  return { id: boardId, realmId: realm.realmId, sourceIds: [spaceId, realm.realmId, schemeId, conceptId, boardId] };
+  const board = await provisionNativeDiscussionBoard(system.kernel, nativeOperator(system), {
+    label: `${label} notification`,
+    realmVisibility,
+  });
+  return { id: board.id, realmId: board.realmId, sourceIds: board.sourceIds };
 }
 
 async function installGrant(
@@ -287,7 +184,13 @@ async function installGrant(
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  await installIdentityGrants(system.database.pool, resourceId, accountId, actions);
+  await grantAccountActions(
+    system.kernel,
+    nativeGrantor(system),
+    { route: route(resourceId), id: resourceId },
+    accountId,
+    actions,
+  );
 }
 
 export async function createNotificationFixture(options: { growth?: boolean } = {}): Promise<NotificationFixture> {
@@ -357,16 +260,18 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     await system.clock.setCommandTime(fixture.now);
     await system.clock.setCursorVerificationTime(fixture.now);
     await bootstrapRelease(system.database.pool, bundledRelease, () => new Date(fixture.now));
-    // Parent creation rows sit on the Global Context, the platform root anchor that Space and Realm
-    // creation authorize against. Whether Access admits them is the Access producer's decision (see
-    // the accounts continuation brief); the fixture installs the same rows the other native fixtures use.
-    const parentCreation = ['space:create', 'realm:create', 'subject:create'];
-    await installGrant(system, GLOBAL_CONTEXT, author.id, ['subject:read', ...parentCreation]);
-    await installGrant(system, GLOBAL_CONTEXT, realmOwner.id, parentCreation);
+    // Author already holds parent-creation grants from the native system. RealmOwner needs the
+    // same ordinary receipts; boards themselves are created by governance so delivery does not
+    // wait on Access admitting Space creation for ordinary accounts.
+    await grantAccountActions(system.kernel, nativeGrantor(system), PLATFORM_RESOURCE, realmOwner.id, [
+      'space:create',
+      'realm:create',
+      'subject:create',
+    ]);
 
     const [publicBoard, protectedBoard] = await Promise.all([
-      createBoard(system, author, 'public', 'public'),
-      createBoard(system, realmOwner, 'protected', 'protected'),
+      createBoard(system, 'public', 'public'),
+      createBoard(system, 'protected', 'protected'),
     ]);
     fixture.publicBoardId = publicBoard.id;
     fixture.protectedBoardId = protectedBoard.id;

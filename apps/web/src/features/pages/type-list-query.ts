@@ -148,13 +148,13 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const admissionRequest = readRequest(data);
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
+    await prepareSession(request, env as Partial<import('../../session/client').SessionEnv>);
     let authorization: string | undefined;
     let reader: string | null = null;
 
     if (hasSelectedRealmTarget(data.target)) {
-      const { env } = await import('cloudflare:workers');
-      const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
-      await prepareSession(request, env as Partial<import('../../session/client').SessionEnv>);
       authorization = viewerCredential(request) ?? undefined;
       if (authorization) {
         const subject = sessionSubject(request);

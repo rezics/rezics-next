@@ -704,7 +704,6 @@ CREATE FUNCTION community.refresh_space_discovery_tuple_witness(r integer, id uu
     AS $$
 DECLARE current_space_revision uuid; current_realm_id uuid; current_realm_revision uuid;
         current_state text; p integer; next_generation bigint;
-        witness_producer_epoch numeric(20,0); witness_source_position numeric(20,0);
 BEGIN
   SELECT s.head_revision_id, h.realm_id, h.head_revision_id
     INTO current_space_revision, current_realm_id, current_realm_revision
@@ -713,7 +712,7 @@ BEGIN
     WHERE s.route=r AND s.space_id=id;
   IF NOT FOUND THEN RETURN; END IF;
   p := r / 16;
-  SELECT state,producer_epoch,source_position INTO current_state,witness_producer_epoch,witness_source_position
+  SELECT state INTO current_state
     FROM community.space_discovery_tuple_witness
     WHERE route=r AND space_id=id FOR UPDATE;
   IF NOT FOUND THEN
@@ -751,12 +750,15 @@ BEGIN
     SELECT r,id,next_generation,old.tuple_route,old.source,old.external_id,old.field_group,'remove',
            old.producer_epoch,old.source_position
       FROM (
-        SELECT tr.tuple_route,tr.source,tr.external_id,tr.field_group,
-               witness_producer_epoch AS producer_epoch,witness_source_position AS source_position
-          FROM community.space_discovery_tuple_reference tr WHERE tr.route=r AND tr.space_id=id
+        SELECT ref.tuple_route,ref.source,ref.external_id,ref.field_group,
+               0::numeric AS producer_epoch,0::numeric AS source_position
+          FROM community.space_discovery_tuple_reference AS ref
+          WHERE ref.route=r AND ref.space_id=id
         UNION
-        SELECT w.tuple_route,w.source,w.external_id,w.field_group,w.producer_epoch,w.source_position
-          FROM community.space_discovery_tuple_work w WHERE w.route=r AND w.space_id=id
+        SELECT work.tuple_route,work.source,work.external_id,work.field_group,
+               work.producer_epoch,work.source_position
+          FROM community.space_discovery_tuple_work AS work
+          WHERE work.route=r AND work.space_id=id
       ) old
     ON CONFLICT DO NOTHING;
     DELETE FROM community.space_discovery_tuple_work WHERE route=r AND space_id=id

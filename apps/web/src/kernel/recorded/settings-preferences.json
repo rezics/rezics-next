@@ -28,5 +28,34 @@
     "supported": { "spoilerLevels": [0, 1, 2], "suitability": ["blur", "show"] },
     "effective": { "spoilerLevel": 1, "suitability": "blur" },
     "defaults": { "spoilerLevel": 0, "suitability": "blur" }
+  },
+  "shelfAdvice": {
+    "supported": {
+      "layouts": ["grid", "list", "table"],
+      "tabs": ["in_progress", "planned", "completed", "paused", "dropped", "all"],
+      "sortFields": ["last_activity", "added", "finished", "title", "rating", "release_date", "progress"],
+      "sortDirections": ["asc", "desc"],
+      "gridSizes": ["small", "medium", "large"],
+      "tableColumns": [
+        "cover",
+        "title",
+        "creator",
+        "type",
+        "status",
+        "progress",
+        "rating",
+        "added",
+        "started",
+        "finished",
+        "last_activity"
+      ]
+    },
+    "limits": {
+      "maxLayouts": 32,
+      "scopeMaxLength": 256,
+      "scopePattern": "^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\\S+)$"
+    },
+    "effective": {},
+    "defaults": {}
   }
 }

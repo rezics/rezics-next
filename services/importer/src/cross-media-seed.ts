@@ -3277,6 +3277,8 @@ async function readPriorShowcasePublication(
 }
 
 export type CrossMediaSeedCliOptions = {
+  /** Include the independently selected, pinned literary families beside a finite showcase selection. */
+  includeBooks?: boolean;
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
   selection?: CrossMediaSelection;
@@ -4321,27 +4323,28 @@ export async function runCrossMediaSeedCli(
       },
     };
     const { importShowcaseBooks, showcaseBooksToCrossMediaPlan } = await import('./showcase-books.ts');
-    const books = options.selection
-      ? undefined
-      : await importShowcaseBooks({
-          tables: input,
-          path: statePath,
-          port,
-          destination: { origin: api },
-          ...(journal && publicClient
-            ? {
-                journal,
-                review: importPort,
-                publicClient,
-                ...(creditResolution?.publication
-                  ? { prior: creditResolution.publication }
-                  : priorShowcase
-                    ? { prior: priorShowcase }
-                    : {}),
-                readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
-              }
-            : {}),
-        });
+    const books =
+      options.selection && !options.includeBooks
+        ? undefined
+        : await importShowcaseBooks({
+            tables: input,
+            path: statePath,
+            port,
+            destination: { origin: api },
+            ...(journal && publicClient
+              ? {
+                  journal,
+                  review: importPort,
+                  publicClient,
+                  ...(creditResolution?.publication
+                    ? { prior: creditResolution.publication }
+                    : priorShowcase
+                      ? { prior: priorShowcase }
+                      : {}),
+                  readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+                }
+              : {}),
+          });
     if (books) {
       const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
       for (const target of [plan, publicationPlan]) {

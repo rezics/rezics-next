@@ -4,7 +4,7 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccessRealmRoleReader, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { realmReadEligibility } from '../community/realm.ts';
+import { realmReadEligibility } from '../community/access-capabilities.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import publicRealmsRead from './account-public-realms-read.sql';

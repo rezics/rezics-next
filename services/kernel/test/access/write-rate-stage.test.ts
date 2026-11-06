@@ -1,6 +1,7 @@
-import { afterAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { t } from 'elysia';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { newId } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -9,6 +10,7 @@ import { createApp } from '../../src/http/app.ts';
 import { defineRateLimit } from '../../src/http/rate-limit.ts';
 import { createWriteRateStage } from '../../src/access/write-rate-stage.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { mountedRouteCatalogue } from '../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -59,11 +61,26 @@ const request = (path: string, count?: number, headers: Record<string, string> =
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(count === undefined ? {} : { commands: Array.from({ length: count }, () => ({ value: 1 })) }),
   });
+const opening = Bun.randomUUIDv7();
+beforeAll(async () => {
+  for (const group of ['search', 'search_advanced', 'selling']) {
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open) {
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         VALUES ($1, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2)`,
+        [group, opening],
+      );
+    }
+  }
+});
 beforeEach(async () => {
   effects = 0;
   await pool.query('TRUNCATE access.write_rate_counter');
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  await pool.end();
+});
 
 test('native HTTP stage spends the complete batch once before effects and preserves rejected expiry', async () => {
   const app = fixture();
@@ -151,10 +168,16 @@ test('one opaque request charge covers duplicate stage invocation and refuses a 
 });
 
 test('the default kernel composition declares every mounted write and installs the real limiter', async () => {
-  const app = createKernel({ pool, routeKey: new Uint8Array(32), ratePeer: () => '192.0.2.1' });
-  const writes = app.routes.filter((route) => {
-    const action = route.hooks?.detail?.['x-action'];
-    const readOnly = typeof action === 'string' && /^[a-z][a-z_]*:(read|list)$/.test(action);
+  const app = createKernel({
+    pool,
+    routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
+    ratePeer: () => '192.0.2.1',
+  });
+  const writes = mountedRouteCatalogue(app).routes.filter((route) => {
+    const detail = route.hooks?.detail as Record<string, unknown> | undefined;
+    const action = detail?.['x-action'];
+    const readOnly = typeof action === 'string' && /:(?:read|list)(?:_[a-z][a-z_]*)?(?![\s\S])/.test(action);
     return !['GET', 'HEAD', 'OPTIONS'].includes(route.method) && !readOnly;
   });
   expect(writes.length).toBeGreaterThan(0);
@@ -177,15 +200,18 @@ test('createKernel subject:read POST custom search authorizes without a write ch
   let spends = 0;
   const result = {
     subjects: [],
-    total: { value: 0, relation: 'exact' as const },
     next: null,
     as_of: '2026-10-25T00:00:00.000Z',
   };
   const app = createKernel({
     pool,
     routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
     access: ({ actions: catalogue }) => {
-      expect(catalogue.get('subject:read')).toEqual({ anonymous: true });
+      expect(catalogue.get('subject:read')).toEqual({
+        anonymous: true,
+        'x-resource-types': ['community.realm', 'semantic.context', 'semantic.subject'],
+      });
       return {
         async authenticate() {
           throw new Error('unused');
@@ -203,23 +229,21 @@ test('createKernel subject:read POST custom search authorizes without a write ch
       },
     },
     search: {
-      async savedCatalogueMembers() {
-        throw new Error('saved membership is not used by this fixture');
+      async releaseGroups() {
+        throw new Error('unused');
       },
-      async search(principal, body) {
+      async savedCatalogueMembers() {
+        throw new Error('unused');
+      },
+      async search(principal, body, _now, _active, context) {
         searches.push([principal, body]);
+        await context?.complete(result);
         return result;
       },
       async suggest() {
         throw new Error('unused');
       },
       async facets() {
-        throw new Error('unused');
-      },
-      async releaseGroups() {
-        throw new Error('unused');
-      },
-      async savedCatalogueMembers() {
         throw new Error('unused');
       },
     },
@@ -355,6 +379,7 @@ test('createKernel payout markPaid and offer delist spend once before effect wit
   const app = createKernel({
     pool,
     routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,

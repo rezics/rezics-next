@@ -784,6 +784,7 @@ export function accessRoutes(
             access: dependencies.access(),
             resources: dependencies.grantResources?.() ?? new Map(),
             commands: commands(),
+            routes: app.routes,
           },
           actor,
           query,

@@ -23,6 +23,7 @@ import {
   showcaseBookFamily,
   showcaseBooksToCrossMediaPlan,
 } from '../src/showcase-books.ts';
+import pinned from '../../kernel/test/imports/showcase-books-source.json';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const series = {
@@ -633,7 +634,7 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30_000);
+}, 120_000);
 
 test('wrong, missing or retracted author evidence withholds only that claim and exact journal replay keeps identities', async () => {
   const planned = await planShowcaseBooks({
@@ -732,3 +733,111 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('pinned real light-novel families publish through the reviewed world and reopen with exact identities', async () => {
+  const rows = pinned.rows as Record<string, Record<string, unknown>[]>;
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-pinned-books-'));
+  let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const world = reviewWorld(journal);
+    const input = {
+      tables: {
+        async *rows(provider: 'bangumi' | 'vndb', table: string) {
+          if (provider === 'bangumi') yield* rows[table] ?? [];
+        },
+      },
+      path: join(directory, 'state.sqlite'),
+      port: world.port,
+      journal,
+      review: world.review,
+      publicClient: world.publicClient,
+    };
+    const first = await importShowcaseBooks(input);
+    expect(first.selected).toMatchObject({
+      series: ['499', '2815'],
+      volumes: expect.arrayContaining(['26', '5329', '10862']),
+      authors: ['person:6023', 'person:1466'],
+      illustrators: expect.arrayContaining(['person:1467']),
+      publishers: expect.arrayContaining(['person:128']),
+      anime: ['233'],
+    });
+    const publication = await publishShowcase({
+      plan: showcaseBooksToCrossMediaPlan(first.planned),
+      result: first,
+      aliases: crossMediaAliases,
+      journal,
+      review: world.review,
+      publicClient: world.publicClient,
+      ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
+    });
+    const seriesId = first.identities['2815']!.id;
+    const animeId = first.identities['233']!.id;
+    const read = async (id: string) =>
+      (await world.publicClient.readSubject(id)).subject as {
+        type: string;
+        statements: Record<string, { value?: { content?: unknown } }[]>;
+      };
+    const contents = (subject: { statements: Record<string, { value?: { content?: unknown } }[]> }, property: string) =>
+      (subject.statements[property] ?? []).map((row) => row.value?.content);
+    const series2815 = await read(seriesId);
+    expect(series2815.type).toBe('schema:BookSeries');
+    // A BookSeries admits publisher but not author or illustrator, and the pinned source has no volume credit rows.
+    expect(first.creditGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: '/subject-persons/2815/1466/position',
+          reason: 'property_not_admitted',
+          property: 'schema:author',
+        }),
+        expect.objectContaining({
+          path: '/subject-persons/2815/1467/position',
+          reason: 'property_not_admitted',
+          property: 'schema:illustrator',
+        }),
+      ]),
+    );
+    expect(contents(series2815, 'schema:publisher')).toContain(first.identities['person:128']!.id);
+    expect(contents(series2815, 'schema:name')).toContainEqual({ language: 'und', text: 'THE GARDEN OF SINNERS' });
+    // The fake world adopts no relation statements, so volume membership is checked as its exact proposals.
+    const membership = [...world.receipts.values()]
+      .map((row) => JSON.parse(row.body) as BatchCommand)
+      .filter(
+        (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+          command.op === 'propose' && command.statement.property.id === 'wdt:P179',
+      );
+    for (const key of ['5329', '10862'])
+      expect(
+        membership.some(
+          (command) => command.subject === first.identities[key]!.id && valueContent(command.statement) === seriesId,
+        ),
+      ).toBe(true);
+    const anime = await read(animeId);
+    expect(anime.type).toBe('schema:TVSeries');
+    expect(contents(anime, 'schema:name')).toContainEqual({ language: 'und', text: '劇場版 空の境界 第一章 俯瞰風景' });
+    const counterpart = [...world.receipts.values()]
+      .map((row) => JSON.parse(row.body) as BatchCommand)
+      .some(
+        (command) =>
+          command.op === 'propose' &&
+          command.statement.property.id === 'rezics:crossMediaCounterpart' &&
+          ((command.subject === animeId && valueContent(command.statement) === seriesId) ||
+            (command.subject === seriesId && valueContent(command.statement) === animeId)),
+      );
+    expect(counterpart).toBe(true);
+
+    journal.close();
+    journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    const reopened = await importShowcaseBooks({
+      ...input,
+      port: captureShowcaseCommands(world.rawPort, journal),
+      journal,
+      prior: publication,
+    });
+    expect(reopened.selected).toEqual(first.selected);
+    for (const key of ['499', '2815', '26', '5329', '10862', '233', 'person:1466', 'person:1467', 'person:128'])
+      expect(reopened.identities[key]?.id).toBe(first.identities[key]?.id);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 180_000);

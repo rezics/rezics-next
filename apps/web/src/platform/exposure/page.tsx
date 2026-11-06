@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
 import type { Action, ExposureQuery, ExposureReaderEnvelope, Intent, Outcome, Page } from './data';
 import { ExposureOperation } from './operation';
 import { useExposureVisit, type ExposureBoundIO } from './lifetime';
@@ -104,6 +105,15 @@ function ExposureView({
             {m.exposure_groups()}
           </h2>
           <p className="text-muted-foreground">{m.exposure_current_page()}</p>
+          <div className="space-y-2 rounded-lg border p-4">
+            <a
+              className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline"
+              href={`/${getLocale()}/access/00000000-0000-8000-8000-000000000000`}
+            >
+              {m.exposure_grants_link()}
+            </a>
+            <p className="text-sm text-muted-foreground">{m.exposure_grants_help()}</p>
+          </div>
           <div className="flex flex-wrap gap-3">
             {page.current.next && (
               <Button variant="outline" disabled={busy} onClick={onNextPage}>

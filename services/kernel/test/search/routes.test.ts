@@ -12,11 +12,20 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
-import { compileKinds, kindDigest } from '../../src/search/query.ts';
+import {
+  compileKinds,
+  FACET_TEMPLATE,
+  HIT_TEMPLATE,
+  installTemplates,
+  kindDigest,
+  SEARCH_TEMPLATE,
+  SUGGEST_TEMPLATE,
+} from '../../src/search/query.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { createSearchService } from '../../src/search/service.ts';
-import type { IndexedSubject } from '../../src/search/source.ts';
+import { subjectPartition, type IndexedSubject } from '../../src/search/source.ts';
 import { createFakeSource } from './support/fake-source.ts';
+import { epochFixture } from '../semantic/support/identity-epoch.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const missingFigure: PublicFigureView = {
@@ -87,17 +96,16 @@ process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
   .join(',');
 let failure: ProblemError | null = null;
 const service: SearchService = {
-  async savedCatalogueMembers() {
-    throw new Error('saved membership is not used by this fixture');
-  },
-  async search(principal, request) {
+  async search(principal, request, _now, _active, context) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return {
-      subjects: [{ ...result, figure: missingFigure, matchEvidence: { state: 'absent' } }],
+    const page = {
+      subjects: [{ ...result, figure: missingFigure, matchEvidence: { state: 'absent' as const } }],
       next: null,
       as_of: asOf,
     };
+    await context?.complete(page);
+    return page;
   },
   async facets(principal, request) {
     calls.push(['facets', principal, request]);
@@ -113,10 +121,15 @@ const service: SearchService = {
       as_of: asOf,
     };
   },
-  async suggest(q, limit) {
+  async suggest(q, limit, _languages, read) {
     calls.push(['suggest', q, limit]);
     if (failure) throw failure;
-    return { subjects: [result], as_of: asOf };
+    const page = { subjects: [result], as_of: asOf };
+    await read?.complete(page);
+    return page;
+  },
+  async savedCatalogueMembers() {
+    throw new Error('Unexpected saved catalogue members call');
   },
   async releaseGroups(principal, request) {
     calls.push(['releaseGroups', principal, request]);
@@ -135,8 +148,15 @@ const service: SearchService = {
     throw new Error('Unexpected saved catalogue members call');
   },
 };
-const kernel = createKernel({ pool, access, tokens, routeKey, search: service });
-const offline = createKernel({ pool, access, tokens, routeKey });
+const kernel = createKernel({
+  pool,
+  access,
+  tokens,
+  receiptKeys: testReceiptKeys(),
+  routeKey,
+  search: service,
+});
+const offline = createKernel({ pool, access, tokens, receiptKeys: testReceiptKeys(), routeKey });
 
 async function call(
   app: typeof kernel,
@@ -175,6 +195,7 @@ test('search and suggest pass the caller, the body and the query to the service,
         summary: null,
         figure: missingFigure,
         kind: result.type,
+        matchEvidence: { state: 'absent' },
         base: {
           id: result.id,
           kind: result.type,
@@ -416,14 +437,17 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
     pool,
     access,
     tokens,
+    receiptKeys: testReceiptKeys(),
     routeKey,
     clock: () => new Date(now),
     search: {
       ...service,
-      async search(_principal, _request, instant) {
+      async search(_principal, _request, instant, _active, context) {
         forwarded.push(instant!);
         deadlines.push(deadlineFor(1));
-        return { subjects: [], next: null, as_of: asOf };
+        const page = { subjects: [], next: null, as_of: asOf };
+        await context?.complete(page);
+        return page;
       },
       async facets(_principal, _request, instant) {
         forwarded.push(instant!);
@@ -500,39 +524,46 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     cursors: ring,
     release: async () => version,
   });
-  const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
-  const subjects: IndexedSubject[] = Array.from({ length: 5 }, (_, n) => ({
-    id: id(n),
-    type: n < 3 ? 'schema:Book' : 'kind:Kind1',
-    visibility: 'visible',
-    redirect: null,
-    securityRevision: 1,
-    labels: [{ language: 'en', value: `Book ${n}` }],
-    aliases: [],
-    descriptions: [],
-    statements: [],
-  }));
+  let identity: Awaited<ReturnType<typeof epochFixture>> | undefined;
+  const subjects: IndexedSubject[] = [];
   beforeAll(async () => {
+    identity = await epochFixture(database, { pool });
+    for (let n = 0; n < 5; n++) {
+      const created = await identity.create(`Book ${n}`, 0xa0);
+      const subject: IndexedSubject = {
+        id: created.id,
+        type: n < 3 ? 'schema:Book' : 'kind:Kind1',
+        visibility: 'visible',
+        redirect: null,
+        securityRevision: 1,
+        labels: [{ language: 'en', value: `Book ${n}` }],
+        aliases: [],
+        descriptions: [],
+        statements: [],
+      };
+      subjects.push(subject);
+      fake.put(subject);
+    }
+    await installTemplates(native, prefix);
     await createSubjectIndex(native, prefix, 1);
-    for (const subject of subjects) fake.put(subject);
-    await native.bulk(
-      bulkLines(
-        index,
-        documentActions(
-          { partition: 10, position: 5n, subjects },
-          subjects.map((s) => s.id),
-        ),
-      ),
-      { query: { refresh: 'wait_for' } },
-    );
+    const partitions = new Map<number, string[]>();
+    for (const subject of subjects) {
+      const partition = subjectPartition(subject.id);
+      partitions.set(partition, [...(partitions.get(partition) ?? []), subject.id]);
+    }
+    for (const [partition, ids] of partitions) {
+      const snapshot = await fake.read(partition, ids);
+      await native.bulk(bulkLines(index, documentActions(snapshot, ids)), { query: { refresh: 'wait_for' } });
+    }
     await native.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(prefix) } }] });
-  });
+  }, 600_000);
   afterAll(async () => {
     await native.request('DELETE', `/${index}`);
-    for (const name of ['subjects-hits-v1', 'subjects-search-v2', 'subjects-suggest-v1', 'subjects-facets-v1'])
+    for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
       await native.request('DELETE', `/_scripts/${prefix}${name}`);
+    await identity?.close();
     await pool.end();
-  });
+  }, 600_000);
   const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
   test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {
     const before = queries;

@@ -1,6 +1,9 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { approveRealmClaim } from '../../src/access/realm-claim.ts';
+import { approveRealmClaim } from '../../src/access/index.ts';
+import * as community from '../../src/community/index.ts';
+import { compileViewerActionBindings } from '../../src/access/viewer-actions.ts';
+import { newId } from '../../src/route/route.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import governance from '../../src/access/platform-governance.json';
@@ -297,4 +300,154 @@ test('failed Content owned-state application rolls back the owner role, decision
     await system.database.pool.query('DROP TRIGGER refuse_claim_fixture ON community.realm');
     await system.database.pool.query('DROP FUNCTION community.refuse_claim_fixture()');
   }
+});
+
+test('installed approval advertises only fixed Global authority and maps missing source refusal before HTTP disclosure', async () => {
+  const bindings = compileViewerActionBindings(system.kernel.routes);
+  expect(bindings.get('semantic.context')?.find((entry) => entry.operationId === 'realm.approve_claim')).toMatchObject({
+    action: 'realm:approve_claim',
+    authority: 'resource',
+    fixedResourceId: PLATFORM_RESOURCE.id,
+  });
+  expect(bindings.get('community.realm')?.some((entry) => entry.operationId === 'realm.approve_claim')).toBe(false);
+  const pending = await orphan();
+  const input = { realmId: pending.realmId, requestId: newId(routeOf(pending.realmId)!) };
+  const before = await snapshot(input.realmId);
+  await expect(approveRealmClaim(deps(), approver(), input, context())).rejects.toBeInstanceOf(GrantDeniedError);
+  const response = await system.kernel.handle(
+    new Request(`http://kernel.test/v1/realms/${input.realmId}/claimRequests/${input.requestId}:approve`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${system.actors.moderator.bearer}`,
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
+    }),
+  );
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ code: 'forbidden' });
+  expect(await snapshot(input.realmId)).toEqual(before);
+});
+
+test('production Access receives original Community source custody, rolls back copied and prior-transaction sources, and HTTP replay retains the stored decision', async () => {
+  const pending = await orphan();
+  const input = { realmId: pending.realmId, requestId: pending.requestId };
+  const before = await snapshot(input.realmId);
+  const original = community.lockRealmClaimApprovalSource;
+  let captured: community.LockedRealmClaimApproval | null = null;
+  const copied = spyOn(community, 'lockRealmClaimApprovalSource').mockImplementation(async (tx, selection) => {
+    captured = await original(tx, selection);
+    return captured ? { ...captured } : null;
+  });
+  try {
+    await expect(approveRealmClaim(deps(), approver(), input, context())).rejects.toBeDefined();
+    expect(captured).not.toBeNull();
+    expect(await snapshot(input.realmId)).toEqual(before);
+  } finally {
+    copied.mockRestore();
+  }
+  const previous = spyOn(community, 'lockRealmClaimApprovalSource').mockImplementation(async (tx, selection) => {
+    await original(tx, selection);
+    return captured;
+  });
+  try {
+    await expect(approveRealmClaim(deps(), approver(), input, context())).rejects.toBeDefined();
+    expect(await snapshot(input.realmId)).toEqual(before);
+  } finally {
+    previous.mockRestore();
+  }
+  const key = crypto.randomUUID();
+  const send = () =>
+    system.kernel.handle(
+      new Request(`http://kernel.test/v1/realms/${input.realmId}/claimRequests/${input.requestId}:approve`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${system.actors.moderator.bearer}`, 'idempotency-key': JSON.stringify(key) },
+      }),
+    );
+  const approved = await send();
+  expect(approved.status).toBe(200);
+  const receipt = await approved.json();
+  expect(receipt).toMatchObject({ claim: { ...input, claimantAccountId: claimant().accountId, state: 'owned' } });
+  const after = await snapshot(input.realmId);
+  await clock(new Date(time.getTime() + day));
+  const replay = await send();
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual(receipt);
+  expect(await snapshot(input.realmId)).toEqual(after);
+});
+
+test('the mounted Global grant review receives installed gates, covers group delegation with gate:any, and reads back ordinary grant and revoke', async () => {
+  await clock(new Date());
+  // Explicit native client registration and consent receive the gate authority;
+  // ordinary mounted-operation scopes alone do not carry gate:any.
+  const scopes = [...system.auth.ordinaryScopes, 'gate:any'];
+  await system.nativeAuth.internal.registerClient({
+    clientId: system.auth.ordinaryClient.id,
+    firstParty: true,
+    scopes,
+  });
+  const operator = await system.auth.issue({
+    accountId: approver().accountId,
+    clientId: system.auth.ordinaryClient.id,
+    scopes,
+  });
+  const group = system.kernel.routes
+    .flatMap((route) => {
+      const exposure = route.hooks?.detail?.['x-exposure'];
+      return typeof exposure === 'string' && exposure.startsWith('gate:') ? [exposure.slice(5)] : [];
+    })
+    .sort()[0]!;
+  expect(group).toBeDefined();
+  const action = `gate:${group}`;
+  const read = (bearer = operator.bearer) =>
+    system.kernel.handle(
+      new Request(`http://kernel.test/v1/grants?resourceId=${PLATFORM_RESOURCE.id}`, {
+        headers: { authorization: `Bearer ${bearer}` },
+      }),
+    );
+  const response = await read();
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  const page = (await response.json()) as { actions: string[]; resource: { id: string; type: string } };
+  expect(page.resource).toMatchObject({ id: PLATFORM_RESOURCE.id, type: 'semantic.context' });
+  expect(page.actions).toContain('gate:any');
+  expect(page.actions).toContain(action);
+  const body = {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: competingClaimant().accountId },
+    actions: [action],
+    valid: '(,)',
+  };
+  const write = (path: string) =>
+    system.kernel.handle(
+      new Request(`http://kernel.test${path}`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${operator.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+        body: JSON.stringify(body),
+      }),
+    );
+  expect((await write('/v1/grants')).status).toBe(201);
+  const granted = await read();
+  expect(granted.status).toBe(200);
+  const grants = (await granted.json()).grants as {
+    subject: { id?: string };
+    actions: string[];
+    manageable: boolean;
+  }[];
+  expect(
+    grants.find((row) => row.subject.id === competingClaimant().accountId && row.actions.includes(action)),
+  ).toMatchObject({ manageable: true });
+  expect((await read(system.actors.other.bearer)).status).toBe(404);
+  expect((await write('/v1/grants:revoke')).status).toBe(200);
+  const revoked = await read();
+  expect(revoked.status).toBe(200);
+  expect(
+    (await revoked.json()).grants.some(
+      (row: { subject: { id?: string }; actions: string[] }) =>
+        row.subject.id === competingClaimant().accountId && row.actions.includes(action),
+    ),
+  ).toBe(false);
 });

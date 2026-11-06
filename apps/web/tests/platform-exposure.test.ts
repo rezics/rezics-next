@@ -199,3 +199,22 @@ test('read failures are unavailable and the real closed page offers no mutation 
   expect(markup).not.toContain('aria-label="Open collections"');
   expect(markup).not.toContain('aria-label="Close collections"');
 });
+
+test('native management links to the ordinary fixed Global grant journey without inferring grant authority', async () => {
+  const native = fixture({ offered: [] });
+  const initial = await loadExposure(native.client, 'Bearer viewer');
+  const markup = renderToStaticMarkup(
+    createElement(PlatformExposurePage, {
+      initial,
+      io: {
+        read: () => loadExposure(native.client, 'Bearer viewer'),
+        change: (operation) => commandExposure(native.client, 'Bearer viewer', operation),
+      },
+    }),
+  );
+  expect(markup).toContain('/access/00000000-0000-8000-8000-000000000000');
+  expect(markup).toContain('Review tester grants');
+  expect(markup).toContain('That page checks your current grant authority');
+  expect(markup).not.toContain('aria-label="Open collections"');
+  expect(native.calls.every((call) => call.method === 'GET')).toBe(true);
+});

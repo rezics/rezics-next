@@ -48,8 +48,10 @@ existing `access.account` profile. Point actions without one exact target type r
 `prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
 `permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
 validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
-target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
-the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
+target type is not registered or inferable. Decision: that statement selects `local.deadline_live AS deadlineLive`
+once, beside `assignmentValid`, and statement-level `live`; `policy-core.ts` maps `PolicyFacts.deadlineLive` from
+`row.live`. A second identical alias fails SQL analysis. The adapter evaluates every target at the same native
+snapshot and uses the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
 excludes that floor and resource-role grants. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
@@ -124,7 +126,7 @@ Mounted resource-authority metadata may declare `x-authority-resource-id` only a
 missing authority types and other type combinations fail constructor compilation. This is the actual
 fixed Global Context, not a new resource type or permission floor.
 
-The existing `exposure.open` and `exposure.close` operations publish this declaration. Compilation retains
+The existing `exposure.open`, `exposure.close` and `realm.approve_claim` operations publish this declaration. Compilation retains
 it as `ViewerActionBinding.fixedResourceId`. Native viewer actions discard inapplicable bindings before
 preparation and gate/candidate work, and restrict mixed-batch action decisions and operation entries to
 the matching native reference. All existing resource existence/privacy, current T, scopes, principal,
@@ -233,8 +235,9 @@ completed projection bytes are measured directly. Witness work is zero: Access d
   and public projections. Each key/target/branch has an action-grant seek, each configured resource-role grant
   seek, and denial work for the three closed reasons (`resource`, `suspension`, `realm_ban`). The native temporal
   keys' `WITHOUT OVERLAPS` constraints and last-range `LIMIT 1` seeks bound each candidate/reason. The declaration
-  also charges the finite generated key/target/probe/decision work. The final assignment recheck is separately
-  included. No target grant, current denial or final scope decision is reused from preparation.
+  also charges finite generated key/target/probe/decision work. Final assignment and live deadline evidence
+  reach the typed policy projection; its 38 primitive fields are included in byte reservations. No target grant,
+  current denial or final scope decision is reused from preparation.
 
 Native cost/growth evidence remains separate from these declarations. Publishing a bound proves no native
 execution, cold-load or shared-suite pass; missing foreign operands remain explicitly unmeasured.
@@ -288,9 +291,30 @@ explicitly includes that scope. Auth's host creates a missing `login` client wit
 
 ## Grant rule
 
-A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
+A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. Composed Auth/Access fixtures call these native grant commands rather than a separate HTTP Access app. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
 
 `gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). Mounted route declarations use `<group>` matching `^[a-z][a-z_]{0,62}$`; native opening and gate-action validation retains `^[a-z][a-z_-]{0,62}$`. On that resource, holding `gate:any` counts as holding every admitted `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
+
+### Installed Global grant review
+
+The ordinary `GET /v1/grants` reader prepares its native owner before the target checkout and forwards the same
+live authoritative time to the owner read. The canonical Global Context has its known `semantic.context` type
+independently of ordinary resource-creation enrollment; the real native Context reader still establishes its
+existence, lifecycle and current disclosure. Other resources require their existing initialization marker.
+
+For Global only, the action picker additionally receives `gate:any` and sorted gate actions from the immutable
+mounted exposure catalogue. Current native actor/client/principal checks decide each exact action. A current
+`gate:any` covers delegation advice for those mounted groups, matching the ordinary grant writer's existing
+exception; it grants no other action or resource. The grant page's current rows use that same advice for revoke.
+The exposure page links to this ordinary screen; configuration-read and open/close authority never imply grant
+authority. Every write retains the original native authorization, anti-amplification, currentness and replay.
+Live Realm grant and account-Realm reads take `realmReadEligibility` through Community's `access-capabilities`
+public entry.
+
+Cost: preparation adds one existing owner preparation for the exact target before checkout. Gate advice adds at
+most G+1 ordinary native checks for the fixed mounted group count G, with the existing K<=1,000 formula bound;
+no members, grant history or route-derived resource rows are enumerated. The existing twenty-row page and
+keyset cursor remain unchanged. Native Global grant/readback coverage lives in `test/access/realm-claim.test.ts`.
 
 ### Platform governance reach
 
@@ -1326,6 +1350,8 @@ It does not publish a second effect or replace the native error mapping.
 Realm mutation presentation. A missing or copied port remains `realm_guard_unavailable`; a role row or
 caller flag cannot open it. Existing current before/final management reads, all-action delegation checks,
 signed 20-row keyset pages and bounded public identity batches still apply. Realm subject groups stay read-only.
+Delegation advice follows actually held actions: withdrawing one owner action also requires removing a covering
+owner role grant, or the role still confers that action.
 
 The authenticated Web BFF consumer is `/access/{resourceId}` via `transferResourceOwner` and the local typed
 `owner-transfer` transport. It uses the server's current credential, shared Origin/session CSRF protection and
@@ -1438,13 +1464,13 @@ requests in that episode cannot subsequently apply. Original orphan/request prov
 the source and result. Stale source/request, claimant fencing, removal/restore, a later owner or failed application
 rolls back grant, state, request, event and receipt together.
 
-**The native Content implementation is still unavailable in this checkout.**
-`community/realm-claim-approval.ts` publishes the agreed original-module types and callable signatures with
-unconditionally unavailable provisional bodies. It returns no source or application result and performs no SQL.
-Content owns replacing those bodies with its real transaction-bound source/state implementation, native
-request/decision retention and route exposure. The Access composition is implemented, but these declarations
-provide neither native approval nor acceptance proof. No optional adapter, caller callback, copied Content SQL
-or parallel owner registry supplies authority.
+Native composition receives the transaction-bound implementation through Community's public `index.ts` entry.
+The adapter preserves the original opaque source object and live transaction; it neither copies source fields
+nor substitutes an application-owned source. Application-level claim denials throw contract `RealmClaimDeniedError`; the adapter maps that class to native
+`GrantDeniedError` without importing the application module, so missing requests and invalid selections retain
+the ordinary forbidden HTTP response. Unexpected producer
+errors and typed source conflicts propagate unchanged. The mounted approval operation declares its exact
+Global authority for generated viewer actions; its addressed Realm is not its authorization anchor.
 
 The real command basis, grant transaction provenance and event association retain the approver/principal through
 the existing command machinery. Native grant retention remains with the existing Access grant owners and
@@ -1829,6 +1855,27 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 - Touches: actor evidence once, as for a single check; one owning-module page validation statement; one formula statement over at most 100 exact grant, role-grant and denial keys per admitted subject; one governance reach record statement when reach is used. Membership anchors are deduplicated across the page.
 - Bound: `O((1 + K) log G + P log R)` with page size `P <= 100` and the existing admitted-key and catalogue caps; statement count is independent of page size for fixed actor evidence. Per id, each key matches at most one current grant and three denial reasons. No ACL enumeration.
 - Growth check: `test/access/growth-resource-authorization-page.test.ts`, two `checkGrowth` series at [1, 8, 64] with warm-ups: growing page size, including the explicit operand, has constant statements and linear rows; growing unrelated accounts, grants and resources at fixed page size has constant rows/statements and logarithmic buffers.
+
+### Installed Global grant review
+
+The ordinary `GET /v1/grants` reader prepares its native owner before the target checkout and forwards the same
+live authoritative time to the owner read. The canonical Global Context has its known `semantic.context` type
+independently of ordinary resource-creation enrollment; the real native Context reader still establishes its
+existence, lifecycle and current disclosure. Other resources require their existing initialization marker.
+
+For Global only, the action picker additionally receives `gate:any` and sorted gate actions from the immutable
+mounted exposure catalogue. Current native actor/client/principal checks decide each exact action. A current
+`gate:any` covers delegation advice for those mounted groups, matching the ordinary grant writer's existing
+exception; it grants no other action or resource. The grant page's current rows use that same advice for revoke.
+The exposure page links to this ordinary screen; configuration-read and open/close authority never imply grant
+authority. Every write retains the original native authorization, anti-amplification, currentness and replay.
+Live Realm grant and account-Realm reads take `realmReadEligibility` through Community's `access-capabilities`
+public entry.
+
+Cost: preparation adds one existing owner preparation for the exact target before checkout. Gate advice adds at
+most G+1 ordinary native checks for the fixed mounted group count G, with the existing K<=1,000 formula bound;
+no members, grant history or route-derived resource rows are enumerated. The existing twenty-row page and
+keyset cursor remain unchanged. Native Global grant/readback coverage lives in `test/access/realm-claim.test.ts`.
 
 ### Platform governance reach
 
@@ -3097,7 +3144,10 @@ report and appeal outcomes are independent of optional toggles. Optional off aff
 not old inbox entries, content authority or follows. See [Accounts adoption](../../../../docs/accounts.md#6-auth-ownership-and-registration)
 and the [notification research](../../../../docs/research/accounts-design-notification-preferences.md).
 
-Consumers retain the actual effective-map/default, null-reset, shared CAS and replay contracts above. Web must
+Consumers retain the actual effective-map/default, null-reset, shared CAS and replay contracts above. Native notice
+fixtures create boards as the governance operator through ordinary Space/Realm routes; Community's current witness
+refresh copies reference removals from the Space witness epoch because `space_discovery_tuple_reference` has no
+`producer_epoch`. Web must
 distinguish an ambiguous save from confirmed Saved and unavailable unread data from zero, preserving session
 and CSRF behavior. A replayed preference response is historical acknowledgement; fresh GET establishes current
 readback. No channel, quiet-hour or conversation setting is implied.
@@ -3106,6 +3156,10 @@ Decision: Reset, when shown, PATCHes native defaults `spoilerLevel` 0 and `suita
 shared version. Viewer state and read/update actions sit on the shared preference-page envelope so a notification
 catalogue and shelf observation can add their slices without a second preference version. Unknown or malformed choice
 data is unavailable; consumers do not guess the spoiler or suitability enum, nor invent shelf catalogues or limits.
+
+Decision: Native content fixtures grant Global parent-creation actions through ordinary `POST /v1/grants` receipts
+issued with the grantor client's `access:grant` token. Whether the Global B-tree seek admits those rows for Space
+and Realm creation is the permission-formula owner.
 
 ## Direct resource role data
 

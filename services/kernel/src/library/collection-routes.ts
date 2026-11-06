@@ -22,7 +22,7 @@ import type { SearchService } from '../search/service-scope.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
 import { viewerPersonalActionsResponseSchema } from './viewer-personal-actions-schema.ts';
-import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
+import type { ViewerPersonalActionsPage, ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
 import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { createCollectionCommands } from './collections.ts';
 import { createCollectionStructureHistory } from './collection-structure-history.ts';
@@ -562,6 +562,55 @@ function collectionView(value: Collection) {
 function memberView(value: CollectionMember) {
   const { id, subjectId, note, addedAt } = value;
   return { id, subjectId, note, addedAt };
+}
+
+type MembersHttpSubject = Static<typeof SubjectSummarySchema> | { id: string; type: string; label: string } | null;
+type MembersHttpFacts = Record<string, Static<typeof FactSchema>[]>;
+type MembersHttpMember =
+  | Readonly<{
+      kind: 'dynamic';
+      subjectId: string;
+      subject?: MembersHttpSubject;
+      facts?: MembersHttpFacts;
+    }>
+  | Readonly<{
+      id: string;
+      subjectId: string;
+      note: string | null;
+      addedAt: string;
+      subject?: MembersHttpSubject;
+      facts?: MembersHttpFacts;
+    }>;
+
+/** Copy Search/Library member pages into the mutable members HTTP body. Readonly saved-catalogue rows stay internal. */
+function membersHttpResponse(
+  result:
+    | { preparing: true }
+    | Readonly<{
+        members: readonly MembersHttpMember[];
+        next: string | null;
+        viewerFacts?: ViewerPersonalActionsPage;
+      }>,
+) {
+  if ('preparing' in result) return { preparing: true as const };
+  return {
+    members: result.members.map((member) => {
+      const extras = {
+        ...('subject' in member && member.subject !== undefined ? { subject: member.subject } : {}),
+        ...('facts' in member && member.facts !== undefined ? { facts: member.facts } : {}),
+      };
+      if ('kind' in member) return { kind: 'dynamic' as const, subjectId: member.subjectId, ...extras };
+      return {
+        id: member.id,
+        subjectId: member.subjectId,
+        note: member.note,
+        addedAt: member.addedAt,
+        ...extras,
+      };
+    }),
+    next: result.next ?? null,
+    ...('viewerFacts' in result && result.viewerFacts !== undefined ? { viewerFacts: result.viewerFacts } : {}),
+  };
 }
 
 /** Transport only: the merged commands and reads own authorization, privacy and ordering. */
@@ -1270,25 +1319,34 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
-        const sourceOptions = query.filter !== undefined || query.sort !== undefined ? query : basicQuery(query);
+        const languages = languageRanges(request.headers.get('accept-language'));
+        const memberQuery = {
+          ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+          ...(query.limit === undefined ? {} : { limit: query.limit }),
+          ...(query.filter === undefined ? {} : { filter: query.filter }),
+          ...(query.sort === undefined ? {} : { sort: query.sort }),
+          ...(query.view === undefined ? {} : { view: query.view }),
+        };
         const listFactsAttached = query.filter === undefined && query.sort === undefined && query.view === 'FULL';
         const sourcePage = () =>
-          admission.run('normal', job, () =>
-            read().readMembers(actor, params.collectionId, sourceOptions, job.deadline),
-          );
+          admission.run('normal', job, () => read().readMembers(actor, params.collectionId, memberQuery, job.deadline));
         const finalSource =
           query.view === 'FULL' && actor.kind === 'account'
             ? await read().observeMemberSource(actor, params.collectionId, job.deadline)
             : undefined;
         let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
-            ? read().readMembers(actor, params.collectionId, query, job.deadline)
+            ? read().readMembers(actor, params.collectionId, memberQuery, job.deadline)
             : query.view === 'FULL'
               ? fullMembers(
                   viewDependencies(),
                   actor,
                   params.collectionId,
-                  { ...basicQuery(query), languages: languageRanges(request.headers.get('accept-language')) },
+                  {
+                    ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                    ...(query.limit === undefined ? {} : { limit: query.limit }),
+                    languages,
+                  },
                   job.deadline,
                 )
               : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
@@ -1305,8 +1363,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           set.headers['retry-after'] = '1';
           return { preparing: true as const };
         }
-        // Saved catalogue pages carry readonly dynamic members; the response schema owns mutable arrays.
-        return 'members' in result ? { ...result, members: [...result.members] } : result;
+        return membersHttpResponse(result);
       },
     )
     .post(

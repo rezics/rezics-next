@@ -755,36 +755,111 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
+/**
+ * Starts the local stack in three ordered phases, each gated on what the next one needs. The issuer origin is served by
+ * the Pages process, which proxies to the native Auth host, and the kernel fetches its keys from that issuer while it
+ * boots. So identity, Pages and the workflow worker start first: the worker's DBOS launch creates the system schema the
+ * kernel boots against, and its "Worker ready" line marks that launch complete. The kernel boots next and must answer
+ * before Web, the heaviest compilation, begins. Each phase logs when it is ready and names itself when it stalls.
+ */
 async function start() {
   const env = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
-  const children = [
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'dev'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
-  ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
+  const children: ReturnType<typeof Bun.spawn>[] = [];
+  const launch = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') => {
+    const child = Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout, stderr: 'inherit' });
+    children.push(child);
+    return child;
+  };
   let stopping = false;
   const stop = () => {
     stopping = true;
-    for (const child of children) child.kill('SIGTERM');
+    void stopChildren(children);
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
+    const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
+    const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
+    const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+    await phase(
+      'identity',
+      Promise.all([
+        untilOutput(worker, 'Worker ready'),
+        untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker, pages]),
+      ]),
+    );
+    const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
+    await phase('kernel', untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity, pages]));
+    const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
+    await phase('web', untilReady([`${origins.web}/`], [web]));
     const first = await Promise.race(children.map(async (child) => await child.exited));
     const interrupted = stopping;
-    stop();
-    await Promise.all(children.map((child) => child.exited));
+    await stopChildren(children);
     process.exitCode = interrupted ? 0 : first || 1;
+  } catch (error) {
+    await stopChildren(children);
+    throw error;
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
   }
+}
+
+/** Names the startup phase that failed, so the stack output says which dependency was missing. */
+async function phase<T>(name: string, work: Promise<T>): Promise<T> {
+  try {
+    const value = await work;
+    console.info(`stack: ${name} ready`);
+    return value;
+  } catch (error) {
+    throw new Error(`walk: the ${name} phase did not start: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/** Resolves once `child` prints `marker`; its output keeps flowing to this process's stdout for the child's lifetime. */
+async function untilOutput(child: ReturnType<typeof Bun.spawn>, marker: string): Promise<void> {
+  const decoder = new TextDecoder();
+  let recent = '';
+  let seen = false;
+  const pump = (async () => {
+    for await (const chunk of child.stdout as ReadableStream<Uint8Array>) {
+      const text = decoder.decode(chunk, { stream: true });
+      process.stdout.write(text);
+      if (!seen) {
+        recent = (recent + text).slice(-(marker.length + 256));
+        seen = recent.includes(marker);
+      }
+    }
+  })();
+  pump.catch(() => {});
+  const deadline = Date.now() + 600_000;
+  while (!seen) {
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(`walk: "${marker}" was not printed; the process exited (${child.exitCode ?? child.signalCode})`);
+    if (Date.now() > deadline) throw new Error(`walk: "${marker}" was not printed within ten minutes`);
+    await Bun.sleep(250);
+  }
+}
+
+/** SIGTERM every running child, then SIGKILL any that outlive the grace period, so a stuck child cannot hold teardown. */
+async function stopChildren(children: ReturnType<typeof Bun.spawn>[], graceMs = 30_000): Promise<void> {
+  const running = () => children.filter((child) => child.exitCode === null && child.signalCode === null);
+  for (const child of running()) child.kill('SIGTERM');
+  const exits = Promise.all(children.map((child) => child.exited));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const outlived = await Promise.race([
+    exits.then(() => false),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(true), graceMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (outlived) for (const child of running()) child.kill('SIGKILL');
+  await exits;
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
@@ -802,8 +877,12 @@ function removeWalkStack(names: WalkNames): void {
     if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
 }
 
-/** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
-async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
+/** Resolves when every URL answers; fails when any starting process exits first or takes longer than ten minutes. */
+async function untilReady(
+  urls: string[],
+  starting: ReturnType<typeof Bun.spawn> | readonly ReturnType<typeof Bun.spawn>[],
+): Promise<void> {
+  const processes = Array.isArray(starting) ? starting : [starting as ReturnType<typeof Bun.spawn>];
   const answers = (url: string) =>
     fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
       (response) => response.status < 500,
@@ -811,8 +890,9 @@ async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>
     );
   const deadline = Date.now() + 600_000;
   while (!(await Promise.all(urls.map(answers))).every(Boolean)) {
-    if (starting.exitCode !== null || starting.signalCode !== null)
-      throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
+    const exited = processes.find((child) => child.exitCode !== null || child.signalCode !== null);
+    if (exited)
+      throw new Error(`walk: the local stack exited (${exited.exitCode ?? exited.signalCode}) before it was ready`);
     if (Date.now() > deadline) throw new Error('walk: the local stack was not ready after ten minutes');
     await Bun.sleep(500);
   }

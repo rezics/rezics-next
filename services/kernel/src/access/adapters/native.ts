@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { checkAvatarMedia, readAvatarSummaries } from '../../content/access-capabilities.ts';
-import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/access-capabilities.ts';
+import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/index.ts';
 import {
   accountAgentId,
   activeIdentitySourceConsumerMaintenance,

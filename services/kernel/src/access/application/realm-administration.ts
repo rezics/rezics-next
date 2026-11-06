@@ -2,21 +2,17 @@ import {
   ACCESS_WORKFLOW_KEY_MAX,
   ACCESS_WORKFLOW_KEY_MIN,
   isAccessAccountActor,
+  RealmClaimDeniedError,
   type AccessApplicationPorts,
   type ApproveRealmClaimApplicationInput,
   type RealmClaimApprovalResult,
 } from '../contract/index.ts';
 
+export { RealmClaimDeniedError };
+
 function routeOf(id: string): number | null {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return null;
   return Number.parseInt(id.slice(0, 4), 16) & 0xffff;
-}
-
-export class RealmClaimDeniedError extends Error {
-  constructor() {
-    super('Realm claim denied');
-    this.name = 'RealmClaimDeniedError';
-  }
 }
 
 export function createRealmAdministration(ports: Pick<AccessApplicationPorts, 'realm'>) {

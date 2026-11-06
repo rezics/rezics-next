@@ -52,6 +52,7 @@ import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf
 import { packScopeLeafProgress, type ScopeLeafPosition } from './scope-progress.ts';
 import { compileFilter } from './filter.ts';
 import type { OpenSearch, SearchRequestWork } from './opensearch.ts';
+import type { CataloguePublicationObservation } from './catalogue-publication.ts';
 import { isOrdinalKey } from '../library/ordinal.ts';
 import { routeOf } from '../route/route.ts';
 import type { SearchHit } from './query.ts';
@@ -123,6 +124,7 @@ export type ScopeBasis = Readonly<{
   query: string;
   profile: string;
   canonical: string;
+  publicCatalogue?: CataloguePublicationObservation;
 }> &
   (
     | Readonly<{ generation: number; index: string; nativeOwner?: never }>

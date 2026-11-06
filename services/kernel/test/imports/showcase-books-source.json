@@ -1,0 +1,2474 @@
+{
+  "rows": {
+    "subject-relations": [
+      {
+        "subject_id": 26,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 27,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 78,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 79,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 80,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 81,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 82,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 233,
+        "relation_type": 1,
+        "related_subject_id": 2815,
+        "order": 0
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 26,
+        "order": 0
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 27,
+        "order": 2
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 78,
+        "order": 7
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 79,
+        "order": 4
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 80,
+        "order": 5
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 81,
+        "order": 6
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 82,
+        "order": 3
+      },
+      {
+        "subject_id": 499,
+        "relation_type": 1003,
+        "related_subject_id": 852,
+        "order": 8
+      },
+      {
+        "subject_id": 852,
+        "relation_type": 1002,
+        "related_subject_id": 499,
+        "order": 0
+      },
+      {
+        "subject_id": 2815,
+        "relation_type": 1,
+        "related_subject_id": 233,
+        "order": 1
+      },
+      {
+        "subject_id": 2815,
+        "relation_type": 1003,
+        "related_subject_id": 5329,
+        "order": 1
+      },
+      {
+        "subject_id": 2815,
+        "relation_type": 1003,
+        "related_subject_id": 10862,
+        "order": 2
+      },
+      {
+        "subject_id": 2819,
+        "relation_type": 1002,
+        "related_subject_id": 2815,
+        "order": 0
+      },
+      {
+        "subject_id": 2820,
+        "relation_type": 1002,
+        "related_subject_id": 2815,
+        "order": 0
+      },
+      {
+        "subject_id": 5329,
+        "relation_type": 1002,
+        "related_subject_id": 2815,
+        "order": 0
+      },
+      {
+        "subject_id": 10862,
+        "relation_type": 1002,
+        "related_subject_id": 2815,
+        "order": 0
+      }
+    ],
+    "subject": [
+      {
+        "id": 26,
+        "type": 1,
+        "name": "“文学少女”と死にたがりの道化",
+        "name_cn": "“文学少女”与渴望死亡的小丑",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与渴望死亡的小丑\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= ￥ 588\r\n|连载杂志= \r\n|发售日= 2006-04-28\r\n|册数= \r\n|页数= 254\r\n|话数= 7\r\n|ISBN= 9784757728066\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹岡美穂\r\n|ISBN-10= 4757728069\r\n}}",
+        "platform": 1002,
+        "summary": "「どうかあたしの恋を叶えてください!」何故か文芸部に持ち込まれた依頼。それは、単なる恋文の代筆のはずだったが…。物語を食べちゃうくらい深く愛している“文学少女”天野遠子と、平穏と平凡を愛する、今はただの男子高校生、井上心葉。ふたりの前に紡ぎ出されたのは、人間の心が分からない、孤独な“お化け”の嘆きと絶望の物語だった―。野村美月が贈る新味、口溶け軽めでちょっぴりビターな、ミステリアス学園コメディ、開幕。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 363
+          },
+          {
+            "name": "轻小说",
+            "count": 329
+          },
+          {
+            "name": "野村美月",
+            "count": 178
+          },
+          {
+            "name": "人间失格",
+            "count": 124
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 80
+          },
+          {
+            "name": "文学少女与渴望死亡的小丑",
+            "count": 73
+          },
+          {
+            "name": "远子学姐",
+            "count": 51
+          },
+          {
+            "name": "悬疑",
+            "count": 45
+          },
+          {
+            "name": "文学少女渴望死亡的小丑",
+            "count": 23
+          },
+          {
+            "name": "单行本",
+            "count": 16
+          },
+          {
+            "name": "尖端",
+            "count": 15
+          }
+        ],
+        "meta_tags": [],
+        "score": 8,
+        "score_details": {
+          "1": 1,
+          "2": 0,
+          "3": 3,
+          "4": 6,
+          "5": 8,
+          "6": 73,
+          "7": 183,
+          "8": 402,
+          "9": 238,
+          "10": 94
+        },
+        "rank": 575,
+        "date": "2006-04-28",
+        "favorite": {
+          "wish": 111,
+          "done": 1489,
+          "doing": 30,
+          "on_hold": 11,
+          "dropped": 4
+        },
+        "series": false
+      },
+      {
+        "id": 27,
+        "type": 1,
+        "name": "“文学少女”と飢え渇く幽霊",
+        "name_cn": "“文学少女”与渴求真爱的幽灵",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与渴求真爱的幽灵\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= ￥ 630\r\n|连载杂志= \r\n|发售日= 2006-08-30\r\n|册数= \r\n|页数= 318\r\n|话数= 9\r\n|ISBN= 9784757729155\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹岡美穂\r\n|ISBN-10= 4757729154\r\n}}",
+        "platform": 1002,
+        "summary": "文芸部部長・天野遠子。物語を食べちゃうくらい愛しているこの自称“文学少女”に、後輩の井上心葉は振り回されっぱなしの毎日を送っている。そんなある日、文芸部の「恋の相談ポスト」に「憎い」「幽霊が」という文字や、謎の数字を書き連ねた紙片が投げ込まれる。文芸部への挑戦だわ!と、心葉を巻き込み調査をはじめる遠子だが、見つけた“犯人”は「わたし、もう死んでるの」と笑う少女で―!?コメディ風味のビターテイスト学園ミステリー、第2弾。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 297
+          },
+          {
+            "name": "轻小说",
+            "count": 255
+          },
+          {
+            "name": "野村美月",
+            "count": 155
+          },
+          {
+            "name": "呼啸山庄",
+            "count": 119
+          },
+          {
+            "name": "文学少女与渴求真爱的灵魂",
+            "count": 67
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 65
+          },
+          {
+            "name": "远子学姐",
+            "count": 32
+          },
+          {
+            "name": "雨宫萤",
+            "count": 28
+          },
+          {
+            "name": "推理",
+            "count": 27
+          },
+          {
+            "name": "2006",
+            "count": 24
+          },
+          {
+            "name": "悬疑",
+            "count": 22
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.1,
+        "score_details": {
+          "1": 1,
+          "2": 0,
+          "3": 2,
+          "4": 8,
+          "5": 11,
+          "6": 48,
+          "7": 154,
+          "8": 335,
+          "9": 223,
+          "10": 104
+        },
+        "rank": 454,
+        "date": "2006-08-30",
+        "favorite": {
+          "wish": 91,
+          "done": 1306,
+          "doing": 43,
+          "on_hold": 12,
+          "dropped": 4
+        },
+        "series": false
+      },
+      {
+        "id": 78,
+        "type": 1,
+        "name": "“文学少女”と神に臨む作家 上",
+        "name_cn": "“文学少女”与迈向神境的作家 上",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与迈向神境的作家 上\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= \r\n|连载杂志= \r\n|发售日= 2008-04-28\r\n|册数= \r\n|页数= 318\r\n|话数= 7\r\n|ISBN= 9784757741737\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹冈美穗\r\n|ISBN-10= 4757741731\r\n}}",
+        "platform": 1002,
+        "summary": "「わたしは天野遠子。ご覧のとおりの“文学少女”よ」―そう名乗る不思議な少女との出会いから、二年。物語を食べちゃうくらい愛するこの“文学少女”に導かれ、心葉は様々なことを乗り越えてきた。けれど、遠子の卒業の日は迫り、そして―。突然の、“文学少女”の裏切りの言葉。愕然とする心葉を、さらに流人が翻弄する。「天野遠子は消えてしまう」「天野遠子を知ってください」―遠子に秘められた謎とは?心葉と遠子の物語の結末は!?最終編、開幕。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 193
+          },
+          {
+            "name": "轻小说",
+            "count": 161
+          },
+          {
+            "name": "野村美月",
+            "count": 111
+          },
+          {
+            "name": "天野远子",
+            "count": 61
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 48
+          },
+          {
+            "name": "窄门",
+            "count": 43
+          },
+          {
+            "name": "治愈",
+            "count": 18
+          },
+          {
+            "name": "推理",
+            "count": 17
+          },
+          {
+            "name": "完结篇上",
+            "count": 14
+          },
+          {
+            "name": "小说",
+            "count": 12
+          },
+          {
+            "name": "黑暗文学史",
+            "count": 10
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.2,
+        "score_details": {
+          "1": 1,
+          "2": 0,
+          "3": 1,
+          "4": 7,
+          "5": 5,
+          "6": 31,
+          "7": 78,
+          "8": 201,
+          "9": 168,
+          "10": 81
+        },
+        "rank": 315,
+        "date": "2008-04-28",
+        "favorite": {
+          "wish": 71,
+          "done": 894,
+          "doing": 12,
+          "on_hold": 10,
+          "dropped": 4
+        },
+        "series": false
+      },
+      {
+        "id": 79,
+        "type": 1,
+        "name": "“文学少女”と穢名の天使",
+        "name_cn": "“文学少女”与背负污名的天使",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与背负污名的天使\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= \r\n|连载杂志= \r\n|发售日= 2007-04-28\r\n|册数= \r\n|页数= 318\r\n|话数= 9\r\n|ISBN= 9784757735064\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹冈美穗\r\n|ISBN-10= 4757735065\r\n}}",
+        "platform": 1002,
+        "summary": "文芸部部長、天野遠子。物語を食べちゃうくらいに愛するこの“文学少女”が、何と突然の休部宣言!?その理由に呆れ返りつつも一抹の寂しさを覚える心葉。一方では、音楽教師の毬谷の手伝いで、ななせと一緒に放課後を過ごすことになったりと、平和な日々が過ぎていくが…。クリスマス間近の街からひとりの少女が姿を消した。必死で行方を追うななせと心葉の前に、やがて心葉自身の鏡写しのような、ひとりの“天使”が姿を現す―。大好評シリーズ第4弾。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 238
+          },
+          {
+            "name": "轻小说",
+            "count": 205
+          },
+          {
+            "name": "野村美月",
+            "count": 126
+          },
+          {
+            "name": "歌剧魅影",
+            "count": 97
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 64
+          },
+          {
+            "name": "悬疑",
+            "count": 31
+          },
+          {
+            "name": "天使",
+            "count": 22
+          },
+          {
+            "name": "治愈",
+            "count": 20
+          },
+          {
+            "name": "远子学姐",
+            "count": 18
+          },
+          {
+            "name": "推理",
+            "count": 14
+          },
+          {
+            "name": "单行本",
+            "count": 12
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.3,
+        "score_details": {
+          "1": 0,
+          "2": 0,
+          "3": 1,
+          "4": 1,
+          "5": 5,
+          "6": 27,
+          "7": 94,
+          "8": 280,
+          "9": 217,
+          "10": 96
+        },
+        "rank": 214,
+        "date": "2007-04-28",
+        "favorite": {
+          "wish": 89,
+          "done": 1108,
+          "doing": 21,
+          "on_hold": 11,
+          "dropped": 6
+        },
+        "series": false
+      },
+      {
+        "id": 80,
+        "type": 1,
+        "name": "“文学少女”と慟哭の巡礼者",
+        "name_cn": "“文学少女”与绝望恸哭的信徒",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与绝望恸哭的信徒\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= \r\n|连载杂志= \r\n|发售日= 2007-08-30\r\n|册数= \r\n|页数= 382\r\n|话数= 10\r\n|ISBN= 9784757736856\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹冈美穗\r\n|ISBN-10= 4757736851\r\n}}",
+        "platform": 1002,
+        "summary": "もうすぐ遠子は卒業する。それを寂しく思う一方で、ななせとは初詣に行ったりと、ほんの少し距離を縮める心葉。だが、突然ななせが入院したと聞き、見舞いに行った心葉は、片時も忘れたことのなかったひとりの少女と再会する!過去と変わらず微笑む少女。しかし彼女を中心として、心葉と周囲の人達との絆は大きく軋み始める。一体何が真実なのか。彼女は何を願っているのか―。“文学少女”が“想像”する、少女の本当の想いとは!?待望の第5弾。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 233
+          },
+          {
+            "name": "轻小说",
+            "count": 206
+          },
+          {
+            "name": "野村美月",
+            "count": 122
+          },
+          {
+            "name": "远子学姐",
+            "count": 58
+          },
+          {
+            "name": "银河铁道之夜",
+            "count": 52
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 50
+          },
+          {
+            "name": "美羽编",
+            "count": 41
+          },
+          {
+            "name": "银河轨道之夜",
+            "count": 31
+          },
+          {
+            "name": "井上美羽",
+            "count": 22
+          },
+          {
+            "name": "治愈",
+            "count": 17
+          },
+          {
+            "name": "推理",
+            "count": 13
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.5,
+        "score_details": {
+          "1": 3,
+          "2": 0,
+          "3": 0,
+          "4": 3,
+          "5": 4,
+          "6": 25,
+          "7": 76,
+          "8": 239,
+          "9": 268,
+          "10": 141
+        },
+        "rank": 129,
+        "date": "2007-08-30",
+        "favorite": {
+          "wish": 107,
+          "done": 1130,
+          "doing": 22,
+          "on_hold": 9,
+          "dropped": 8
+        },
+        "series": false
+      },
+      {
+        "id": 81,
+        "type": 1,
+        "name": "“文学少女”と月花を孕く水妖",
+        "name_cn": "“文学少女”与怀抱花月的水妖",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与怀抱花月的水妖\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= \r\n|连载杂志= \r\n|发售日= 2007-12-25\r\n|册数= \r\n|页数= 318\r\n|话数= 7\r\n|ISBN= 9784757739185\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹冈美穗\r\n|ISBN-10= 4757739184\r\n}}",
+        "platform": 1002,
+        "summary": "『悪い人にさらわれました。着替えと宿題を持って、今すぐ助けに来てください』―そんな遠子からのSOSで、夏休みを姫倉の別荘で“おやつ”を書いて過ごす羽目になった心葉。だが、そんな彼らに、八十年前起こった惨劇の影が忍び寄る。“令嬢”“学生”そして“妖怪”。役者は揃い舞台は整い、すべては再び崩壊に向かう。事態を仕組んだ麻貴の望みとは?自らの“想像”に心を揺らす、“文学少女”の“秘密”とは―。夢のようなひと夏を描く、“文学少女”特別編。 ",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 185
+          },
+          {
+            "name": "轻小说",
+            "count": 164
+          },
+          {
+            "name": "野村美月",
+            "count": 98
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 57
+          },
+          {
+            "name": "远子学姐",
+            "count": 43
+          },
+          {
+            "name": "推理",
+            "count": 22
+          },
+          {
+            "name": "講談社",
+            "count": 19
+          },
+          {
+            "name": "悬疑",
+            "count": 17
+          },
+          {
+            "name": "暑假",
+            "count": 13
+          },
+          {
+            "name": "尖端",
+            "count": 11
+          },
+          {
+            "name": "日本小说",
+            "count": 9
+          }
+        ],
+        "meta_tags": [],
+        "score": 8,
+        "score_details": {
+          "1": 1,
+          "2": 1,
+          "3": 0,
+          "4": 1,
+          "5": 14,
+          "6": 39,
+          "7": 106,
+          "8": 231,
+          "9": 112,
+          "10": 68
+        },
+        "rank": 635,
+        "date": "2007-12-25",
+        "favorite": {
+          "wish": 59,
+          "done": 880,
+          "doing": 11,
+          "on_hold": 8,
+          "dropped": 3
+        },
+        "series": false
+      },
+      {
+        "id": 82,
+        "type": 1,
+        "name": "“文学少女”と繋がれた愚者",
+        "name_cn": "“文学少女”与沉陷过往的愚者",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与沉陷过往的愚者\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= ￥ 630\r\n|连载杂志= \r\n|发售日= 2006-12-25\r\n|册数= \r\n|页数= 328\r\n|话数= 8\r\n|ISBN= 9784757730847\r\n|其他= \r\n|作者= 野村美月\r\n|插图= 竹岡美穂\r\n|ISBN-10= 4757730845\r\n}}",
+        "platform": 1002,
+        "summary": "「ああっ、この本ページが足りないわ!」ある日遠子が図書館から借りてきた本は、切り裂かれ、ページが欠けていた―。物語を食べちゃうくらい深く愛する “文学少女”が、これに黙っているわけもない。暴走する遠子に巻き込まれた挙句、何故か文化祭で劇までやるハメになる心葉と級友の芥川だったが…。垣間見たクラスメイトの心の闇。追いつめられ募る狂気。過去に縛られ立ちすくむ魂を、“文学少女”は解き放てるのか―?大好評シリーズ第3弾。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 221
+          },
+          {
+            "name": "轻小说",
+            "count": 191
+          },
+          {
+            "name": "野村美月",
+            "count": 126
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 54
+          },
+          {
+            "name": "友情",
+            "count": 45
+          },
+          {
+            "name": "文学少女与沉陷过往的愚者",
+            "count": 40
+          },
+          {
+            "name": "芥川一诗",
+            "count": 29
+          },
+          {
+            "name": "推理",
+            "count": 20
+          },
+          {
+            "name": "悬疑",
+            "count": 16
+          },
+          {
+            "name": "话剧",
+            "count": 16
+          },
+          {
+            "name": "单行本",
+            "count": 14
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.2,
+        "score_details": {
+          "1": 0,
+          "2": 1,
+          "3": 0,
+          "4": 2,
+          "5": 7,
+          "6": 28,
+          "7": 114,
+          "8": 286,
+          "9": 185,
+          "10": 67
+        },
+        "rank": 386,
+        "date": "2006-12-25",
+        "favorite": {
+          "wish": 46,
+          "done": 1048,
+          "doing": 22,
+          "on_hold": 7,
+          "dropped": 4
+        },
+        "series": false
+      },
+      {
+        "id": 233,
+        "type": 2,
+        "name": "劇場版 空の境界 第一章 俯瞰風景",
+        "name_cn": "剧场版 空之境界 第一章 俯瞰风景",
+        "infobox": "{{Infobox animanga/Movie\r\n|中文名= 剧场版 空之境界 第一章 俯瞰风景\r\n|别名={\r\n[Gekijouban Kara no Kyoukai: The Garden of Sinners]\r\n[the Garden of sinners: Thanatos]\r\n}\r\n|上映年度= 2007年12月1日\r\n|片长= 50分钟\r\n|官方网站= http://www.karanokyoukai.com/\r\n|链接={\r\n}\r\n|其他= \r\n|Copyright= ©奈須きのこ／講談社・アニプレックス・ノーツ・ufotable\r\n|导演= あおきえい\r\n|脚本= 平松正樹(ufotable)\r\n|话数= 1\r\n|原作= 奈須きのこ\r\n|人物原案= 武内崇\r\n|人物设定= 須藤友徳、高橋タクロヲ\r\n|作画监督= 須藤友徳、高橋タクロヲ\r\n|製作= 劇場版「空の境界」製作委員会（Aniplex、講談社、ノーツ、ufotable）\r\n|企画= 夏目公一朗、入江祥雄\r\n|制片人= 岩上敦宏、針生雅行、竹内友崇(武内崇)、近藤光；宣传制片人：清水博之\r\n|助理制片人= 副制片人：鳥羽洋典、山谷奈久留、池田恵\r\n|执行制片人= 植田益朗、吉岡富夫\r\n|动画制片人= 近藤光\r\n}}",
+        "platform": 3,
+        "summary": "　　“去吧、去吧、去吧、去吧——”\r\n　　我只是这样期望着，\r\n　　期望着这个窗外的世界。\r\n　　只是期望被他带走而已。\r\n　　这是一个发生在夏末，少女们不断飞落跳下相继自杀的故事。少女们，毫无征兆突发性的从废墟大楼的屋顶\r\n　　上跳向天空，随后落下。等待她们的只有死。\r\n　　这些女孩在学校也并无异常，相互间也并非朋友关系。这些一切毫无关联性，连自杀的理由都找不到，完全无法解释的自杀事件逐一被不断报道。但是唯一只有一个人看出了这事件其中的关联性。\r\n　　这个人就是最高位的人偶师、也是一位没有成为魔法使的魔术师 —— 苍崎澄子。\r\n　　或许……“没有理由”就是他们的共通点，其次就是浮游与飞行的差别。\r\n　　而搜索调查这个连续自杀事件的人就是拥有能看见事间万物之死线能力“直死之魔眼”的两仪式。\r\n　　对她而言，有一个与此事件不得不关联起来的理由——\r\n　　与其说自身这种并不想要获得的能力（直死之魔眼），更令她在意的是用她的眼睛就这样捕捉到了在虚空中飞舞的少女们的幽灵，而这些幽灵到底又在想什么呢？\r\n　　假设，这或许是到达相同道路同胞们的哀怜，也或者是同族的嫌恶。\r\n　　假设，这或许是来自威胁某种重要存在之人的敌意。\r\n　　换句话说，这是明确的杀意。\r\n　　式就这样前往了那个可怜的大楼现场，而那里等着她的是谁都不知道的，展开着重重包围圈套的序章。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "空之境界",
+            "count": 2771
+          },
+          {
+            "name": "剧场版",
+            "count": 2680
+          },
+          {
+            "name": "Type-Moon",
+            "count": 2444
+          },
+          {
+            "name": "ufotable",
+            "count": 1746
+          },
+          {
+            "name": "奈须きのこ",
+            "count": 1495
+          },
+          {
+            "name": "梶浦由记",
+            "count": 1250
+          },
+          {
+            "name": "2007",
+            "count": 1014
+          },
+          {
+            "name": "两仪式",
+            "count": 859
+          },
+          {
+            "name": "奇幻",
+            "count": 615
+          },
+          {
+            "name": "俯瞰风景",
+            "count": 579
+          },
+          {
+            "name": "坂本真绫",
+            "count": 531
+          }
+        ],
+        "meta_tags": ["剧场版", "日本", "奇幻", "战斗", "小说改"],
+        "score": 7.9,
+        "score_details": {
+          "1": 16,
+          "2": 6,
+          "3": 6,
+          "4": 30,
+          "5": 148,
+          "6": 754,
+          "7": 2926,
+          "8": 5490,
+          "9": 2072,
+          "10": 831
+        },
+        "rank": 326,
+        "date": "2007-12-01",
+        "favorite": {
+          "wish": 2374,
+          "done": 20392,
+          "doing": 338,
+          "on_hold": 233,
+          "dropped": 65
+        },
+        "series": false
+      },
+      {
+        "id": 499,
+        "type": 1,
+        "name": "文学少女",
+        "name_cn": "文学少女",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= 文学少女\r\n|别名={\r\n[Book Girl]\r\n}\r\n|作者= 野村美月\r\n|插图= 竹岡美穂\r\n|出版社= エンターブレイン→エンターブレイン(発行)／角川グループパブリッシング(発売)\r\n|价格= \r\n|连载杂志= FB Online（短篇部分）\r\n|发售日= 2006-04-28\r\n|册数= 8+8(番外)\r\n|页数= \r\n|话数= \r\n|ISBN= \r\n|链接={\r\n}\r\n|其他= \r\n|文库= ファミ通文庫\r\n|版本:99读书人新版={\r\n[版本名|文学少女]\r\n[别名|]\r\n[出版社|上海文艺出版社]\r\n[插图|]\r\n[发售日|2014-08-01]\r\n[译者|]\r\n[册数|8~]\r\n[页数|]\r\n[价格|]\r\n[ISBN|]\r\n[书系|]\r\n[出品方|99读书人]\r\n[图书品牌|]\r\n[加笔|]\r\n[排版|]\r\n[官方网站|]\r\n[语言|简体中文]\r\n}\r\n|版本:99读书人旧版={\r\n[版本名|文学少女]\r\n[别名|]\r\n[出版社|人民文学出版社]\r\n[插图|]\r\n[发售日|2010-09]\r\n[译者|]\r\n[册数|8~]\r\n[页数|]\r\n[价格|]\r\n[ISBN|]\r\n[书系|]\r\n[出品方|99读书人]\r\n[图书品牌|]\r\n[加笔|]\r\n[排版|]\r\n[官方网站|]\r\n[语言|简体中文]\r\n}\r\n}}",
+        "platform": 1002,
+        "summary": "《文学少女》系列小说，长篇每卷皆以一部实际存在的经典小说为主线文本，推动剧情前进。故事围绕圣条学园文艺社社长天野远子和社员井上心叶的事件与解谜。小说基本上以井上心叶的第一人称进行，但不时穿插“第二某人”的第一人称口白心境（粗体字），是故事黑幕的重要提示。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "轻小说",
+            "count": 1235
+          },
+          {
+            "name": "文学少女",
+            "count": 1214
+          },
+          {
+            "name": "野村美月",
+            "count": 887
+          },
+          {
+            "name": "天野远子",
+            "count": 481
+          },
+          {
+            "name": "治愈",
+            "count": 457
+          },
+          {
+            "name": "吃书妖怪",
+            "count": 309
+          },
+          {
+            "name": "神作",
+            "count": 249
+          },
+          {
+            "name": "黑暗文学史",
+            "count": 183
+          },
+          {
+            "name": "文学",
+            "count": 168
+          },
+          {
+            "name": "学姐",
+            "count": 160
+          },
+          {
+            "name": "小说",
+            "count": 137
+          }
+        ],
+        "meta_tags": ["日本", "小说", "系列"],
+        "score": 8.5,
+        "score_details": {
+          "1": 7,
+          "2": 5,
+          "3": 5,
+          "4": 22,
+          "5": 53,
+          "6": 126,
+          "7": 352,
+          "8": 932,
+          "9": 1210,
+          "10": 808
+        },
+        "rank": 89,
+        "date": "2006-04-28",
+        "favorite": {
+          "wish": 1970,
+          "done": 3890,
+          "doing": 985,
+          "on_hold": 308,
+          "dropped": 109
+        },
+        "series": true
+      },
+      {
+        "id": 852,
+        "type": 1,
+        "name": "“文学少女”と神に臨む作家 下",
+        "name_cn": "“文学少女”与迈向神境的作家 下",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= “文学少女”与迈向神境的作家 下\r\n|别名={\r\n}\r\n|出版社= エンターブレイン\r\n|价格= \r\n|连载杂志= \r\n|发售日= 2008-08-30\r\n|册数= \r\n|页数= 350\r\n|话数= 9\r\n|ISBN= 9784757743717\r\n|其他= \r\n|作者= 野村美月\r\n|作画= 竹岡美穂\r\n|ISBN-10= 4757743718\r\n}}",
+        "platform": 1002,
+        "summary": "「書かなくてもいい。ずっと側にいる」―そう告げるななせに救われた心葉。だが、そんな彼を流人の言葉が脅かす。「琴吹さんのこと、壊しちゃうかもしれませんよ」…そんな時、突然、遠子が姿を消した。空っぽの家に残るのは切り裂かれた制服だけ。心葉は遠子を追えるのか?露わになってゆく真実に、彼が出す答えとは?遠子の祈り、叶子の憎しみ、流人の絶望―その果てに秘められた物語が今、明らかになる…!“文学少女”の物語、堂々終幕。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "文学少女",
+            "count": 211
+          },
+          {
+            "name": "轻小说",
+            "count": 183
+          },
+          {
+            "name": "野村美月",
+            "count": 110
+          },
+          {
+            "name": "窄门",
+            "count": 76
+          },
+          {
+            "name": "竹冈美穗",
+            "count": 53
+          },
+          {
+            "name": "治愈",
+            "count": 41
+          },
+          {
+            "name": "天野远子",
+            "count": 32
+          },
+          {
+            "name": "结局",
+            "count": 29
+          },
+          {
+            "name": "推理",
+            "count": 25
+          },
+          {
+            "name": "講談社",
+            "count": 13
+          },
+          {
+            "name": "百合",
+            "count": 12
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.5,
+        "score_details": {
+          "1": 3,
+          "2": 0,
+          "3": 0,
+          "4": 4,
+          "5": 8,
+          "6": 21,
+          "7": 68,
+          "8": 167,
+          "9": 211,
+          "10": 127
+        },
+        "rank": 140,
+        "date": "2008-08-30",
+        "favorite": {
+          "wish": 98,
+          "done": 907,
+          "doing": 12,
+          "on_hold": 10,
+          "dropped": 4
+        },
+        "series": false
+      },
+      {
+        "id": 2815,
+        "type": 1,
+        "name": "空の境界",
+        "name_cn": "空之境界",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= 空之境界\r\n|别名={\r\n[THE GARDEN OF SINNERS]\r\n}\r\n|出版社= 講談社\r\n|价格= \r\n|连载杂志= \r\n|发售日= 2004-06-08\r\n|册数= 2册\r\n|页数= \r\n|话数= \r\n|ISBN= \r\n|其他= \r\n|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|开始= 1998年10月\r\n|结束= 1999年8月\r\n|website= http://www.typemoon.org/kara/\r\n}}",
+        "platform": 1002,
+        "summary": "そして、長い昏睡から両儀式は目覚めた。\r\n\r\n後遺症として生まれた、物の死を視る眼。\r\nナイフだけであらゆる物を“殺す”事ができる力は、式を昏い世界へと誘っていく。\r\n\r\n二年前の殺人鬼。\r\n浮遊する幽霊の群れ。\r\n物を視るだけで歪曲させる少女。\r\n人の死を蒐集する螺旋建築。\r\n\r\n数々の怪異と式の魔眼が衝突する時、忘れられていた記憶が蘇る───。",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "Type-Moon",
+            "count": 728
+          },
+          {
+            "name": "奈须蘑菇",
+            "count": 675
+          },
+          {
+            "name": "空之境界",
+            "count": 455
+          },
+          {
+            "name": "轻小说",
+            "count": 424
+          },
+          {
+            "name": "两仪式",
+            "count": 329
+          },
+          {
+            "name": "奈須きのこ",
+            "count": 170
+          },
+          {
+            "name": "月世界",
+            "count": 149
+          },
+          {
+            "name": "根源",
+            "count": 85
+          },
+          {
+            "name": "小说",
+            "count": 82
+          },
+          {
+            "name": "蘑菇",
+            "count": 70
+          },
+          {
+            "name": "螺旋",
+            "count": 48
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.7,
+        "score_details": {
+          "1": 4,
+          "2": 3,
+          "3": 5,
+          "4": 9,
+          "5": 9,
+          "6": 59,
+          "7": 180,
+          "8": 590,
+          "9": 776,
+          "10": 543
+        },
+        "rank": 54,
+        "date": "2004-06-08",
+        "favorite": {
+          "wish": 930,
+          "done": 2896,
+          "doing": 233,
+          "on_hold": 93,
+          "dropped": 31
+        },
+        "series": true
+      },
+      {
+        "id": 5329,
+        "type": 1,
+        "name": "空の境界 (上)",
+        "name_cn": "空之境界 (上)",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= 空之境界 (上)\r\n|别名={\r\n}\r\n|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|价格= ￥ 1,155\r\n|连载杂志= \r\n|发售日= 2004-06-08\r\n|册数= \r\n|页数= 448\r\n|话数= \r\n|ISBN= 9784061823617\r\n|链接={\r\n}\r\n|其他= \r\n}}",
+        "platform": 1002,
+        "summary": "从两年间的昏睡清醒过来的少女——两仪式。因为沉睡的后遗症，因此获得“目视一切事物死亡”的能力——“直死之魔眼”。浮游在大楼上空的幽灵群、搜集人类死亡的螺旋形建筑物，非日常的世界，其实被包含在日常世界中，式手上的小刀上，不断反映出各种怪异事件，式被封印的那份记忆，仿佛被人唤起而逐渐苏醒……",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "奈須きのこ",
+            "count": 279
+          },
+          {
+            "name": "空之境界",
+            "count": 255
+          },
+          {
+            "name": "Type-Moon",
+            "count": 198
+          },
+          {
+            "name": "轻小说",
+            "count": 124
+          },
+          {
+            "name": "两仪式",
+            "count": 122
+          },
+          {
+            "name": "月世界",
+            "count": 67
+          },
+          {
+            "name": "意识流",
+            "count": 63
+          },
+          {
+            "name": "講談社",
+            "count": 38
+          },
+          {
+            "name": "世界观",
+            "count": 36
+          },
+          {
+            "name": "根源",
+            "count": 32
+          },
+          {
+            "name": "奈须蘑菇",
+            "count": 27
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.6,
+        "score_details": {
+          "1": 1,
+          "2": 1,
+          "3": 2,
+          "4": 3,
+          "5": 3,
+          "6": 21,
+          "7": 81,
+          "8": 260,
+          "9": 327,
+          "10": 204
+        },
+        "rank": 64,
+        "date": "2004-06-08",
+        "favorite": {
+          "wish": 184,
+          "done": 1350,
+          "doing": 48,
+          "on_hold": 20,
+          "dropped": 10
+        },
+        "series": false
+      },
+      {
+        "id": 10862,
+        "type": 1,
+        "name": "空の境界 (下)",
+        "name_cn": "空之境界 (下)",
+        "infobox": "{{Infobox animanga/Novel\r\n|中文名= 空之境界 (下)\r\n|别名={\r\n}\r\n|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|价格= ￥ 1,260\r\n|连载杂志= \r\n|发售日= 2004-06-08\r\n|册数= \r\n|页数= 538\r\n|话数= \r\n|ISBN= 9784061823624\r\n|链接={\r\n}\r\n|其他= \r\n}}",
+        "platform": 1002,
+        "summary": "追求永远而吞噬许多死亡的魔术师——荒耶宗莲，正是两仪式遭遇怪异事件的幕后黑手，为了让式回归原有形态，他不惜企图夺走式的生命。可惜人们忘却记忆取出的妖精房舍、建造于临海仓库的麻药庭园……以及再度到来的……两年前的杀人鬼。尝试取回丧失记忆的那以前，将面临与另一个自己对峙的最大挑战……",
+        "nsfw": false,
+        "tags": [
+          {
+            "name": "奈須きのこ",
+            "count": 300
+          },
+          {
+            "name": "空之境界",
+            "count": 289
+          },
+          {
+            "name": "Type-Moon",
+            "count": 224
+          },
+          {
+            "name": "轻小说",
+            "count": 134
+          },
+          {
+            "name": "两仪式",
+            "count": 118
+          },
+          {
+            "name": "月世界",
+            "count": 77
+          },
+          {
+            "name": "意识流",
+            "count": 67
+          },
+          {
+            "name": "講談社",
+            "count": 41
+          },
+          {
+            "name": "奈须蘑菇",
+            "count": 37
+          },
+          {
+            "name": "根源",
+            "count": 27
+          },
+          {
+            "name": "空の境界",
+            "count": 25
+          }
+        ],
+        "meta_tags": [],
+        "score": 8.8,
+        "score_details": {
+          "1": 2,
+          "2": 3,
+          "3": 3,
+          "4": 0,
+          "5": 2,
+          "6": 11,
+          "7": 77,
+          "8": 237,
+          "9": 379,
+          "10": 278
+        },
+        "rank": 34,
+        "date": "2004-06-08",
+        "favorite": {
+          "wish": 277,
+          "done": 1432,
+          "doing": 56,
+          "on_hold": 25,
+          "dropped": 11
+        },
+        "series": false
+      }
+    ],
+    "subject-persons": [
+      {
+        "person_id": 128,
+        "subject_id": 233,
+        "position": 42,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 231,
+        "subject_id": 233,
+        "position": 44,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 275,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 645,
+        "subject_id": 233,
+        "position": 42,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 782,
+        "subject_id": 233,
+        "position": 17,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1466,
+        "subject_id": 233,
+        "position": 1,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1467,
+        "subject_id": 233,
+        "position": 54,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1467,
+        "subject_id": 233,
+        "position": 7,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1595,
+        "subject_id": 233,
+        "position": 6,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1759,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1804,
+        "subject_id": 233,
+        "position": 13,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1805,
+        "subject_id": 233,
+        "position": 87,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1805,
+        "subject_id": 233,
+        "position": 54,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1828,
+        "subject_id": 233,
+        "position": 5,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1828,
+        "subject_id": 233,
+        "position": 4,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1828,
+        "subject_id": 233,
+        "position": 2,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 2156,
+        "subject_id": 233,
+        "position": 52,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3059,
+        "subject_id": 233,
+        "position": 67,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3059,
+        "subject_id": 233,
+        "position": 42,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3062,
+        "subject_id": 233,
+        "position": 17,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3139,
+        "subject_id": 233,
+        "position": 15,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3139,
+        "subject_id": 233,
+        "position": 8,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3344,
+        "subject_id": 233,
+        "position": 86,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3345,
+        "subject_id": 233,
+        "position": 3,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3346,
+        "subject_id": 233,
+        "position": 15,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3346,
+        "subject_id": 233,
+        "position": 8,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3347,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3348,
+        "subject_id": 233,
+        "position": 42,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3349,
+        "subject_id": 233,
+        "position": 35,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3350,
+        "subject_id": 233,
+        "position": 35,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3604,
+        "subject_id": 233,
+        "position": 54,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 3767,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 5782,
+        "subject_id": 233,
+        "position": 54,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 6014,
+        "subject_id": 233,
+        "position": 33,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 6076,
+        "subject_id": 233,
+        "position": 46,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 11560,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 11671,
+        "subject_id": 233,
+        "position": 90,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 11923,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12343,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12346,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12369,
+        "subject_id": 233,
+        "position": 28,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12374,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12375,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12577,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12762,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 12920,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 13809,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 14088,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 14089,
+        "subject_id": 233,
+        "position": 11,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 19122,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 21474,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 24370,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 24391,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 25421,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 27107,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 27647,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 29868,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 30820,
+        "subject_id": 233,
+        "position": 159,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 31685,
+        "subject_id": 233,
+        "position": 159,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 36972,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 37438,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 39868,
+        "subject_id": 233,
+        "position": 53,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 39889,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 45089,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 50037,
+        "subject_id": 233,
+        "position": 81,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 51010,
+        "subject_id": 233,
+        "position": 53,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 55429,
+        "subject_id": 233,
+        "position": 20,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 57069,
+        "subject_id": 233,
+        "position": 25,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 65176,
+        "subject_id": 233,
+        "position": 51,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 94085,
+        "subject_id": 233,
+        "position": 124,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 95615,
+        "subject_id": 233,
+        "position": 52,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 99322,
+        "subject_id": 233,
+        "position": 53,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 100615,
+        "subject_id": 233,
+        "position": 21,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1581,
+        "subject_id": 499,
+        "position": 2004,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 5839,
+        "subject_id": 499,
+        "position": 2003,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 6023,
+        "subject_id": 499,
+        "position": 2001,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 7611,
+        "subject_id": 499,
+        "position": 2004,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 41078,
+        "subject_id": 499,
+        "position": 2004,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 51415,
+        "subject_id": 499,
+        "position": 2004,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 57570,
+        "subject_id": 499,
+        "position": 2011,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 70456,
+        "subject_id": 499,
+        "position": 2004,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 74689,
+        "subject_id": 499,
+        "position": 2012,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 128,
+        "subject_id": 2815,
+        "position": 2004,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1466,
+        "subject_id": 2815,
+        "position": 2001,
+        "appear_eps": ""
+      },
+      {
+        "person_id": 1467,
+        "subject_id": 2815,
+        "position": 2003,
+        "appear_eps": ""
+      }
+    ],
+    "person": [
+      {
+        "id": 128,
+        "name": "講談社",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 讲谈社\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Kodansha Ltd.]\r\n[日文名|]\r\n[纯假名|こうだんしゃ]\r\n[罗马字|Kodansha]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[会社案内|https://www.kodansha.co.jp/company/about#company-profile]\r\n[wiki|https://ja.wikipedia.org/wiki/%E8%AC%9B%E8%AB%87%E7%A4%BE]\r\n}\r\n|公司类型= 株式会社\r\n|成立时间= 1909年11月\r\n|总部地点= 日本东京都文京区音羽 2-12-21\r\n|邮政编码= 112-8001\r\n|创始人= 野間清治（のま せいじ）\r\n|现任社长= 野間省伸（のまよしのぶ）\r\n|产业= 情報・通信業\r\n|年营业额= 1708亿日元(2021年)\r\n|员工数= 945人(2022年4月)\r\n|子公司={\r\n[兰登书屋讲谈社]\r\n[讲谈社国际]\r\n[讲谈社サイエンティフィク]\r\n[讲谈社フェーマススクールズ]\r\n[讲谈社出版服务中心]\r\n[讲谈社物流]\r\n[第一纸业]\r\n[讲谈社（北京）文化有限公司]\r\n}\r\n|链接={\r\n[HP|https://www.kodansha.co.jp/]\r\n[X|https://x.com/KODANSHA_JP]\r\n[Youtube|https://www.youtube.com/user/KODANSHAcojp]\r\n[X_en|https://x.com/KODANSHA_EN]\r\n}\r\n}}",
+        "summary": "讲谈社（こうだんしゃ）是位于东京都文京区音羽的日本出版社，与King Records、光文社、日刊现代同为音羽集团（音羽グループ）成员。\r\n\r\n前身是1909年创立的大日本雄辩会（创立者：野间清治），当时出版辩论杂志《辩论》。从1911年开始和大日本雄辩会这一名称一同使用。1958年改用现在的名称株式会社讲谈社。\r\n在战前主要出版以趣味为主题的各种通俗杂志和书籍，包括《King》（キング）、《少年俱乐部》等。在出版《吉川英治集》和《日语大辞典》的同时，主宰着大部分的文学奖。\r\n讲谈社与迪士尼公司的关系深厚，对于东京迪士尼乐园和东京迪士尼海洋也有官方赞助。\r\n2010年4月25日，与北京时代华语图书股份有限公司签订长期战略合作协议。按照合作协议，时代华语公司以后从讲谈社引进版权时将具有优先选择权，同时版权价格也会低于非战略伙伴。目前已出版《刀语》系列1-4册，预定出版西泽保彦、二阶堂黎人、有栖川有栖、森博嗣、辻村深月、森村诚一、道尾秀介等作者之著作。",
+        "comments": 38,
+        "collects": 198
+      },
+      {
+        "id": 231,
+        "name": "岩浪美和",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 岩浪美和\r\n|别名={\r\n[英文名|]\r\n[日文名|岩浪 美和]\r\n[纯假名|いわなみ よしかず]\r\n[罗马字|Iwanami Yoshikazu]\r\n[昵称|]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1962年5月19日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|X= @namisuke1073\r\n}}",
+        "summary": "学生時代に自主映画の制作などを通じて映画や演劇に興味を持ち、専門学校の音響芸術科を出てミキシング・エンジニアを6年間勤めた後、映像演出を経て、音響監督としてのキャリアを開始。ウィーヴ（旧：イオン）企画作品やディオメディア（旧：スタジオバルセロナ）元請作品の多くに参加。他にも、数多くの作品に携わっている。\r\n\r\n古風だが比較的バランスの取れたキャスティングをする。参加作品（特に子供向けアニメや少年向けアニメ）に声優のアドリブや曲のパロディBGMが多用されることでも知られる。特にトランスフォーマーシリーズのアニメ作品には『ビーストウォーズ』から『プライム』まで国内・海外作品を問わず多くの作品に関わっており、海外作品の吹き替えでは原語版にはないアドリブを挿入するなど、コミカルな脚色を数多く加えた演出となっている。\r\n\r\nその姿は風来坊のようだと称される。また、美脚の持ち主。\r\n\r\n『ワンワンセレプー それゆけ!徹之進』にはモブキャラクターとして登場したことがあった（声は充てていない）。同作（2006年）以降、いわゆる子供向けアニメには長らく参加していなかったが、『トランスフォーマー アニメイテッド』と『ジュエルペット てぃんくる☆』（何れも2010年）で復帰した。",
+        "comments": 45,
+        "collects": 101
+      },
+      {
+        "id": 275,
+        "name": "小林利充",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 小林利充\r\n|别名={\r\n[小林利光]\r\n[小林俊充]\r\n[第二中文名|]\r\n[英文名|Toshimitsu Kobayashi]\r\n[日文名|小林 利充]\r\n[纯假名|こばやし としみつ]\r\n[罗马字|Kobayashi Toshimitsu]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1960年2月24日\r\n|血型= B型\r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "1960年2月24日出生。东京都江东区木场出身。（据Newtype1985年7月号）\r\n出身于手塚プロダクション。是作为作画监督在第一线活跃了40年以上的资深从业者。\r\n是支撑起80年代富野（由悠季）作品骨干的动画师之一。\r\n\r\n在参与了80年代初的『铁臂阿童木（新）』之后，作为自由身参与SUNRISE第2工作室的作品。\r\n在『战斗机甲萨芬格尔』制作期间，与在第2工作室结识的内田顺久、和田卓也、今井幸惠等人一起，参与创立自由动画师团体「スタジオMAX」。\r\n在『萨芬格尔』中担任动画检查，在『圣战士丹拜因』中担任原画，随后在『重战机艾尔盖姆』中顺利晋升为作画监督。\r\n此后在90年代，活跃于东京Movie、小丑社、梦太、Studio DEEN、GONZO等公司。\r\n目前在各大工作室担任总作画监督、作画监督的次数日益增多，且参与的作品数量庞大，由此可见其工作效率高且具备稳定的技术。\r\n\r\n在SUNRISE工作时期，与同一时期从设定制作晋升为演出的川濑敏文交情尤为深厚。\r\n经常在川濑敏文担任监督或脚本的作品中作为作画监督或原画参与制作，并在川濑首次担任监督的OVA『DEAD HEAT』中首次担任角色设计出道。\r\n在川濑监督的成名作『绝对无敌系列』中，担任原画、作画监督以及辅助工作。\r\n此后作为川濑作品的常客参与各种作品，与此同时，也参与了同为80年代富野作品得力助手今川泰宏的作品。\r\n参与了除星霜篇之外的所有『浪客剑心』系列动画，包含2023年版在内。\r\n\r\n在角色设计的画风特征方面，倾向于绘制拥有锐利眼神与面容的角色。另一方面，他也挑战了如『鲁邦三世系列』这类复古风格的角色作画。但与负责主要角色的平山智等作画监督相比，由他负责的次要角色或作画片段，依然能看出画风存在差异，显得更为锐利。",
+        "comments": 2,
+        "collects": 32
+      },
+      {
+        "id": 645,
+        "name": "Aniplex",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 安尼普\r\n|别名={\r\n[SME・ビジュアルワークス]\r\n[SPE Visual Works]\r\n[SPEビジュアルワークス]\r\n[SPE・ビジュアルワークス]\r\n[第二中文名|日本安尼普株式会社]\r\n[英文名|]\r\n[日文名|アニプレックス]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|A爹、扑街A、アニプレ、ANX]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|成立时间= 1995年9月\r\n|代表取缔役会长= 岩上敦宏\r\n|代表取缔役社长= 西本修\r\n|所在地= 东京都千代田区六番町4-5\r\n|旗下的动画公司= A-1 Pictures / CloverWorks\r\n|官方网站= https://www.aniplex.co.jp/\r\n|bilibili= https://space.bilibili.com/489004577\r\n}}",
+        "summary": "Aniplex是日本索尼音乐旗下以动画为主，从事企画、制作及贩卖等业务的公司。于1995年成立，前身为索尼影像娱乐音乐出版社。后与索尼音乐娱乐合资，于1997年成立索尼影像娱乐视觉工坊。2001年并入索尼音乐娱乐，成为其全资子公司，并在2003年改为现名。\r\n\r\nAniplex(アニプレックス，简称ANX)，拥有全资子动画公司A-1 Pictures和CloverWorks，是索尼(日本)音乐娱乐集团最大子公司。“Aniplex”是动画(Animation)和复合(Complex)的结合词，象征公司在动画领域的多面性。Aniplex是以动画作品企划、制作和贩售为主营业务的公司，日本动画协会正式会员，已成功让《未闻花名》、《钢之炼金术师》、《Fate zero》、《魔法少女小圆》、《夏目友人帐》、《无头骑士异闻录》、《化物语》、《天使的心跳!》、《刀剑神域》、《我的妹妹不可能那么可爱》、《偶像大师》、《黑执事》等众多动画作品成为话题作。\r\n\r\n此前在北美和欧洲都设立过分公司，2019年1月4日，安尼普（上海）文化艺术有限公司正式成立，Aniplex出资816万占股51%，SONY中国出资784万占股49%。安尼普（上海）文化艺术有限公司由Aniplex的执行董事后藤秀树担任董事长，总经理由平山公通出任。",
+        "comments": 62,
+        "collects": 589
+      },
+      {
+        "id": 782,
+        "name": "松田成志",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 松田成志\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|松田成志]\r\n[纯假名|]\r\n[罗马字|Matsuda Seiji]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 3
+      },
+      {
+        "id": 1466,
+        "name": "奈須きのこ",
+        "type": 1,
+        "career": ["writer", "producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 奈须蘑菇\r\n|别名={\r\n[本名|奈須國広（なす くにひろ）]\r\n[那須邦宏]\r\n[奈須茸]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|なす きのこ]\r\n[罗马字|Nasu Kinoko]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1973-11-28\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "日本男性腳本家與小說家。由於不公開露面，因此曾因名字的漢字寫法惹來性別上的猜測。座右銘為「人類皆強大」，自畫像是一顆蘑菇怪物。\r\n與武內崇為國中同學和好友，兩人成立同人團體「TYPE-MOON」，2000年發表遊戲《月姬》，奈須負責劇本。2003年商業化成立遊戲公司「Notes」（ノーツ）。2004年發表遊戲《Fate/stay night》，同樣擔任遊戲腳本原案。現於講談社的「浮士德（ファウスト）」連載小說《DDD》（Decoration Disorder Disconnection）。",
+        "comments": 180,
+        "collects": 1177
+      },
+      {
+        "id": 1467,
+        "name": "武内崇",
+        "type": 1,
+        "career": ["illustrator"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 武内崇\r\n|别名={\r\n[本名|竹内友崇（たけうち ともたか）]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|たけうち たけし]\r\n[罗马字|Takeuchi Takashi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1973-08-28\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "本名为竹内友崇（竹内 友崇（たけうちともたか）））为游戏公司“TYPE-MOON”的社长与原画师，和奈须蘑菇同为“TYPE-MOON”的核心人物，两人为国中以来的好友。\r\n\r\n中学时代很爱看漫画，受到幽游白书很大的影响。之后开始自己创作漫画，在1996年时以“武内崇”的笔名参加1996年“第三届エニックス（ENIX，现在SQUARE ENIX）21世纪マンガ大赏（21世纪漫画大奖）”，作品‘F’得到佳作。后在“月刊少年ガンガンWING”1997年冬季号刊登短篇‘勇者部ただいま活动中！！’。曾在“コンパイル”担任CG绘制工作，但在1998年退社。同年与奈须蘑菇组成同人团体“竹帚”，开始初期创作。开发《月姬》时，住在东京都大田区。之后以同人团体“TYPE-MOON”名义，于2000年12月的COMIC MARKET中发表《月姬》。获得了广泛的回响与好评，之后陆续推出后续作品与周边。\r\n\r\n2003年，武内与奈须将“TYPE-MOON”商业化，设立了有限会社“Notes”。同年4月，以同人名义发行收录过去到现在所有发表作品（《Melty Blood》除外）的《月箱》，并宣布解散“TYPE-MOON”，将其定位为Notes的商业品牌。\r\n\r\n2004年1月30日，发行商业公司化后的第一个游戏《Fate/stay night》。",
+        "comments": 42,
+        "collects": 512
+      },
+      {
+        "id": 1581,
+        "name": "エンターブレイン",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= enterbrain\r\n|别名={\r\n[（株）エンターブレイン]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n[简称|eb!]\r\n}\r\n|性别= \r\n|生日= 2000-04-01\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|出版者记号= 7577（新規発行中止）\r\n|官网= http://www.enterbrain.co.jp/\r\n}}",
+        "summary": "角川集团制作经手娱乐关连杂志、书籍的品牌公司。之前隶属于角川控股集团中间持股公司MediaLeaves的旗下。\r\n\r\n前身主体为西和彦所设立的ASCII公司其中一个部门的娱乐系编辑部之第二编辑统筹本部。\r\n公司名称寓含有“要成为娱乐业（entertainment）首脑（brain）”的意思。企业标志为红字的eb!标记。\r\n\r\n1987年1月30日－成立ASCII映画株式会社。\r\n1997年－商号变更为株式会社ASCII Visual Entertainment。\r\n2000年4月1日－自株式会社ASCII（之后改组为株式会社MediaLeaves），将Fami通等娱乐系的编辑部，以及营业部门、事务部门让渡给ASCII Visual Entertainment，商号改为株式会社enterbrain。\r\n2004年3月18日－连同母公司MediaLeaves被角川控股收购。\r\n2005年3月－将本部自世田谷区若林迁移至千代田区三番町（本部大楼位于桂宫官邸的隔壁）。\r\n2010年10月1日－MediaLeaves并入。\r\n2011年3月1日－角川杂志（角川マガジンズ）并入。\r\n2013年10月1日－并入“株式会社KADOKAWA”成为事业品牌，公司法人消灭。",
+        "comments": 5,
+        "collects": 54
+      },
+      {
+        "id": 1595,
+        "name": "梶浦由記",
+        "type": 1,
+        "career": ["artist"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 梶浦由记\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|かじうら ゆき]\r\n[罗马字|Kajiura Yuki]\r\n[昵称|油鸡]\r\n[误记名|梶浦由紀 / 梶浦由纪]\r\n}\r\n|性别= 女\r\n|生日= 1965年8月6日\r\n|血型= A型\r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|网站= http://www.fictionjunction.com/\r\n|Twitter= @Fion0806\r\n}}",
+        "summary": "梶浦由记（1965年8月6日－），日本作、编曲家，出生于日本东京都，现居于日本东京都西部。梶浦现以制作动画及游戏配乐为主，她亦活跃于电视广告界及电影界。创作动画配乐的特色是在乐句中串插一些歌声。\r\n\r\n早年作为女子乐队See-Saw的成员出道，乐队解散后在电影、CM、动画、游戏和音乐剧等领域中有发展。2001年梶浦凭借TV动画《NOIR》中独具个人特色的配乐开始被广大动画观众所知晓，之后为《高达SEED》、《舞-HiME》、《翼-年代记》等人气动画谱写歌曲和配乐。她和菅野洋子、新居昭乃、冈崎律子一起被动画爱好者并称为“日本动画音乐界的四大才女”。2007-2009年因担当名作《空之境界》剧场版动画的配乐而使得其音乐生涯翻开了崭新的篇章。\r\n\r\n1972年，跟随父亲到前西德工作，并首次作曲。后来返回东京生活。\r\n1993年7月，组成乐队See-Saw，以石川智晶作为主音歌手和负责作词，而梶浦则主要负责作曲、编曲。\r\n1995年2月，开始Solo活动。\r\n2001年秋季，See-Saw的活动再开。\r\n2003年5月，Solo Project FictionJunction正式开始，活动至今。\r\n2003年7月，梶浦的第一张个人名义CD“FICTION”在美国发行，并于同年8月发售日本版本。\r\n2006年，See-Saw停止活动。\r\n2008年和索尼音乐娱乐旗下SME Records建立合作关系，“project Kalafina”启动。\r\n2011年10月凭借“魔法少女小圆”获得“Newtype×マチ★アソビ アニメアワード2011”剧伴部门受赏。\r\n2012年10月凭借“Fate/Zero”获得“Newtype×マチ★アソビ アニメアワード2012”的原声音乐奖。\r\n2018年离开SME Records。Kalafina也于2019年宣布解散。",
+        "comments": 136,
+        "collects": 1478
+      },
+      {
+        "id": 1759,
+        "name": "小笠原篤",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 小笠原笃\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|おがさわら あつし]\r\n[罗马字|Ogasawara Atsushi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1976-04-01\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|链接={\r\n[X|https://x.com/ogadelie]\r\n}\r\n}}",
+        "summary": "千葉県出身の男性アニメーター、キャラクターデザイナーである。1996年にスタジオぴえろに入社後、動画・原画を経てフリーとなる。現在はufotableに所属している。",
+        "comments": 0,
+        "collects": 8
+      },
+      {
+        "id": 1804,
+        "name": "千葉絵美",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 千叶绘美\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|千葉 絵美]\r\n[纯假名|ちば えみ]\r\n[罗马字|Chiba Emi]\r\n[昵称|]\r\n}\r\n|性别= 女\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|配偶= 平尾隆之\r\n}}",
+        "summary": "",
+        "comments": 2,
+        "collects": 17
+      },
+      {
+        "id": 1805,
+        "name": "近藤光",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 近藤光\r\n|别名={\r\n[逢瀬祭]\r\n[瀧沢進介]\r\n[第二中文名|]\r\n[英文名|Hikaru Kondou]\r\n[日文名|近藤 光]\r\n[纯假名|こんどう ひかる]\r\n[罗马字|Kondou Hikaru]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1969年12月2日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[X|https://x.com/hikaruufo]\r\n}\r\n}}",
+        "summary": "动画制片人、动画导演、脚本家、音响监督，ufotable代表董事社长。出生于日本德岛县。\r\n\r\n20岁出头时曾从事游戏相关的书籍写作工作，随后进入东京电影新社（现TMS Entertainment）及子公司Telecom Animation Film，《鲁邦三世：去死吧！诺斯特拉达穆斯》等作品中担任制作进行。离开Telecom Animation Film后，在影像内容公司Step Eizou担任制作人，1999年独立创业。\r\n\r\n近藤秉持\"想成立一家25岁时的自己会向往的公司\"的理念，召集团队在朋友居住的北池袋旧公寓内，于仅四块半榻榻米大小的空间搬入两张办公桌，成立了ufotable。2000年10月完成法人登记，正式就任公司代表董事社长。\r\n\r\n2006年起，开设\"ufotable Cafe\"。近藤表示，自成立ufotable之初就希望经营一个连接创作者与粉丝的艺廊咖啡馆，同时希望通过改善员工饮食来提升团队士气，此后陆续在新宿区、德岛市、名古屋市、北九州市开设咖啡馆和主题餐厅，更在德岛市建设\"ufotable CINEMA\"影院，拓展动画制作之外的经营领域。\r\n\r\n2009年开始积极推动家乡德岛县的地方振兴，在德岛市内设立工作室，承接大量与县市政府合作的项目。同时策划举办融合动画和游戏等娱乐元素的\"城镇★游趣（マチ★アソビ）\"活动，担任总制作人负责整体企划。\"マチ\"是德岛站周边地区的当地特有称呼，活动场地特设于眉山山顶和新町川沿岸等存在停车场和演出场地限制的区域，蕴含近藤\"希望重现昔日街道人潮涌动的热闹景象\"的理念。\r\n\r\n2014年，因对\"城镇★游趣\"的贡献，荣获第50届德岛新闻奖特别奖，该奖项专为对德岛发展有杰出贡献的县内外人士设立。\r\n\r\n近藤曾担任德岛县观光政策课下属\"动画祭典执行委员会\"会长，负责管理\"城镇★游趣\"相关事务，但2019年5月13日被证实已辞去该职务。据德岛县政府透露，辞职申请实际于4月中旬提出。\r\n\r\n其个人SNS账号Twitter（现X）的更新停留在2019年3月10日。\r\n\r\n2020年6月3日，东京国税局以涉嫌违反《法人税法》等罪名，对近藤及其公司向东京地方检察厅提出刑事告发。2021年7月9日，东京地检特搜部以违反《法人税法》等罪名对近藤实施非羁押起诉，并对该公司法人提起诉讼。\r\n本案起因于近藤为应对未来可能出现的经营危机，通过篡改东京和大阪咖啡馆分店的账目虚减销售额等手段，在2015年、2017年及2018年累计隐匿约4.46亿日元收入，逃避缴纳约1.1亿日元法人税及约2900万日元消费税。\r\n调查显示，公司制作运营资金来源于近藤个人薪酬及公司内部储备金，包括此前引发质疑的慈善募捐款项在内的资金运作均属正当，且未动用任何逃税资金。但鉴于公司自2012年度至2021年期间持续保持高额盈利、存在强迫会计人员（其妻子）篡改账目及亲自操作门店收银机截留营业款等恶性情节，法院认定\"作为经营者难辞其咎\"，于2021年12月10日判决近藤有罪。另一方面，因ufotable公司已全额补缴逃税金额，并建立了由税务专家提供咨询支持的管理体系，法院对近藤判处有期徒刑缓期执行，对公司罚款也从原定金额减至3000万日元。",
+        "comments": 49,
+        "collects": 69
+      },
+      {
+        "id": 1828,
+        "name": "あおきえい",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 青木英\r\n|别名={\r\n[蒼井啓(苍井启)]\r\n[第二中文名|]\r\n[英文名|Ei Aoki]\r\n[日文名|]\r\n[纯假名|あおき えい]\r\n[罗马字|Aoki Ei]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1973年1月20日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[X|https://x.com/ei_aoki]\r\n}\r\n}}",
+        "summary": "日本动画导演、演出家，出生于东京都，现任动画公司TROYCA取缔役。早期曾以\"蒼井啓\"名义参与作品创作。\r\n\r\n2005年之前任职于动画公司AIC期间，在TV动画《SHUFFLE!》第19话\"无法忘怀的思念\"中担任分镜和演出工作。该集以\"空锅\"为名的独特演出手法刻画女主角的病娇属性，引发广泛讨论。\r\n\r\n2004年的TV动画《女生万岁 first season》是青木英首次担任监督，此后转为自由职业者，后以AIC和ufotable为主要合作开展导演和演出的工作，2013年5月与前AIC动画制片人长野敏之、摄影监督加藤友宜共同成立动画公司TROYCA并担任取缔役。",
+        "comments": 86,
+        "collects": 353
+      },
+      {
+        "id": 2156,
+        "name": "植田益朗",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 植田益朗\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|うえだますお]\r\n[罗马字|Ueda Masuo]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "日本のアニメーションプロデューサー。A-1 Pictures取締役、アニプレックス取締役会長。",
+        "comments": 10,
+        "collects": 11
+      },
+      {
+        "id": 3059,
+        "name": "ufotable",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= \r\n|别名={\r\n[第二中文名|飞碟桌]\r\n[英文名|Ufotable, Inc.]\r\n[日文名|ユーフォーテーブル有限会社]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|飞碟社]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|成立时间= 2000年10月\r\n|代表取缔役= 近藤光\r\n|员工数= 366名（2026年）\r\n|链接={\r\n[官网|https://www.ufotable.com]\r\n[X|https://x.com/ufotable]\r\n[Instagram|https://www.instagram.com/ufotable_inc]\r\n[YouTube|https://www.youtube.com/c/ufotable_inc]\r\n}\r\n}}",
+        "summary": "日本一家动画制作公司。\r\n\r\n在TMS和Telecom Animation Film担任制作进行的近藤光于2000年独立出来成立的动画制作公司。\r\n社名的由来是实际存在的家具“UFOtable”（飞碟桌）。近藤十分中意这个名字，甚至亲自去欧洲买下了这一款飞碟桌\r\n2009年四月开设德岛工作室，二楼是著名的ufotable Cafe，德岛工作室主要担任TV动画《卫宫家今天的饭》的制作。\r\n\r\n2012年在德岛开设ufotable CINEMA，2018年在韩国开设ufotable Cafe KOREA。\r\n东京本社设有制作部、演出部、作画部、上色部、数码部、漫画班、美术部、黏土动画部等；德岛工作室有作画部和演出部。\r\n\r\n2010年之后，由于社内制作环境的效率提升，基本上不再把单集TV动画外包给他社制作，并且不明确设立制作组，社内所有人员几乎都会参与到每一部作品的制作当中，系列构成和脚本的工作由导演和社内人员共同完成。\r\n\r\n经常尝试新的制作体制，例如《学美向前冲！》是业界首次采用导演小组制度，2006年之后的作品都会亲自出资，参与出品委员会，在《空之境界》之后，分镜原稿在进行原画作业之前有时会先拿到数码部，用CG做一个“原型影像”（プロトタイプ映像），先行模拟画面的动作和构图，在初期阶段就可以明确演出的计划和方向性，然后再进入原画工作以及先行完成台词和音乐的录制。\r\n2005年的《双恋A》之后，多数作品的音乐制作采用“根据制作完成的影像作曲”的“フィルムスコアリング”模式。而2014年的《Fate [UBW]》则是业界首次两个季度所有音乐全由“フィルムスコアリング”模式完成。2016年以后，近藤光社长担任所有作品的音响监督，并且主题曲、插曲的作词也大部分由社内完成。\r\n\r\n社内拥有制作动画需要的所有部门，主要STAFF经常取用社内人员，数码部（摄影部）的人员经常参与分镜构图工作，摄影和CG特效等方面使用十分受业界人员和观众一致好评。\r\n\r\n时有参与动画公司feel.的原画外包工作，与椎名豪、深泽秀行、梶浦由记等作曲家关系密切，声优方面倾向于选用MAUSU所属的声优。\r\n\r\n2019年播出的TV动画《鬼灭之刃》引起了社会现象的热潮，2020年上映的剧场版动画《鬼灭之刃 无限列车篇》成为日本历代票房收入和观众动员数位居第1位。",
+        "comments": 250,
+        "collects": 738
+      },
+      {
+        "id": 3062,
+        "name": "寺尾優一",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 寺尾优一\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Yuuichi Terao]\r\n[日文名|寺尾 優一]\r\n[纯假名|てらお ゆういち]\r\n[罗马字|Terao Yuuichi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|妻子= 神谷桃子\r\n}}",
+        "summary": "日本のアニメーション撮影監督、コンポジッター、エフェクトアーティスト、アニメーション演出家である。岡山県出身。\r\nアニメーション制作会社ufotableに所属。ufotableデジタル映像部チーフを務める。\r\n\r\n大阪芸術大学に入学後、栖原隆史らと自主制作のアニメーション映画を制作し、関東にある大学サークルと上映会を開催することもあった。大学3年生の時、大学の先輩からの紹介で2003年12月にアニメーション制作会社ufotableに入社した。入社当初は制作部にて制作進行を希望していたが、面接の際に映像を持ち込んでいたことから、当時、設立されたばかりの撮影部（現在のデジタル映像部）に配属となる。撮影に関して詳しくなかった寺尾は一から技術を学び、コンポジッターとしてキャリアをスタート。2007年より『劇場版 空の境界』などの作品で撮影監督として活動を開始。現在はエフェクトアーティストを始め様々な仕事に取り組んでいる。\r\n\r\nufotableデジタル映像部チーフとして撮影・CGの統括を行っており、2007年以降のufotable元請制作作品の多くで撮影監督を務める。2007年以降に制作されたufotable元請作品のコンポジット・エフェクトの基礎を作り上げた人物。一時期、『ヱヴァンゲリヲン新劇場版:破』制作のため約1ヶ月間スタジオカラーに出向していたこともある。\r\n\r\n品質の高いアニメーションを目指すために出来ることは何にでも取り組むことを意識しており、撮影・CGの領域以外にも作画、背景のセクションや監督、絵コンテ、演出など演出家として作品に参加することもある。特に背景美術には積極的にかかわっており、同社元請作品では背景美術制作の初期段階から撮影スタッフとして光などの照明効果の画面設計に参加している。\r\n\r\nufotable元請作品の多くでプロモーションビデオやCMの制作も行っており、2011年に放送されたTVアニメ『Fate/Zero』では、登場人物7陣営それぞれを主役にした陣営別CMを7本制作し、このCMが放送されると大きな話題となった。\r\n\r\n演出家としてufotable作品のTVアニメのオープニングやゲームアニメーションの監督、絵コンテ・演出なども担当しており、2019年放送のTVアニメ『鬼滅の刃』の最終話にてテレビアニメ作品としては初の絵コンテ・演出を担当し、原画スタッフとしてもデビューを果たした。\r\n\r\n2007年より現在まで、ufotable公式ホームページにてデジタル映像部の活動や撮影・3DCGの技術的な解説を行うブログ「ufotable digital team」を不定期掲載している。\r\n\r\nアニメーションは集団による総合芸術であるという考えを持ち、制作ではチームワークを重視している。作画で表現されたキャラクター・背景美術と3DCGのコンポジットによるマッチングは常に意識しており、正しくライティングを行えば、どんなスタイルのキャラクター・背景美術とも3DCGは自然に融合すると考えている。また、特殊効果による光や煙、爆発、雪、水、雨のような自然現象の表現に定評がある。\r\n\r\n寺尾を中心としたデジタル映像部が手がけた映像は「フォトリアリスティック（写実的な描画方法）」な画面と評価されている。これは寺尾が、アニメーションらしい外連味のある映像を追い求めるなかで、リアリズムに手を加えると、アニメーションと相性の良い作為的な映像になることを知ったため、2007年以降のufotable元請作品の画面設計に採用されるようになる。また、撮影監督として、各作品の世界観にマッチするように映像の雰囲気をコントロールすることを意識している。\r\n\r\n寺尾が10年以上撮影監督を務めている『TYPE-MOON×ufotable』作品のコンポジットでは、TYPE-MOON作品のキャラクターだけが映える空の色、「TYPE-MOONブルー」の表現に力を入れている。\r\n\r\n2022年2月、東京アニメアワード2022にて美術・色彩・映像部門「個人賞」を受賞した。2022年2月には、『第1回新潟国際アニメーション映画祭』を前に発表された【大川＝蕗谷賞】にて、寺尾らデジタル映像部が撮影技術を評価され受賞している。\r\n\r\nガイナックスやTRIGGER、スタジオカラーの作品にて撮影監督を務める山田豊徳は寺尾が撮影監督を務めた『劇場版 空の境界』について、初期の新海誠作品の影響により注目の集まったコンポジットで画のクオリティをコントロールする方法論の最初の大きな成功例であると評している。また、『劇場版 空の境界』以降に寺尾が撮影監督を務めたufotable作品の作風となっている撮影処理の際立つ表現法について、京都アニメーションと同様に映像面の全セクションを社内に設け、連動が上手く取れているからこそ出来る表現方法だと評した。\r\n\r\nスタジオジブリ出身の撮影監督・CGデザイナーである泉津井陽一は寺尾が率いるufotableデジタル映像部について、「一般に作画と背景美術、CGの情報量が剥離する傾向にあるアニメ作品において、作画、背景美術、CGに同様の撮影処理を乗せることで質感を近づけ馴染ませるアプローチをしており、作画に実体感を持たせることで世界観を作り出している」と評している。また、薄暗いシーンで画面を成立させているコントラスト処理を高く評価しており、薄暗い画面と暖色系の特徴的なエフェクトを両立させている寺尾とデジタル映像部の技量を高く評価している。",
+        "comments": 14,
+        "collects": 45
+      },
+      {
+        "id": 3139,
+        "name": "須藤友徳",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 须藤友德\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|すどうとものり]\r\n[罗马字|Sudou Tomonori]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1978年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "日本のアニメーター、キャラクターデザイナー、アニメーション演出家、アニメーション監督である。神奈川県出身。アニメ制作会社じゃんぐるじむ出身。現在は ufotable に所属。\r\n\r\n『住めば都のコスモス荘 すっとこ大戦ドッコイダー』より ufotable に参加。『ニニンがシノブ伝』で一人原画を務め、『コヨーテ ラグタイムショー』で初のキャラクターデザインを務める。\r\n同人ゲーム『月姫』発売当初からの TYPE-MOON 作品のファンであり、2003年、『月姫』のアニメ化を聞きつけた須藤は、人づてに紹介してもらい J.C.STAFF 制作のTVアニメ『真月譚 月姫』に原画として参加。この作品で初めて TYPE-MOON 作品に関わる。その後、2007年公開の劇場アニメ『空の境界』より、ufotable が手掛ける TYPE-MOON 作品で武内崇原案のキャラクターデザインを手掛ける。同時に作画監督、『Fate/stay night [Unlimited Brade Works]』からは総作画監督も務めた。\r\n劇場アニメ『空の境界 未来福音』にて初監督を務める。監督に任命された際、「未来福音の前にコンテ・演出を経験したい」と要望したことがきっかけとなり、TVアニメ『Fate/Zero』第5話にて初の絵コンテ・演出を務めた。",
+        "comments": 47,
+        "collects": 95
+      },
+      {
+        "id": 3344,
+        "name": "中村慎太郎",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 中村慎太郎\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Shintarou Nakamura]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Nakamura Shintarou]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|链接={\r\n[X|https://x.com/tokyo_emon]\r\n}\r\n}}",
+        "summary": "Seven Arcs所属。\r\n原ufotable、日本绘梦所属。",
+        "comments": 1,
+        "collects": 3
+      },
+      {
+        "id": 3345,
+        "name": "平松正樹",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 平松正树\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|ひらまつまさき]\r\n[罗马字|Hiramatsu Masaki]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1971年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|twitter= @hiramac10\r\n}}",
+        "summary": "フリーの脚本家、ゲームシナリオライター。愛知県豊川市出身。東京都武蔵野市在住。中央大学卒業。かつては作家の長坂秀佳に師事。代表作としては『街 〜運命の交差点〜』と『劇場版 空の境界』があげられる。",
+        "comments": 11,
+        "collects": 20
+      },
+      {
+        "id": 3346,
+        "name": "高橋タクロヲ",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 高桥拓朗\r\n|别名={\r\n[高橋拓朗]\r\n[高橋タクロウ]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|たかはし たくろう]\r\n[罗马字|Takahashi Takurou]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1974年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "日本のアニメーター、キャラクターデザイナー、アニメーション演出家、アニメーション監督である。千葉県出身。原 ufotable所属。\r\n\r\n『王立宇宙軍』そして『トップをねらえ!』と『ふしぎの海のナディア』に影響されアニメ業界への道を志す。専門学校（学校法人東京デザイナー学院）を卒業後、『トップをねらえ！』を制作した GAINAX に入社。その後、動画、原画、そしてフリー作監や演出を経て ufotable に入社した。陸上自衛隊に所属していた経験がある。\r\nレイアウトには定評があり、ufotable 代表の近藤光いわく、ufotable のクオリティの根幹のひとりである。\r\n\r\nufotable作品で副監督を務めるまでになっていた高橋は2017年の「活劇 刀剣乱舞」において酒の勢いで下品な演出を行ったと自らtwitterで暴露し炎上。ufotableが社として謝罪を行う事態になってしまった。表向きには処分などは発表されていないが、それ以降の作品では一度も起用されておらず、2020年現在になっても担当作品なしの状態が続いている。スタッフとしてクレジットされていたソーシャルゲーム「Fate/GrandOrder」からも名前が削除されるなど、各方面で実質的に干された状態となっている。\r\n近況が不明であるためufotable所属としているが、ufotableにおける演出家の雇用形態と数年に渡り担当作品がない状況を鑑みると、基本的には既にufotableを退社済みと見られている。",
+        "comments": 12,
+        "collects": 10
+      },
+      {
+        "id": 3347,
+        "name": "小船井充",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 小船井充\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|おぶないみつる]\r\n[罗马字|Obunai Mitsuru]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1968年3月28日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|Twitter= @m_obunai\r\n}}",
+        "summary": "ufotable所属。スタジオへらくれすにも参加中。「おぶないみつる」表記の時も。\r\n主にアクションやエフェクトのスペシャルカットでの起用が多く、中核スタッフとしての活躍が多い。\r\nキャラ、メカ、エフェクトどれを取っても上手い上に、仕事が超速いらしい。\r\n代表作は、監督・作画監督・原画・絵コンテ・演出を務めた『空の境界・第三章 痛覚残留』。",
+        "comments": 8,
+        "collects": 63
+      },
+      {
+        "id": 3348,
+        "name": "ノーツ",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= Notes.\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Notes.]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= 2003年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "有限会社ノーツ - 同人サークル「TYPE-MOON」のメンバーが設立した会社。",
+        "comments": 0,
+        "collects": 11
+      },
+      {
+        "id": 3349,
+        "name": "入江祥雄",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 入江祥雄\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Irie Yoshio]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "",
+        "comments": 1,
+        "collects": 0
+      },
+      {
+        "id": 3350,
+        "name": "夏目公一朗",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 夏目公一朗\r\n|别名={\r\n[夏目公一郎]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|なつめこういちろう]\r\n[罗马字|Natsume Kouichirou]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "原Aniplex社长，现已退位。",
+        "comments": 27,
+        "collects": 55
+      },
+      {
+        "id": 3604,
+        "name": "針生雅行",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 针生雅行\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Hariu Masayuki]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 3767,
+        "name": "嘉手苅睦",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 嘉手苅睦\r\n|别名={\r\n[嘉手刈睦]\r\n[嘉手苅陸]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|かでかるちかし]\r\n[罗马字|Kadekaru Chikashi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1976年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|链接={\r\n[X|https://x.com/kadhich]\r\n}\r\n}}",
+        "summary": "沖縄県出身の男性アニメーター。\r\n代々木アニメーション学院を卒業後、サンライズを経て現在はフリーで活動中。2004年頃から2009年にかけてはufotableでの仕事が多かった。なお、珍しい苗字のせいか以前は表記間違いをされる事が多かったようだが、活躍するにつれてそのようなことは少なくなった模様。（嘉手刈 睦、嘉手 苅睦、嘉手苅 陸など）カデカルムツミ表記のときもある。",
+        "comments": 0,
+        "collects": 8
+      },
+      {
+        "id": 5782,
+        "name": "岩上敦宏",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 岩上敦宏\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Atsuhiro Iwakami]\r\n[日文名|]\r\n[纯假名|いわかみ あつひろ]\r\n[罗马字|Iwakami Atsuhiro]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1972年2月7日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "日本动画企划制片人、企业家，出生于群马县。现任株式会社索尼音乐娱乐代表董事社长兼集团CEO、株式会社Aniplex代表董事执行役员社长、株式会社Laceengle代表董事执行役员会长。\r\n\r\n毕业于东京外国语大学，大学毕业后曾以成为电影导演为目标从事自由职业，后因参与影像讲座为契机，于1997年加入SPE Visual Works（现Aniplex）当制片人。2016年就任Aniplex代表董事社长。2021年获得渡边晋奖、藤本奖。\r\n\r\n参与多部Aniplex出品的新房昭之导演、SHAFT制作的动画作品，是TV动画《魔法少女小圆》中新房昭之×虚渊玄×苍树梅这一异色组合的提案者，将企划定位为魔法少女题材的原因是认为\"这是最能展现动画魅力的类型\"。他评价新房昭之\"虽是导演却拥有制片人般的视角\"，并表示自己作为制片人也受到过新房的影响。\r\nAniplex、Notes、ufotable三社联合以TYPE-MOON作品及相关作品动画化为核心企划的发起者。\r\n2005年左右观看了由ufotable制作的TV动画《双恋Alternative》时产生\"居然存在能制作这类作品的动画工作室\"的想法，随后向ufotable代表董事社长近藤光和Notes代表董事竹内友崇提出了酝酿已久的《空之境界》动画化企划，除了该企划外，后面还参与了TYPE-MOON×ufotable的其他作品。\r\n对于企划第一弹《剧场版 空之境界》，他坦言\"这是改变我职业生涯的作品\"。\r\n在游戏应用领域亦有建树，如《Fate/Grand Order》的企划。",
+        "comments": 30,
+        "collects": 96
+      },
+      {
+        "id": 5839,
+        "name": "竹岡美穂",
+        "type": 1,
+        "career": ["illustrator"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 竹冈美穗\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|たけおか みほ]\r\n[罗马字|Takeoka Miho]\r\n[昵称|]\r\n}\r\n|性别= 女\r\n|生日= 7/1\r\n|妹= 竹岡葉月\r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= wikipedia\r\n}}",
+        "summary": "竹冈美穗（7月1日－）是日本的插画家。东京出身。 第九回コバルトイラスト大赏得奖后，以插画家的身分出道。 小说家竹冈叶月的姊姊。",
+        "comments": 22,
+        "collects": 151
+      },
+      {
+        "id": 6014,
+        "name": "Kalafina",
+        "type": 3,
+        "career": ["artist"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= Kalafina\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Kalafina]\r\n[日文名|カラフィナ]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[HP|https://www.kalafina.jp/]\r\n[YouTube|https://www.youtube.com/kalafinaSMEJ]\r\n[Wikipedia|http://zh.wikipedia.org/zh-cn/Kalafina]\r\n}\r\n|活动期间= 2008-2019, 2024-\r\n|X= @Kalafina_Staff\r\n}}",
+        "summary": "Kalafina是梶浦由记制作，隶属于SME Records的音乐组合。于2019年3月解散，2024年10月3日重新活动。\r\n\r\n概要\r\n\r\n　　音乐制作人梶浦由记在空之境界剧场版的制作方将7部剧场版的主题歌制作工作交给她以后。开始构思选拔新人女歌手组成新的音乐组合来负责主题歌的演唱工作，并且当时举行了公开选拔。梶浦以外的成员最初并没有公布，直到2008年4月~5月间举行的演唱会“Revo＆梶浦由记Presents Dream Port 2008”公演开始之际，最初的成员Wakana和Keiko被公开身份并参与到演唱会的演出之中。梶浦同时曾经在杂志的访谈中说过“Kalafina是成员不固定的流动的组合”。如她所说，从第二张单曲“sprinter/ARIA”开始，Hikaru和maya加入，4人组成的主音歌手阵容确立。第一张专辑“Seventh Heaven”之后Maya离开，以后Wakana、Keiko、Hikaru三人以此名义开始展开音乐活动。\r\n　　2008年1月23日，收录第一章~第三章主题歌的第一张单曲“oblivious”发售。预定全7章对应的7首主题歌收录于3张单曲中。但是，因为oblivious成为了比预计高很多的人气作品，所以决定制作了Remix专辑Re/oblivious发售。\r\n　　当初构思是负责剧场版空之境界主题歌演唱工作的组合，其后，电视动画黑执事片尾主题歌发表。Wakana和Keiko在上电台节目A&Gメディアステーション こむちゃっとカウントダウン的时候说过，组合名称的由来是个秘密。在oblivious最初公布的时候，组合的成员尚未确定，谜团很多。\r\n\r\n构成\r\n\r\n制作人\r\n　梶浦由记 (键盘/和声等)\r\n\r\n主音歌手\r\n　大滝若菜（Wakana）\r\n　洼田启子（Keiko）\r\n　政井光（Hikaru）（第2张单曲～）\r\n\r\n和声等\r\n　梶浦由记\r\n　贝田由里子\r\n　戸丸华江\r\n\r\n原成员\r\n　Maya（第2张单曲～第1张专辑）",
+        "comments": 56,
+        "collects": 367
+      },
+      {
+        "id": 6023,
+        "name": "野村美月",
+        "type": 1,
+        "career": ["writer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 野村美月\r\n|别名={\r\n[香山暁子]\r\n[今井楓人]\r\n[村中志帆]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|のむら みづき]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= 女\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|Twitter= @Haruno_Soraha\r\n}}",
+        "summary": "野村 美月（のむら みづき）は、日本のライトノベル作家。福島県出身。東洋大学文学部国文学科卒。",
+        "comments": 49,
+        "collects": 304
+      },
+      {
+        "id": 6076,
+        "name": "倉橋静男",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 仓桥静男\r\n|别名={\r\n[倉橋靜男]\r\n[第二中文名|]\r\n[英文名|Shizuo Kurahashi]\r\n[日文名|]\r\n[纯假名|くらはし しずお]\r\n[罗马字|Kurahashi Shizuo]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1948年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "アニメや映画を中心に活動している音響効果技師、元映画編集技師。本名：倉橋 靜男。現在、株式会社サウンドボックス、有限会社サウンドコア代表取締役社長。新潟県出身。\r\n\r\n1968年に編集助手として日活とフリー契約。1975年に効果係へ移り音効マンとしてのキャリアをスタートさせ、主に小島良雄に師事。1978年より日活分社化に伴い東洋音響効果グループに参加し、主にアニメ作品やテレビドラマなどを担当。特に『熱中時代』などの田中知己演出ドラマに多く関わる。\r\n1988年、東洋音響の解散を契機に同グループのスタッフであった柴崎憲治（現・アルカブース代表）らと共にサウンドボックスを設立。以降はビデオ映画や三谷幸喜監督作品などの実写作品もコンスタントに手掛けつつ、アニメへと活動の中心をシフトさせ、話題作を数多く担当。音楽監督・選曲家の鈴木清司、プロデューサーの南雅彦、音響監督の三間雅文、明田川進、若林和弘、作曲家の菅野よう子らとの繋がりが深い。",
+        "comments": 2,
+        "collects": 6
+      },
+      {
+        "id": 7611,
+        "name": "尖端出版",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 台湾尖端\r\n|别名={\r\n[尖端出版社]\r\n[尖端出版SPP]\r\n[台湾尖端出版社]\r\n[第二中文名|城邦文化事業股份有限公司 尖端出版]\r\n[英文名|Sharp Point Press]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= 1982年7月12日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= http://www.spp.com.tw/\r\n}}",
+        "summary": "尖端出版是台湾出版事业体城邦文化旗下的一支出版部门，目前主要以年轻族群的书籍及相关产品为发行重点。",
+        "comments": 5,
+        "collects": 46
+      },
+      {
+        "id": 11560,
+        "name": "阿部望",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 阿部望\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Nozomu Abe]\r\n[日文名|]\r\n[纯假名|あべ のぞむ]\r\n[罗马字|Abe Nozomu]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1979年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "スタジオブーメラン出身，现在是ufotable所属。\r\n以ufotable作品为中心的同时，也会参与其他公司的作品，在ufotable社内担任以特效为主的动作卡居多。\r\n最初因为担任《一骑当千DD》的主动画师表现而备受瞩目。\r\n偶像是梅津泰臣，同时也被梅津泰臣本人刮目相看。\r\n近年连续担任了很多高人气作品的原画工作，在一般观众里的知名度也逐渐上升。\r\n在《魔法少女小圆》之后，阿部望每次在TV动画里担任的高密度的动作、特效作画都会成为话题。\r\n个人特征是高密度的爆炸、烟雾、碎片特效，还有激烈的电光特效。\r\n其细长的方形碎片被作画厨称为阿部碎片，在碎片之中夹杂的液状的特效被加速世界的STAFF称作阿部汁。",
+        "comments": 56,
+        "collects": 509
+      },
+      {
+        "id": 11671,
+        "name": "藤井真澄",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 藤井真澄\r\n|别名={\r\n[日向]\r\n[森下真澄]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= 女\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|twitter= @hinata0921\r\n|配偶= 藤井昌宏\r\n}}",
+        "summary": "藤井真澄，女，动画师，J.C.STAFF出身，现自由原画，近年负责BNPictures、日升的作品较多。\r\n结婚前名为森下真澄（本来以为是两个不一样的人，但查阅作画WIKI发现两人停止活动和开始活动的时间很近。目前其推特简介里有透露其旧姓是森下，已证实）\r\n丈夫是J.C.STAFF所属的动画师藤井昌宏，两人在《少女革命》时期一同担任补间动画。",
+        "comments": 0,
+        "collects": 1
+      },
+      {
+        "id": 11923,
+        "name": "本村晃一",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 本村晃一\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|もとむら こういち]\r\n[罗马字|Motomura Kouichi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1974年07月10日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|链接={\r\n[X|https://x.com/wired777]\r\n[Pixiv|https://www.pixiv.net/users/139523]\r\n}\r\n}}",
+        "summary": "GONZO出身。フリー。三度の飯よりゲーム好き。\r\nアニメーター。【趣味】ゲーム、映画、カメラ、オーディオ【最近の仕事】勇気爆発バーンブレイバーン（キャラクターデザイン、総作監）、86-エイティシックス-、ダリフラ、天元突破グレンラガン（作画監督）、シン・エヴァンゲリオン劇場版（原画）等。",
+        "comments": 0,
+        "collects": 11
+      },
+      {
+        "id": 12343,
+        "name": "碇谷敦",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 碇谷敦\r\n|别名={\r\n[板垣敦]\r\n[第二中文名|]\r\n[英文名|Atsushi Ikariya]\r\n[日文名|]\r\n[纯假名|いたがき あつし]\r\n[罗马字|Itagaki Atsushi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|链接={\r\n[X|https://x.com/ikariya33]\r\n}\r\n}}",
+        "summary": "元オー・エル・エム→ufotable所属。現在はNAZをに活躍。\r\n\r\n動画マンとして活躍し、後に原画マンに昇格。作画監督を担当する事は比較的少ないが、キャラクターデザインに恥じぬ作画で知られている。難度の高い動きのカットを得意とし、主に戦闘シーンやメカニックに多く見られる。『天元突破グレンラガン』では第二原画ながらも、得意なアクション原画を引き出した。\r\n之前是作为补间动画的身份而活跃，之后升格为原画。虽然担当作画监督的工作比较少，但以不逊色于角色设计的作画质量而被为人所知。擅长高难度动作的（原画）切割，主要在战斗场景和机械作画中常见。在《天元突破红莲之眼》中虽然是第二原画，但还是表现出了其擅长的动作原画。\r\n\r\nufotable、WHITE FOXを中心に原画マン、作画監督、キャラクターデザイナーとして活動しており、2017年現在はufotableに席を置いている。\r\n以ufotable、WHITE FOX为中心，以原画、作画监督、角色设计师的身份而活动着，2017年到现在在ufotable里有着专门的作画工位。\r\n\r\n2017年に公開された短編アニメーション、『さくらインターネット 新生』にて初監督を務める。本作では、監督の他に絵コンテ・演出、作画監督、原画を一人で務めた。\r\n在2017年上映的短篇动画《SAKURA Internet 新生/樱花网络 新生》中首次担任动画监督。在本作品中，除了监督的岗位以外，还一个人担任了分镜、演出、作画监督和原画等工作。",
+        "comments": 10,
+        "collects": 76
+      },
+      {
+        "id": 12346,
+        "name": "又賀大介",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 又贺大介\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|またが だいすけ]\r\n[罗马字|Mataga Daisuke]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|Twitter= @matagadaisuke33\r\n}}",
+        "summary": "エムアイ出身。",
+        "comments": 0,
+        "collects": 6
+      },
+      {
+        "id": 12369,
+        "name": "神野学",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 神野学\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Kamino Manabu]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 2
+      },
+      {
+        "id": 12374,
+        "name": "茂木貴之",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 茂木贵之\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Takayuki Mogi]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Takayuki Motegi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "ufotable所属",
+        "comments": 3,
+        "collects": 13
+      },
+      {
+        "id": 12375,
+        "name": "永森雅人",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 永森雅人\r\n|别名={\r\n[森永雅人]\r\n[第二中文名|]\r\n[英文名|Masato Nagamori]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "ufotable所属。",
+        "comments": 0,
+        "collects": 3
+      },
+      {
+        "id": 12577,
+        "name": "崎山北斗",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 崎山北斗\r\n|别名={\r\n[﨑山北斗]\r\n[第二中文名|]\r\n[英文名|Hokuto Sakiyama]\r\n[日文名|崎山 北斗]\r\n[纯假名|さきやま ほくと]\r\n[罗马字|Sakiyama Hokuto]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1985年3月13日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|链接={\r\n[X|https://x.com/hokuto_sakiyama]\r\n[Sakugabooru|https://www.sakugabooru.com/post?tags=hokuto_sakiyama]\r\n}\r\n}}",
+        "summary": "1985年出生。毕业于九州视觉艺术动画学科。\r\n出身于 XEBEC M2。目前为自由画师。凭借在『兰岛漂流记』中的工作表现而备受瞩目。\r\n新井淳曾评价他为「想要成为大平晋也的人」。\r\n属于那种会在1个Cut里塞入极高原画张数的类型。正如AHOBOY氏所公开的草摄中所展现的那样，其原画是以极具魄力与狂野的笔触绘制而成的。\r\n他是甚至能让ufotable的社长近藤光说出 “如果你能认真干的话，我就让你做一部原创作品” 这种话的罕见人才。\r\n\r\n然而以2008年为分界线，他的工作量骤减，作为动画师的未来一度令人担忧。\r\n但在『传说中勇者的传说』第18话中正式宣告恢复活动。在『STAR DRIVER』第25话中，用浓重的线条描绘了大平风格的机甲。\r\n向世人展现了其极具个性的作画能力依然健在。\r\n\r\n目前就任于名古屋造形大学，担任特任助教。",
+        "comments": 8,
+        "collects": 59
+      },
+      {
+        "id": 12762,
+        "name": "村上竜之介",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 村上龙之介\r\n|别名={\r\n[村上龍之介]\r\n[第二中文名|]\r\n[英文名|Ryuunosuke Murakami]\r\n[日文名|村上 竜之介]\r\n[纯假名|むらかみ りゅうのすけ]\r\n[罗马字|Murakami Ryuunosuke]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|链接={\r\n[X|https://x.com/ryuuuu_________]\r\n}\r\n}}",
+        "summary": "出身于Jec.E。曾就职于ufotable，目前为自由动画师。\r\n在ufotable德岛工作室期间，也曾负责过动画作画的指导与培训工作。\r\n在『空の境界』担任了部分道具设计与动物作画监督。\r\n爱好是踢足球，以及品鉴日本酒。",
+        "comments": 0,
+        "collects": 2
+      },
+      {
+        "id": 12920,
+        "name": "三浦貴博",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 三浦贵博\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|三浦 貴博]\r\n[纯假名|みうら たかひろ]\r\n[罗马字|Miura Takahiro]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1975年6月5日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "日本的动画导演、动画演出家，出生于埼玉县。\r\n原ufotable所属，现自由身，现主要参与CloverWorks的作品较多，ufotable也时有参与。\r\n\r\n擅长动作戏的分镜，因此给人留下了非常深刻的印象。\r\n曾以漫画家作为目标、在学习了绘画之后目标转向为动画人。\r\n在进入动画公司Imagin后、做过一段时间的中割工作，在《地球守护者》原画出道。\r\n2002年作为自由身活动在2003年播放的动画《急救超人兵团》开始参与ufotable的作品，于大沼心担任导演的动画《魔法老师涅吉!?夏》初次担当演出，此后则主要作为演出进行活动，剧场版动画《空之境界》第6章中初次担任导演。\r\n\r\n在自己作为导演的作品中除去分镜和演出以外也经常负责一定的原画，手头有空的话自己画掉会比较节省制作现场的时间。現在は演出家の活動がメインとなっているが、自身で描かないと演出家として伸びていかないという考えからアニメーターとしての活動も続けている。\r\n\r\n在ufotable中是比较有代表性的动作演出家，重要的动作场景经常由其负责。负责分镜和演出的部分被ufotable社内称呼为“M Part”。\r\n由他担任导演的TV动画《Fate/Stay Night [Unlimited Blade Works]》中的动作描写被原作者奈须蘑菇评价道“动作戏的张力跟特效的视觉效果过于华丽宛若怪物一般”。\r\n之后的剧场版动画《Fate/Stay night ［Heaven's Feel］》全3章中负责了【Lance VS 真Assassin】【Rider VS 真Assassin】【Saber〔Alter〕 VS Berserker】【Rider VS Saber〔Alter〕】的分镜和演出。\r\n\r\n从《東方地霊殿》开始成为了东方Project的粉丝，在アニメイト10周年企划《アニメ店長×東方Project》中担任了导演。\r\n\r\n2020年左右转为自由身活动，负责其他公司的作品，在TV动画《约定的梦幻岛 第二季》第4话作为分镜参与到CloverWorks的作品之中。之后在《东京24区》第3、5、8、12话中担任了分镜及第12话演出，而《间谍过家家》第一季后半part中的CloverWorks回也担任了比较重动作的两集分镜，依旧给人一种重动作戏的印象。",
+        "comments": 46,
+        "collects": 70
+      },
+      {
+        "id": 13809,
+        "name": "田畑壽之",
+        "type": 1,
+        "career": ["producer", "illustrator"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 田畑寿之\r\n|别名={\r\n[田畑寿之]\r\n[田端壽之]\r\n[Arctic char]\r\n[旅田尚幸]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|たばた　ひさゆき]\r\n[罗马字|Hisayuki Tabata]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|Pixiv id= 15575303\r\n|Twitter= @Arctic_char_J\r\n}}",
+        "summary": "Studio DEEN(スタジオディーン)出身。\r\n\r\n丁寧な芝居を魅せる作画に定評がある。\r\nまた、エロスな作画でも知られており、本編原画はもとより版権絵でも独自のフェティッシュさを感じさせる。自他ともに認める変態。\r\n特徴的なデザインをしており、版権絵でも田畑氏が担当した際は田畑絵とわかるほど。\r\n『コードギアス 反逆のルルーシュ R2』のタバタッチのモデルということでも有名。\r\n\r\nキネマシトラス元請作品『ゆゆ式』で初のキャラクターデザインを務め、一躍脚光を浴びた。\r\nしかし、作画崩壊で話題となってしまった『クオリディア・コード』のキャラクターデザイン・総作画監督を務めて以降、\r\n2017年～2018年は寡作の状態となっており、名前を見掛けることは少なくなっている。",
+        "comments": 19,
+        "collects": 27
+      },
+      {
+        "id": 14088,
+        "name": "菊池隼也",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 菊池隼也\r\n|别名={\r\n[菊地隼也]\r\n[第二中文名|]\r\n[英文名|Kikuchi Shun`ya]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Shunya Kikuchi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "中村プロダクション出身 → ufotable所属 → 自由身。",
+        "comments": 4,
+        "collects": 9
+      },
+      {
+        "id": 14089,
+        "name": "池信孝",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 池信孝\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Nobutaka IKE]\r\n[日文名|]\r\n[纯假名|いけ のぶたか]\r\n[罗马字|Ike Nobutaka]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "日本のアニメーション美術監督。\r\n今敏監督作品の全作で美術監督を担当。\r\n東京国際アニメフェアでは2003年に『千年女優』、2004年に『東京ゴッドファーザーズ』で美術賞を受賞している。\r\n\r\n=========================================\r\n日本的动画美术监督\r\n负责了今敏监督所有作品的美术监督一职\r\n分别于2003年在东京国际动漫展上凭借《千年女演员》、2004年凭借《东京教父》两次获得最佳美术奖。\r\n据履历推断，出身于Studio Cosmos，后加入Studio Cats。现在是STUDIO EASTER所属。\r\n头像来源于animeanime.jp\r\n（翻译、资料整理：YiYangsoft，有错请指正，转载请说明。）",
+        "comments": 0,
+        "collects": 25
+      },
+      {
+        "id": 19122,
+        "name": "栖原隆史",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 栖原隆史\r\n|别名={\r\n[すはら たかし]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|suhara takashi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "ufotable所属。｢Fate/Zero｣で演出デビューした期待の若手。 主にケイネス関係の話を担当した。 \r\n同社には学生時代の後輩である寺尾優一撮影監督がきっかけで入社した。",
+        "comments": 7,
+        "collects": 13
+      },
+      {
+        "id": 21474,
+        "name": "小田嶋瞳",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 小田岛瞳\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Hitomi Odashima]\r\n[日文名|小田嶋 瞳]\r\n[纯假名|おだしま ひとみ]\r\n[罗马字|Odashima Hitomi]\r\n[昵称|]\r\n}\r\n|性别= 女\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|链接={\r\n[X|https://x.com/hitoyaaaan]\r\n}\r\n}}",
+        "summary": "ufotable出身。近年来主要在BONES总制作的作品中活跃。\r\n在『我的英雄学院』中，自第2季起作为角色设计补佐・总作画监督参与制作，第5季之后与马越嘉彦共同担任角色设计。",
+        "comments": 0,
+        "collects": 12
+      },
+      {
+        "id": 24370,
+        "name": "国弘昌之",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 国弘昌之\r\n|别名={\r\n[國弘昌之]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|くにひろ まさゆき]\r\n[罗马字|Masayuki Kunihiro]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1979年9月26日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "1979年9月26日生まれ。ufotable所属。「國弘昌之」表記されることもある。社内期待の若手の一人と紹介される。\r\n『まなびストレート！DIRECTORS' WORKS(アニメスタイル編集・発行)』より",
+        "comments": 5,
+        "collects": 62
+      },
+      {
+        "id": 24391,
+        "name": "菊池カツヤ",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 菊池胜也\r\n|别名={\r\n[菊地勝也]\r\n[菊池勝也]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|菊池 カツヤ]\r\n[纯假名|きくち かつや]\r\n[罗马字|Kikuchi Katsuya]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|Twitter= @kikukatu79\r\n}}",
+        "summary": "代代木动画学院毕业后，任职于Production I.G，现为自由导演，最爱吃饺子。\r\n\r\nアイドルメモリーズ監督。 王室教師ハイネ監督 ＋秘密の作品監督中。 ロードオブヴァーミリオン(LoV3)アニメーションDOGDAYS''、｢戦国☆パラダイス極｣、ＳＫＥ４８｢パレオはエメラルド｣アニメーション。監督・副監督。変態王子と笑わない猫EDムシブギョーOPED、櫻子さんの足の下には～、ばくおん！絵コンテ・演出等々",
+        "comments": 0,
+        "collects": 8
+      },
+      {
+        "id": 25421,
+        "name": "前田義宏",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 前田义宏\r\n|别名={\r\n[前田義弘]\r\n[yoshihiro maeda]\r\n[第二中文名|]\r\n[英文名|Maeda Yoshihiro]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= 5月17日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|X= @hurutihaya2\r\n}}",
+        "summary": "Production Goodbook（プロダクション・グッドブック）的主力作画监督。\r\n\r\nぼちぼちアニメーター。たまに講師。",
+        "comments": 0,
+        "collects": 5
+      },
+      {
+        "id": 27107,
+        "name": "安田慎介",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 安田慎介\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|やすだしんすけ]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "Jec.E (ジェック・イー)出身。フリーランスを経て、現在はufotable所属。\r\n\r\n外崎春雄氏、松島晃氏の下で作画を学び、現在ではufotableの主力の一人に数えられる。\r\n\r\n『空の境界』ではあおきえい氏、野中卓也氏、平尾隆之氏に人物の芝居を褒められるほど。",
+        "comments": 0,
+        "collects": 2
+      },
+      {
+        "id": 27647,
+        "name": "木村豪",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 木村豪\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|きむら ごう]\r\n[罗马字|kimura gou / Kimura Masaru]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1971年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "1971年生まれ。テレコム・アニメーションフィルム出身。\r\nスタジオジュニオを経て、2007年からufotableに所属。\r\nアクション、画力、作画スピードともに優れている。\r\n「ちゃんと早い時間に会社に来て、ちゃんと家に帰る。でもすごいカット数をあげる」スタイルらしい。\r\nufotableで3Dでのカメラワークにキャラクター合わせて描いてるのはほぼこの人思っていい（まなび、空の境界、BRSなど　本人は非常にやりたくないがしっかりこなす）",
+        "comments": 11,
+        "collects": 47
+      },
+      {
+        "id": 29868,
+        "name": "伊佐英朗",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 伊佐英朗\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 1
+      },
+      {
+        "id": 30820,
+        "name": "清水博之",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 清水博之\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|しみず ひろゆき]\r\n[罗马字|Shimizu Hiroyuki]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "现Aniplex执行役员常务。",
+        "comments": 1,
+        "collects": 9
+      },
+      {
+        "id": 31685,
+        "name": "高橋祐馬",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 高桥祐马\r\n|别名={\r\n[髙橋祐馬]\r\n[第二中文名|高桥佑马]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|たかはし ゆうま]\r\n[罗马字|Takahashi Yuuma]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1980年\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "高橋 祐馬（たかはし ゆうま、1980年 - ）は、日本のアニメプロデューサー、元アニメ宣伝プロデューサー。神奈川県鎌倉市出身。\r\n\r\n株式会社アニプレックス 企画制作第1グループ企画制作部4課課長。",
+        "comments": 6,
+        "collects": 6
+      },
+      {
+        "id": 36972,
+        "name": "大曲健克",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 大曲健克\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "",
+        "comments": 1,
+        "collects": 3
+      },
+      {
+        "id": 37438,
+        "name": "髙部光章",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 高部光章\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Takabe Mitsuaki]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 2
+      },
+      {
+        "id": 39868,
+        "name": "鳥羽洋典",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 鸟羽洋典\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Yousuke Toba]\r\n[日文名|]\r\n[纯假名|とば ようすけ]\r\n[罗马字|Toba Yousuke]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "Aniplex所属制片人。吉卜力制作出身。",
+        "comments": 29,
+        "collects": 8
+      },
+      {
+        "id": 39889,
+        "name": "中村誠",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 中村诚（动画师）\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "",
+        "comments": 5,
+        "collects": 3
+      },
+      {
+        "id": 41078,
+        "name": "角川グループパブリッシング",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= \r\n|别名={\r\n[角川GP]\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|株式会社角川グループパブリッシング]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= 2003年4月1日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= https://ja.wikipedia.org/wiki/%E8%A7%92%E5%B7%9D%E3%82%B0%E3%83%AB%E3%83%BC%E3%83%97%E3%83%9B%E3%83%BC%E3%83%AB%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E3%82%B9\r\n|结束= 2013年4月1日（并入角川GHD）\r\n|链接={\r\n[官方网站|http://web.archive.org/web/*/http://www.kadokawa.co.jp/]\r\n}\r\n}}",
+        "summary": "株式会社角川グループパブリッシングは、角川グループの再編に伴い2003年（平成15年）に設立された事業会社・角川書店（2代目）を前身とする。\r\n\r\n2007年（平成19年）1月1日、それまで角川書店が行っていたグループ各社の書籍・雑誌の営業・物流・販売・宣伝業務に特化する目的で編集・出版部門を角川書店（3代目）として分割し、角川グループパブリッシングへ社名を変更。2012年（平成24年）7月1日付で子会社の角川出版販売を吸収合併した。\r\n\r\n基本的に角川グループ各社の出版物の発売元となっていたが、2010年（平成22年）にはバンダイビジュアルが運営していたウェブコミック配信サイト『Webコミックゲッキン』連載作品の単行本レーベル・エモーションコミックスの発売を引き受けるなどグループ外の出版物にも取り扱いを拡げていた。その一方で、中経出版（旧新人物往来社を含む）とメディアファクトリーは角川グループ傘下となった後もISBNコードの統合を行わず、発行・発売とも自社で行っていた。\r\n\r\n2013年（平成25年）4月1日付で角川GHDに吸収合併され、角川GHDは事業会社となった。角川GHDがKADOKAWAへ社名変更した後の2013年10月1日以降に中経出版とメディアファクトリー（いずれも吸収合併によりブランドカンパニー化）が刊行する出版物のISBNコードはKADOKAWAと同じものに統合される。なお角川プロダクション以外の合併した8つの会社の名義は広義の社内カンパニーに当たるブランドカンパニーの扱いとして継続される。",
+        "comments": 1,
+        "collects": 2
+      },
+      {
+        "id": 45089,
+        "name": "楡木哲郎",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 榆木哲郎\r\n|别名={\r\n[楡木哲朗]\r\n[第二中文名|]\r\n[英文名|Tetsurou Niregi]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Niregi Tetsurou]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 1
+      },
+      {
+        "id": 50037,
+        "name": "太田克史",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 太田克史\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|おおた かつし]\r\n[罗马字|Oota Katsushi]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1972年3月22日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n|Twitter= @FAUST_editor_J\r\n}}",
+        "summary": "日本の男性編集者である。2020年現在、講談社の100％出資子会社として設立された出版社・星海社の代表取締役社長。",
+        "comments": 1,
+        "collects": 2
+      },
+      {
+        "id": 51010,
+        "name": "池田恵",
+        "type": 1,
+        "career": ["mangaka"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 池田惠\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|いけだ けい]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1965年3月3日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "日本の漫画家。男性。広島県出身。広島東洋カープの熱烈なファン。",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 51415,
+        "name": "人民文学出版社",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 人民文学出版社\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= http://www.cnpubg.com/overview/member/2012/1023/5238.shtml\r\n|链接={\r\n[微博|https://weibo.com/u/1290696881]\r\n}\r\n}}",
+        "summary": "人民文学出版社1951年3月成立于北京，系国家级专业文学出版机构，现为中国出版传媒股份有限公司成员单位。2011年2月23日，人民文学出版社正式注册为人民文学出版社有限公司。人民文学出版社位于北京市东城区朝阳门内大街166号，主要经营出版、发行本版图书、杂志。人民文学出版社有限公司设有当代文学编辑室、现代文学编辑室、古典文学编辑室、外国文学编辑室、青年文学编辑室、文化编辑室、教材出版中心、大众读物编辑室等8个图书编辑室以及《当代》、《中华文学选刊》、《新文学史料》、《学语文之友》和《帅作文》等5个报刊编辑部，并拥有以出版少儿读物为主旨的全资子公司天天出版社以及控股出版外国文学经典的上海九久读书人文化实业有限公司。人民文学出版社注重图书出版的系统性和多层次结构，力求全面地高质量地传播人类古今中外优秀的文学成果。68年来已出版中国当代优秀文学作品，现代文学史上影响较大的文学作品，优秀古典文学作品，世界各国有代表性作品的中译本以及文学理论、高校文科教材、人文科学著作等各种图书万余种，发行超过10亿册，已形成高品位、高质量、包容古今、囊括中外的文学图书体系，赢得了广泛的赞誉。60多年来，人民文学出版社是获得各种国家级图书奖奖项最多的文学专业出版社，并先后荣获“全国优秀出版社”、“全国百佳出版单位”、“历年中国图书世界影响力出版TOP20”、“中国图书世界影响力出版100强”、“网友最喜爱品牌”、“中国图书海外馆藏影响力出版100强”等一系列荣誉，在海内外亿万读者中享有良好口碑。人民文学出版社的图书也曾荣获国家级和地方奖项。迄今为止，共有《白鹿原》《尘埃落定》等18部作品荣获茅盾文学奖；共有《长征》《笨花》《当代》等多种图书和期刊荣获中国出版政府奖；共有《天行者》《解放战争》等17种图书荣获中宣部“五个一”工程奖。",
+        "comments": 2,
+        "collects": 4
+      },
+      {
+        "id": 55429,
+        "name": "下司晃生",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 下司晃生\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Kousei Geshi]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Shimotsukasa Akio]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "原ufotable所属。现在自由身。",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 57069,
+        "name": "臼井みなみ",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 臼井南\r\n|别名={\r\n[第二中文名|臼井未奈美]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Usui Minami]\r\n[昵称|]\r\n}\r\n|性别= 女\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "CloverWorks 美术室所属。Studio Easter(スタジオ・イースター)出身。",
+        "comments": 0,
+        "collects": 2
+      },
+      {
+        "id": 57570,
+        "name": "ファミ通文庫",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= Fami通文库\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|ファミつうぶんこ]\r\n[罗马字|Famitsu Bunko]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= https://zh.wikipedia.org/zh-cn/Fami通文庫\r\n}}",
+        "summary": "Fami通文库（日语：ファミ通文庫，英语：Famitsu Bunko），现是日本出版社KADOKAWA旗下enterbrain出版的轻小说文库。1998年由Aspect出版社创立，2000年ASCII集团重整后转到enterbrain旗下。\r\n\r\n前身为Aspect发行的Logout冒险文库（1993年－1996年）、Logout文库（1997年－1998年）和Fami通游戏文库（1996年－1998年）。\r\n\r\n简介\r\n\r\nLogout冒险文库以出版Falcom、HUMMINGBIRD SOFT公司作品的小说化、以及纸上RPG游戏的游戏历程为主，Logout文库则出版原创的作品。Fami通游戏文库除了继承一部分作品外，和前两者没有直接关联。此外，Fami通游戏文库在出版大型电玩、家用游戏的小说作品外，也出版题材广泛的原创作品，因而改名为“Fami通文库”。\r\n\r\n现在有重新出版纸上RPG的游戏历程。在2006年，也出版了规则书籍。\r\n\r\n书背的“FB”字样、红色代表原创作品，绿色代表是小说化作品与纸上游戏相关书籍。2005年7月后出版作品的书背设计有部分更动（青色色调没有改变）。\r\n\r\n有新人奖“Entame大奖小说部门”。\r\n\r\n新书表原本和enterbrain其他的漫画、攻略本等合在一起，在2006年10月改为独立的“Famitsu Bunko News”（FBN）。",
+        "comments": 1,
+        "collects": 2
+      },
+      {
+        "id": 65176,
+        "name": "宇都功介",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 宇都功介\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Kousuke Uto]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Uto Kousuke]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源= \r\n}}",
+        "summary": "ufotable所属",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 70456,
+        "name": "上海文艺出版社",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 上海文艺出版社\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= 1952年6月\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[https://zh.wikipedia.org/wiki/%E4%B8%8A%E6%B5%B7%E6%96%87%E8%89%BA%E5%87%BA%E7%89%88%E7%A4%BE]\r\n}\r\n}}",
+        "summary": "上海文艺出版社是一家具有历史传统的综合性文学艺术出版社，由原郭沫若主持的群益出版社、俞鸿模主持的海燕书店、任宗德主持的大浮出版公司和巴金主持的平明出版社及文化生活出版社合并而成，于1952年6月1日正式成立，位于上海市长乐路672弄33号。现在隶属于上海世纪出版集团。\r\n\r\n上海文艺出版社主要出版中外当代和现代文学、艺术作品及文艺理论和文艺批评专著，亦出版《故事会》、《旅游天地》、《东方剑》、《人与自然》、《上海壹周》等期刊。",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 74689,
+        "name": "99读书人",
+        "type": 2,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 99读书人\r\n|别名={\r\n[第二中文名|上海九久读书人文化实业有限公司]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= 2004年3月29日\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n|链接={\r\n[微博|https://weibo.com/u/1606351031]\r\n[bilibili|https://space.bilibili.com/248258492]\r\n}\r\n}}",
+        "summary": "99读书人是致力于引进、出版外国文学出版品牌。\r\n2016年1月，人民文学出版社在中国出版集团的支持下，斥资并购了上海九久读书人文化实业有限公司。",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 94085,
+        "name": "鈴木龍",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 铃木龙（ufotable）\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Ryuu Suzuki]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|Suzuki Ryuu]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "ufotable所属制作，本社初创成员之一，CG制作出身。",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 95615,
+        "name": "吉岡富夫",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 吉冈富夫\r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n}\r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 99322,
+        "name": "山谷奈久留",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= \r\n|别名={\r\n[第二中文名|]\r\n[英文名|]\r\n[日文名|山谷 奈久留]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= \r\n|生日= \r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[Facebook|https://www.facebook.com/nakuru.yamatani]\r\n}\r\n}}",
+        "summary": "",
+        "comments": 0,
+        "collects": 0
+      },
+      {
+        "id": 100615,
+        "name": "平松岳史",
+        "type": 1,
+        "career": ["producer"],
+        "infobox": "{{Infobox Crt\r\n|简体中文名= 平松岳史\r\n|别名={\r\n[第二中文名|]\r\n[英文名|Takeshi Hiramatsu]\r\n[日文名|]\r\n[纯假名|]\r\n[罗马字|]\r\n[昵称|]\r\n}\r\n|性别= 男\r\n|生日= 1978年5⽉23⽇\r\n|血型= \r\n|身高= \r\n|体重= \r\n|BWH= \r\n|引用来源={\r\n[X|https://x.com/hiramatsu__]\r\n}\r\n}}",
+        "summary": "株式会社動画工房所属アーカイブ事業班長/アニメーター/アシスタントプロデューサー神奈川県出身代々木アニメーション学院",
+        "comments": 0,
+        "collects": 0
+      }
+    ]
+  },
+  "digests": {
+    "subject-relations": "bab6e50680db659ed60a0a5d897dec9a106405d5172350248bbd44b212391aa8",
+    "subject": "2f0692ac644608b0f040d5fee96593d001ae7be2b8005cf3870591f1597145eb",
+    "subject-persons": "e65213f42f353a1536ff16242ade0de7dabf532738b4b6a3264a7c21b1d8bb05",
+    "person": "c9905a28a65fc787a4376b5ee9f0f77a96b8df25b94759f0e5c4d3d9e8d92b0b"
+  },
+  "sizes": {
+    "subject-relations": 75424309,
+    "subject": 990267761,
+    "subject-persons": 157459573,
+    "person": 73375603
+  },
+  "counts": {
+    "subject-relations": 941810,
+    "subject": 697963,
+    "subject-persons": 2232175,
+    "person": 104055
+  }
+}
