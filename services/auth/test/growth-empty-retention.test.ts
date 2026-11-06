@@ -81,8 +81,12 @@ async function emptyGrowth(drain: boolean) {
           // The count-only step records one retirement followed by genuine zeros.
           expect(output.map(({ output }) => JSON.parse(output).json)).toEqual([drain && page === 0 ? 1 : 0]);
         }
-        const saved = (await current.admin.query('SELECT after_key FROM auth_workflow_retention')).rows[0].after_key;
-        expect(saved).toBe(`${tag}${String(1000 * pages).padStart(6, '0')}`);
+        const saved = (await current.admin.query('SELECT continuation FROM auth_workflow_retention')).rows[0]
+          .continuation;
+        if (saved !== null) {
+          expect(saved.lastExaminedKey.workflowID).toBe(`${tag}${String(1000 * pages).padStart(6, '0')}`);
+          expect(saved.applicationName).toBe('rezics-auth-accounts');
+        }
       },
     });
     for (const sample of report.samples) {

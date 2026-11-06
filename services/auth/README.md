@@ -1915,7 +1915,7 @@ linear bounds.
 | Session expiry pruning                                         | `pruneExpiredSessions` admits b≤1000 ordered `(expiresAt,id)` keys via `session_expiry`, then point-locks only those keys with SKIP LOCKED and deletes by session PK in one statement. No search beyond a locked admitted prefix. Fix b while expired/live session history grows; legacy trimming/discovery is one-time deployment work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | R=O(b), B=O(bL), Q=1. Linear in admitted b; constant rows/statements and logarithmic blocks at fixed b, including nested locks/deletes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `test/growth-bounded-sessions.test.ts`: “checkGrowth measures changing legacy history in separate bounded pages and indexed expiry batches”                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Website refresh rotation and replay                            | Form `/token` confidential admission reads the exact website client/reduction, verifies its bounded JWK set and consumes one assertion JTI. Refresh token hash seeks `oauthRefreshToken_token_key`; family PK guard, session PK, current owner/consent/Access proof and ≤3 signing slots precede native CAS rotation. Reuse revokes the exact family marker and advances the Access floor, with one recent-session upsert; no family token-history walk. Fix selected session, family, scopes and request bytes; grow same-family history and unrelated tokens.                                                                                                                                                                                                                                                                                                                                                                  | Constant rows/statements and logarithmic O(L) blocks for rotation and replay invalidation, independent of retained tokens per family. The native handler series records rotation Q=28/R=30 and replay Q=18/R=16 at 1x/8x/64x. JWT/claims work uses fixed sizes; no promise of constant timing.                                                                                                                                                                                                                                                                                                                                                                                       | `test/growth-website-refresh.test.ts`: “checkGrowth keeps website refresh rotation constant as family history and unrelated tokens grow”; “checkGrowth keeps website refresh replay revocation constant without walking family history”                                                                                                                                                                                                                                                                                                                                                                            |
 | Website protocol retention and durable sweep                   | `pruneExpiredProtocolState` runs five expiry-index statements: access tokens, refresh tokens, refresh families, client assertions and recent OIDC sessions. Each admits ≤2b candidates, locks/deletes ≤b≤1000 by TID, in dependency order. Optional `websiteMaintenanceModule` registers one maintenance-queue workflow with one replayable step; its native wake/dispatch/checkpoint persistence is included in the separate sweep capture. Fix b and durable step count; grow expired/live protocol and workflow history.                                                                                                                                                                                                                                                                                                                                                                                                      | Primitive Q=5, R=O(5b), B=O(5bL), linear in admitted b. Constant rows/statements and logarithmic blocks at fixed b, plus a constant number of durable workflow/step records for the registered sweep. No history-draining loop; module availability does not imply every host composes it.                                                                                                                                                                                                                                                                                                                                                                                           | `test/website-protocol-retention.test.ts`: “checkGrowth keeps one retention invocation constant in rows and statements as expired and live history grows”; “ordinary protocol retention leaves the signed-in Auth session readable”. `test/growth-revoke-maintenance.test.ts`: “Website maintenance sweep stays within its bound as protocol state history grows”                                                                                                                                                                                                                                                  |
-| Auth workflow and request retention | One durable raw PK page of b≤1000, including rejected and pending candidates; personal copies use the original native consumer, artifact ledger and SDK writer closure. See [Workflow history retention](#workflow-history-retention) for the complete derivation. | Selection examines ≤b raw workflow rows plus two singleton reads and one upper-key seek on initialization. Retirement expands only admitted copies, each bounded by the existing 139-row/10-MiB custody cap. A short retirement count never reprices the raw page. | `test/growth-retention.test.ts`: “a full Auth retention batch stays constant as workflow and request history grow”; “a short Auth retention batch stays constant as workflow and request history grow”. `test/growth-empty-retention.test.ts`: “zero-eligible Auth retention examines bounded workflow history and preserves recent requests”; “Auth retention charges the drain and bounds repeated empty batches as request history grows”. |
+| Auth workflow and request retention | One durable SDK scan page of b≤1000 raw keys, including rejected and pending candidates; personal copies use the original native consumer, artifact ledger and SDK writer closure. See [Workflow history retention](#workflow-history-retention) for the complete derivation. | Selection examines ≤b raw workflow rows plus two singleton reads and one SDK upper-key seek on initialization. Retirement expands only admitted copies, each bounded by the existing 139-row/10-MiB custody cap. A short retirement count never reprices the raw page. | `test/growth-retention.test.ts`: “a full Auth retention batch stays constant as workflow and request history grow”; “a short Auth retention batch stays constant as workflow and request history grow”. `test/growth-empty-retention.test.ts`: “zero-eligible Auth retention examines bounded workflow history and preserves recent requests”; “Auth retention charges the drain and bounds repeated empty batches as request history grows”. |
 | Website authorize, code exchange, revoke, logout and discovery | Authorize reads exact website client/reduction and native session/user/Access/consent proof, materializes one consent pair and writes one native verification code. Code exchange seeks latest code via `verification_latest_idx`, verifies confidential assertion/JTI and PKCE, rechecks exact session/client/consent and creates one refresh family/token plus signed claims. Revoke seeks refresh hash or verifies signed access, checks native client proof, upserts one recent session and advances the Access floor before native family revocation. Logout checks exact hinted/current/recent session and client redirect, then invalidates before session deletion. Cold discovery reads the exact client and ≤3 signing slots. Fix selected anchors, request scopes/bytes and admitted branch; grow client/session/grant/code/token-family history.                                                                     | Constant rows/statements and logarithmic O(L) blocks for the measured complete protocol branches, including cold metadata/signing. Family revocation marks one family rather than walking siblings; code identity is fresh and bounded. Generic duplicate-identifier verification deletion remains linear in matching rows.                                                                                                                                                                                                                                                                                                                                                          | `test/growth-protocol.test.ts`: “Authorize stays within its bound as client, session and grant history grows”; “Authorization code exchange stays within its bound as code and token family history grows”; “Token revocation and logout stay within their bound as token family and session history grows”                                                                                                                                                                                                                                                                                                        |
 | Expired-registration release                                   | `expireDueRegistrations` reads pages of at most 64 due stages through the `auth_registration_stage_due` index, ordered and resumed by `(expires_at, registration_id)`, then seeks the partial automated-request registrationId index once per admitted registration. Each row sends both expiry messages or resumes its stored automated request, then performs the fixed expiry and release steps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Constant rows and statements per admitted due registration; logarithmic blocks as finished stages, requests and workflow history grow. Total work follows the number of due registrations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `test/growth-registration-operator-workflows.test.ts`: “Auth expired registration release stays within its bound as stage, request and workflow history grows”                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Operator-session workflow composition                          | `openOperatorSession` resolves one native Access approval/opening receipt then immediately invokes Auth `openAutomatedSession`: human/session proof, exact receipt, subject/client/coverage/consent reads, ≤64-session establishment and one `auth_session_opening_pkey`/receipt-unique insert. Current production path does not enqueue a DBOS workflow. Fix one approval/operator/subject and capped session neighborhood; grow stage/request/workflow history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Constant rows/statements and logarithmic O(L) blocks at fixed owner cap and approval neighborhood; no scan of retained opening/stage/workflow history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `test/growth-registration-operator-workflows.test.ts`: “Operator session workflows stay within their bound as stage, request and workflow history grows”                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -2533,26 +2533,28 @@ The host validates `AUTH_WORKFLOW_RETENTION_DAYS` as 7–365 whole days (default
 maintenance queue, UTC without backfill. One registered tick calls one native page;
 `runWorkflowRetentionSweep` is an administrative drain capped at 60 pages.
 
-Decision: admit raw primary-key pages before testing eligibility. The existing SDK
-`workflow_status_pkey` supplies the range; no SDK schema, index or API changes are
-needed. Auth's own `auth_workflow_retention` singleton stores a fixed cutoff,
-upper workflow key and last examined key. Preparation commits cutoff and upper key
+Decision: Auth does not query private SDK tables. Selection uses the supported
+`openWorkflowStatusScan({ applicationName, createdBefore })` and
+`readWorkflowStatusScanPage(continuation, { rawLimit: 1000 })` producer. Auth's
+`auth_workflow_retention` singleton stores that persistable continuation
+(`applicationName`, `createdBefore`, `upperKey`, `lastExaminedKey`). Keys are
+`{ createdAt, workflowID }` or null. Preparation commits the opened continuation
 before retirement, including before a possible lost deletion reply. A second
-transaction locks that control row, reads a materialized page of at most 1000 keys
-in `(after, upper]`, retires its eligible copies, then checkpoints. The outer
-ordered projection sorts at most that page. No OFFSET, population count, payload
-join or application/completion predicate precedes LIMIT.
+transaction locks that control row, reads one SDK page, retires returned copies,
+then checkpoints the returned continuation or clears it on exhaustion. Advance by
+raw `examined` / `exhausted` even when copies or retired counts are zero.
 
-Application `rezics-auth-accounts`, terminal status, creation and completion strictly
-before cutoff decide eligibility **after** raw admission. Millisecond equality stays
-retained. Foreign applications, live workflows, recent completions and pending
-consumers each spend a raw slot and advance the cursor. Exhaustion clears the cut;
-the next tick starts a fresh sweep and revisits recovered consumers. New keys behind
-the cursor or beyond the upper key wait for that next sweep. A capped drain keeps
-its original cutoff across ticks. A finite captured population therefore reaches
-later keys even when an entire page has zero retirements. Concurrent native callers
-serialize on the same singleton; a caller whose prepared sweep was concurrently
-drained returns an empty page rather than constructing a new cut mid-page.
+The producer fixes application `rezics-auth-accounts`, an inclusive `created_at`
+cutoff and the indexed upper key, then applies terminal eligibility
+(`completed_at <= createdBefore`) after the raw limit. Live workflows, recent
+completions and pending consumers each spend a raw slot and advance the
+continuation. Exhaustion clears the cut; the next tick opens a fresh sweep and
+revisits recovered consumers. New keys behind the last examined key or beyond the
+upper key wait for that next open. Inserts still inside the captured upper key can
+appear on a later page of the same open. A capped drain keeps its original
+continuation across ticks. Concurrent native callers serialize on the same
+singleton; a caller whose prepared sweep was concurrently drained returns an empty
+page rather than constructing a new cut mid-page.
 
 Each personal copy still invokes `completeCopy` and `eraseCopy`: genuine native
 result commitment and result read, exact roles/source/request preconditions,
@@ -2565,21 +2567,23 @@ names use direct SDK deletion. They create no personal request binding.
 
 ### Cost derivation
 
-- Touches: two point-locked singleton reads, at most one backward workflow PK seek
-  when starting a sweep, and one forward PK range. Preparation is 3 statements
-  (BEGIN/read/COMMIT), plus upper-key read/update on initialization. Examination is
-  5 (BEGIN/read/page/update/COMMIT): 8 base statements, 10 on initialization,
-  excluding retirement. An empty system omits the page query. Both phases are
-  charged inside the ordinary operation. Each phase retains only one connection;
-  a retirement body uses its existing Auth/SDK connections while the cursor lock
-  is held, so the composed pool needs at least two available connections.
-- Bound: b≤1000 examined keys, p≤b personal candidates, t≤b-p technical candidates,
+- Touches: two point-locked singleton reads, the SDK open (one indexed upper-key
+  seek) when starting a sweep, and one SDK exclusive `(created_at, workflow_uuid)`
+  page. Preparation is 3 statements (BEGIN/read/COMMIT), plus the open seek/update
+  on initialization. Examination is 5 (BEGIN/read/page/update/COMMIT): 8 base
+  statements, 10 on initialization, excluding retirement. An empty system omits the
+  page query. Both phases are charged inside the ordinary operation. Each phase
+  retains only one Auth connection; a retirement body uses its existing Auth/SDK
+  connections while the cursor lock is held, so the composed pool needs at least
+  two available connections. Indexed total-key seeks, deep timestamp ties and the
+  covering scan index are producer evidence, not established by returned row counts.
+- Bound: b≤1000 examined keys, p≤b personal copies, t≤b-p technical copies,
   a≤139 artifacts/10 MiB and r≤16 roles per personal copy. A page exports only
-  workflow IDs and two booleans; its continuation retains two SDK primary keys and
-  a cutoff. Selection work is O(b) rows and O(b log N) blocks including initialization;
-  discarded candidates are included. Only the bounded outer page can be sorted.
-  This is a raw-work budget, not constant total work for an entire history sweep:
-  a sweep of H captured rows needs at most ceil(H/1000)+1 pages, plus replayed work.
+  eligible copies; its continuation retains two scan keys and createdBefore.
+  Selection work is O(b) rows and O(b log N) blocks including initialization;
+  discarded candidates are included. This is a raw-work budget, not constant total
+  work for an entire history sweep: a sweep of H captured rows needs at most
+  ceil(H/1000)+1 pages, plus replayed work.
 - Complete body: add each admitted consumer's native result read (≤64 KiB output),
   its readiness read/update, two original custody/precondition passes (each reads
   ≤17 roles, exact source/request/status, ≤140 artifact-ledger keys, seven exact
@@ -2594,8 +2598,8 @@ names use direct SDK deletion. They create no personal request binding.
   Thus total work is the base page plus the sum of those bounded neighbourhoods,
   with logarithmic native probes; it is never priced by callback count alone.
 - Bytes: let I be the maximum admitted SDK primary-key bytes and C≤10 MiB a
-  personal copy's covered payload. Selection returns at most b IDs and two
-  booleans per ID; SQL requests contain fixed text/statuses, two keys and a cutoff.
+  personal copy's covered payload.   Selection returns at most b eligible copies; SQL requests contain the
+  application, cutoff, two composite keys and the raw limit.
   Technical deletion binds at most t IDs. Personal exchanges include at most
   64 KiB of original result, two bounded C-sized custody inspections, ≤140
   artifact keys (≤384 bytes each) per inspection, ≤17 account/role keys (account
@@ -2620,14 +2624,15 @@ names use direct SDK deletion. They create no personal request binding.
   attribution are emitted by those native checks. Fixed cohorts equal their admitted
   raw budgets; there is no deep history baseline or repricing by returned count.
 
-The focused causal cases also pin strict cutoff ties, pending then recovered custody,
-late insertion, a 60-page continuation, deletion rollback and lost native receipt/reply
-replay. Source presence and typing do not establish native acceptance. SDK connection
-retry loops can make more than one native attempt; all observed attempts must remain
-charged, and persistent connection failure has no finite whole-operation retry bound
-in the current producer. Native plans, nested producer constants, bytes and original
-operation attribution require the owning checks after integration; capability limits
-are recorded in [Performance acceptance](../../docs/goals/performance.capabilities.md).
+The focused causal cases also pin inclusive producer cutoff ties, pending then recovered
+custody, late insertion inside the captured upper key, a 60-page continuation, deletion
+rollback and lost native receipt/reply replay. Source presence and typing do not
+establish native acceptance. SDK connection retry loops can make more than one native
+attempt; all observed attempts must remain charged, and persistent connection failure
+has no finite whole-operation retry bound in the current producer. Native plans, nested
+producer constants, bytes and original operation attribution require the owning checks
+after integration; capability limits are recorded in
+[Performance acceptance](../../docs/goals/performance.capabilities.md).
 
 ### Erasure cursor deployment
 

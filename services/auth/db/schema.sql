@@ -4646,11 +4646,7 @@ CREATE TABLE public.auth_workflow_request (
 
 CREATE TABLE public.auth_workflow_retention (
     singleton boolean DEFAULT true NOT NULL,
-    cutoff bigint,
-    through_key text,
-    after_key text,
-    CONSTRAINT auth_workflow_retention_check CHECK (((cutoff IS NOT NULL) OR ((through_key IS NULL) AND (after_key IS NULL)))),
-    CONSTRAINT auth_workflow_retention_check1 CHECK (((after_key IS NULL) OR ((through_key IS NOT NULL) AND (after_key <= through_key)))),
+    continuation jsonb,
     CONSTRAINT auth_workflow_retention_singleton_check CHECK (singleton)
 );
 

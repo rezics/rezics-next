@@ -17,7 +17,7 @@ export const WORKFLOW_RETENTION_SCHEDULE_EXPRESSION = '*/10 * * * *';
 export const DEFAULT_WORKFLOW_RETENTION_DAYS = 30;
 export const MIN_WORKFLOW_RETENTION_DAYS = 7;
 export const MAX_WORKFLOW_RETENTION_DAYS = 365;
-/** Raw keys, including foreign applications, live copies and pending consumers. */
+/** Raw keys admitted by the SDK scan, including live copies and pending consumers. */
 export const WORKFLOW_RETENTION_BATCH_SIZE = 1000;
 export const WORKFLOW_RETENTION_MAX_BATCHES = 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -86,7 +86,7 @@ async function retireCandidates(
   return { eligible, retired: retired + technical.length, pending };
 }
 
-/** One raw-PK page. The store checkpoints only after the entire retirement body succeeds.
+/** One SDK scan page. The store checkpoints only after the entire retirement body succeeds.
  * A lost response can repeat exact SDK retirement, but never infers consumption from age.
  */
 export async function runWorkflowRetentionPage(
@@ -118,7 +118,7 @@ export async function runWorkflowRetentionBatch(
 
 /** Administrative bounded drain. Scheduled maintenance uses one page per tick.
  * Stop on raw exhaustion, never on a short deletion count or a pending consumer.
- * A capped drain leaves the same cutoff and cursor for the next invocation.
+ * A capped drain leaves the same SDK continuation for the next invocation.
  */
 export async function runWorkflowRetentionSweep(
   database: Pool,
@@ -137,7 +137,7 @@ export async function runWorkflowRetentionSweep(
 }
 
 /** Install after DBOS launch. The owner function removes only source-authorized request
- * bindings inside SDK deletion, including rollback. No SDK schema/index/API is replaced.
+ * bindings inside SDK deletion, including rollback. Selection uses the supported SDK scan.
  */
 export async function installWorkflowRequestRetention(database: Pool): Promise<void> {
   await database.query(`CREATE OR REPLACE TRIGGER auth_workflow_request_retention
