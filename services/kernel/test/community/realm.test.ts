@@ -96,7 +96,12 @@ async function fixture(pool: Pool, admin: Pool) {
         new Request(`${issuer}/signin`, {
           method: 'POST',
           headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ email: `${id}@community.test`, password, client_id: 'community-test', scope: actions }),
+          body: JSON.stringify({
+            email: `${id}@community.test`,
+            password,
+            client_id: 'community-test',
+            scope: actions,
+          }),
         }),
       );
       expect(signin.status).toBe(200);
