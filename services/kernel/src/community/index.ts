@@ -1,5 +1,10 @@
 /** Community-owned Space discovery producer entry. Source readiness and incarnation remain native. */
-export { readSpaceDiscoverySummaries, spaceDiscoverySource } from './space-discovery.ts';
+export {
+  readSpaceDiscoverySummaries,
+  spaceDiscoverySource,
+  spaceDiscoveryInvalidation,
+  SPACE_DISCOVERY_NATIVE_EVENTS,
+} from './space-discovery.ts';
 export type {
   IndexedSpace,
   SpaceDiscoveryDependencies,
