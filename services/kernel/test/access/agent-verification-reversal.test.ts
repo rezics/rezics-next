@@ -1,4 +1,3 @@
-import { acknowledgeErasure } from '../../src/access/erasure.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -3412,7 +3411,7 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
     const select = () =>
       pool.query('UPDATE access.erasure_native_progress SET phase=$2,page=0 WHERE progress_id=$1', [progress, phase]);
     await select();
-    await advanceNativeErasure(pool, progress, acknowledgeErasure, {
+    await advanceNativeErasure(pool, progress, {
       client,
       env: process.env,
       clock,
@@ -3469,7 +3468,7 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
       ).rows[0]!.n,
     ).toBe(0);
     await select();
-    await advanceNativeErasure(pool, progress, acknowledgeErasure, {
+    await advanceNativeErasure(pool, progress, {
       client,
       env: process.env,
       clock,
@@ -3503,7 +3502,7 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
     expect(undo.source.digest).toBe(original.intent_digest);
     // A retry cannot delete the technical skeleton or surviving decider attribution.
     await select();
-    await advanceNativeErasure(pool, progress, acknowledgeErasure, {
+    await advanceNativeErasure(pool, progress, {
       client,
       env: process.env,
       clock,

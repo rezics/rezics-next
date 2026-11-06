@@ -34,10 +34,17 @@ import {
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { discoverErasurePage, ERASURE_DISCOVERY_ROLES, type ErasureDiscoveryPage } from './erasure-progress.ts';
 
-export type NativeErasureAcknowledgement = (
+type NativeErasureAcknowledgement = (
   deps: { pool: Pool },
   input: { accountId: string; participant: string; outcome: 'erased' | 'none' },
 ) => Promise<unknown>;
+
+let acknowledgeAccessErasure: NativeErasureAcknowledgement | undefined;
+
+/** Coordinator binds acknowledgement so native paging does not import the public erasure module. */
+export function bindNativeErasureAcknowledgement(acknowledge: NativeErasureAcknowledgement): void {
+  acknowledgeAccessErasure = acknowledge;
+}
 
 /** Delivered native groups only. The rest of the inventory is explicitly pending.
  * Ordering consumes handle effect children before their terminal operation parents.
@@ -126,7 +133,6 @@ export async function openNativeErasure(pool: Pool, accountId: string): Promise<
 export async function advanceNativeErasure(
   pool: Pool,
   progressId: string,
-  acknowledge: NativeErasureAcknowledgement,
   identity?: AgentIdentityRetentionDependencies,
 ): Promise<NativeErasureResult> {
   const initial = await withConnection(pool, (tx) =>
@@ -167,7 +173,10 @@ export async function advanceNativeErasure(
           [progressId, groups.length],
         );
       });
-      await acknowledge({ pool }, { accountId: expected.account_id, participant: 'access', outcome: 'erased' });
+      await acknowledgeAccessErasure!(
+        { pool },
+        { accountId: expected.account_id, participant: 'access', outcome: 'erased' },
+      );
       return 'pending-shared-custody';
     }
     expected = { ...anchor, ...blocked, retry: true };
@@ -575,15 +584,12 @@ async function claimsReady(tx: PoolClient, page: ErasureDiscoveryPage): Promise<
  * Re-delivery enqueues the same opaque identity and PostgreSQL remains authoritative
  * even when the completed DBOS attempt is deleted. No fake shared-history handoff.
  */
-export function registerNativeErasureWork(context: WorkContext, acknowledge: NativeErasureAcknowledgement): void {
-  const step = DBOS.registerStep(
-    (progressId: string) => advanceNativeErasure(context.pool, progressId, acknowledge, context),
-    {
-      name: 'access.erasure.native-page',
-      retriesAllowed: true,
-      maxAttempts: 10,
-    },
-  );
+export function registerNativeErasureWork(context: WorkContext): void {
+  const step = DBOS.registerStep((progressId: string) => advanceNativeErasure(context.pool, progressId, context), {
+    name: 'access.erasure.native-page',
+    retriesAllowed: true,
+    maxAttempts: 10,
+  });
   DBOS.registerWorkflow(
     async (progressId: string) => {
       for (;;) {

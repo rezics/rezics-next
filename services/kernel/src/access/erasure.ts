@@ -2,7 +2,7 @@ import { Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { jsonParameter } from '../database/json.ts';
 import { registerLiveCopyRecovery } from './live-copy-work.ts';
-import { registerNativeErasureWork } from './erasure-native.ts';
+import { bindNativeErasureAcknowledgement, registerNativeErasureWork } from './erasure-native.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkModule } from '../work/registry.ts';
 import canonicalize from 'canonicalize';
@@ -232,6 +232,8 @@ export async function acknowledgeErasure(
   );
 }
 
+bindNativeErasureAcknowledgement(acknowledgeErasure);
+
 /** The owner calls this in a separate platform command after its expiry purge commits. */
 export async function resolveRetention(
   deps: { pool: Pool; clock?: () => Date },
@@ -427,7 +429,7 @@ export const erasureWorkModule: WorkModule = {
   name: 'account_erasure',
   async register(context) {
     await registerLiveCopyRecovery(context);
-    registerNativeErasureWork(context, acknowledgeErasure);
+    registerNativeErasureWork(context);
     const advance = DBOS.registerStep(
       async (accountId: string) => (await advanceErasureCompletion({ pool: context.pool }, accountId)).value,
       { name: 'access.erasure.advance', retriesAllowed: true, maxAttempts: 10 },

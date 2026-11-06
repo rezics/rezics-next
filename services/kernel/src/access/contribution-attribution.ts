@@ -55,6 +55,13 @@ export function contributionAttribution(identity: ContributionIdentity | null | 
   return { id, kind, displayName: identity.displayName ?? null };
 }
 
-export function contributionDeleted(value: ContributionAttribution): value is DeletedContributionAttribution {
-  return value !== null && !('id' in value);
+/** An absent id alone cannot establish deletion on a partially assembled public view. */
+export function contributionDeleted(
+  value: Pick<ContributionIdentity, 'id' | 'displayName'> | null | undefined,
+): value is DeletedContributionAttribution {
+  return (
+    value != null &&
+    !('id' in value) &&
+    (value.displayName === 'Deleted account' || value.displayName === 'Deleted organization')
+  );
 }

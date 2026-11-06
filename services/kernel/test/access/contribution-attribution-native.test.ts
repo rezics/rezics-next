@@ -1,6 +1,10 @@
 import { afterAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
-import { agentContributionAttribution, readContributionAttributions } from '../../src/access/public-identity.ts';
+import {
+  agentContributionAttribution,
+  readContributionAttributions,
+  type ContributionAttribution,
+} from '../../src/access/public-identity.ts';
 import { accountAgentId } from '../../src/semantic/access-capabilities.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 
@@ -11,9 +15,9 @@ test('bounded owner reads keep live, deleted, pending and missing identities dis
   const client = await pool.connect();
   await client.query('BEGIN');
   try {
-    const rows: { id: string; kind: string; state: string }[] = [];
-    for (const kind of ['actor', 'organization']) {
-      for (const state of ['active', 'pending', 'deleted']) {
+    const rows: { id: string; kind: 'actor' | 'organization'; state: 'active' | 'pending' | 'deleted' }[] = [];
+    for (const kind of ['actor', 'organization'] as const) {
+      for (const state of ['active', 'pending', 'deleted'] as const) {
         const id = newId(0x6a21);
         rows.push({ id, kind, state });
         await client.query(
@@ -39,7 +43,7 @@ test('bounded owner reads keep live, deleted, pending and missing identities dis
     const current = await readContributionAttributions(client, [...rows.map(({ id }) => id), missing, rows[0]!.id]);
     expect(current.size).toBe(7);
     for (const { id, kind, state } of rows) {
-      const expected =
+      const expected: ContributionAttribution =
         state === 'pending'
           ? null
           : state === 'deleted'

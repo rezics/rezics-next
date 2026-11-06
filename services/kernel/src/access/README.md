@@ -19,7 +19,8 @@ Decision: resource-role identifier helpers are functions so circular Access comp
 
 Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
 `public-identity.ts`. Contribution attribution is nullable: missing, pending and unavailable identity are `null`,
-not evidence of deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
+not evidence of deletion. `contributionDeleted` requires an explicit deletion label with no id; an id-free
+partial view alone never establishes deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
 deleted account produces a label-only `Deleted account` or `Deleted organization`. `readContributionAttributions` deduplicates page owners and reads at most 100 Account anchors per batch.
 Native agent attribution reads
 the exact bounded Semantic owner relation through its public Access capability and confirms the anchored Account;
@@ -1683,11 +1684,6 @@ The owner names exceptions in its acknowledgement and retention inventory, purge
 `resolveRetention({ pool }, { accountId, participant, store })` as its own command transaction after that purge
 commits. Resolution records one time, requires expiry to have arrived, is idempotent, and refuses an unknown erasure,
 participant or store. Like acknowledgement, it runs as the platform and restores no initiator.
-
-The coordinator passes `acknowledgeErasure` explicitly into native work registration and each native page runner.
-There is no process-global acknowledgement slot or import-order initialization. The callback receives the original
-Pool and runs only after the native progress transaction commits; a failed acknowledgement retries that same
-progress identity without inventing completion. Final native progress still leaves shared-history pending.
 
 The terminal `access.erasure` workflow is started by the tombstone effect and retries completion durably until
 all participants acknowledge, no late item is open, the effects frontier has passed, and no pre-T locator work is open. Acknowledgement alone

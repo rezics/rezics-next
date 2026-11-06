@@ -317,7 +317,8 @@ No new promotion claim follows from the receiving repairs or authored regression
 
 **Attribution choice:** Retained surfaces consume nullable Access attribution: live identity keeps its kind;
 only an authoritative deleted identity emits a label without an account link. Pending, missing and unavailable
-identity never implies deletion. Focused producer tests cover person/organization and exact native agent relations;
+identity never implies deletion. Deletion detection requires the explicit id-free deletion-label variant,
+including during partial enrichment. Focused producer tests cover person/organization and exact native agent relations;
 Content's authored-erasure test checks live-to-deleted HTTP presentation and Bob's retained reply with unchanged
 revision/SHA/licence/references/body. The eight graph scenarios remain the native acceptance contract; source-backed
 producer fixtures do not establish whole-graph execution, mounted surfaces or promotion.

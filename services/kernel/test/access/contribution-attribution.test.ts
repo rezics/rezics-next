@@ -9,7 +9,7 @@ import {
 const id = '00000000-0000-8000-8000-123400000001';
 
 test('only authoritative deletion de-identifies retained people and organizations', () => {
-  for (const kind of ['actor', 'organization']) {
+  for (const kind of ['actor', 'organization'] as const) {
     const live = { id, kind, state: 'active', displayName: 'Current name', handle: 'current' };
     expect(contributionAttribution(live)).toEqual({ id, kind, displayName: 'Current name' });
     expect(contributionAttribution({ ...live, state: 'suspended' })).toEqual({ id, kind, displayName: 'Current name' });
@@ -33,4 +33,13 @@ test('optional absence, pending owners and missing ids remain unavailable rather
     kind: 'organization',
     displayName: null,
   });
+});
+
+test('deletion detection requires an explicit tombstone, including during partial enrichment', () => {
+  for (const value of [undefined, null, {}, { displayName: null }, { displayName: 'Current name' }]) {
+    expect(contributionDeleted(value)).toBe(false);
+  }
+  expect(contributionDeleted({ id, displayName: 'Deleted account' })).toBe(false);
+  expect(contributionDeleted({ displayName: 'Deleted account' })).toBe(true);
+  expect(contributionDeleted({ displayName: 'Deleted organization' })).toBe(true);
 });
