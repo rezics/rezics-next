@@ -48,7 +48,7 @@ import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
 type RealmParticipationCheck = ReturnType<CommunityDeclaration['createParticipation']>;
-import { realmReadEligibility } from '../community/realm.ts';
+import { realmReadEligibility } from '../community/access-capabilities.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';

@@ -11751,31 +11751,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/participation.ts\" #1 => services/kernel/src/community/participation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/realm.ts\" #1 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/realm.ts\" #2 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/routes.ts\" #1 => services/kernel/src/community/routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/space.ts\" #1 => services/kernel/src/community/space.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../content/feed-routes.ts\" #1 => services/kernel/src/content/feed-routes.ts"
         },
         {

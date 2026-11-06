@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 const src = resolve(import.meta.dir, '../src');
@@ -14,7 +14,7 @@ function closure(start: string): Map<string, string | null> {
     for (const { path } of transpiler.scanImports(readFileSync(file, 'utf8'))) {
       if (!path.startsWith('.') || !path.endsWith('.ts')) continue;
       const next = resolve(dirname(file), path);
-      if (parents.has(next)) continue;
+      if (parents.has(next) || !existsSync(next)) continue;
       parents.set(next, file);
       queue.push(next);
     }
@@ -34,5 +34,7 @@ test('the kernel worker never loads the HTTP server', () => {
   expect(parents.has(server) ? chain(parents, server) : null).toBeNull();
   expect(parents.has(resolve(src, 'composition/work-modules.ts'))).toBe(true);
   expect(parents.has(resolve(src, 'composition/content.ts'))).toBe(true);
+  expect(parents.has(resolve(src, 'composition/community.ts'))).toBe(true);
   expect(chain(parents, resolve(src, 'content/register.ts'))).toContain('composition/work-modules.ts');
+  expect(chain(parents, resolve(src, 'community/declaration.ts'))).toContain('composition/work-modules.ts');
 });
