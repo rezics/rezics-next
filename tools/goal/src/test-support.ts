@@ -160,6 +160,9 @@ function cloneSharedGit(template: string, destination: string): void {
   } catch {
     /* git clone always adds origin; keep init-like remotes. */
   }
+  // Clone does not copy user identity. Check hosts without a global git identity cannot commit otherwise.
+  repositoryGit(destination, 'config', 'user.email', 'fixture@example.invalid');
+  repositoryGit(destination, 'config', 'user.name', 'Fixture');
 }
 
 function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => void): string {
