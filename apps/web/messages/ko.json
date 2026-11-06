@@ -11176,5 +11176,9 @@
   "public_read_preparing": "이 보기를 준비하고 있습니다",
   "public_read_sparse": "이 페이지에 표시할 항목이 없습니다. 다음 페이지를 읽어 보세요.",
   "public_read_denied": "이 내용을 볼 권한이 없습니다.",
-  "public_read_empty": "이 목록은 비어 있습니다"
+  "public_read_empty": "이 목록은 비어 있습니다",
+  "library_archive_observation_correct": "기존 관측 유지 또는 수정",
+  "library_archive_observation_admit": "새 관측 등록",
+  "library_archive_observation_revision": "현재 관측 리비전",
+  "library_archive_observation_admit_help": "등록 시 명시적 지우기를 포함한 모든 보관 필드를 사용합니다. 기본 검토에서 기존 관측이 없는지 확인합니다."
 }

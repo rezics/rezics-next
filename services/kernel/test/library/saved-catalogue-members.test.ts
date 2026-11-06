@@ -55,6 +55,7 @@ test('saved catalogue delegates the exact property query, accepted meaning and n
             id: 'catalogue-only-subject',
             type: 'schema:Book',
             labels: { en: 'Catalogue book' },
+            matchEvidence: { state: 'absent' },
             figure: {
               questionId: 'question',
               populationId: 'global',

@@ -11188,5 +11188,9 @@
   "public_read_preparing": "正在准备此视图",
   "public_read_sparse": "此页没有可显示的条目。请继续读取下一页。",
   "public_read_denied": "你无权访问此内容。",
-  "public_read_empty": "此列表为空"
+  "public_read_empty": "此列表为空",
+  "library_archive_observation_correct": "保留或修正现有观察记录",
+  "library_archive_observation_admit": "录入新的观察记录",
+  "library_archive_observation_revision": "当前观察记录修订版本",
+  "library_archive_observation_admit_help": "录入会使用归档中的所有字段，包括明确清除的值。原生审核会确认没有现有记录。"
 }

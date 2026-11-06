@@ -46,6 +46,8 @@ subject while retaining each original fact and accepted pin; it unions independe
 holdings separate. Identity and row order never supply permission. Private owner-write order and identity/source
 currentness follow the [owner-query contract](library-owner-queries.md).
 
+Decision: Copy conflict adoption keeps the incoming server Copy as inventory readback and the clean baseline; only the dirty draft merges local edits, and its next save uses the incoming revision.
+
 Personal notes and priority remain owner-local and revisioned; import evidence does not overwrite them without
 explicit review. Copies remain separate holdings with their own status, revision and accepted kind. Optional
 physical-condition observations use the finite `physical-v1` media and packaging vocabulary only when the exact

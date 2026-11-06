@@ -11176,5 +11176,9 @@
   "public_read_preparing": "Preparando esta vista",
   "public_read_sparse": "No hay entradas visibles en esta página. Continúa a la página siguiente.",
   "public_read_denied": "No tienes acceso a este contenido.",
-  "public_read_empty": "Esta lista está vacía"
+  "public_read_empty": "Esta lista está vacía",
+  "library_archive_observation_correct": "Conservar o corregir una observación existente",
+  "library_archive_observation_admit": "Añadir una observación nueva",
+  "library_archive_observation_revision": "Revisión actual de la observación",
+  "library_archive_observation_admit_help": "Se usan todos los campos archivados, incluidos los borrados explícitos. La revisión nativa comprueba que no exista una observación."
 }

@@ -3,19 +3,20 @@
 This journey extends the existing private [archive review and merge](library-archive-merge.md) consumer. It uses the
 installed V2/V3 export sections and the native Entry and Session commands; it adds no archive format, retention store,
 exporter, or restoration path. V3 keeps the V2 section inventory and adds a private occurrence assessment; V4 appends
-provider sections and remains unsupported for recovery. [Library export](library-export.md) remains the authority for
+provider sections as retained unsupported evidence, while its existing personal-fact sections remain reviewable. [Library export](library-export.md) remains the authority for
 producer facts and format limits.
 
 Decision: Recovered annotations, source observations and occurrence assessments remain private; archived identity, visibility, revisions and audit times never authorize publication or select a current occurrence.
 
 Decision: Unselected fields preserve their current native values; only an explicit field-level `set` or `clear` changes a fact.
 
-Decision: until the installed generated review client publishes assessment and observation operands, the Web form
-explains their retained-evidence status without inferring assessment zero/clear or applying privacy/source timestamps.
+Decision: the Web form binds the installed assessment and observation operands. Observation correction starts with
+preserve for each field and requires the exact current observation revision. Admission uses every archived field
+with its explicit cleared/unknown/absent meaning. Unsupported rows remain evidence without assignment controls.
 
 ## Evidence and supported operations
 
-`decodeLibraryArchive(bytes)` accepts completed V1, V2 and V3 manifests using exact per-version section inventories
+`decodeLibraryArchive(bytes)` accepts completed V1, V2, V3 and V4 manifests using exact per-version section inventories
 and final record/byte totals. V1/V2 retain their original shapes; V2/V3 annotations, journals and provenance require
 explicit current-target mapping. V3 adds the required `assessment:{meaningRevision,units}` journal object without
 changing the V2 inventory. Only meaning revision 1 and integer units 0–20 are adoptable; null is an explicit archived

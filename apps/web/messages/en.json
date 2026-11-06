@@ -11472,5 +11472,9 @@
   "public_read_preparing": "Preparing this view",
   "public_read_sparse": "No visible entries on this page. Continue to read the next page.",
   "public_read_denied": "You do not have access to this reading.",
-  "public_read_empty": "This list is empty"
+  "public_read_empty": "This list is empty",
+  "library_archive_observation_correct": "Preserve or correct an existing observation",
+  "library_archive_observation_admit": "Admit a new observation",
+  "library_archive_observation_revision": "Current observation revision",
+  "library_archive_observation_admit_help": "Admission uses every archived field, including explicit clears. Native review checks that no observation exists."
 }

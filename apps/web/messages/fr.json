@@ -11176,5 +11176,9 @@
   "public_read_preparing": "Préparation de cette vue",
   "public_read_sparse": "Aucune entrée visible sur cette page. Passez à la page suivante.",
   "public_read_denied": "Vous n’avez pas accès à ce contenu.",
-  "public_read_empty": "Cette liste est vide"
+  "public_read_empty": "Cette liste est vide",
+  "library_archive_observation_correct": "Conserver ou corriger une observation existante",
+  "library_archive_observation_admit": "Ajouter une nouvelle observation",
+  "library_archive_observation_revision": "Révision actuelle de l’observation",
+  "library_archive_observation_admit_help": "L’ajout utilise tous les champs archivés, y compris les effacements explicites. La vérification native confirme qu’aucune observation n’existe."
 }
