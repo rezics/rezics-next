@@ -73,10 +73,10 @@ export function CopiesCurrent({
     active: hydrated && allowed && sessionReady && !address.issue && origin.isCurrent(),
   });
   const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
+  const shown = useRef<string | null>(null);
   if (scope.id !== origin.id)
     setScope({ id: origin.id, seed: scope.seed && !scope.hydrated && !!subject && allowed, hydrated });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
-  const shown = useRef<string | null>(null);
   if (allowed) shown.current = origin.id;
   if (hydrated && (session.state === 'unknown' || session.state === 'unavailable'))
     return <DependencyUnavailablePage signInHref={sessionRecoverySignInHref(`/${locale}/library/copies`)} />;

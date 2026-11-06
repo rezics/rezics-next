@@ -62,7 +62,7 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
   expect(html).toContain(threadLocation('en', communityThread('review')));
   expect(html).not.toContain(`new?subject=${communitySubject.id}`);
   expect(html).not.toContain('data-slot="create-thread"');
-  expect(subjectTabs(loaded.page).map((tab) => tab.view)).toEqual(expect.arrayContaining(['reviews', 'discussion']));
+  expect(subjectTabs(loaded.page).map((tab) => tab.view)).toEqual(expect.arrayContaining(['overview', 'details']));
   const reads = threadReads(requests);
   expect(reads).toHaveLength(2);
   for (const request of reads) {

@@ -97,6 +97,10 @@ covered merely by linking a kernel test.
   composition without a RouterProvider, and tag return uses the visit currentHref or the subject fallback. Public
   CollectionList destinations stay linked; collection.get does not hide public Collection addresses. Copies
   unknown/unavailable sessions show unavailable with safe sign-in and do not start private reads.
+  Isolated Subject community tabs follow native composition reads; overview cards do not invent reviews/discussion
+  tabs. Copy inventory Cover subjects include `types`; deleting the last visible copy still offers first-page
+  recovery, and an uncertain Copies command keeps that recovery present and inert. Auth metadata tests stub
+  `trustedAccessPorts`.
   Preview CollectionList still hides empty; a paged empty/sparse page keeps native continuation. Isolated Subject
   community markup keeps native cards and current-context identity; write `subject=` board destinations stay absent
   without native advice. Preview empty CollectionList renders no list slot; the page artwork host may wrap that

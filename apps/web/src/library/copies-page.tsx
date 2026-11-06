@@ -358,6 +358,7 @@ export function CopyForm({
     }
     const captured = intent.current;
     if (!current(operation)) return;
+    captured.headers = new Headers(credentialHeaders);
     const lease = { current: () => current(operation) };
     flight.current = lease;
     busy.current = true;
@@ -459,6 +460,8 @@ export function CopyForm({
       send: deleteCopy,
       data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey },
     };
+    const captured = intent.current;
+    captured.headers = new Headers(credentialHeaders);
     const lease = { current: () => current('copy.delete') };
     flight.current = lease;
     busy.current = true;
@@ -466,7 +469,6 @@ export function CopyForm({
     setFailure(null);
     try {
       deleteStarted.current ??= Date.now();
-      const captured = intent.current;
       if (captured.operation !== 'delete') return;
       const result = await captured.send({ data: captured.data, headers: captured.headers });
       if (!current('copy.delete')) return;
@@ -1142,8 +1144,10 @@ function LoadedCopiesPage({
   };
   const firstPageEmpty = !page.requestedCursor && !page.next && !page.copies.length && !changed;
   const recoverable = Boolean(page.requestedCursor) || (!copies.length && !firstPageEmpty);
-  const firstAvailable = windows?.current !== undefined ? windows.current !== null : recoverable;
+  const emptiedHere = changed && copies.length === 0;
+  const firstAvailable = windows?.current !== undefined ? windows.current !== null || emptiedHere : recoverable;
   const previousAvailable = windows?.previous !== undefined;
+  const recoveryLocked = editing !== undefined;
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -1306,8 +1310,9 @@ function LoadedCopiesPage({
                     ? {}
                     : { cursor: windows.previous }),
                 }}
+                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (!currentPage('copy.list')) {
+                  if (recoveryLocked || !currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1323,8 +1328,9 @@ function LoadedCopiesPage({
               <Link
                 to="/library/copies"
                 search={firstPageSearch}
+                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (!currentPage('copy.list')) {
+                  if (recoveryLocked || !currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1338,8 +1344,9 @@ function LoadedCopiesPage({
             {page.next ? (
               <Link
                 to="/library/copies"
+                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (!currentPage('copy.list')) {
+                  if (recoveryLocked || !currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1381,6 +1388,7 @@ function LoadedCopiesPage({
                   send: undoCopy,
                 };
               const captured = restoreIntent.current;
+              captured.headers = new Headers(headers);
               const result = await captured.send({ data: captured.data, headers: captured.headers });
               if (!result.ok && result.reason !== 'unavailable' && restoreIntent.current === captured)
                 restoreIntent.current = null;

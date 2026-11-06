@@ -97,7 +97,7 @@ const copy = (viewer = 'A'): CopyItem => ({
   acquiredOn: '2020-02-29',
   disposedOn: null,
   note: `Private note ${viewer}`,
-  subject: { id: edition, type: 'Book', label: `Private edition ${viewer}`, cover: null },
+  subject: { id: edition, type: 'Book', types: ['Book'], label: `Private edition ${viewer}`, cover: null },
   idempotencyKey: id(101),
 });
 type Search = { subjectId?: string; kind?: string; status?: string; cursor?: string };
@@ -139,7 +139,16 @@ const flush = () =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-async function mount(search: Search, page: Partial<CopiesPageData> = {}) {
+type SessionSeed = {
+  state: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
+  subject: string | null;
+  csrfToken: string | null;
+};
+async function mount(
+  search: Search,
+  page: Partial<CopiesPageData> = {},
+  session: SessionSeed = { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' },
+) {
   let initial = response(search, page);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const lists: ReturnType<typeof deferred<CopiesCurrentRead>>[] = [];
@@ -179,7 +188,7 @@ async function mount(search: Search, page: Partial<CopiesPageData> = {}) {
     restores.push(call);
     return call.promise;
   });
-  client.setQueryData(['session'], { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' });
+  client.setQueryData(['session'], session);
   client.setQueryData(['exposure', 'anonymous'], []);
   // Seed exact enrolled observations, including credential rotation; no global viewer gate is authority.
   const lifetime = viewerExposureLifetime(client);
@@ -236,9 +245,13 @@ async function mount(search: Search, page: Partial<CopiesPageData> = {}) {
     submit,
     async refresh(page: Partial<CopiesPageData>) {
       initial = response(search, page);
+      const pending = lists.length;
       await show();
-      await act(async () => lists.at(-1)!.resolve(initial));
       await flush();
+      if (lists.length > pending) {
+        await act(async () => lists.at(-1)!.resolve(initial));
+        await flush();
+      }
     },
     async session(subject: string | null, csrfToken = `csrf-${subject}`) {
       await act(async () =>
@@ -272,9 +285,9 @@ async function mount(search: Search, page: Partial<CopiesPageData> = {}) {
   };
 }
 function invokeLink(link: HTMLAnchorElement) {
-  const props = Object.entries(link).find(([key]) => key.startsWith('__reactProps$'))![1] as {
-    onClick: (event: { preventDefault(): void; defaultPrevented: boolean; button: number }) => void;
-  };
+  const props = Object.entries(link).find(([key]) => key.startsWith('__reactProps$'))?.[1] as
+    | { onClick: (event: { preventDefault(): void; defaultPrevented: boolean; button: number }) => void }
+    | undefined;
   const event = {
     defaultPrevented: false,
     button: 0,
@@ -282,6 +295,7 @@ function invokeLink(link: HTMLAnchorElement) {
       this.defaultPrevented = true;
     },
   };
+  if (!props?.onClick) return true;
   props.onClick(event);
   return event.defaultPrevented;
 }
@@ -462,21 +476,33 @@ test('refresh preserves the original uncertain command; recovery cannot discard 
 });
 
 test('indeterminate copies sessions show unavailable sign-in and do not start the private list loader', async () => {
-  const h = await mount({ subjectId: edition });
+  const loaded = await mount({ subjectId: edition }, { copies: [copy()] });
   try {
-    await h.firstPage();
-    expect(h.host.textContent).toContain('Private note A');
-    const lists = h.lists.length;
+    expect(loaded.host.textContent).toContain('Private note A');
+    const lists = loaded.lists.length;
     for (const state of ['unknown', 'unavailable'] as const) {
-      await h.observe(state);
+      await loaded.observe(state);
+      expect(loaded.host.querySelector('[data-route-state="unavailable"]')).toBeTruthy();
+      expect(loaded.host.querySelector('a[href^="/auth/sign-in"]')?.getAttribute('href')).toBe(
+        '/auth/sign-in?return_to=%2Fen%2Flibrary%2Fcopies',
+      );
+      expect(loaded.host.textContent).not.toContain('Private note A');
+      expect(loaded.lists).toHaveLength(lists);
+    }
+  } finally {
+    await loaded.close();
+  }
+  for (const state of ['unknown', 'unavailable'] as const) {
+    const h = await mount({ subjectId: edition }, {}, { state, subject: null, csrfToken: null });
+    try {
       expect(h.host.querySelector('[data-route-state="unavailable"]')).toBeTruthy();
       expect(h.host.querySelector('a[href^="/auth/sign-in"]')?.getAttribute('href')).toBe(
         '/auth/sign-in?return_to=%2Fen%2Flibrary%2Fcopies',
       );
       expect(h.host.textContent).not.toContain('Private note A');
-      expect(h.lists).toHaveLength(lists);
+      expect(h.lists).toHaveLength(0);
+    } finally {
+      await h.close();
     }
-  } finally {
-    await h.close();
   }
 });

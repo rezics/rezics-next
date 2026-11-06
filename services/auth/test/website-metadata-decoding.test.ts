@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import type { AuthServiceOptions, PublicJwks, SessionProof } from '../src/index.ts';
 import { websiteRoutes } from '../src/website.ts';
+import { trustedAccessPorts } from './support/trusted-access.ts';
 
 const issuer = 'https://auth.test';
 const nativeObject = {
@@ -18,14 +19,13 @@ function routes(native: (request: Request) => Promise<Response>) {
       database: {} as Pool,
       secret: 'website-metadata-decoding-secret-32b',
       signing: { activeKid: 'k', privateKeys: [] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         readAccount: async () => null,
-        readFencedAccount: async () => null,
         authorizeProvisioning: async () => {
           throw new Error('unused');
         },
-      },
-    } as AuthServiceOptions,
+      }),
+    } as unknown as AuthServiceOptions,
     scopeLimit: 16,
     database: {
       query: async () => ({ rows: [{ scopes: ['openid', 'offline_access'] }] }),
