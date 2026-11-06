@@ -44,7 +44,11 @@ import {
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { hostsLocation } from './stack-run.ts';
 import { classifyCheck, isCheckHostRun, performanceHosts, splitEnvironmentCommand } from './check-placement.ts';
-import { refuseExcessWorkerCheckHostRun } from '../tools/goal/src/worker-check-budget.ts';
+import {
+  refuseExcessWorkerCheckHostRun,
+  settleWorkerCheckHostBudget,
+  workerCheckHostCommandReached,
+} from '../tools/goal/src/worker-check-budget.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
@@ -3392,6 +3396,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
       current.status = 'finished';
       current.exitCode = exitCode;
       writeRecord(current);
+      settleWorkerCheckHostBudget(process.env, exitCode, workerCheckHostCommandReached(current.physicalRun));
     });
   };
   if (initial.waitForPhysicalRunId) {
