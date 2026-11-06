@@ -254,6 +254,32 @@ test('Bun process custody preserves an AbortError captured before stop starts', 
   expect(custody.settled).toBe(true);
 });
 
+test('Bun process custody settles an intentional stop whose output rejects after stop starts', async () => {
+  const child = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  let failStdout: (error: unknown) => void = () => {};
+  const stdout = new ReadableStream<Uint8Array>({
+    start(controller) {
+      failStdout = (error) => controller.error(error);
+    },
+  });
+  const custody = ownBunProcess(child, {
+    label: 'post-stop stream fixture',
+    streams: { stdout, stderr: null },
+    termGraceMs: 80,
+    settleTimeoutMs: 1500,
+    pollIntervalMs: 10,
+  });
+  const closing = custody.close();
+  failStdout(new DOMException('stopped by the owner', 'AbortError'));
+  await closing;
+  expect(custody.settled).toBe(true);
+});
+
 test('server group cleanup runs even when browser close rejects', async () => {
   const fixture = bunFixture(false);
   await fixture.descendantReady;
