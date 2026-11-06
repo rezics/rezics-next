@@ -300,7 +300,8 @@ describe.skipIf(!process.env.DATABASE_URL)('existing native formula with Access 
       authnEpoch: 1,
     };
     const access = createAccess({
-      actions: new Map([[action, { anonymous: false }]]),
+      actions: new Map([[action, { anonymous: false, 'x-resource-types': ['test.work'] }]]),
+      resourceRoles: { roles: {}, types: { 'test.work': { standing: [] } } },
       accountEvidence: (input) => (input === actor ? account : null),
     });
     const time = await withConnection(pool, (client) => mintReadTime(client));
@@ -789,11 +790,12 @@ describe.skipIf(!process.env.DATABASE_URL)('native account and fixed Global work
       expect(admitted.some((entry) => entry.operation === 'access.opening')).toBe(true);
       expect(admitted.some((entry) => entry.operation === 'access.transaction')).toBe(true);
       expect(work.usage()).toEqual(sum(settled));
-      const unsupported = accounting();
+      // An accounting that refuses the bearer authentication producer leaves the bearer unproved: unavailable, not invalid.
+      const unsupported = accounting('access.authenticate');
       const unsupportedContext = { pool, work: unsupported.work, deadline: unsupported.work.deadline };
       expect(await unsupported.work.capture(() => access.authenticate(bearer, unsupportedContext))).toMatchObject({
         state: 'unavailable',
-        dependency: 'Auth ES256 verification/JWKS native work producer',
+        dependency: 'access.authenticate',
         usage: EMPTY_ACCESS_WORK,
       });
       expect(fetches).toBe(1);

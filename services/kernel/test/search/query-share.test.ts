@@ -81,6 +81,7 @@ const access: Access = {
   },
 };
 const search: SearchService = {
+  savedCatalogueMembers: () => Promise.reject(new Error('saved catalogue members are not used here')),
   async releaseGroups() {
     throw new Error('grouped release search is not used by this fixture');
   },

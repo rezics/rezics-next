@@ -10,6 +10,7 @@ import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
@@ -141,6 +142,8 @@ async function openWorld(
 ): Promise<World> {
   const kernel = createPool(databaseUrl(kernelName));
   kernel.options.max = 6;
+  // Registration workflows reach kernel commands through this pool's receipt ring.
+  configureTestReceiptKeys(kernel);
   const facts = new Pool({ connectionString: databaseUrl(kernelName), max: 2 });
   const auth = new Pool({ connectionString: databaseUrl(authName) });
   const proofs = new Pool({ connectionString: databaseUrl(authName), max: 2 });

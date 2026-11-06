@@ -28,7 +28,7 @@ const catalogue = compileNativePolicyCatalogue(actions, roles);
 function projection(overrides: Partial<NativePermissionProjection> = {}): NativePermissionProjection {
   return {
     assignmentValid: true,
-    deadlineLive: true,
+    live: true,
     localDenied: false,
     actorActionGrant: false,
     actorResourceRoleGrant: false,
@@ -90,6 +90,22 @@ test('Collection policy consumes separate actor and principal facts, never the l
   });
 });
 
+test('native live projection permits current grants and expires ordinary and explicit advice together', () => {
+  const facts = projection({
+    actorActionGrant: true,
+    principalActionGrant: true,
+    explicitActorActionGrant: true,
+    explicitPrincipalActionGrant: true,
+  });
+  for (const mode of ['ordinary', 'explicit'] as const) {
+    expect(decideNativePermission(catalogue, { ...collection, mode }, facts).decision).toBe('allow');
+    expect(decideNativePermission(catalogue, { ...collection, mode }, { ...facts, live: false })).toMatchObject({
+      decision: 'deny',
+      reason: 'deadline',
+    });
+  }
+});
+
 test('Collection floor remains public and scopeless while explicit advice drops floor and resource roles', () => {
   const publicInput = projection();
   expect(
@@ -124,6 +140,11 @@ test('exact registered Global reach is the only alternate path, and unavailable 
   );
   expect(reach).toMatchObject({ decision: 'allow', reason: 'global-reach' });
 
-  const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
+  // The principal grant must hold so that only the unknown actor operand decides the result.
+  const unknown = decideNativePermission(
+    catalogue,
+    collection,
+    projection({ actorActionGrant: null, principalActionGrant: true }),
+  );
   expect(unknown.decision).toBe('unavailable');
 });

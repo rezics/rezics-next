@@ -72,6 +72,11 @@ async function authentic<T>(
   const account = newId(0);
   const job = randomUUID();
   const registry = new HistoryRegistry();
+  // The erasure row references its account; the account is the deleted subject it erases.
+  await f.admin.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES($1,$2,'actor','deleted',$2)",
+    [routeOf(account), account],
+  );
   await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
     routeOf(account),
     account,

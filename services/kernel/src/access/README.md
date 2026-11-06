@@ -51,8 +51,11 @@ validity and deadline validity for those profiles; its final SQL booleans are re
 target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
 the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
-excludes that floor and resource-role grants. A core decision reached through registered Global authority still
+excludes that floor and resource-role grants; own-account grants remain explicit advice. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
+
+The typed native projection maps SQL `live` to the core's `deadlineLive` operand without structural casts.
+Scalar and batched consumers use that same projection; the native statement and its output remain unchanged.
 
 The exact type operand is deliberately not guessed for point `Resource` checks. Resource-role registrations bind
 `access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; that point action keeps the existing
@@ -234,7 +237,9 @@ completed projection bytes are measured directly. Witness work is zero: Access d
   seek, and denial work for the three closed reasons (`resource`, `suspension`, `realm_ban`). The native temporal
   keys' `WITHOUT OVERLAPS` constraints and last-range `LIMIT 1` seeks bound each candidate/reason. The declaration
   also charges the finite generated key/target/probe/decision work. The final assignment recheck is separately
-  included. No target grant, current denial or final scope decision is reused from preparation.
+  included. Its byte reservation includes all ordinary/explicit local/Global primitive grant and denial fields,
+  assignment validity and `live`, checked against the adapter's closed projection type. Kind audience declarations
+  compose this same reservation. No target grant, current denial or final scope decision is reused from preparation.
 
 Native cost/growth evidence remains separate from these declarations. Publishing a bound proves no native
 execution, cold-load or shared-suite pass; missing foreign operands remain explicitly unmeasured.
@@ -2065,6 +2070,7 @@ no-candidate. No separate snapshot or mutable transaction-id surrogate is provid
 ### Generic / parent creation authorization
 
 - Touches: `resource-authorization.ts` prepares actor/principal inverses and matched group proofs, validates the trusted authority existence/revision, then runs one Access formula at attempt T on one authority connection, released before target checkout. Fresh proof on every retry; authorization precedes replay. `parent-creation.ts` additionally binds the exact child UUID/partition and unique INSERT provenance, single-use initialization and manifest guard. Reads are the P/Q keys plus exact owning-module validation keys; no writes during authorization.
+- Typed parent: a parent anchor that declares its own `resourceType` (the Global platform root declares `semantic.context`) is authorized as that resource type through the page path. The child action's declared type never selects the parent's profile, so a direct Global grant for `space:create` or `realm:create` authorizes creation under the Global parent.
 - Bound: `P+Q` plus shared command admission and the authority validation seek per attempt: measured constant rows/statements and logarithmic blocks in S at fixed J/output, with permission work at most linear in capped J and V. Target changes add their own indexed writes; creation adds an exact provenance seek per declared child. No ACL/history enumeration or held connection across anchors.
 - Growth check: `test/access/growth-resource-authorization.test.ts`: composed stable tuple and creation commands at three scales
 

@@ -47,6 +47,7 @@ type SearchCall = {
 const observed: SearchCall[] = [];
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
+  savedCatalogueMembers: () => Promise.reject(new Error('saved catalogue members are not used here')),
   async search(principal, request, _time, _active, context) {
     observed.push({ principal, request, context });
     await context?.complete(page);

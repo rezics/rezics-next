@@ -71,6 +71,8 @@ recovery. Auth response and page transport suites pin fixed RP receiving, exact 
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/permission-outcome.test.ts`.
 
+**Executed evidence (not accepted):** at `d7bf3fea79`, `permission.test.ts` passed 17/17, `policy-core-collection.test.ts` passed 4/4 and `work.test.ts` passed 15/15. The metered bearer read now charges its full closed account row, so a valid bearer with a profile is no longer refused as invalid. `permission-outcome.test.ts` has produced no result in three attempts: the remote run lifetime (`remote-check: deadline reached after 374382 ms`) ended each one mid-file. No seeded persona or mounted-page walk ran.
+
 ## platform-gates
 
 **User job:** An operator exposes product operations through declared gates, grants and revocations, including public opening, without a separate flag service.
@@ -198,6 +200,8 @@ acceptance remain deferred to integration; this consumer check does not establis
 **Frozen scenarios:** Existing: “a delegated editor who is not the curator is offered the same operations”, “the same editor after the grant is revoked is offered nothing on the next read with the same bearer and the edit is refused”, “an assigned actor whose principal lacks the action or is suspended or whose assignment was revoked is offered nothing for it”, “a visible resource with no allowed action answers an empty list while a failing dependency answers 503 with no partial positives” (`specs/viewer-actions-outcomes.test.ts`; native binding: `services/kernel/test/access/viewer-actions-outcomes.test.ts`). The catalogue subject and TypeList row cases are bound natively by `services/kernel/test/access/viewer-actions-surfaces-outcomes.test.ts` to the complete `specs/viewer-actions-surfaces-outcomes.test.ts`. Their independent subject, grant and history growth axes are covered by `services/kernel/test/access/growth-viewer-actions-surfaces.test.ts`. Realm and Space evidence remains outside this consumer slice.
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/viewer-actions-outcomes.test.ts test/access/viewer-actions-surfaces-outcomes.test.ts test/access/growth-viewer-actions-surfaces.test.ts`.
+
+**Executed evidence (not accepted):** at `d7bf3fea79`, `viewer-actions-outcomes.test.ts` passed 0/16: the first test's teardown left the Auth DBOS owner set, so later drivers fail with `Another Auth workflow host owns DBOS in this process`. `viewer-actions-surfaces-outcomes.test.ts` passed 0/7: a Space write fails with SQLSTATE 42702 (`column reference "producer_epoch" is ambiguous`), and TypeList rows return 113 lines the spec does not expect. `growth-viewer-actions-surfaces.test.ts` passed 0/1. No seeded persona or mounted-page walk ran.
 
 ## membership-and-ban-protection
 
