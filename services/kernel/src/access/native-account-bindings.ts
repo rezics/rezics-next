@@ -48,6 +48,8 @@ import { createOperatorCommands, OperatorDeniedError } from './operator.ts';
 import { createRecoveryCompletion } from './recovery-completion.ts';
 
 import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
+import { bindAuthErasureAcknowledgement } from '@rezics/auth';
+import { acknowledgeErasure } from './erasure.ts';
 import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
@@ -387,6 +389,10 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     readAssignment: (requestedBy, assignedActorId) =>
       readAssignment(pool, requestedBy, assignedActorId, accessClock(access)),
   };
+  bindAuthErasureAcknowledgement(trustedAccess, {
+    acknowledgeAccountErasure: (accountId, outcome) =>
+      acknowledgeErasure({ pool }, { accountId, participant: 'auth', outcome }).then(() => undefined),
+  });
   const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = authWorkflowBoundary({
     readOriginalLifecycleResult: (input: OriginalLifecycleRequest) =>
       readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),

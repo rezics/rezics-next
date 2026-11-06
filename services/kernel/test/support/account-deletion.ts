@@ -123,10 +123,18 @@ export async function deletePersona(
   const approval = (await approved.json()) as { reference?: unknown };
   if (typeof approval.reference !== 'string' || !approval.reference)
     throw new AccountDeletionError(approved.status, { error: 'invalid_approval_response' });
+  const handle = await options.pool.query<{ normalized_handle: string }>(
+    `SELECT normalized_handle FROM access.handle_claim
+     WHERE route=$1 AND account_id=$2 AND state='active' ORDER BY normalized_handle LIMIT 1`,
+    [routeOf(persona.accountId), persona.accountId],
+  );
   const executed = await post('/account-operations/execute', {
     operationKey,
     operation,
     reference: approval.reference,
+    ...(handle.rows[0]?.normalized_handle
+      ? { confirmation: handle.rows[0].normalized_handle }
+      : {}),
   });
   if (!executed.ok) {
     const body = (await executed.json().catch(() => ({}))) as AccountDeletionErrorBody;

@@ -11,11 +11,13 @@ import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
+import { readAccount } from '../../src/access/account-data.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createAccountManagementReadAccess } from '../../src/access/management-source.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
+import { routeOf } from '../../src/route/route.ts';
 
 async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
   const name = `native_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
@@ -142,6 +144,14 @@ export async function nativeFixture(
         const ports: AccountOperationAccess = {
           context,
           readOperatorTransferState: createAccountManagementReadAccess({ pool, access }).readOperatorTransferState,
+          async readDeletionHandle(token, accountId, ctx) {
+            const actor = await access.authenticate(token, ctx as ReturnType<typeof context>);
+            if (actor.kind !== 'account' || actor.accountId !== accountId) return null;
+            const route = routeOf(accountId);
+            if (route === null) return null;
+            const account = await readAccount(pool, route, accountId);
+            return account?.handle ?? null;
+          },
           approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
           resolveForCaller: (token, reference, operation, ctx) =>
             workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),

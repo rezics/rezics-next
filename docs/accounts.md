@@ -707,7 +707,7 @@ only after trusted new-establishment proof. Reinstatement never restores old ses
 See [session-revocation.ts][session-revocation], [suspension.ts][suspension], [auth-barriers.ts][auth-barriers],
 [recovery-completion.ts][recovery-completion] and [Session revocation][access-revocation].
 
-[Deletion](deletion.md) owns erasure: account deletion is final at fresh, typed confirmation, private data is
+[Deletion](deletion.md) owns erasure: account deletion is final at fresh, typed confirmation of the current handle, private data is
 purged by bounded durable work and retained public contributions have only de-identified `{ id, state, kind }`
 attribution, through [lifecycle.ts][lifecycle], [account-workflows.ts][account-workflows] and
 [Account deletion policy][access-deletion].

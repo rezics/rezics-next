@@ -18,6 +18,7 @@ import {
   automatedNativeResult,
 } from './automated-account-transport.ts';
 import type { OperatorTransferState } from './account-management-read-transport.ts';
+import { authDeletionHandleRead, deletionConfirmationMatches } from './kernel-access.ts';
 
 /** Kernel workflow approval and platform gate ports, bound by the composition.
  * The transport hands them an Access bearer from a live Auth proof scope and
@@ -40,6 +41,8 @@ export interface AccountOperationAccess<Context = { pool: unknown; deadline: num
   /** The kernel route-admission rule for one group: true when the group is open
    * or the person holds `gate:<group>` or `gate:any` on the Global Context. */
   admitGroup(token: string, group: string, context: Context): Promise<boolean>;
+  /** Current handle of the deletion target. Omitted bindings skip typed confirmation. */
+  readDeletionHandle?(token: string, accountId: string, context: Context): Promise<string | null>;
 }
 
 export class TransportDenied extends Error {
@@ -146,9 +149,13 @@ export function accountOperationTransport(
     ]).get(url.pathname);
     if (!command) return fallback(request);
     const response = (body: unknown, status = 200) =>
-      Response.json(body, {
+      new Response(JSON.stringify(body), {
         status,
-        headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+        headers: {
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+          'content-type': status >= 400 ? 'application/problem+json' : 'application/json',
+        },
       });
     const denied = (status: number) =>
       response({ error: 'account_operation_denied', effect_status: 'not_applied' }, status);
@@ -170,7 +177,7 @@ export function accountOperationTransport(
       const names =
         command === 'approve'
           ? ['operationKey', 'operation', 'accountId']
-          : ['operationKey', 'operation', 'reference', 'acceptance', 'accountId'];
+          : ['operationKey', 'operation', 'reference', 'acceptance', 'accountId', 'confirmation'];
       if (Object.keys(body).some((field) => !names.includes(field))) return denied(400);
       const key = text(body.operationKey);
       const operation = operationOf(body.operation);
@@ -231,15 +238,25 @@ export function accountOperationTransport(
       const authorization = text(body.reference);
       const executable = { ...operation, authorization } as AccountOperation;
       // The caller proves the person; the workflow resolves the approval again.
-      await service.internal.withFreshHuman({ headers: request.headers, fresh: management }, async (proof) => {
-        if (management && !callerMatches(proof, body.accountId, operation)) deny(403);
-        return access.resolveForCaller(
-          await service.internal.accessTokenForProof(proof),
-          authorization,
-          executable,
-          context,
-        );
-      });
+      const callerToken = await service.internal.withFreshHuman(
+        { headers: request.headers, fresh: management },
+        async (proof) => {
+          if (management && !callerMatches(proof, body.accountId, operation)) deny(403);
+          return service.internal.accessTokenForProof(proof);
+        },
+      );
+      if (operation.kind === 'delete' && body.confirmation !== undefined) {
+        if (typeof body.confirmation !== 'string') return denied(400);
+        const bound = access.readDeletionHandle ?? authDeletionHandleRead(access)?.readDeletionHandle;
+        // Omitted handle bindings skip typed confirmation so existing callers stay callable.
+        if (bound) {
+          const handle = access.readDeletionHandle
+            ? await access.readDeletionHandle(callerToken, operation.accountId as string, context)
+            : await bound(callerToken, operation.accountId as string);
+          if (!handle || !deletionConfirmationMatches(body.confirmation, handle)) return denied(403);
+        }
+      }
+      await access.resolveForCaller(callerToken, authorization, executable, context);
       const input = { key, authorization } as const;
       switch (operation.kind) {
         case 'automated': {

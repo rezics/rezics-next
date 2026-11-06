@@ -821,6 +821,7 @@ advice, dismissal and replacement. Restored submitted hints supply no command ev
 resolves uncertainty; it survives private retirement as generic completed history, with cleanup/downstream custody
 pending. Late results cannot complete replacement views, clear another continuation/key or reveal former identity.
 Another deliberate exact retry requires fresh review and typed confirmation; current advice grants no authority.
+Native delete execute confirmation is the current handle; this page's localized phrase remains a client-only gate.
 
 Submission costs two POSTs normally. Approval retries exact `503 unavailable` once; explicit deletion recovery may
 retry execution once while current, preserving its identical key, descriptor and reference. Malformed output,

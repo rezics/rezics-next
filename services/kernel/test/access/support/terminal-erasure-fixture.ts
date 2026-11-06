@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createPool } from '../../../src/database/pool.ts';
@@ -161,6 +161,7 @@ export async function createTerminalErasureFixture() {
       work,
       kernel,
       people,
+      databaseUrl,
       accountHandle,
       command,
       json,
@@ -183,4 +184,3 @@ export async function createTerminalErasureFixture() {
   }
 }
 
-type QueryResultRow = Record<string, unknown>;

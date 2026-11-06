@@ -157,6 +157,11 @@ export async function advanceNativeErasure(
           [progressId, NATIVE_ERASURE_GROUPS().length],
         );
       });
+      const { acknowledgeErasure } = await import('./erasure.ts');
+      await acknowledgeErasure(
+        { pool },
+        { accountId: expected.account_id, participant: 'access', outcome: 'erased' },
+      );
       return 'pending-shared-custody';
     }
     expected = { ...anchor, ...blocked, retry: true };

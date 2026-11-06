@@ -61,3 +61,38 @@ test('deletion projects finite exact native success/replay and never fabricates 
     expect(await (await invalid(request('approve'))).json()).toEqual({ error: 'unavailable' });
   }
 });
+
+test('deletion execute confirmation matches the current handle when Access binds a reader', async () => {
+  const workflows = { deleteAccount: async () => ({ accountId: 'original' }) } as unknown as ReturnType<
+    typeof createAccountWorkflows
+  >;
+  const bound = {
+    ...access,
+    readDeletionHandle: async () => 'Alice_Handle',
+  };
+  const transport = accountOperationTransport(
+    service,
+    workflows,
+    async () => new Response(null, { status: 404 }),
+    bound,
+  );
+  const execute = (confirmation: string) =>
+    new Request('https://auth.test/account-operations/execute', {
+      method: 'POST',
+      headers: { origin: 'https://auth.test', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        operationKey: 'key',
+        operation: { kind: 'delete', accountId: 'original' },
+        reference,
+        confirmation,
+      }),
+    });
+  const refused = await transport(execute('incorrect confirmation'));
+  expect(refused.status).toBe(403);
+  expect(refused.headers.get('content-type')).toContain('application/problem+json');
+  expect(await refused.json()).toEqual({ error: 'account_operation_denied', effect_status: 'not_applied' });
+  const accepted = await transport(execute('alice_handle'));
+  expect(accepted.status).toBe(200);
+  expect(accepted.headers.get('content-type')).toContain('application/json');
+  expect(await accepted.json()).toEqual({ accountId: 'original' });
+});
