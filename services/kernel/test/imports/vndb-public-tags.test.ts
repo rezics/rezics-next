@@ -83,10 +83,12 @@ async function openPublicTagWorld() {
   })();
   const directory = await mkdtemp(join(tmpdir(), 'vndb-public-tags-native-'));
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
@@ -174,7 +176,10 @@ async function openPublicTagWorld() {
         }),
       ],
     });
-    expect(propose.results.every((result) => result.status === 201)).toBe(true);
+    expect(
+      propose.results.every((result) => result.status === 201),
+      JSON.stringify(propose.results),
+    ).toBe(true);
     async function candidates(subjectId: string, property: string) {
       const page = await editor.http(
         `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
@@ -453,7 +458,10 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
           },
         })),
       });
-      expect(proposals.results.every((result) => result.status === 201)).toBe(true);
+      expect(
+        proposals.results.every((result) => result.status === 201),
+        JSON.stringify(proposals.results),
+      ).toBe(true);
       await acceptAdopt(id, 'schema:url');
       await acceptAdopt(id, 'skos:inScheme');
       concepts.push({ category: 'cont' as const, code, id });
@@ -533,6 +541,9 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
         publicClient: publicClient,
         tagWeightObservations: prepared.tagWeightObservations,
         tagWeightRefreshes: prepared.tagWeightRefreshes,
+        tagAssociations: prepared.associationBindings,
+        tagAssociationRefreshes: prepared.associationRefreshes,
+        tagAssociationWithdrawals: prepared.tagAssociationWithdrawals,
       });
     const published = await publish();
     expect(published.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
@@ -578,6 +589,11 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
       });
       expect(JSON.stringify(weight.references)).toContain(digest);
     }
+    const memberships = genres.filter(
+      (row) => !row.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
+    );
+    expect(memberships.map((row) => row.value.content).sort()).toEqual(concepts.map((row) => row.id).sort());
+    expect(JSON.stringify(memberships)).not.toContain(digest);
     expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
     console.log(
       JSON.stringify({

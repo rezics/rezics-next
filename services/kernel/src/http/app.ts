@@ -205,13 +205,14 @@ export function createApp({
         route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
         ...(action ? { action } : {}),
       });
-      // internal_error is the only 500 problem; log the cause the response hides, never request content.
-      if (problem.status === 500) {
+      // Log hidden server failures, including unavailable native dependencies, never request content.
+      if (problem.status === 500 || (problem.status === 503 && !(error instanceof ProblemError))) {
         logInternalError({
           requestId: idFor(request),
           method: request.method,
           route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
           cause: bodyError ?? error,
+          ...(problem.status === 503 ? { event: 'dependency_unavailable' as const } : {}),
         });
       }
       if (new URL(request.url).pathname === '/v1/viewerActions')

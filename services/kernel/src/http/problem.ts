@@ -180,12 +180,13 @@ export function logInternalError(options: {
   route?: string | undefined;
   cause: unknown;
   commandIndex?: number | undefined;
+  event?: 'internal_error' | 'dependency_unavailable';
 }): void {
   const { requestId, method, route, cause, commandIndex } = options;
   const code = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
   console.error(
     JSON.stringify({
-      event: 'internal_error',
+      event: options.event ?? 'internal_error',
       request_id: requestId,
       method,
       route,

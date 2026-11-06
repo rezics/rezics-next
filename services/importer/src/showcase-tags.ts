@@ -7,6 +7,7 @@ import {
   type BatchStatement,
 } from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
+import { vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import {
   commandKey,
@@ -32,6 +33,7 @@ import {
 import {
   bindShowcaseTagParents,
   showcaseTagParentCommand,
+  showcaseTagParentMetadata,
   showcaseTagParentSourceFence,
   withholdShowcaseTagAssociations,
 } from './showcase-cross-provider-tags.ts';
@@ -975,7 +977,10 @@ function ackedTagCreates(journal: ShowcaseJournal): Map<string, string> {
 }
 
 function isTagVocabularyCommand(command: BatchCommand): boolean {
-  return command.source.source === 'vndb_cross_media' && command.source.converter_revision === adapterRevision;
+  return (
+    command.source.source === 'vndb_cross_media' &&
+    [adapterRevision, vndbPublicTagParentRevision].includes(command.source.converter_revision)
+  );
 }
 
 async function sendTagCommandPages(
@@ -1029,7 +1034,7 @@ async function sendMissingTagCommands(input: {
 /** Journal and propose exact source-parent assertions only while their current source tuple is open. */
 export async function prepareShowcaseTagParentPublications(input: {
   evidence: readonly ShowcaseTagParentBinding[];
-  port: Pick<CrossMediaPort, 'batch' | 'fence'>;
+  port: Pick<CrossMediaPort, 'batch' | 'fence' | 'setSourceRecordMetadata'>;
   journal: ShowcaseJournal;
 }): Promise<{
   acknowledgements: ShowcaseAcknowledgement[];
@@ -1053,6 +1058,12 @@ export async function prepareShowcaseTagParentPublications(input: {
       });
       continue;
     }
+    const metadata = showcaseTagParentMetadata(binding);
+    // Replay still obtains a current-authorized native ACK before proposing or reusing a candidate.
+    await input.port.setSourceRecordMetadata({
+      command: metadata,
+      idempotencyKey: `vndb-tag-parent-metadata:${showcaseDigest(metadata)}`,
+    });
     const command = showcaseTagParentCommand(binding);
     commands.push(command);
     byKey.set(command.key, binding);

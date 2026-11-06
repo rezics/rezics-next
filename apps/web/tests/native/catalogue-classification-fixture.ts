@@ -1,8 +1,11 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack, type AuthJourney, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
+
+// This HTTP fixture uses the released Global resource without loading the
+// kernel's SQL-backed definition activation service in the browser supervisor.
+const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 
 export type NativeClassificationSubject = { id: string; type: string; label: string; path: string };
 
