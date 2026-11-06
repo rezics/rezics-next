@@ -5,7 +5,7 @@ import { Value } from 'typebox/value';
 import {
   QuestionManagementResponseSchema,
   RatingQuestionLabelHistorySchema,
-} from '../../../../../services/kernel/src/rating/schemas.ts';
+} from '../../../../../services/kernel/src/rating/question-management-schemas.ts';
 import { requestLanguages } from '../../kernel/languages';
 import { parseQuestionManagementIntent } from './intent';
 import type {
