@@ -720,7 +720,7 @@ test(
 
       await slot.getByRole('button', { name: 'Review current version', exact: true }).click();
       const recovery = page.getByRole('alertdialog');
-      await recovery.getByText('Current version on the server', { exact: true }).waitFor();
+      await recovery.locator('p[data-block-id="paragraph"]').filter({ hasText: 'Current version on the server' }).waitFor();
       expect(await inlineEditor(slot).innerText()).toContain(draft);
       await recovery.getByRole('button', { name: 'Keep editing', exact: true }).click();
       await inlineEditor(slot).waitFor({ state: 'visible' });

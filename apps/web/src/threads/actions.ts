@@ -240,12 +240,20 @@ function validatePostId(input: unknown): { postId: string } {
   return { postId: input.postId };
 }
 
+function validateLicence(input: object): string | undefined {
+  if (!('licence' in input) || input.licence === undefined) return undefined;
+  if (typeof input.licence !== 'string' || input.licence.length < 1 || input.licence.length > 128)
+    throw new Error('Invalid post licence');
+  return input.licence;
+}
+
 function validateEdit(input: unknown): {
   postId: string;
   revisionId: string;
   body: DocumentSnapshot;
   idempotencyKey: string;
   mediaIds?: string[];
+  licence?: string;
 } {
   const draft = validateDraft(input);
   const postId = validatePostId(input).postId;
@@ -258,7 +266,8 @@ function validateEdit(input: unknown): {
     input.revisionId.length > 128
   )
     throw new Error('Invalid post revision');
-  return { ...draft, postId, revisionId: input.revisionId };
+  const licence = validateLicence(input);
+  return { ...draft, postId, revisionId: input.revisionId, ...(licence === undefined ? {} : { licence }) };
 }
 
 export const revisePost = createServerFn({ method: 'POST' })

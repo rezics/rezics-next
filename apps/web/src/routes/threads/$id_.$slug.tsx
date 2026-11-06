@@ -835,8 +835,13 @@ export function ThreadReadingPost({
       return;
     }
     if (restoreMenuFocus.current && !editing) {
-      restoreMenuFocus.current = false;
-      menuButton.current?.focus();
+      if (menuButton.current) {
+        restoreMenuFocus.current = false;
+        menuButton.current.focus();
+      } else if (post.availability !== 'available') {
+        restoreMenuFocus.current = false;
+        itemElement.current?.focus();
+      }
     }
     if (restorePostFocus.current && !editing && post.availability === 'available') {
       restorePostFocus.current = false;
@@ -1022,29 +1027,34 @@ export function ThreadReadingPost({
     if (!current()) return;
     if (removedMinHeight === undefined) setRemovedMinHeight(itemElement.current?.getBoundingClientRect().height);
     if (!current()) return;
-    restoreMenuFocus.current = true;
     setRestoreError('');
     setExistingReviewId(undefined);
-    updateIntent((value) => value + 1);
-    // This byte-free placeholder records the applied deletion, not a native expiry or a read grant.
-    onChange({
-      id: lifetime.binding.postId,
-      threadId: lifetime.binding.threadId,
-      route: post.route,
-      parentId: post.parentId,
-      body: null,
-      sha256: null,
-      availability: 'erased',
-      removed: true,
-    });
     if (!current()) return;
+    const refreshed = await refreshCurrentPost(lifetime, ticket);
+    if (!current() || command.episode !== episode) return;
+    if (!refreshed) {
+      // This byte-free placeholder records the applied deletion, not a native expiry or a read grant.
+      onChange({
+        id: lifetime.binding.postId,
+        threadId: lifetime.binding.threadId,
+        route: post.route,
+        parentId: post.parentId,
+        body: null,
+        sha256: null,
+        availability: 'erased',
+        removed: true,
+        ...('authorId' in post ? { authorId: post.authorId } : {}),
+        ...('revisionId' in post ? { revisionId: post.revisionId } : {}),
+      });
+    }
+    if (!current()) return;
+    restoreMenuFocus.current = true;
+    updateIntent((value) => value + 1);
     if (lifetime.binding.target.kind === 'thread') onOpeningPostChange(false);
     if (!current()) return;
     undoToast(m.thread_post_deleted_toast(), () => void restoreRemovedPost(lifetime, ticket, episode), {
       undo: m.thread_post_undo(),
     });
-    if (!current()) return;
-    await refreshCurrentPost(lifetime, ticket);
   }
 
   if (post.availability !== 'available') {
@@ -1188,6 +1198,7 @@ export function ThreadReadingPost({
               revisionId,
               idempotencyKey,
               mediaIds: [...mediaIds],
+              ...('licence' in post && typeof post.licence === 'string' ? { licence: post.licence } : {}),
             };
             if (!owner.lifetime.isCommandReady(owner.ticket)) return { ok: false, reason: 'unavailable' };
             const result = await revisePost({

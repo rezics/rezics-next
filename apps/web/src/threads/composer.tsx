@@ -1440,12 +1440,17 @@ function InlinePostEditorContent({
     editIntent.current.unresolved,
   ]);
   const departure = useAuthoringDeparture(
-    lifetime.current() &&
+    () =>
+      lifetime.current() &&
       (JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
         pendingRef.current > 0 ||
         editIntent.current.unresolved ||
-        uncertainChanged),
-    lifetime.current() && (submitting || editIntent.current.unresolved),
+        !editIntent.current.canPrepare(
+          { title: '', body: bodyRef.current, mediaIds: mediaIdsFromSources(imageSources(bodyRef.current)) },
+          null,
+          commandContext(commandAction),
+        )),
+    () => lifetime.current() && (submittingRef.current || editIntent.current.unresolved),
     departureSignature,
     onCancel,
     () => lifetime.retire(),
@@ -1757,21 +1762,18 @@ function InlinePostEditorContent({
       className="min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-5 [overflow-wrap:anywhere]"
       onInputCapture={captureEditorInput}
       onKeyDownCapture={(event) => {
+        if (event.key !== 'Escape' || submittingRef.current) return;
+        const target = event.target;
         if (
-          event.target instanceof HTMLElement &&
-          (event.target.closest('[role="combobox"][aria-expanded="true"]') ||
-            event.currentTarget.querySelector('[data-slot="editor-mention"]'))
+          target instanceof HTMLElement &&
+          (target.closest('[data-slot="editor-mention"]') ||
+            target.closest('[role="alertdialog"], [role="dialog"]') ||
+            (target.closest('[role="combobox"][aria-expanded="true"]') &&
+              event.currentTarget.querySelector('[data-slot="editor-mention"]')))
         )
           return;
-        if (
-          event.key === 'Escape' &&
-          !submitting &&
-          !event.defaultPrevented &&
-          !(event.target instanceof HTMLElement && event.target.closest('[role="alertdialog"], [role="dialog"]'))
-        ) {
-          event.preventDefault();
-          departure.requestDiscard(onCancel);
-        }
+        event.preventDefault();
+        departure.requestDiscard(onCancel);
       }}
     >
       {foreignPendingRef.current > 0 ? (

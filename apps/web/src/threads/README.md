@@ -170,6 +170,9 @@ Decision: opening Review explicitly opens both full readings; selecting an index
 and **Read full document** restores the complete reader without changing either writing.
 
 The inline edit still inherits native licence and review metadata and offers no separate controls for them.
+Revision commands send that inherited licence. An author-erased slot without a restore window shows
+“Removed by its author” and no overflow menu; a restorable deletion keeps the deleted tombstone, copy
+menu and restore control. Edit discard reads live draft dirtiness so Escape can confirm before React paints.
 
 ## Browser-only writing recovery
 
