@@ -11,6 +11,13 @@ import { testKernel } from '../../support/test-kernel.ts';
 import { startTerminalErasureWorker, TERMINAL_ERASURE_BARRIER_TABLE } from './terminal-erasure-worker.ts';
 import { nativeFixture } from '../native-account-bindings-fixture.ts';
 import { routeOf } from '../../../src/route/route.ts';
+export {
+  inspectNativeRetainedOrder,
+  prepareNativeRetainedOrder,
+  NATIVE_TEST_ORDER_RETENTION_FIELDS,
+  NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+  ORDER_RETENTION_STORE,
+} from '../../commerce/support/order-retention-fixture.ts';
 
 type NativeAuth = Awaited<ReturnType<typeof nativeFixture>>;
 type NativeWorker = Awaited<ReturnType<typeof startTerminalErasureWorker>>;
