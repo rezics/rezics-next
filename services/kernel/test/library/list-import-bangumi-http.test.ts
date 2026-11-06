@@ -99,7 +99,7 @@ async function admitBangumiClaim(externalId: number, label: string, digest = 'a'
 beforeAll(async () => {
   f = await createProfileEntryFixture();
   matched = await admitBangumiClaim(providerId, 'Source title');
-  await f.catchUpIdentity(partitionOf(routeOf(matched)!));
+  await f.awaitCurrentIdentity(matched);
 }, 120000);
 afterAll(async () => {
   await f?.close();

@@ -55,7 +55,8 @@ identity bootstrap on that partition before Rating review or merge. Native impor
 metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home
 guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on
 that home so the first scan includes it; sealing the empty question/control home first leaves later creations
-past the cursor. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
+past the cursor. Native import tests stop identity catch-up when that Subject is mapped; extra dirty or closure
+pages after that freeze later Progress, Rating and merge writes. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and
 `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty
 before Rating, Progress or merge resolve the mapping. Guarded Rating apply uses the same `rating:vote`
 token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal

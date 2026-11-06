@@ -91,7 +91,7 @@ occurrence; separate start and measure receipts expose an admitted partial occur
 Failed or uncertain effects retry the original native receipt and operands. A definite native invalid, denied or
 unavailable write throws; it is not recorded as an uncertain retry. Native import progress actors occupy partition 0
 with the selected Subject so the same-home identity mapping Rating already uses for guarded votes applies.
-Partition 0 identity bootstrap waits until that Subject exists so the first scan includes it. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty before Progress resolves the mapping. The row page adds the private field/unit
+Partition 0 identity bootstrap waits until that Subject exists so the first scan includes it. Native import tests stop identity catch-up when that Subject is mapped; extra dirty or closure pages after that freeze later Progress writes. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty before Progress resolves the mapping. The row page adds the private field/unit
 matrix and per-measure result.
 
 Both provider methods use the native `GET /v1/progressSessions?subjectId=...` bounded selection pages,

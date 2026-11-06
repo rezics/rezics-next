@@ -119,7 +119,7 @@ test.serial(
       subjects.push(result.value.id);
     }
     const subjectId = subjects[0]!;
-    await f.catchUpIdentity(partitionOf(routeOf(subjectId)!));
+    for (const id of subjects) await f.awaitCurrentIdentity(id);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
     await votes.putVoteOutcome(
       importer.actor,
