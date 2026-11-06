@@ -318,7 +318,50 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
       },
       [opening, reply],
     ),
-  ).toEqual({ kind: 'unavailable' });
+  ).toEqual({ kind: 'ready', images: [], documents: [] });
+  const mixedUnavailable = {
+    id: mediaId,
+    state: 'unavailable' as const,
+  };
+  const mixedAvailable = {
+    id: mediaId,
+    state: 'available' as const,
+    presentation: image,
+  };
+  expect(
+    receiveThreadDocumentMedia(
+      {
+        state: 'available',
+        documents: [
+          {
+            ...response.documentMedia.documents[0]!,
+            images: [mixedUnavailable, mixedAvailable],
+          },
+        ],
+      },
+      [
+        {
+          ...opening,
+          mediaIds: [mediaId],
+          body: response.thread.firstPost.body,
+        },
+        reply,
+      ],
+    ),
+  ).toEqual({
+    kind: 'ready',
+    images: [image],
+    documents: [
+      {
+        pageIndex: 0,
+        postId: openingId,
+        threadId,
+        revisionId: opening.revisionId,
+        sha256: opening.sha256,
+        mediaIds: [mediaId],
+      },
+    ],
+  });
   const selectedRead = (signal?: AbortSignal) =>
     loadThreadPage(
       client,

@@ -638,7 +638,9 @@ slug and Board context reads keep their request signal.
 ## Current-page mention reading
 
 The final-admitted installed projection binds each document to `postId`, `threadId`, `revisionId`, `sha256` and
-`pageIndex`; a page holds at most 21 documents, 32 image references and 100 mention identities. Keep
+`pageIndex`; a page holds at most 21 documents, 32 image references and 100 mention identities. Duplicate mention
+identities keep the first disclosed row. Mixed document-media availability keeps available images and readable text;
+only a failed presentation read marks the page unavailable. Keep
 active/concealed/erased identities, unavailable/overflow and unresolved `@` text distinct. Activity retains exact,
 lower-bound, zero, null and unknown meanings. References retain exact
 occurrence/page/cursor return with separate mention/link ordinals. The renderer adapts only current identities attached
@@ -653,6 +655,6 @@ Accounts admits identities.
 - **Bound:** at most 21 disclosed posts, 32 native image references and 100 native mention identities; image and
   mention bindings check post, thread, revision, digest and the admitted page index. Source bodies and native final
   admission remain charged to Content's mounted thread-reading page operation.
-- **Growth check:** `thread-page-reading.test.ts` verifies all four installed projections, optional-source behavior,
-  exact revision association and absence of second media/account reads. Native, installed, seeded browser and physical
-  growth acceptance remain separately owned by their existing gates.
+- **Growth check:** `thread-page-reading.test.ts` and `seeded-content-reading.test.ts` verify all four installed
+  projections, Board generation/advice, original-page return, optional-source behavior and absence of second
+  media/account reads. Native, installed, seeded browser and physical growth acceptance remain separately owned.

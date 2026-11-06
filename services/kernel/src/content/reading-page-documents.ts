@@ -136,6 +136,38 @@ function unavailableDocument(document: SelectedReadingPageDocument): ReadingPage
   };
 }
 
+/** First matching presentation wins; missing or foreign images stay per-image unavailable. */
+export function projectReadingPageDocumentMedia(
+  selection: Extract<ReadingPageDocumentSelection, { state: 'selected' }>,
+  presentations: readonly DocumentImagePresentation[],
+): ReadingPageDocumentMedia {
+  const allowed = new Set(selection.mediaIds);
+  const byId = new Map<string, DocumentImagePresentation>();
+  for (const image of presentations) {
+    if (!allowed.has(image.id) || byId.has(image.id)) continue;
+    byId.set(image.id, image);
+  }
+  return {
+    state: 'available',
+    documents: selection.documents.map((document) => {
+      const images = document.mediaIds.map<ReadingPageDocumentImage>((id) => {
+        const presentation = byId.get(id);
+        return presentation?.containerId === document.threadId
+          ? { id, state: 'available', presentation }
+          : { id, state: 'unavailable' };
+      });
+      return {
+        postId: document.postId,
+        threadId: document.threadId,
+        revisionId: document.revisionId,
+        sha256: document.sha256,
+        state: images.some((image) => image.state === 'available') ? 'available' : 'unavailable',
+        images,
+      };
+    }),
+  };
+}
+
 /** Native optional composition runs before ReadingPage's final source admission. */
 export async function readReadingPageDocumentMedia(
   dependencies: MediaDependencies & Readonly<{ routeKey: Uint8Array }>,
@@ -154,14 +186,14 @@ export async function readReadingPageDocumentMedia(
       })),
     };
   if (!selection.documents.length) return { state: 'available', documents: [] };
-  let presentations: readonly DocumentImagePresentation[];
   try {
-    presentations = (
+    const presentations = (
       await readDocumentMediaPresentations(dependencies, actor, selection.mediaIds, {
         deadline,
         routeKey: dependencies.routeKey,
       })
     ).images;
+    return projectReadingPageDocumentMedia(selection, presentations);
   } catch (error) {
     if (
       classifyUnavailability(error) === undefined &&
@@ -170,32 +202,6 @@ export async function readReadingPageDocumentMedia(
       throw error;
     return { state: 'unavailable', documents: selection.documents.map(unavailableDocument) };
   }
-  const byId = new Map<string, DocumentImagePresentation>();
-  for (const image of presentations) {
-    if (!selection.mediaIds.includes(image.id) || byId.has(image.id))
-      return { state: 'unavailable', documents: selection.documents.map(unavailableDocument) };
-    byId.set(image.id, image);
-  }
-  const documents = selection.documents.map<ReadingPageDocument>((document) => {
-    const images = document.mediaIds.map<ReadingPageDocumentImage>((id) => {
-      const presentation = byId.get(id);
-      return presentation?.containerId === document.threadId
-        ? { id, state: 'available', presentation }
-        : { id, state: 'unavailable' };
-    });
-    return {
-      postId: document.postId,
-      threadId: document.threadId,
-      revisionId: document.revisionId,
-      sha256: document.sha256,
-      state: images.every((image) => image.state === 'available') ? 'available' : 'unavailable',
-      images,
-    };
-  });
-  return {
-    state: documents.every((document) => document.state === 'available') ? 'available' : 'unavailable',
-    documents,
-  };
 }
 
 export type ReadingPageDocumentMediaResponse = Static<ReturnType<typeof ReadingPageDocumentMediaSchema>>;

@@ -4,6 +4,7 @@ import type { DocumentMentions } from '@rezics/ui/document-body';
 import type { ThreadPost } from './thread-page';
 
 export type ThreadMentionProjection = NonNullable<ReadingPageResponse['mentions']>;
+type MentionIdentity = ThreadMentionProjection['identities'][number];
 
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
@@ -20,22 +21,23 @@ function referencedInPost(post: Extract<ThreadPost, { availability: 'available' 
   return found;
 }
 
+function admittedIdentities(projection: ThreadMentionProjection) {
+  const identities = new Map<MentionIdentity['id'], MentionIdentity>();
+  for (const identity of projection.identities) {
+    // The wire schema bounds identities but does not require unique IDs. The first
+    // disclosed row is the authority for that account on this page.
+    if (!identities.has(identity.id)) identities.set(identity.id, identity);
+  }
+  return identities;
+}
+
 /** Resolve only active identities referenced by an exact current post on this admitted page. */
 export function receiveThreadDocumentMentions(
   projection: ThreadMentionProjection | undefined,
   posts: readonly ThreadPost[],
 ): DocumentMentions {
   if (!projection || projection.state !== 'current') return {};
-  const identities = new Map<
-    ThreadMentionProjection['identities'][number]['id'],
-    ThreadMentionProjection['identities'][number]
-  >();
-  for (const identity of projection.identities) {
-    // The wire schema bounds identities but does not require unique IDs. A duplicate could
-    // otherwise let an active row override a concealed or erased row for the same account.
-    if (identities.has(identity.id)) return {};
-    identities.set(identity.id, identity);
-  }
+  const identities = admittedIdentities(projection);
   const resolved: Record<string, { handle: string }> = {};
   for (const source of projection.sources) {
     const post = posts[source.pageIndex];

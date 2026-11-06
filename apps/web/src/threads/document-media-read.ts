@@ -17,6 +17,23 @@ export type ThreadDocumentMedia =
   | { kind: 'unavailable'; reason?: 'overflow' };
 
 type ReadingPageMedia = ReadingPageResponse['documentMedia'];
+type ReadingPageDocument = ReadingPageMedia['documents'][number];
+
+function samePresentation(left: DocumentImagePresentation, right: DocumentImagePresentation) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function bindPost(posts: readonly ThreadPost[], source: ReadingPageDocument) {
+  const pageIndex = posts.findIndex(
+    (candidate) =>
+      candidate.availability === 'available' &&
+      candidate.id === source.postId &&
+      candidate.threadId === source.threadId &&
+      candidate.revisionId === source.revisionId &&
+      candidate.sha256 === source.sha256,
+  );
+  return pageIndex < 0 ? undefined : { pageIndex, post: posts[pageIndex]! };
+}
 
 /** Adapt the already-admitted ReadingPage projection for the existing post renderer. */
 export function receiveThreadDocumentMedia(
@@ -30,24 +47,17 @@ export function receiveThreadDocumentMedia(
   const documents: DocumentBinding[] = [];
   const seenPosts = new Set<string>();
   for (const source of projection.documents) {
-    const pageIndex = posts.findIndex(
-      (candidate) =>
-        candidate.availability === 'available' &&
-        candidate.id === source.postId &&
-        candidate.threadId === source.threadId &&
-        candidate.revisionId === source.revisionId &&
-        candidate.sha256 === source.sha256,
-    );
-    if (pageIndex < 0) continue;
-    const post = posts[pageIndex]!;
-    if (seenPosts.has(post.id)) return { kind: 'unavailable' };
+    const bound = bindPost(posts, source);
+    if (!bound) continue;
+    const { pageIndex, post } = bound;
+    if (seenPosts.has(post.id)) continue;
     seenPosts.add(post.id);
+    if (source.state !== 'available') continue;
     const declared = new Set(post.mediaIds);
     const selected: string[] = [];
     const selectedSet = new Set<string>();
-    if (source.state !== 'available') return { kind: 'unavailable' };
     for (const item of source.images) {
-      if (item.state !== 'available') return { kind: 'unavailable' };
+      if (item.state !== 'available') continue;
       const image = item.presentation;
       if (
         !declared.has(item.id) ||
@@ -55,9 +65,9 @@ export function receiveThreadDocumentMedia(
         image.containerId !== post.threadId ||
         selectedSet.has(item.id)
       )
-        return { kind: 'unavailable' };
+        continue;
       const previous = images.get(item.id);
-      if (previous && JSON.stringify(previous) !== JSON.stringify(image)) return { kind: 'unavailable' };
+      if (previous && !samePresentation(previous, image)) continue;
       if (!previous) images.set(item.id, image);
       selected.push(item.id);
       selectedSet.add(item.id);

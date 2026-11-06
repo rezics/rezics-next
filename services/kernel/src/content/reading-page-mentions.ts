@@ -105,13 +105,23 @@ export function selectReadingPageMentions(
 }
 
 export function readingPageMentionIdentityViews(ids: readonly string[], accounts: readonly PublicIdentity[]) {
-  const byId = new Map(accounts.map((account) => [account.id, account]));
-  return ids.map((id) => {
+  const byId = new Map<string, PublicIdentity>();
+  for (const account of accounts) if (!byId.has(account.id)) byId.set(account.id, account);
+  const seen = new Set<string>();
+  const identities: ReadingPageMentions['identities'] = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
     const account = byId.get(id);
-    if (!account) return { id, state: 'concealed' as const };
-    if (account.state === 'deleted') return { id, state: 'erased' as const };
-    return { id, state: 'active' as const, handle: account.handle };
-  });
+    identities.push(
+      !account
+        ? { id, state: 'concealed' }
+        : account.state === 'deleted'
+          ? { id, state: 'erased' }
+          : { id, state: 'active', handle: account.handle },
+    );
+  }
+  return identities;
 }
 
 export function currentReadingPageMentions(
