@@ -91,6 +91,8 @@ async function readNext(pool: Pool, ref: IdentityJobRef): Promise<Next> {
         publishedEpoch: BigInt(row.published_epoch),
         pendingJob: row.pending_job,
         pendingEpoch: row.pending_epoch === null ? null : BigInt(row.pending_epoch),
+        prepareJob: row.prepare_job,
+        prepareEpoch: row.prepare_epoch === null ? null : BigInt(row.prepare_epoch),
       },
     });
     if (next === 'publication-control-disagrees') throw unavailable('Native publication and control custody disagree');
@@ -190,7 +192,12 @@ export function registerIdentityEpochCoordinator(
       let previous: ReceiptLocator | null = null;
       for (let page = 0; page < IDENTITY_EPOCH_SEGMENT_PAGES; page++) {
         const next = await read(job);
-        if (next === 'published' || next === 'cancelled') return { nextSegment: null };
+        if (next === 'cancelled') return { nextSegment: null };
+        if (next === 'published') {
+          // Publication releases the reservation, bridges and Source holds through the owning admission path.
+          await admission(job);
+          return { nextSegment: null };
+        }
         if (next === 'preparing' || next === 'cancelling') {
           await admission(job);
         } else if (next === 'publish') {
