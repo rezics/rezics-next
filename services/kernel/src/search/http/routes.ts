@@ -322,17 +322,21 @@ export function searchRoutes<App>(
             };
             const page = discoveryHttpPage(
               await searchHttpExecute(nativeBody, () =>
-                discovery(searchHttpPrincipal(actor), { ...nativeBody, representation: 'discovery-v1' }, {
-                  access: ownerAccess,
-                  actor,
-                  deadline: job.deadline,
-                  ...(body.languages === undefined ? {} : { languages: body.languages }),
-                  descriptions: body.descriptions === true,
-                  ...(body.spoilerThreshold === undefined
-                    ? {}
-                    : { spoilerThreshold: body.spoilerThreshold as 0 | 1 | 2 }),
-                  observeRelationRelease,
-                }),
+                discovery(
+                  searchHttpPrincipal(actor),
+                  { ...nativeBody, representation: 'discovery-v1' },
+                  {
+                    access: ownerAccess,
+                    actor,
+                    deadline: job.deadline,
+                    ...(body.languages === undefined ? {} : { languages: body.languages }),
+                    descriptions: body.descriptions === true,
+                    ...(body.spoilerThreshold === undefined
+                      ? {}
+                      : { spoilerThreshold: body.spoilerThreshold as 0 | 1 | 2 }),
+                    observeRelationRelease,
+                  },
+                ),
               ),
             );
             const emptyRecovery = await recoveryForPage(

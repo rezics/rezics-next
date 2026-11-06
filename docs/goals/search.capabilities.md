@@ -476,13 +476,13 @@ routes/native pagination are retained. Web separately owes served HTML/redirect/
 vertical and agent kind, instructions/diet/cookTime25→PT25M and cache-safe public JSON-LD. No serializer or kernel
 response closes publication, and no native context schema is invented here.
 
-| Stage                                   | Evidence                                                                                  |
-| --------------------------------------- | ----------------------------------------------------------------------------------------- |
-| specification validated red             | Existing separate route assertions present; composed context/claim journey not frozen.    |
-| native driver registered                | Pages and Semantic route slices registered; complete context/publication binding missing. |
+| Stage                                   | Evidence                                                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| specification validated red             | Existing separate route assertions present; composed context/claim journey not frozen.                                                        |
+| native driver registered                | Pages and Semantic route slices registered; complete context/publication binding missing.                                                     |
 | implementation exposed                  | Standalone relations/views exist; rating order/population restart as one executed pair in canonical-executed-recovery. Realm-context pending. |
-| user-case native pass at named revision | None recorded for this capability or its publication stage.                               |
-| promoted                                | No main closure evidence.                                                                 |
+| user-case native pass at named revision | None recorded for this capability or its publication stage.                                                                                   |
+| promoted                                | No main closure evidence.                                                                                                                     |
 
 ## composed-cost-and-progress
 
