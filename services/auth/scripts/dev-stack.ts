@@ -741,6 +741,16 @@ export function walkBun(env: NodeJS.ProcessEnv = process.env): string[] {
   return env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
 }
 
+/** Walk host already wrote seed.env; a second Auth+Kernel assemble would share the 6 GiB slice. */
+export function walkHostPersonaAccount(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  seedEnvContents: string | undefined,
+): string | undefined {
+  if (env.REZICS_WALK_DEFER_FRONTENDS !== '1' || seedEnvContents === undefined) return undefined;
+  const match = /^REZICS_DEV_PERSONA_ACCOUNT=(\S+)/m.exec(seedEnvContents);
+  return match?.[1];
+}
+
 /** Kernel, worker and native Auth. Web and Auth pages stay down through persona/seed when deferred. */
 export function walkStartProcesses(
   env: NodeJS.ProcessEnv = process.env,
@@ -963,12 +973,22 @@ if (import.meta.main) {
       await setup();
     } else if (action === 'host') await serveHost();
     else if (action === 'persona') {
-      const composition = await assemble();
-      try {
-        const person = await provisionPersona(composition);
-        printPersona(composition.keys, person.accountId);
-      } finally {
-        await composition.stop();
+      const account = walkHostPersonaAccount(
+        process.env,
+        await readFile(resolve(state, 'seed.env'), 'utf8').catch((error) => {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+          throw error;
+        }),
+      );
+      if (account) printPersona(await developmentKeys(), account);
+      else {
+        const composition = await assemble();
+        try {
+          const person = await provisionPersona(composition);
+          printPersona(composition.keys, person.accountId);
+        } finally {
+          await composition.stop();
+        }
       }
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
     else if (action === 'start') await start();

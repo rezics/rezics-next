@@ -75,6 +75,8 @@ locale/viewport captures share one Chromium and own one context each; the signed
 Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
 The walk restores the launcher's pinned dump cache onto `/srv/rezics-check/datasets/dumps` before the run slice so
 seed neither downloads a rotated VNDB file nor extracts archives inside the 6 GiB memory cap.
+`persona` reuses the host-written `seed.env` rather than assembling a second Auth+Kernel composition; issuer forwarding
+keeps POST bodies so seed sign-in reaches native Auth.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.

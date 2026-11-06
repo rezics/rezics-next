@@ -254,6 +254,9 @@ nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker mem
 Walk admission is host-wide at `/tmp/rezics-walk-stacks` so concurrent remote-check checkouts share slots and ports;
 this task's leftover containers are removed before admission, and a Docker bind that still reports the port allocated
 skips that slot.
+`persona` inside a deferred-frontend walk reuses the host-written `seed.env` instead of assembling a second Auth+Kernel
+composition in the 6 GiB slice. Issuer JWKS and seed `POST /signin/key` are forwarded onto native Auth with the original
+request, including POST bodies, until Auth pages bind.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
@@ -270,7 +273,8 @@ actual native identities. Missing credentials, private exports or required seede
 controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
 
 Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
-`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Do not run
+`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. A deferred-frontend
+walk's `persona` reprints the host-written account and skips a second Auth+Kernel assemble. Do not run
 `task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
 stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so

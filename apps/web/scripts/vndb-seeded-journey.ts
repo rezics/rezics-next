@@ -7,6 +7,7 @@ import { expect } from 'playwright/test';
 import { createKernelClient } from '@rezics/client';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
 import type { DevelopmentShowcaseReport } from '../../../scripts/datasets/cross-media-seed.ts';
+import { walkIssuerForward } from '../../../scripts/walk-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/vndb-journey');
@@ -74,15 +75,11 @@ async function untilOrigin(origin: string, starting?: ReturnType<typeof Bun.spaw
 
 /** Kernel fetches JWKS at the public issuer origin; native Auth already serves it. */
 function issuerProxy(): ReturnType<typeof Bun.serve> {
-  const native = new URL(stack.native);
   return Bun.serve({
     hostname: '127.0.0.1',
     port: Number(new URL(stack.issuer).port),
     fetch(request) {
-      const url = new URL(request.url);
-      url.protocol = native.protocol;
-      url.host = native.host;
-      return fetch(url, { method: request.method, headers: request.headers });
+      return fetch(walkIssuerForward(request, stack.native));
     },
   });
 }
@@ -228,6 +225,8 @@ assert(
 await mkdir(evidence, { recursive: true });
 try {
   await run([...bun, 'services/auth/scripts/dev-stack.ts', 'persona']);
+  const jwks = await fetch(`${stack.native}/.well-known/jwks.json`, { signal: AbortSignal.timeout(5_000) });
+  assert(jwks.ok, `Native Auth JWKS must answer before seed: HTTP ${jwks.status}`);
   const proxy = issuerProxy();
   try {
     await run([...bun, 'scripts/datasets/cross-media-seed.ts', '--dev'], {

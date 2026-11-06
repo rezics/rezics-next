@@ -23,6 +23,7 @@ import {
   localShowcaseClientRegistration,
   importerScopes,
   walkBun,
+  walkHostPersonaAccount,
   walkStartProcesses,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
@@ -296,6 +297,21 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('a walk persona reuses the host-written seed.env instead of assembling a second Auth host', () => {
+  const seed = [
+    'REZICS_DEV_PERSONA_ACCOUNT=99e7b230-90dd-83ae-b5dc-67cacb45ae35',
+    'AUTH_ORIGIN=http://127.0.0.1:20011',
+  ].join('\n');
+  expect(walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, seed)).toBe(
+    '99e7b230-90dd-83ae-b5dc-67cacb45ae35',
+  );
+  expect(walkHostPersonaAccount({}, seed)).toBeUndefined();
+  expect(walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, undefined)).toBeUndefined();
+  expect(
+    walkHostPersonaAccount({ REZICS_WALK_DEFER_FRONTENDS: '1' }, 'AUTH_ORIGIN=http://127.0.0.1:20011\n'),
+  ).toBeUndefined();
 });
 
 test('a walk start keeps Vite down through seed and runs Kernel without watch', () => {

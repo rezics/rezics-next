@@ -127,6 +127,15 @@ export function walkStackEnvironment(task: string, index: number): Record<string
   };
 }
 
+/** Forward one issuer-origin request onto native Auth, including POST bodies used by seed sign-in. */
+export function walkIssuerForward(request: Request, nativeOrigin: string): Request {
+  const url = new URL(request.url);
+  const native = new URL(nativeOrigin);
+  url.protocol = native.protocol;
+  url.host = native.host;
+  return new Request(url, request);
+}
+
 /** Walks wait for Kernel and native Auth. Web and Auth pages start after seed, before browser visits. */
 export function walkReadyUrls(ports: WalkPorts, env: Record<string, string | undefined> = {}): string[] {
   if (env.REZICS_WALK_DEFER_FRONTENDS === '1')

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   publishedHostPorts,
+  walkIssuerForward,
   walkPortAllocated,
   walkReadyUrls,
   walkStackEnvironment,
@@ -49,6 +50,19 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
     'KERNEL_SEARCH_MEMORY',
   );
+});
+
+test('walk issuer forwarding keeps POST bodies for native Auth', async () => {
+  const request = new Request('http://127.0.0.1:20011/signin/key', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:20011' },
+    body: JSON.stringify({ account_id: '99e7b230-90dd-83ae-b5dc-67cacb45ae35' }),
+  });
+  const forwarded = walkIssuerForward(request, 'http://127.0.0.1:20012');
+  expect(forwarded.url).toBe('http://127.0.0.1:20012/signin/key');
+  expect(forwarded.method).toBe('POST');
+  expect(forwarded.headers.get('origin')).toBe('http://127.0.0.1:20011');
+  expect(await forwarded.json()).toEqual({ account_id: '99e7b230-90dd-83ae-b5dc-67cacb45ae35' });
 });
 
 test('Docker published mappings occupy a walk slot even when nothing is listening', () => {
