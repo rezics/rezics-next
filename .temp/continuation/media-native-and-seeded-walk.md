@@ -155,3 +155,25 @@ reconciles it. The mounted-scope assertions moved unchanged from `services/auth/
 uses the public capability entries from dev commit `f2d87bf104`, which is not an ancestor of this branch, so
 none were received. The actual reserve, upload, complete, claim and read journey remains owner-deferred to a
 controller-owned seeded stack, as recorded above.
+
+## Final state for this attempt
+
+Passing: the landing focused web command `bun apps/web/scripts/focused.ts --private-network -- bun test scripts/messages-ready.test.ts tests/media-configuration.test.ts tests/media.test.ts`, check `74162f6d-c110-413a-ba0e-2a1c1ae0580b`, exit 0. It covers the cold dev Worker start (720-second probe), the Worker's load of `src/session/website-scopes.ts` with the browser read still denied, the R2 digest mismatch answered as 400, and the upload, completion, refusal and download journey in the test fixtures.
+
+Kernel landing command `bun run --cwd services/kernel check test/content/local-media-http.test.ts test/content/media-dev-stack-configuration.test.ts test/content/media-parent.test.ts test/content/seeded-media-site.test.ts`, check `ca3255bb-7363-4ab4-a75d-12bfe17636bd`, exit 70:
+
+- Typecheck failures in files this branch does not change (identical to base): `src/library/collection-routes.ts(1267)`, `src/library/members-preparation.ts(406)`, `test/access/write-rate-stage.test.ts(201)`, `test/http-json-body-strict.test.ts(19)`, `test/library/saved-catalogue-members.test.ts(54)`, `test/library/support/members-preparation-runtime.ts(213)`, `test/search/members-native-scope.test.ts(26)`, `test/search/query-share.test.ts(83)`, `test/search/routes.test.ts(85)`, `test/search/second-scope-library.test.ts(49)`, `test/search/service-scope.test.ts(45)`. These are base failures.
+- `local-media-http.test.ts` and `media-dev-stack-configuration.test.ts` pass.
+- `media-parent.test.ts` fails: native Access denials (`GrantDeniedError`), a missing board probe, and 60-second timeouts. The same set failed in checks `e68a9a55` and `fa835605`. Owner decision 43585 holds this for Threads' canonical `row.live` projection repair, which is not yet delivered. Media keeps its native acceptance unchanged.
+- `seeded-media-site.test.ts` has no result: the run was terminated after the typecheck failure.
+- Infrastructure note: `remote-check: infrastructure failure install/preparation: Command '['docker', 'rm', '-f', '-v', 'e05f611d8d96']' timed out after 3 seconds`.
+
+Dev-stack landing command `bun test services/auth/scripts/dev-stack.test.ts services/auth/test/dev-stack.test.ts`, check `bcb20064-4231-4c73-86b0-b0c4887927de`, exit 1: `services/auth/scripts/dev-stack.test.ts` passes. `services/auth/test/dev-stack.test.ts` fails with `error: Executable not found in $PATH: "go-task"`. That file is identical to base. `go-task` is the documented developer runner (`docs/development/README.md`) and is absent on the check hosts. This is shared check infrastructure, not a change on this branch.
+
+Remainder, owned elsewhere:
+
+1. Native Media acceptance: receive Threads' canonical projection repair (`row.live` mapped to `PolicyFacts.deadlineLive`), reconcile this branch's `deadlineLive` alias, then rerun `media-parent.test.ts` and `seeded-media-site.test.ts`.
+2. Seeded and browser walk: not started. It needs the controller-owned seeded stack (`bun services/auth/scripts/dev-stack.ts setup` and `start`, then the task seed), the persona walk over served pages and HTTP, screenshots at 390 and 1440 px in light and dark, and the English, zh-Hant and Japanese main path.
+3. Check-host tooling: `go-task` on the check hosts for `services/auth/test/dev-stack.test.ts`.
+4. Base typecheck failures listed above.
+5. Remove the diagnostic `DEBUG: 'vite:deps'` environment from the dev-server spawn in `apps/web/tests/media.test.ts` once cold starts are routine.
