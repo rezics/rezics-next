@@ -235,30 +235,8 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
       return page.body as { candidates: Candidate[]; adoption: { head: number } | null };
     }
     async function acceptAdopt(subjectId: string, property: string) {
-      const seen = new Set<string>();
-      for (;;) {
-        const listing = await candidates(subjectId, property);
-        const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
-        if (!next) {
-          const live = listing.candidates.filter((item) => !item.retracted);
-          if (!live.length) return listing;
-          const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-            context: globalContext,
-            property,
-            mode: 'replace',
-            expected_head: listing.adoption?.head ?? null,
-            selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-          });
-          expect(adopted.status).toBe(200);
-          return listing;
-        }
-        const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-          context: globalContext,
-          expected_head: next.head,
-        });
-        expect(accepted.status).toBe(200);
-        seen.add(next.id);
-      }
+      await runtime.acceptAndAdopt(subjectId, property);
+      return candidates(subjectId, property);
     }
     for (const [id, property] of [
       [contScheme, 'schema:url'],
@@ -426,35 +404,12 @@ function guessedTagCreate(input: {
   };
 }
 
-async function acceptAdopted(editor: { http: (path: string, body?: unknown) => Promise<{ status: number; body: unknown }> }, subjectId: string, property: string) {
-  const seen = new Set<string>();
-  for (;;) {
-    const page = await editor.http(
-      `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
-    );
-    expect(page.status).toBe(200);
-    const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
-    const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
-    if (!next) {
-      const live = listing.candidates.filter((item) => !item.retracted);
-      if (!live.length) return;
-      const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-        context: globalContext,
-        property,
-        mode: 'replace',
-        expected_head: listing.adoption?.head ?? null,
-        selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-      });
-      expect(adopted.status).toBe(200);
-      return;
-    }
-    const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-      context: globalContext,
-      expected_head: next.head,
-    });
-    expect(accepted.status).toBe(200);
-    seen.add(next.id);
-  }
+async function acceptAdopted(
+  runtime: { acceptAndAdopt(subjectId: string, property: string): Promise<void> },
+  subjectId: string,
+  property: string,
+) {
+  await runtime.acceptAndAdopt(subjectId, property);
 }
 
 test('default selected VN tag publication keeps language-less names as und through native create, review and public read', async () => {
@@ -521,7 +476,7 @@ test('default selected VN tag publication keeps language-less names as und throu
       [kanaId, 'skos:inScheme'],
       [latinId, 'skos:inScheme'],
     ] as const)
-      await acceptAdopted(editor, id, property);
+      await acceptAdopted(runtime, id, property);
     const current = await readShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal });
     expect(current.concepts.find((item) => item.code === 'g311')?.id).toBe(hanId);
     const imported = await importShowcaseTags({
@@ -536,7 +491,7 @@ test('default selected VN tag publication keeps language-less names as und throu
       (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
       (imported.readings[0]?.subject as { id?: string }).id;
     expect(workId).toBeTruthy();
-    await acceptAdopted(editor, workId!, 'schema:genre');
+    await acceptAdopted(runtime, workId!, 'schema:genre');
     expect(await labelsOf(hanId)).toEqual({ und: '学園' });
     expect(await labelsOf(kanaId)).toEqual({ und: '親タグ' });
     expect(await labelsOf(latinId)).toEqual({ und: 'Authored erotic tag' });
@@ -671,7 +626,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
       [sealedKanaId, 'skos:inScheme'],
       [latinId, 'skos:inScheme'],
     ] as const)
-      await acceptAdopted(editor, id, property);
+      await acceptAdopted(runtime, id, property);
     const current = await readShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal });
     expect(current.concepts.find((item) => item.code === 'g12')?.id).toBe(sealedKanaId);
     const imported = await importShowcaseTags({
@@ -686,7 +641,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
       (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
       (imported.readings[0]?.subject as { id?: string }).id;
     expect(workId).toBeTruthy();
-    await acceptAdopted(editor, workId!, 'schema:genre');
+    await acceptAdopted(runtime, workId!, 'schema:genre');
     const read = await editor.http(`/v1/subjects/${workId}?context=${globalContext}`);
     expect(read.status).toBe(200);
     const genres = (

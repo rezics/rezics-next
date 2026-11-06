@@ -167,30 +167,8 @@ async function openPublicTagWorld() {
       return page.body as { candidates: Candidate[]; adoption: { head: number } | null };
     }
     async function acceptAdopt(subjectId: string, property: string) {
-      const seen = new Set<string>();
-      for (;;) {
-        const listing = await candidates(subjectId, property);
-        const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
-        if (!next) {
-          const live = listing.candidates.filter((item) => !item.retracted);
-          if (!live.length) return listing;
-          const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-            context: globalContext,
-            property,
-            mode: 'replace',
-            expected_head: listing.adoption?.head ?? null,
-            selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-          });
-          expect(adopted.status).toBe(200);
-          return listing;
-        }
-        const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-          context: globalContext,
-          expected_head: next.head,
-        });
-        expect(accepted.status).toBe(200);
-        seen.add(next.id);
-      }
+      await runtime.acceptAndAdopt(subjectId, property);
+      return candidates(subjectId, property);
     }
     for (const [id, property] of [
       [contScheme, 'schema:url'],

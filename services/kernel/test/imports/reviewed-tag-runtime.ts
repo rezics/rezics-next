@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
+import { reviewReviewedTagProperty } from '../../../importer/src/showcase-tags.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from '../semantic/outcome-driver.ts';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
 
 const origin = 'http://kernel.test';
-const context = GLOBAL_CONTEXT;
 type Account = { accountId: string; bearer: string };
 
 async function jsonResponse(response: Response): Promise<HttpResponse> {
@@ -39,6 +39,7 @@ function kernelRequest(path: string, body: unknown, bearer: string | undefined, 
 export async function openReviewedTagRuntime() {
   const driver = await createSemanticDriver();
   const { fixtures } = driver;
+  let journal: ShowcaseJournal | undefined;
   try {
     const importer = await fixtures.person('reviewed-tag-importer');
     const reviewer = await fixtures.person('reviewed-tag-reviewer');
@@ -111,6 +112,12 @@ export async function openReviewedTagRuntime() {
       tokenProvider: async () => importer.bearer,
       importFetch,
     });
+    const reviewTransport = createImportTransport({
+      origin,
+      tokenProvider: async () => reviewer.bearer,
+      importFetch,
+    });
+    journal = new ShowcaseJournal(':memory:');
     const publicClient = createPublicBulkClient({
       origin,
       fetch: Object.assign(
@@ -127,53 +134,7 @@ export async function openReviewedTagRuntime() {
     }
 
     async function acceptAndAdopt(subjectId: string, property: string): Promise<void> {
-      const seen = new Set<string>();
-      for (;;) {
-        const response = await http(
-          reviewer,
-          `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context, limit: '100' })}`,
-        );
-        if (response.status !== 200)
-          throw new Error(`Reviewed-tag candidate page: HTTP ${response.status}: ${JSON.stringify(response.body)}`);
-        const page = response.body as {
-          candidates: {
-            id: string;
-            head: number | null;
-            retracted: number | null;
-            decision?: string | null;
-            statement?: { rank?: 'normal' | 'preferred' | 'deprecated' };
-          }[];
-          adoption: { head: number } | null;
-        };
-        const next = page.candidates.find(
-          (candidate) => !candidate.retracted && candidate.decision !== 'rejected' && !seen.has(candidate.id),
-        );
-        if (next) {
-          const accepted = await http(reviewer, `/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-            context,
-            expected_head: next.head,
-          });
-          if (accepted.status !== 200)
-            throw new Error(`Reviewed-tag accept: HTTP ${accepted.status}: ${JSON.stringify(accepted.body)}`);
-          seen.add(next.id);
-          continue;
-        }
-        const adopted = await http(reviewer, `/v1/subjects/${subjectId}:adopt`, {
-          context,
-          property,
-          mode: 'replace',
-          expected_head: page.adoption?.head ?? null,
-          selection: page.candidates
-            .filter((candidate) => !candidate.retracted && candidate.decision === 'accepted')
-            .map((candidate) => ({
-              candidate: candidate.id,
-              rank: candidate.statement?.rank ?? 'normal',
-            })),
-        });
-        if (adopted.status !== 200)
-          throw new Error(`Reviewed-tag adopt: HTTP ${adopted.status}: ${JSON.stringify(adopted.body)}`);
-        return;
-      }
+      await reviewReviewedTagProperty(reviewTransport, journal!, subjectId, property);
     }
 
     return {
@@ -183,6 +144,8 @@ export async function openReviewedTagRuntime() {
       importer,
       reviewer,
       importTransport,
+      review: reviewTransport,
+      journal: journal!,
       publicClient,
       pool: fixtures.pool,
       request: dispatch,
@@ -190,9 +153,13 @@ export async function openReviewedTagRuntime() {
         http: (path: string, body?: unknown) => http(reviewer, path, body),
       },
       acceptAndAdopt,
-      close: () => driver.close(),
+      close: async () => {
+        journal!.close();
+        await driver.close();
+      },
     };
   } catch (error) {
+    journal?.close();
     await driver.close();
     throw error;
   }

@@ -1063,12 +1063,46 @@ test('reviewed-tag pages separate pending acceptance from rejected rows and reti
   ]);
 });
 
-test('reviewed-tag flow accepts, adopts, rereads current identities and selected work membership separately', async () => {
-  const schemeId = '00000000-0000-4000-8000-000000000010';
-  const conceptId = '00000000-0000-4000-8000-000000000011';
-  const workId = '00000000-0000-4000-8000-000000000012';
-  const pendingId = '00000000-0000-4000-8000-000000000021';
-  const pages = new Map<string, Record<string, unknown>>();
+const schemeId = '00000000-0000-4000-8000-000000000010';
+const conceptId = '00000000-0000-4000-8000-000000000011';
+const workId = '00000000-0000-4000-8000-000000000012';
+const pageOneId = '00000000-0000-4000-8000-000000000021';
+const pageTwoId = '00000000-0000-4000-8000-000000000022';
+const editorialId = '00000000-0000-4000-8000-000000000023';
+const vanishedId = '00000000-0000-4000-8000-000000000024';
+
+function candidateRow(
+  id: string,
+  source: { source: string; external_id: string } | null,
+  decision: 'accepted' | 'rejected' | null = null,
+  rank: 'normal' | 'preferred' | null = null,
+) {
+  return { id, decision, retracted: null, head: 1, rank, source };
+}
+
+function journaledReview(options: {
+  schemeAvailable?: boolean;
+  loseAdopt?: boolean;
+  workCandidates: {
+    first: ReturnType<typeof candidateRow>[];
+    second: ReturnType<typeof candidateRow>[];
+    adoption?: { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] } | null;
+  };
+}) {
+  const accepted = new Set<string>();
+  const adoptKeys: string[] = [];
+  const adoptBodies: unknown[] = [];
+  let schemeAvailable = options.schemeAvailable ?? true;
+  let loseAdopt = options.loseAdopt ?? false;
+  const workCandidates = {
+    first: options.workCandidates.first.map((row) => ({ ...row })),
+    second: options.workCandidates.second.map((row) => ({ ...row })),
+    adoption: options.workCandidates.adoption ?? null,
+  };
+  const markAccepted = (id: string) => {
+    accepted.add(id);
+    for (const row of [...workCandidates.first, ...workCandidates.second]) if (row.id === id) row.decision = 'accepted';
+  };
   const subjects: Record<string, ReviewedSubjectRead> = {
     [schemeId]: { subject: { id: schemeId, type: 'skos:ConceptScheme', statements: {} } } as ReviewedSubjectRead,
     [conceptId]: { subject: { id: conceptId, type: 'skos:Concept', statements: {} } } as ReviewedSubjectRead,
@@ -1079,7 +1113,7 @@ test('reviewed-tag flow accepts, adopts, rereads current identities and selected
         statements: {
           'schema:genre': [
             {
-              id: pendingId,
+              id: pageOneId,
               rank: 'normal',
               property: { id: 'schema:genre' },
               value: { type: 'value', content: conceptId },
@@ -1099,89 +1133,170 @@ test('reviewed-tag flow accepts, adopts, rereads current identities and selected
       },
     } as unknown as ReviewedSubjectRead,
   };
-  const accepted = new Set<string>();
   const review = {
-    async reviewedCandidates(id: string, query: { property: string }) {
-      const key = `${id}:${query.property}`;
-      if (accepted.has(pendingId) && key === `${workId}:schema:genre`) {
-        return {
-          candidates: [
-            {
-              id: pendingId,
-              decision: 'accepted',
-              retracted: null,
-              head: 1,
-              rank: 'normal',
-              source: { source: 'vndb', external_id: 'g311' },
-            },
-          ],
-          next: null,
-          adoption: { head: 1, selection: [{ candidate: pendingId, rank: 'normal' }] },
-        };
-      }
-      if (key === `${workId}:schema:genre`) {
-        return {
-          candidates: [
-            {
-              id: pendingId,
-              decision: null,
-              retracted: null,
-              head: 1,
-              rank: 'normal',
-              source: { source: 'vndb', external_id: 'g311' },
-            },
-          ],
-          next: null,
-          adoption: null,
-        };
-      }
-      return pages.get(key) ?? { candidates: [], next: null, adoption: null };
+    adoptKeys,
+    adoptBodies,
+    accepted,
+    setSchemeAvailable(value: boolean) {
+      schemeAvailable = value;
+    },
+    async reviewedCandidates(id: string, query: { property: string; cursor?: string }) {
+      if (id !== workId || query.property !== 'schema:genre') return { candidates: [], next: null, adoption: null };
+      if (query.cursor === 'page-2')
+        return { candidates: workCandidates.second, next: null, adoption: workCandidates.adoption };
+      return { candidates: workCandidates.first, next: workCandidates.second.length ? 'page-2' : null, adoption: workCandidates.adoption };
     },
     async acceptReviewedCandidate(_id: string, candidate: string) {
-      accepted.add(candidate);
+      markAccepted(candidate);
       return { candidate };
     },
-    async adoptReviewedCandidates() {
-      return { adoption: { head: 2, selection: [{ candidate: pendingId, rank: 'normal' }] } };
+    async adoptReviewedCandidates(_id: string, body: unknown, key: string) {
+      adoptKeys.push(key);
+      adoptBodies.push(body);
+      if (loseAdopt) {
+        loseAdopt = false;
+        throw new Error('Lost committed adoption');
+      }
+      const selection = isRecord(body) && Array.isArray(body.selection) ? body.selection : [];
+      workCandidates.adoption = {
+        head: (workCandidates.adoption?.head ?? 1) + 1,
+        selection: selection as { candidate: string; rank: 'normal' | 'preferred' }[],
+      };
+      return { adoption: workCandidates.adoption };
     },
     async readReviewedSubject(id: string) {
+      if (id === schemeId && !schemeAvailable) throw new TypeError('missing subject');
       const read = subjects[id];
       if (!read) throw new TypeError('missing subject');
       return read;
     },
   };
-  const result = await completeReviewedSharedTagFlow({
-    review: review as unknown as ShowcaseReviewPort,
-    schemes: [schemeId],
-    concepts: [conceptId],
-    works: [workId],
-    properties: ['schema:genre'],
-    keepExternalIds: new Set(['g311']),
-  });
-  expect(result.accepted).toEqual([pendingId]);
-  expect(result.rejected).toEqual([]);
-  expect(result.adopted[`${workId}:schema:genre`]?.head).toBe(2);
-  expect(result.schemes).toEqual([
-    { requestedId: schemeId, currentId: schemeId, type: 'skos:ConceptScheme', available: true },
-  ]);
-  expect(result.concepts[0]?.available).toBe(true);
-  expect(result.membership).toEqual([
-    {
-      workId,
-      property: 'schema:genre',
-      currentId: workId,
-      available: true,
-      values: [conceptId],
-      weights: [{ target: conceptId, amount: '+2.6', metric: 'vndbTagsRating' }],
-    },
-    {
-      workId,
-      property: 'schema:keywords',
-      currentId: workId,
-      available: true,
-      values: [],
-      weights: [],
-    },
-  ]);
-  expect(result.retiredCandidateIds).toEqual([]);
+  return review;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+test('journaled caller paginates, binds distinct refresh keys, applies managed retirement beside editorial selection, and replays unknown delivery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-flow-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const review = journaledReview({
+      loseAdopt: true,
+      workCandidates: {
+        first: [
+          candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }),
+          candidateRow(editorialId, { source: 'editorial', external_id: 'note' }, 'accepted', 'preferred'),
+          candidateRow(vanishedId, { source: 'vndb', external_id: 'g99' }, 'accepted', 'normal'),
+        ],
+        second: [candidateRow(pageTwoId, { source: 'vndb', external_id: 'g12' })],
+        adoption: {
+          head: 4,
+          selection: [
+            { candidate: editorialId, rank: 'preferred' },
+            { candidate: vanishedId, rank: 'normal' },
+          ],
+        },
+      },
+    });
+    const input = {
+      review: review as unknown as ShowcaseReviewPort,
+      journal,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'] as const,
+    };
+    await expect(
+      completeReviewedSharedTagFlow({
+        ...input,
+        keepExternalIds: new Set(['g311', 'g12', 'g99']),
+      }),
+    ).rejects.toThrow('Lost committed adoption');
+    expect([...review.accepted].sort()).toEqual([pageOneId, pageTwoId].sort());
+    expect(review.adoptKeys).toHaveLength(1);
+    const sealedKey = review.adoptKeys[0]!;
+
+    const replayed = await completeReviewedSharedTagFlow({
+      ...input,
+      keepExternalIds: new Set(['g311', 'g12', 'g99']),
+    });
+    expect(review.adoptKeys).toEqual([sealedKey, sealedKey]);
+    expect([...replayed.accepted].sort()).toEqual([editorialId, pageOneId, pageTwoId, vanishedId].sort());
+    expect(replayed.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
+      [editorialId, pageOneId, pageTwoId, vanishedId].sort(),
+    );
+
+    const retired = await completeReviewedSharedTagFlow({
+      ...input,
+      keepExternalIds: new Set(['g311', 'g12']),
+      intent: 'retire-g99',
+    });
+    expect(retired.retiredCandidateIds).toEqual([vanishedId]);
+    expect(review.adoptKeys[2]).not.toBe(sealedKey);
+    expect(retired.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
+      [editorialId, pageOneId, pageTwoId].sort(),
+    );
+    expect(retired.adopted[`${workId}:schema:genre`]?.selection.find((row) => row.candidate === editorialId)?.rank).toBe(
+      'preferred',
+    );
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('unavailable Scheme withholds membership until independent recovery on unchanged input', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-scheme-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const review = journaledReview({
+      schemeAvailable: false,
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' })],
+        second: [],
+      },
+    });
+    const withheld = await completeReviewedSharedTagFlow({
+      review: review as unknown as ShowcaseReviewPort,
+      journal,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'],
+      keepExternalIds: new Set(['g311']),
+    });
+    expect(withheld.schemes).toEqual([{ requestedId: schemeId, currentId: schemeId, type: null, available: false }]);
+    expect(withheld.concepts).toEqual([]);
+    expect(withheld.membership).toEqual([]);
+    expect(review.accepted.size).toBe(0);
+
+    review.setSchemeAvailable(true);
+    const recovered = await completeReviewedSharedTagFlow({
+      review: review as unknown as ShowcaseReviewPort,
+      journal,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'],
+      keepExternalIds: new Set(['g311']),
+    });
+    expect(recovered.schemes[0]?.available).toBe(true);
+    expect(recovered.concepts[0]?.available).toBe(true);
+    expect(recovered.accepted).toEqual([pageOneId]);
+    expect(recovered.membership).toEqual([
+      {
+        workId,
+        property: 'schema:genre',
+        currentId: workId,
+        available: true,
+        values: [conceptId],
+        weights: [{ target: conceptId, amount: '+2.6', metric: 'vndbTagsRating' }],
+      },
+    ]);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -822,11 +822,26 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   async function reviewedCandidates(
     id: string,
-    query: { property: string; target?: string; sameAs?: string; context: string; limit: number },
+    query: {
+      property: string;
+      target?: string;
+      sameAs?: string;
+      context: string;
+      limit: number;
+      cursor?: string;
+    },
     signal?: AbortSignal,
   ): Promise<ReviewedCandidatePage> {
     mediaId(id);
-    const safe = snapshot(query, BODY_BYTES) as typeof query;
+    const safeQuery = {
+      property: query.property,
+      context: query.context,
+      limit: query.limit,
+      ...(query.target !== undefined ? { target: query.target } : {}),
+      ...(query.sameAs !== undefined ? { sameAs: query.sameAs } : {}),
+      ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+    };
+    const safe = snapshot(safeQuery, BODY_BYTES) as typeof safeQuery;
     const reply = await response(
       () => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }),
       200,
