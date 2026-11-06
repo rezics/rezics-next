@@ -74,6 +74,10 @@ Each check uses `captureMode: 'cost-folded'` so nested SDK-delete auto_explain n
 and 20,000-entry telemetry caps; raw retention of those notices overflowed on eligible-backlog, payload-fanout and
 two-batch sweep. Folded captures recycle each notice envelope and plan-walk occupancy after charging summaries;
 unmeasured prepare/warmup records only top-level write plans.
+The 32,768-row planner floor owns unit copies of every payload family so exact-ID deletes keep indexed seeks when
+fanout is 1, 8 or 64; a selected-only payload table seq-scans at small N and the linear blocks family cannot fit
+that plan change. Selector-plan notices are sampled from acquired pool clients, including connections the
+auto_explain probe already opened, because `connect` does not fire again for those backends.
 Plans must use `workflow_retention_selector` with no sequential scan. The suite samples only selector-plan notices
 for that index proof and classifies the four exact-ID deletes from folded statement lists. The full-batch series
 bound retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`. Native recovery
@@ -98,7 +102,9 @@ Decision: pin this outcome with the four named native suites only — compact se
 interrupt/resume with frozen cutoff and application, and growth empty/short/full/backlog/fanout/sweep — rather than
 extra stories. Each growth series uses its own application and seed identities so a selected count cannot borrow
 another series' payload. Growth capture is folded; a selected 1,000-id delete cannot keep every nested auto_explain
-document under the shared 32 MiB or 20,000 retained-entry caps.
+document under the shared 32 MiB or 20,000 retained-entry caps. Payload-family planner floors are part of that pin:
+fanout 1/8/64 must remain an indexed equality delete of owned copies, not a sequential scan of a tiny selected-only
+table.
 
 A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
 SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or
