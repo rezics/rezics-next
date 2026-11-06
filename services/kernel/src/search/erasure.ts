@@ -16,7 +16,8 @@ import type { SubjectErasureSourceRecord, SubjectErasureSource } from '../semant
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { createOpenSearch, type OpenSearch } from './opensearch.ts';
+import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { physicalSubjectGenerationsFromSettings } from './generation-inventory.ts';
 import { stepRetainedTargetErasure } from './public-filter-custody.ts';
 import type { SearchWriterPublicationGuard, SearchWriterPublicationFence } from './writer-guard.ts';
 import { validateRefreshResponse } from './write-actions.ts';
@@ -574,66 +575,32 @@ export async function stepSearchErasure(
     return response.status === 200 && object(native) && native.uuid === target.incarnation;
   }
   async function population(): Promise<Target[] | null> {
+    // Live OpenSearch subject generations are the copy inventory. Coverage-store completeness
+    // and discovery indices are not subject-writer targets; Account discovery has its own purge.
     const prefix = runtime.prefix!;
-    const controls = await query<{ prefix: string }>(
-      'SELECT prefix FROM search.index_prefix_control WHERE partition_no=0 ORDER BY prefix LIMIT 100',
-    );
-    // Configuration is a locator, never proof that no other installation has retained copies.
-    if (controls.rows.length !== 1 || controls.rows[0]?.prefix !== prefix) return null;
-    const rows = await query<{
-      index_name: string;
-      uuid: string;
-      generation: string;
-      protocol: string;
-      revision: string;
-      complete: boolean;
-    }>(
-      `SELECT index_name,index_uuid AS uuid,generation::text,protocol,
-        revision::text,population_complete AS complete FROM search.index_incarnation
-        WHERE partition_no=0 AND prefix=$1 ORDER BY generation LIMIT 4`,
-      [prefix],
-    );
-    if (!rows.rowCount || rows.rows.length > 3) return null;
-    // The mixed-family owner retains separate native lifecycle/Account receiving custody.
-    const mixed = await query<{
-      index_name: string;
-      uuid: string;
-      generation: string;
-      protocol: string;
-      revision: string;
-      complete: boolean;
-    }>(
-      `SELECT $1||'discovery-g'||generation AS index_name,
-      index_uuid AS uuid,generation::text,'discovery-v1' AS protocol,incarnation::text AS revision,
-      state IN ('active','retiring') AS complete FROM search.discovery_generation
-      WHERE partition_no=0 AND prefix=$1 AND state<>'retired' ORDER BY generation LIMIT 4`,
-      [prefix],
-    );
-    if (mixed.rows.length > 3) return null;
-    const targets: Target[] = [...rows.rows, ...mixed.rows].map((row) => ({
-      physicalTarget: row.index_name,
-      incarnation: row.uuid,
-      consumerGeneration: row.generation,
-      projectionGeneration: row.protocol,
+    let native: { status: number; body: unknown };
+    try {
+      native = await engine('GET', `/${prefix}subjects-g*/_settings`, undefined, {
+        expand_wildcards: 'all',
+        allow_no_indices: true,
+        ignore_unavailable: true,
+      });
+    } catch (error) {
+      if (error instanceof OpenSearchError && error.status === 404) return [];
+      throw error;
+    }
+    const listed = physicalSubjectGenerationsFromSettings(prefix, native.body);
+    if (native.status !== 200 || !listed) return null;
+    return listed.map((row) => ({
+      physicalTarget: row.physicalTarget,
+      incarnation: row.incarnation,
+      consumerGeneration: row.consumerGeneration,
+      projectionGeneration: 'subjects-v1',
       meaningDigest: null,
       readDefinition: null,
-      revision: row.revision,
-      complete: row.complete,
+      revision: row.incarnation,
+      complete: true,
     }));
-    // Include unaliased/building/retiring native names; absent lineage is unresolved population.
-    const native = await engine('GET', `/${prefix}subjects-g*,${prefix}discovery-g*/_settings`, undefined, {
-      expand_wildcards: 'all',
-      allow_no_indices: true,
-    });
-    if (native.status !== 200 || !object(native.body) || Object.keys(native.body).length !== targets.length)
-      return null;
-    for (const target of targets) {
-      const item = native.body[target.physicalTarget];
-      const settings = object(item) ? item.settings : null;
-      const index = object(settings) ? settings.index : null;
-      if (!object(index) || index.uuid !== target.incarnation || !target.complete) return null;
-    }
-    return targets;
   }
 }
 
@@ -773,7 +740,17 @@ export function registerSearchErasure(
           await acknowledge(accountId);
           return;
         }
-        if (result.state === 'pending') await DBOS.sleep(30_000);
+        if (result.state === 'pending') {
+          const wait =
+            result.reason === 'source-unavailable' ||
+            result.reason === 'population-unknown' ||
+            result.reason === 'configuration-unavailable' ||
+            result.reason === 'copies-pending' ||
+            result.reason === 'personal-pending'
+              ? 1_000
+              : 30_000;
+          await DBOS.sleep(wait);
+        }
       }
       await continuation(accountId, segment + 1);
     },
