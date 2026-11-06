@@ -1,6 +1,8 @@
 # Search real-worker outcome harness
 
-Status: the harness contract is adopted. Adapter tests pin default registrations and starters, Search-only
+Status: the harness contract is adopted. Native CJK analyzer and source-to-query/evidence cases live in
+`cjk-engine.test.ts` and the retained `index-definition.test.ts` analyzer tokens; they use the check's OpenSearch
+node and do not prove the default-worker harness. Adapter tests pin default registrations and starters, Search-only
 pause/resume, replacement-runner stop, real Semantic writes and witnesses, rebuild/alias/cursor recovery,
 observable consumer checkpoints, drain, and concurrent fixture isolation. Adapter cursor recovery uses the
 production Search service bound to the worker-owned prefix and generation. Default

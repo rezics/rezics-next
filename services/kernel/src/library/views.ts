@@ -106,6 +106,7 @@ class ViewReader {
     readonly actor: Actor,
     readonly deadline: number,
     readonly follow = false,
+    readonly withholdChangedSource = false,
   ) {}
 
   observationDeps() {
@@ -125,10 +126,10 @@ class ViewReader {
     });
   }
 
-  /** Follow FULL keeps the private edge and withholds a changed Source; other FULL views still refuse. */
+  /** Follow FULL keeps the private edge. Published-log FULL keeps the snapshot. Other FULL views still refuse. */
   discloseSource(originalId: string | undefined, currentId: string | undefined, observationCurrent: boolean): boolean {
     if (observationCurrent && currentId === originalId) return true;
-    if (this.follow) return false;
+    if (this.follow || this.withholdChangedSource) return false;
     throw new ProblemError('dependency_unavailable');
   }
 
@@ -229,6 +230,7 @@ export async function fullView<T>(
   options: Readonly<{
     deadline?: number;
     follow?: true;
+    withholdChangedSource?: true;
     followingSpaces?: (
       actor: Actor,
       ids: readonly string[],
@@ -237,7 +239,13 @@ export async function fullView<T>(
   }> = {},
 ): Promise<Embedding<T>> {
   if (view !== 'FULL') return body as Embedding<T>;
-  const reader = new ViewReader(deps, actor, options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS), options.follow);
+  const reader = new ViewReader(
+    deps,
+    actor,
+    options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS),
+    options.follow,
+    options.withholdChangedSource === true,
+  );
   const rows = Object.values(body as Record<string, unknown>).flatMap((value) =>
     Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [],
   ) as Record<string, unknown>[];

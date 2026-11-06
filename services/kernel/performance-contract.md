@@ -61,6 +61,11 @@ application facades. Native adapters import owner facade leaves rather than the 
 producer declarations still own the admitted cost. Test choice: use the focused causal History regressions for
 application/native composition, prepaid identity, identity-history recording, Zone receiving, record purge, agent
 verification reversal and receipt-key cutover, plus `scripts/architecture.test.ts`; avoid a duplicate synthetic suite.
+Decision: Library Published Log operations compose nested original/terminal Source, Follow FULL disclosure and
+public-account work from those producers, bind remaining original deadlines into retries, and pin zero
+`engineRequests`/`witnessKeys` on SQL leaves. Reached producers receive Access work and the original absolute
+deadline; the native interceptor skips consume inside the reserved envelope. FULL public snapshots withhold a
+changed Source. Native 64/512/4096 receiving stays deferred.
 
 ## Finite bounds
 
@@ -72,11 +77,6 @@ Count application-visible SQL, authorization and native work. Invisible database
 the application growth claim. A failed or unavailable native run is neither denial nor a product pass. Keep root,
 module and native evidence distinct; use [verification](../../docs/development/verification.md#native-growth-evidence)
 for evidence handling and check placement.
-
-Deferred callback admission counts callbacks and composes their complete producer work separately. A dispatch
-component with zero local SQL does not make a callback body free: actual native work remains charged exactly once
-through its producer within the original actor, request, deadline and admitted frame. Native callback failure,
-rollback, replay and terminal authorization evidence belong to the owning operation's growth check.
 
 Library follow create/list/remove growth remains the existing personal-writes, personal-reads, follows,
 following-kind-growth, follow-discovery, personal-http and full-views suites with the five Search scope/work-context

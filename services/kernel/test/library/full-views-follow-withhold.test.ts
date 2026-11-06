@@ -20,6 +20,20 @@ mock.module('../../src/semantic/summaries.ts', () => ({
   }),
 }));
 
+mock.module('../../src/database/pool.ts', () => ({
+  withConnection: async (_pool: unknown, work: (client: unknown) => Promise<unknown>) => work({}),
+}));
+
+mock.module('../../src/access/account-data.ts', () => ({
+  readAccount: async () => null,
+  readPublicAccount: async () => ({
+    accountId: original,
+    state: 'active',
+    handle: 'owner',
+    displayName: 'Owner',
+  }),
+}));
+
 const { fullView } = await import('../../src/library/views.ts');
 
 const deps = {
@@ -56,6 +70,27 @@ test('non-follow FULL still refuses a changed Source', async () => {
   resolutions.splice(0, resolutions.length, original, moved);
   await expect(fullView(deps, actor, 'FULL', { libraryEntries: [{ subjectId: original }] })).rejects.toMatchObject({
     code: 'dependency_unavailable',
+  });
+});
+
+test('FULL published-log withholds a changed Source and keeps the public snapshot', async () => {
+  observationCurrent = true;
+  resolutions.splice(0, resolutions.length, original, moved);
+  const snapshot = {
+    id: original,
+    accountId: actor.accountId,
+    subjectId: original,
+    sessionState: 'completed' as const,
+    startedAt: '2026-11-06T00:00:00.000Z',
+    completedAt: '2026-11-06T01:00:00.000Z',
+    note: 'kept',
+    publishedAt: '2026-11-06T01:00:00.000Z',
+  };
+  const withheld = await fullView(deps, actor, 'FULL', { publishedLog: snapshot }, { withholdChangedSource: true });
+  expect(withheld.publishedLog).toEqual({
+    ...snapshot,
+    subject: null,
+    account: { id: original, handle: 'owner', displayName: 'Owner' },
   });
 });
 

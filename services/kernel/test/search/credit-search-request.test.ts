@@ -110,23 +110,25 @@ test('credited facets admit the same released qualifier and bind it with the nam
   const facets = validateFacets(input);
   const qualifiers = admitFacetCreditQualifiers(input, release);
   expect(qualifiers).toEqual([{ property: 'wdt:P3831', value: role }]);
-  const binding = facetCursorBinding(
-    {
-      principal: 'anonymous',
-      identityEpoch: 'epoch-digest',
-      text: parseText(input.text),
-      textField: input.textField,
-      creditQualifiers: qualifiers ?? [],
-      languages: ['en'],
-      originalFilter: undefined,
-      facets,
-      now: 0,
-    },
-    facets[0]!,
-  );
+  const cursorInput = {
+    principal: 'anonymous' as const,
+    identityEpoch: 'epoch-digest',
+    text: parseText(input.text),
+    textField: input.textField,
+    creditQualifiers: qualifiers ?? [],
+    languages: ['en'],
+    originalFilter: undefined,
+    facets,
+    now: 0,
+  };
+  const binding = facetCursorBinding(cursorInput, facets[0]!);
   expect(binding.request).toMatchObject({
+    identityEpoch: 'epoch-digest',
     textField: 'credited_creator',
     creditQualifiers: [{ property: 'wdt:P3831', value: role }],
     text: parseText('ada'),
   });
+  expect(binding.request).not.toEqual(
+    facetCursorBinding({ ...cursorInput, identityEpoch: 'retired-epoch' }, facets[0]!).request,
+  );
 });

@@ -31,10 +31,7 @@ failure-status and cleanup behavior. SQL content mappers and the selected tsconf
 
 Decision: Web's official typecheck and check gate both execute `tsc --noEmit --runExternalCode` for `tsconfig.json`
 then `tsconfig.scripts.json`. The scripts program still runs after a red web program. The check gate does not
-substitute `bun check --no-script`. Web-owned runner and seeded-walk scripts remain covered by the scripts program,
-including their real imported types. Repair mapper resolution and preparation at the workspace boundary. Verify
-actual program membership: excluding a root does not remove files imported by another root, and dropping an owned
-script does not establish complete typing. Pin with `apps/web/scripts/typecheck.test.ts`. Native, browser and full root
+substitute `bun check --no-script`. Pin with `apps/web/scripts/typecheck.test.ts`. Native, browser and full root
 journeys remain separate acceptance.
 
 Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving

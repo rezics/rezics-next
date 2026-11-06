@@ -356,6 +356,7 @@ Decision: this increment's accepted cells are native CJK title/alias projection 
 languages, review-producer readiness omission, Web alias-locale fallback and Retry-After hydration, and walk
 slot/cgroup/first-compile regressions. Walk regressions assert `walkStackNames(task, slot)` container names. Stack-run fixtures emit the current probe fields, including `DISK_FREE` and `MEMORY_RECLAIMABLE`. The seeded multilingual native/API/browser matrix stays unaccepted: local Web
 never listened on 20010 within 20 minutes. Shared host placement/headroom remains with the supermanager.
+Decision: multilingual names receive Semantic labels, aliases and schema:name/alternateName languages as-is, including `und`. The ordinary writer `applySubjectKeys` publishes them into the production mapping with stored offsets on the documented OpenSearch 3.9.0 `analysis-icu` image (`db/search/opensearch/Dockerfile`). Isolated matcher tests stay local. Native source-to-query/evidence is `test/search/cjk-engine.test.ts` plus the retained analyzer cases; CJK ngram overlap may highlight additional current aliases, so that case pins the queried original-language name rather than exclusive reason lists; current-text disclosure analyzes the queried generation with those same installed analyzers, including prefix matching and the 32 KiB scan bound; malformed analyzer replies stay `SearchUnavailableError`; seeded browser remains unaccepted. Observed engine: OpenSearch 3.x with `analysis-icu` as required by `requireDevelopmentAnalyzer`. Source checkpoint: Names `f0718c51f8e5f6848c2bfedf59855a7cbfadf3cf` (released labels, language-preserving aliases and schema:name/alternateName).
 **Released fixtures:** original Chinese/Kana/Latin cases, real Semantic source keys/routeKey, source chunks256 EACH
 including tails, exact source snapshot versions, checkpoints and actual physical indices.
 
@@ -370,6 +371,7 @@ including tails, exact source snapshot versions, checkpoints and actual physical
 
 **Frozen scenarios and binding:** originals first three analyzer cases and outage/rebuild ledger entries;
 [index definition](../../services/kernel/test/search/index-definition.test.ts) “cjk_bigram_v2 produces the legacy tokens”;
+[CJK engine](../../services/kernel/test/search/cjk-engine.test.ts) “the documented development analyzer is OpenSearch 3.x with analysis-icu and owner CJK tokens” and “released names go through the ordinary writer into the physical index and keep current evidence across locales”;
 [source batching native](../../services/kernel/test/search/source-batching-native.test.ts) “native event anchors use
 exact chunk snapshots through later transport failure and replay”; [bulk visibility](../../services/kernel/test/search/bulk-visibility.test.ts)
 “a same-version conflict proves independent winning data searchable before successful return”; [source fences](../../services/kernel/test/search/rebuild-source-fences.test.ts)
@@ -384,7 +386,7 @@ Worker invokes startWorker with a decorator of the live `createKernelWorkModules
 pause/resume captures only Search, rebuild uses real rebuildSubjects/subjectSource and runner refresh. Current
 source has progressed beyond [harness README](../../services/kernel/test/search/README.md)'s older captured-starter
 status; neither source nor that stale status supplies a native pass.
-`bun run --cwd services/kernel check test/search/real-source-composition.test.ts test/search/source-batching-native.test.ts test/search/rebuild-source-fences.test.ts test/search/subject-auto-create.test.ts`.
+`bun run --cwd services/kernel check test/search/real-source-composition.test.ts test/search/source-batching-native.test.ts test/search/rebuild-source-fences.test.ts test/search/subject-auto-create.test.ts test/search/cjk-engine.test.ts test/search/index-definition.test.ts`.
 Operator command is `bun run --cwd services/kernel search rebuild`, documented in
 [kernel README](../../services/kernel/README.md), plus actual public search/suggest evidence; no rebuild HTTP route.
 
@@ -395,13 +397,13 @@ actual delete-version pruning; no accidental recreation; default writer normaliz
 The separate64-envelope batch remains. Superseded coverage certificates and coverage/coverage-projection exports
 that throw index_not_ready do not bind the replacement. Reuse real-source composition rather than helper-only completion.
 
-| Stage                                   | Evidence                                                                                                                                                                           |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| specification validated red             | Native assertions present; measured red not recorded; complete pruning/reconciliation matrix not frozen/bound.                                                                     |
-| native driver registered                | Real default-worker source chain registered; missing scenarios require binding to it.                                                                                              |
-| implementation exposed                  | Default worker decorates live createKernelWorkModules; rebuild/alias recovery and physical generation inventory are on that process. Complete producer guarantees remain unproven. |
-| user-case native pass at named revision | None recorded for this capability.                                                                                                                                                 |
-| promoted                                | No main closure evidence.                                                                                                                                                          |
+| Stage                                   | Evidence                                                                                                                                                                                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| specification validated red             | Native assertions present; measured red not recorded; complete pruning/reconciliation matrix not frozen/bound.                                                                                                                                                                  |
+| native driver registered                | Real default-worker source chain registered; missing scenarios require binding to it.                                                                                                                                                                                           |
+| implementation exposed                  | Documented 3.9.0+analysis-icu image, offset-stored `cjk_bigram_v2` mapping and ordinary writer publish released multilingual names; default worker decorates live createKernelWorkModules with rebuild/alias recovery. Complete producer/generation guarantees remain unproven. |
+| user-case native pass at named revision | None recorded for this capability.                                                                                                                                                                                                                                              |
+| promoted                                | No main closure evidence.                                                                                                                                                                                                                                                       |
 
 ## composition-and-profile-governance
 

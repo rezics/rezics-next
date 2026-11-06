@@ -55,6 +55,13 @@ async function ids(index: string, body: unknown): Promise<string[]> {
 }
 
 test('cjk_bigram_v2 produces the legacy tokens', async () => {
+  const mapping = await search.request<
+    Record<string, { mappings: { properties: { names: { analyzer: string; index_options?: string } } } }>
+  >('GET', `/${first}/_mapping`);
+  expect(mapping.body[first]!.mappings.properties.names).toMatchObject({
+    analyzer: 'cjk_bigram_v2',
+    index_options: 'offsets',
+  });
   expect(await tokens('魔法禁書目錄')).toEqual(['魔法', '法禁', '禁书', '书目', '目录']);
   expect(await tokens('ｶﾞﾗｽ')).toEqual(['ガラ', 'ラス']);
   expect(await tokens('ガラス')).toEqual(await tokens('がらす'));

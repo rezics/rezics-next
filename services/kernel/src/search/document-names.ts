@@ -5,11 +5,12 @@ export type PublicName = { field: 'title' | 'alias'; language: string; value: st
 /**
  * Terms select presentation; adopted name statements also supply searchable text.
  * Reuse the complete public statement snapshot, without another reader or writer.
+ * schema:name and schema:alternateName keep their original language, including `und`.
  * Native slot/candidate and monolingual field limits bound this traversal.
  */
 export function* publicNames(subject: IndexedSubject): Generator<PublicName> {
-  for (const name of subject.labels) yield { field: 'title', ...name };
-  for (const name of subject.aliases) yield { field: 'alias', ...name };
+  for (const name of subject.labels) yield { field: 'title', language: name.language, value: name.value };
+  for (const name of subject.aliases) yield { field: 'alias', language: name.language, value: name.value };
   for (const statement of subject.statements) {
     if (statement.language === undefined) continue;
     if (statement.property === 'schema:name')

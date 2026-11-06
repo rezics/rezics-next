@@ -11,6 +11,7 @@ import {
   publishedLogPageReadOperationPlan,
   publishedLogPointReadOperationPlan,
   publishedLogPublishOperationPlan,
+  publishedLogRemainingMs,
   publishedLogRestoreOperationPlan,
   publishedLogRetractOperationPlan,
   publishedLogRetentionPageOperationPlan,
@@ -19,6 +20,15 @@ import {
 } from '../../src/library/published-log-bounds.ts';
 import { runLibraryBoundedOperation, runLibraryBoundedStep } from '../../src/library/command-support.ts';
 import type { PublishedLogDueKey } from '../../src/library/published-log-retention.ts';
+import {
+  consumePublishedLogWork,
+  publishedLogReachedNestedUnits,
+  publishedLogRetrySlots,
+  publishedLogStatement,
+  publishedLogZeroOperand,
+  withPublishedLogNativeWork,
+} from '../../src/library/published-log-native.ts';
+import read from '../../src/library/published-log-read.sql';
 
 const accountId = '00000000-0000-7000-8000-6c7100000001';
 const logId = '00000000-0000-7000-8000-6c7100000002';
@@ -75,8 +85,37 @@ test('Published Log command, read and retention operations compose their full lo
     }),
   ];
   for (const plan of operations) assertComplete(plan);
-  for (const plan of operations.slice(0, 7)) expect(plan.total.engineRequests).toBe(0);
+  for (const plan of operations.slice(0, 7)) {
+    expect(plan.total.engineRequests).toBe(0);
+    expect(plan.total.witnessKeys).toBe(0);
+  }
+  expect(operations[0]!.components.abortedOrSuccessfulAttempts!.statements).toBeGreaterThan(0);
+  expect(operations[0]!.total.identityMetadataRows).toBeGreaterThan(0);
+  expect(operations[0]!.controls).toMatchObject({
+    durationMs,
+    commandAttempts: 1 + Math.ceil(durationMs / 25),
+    engineRequests: 0,
+    witnessKeys: 0,
+  });
   expect(operations[1]!.controls).toMatchObject({ receiptKeyCount, rawRequestKeyBytes: 765 });
+  expect(operations[3]!.controls).toMatchObject({ originalAndTerminalGates: 2, engineRequests: 0 });
+  expect(operations[3]!.total.identityMetadataRows).toBeGreaterThan(0);
+  const remaining = publishedLogRemainingMs(Date.now() + 1_250);
+  expect(remaining).toBeGreaterThan(0);
+  expect(remaining).toBeLessThanOrEqual(1_250);
+  const remainingPublish = publishedLogPublishOperationPlan({
+    accountId,
+    sessionId,
+    note: null,
+    requestKey: 'remaining',
+    receiptKeyCount,
+    durationMs: remaining,
+  });
+  expect(remainingPublish.controls).toMatchObject({
+    durationMs: remaining,
+    commandAttempts: 1 + Math.ceil(remaining / 25),
+  });
+  expect(remainingPublish.controls!.commandAttempts).toBeLessThan(1 + Math.ceil(durationMs / 25));
 
   const publicPage = operations[4]!;
   expect(publicPage.controls).toMatchObject({ rawLimit: 101, disclosureMaximum: 100, pageSentinel: 1 });
@@ -148,4 +187,105 @@ test('a composed operation reserves once and its SQL leaves run on that reservat
   expect(reservations[0]!.operation).toBe('published-log.test');
   expect(reservations[0]!.bound).not.toHaveProperty('engineRequests');
   expect(settlements).toBe(1);
+});
+
+test('reached nested Source units use actual subject IDs, remaining deadline slots, and a zero empty path', () => {
+  const now = 1_700_000_000_000;
+  const dateNow = Date.now;
+  Date.now = () => now;
+  const subjectId = '00000000-0000-7000-8000-6c7100000005';
+  const deadline = now + 1_250;
+  try {
+    const empty = publishedLogReachedNestedUnits({
+      kind: 'published-log.point-read',
+      accountId,
+      deadline,
+      subjectIds: [],
+      logId,
+      route: locator.route,
+    });
+    expect(empty.nestedSource).toEqual(publishedLogZeroOperand());
+    expect(empty.nestedDisclosure).toEqual(publishedLogZeroOperand());
+    expect(empty.zeroSqlAxes).toEqual({ witnessKeys: 0, engineRequests: 0 });
+    const slots = publishedLogRetrySlots(deadline);
+    expect(empty.remainingMs).toBe(1_250);
+    expect(empty.remainingMs).toBe(slots.remainingMs);
+    expect(empty.retryAttempts).toBe(slots.attempts);
+    expect(empty.retryAttempts).toBeLessThan(1 + Math.ceil(5_000 / 25));
+
+    const publish = publishedLogReachedNestedUnits({
+      kind: 'published-log.publish',
+      accountId,
+      deadline,
+      subjectIds: [subjectId],
+      sessionId,
+      note: null,
+      requestKey: 'nested',
+      receiptKeyCount: 3,
+    });
+    expect(publish.nestedSource.identityMetadataRows).toBeGreaterThan(0);
+    expect(publish.nestedSource.engineRequests).toBe(0);
+    expect(publish.nestedSource.witnessKeys).toBe(0);
+    expect(publish.abortedAttempts.statements).toBeGreaterThan(0);
+    expect(publish.successfulAttempt.statements).toBeGreaterThanOrEqual(publish.abortedAttempts.statements);
+    expect(publish.retryAttempts).toBe(slots.attempts);
+
+    const live = publishedLogReachedNestedUnits({
+      kind: 'published-log.point-read',
+      accountId,
+      deadline,
+      subjectIds: [subjectId],
+      logId,
+      route: locator.route,
+    });
+    expect(live.nestedDisclosure.identityMetadataRows).toBeGreaterThan(publish.nestedSource.identityMetadataRows);
+    expect(live.nestedDisclosure.engineRequests).toBe(0);
+
+    const leaf = publishedLogStatement(read.sql, [locator.route, logId]);
+    expect(leaf).toMatchObject({ engineRequests: 0, witnessKeys: 0, statements: 1 });
+    expect(publishedLogStatement('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', [])).toMatchObject({
+      engineRequests: 0,
+      witnessKeys: 0,
+    });
+  } finally {
+    Date.now = dateNow;
+  }
+});
+
+test('native interceptor skips consume while the enclosing operation reservation is open', async () => {
+  const bound = declareBound({
+    candidateKeys: 1,
+    nativeRows: 1,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 1,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: 32,
+    engineRequests: 0,
+  });
+  const runs: string[] = [];
+  const association = {
+    deadline: Date.now() + 5_000,
+    access: {} as AccessWorkAccounting,
+    reserve() {
+      return { settle() {} };
+    },
+    async run<T>(operation: string, _work: Parameters<CommandWorkAssociation['run']>[1], dispatch: () => Promise<T>) {
+      runs.push(operation);
+      return dispatch();
+    },
+    receipt: () => ({}) as WorkReceipt,
+    close: () => undefined,
+  } as CommandWorkAssociation;
+  registerCommandWorkAssociation(association);
+  const result = await withCommandWorkAssociation(association, () =>
+    runLibraryBoundedOperation('published-log.test-native', bound, () =>
+      withPublishedLogNativeWork(association.deadline, () =>
+        consumePublishedLogWork('statement', bound, async () => 'kept'),
+      ),
+    ),
+  );
+  expect(result).toBe('kept');
+  expect(runs).toEqual([]);
 });

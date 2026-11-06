@@ -26,6 +26,7 @@ export const MATCH_EVIDENCE_LIMITS = Object.freeze({
   spans: 8,
   textBytes: 256,
   fragmentBytes: 1024,
+  scanBytes: 32 * 1024,
   enginePageBytes: 262_144,
   pageBytes: 131_072,
 });
@@ -80,6 +81,7 @@ export function compileMatchEvidence(compiled: CompiledText): MatchEvidenceQuery
                   field,
                   {
                     type: 'unified',
+                    force_source: true,
                     fragment_size: 128,
                     number_of_fragments: MATCH_EVIDENCE_LIMITS.reasons,
                     highlight_query: { bool: { should: probes[field], minimum_should_match: 1 } },
@@ -258,9 +260,13 @@ export function projectMatchEvidence(
       const fragment = parseFragment(rawFragment);
       if (!fragment) return { state: 'unavailable' };
       // Scan bounded native fields; only matching identities allocate memory. A
-      // later accepted alias remains attributable even after the first 32 names.
+      // later accepted alias remains attributable within the scan-byte budget.
       const identities = new Map<string, CandidateSource>();
+      let scanned = 0;
       for (const source of currentSources(subject)) {
+        const size = Buffer.byteLength(source.language, 'utf8') + Buffer.byteLength(source.value, 'utf8');
+        if (scanned + size > MATCH_EVIDENCE_LIMITS.scanBytes) break;
+        scanned += size;
         if (
           (engineField === 'names'
             ? source.field === 'title' || source.field === 'alias'

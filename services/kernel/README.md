@@ -165,10 +165,12 @@ check command starts its own disposable OpenSearch node.
 
 Use the workspace command's pinned image, built from
 [`db/search/opensearch/Dockerfile`](db/search/opensearch/Dockerfile), for the released Search analyzer.
-It installs `analysis-icu`; an unmodified upstream image lacks that plugin. Keep the retained development
+It installs `analysis-icu`; an unmodified upstream image lacks that plugin. The install step fails the image
+build unless `opensearch-plugin list` reports `analysis-icu`. Keep the retained development
 volume when recovering a running catalogue: start the existing node with `up`, then run the ordinary
 worker and rebuild command below. Analyzer definitions and script/alias projection remain owned by
-the released Search text implementation; recovery preserves their mapping metadata.
+the released Search text implementation; names/descriptions store offsets so native highlights keep exact
+source text. Recovery preserves their mapping metadata.
 
 ## Rebuilding the search index
 
