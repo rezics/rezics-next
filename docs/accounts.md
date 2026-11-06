@@ -260,6 +260,9 @@ HTTP503 `account_operation_denied`/`effect_status:not_applied` at `managed-accou
 Decision: receive 433f320a native stack composition: Commerce, Stripe and Work runtime modules load only after
 DATABASE_URL and environment setup. Organization walk assertions stay complete. This landing typechecks that
 composed revision and does not add stories.
+Decision: kernel typecheck repairs keep SearchService and PublicSearchPage assertions; duplicate
+`savedCatalogueMembers` methods, a duplicate `matchEvidence` key, the missing catalogue-publication `record`
+guard, and docker stdout encoding are fixture and helper shape updates. No new behaviour tests.
 
 ## 3. Credentials, sessions and tokens
 
