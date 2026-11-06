@@ -1,14 +1,13 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { pickText } from '@rezics/composition';
 import type { LibraryProgressMode, LibraryUnitCountForms } from '@rezics/definitions';
-import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { createFakeKernelFetch, createStoryRecordedKernelFetch, setFakeAdmitted } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import definitionsActive from '../src/kernel/recorded/definitions-active.json';
@@ -577,124 +576,26 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    let closePromise: Promise<void> | undefined;
-    const closeListeningProbe = () =>
-      new Promise<void>((complete, fail) => {
-        probe.close((error) => (error ? fail(error) : complete()));
-      });
-    const closeProbe = () => {
-      if (closePromise) return closePromise;
-      if (probe.listening) {
-        closePromise = closeListeningProbe();
-        return closePromise;
-      }
-      closePromise = new Promise<void>((complete, fail) => {
-        const onListening = () => {
-          probe.off('error', onError);
-          void closeListeningProbe().then(complete, fail);
-        };
-        const onError = () => {
-          probe.off('listening', onListening);
-          complete();
-        };
-        probe.once('listening', onListening);
-        probe.once('error', onError);
-      });
-      return closePromise;
-    };
-    const release = lifetime.retainCleanup(`${label} port probe`, closeProbe);
-    probe.once('error', (error) => {
-      release();
-      reject(error);
-    });
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      void closeProbe().then(() => {
-        release();
-        resolve(port);
-      }, reject);
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
-let serverCustody: ProcessCustody | undefined;
-let started: Promise<string> | undefined;
-let siteOutput = '';
-
 // The documented command, pointed at the fake through the environment it reads in development.
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
 function site(): Promise<string> {
-  started ??= startWithPort(
-    suiteLifetime,
-    'Home cards Vite startup',
-    () => freePort(suiteLifetime, 'Home cards Vite startup'),
-    async (port) => {
-      suiteLifetime.assertActive('Home cards Vite spawn');
-      child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          KERNEL_ORIGIN: fake.url.origin,
-          PUBLIC_ORIGIN: 'https://www.rezics.test',
-          AUTH_ISSUER: `${fake.url.origin}/auth`,
-          WEBSITE_CLIENT_ID: clientId,
-          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-          API_RESOURCE: resource,
-          WEBSITE_SCOPES: scopes.join(' '),
-        },
-      });
-      const custody = (serverCustody = ownNodeProcess(child, {
-        label: 'Home cards Vite server',
-        outputLimit: 8000,
-        onOutput: (chunk) => {
-          siteOutput = (siteOutput + Buffer.from(chunk).toString()).slice(-8000);
-        },
-      }));
-      let spawnError: Error | undefined;
-      child.once('error', (error) => {
-        spawnError = error;
-      });
-      const origin = `http://127.0.0.1:${port}`;
-      const deadline = Date.now() + 150_000;
-      try {
-        for (;;) {
-          suiteLifetime.assertActive('Home cards Vite readiness');
-          if (spawnError)
-            throw new Error(
-              `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
-              {
-                cause: spawnError,
-              },
-            );
-          const exit = child.exitCode ?? child.signalCode;
-          if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
-          try {
-            const response = await fetch(`${origin}/en`, {
-              redirect: 'manual',
-              signal: AbortSignal.timeout(60_000),
-            });
-            suiteLifetime.assertActive('Home cards Vite readiness after response');
-            if (response.status < 500) return origin;
-          } catch (error) {
-            if (suiteLifetime.retired) throw error;
-            // The dev server is still starting.
-          }
-          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
-          await Bun.sleep(500);
-          suiteLifetime.assertActive('Home cards Vite readiness after delay');
-        }
-      } catch (error) {
-        return await withCleanup(async () => {
-          throw error;
-        }, [{ label: 'Home cards Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
-      }
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: fake.url.origin,
+      PUBLIC_ORIGIN: 'https://www.rezics.test',
+      AUTH_ISSUER: `${fake.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: clientId,
+      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+      API_RESOURCE: resource,
+      WEBSITE_SCOPES: scopes.join(' '),
     },
-  );
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
@@ -746,7 +647,7 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
           title: typeof body.title === 'string' ? body.title.slice(0, 64) : undefined,
         }
       : undefined;
-    const oidcDiagnostic = siteOutput
+    const oidcDiagnostic = (server?.diagnostics() ?? '')
       .split('\n')
       .filter((line) => line.includes('[web auth] OpenID authorization-code grant failed:'))
       .at(-1);
@@ -819,7 +720,7 @@ afterAll(() =>
     })),
     { label: 'Home cards browser', run: () => (browser ? closeBrowser(browser) : undefined), timeoutMs: 6000 },
     { label: 'Home cards fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
-    { label: 'Home cards Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
+    { label: 'Home cards Vite process group', run: () => server?.stop(), timeoutMs: 7000 },
   ]),
 );
 

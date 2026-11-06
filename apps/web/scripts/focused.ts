@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
+import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -110,6 +111,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   const appDirectory = resolve(options.appDirectory ?? app);
   if (
     !hasWebCheckCustody(resolve(app, '../..'), appDirectory) &&
+    !options.place &&
     (options.prepare || options.onStart || options.onOutput)
   )
     throw new Error(
@@ -132,6 +134,11 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   );
   if (routed !== null) return routed;
   const admitted = admitExplicitHostTestCommand(command);
+  const wrapShared =
+    commandNeedsSharedDevServer(admitted) &&
+    existsSync(join(appDirectory, 'vite.config.ts')) &&
+    existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
+  const hosted = wrapShared ? ['bun', 'scripts/with-dev-server.ts', '--', ...admitted] : admitted;
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
@@ -139,21 +146,22 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     REZICS_TEST_RUNTIME: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
   };
-  const invocations = focusedTestCommands(admitted).map((command) =>
-    options.privateNetwork
-      ? [
-          'unshare',
-          '--user',
-          '--map-root-user',
-          '--net',
-          'sh',
-          '-c',
-          'ip link set lo up && exec "$@"',
-          'sh',
-          ...command,
-        ]
-      : command,
-  );
+  if (wrapShared && options.privateNetwork) childEnvironment[webTestPrivateNetworkEnvName] = '1';
+  for (const name of [
+    'AUTH_ISSUER',
+    'WEBSITE_CLIENT_ID',
+    'WEBSITE_CLIENT_KEY',
+    'API_RESOURCE',
+    'WEBSITE_SCOPES',
+    'SITE_ORIGINS',
+    'KERNEL_ORIGIN',
+  ])
+    delete childEnvironment[name];
+  const invocations = wrapShared
+    ? [hosted]
+    : focusedTestCommands(admitted).map((command) =>
+        options.privateNetwork ? privateNetworkCommand(command) : command,
+      );
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;

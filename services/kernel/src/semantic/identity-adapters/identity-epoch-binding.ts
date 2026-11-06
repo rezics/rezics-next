@@ -1,3 +1,5 @@
+import { memoizedValue } from '../../memoized.ts';
+import { statementBytes } from '../../database/statement-bytes.ts';
 import { bindSemanticProducerRoles } from '../erasure-producer.ts';
 import { classifyUnavailability } from '../../access/unavailable.ts';
 import { readAccountIdentityTechnicalSource } from '../../access/agent-verification-identity-retention.ts';
@@ -472,6 +474,25 @@ async function assertOriginalConsumerOpen(
     );
 }
 
+/** Two released snapshots: retained Source provenance then accepted job/control. */
+export function IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION, () =>
+    Object.freeze({
+      engineRequests: 0 as const,
+      work: Object.freeze({
+        candidateKeys: 0,
+        nativeRows: 13,
+        identityMetadataRows: 0,
+        nativePoints: 13,
+        witnessKeys: 0,
+        statements: 10,
+        bytes: statementBytes(consumerWork) + statementBytes(consumerJob) + 2 * 8192,
+        emptySeeks: 2,
+      }),
+    }),
+  );
+}
+
 /** Resolve native generations with Source's live maintenance allocation. Each
  * released snapshot prepays its failed point, control and cleanup work. The
  * directory receives planning data and charges the same frame when it dispatches.
@@ -486,17 +507,23 @@ export async function readIdentitySourceConsumerWork(
   reference = structuredClone(reference);
   // Retained Source, its commit, binding/claim/commit, original/undo commits,
   // owner and installed-hook catalogue point: nine exact points, including misses.
-  const reserve = (touches: number) =>
-    reserveIdentitySourceConsumerNativeWork(pool, context.identityConsumerWork, {
-      rows: touches,
-      points: touches,
-      statements: 5,
-      bytes: 8192,
-      engineRequests: 0,
-    });
+  const binding = IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION();
+  const reserve = (touches: number, statements: number, bytes: number, declaration?: typeof binding.work) =>
+    reserveIdentitySourceConsumerNativeWork(
+      pool,
+      context.identityConsumerWork,
+      {
+        rows: touches,
+        points: touches,
+        statements,
+        bytes,
+        engineRequests: 0,
+      },
+      declaration,
+    );
   return withRequestDeadline(context.deadline, async () => {
     try {
-      if (!reserve(9)) return null;
+      if (!reserve(binding.work.nativeRows, binding.work.statements, binding.work.bytes, binding.work)) return null;
       const row = await withReadTransaction(
         pool,
         async (tx) =>
@@ -525,7 +552,7 @@ export async function readIdentitySourceConsumerWork(
             ])
           ).rows[0] ?? null,
       );
-      if (!row || !reserve(4)) return null;
+      if (!row) return null;
       // Release Source before checking its exact accepted job/control/native owner.
       const job = await withReadTransaction(
         pool,

@@ -2,6 +2,12 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
 import { cleanupAll, ownBunProcess, withCleanup } from './server-custody.ts';
+import {
+  acquireWorkerFixture,
+  readSharedDevServer,
+  sharedDevServerEnvName,
+  workerFixtureOverlay,
+} from './dev-server-fixture.ts';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
@@ -15,6 +21,8 @@ export type DevServerOptions = {
   firstPath?: string;
   cwd?: string;
   command?: (context: { port: number; origin: string }) => string[];
+  /** Start a private Vite process even when the check run advertised a shared server. */
+  exclusive?: boolean;
   budgets?: Partial<typeof phaseBudgets>;
   signal?: AbortSignal;
   pollIntervalMs?: number;
@@ -22,6 +30,19 @@ export type DevServerOptions = {
   /** A clock seam for deterministic budget tests; timers still use the remaining phase budget. */
   now?: () => number;
 };
+
+export type DevServerHandle = {
+  origin: string;
+  pid: number | undefined;
+  shared: boolean;
+  stop: () => Promise<void>;
+  diagnostics: () => string;
+};
+
+function bindOrigin(value: string | undefined, origin: string): string | undefined {
+  if (value === undefined) return undefined;
+  return value.replace(/https?:\/\/(?:127\.0\.0\.1|localhost):(?:undefined|\$\{port\}|\d+)/g, origin);
+}
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -34,10 +55,124 @@ function freePort(): Promise<number> {
   });
 }
 
-/** One process group and one warm-up for each browser test file. Always await stop() in afterAll. */
-export async function startDevServer(
-  options: DevServerOptions,
-): Promise<{ origin: string; stop: () => Promise<void>; diagnostics: () => string }> {
+async function waitForFirstResponse(
+  origin: string,
+  firstPath: string,
+  options: {
+    deadline: number;
+    now: () => number;
+    pollIntervalMs: number;
+    signal?: AbortSignal;
+    onError: (error: unknown) => void;
+  },
+): Promise<void> {
+  for (;;) {
+    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+    try {
+      const response = await fetch(`${origin}${firstPath}`, {
+        redirect: 'manual',
+        signal: options.signal ?? AbortSignal.timeout(Math.max(1, options.deadline - options.now())),
+      });
+      await response.body?.cancel();
+      if (response.status < 500) return;
+      options.onError(new Error(`HTTP ${response.status} for ${firstPath}`));
+    } catch (error) {
+      options.onError(error);
+      if (options.signal?.aborted) throw error;
+    }
+    if (options.now() >= options.deadline) throw new Error('phase budget exhausted');
+    await Bun.sleep(Math.min(options.pollIntervalMs, Math.max(1, options.deadline - options.now())));
+  }
+}
+
+async function acquireSharedDevServer(options: DevServerOptions): Promise<DevServerHandle | undefined> {
+  if (options.command || options.exclusive) return undefined;
+  const record = readSharedDevServer();
+  if (!record) return undefined;
+  const now = options.now ?? Date.now;
+  const overlay = workerFixtureOverlay(options.env) ?? {};
+  for (const key of ['PUBLIC_ORIGIN', 'SITE_ORIGINS'] as const) {
+    const bound = bindOrigin(overlay[key], record.origin);
+    if (bound !== undefined) overlay[key] = bound;
+  }
+  const release = await acquireWorkerFixture(record.fixtureDirectory, overlay);
+  const firstPath = options.firstPath ?? '/en';
+  const budgets = { ...phaseBudgets, ...options.budgets };
+  const spawnedAt = now();
+  let stopped: Promise<void> | undefined;
+  const stop = () =>
+    (stopped ??= (async () => {
+      release();
+    })());
+  try {
+    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+    let lastError: unknown = new Error(`no response from ${firstPath}`);
+    await waitForFirstResponse(record.origin, firstPath, {
+      deadline: spawnedAt + budgets.firstResponse,
+      now,
+      pollIntervalMs: options.pollIntervalMs ?? 500,
+      onError: (error) => {
+        lastError = error;
+      },
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    options.onPhase?.({ phase: 'first response', path: firstPath, elapsedMs: now() - spawnedAt });
+    if (options.warmUpPaths.length > 0) {
+      const deadline = now() + budgets.warmUp;
+      let browser: Browser | undefined;
+      try {
+        browser = await chromium.launch({ timeout: Math.max(1, deadline - now()) });
+        const context = await browser.newContext({
+          ...options.contextOptions,
+          javaScriptEnabled: options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true,
+        });
+        await withCleanup(async () => {
+          const page = await context.newPage();
+          for (const warmUpPath of options.warmUpPaths) {
+            const began = now();
+            const response = await page.goto(`${record.origin}${warmUpPath}`, {
+              waitUntil: 'networkidle',
+              timeout: Math.max(1, deadline - now()),
+            });
+            if (!response || response.status() >= 500)
+              throw new Error(`HTTP ${response?.status() ?? 'no response'} for ${warmUpPath}`);
+            if (options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true)
+              await page.locator('html[data-hydrated]').waitFor({
+                state: 'attached',
+                timeout: Math.max(1, deadline - now()),
+              });
+            options.onPhase?.({ phase: 'warm-up', path: warmUpPath, elapsedMs: now() - began });
+          }
+        }, [{ label: 'dev-server warm-up context', run: () => context.close(), timeoutMs: 5000 }]);
+      } catch (error) {
+        throw new Error(
+          `dev server warm-up failed for ${options.warmUpPaths[0]}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}`,
+          { cause: error },
+        );
+      } finally {
+        await browser?.close();
+      }
+    }
+    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+    return {
+      origin: record.origin,
+      pid: record.pid,
+      shared: true,
+      stop,
+      diagnostics: () => `shared ${sharedDevServerEnvName} ${record.origin} pid=${record.pid}`,
+    };
+  } catch (error) {
+    await withCleanup(async () => {
+      throw error;
+    }, [{ label: 'shared dev-server fixture lease', run: stop, timeoutMs: 2000 }]);
+    throw error;
+  }
+}
+
+/** One process group and one warm-up for each browser test file, or the shared run server when advertised. Always await stop() in afterAll. */
+export async function startDevServer(options: DevServerOptions): Promise<DevServerHandle> {
+  const shared = await acquireSharedDevServer(options);
+  if (shared) return shared;
   const port = await freePort();
   if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
   const origin = `http://127.0.0.1:${port}`;
@@ -87,6 +222,9 @@ export async function startDevServer(
       ...options.env,
       REZICS_TEST_RUNTIME: '1',
     };
+    childEnvironment.PUBLIC_ORIGIN = bindOrigin(childEnvironment.PUBLIC_ORIGIN, origin) ?? origin;
+    if (childEnvironment.SITE_ORIGINS)
+      childEnvironment.SITE_ORIGINS = bindOrigin(childEnvironment.SITE_ORIGINS, origin);
     if (options.env?.WEB_TEST_STATE_DIR && !options.env.WEB_TEST_STATE_INSTANCE_DIR)
       childEnvironment.WEB_TEST_STATE_INSTANCE_DIR = options.env.WEB_TEST_STATE_DIR;
     child = Bun.spawn(command, {
@@ -232,6 +370,8 @@ export async function startDevServer(
     options.signal?.addEventListener('abort', abortServer, { once: true });
     return {
       origin,
+      pid: child.pid,
+      shared: false,
       stop,
       diagnostics: () => (abortCleanupError ? `${output}\nCleanup error: ${String(abortCleanupError)}` : output),
     };

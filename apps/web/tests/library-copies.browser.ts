@@ -419,24 +419,13 @@ function site(): Promise<string> {
       warmUpPaths: ['/en/no-such-page'],
       env: {
         KERNEL_ORIGIN: fake.url.origin,
+        PUBLIC_ORIGIN: 'http://127.0.0.1:0',
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
       },
-      command: ({ port, origin }) => [
-        'env',
-        `PUBLIC_ORIGIN=${origin}`,
-        'bun',
-        'run',
-        'dev',
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        '--strictPort',
-      ],
     });
     return server.origin;
   })();

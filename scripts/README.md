@@ -64,10 +64,13 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. A failed probe never stops a master: a busy master times out too, and `-O exit` would cut every run
-multiplexed through it (their rsync sessions end with exit 255). A socket file left by a killed master is removed when
-`-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
-multiplexing` and every connection pays a full handshake.
+idle sockets. Acquisition retries never stop an answering master: `-O exit` would cut every run multiplexed through
+it (their rsync sessions end with exit 255). A placement-probe timeout checks the master and may recover it with
+`-O exit` before a fresh auto connection, at most once per host per minute across processes and never while a run
+holds its lease and the master answers. Placement probes retry after recovery; five minutes of consecutive
+probe-timeout skips report one environment event naming the host and error. A socket file left by a killed master is
+removed when `-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists,
+disabling multiplexing` and every connection pays a full handshake.
 Expired immutable bases are renamed aside under `bases/.lock` and deleted after it is released, so a base lookup never
 waits behind another run's recursive delete.
 Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted
@@ -84,8 +87,9 @@ today's waiter order on the host they move to. `REMOTE_CHECK_PLACEMENT_MOVE_MS` 
 Decision: pin the move with both host names and the wait before it in the check log; a host with a free slot never
 moves.
 
-Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
-the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
+Decision: pin hung ControlMaster placement recovery, once-per-minute cross-process recovery, the five-minute
+probe-timeout environment event, user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion
+behaviour with the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
 rather than 1 GiB tmpfs, nonce reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix
 forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
@@ -563,9 +567,10 @@ either stopgap, remain with the supermanager. Post-admission throughput and host
 remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
 1. Select a responding eligible host and verify its shared SSH control master with a trivial command before using it.
-   The probe is bounded to ninety seconds. A failed probe never stops the master, because a busy master times out too;
-   only a socket whose listener `-O check` reports refused is removed. The probe then runs once more; the second
-   failure is `RemoteTransportError` for the host and `control probe` stage. No run ever `-O exit`s a master.
+   The acquisition probe is bounded to ninety seconds. Its retry never stops an answering master; only a socket whose
+   listener `-O check` reports refused or missing is removed. The probe then runs once more; the second failure is
+   `RemoteTransportError` for the host and `control probe` stage. Placement-probe timeout recovery follows the shared
+   lease and once-per-minute guards above. Completing a run never `-O exit`s a master.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
    slot.
    Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in

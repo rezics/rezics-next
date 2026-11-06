@@ -1,11 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { connect, createServer, type Server } from 'node:net';
 import { join } from 'node:path';
+import { startDevServer } from './support/dev-server.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 180_000;
-const children: ChildProcess[] = [];
+const servers: Awaited<ReturnType<typeof startDevServer>>[] = [];
 // A developer's own setting must not leak into what these tests start.
 const { WORKER_INSPECTOR_PORT: _, ...inherited } = process.env;
 
@@ -40,48 +40,30 @@ function listening(port: number): Promise<boolean> {
   });
 }
 
-// The documented command, in its own process group so that Vite and workerd stop with it.
 function start(env: Record<string, string>) {
   let output = '';
-  const keep = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-8000);
-  };
   const ready = (async () => {
-    const port = await freePort();
-    const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...inherited, ...env },
-    });
-    children.push(child);
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const exited = new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code)));
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) return { origin: null, code: await exited };
-      try {
-        const response = await fetch(`${origin}/en`, {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (response.status < 500) return { origin, code: null };
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    try {
+      const running = await startDevServer({
+        exclusive: true,
+        cwd: app,
+        env: { ...inherited, ...env },
+        warmUpPaths: [],
+      });
+      servers.push(running);
+      output = running.diagnostics();
+      return { origin: running.origin, code: null as number | null };
+    } catch (error) {
+      output = String(error);
+      const codeMatch = output.match(/exited with (\d+)/);
+      return { origin: null as string | null, code: codeMatch ? Number(codeMatch[1]) : 1 };
     }
   })();
   return { ready, output: () => output };
 }
 
-afterAll(() => {
-  for (const child of children)
-    if (child.pid)
-      try {
-        process.kill(-child.pid, 'SIGTERM');
-      } catch {}
+afterAll(async () => {
+  await Promise.all(servers.map((running) => running.stop()));
 });
 
 test(

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
+import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
 
 export type TestCommandLane = { args: string[]; isolate: boolean };
 
@@ -120,19 +121,9 @@ async function main(): Promise<void> {
         let interrupted = false;
         for (const run of commands) {
           const privateNetwork = isolated && run.isolate;
-          const invocation = privateNetwork
-            ? [
-                'unshare',
-                '--user',
-                '--map-root-user',
-                '--net',
-                'sh',
-                '-c',
-                'ip link set lo up && exec "$@"',
-                'sh',
-                ...run.args,
-              ]
-            : run.args;
+          const wrapShared = commandNeedsSharedDevServer(run.args);
+          const args = wrapShared ? ['bun', 'scripts/with-dev-server.ts', '--', ...run.args] : run.args;
+          const invocation = privateNetwork && !wrapShared ? privateNetworkCommand(args) : args;
           if (linux && run.isolate && !privateNetwork) {
             process.stderr.write(
               'the tests are running on the host network, so host network changes can break browser tests.\n',
@@ -141,6 +132,7 @@ async function main(): Promise<void> {
           const testEnvironment: NodeJS.ProcessEnv = { ...childEnvironment, ...slotEnvironment };
           testEnvironment.PUBLIC_ORIGIN = 'http://127.0.0.1:3000';
           testEnvironment.REZICS_TEST_RUNTIME = '1';
+          if (wrapShared && privateNetwork) testEnvironment[webTestPrivateNetworkEnvName] = '1';
           for (const name of [
             'AUTH_ISSUER',
             'WEBSITE_CLIENT_ID',

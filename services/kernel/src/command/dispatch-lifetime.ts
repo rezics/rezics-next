@@ -17,6 +17,20 @@ export type {
   SourceFenceCommandDispatchOwner,
   SourceFenceCommandDispatchAllowance,
 } from './dispatch-lifetime-source-fence.ts';
+import {
+  SOURCE_ASSOCIATION_CALLBACK_MAX,
+  SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE,
+  type SourceAssociationCommandDispatchOwner,
+} from './dispatch-lifetime-source-association.ts';
+export {
+  SOURCE_ASSOCIATION_CALLBACK_MAX,
+  SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE,
+  SOURCE_ASSOCIATION_COMMAND_DISPATCH_CONTROLS,
+} from './dispatch-lifetime-source-association.ts';
+export type {
+  SourceAssociationCommandDispatchOwner,
+  SourceAssociationCommandDispatchAllowance,
+} from './dispatch-lifetime-source-association.ts';
 import type { CommandResult, CommandTransaction } from './command.ts';
 
 export type CommandDispatchPrice = Readonly<{ work: WorkDimensions; engineRequests: 0 }>;
@@ -121,6 +135,7 @@ type Scope = {
   validate: CommandDispatchOwner['validate'];
   reserve(): void | Promise<void>;
   accountId: string | undefined;
+  callbacks: boolean;
   done: Promise<void>;
   finish(): void;
   unchanged(): boolean;
@@ -151,7 +166,15 @@ export async function withCommandDispatchLifetime<T>(
   owner: CommandDispatchOwner,
   body: () => Promise<T>,
 ): Promise<T> {
-  return withDispatchScope(pool, deadline, owner, () => owner.reserve(COMMAND_DISPATCH_ALLOWANCE), undefined, body);
+  return withDispatchScope(
+    pool,
+    deadline,
+    owner,
+    () => owner.reserve(COMMAND_DISPATCH_ALLOWANCE),
+    undefined,
+    false,
+    body,
+  );
 }
 
 /** Additive exact Source exhausted native-fence profile; preserves the callback's normal result ABI. */
@@ -169,6 +192,27 @@ export async function withSourceFenceCommandDispatchLifetime<T>(
     owner,
     () => owner.reserve(SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE),
     accountId,
+    false,
+    body,
+  );
+}
+
+/** Custody prepare/checkpoint/finish: the same progress event plus at most two Source callbacks. */
+export async function withSourceAssociationCommandDispatchLifetime<T>(
+  pool: Pool,
+  deadline: number,
+  owner: SourceAssociationCommandDispatchOwner,
+  accountId: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  assertSourceFenceAccount(accountId);
+  return withDispatchScope(
+    pool,
+    deadline,
+    owner,
+    () => owner.reserve(SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE),
+    accountId,
+    true,
     body,
   );
 }
@@ -176,9 +220,10 @@ export async function withSourceFenceCommandDispatchLifetime<T>(
 async function withDispatchScope<T>(
   pool: Pool,
   deadline: number,
-  owner: CommandDispatchOwner | SourceFenceCommandDispatchOwner,
+  owner: CommandDispatchOwner | SourceFenceCommandDispatchOwner | SourceAssociationCommandDispatchOwner,
   reserve: () => void | Promise<void>,
   accountId: string | undefined,
+  callbacks: boolean,
   body: () => Promise<T>,
 ): Promise<T> {
   if (scopes.getStore() || !owner.original || typeof owner.original !== 'object' || activeOriginals.has(owner.original))
@@ -200,6 +245,7 @@ async function withDispatchScope<T>(
     validate,
     reserve,
     accountId,
+    callbacks,
     done: new Promise<void>((resolve) => {
       finish = resolve;
     }),
@@ -268,6 +314,7 @@ class CommandDispatchLifetime {
   #begun = false;
   #cleanup = false;
   #body = false;
+  #callback = false;
   #query = false;
   #response = false;
   #event = false;
@@ -335,6 +382,25 @@ class CommandDispatchLifetime {
   admitsEvents(): boolean {
     return this.#scope.accountId !== undefined;
   }
+  admitsCallbacks(): boolean {
+    return this.#scope.callbacks;
+  }
+  callbackLimit(): number {
+    return this.#scope.callbacks ? SOURCE_ASSOCIATION_CALLBACK_MAX : 0;
+  }
+  async callbacks<T>(run: () => Promise<T>): Promise<T> {
+    this.checkpoint();
+    if (!this.#scope.callbacks || this.#callback) fail('unsupported or repeated callback phase');
+    this.#callback = true;
+    try {
+      const answer = await run();
+      this.checkpoint();
+      if (this.#query) fail('unsettled callback query');
+      return answer;
+    } finally {
+      this.#callback = false;
+    }
+  }
   async body<T>(run: () => Promise<T>): Promise<T> {
     this.checkpoint();
     this.#body = true;
@@ -356,7 +422,12 @@ class CommandDispatchLifetime {
     const lifetime = this;
     tx.query = async function (this: CommandTransaction, ...args: unknown[]) {
       lifetime.assertLive();
-      if (this !== lifetime.#tx || !lifetime.#body || lifetime.#query || args.some((arg) => typeof arg === 'function'))
+      if (
+        this !== lifetime.#tx ||
+        !(lifetime.#body || lifetime.#callback) ||
+        lifetime.#query ||
+        args.some((arg) => typeof arg === 'function')
+      )
         fail('foreign, concurrent or unsupported body query');
       // pg's callback and Query/stream overloads can settle before native IO.
       // Only its Promise string/plain-config forms belong to this finite profile.
@@ -387,7 +458,7 @@ class CommandDispatchLifetime {
         lifetime.checkpoint();
         const result: unknown = await Reflect.apply(original, tx, args);
         lifetime.checkpoint();
-        if (!lifetime.#body) fail('late body query');
+        if (!lifetime.#body && !lifetime.#callback) fail('late body query');
         return result;
       } finally {
         lifetime.#query = false;

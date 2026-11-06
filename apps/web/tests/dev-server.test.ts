@@ -1,7 +1,9 @@
 import { afterAll, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startDevServer, type DevServerOptions } from './support/dev-server.ts';
+import { sharedDevServerEnvName, writeSharedDevServer } from './support/dev-server-fixture.ts';
 
 const root = join(import.meta.dir, '../../..');
 const budgets = { ready: 10_000, firstResponse: 10_000, warmUp: 30_000 };
@@ -132,9 +134,10 @@ async function alive(pid: number) {
 
 test('startDevServer returns after ready, the first response and every hydrated warm-up, and stop ends the process group', async () => {
   const phases: { phase: string; path: string; elapsedMs: number }[] = [];
+  const fixture = fake();
   const server = await startDevServer({
-    ...fake(),
-    env: { HARNESS_FIXTURE: 'environment preserved' },
+    ...fixture,
+    env: { ...fixture.env, HARNESS_FIXTURE: 'environment preserved' },
     warmUpPaths: ['/warm', '/other'],
     onPhase: (phase) => phases.push(phase),
   });
@@ -320,6 +323,36 @@ test('a slow start cannot consume the warm-up budget either', async () => {
     warmUpPaths: ['/fresh-warm-up-budget'],
   });
   await server.stop();
+}, 60_000);
+
+test('an advertised shared server is acquired by files and exclusive command still spawns its own process', async () => {
+  const inner = await startDevServer({ ...fake(), warmUpPaths: [] });
+  const directory = mkdtempSync(join(tmpdir(), 'rezics-shared-dev-server-'));
+  const descriptor = join(directory, 'dev-server.json');
+  writeSharedDevServer(descriptor, {
+    origin: inner.origin,
+    pid: inner.pid!,
+    fixtureDirectory: directory,
+  });
+  const previous = process.env[sharedDevServerEnvName];
+  process.env[sharedDevServerEnvName] = descriptor;
+  try {
+    const shared = await startDevServer({ warmUpPaths: [] });
+    expect(shared.shared).toBe(true);
+    expect(shared.origin).toBe(inner.origin);
+    expect(shared.pid).toBe(inner.pid);
+    const exclusive = await startDevServer({ ...fake(), warmUpPaths: [], exclusive: true });
+    expect(exclusive.shared).toBe(false);
+    expect(exclusive.origin).not.toBe(inner.origin);
+    await exclusive.stop();
+    await shared.stop();
+    expect(await alive(inner.pid!)).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env[sharedDevServerEnvName];
+    else process.env[sharedDevServerEnvName] = previous;
+    await inner.stop();
+    rmSync(directory, { recursive: true, force: true });
+  }
 }, 60_000);
 
 test('a parent exit fails immediately even when its child keeps the output pipe open', async () => {

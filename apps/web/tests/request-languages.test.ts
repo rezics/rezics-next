@@ -1,7 +1,5 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
-import { join } from 'node:path';
 import type { KernelClient } from '@rezics/client';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -12,7 +10,6 @@ import homePage from '../src/kernel/recorded/home-page.json' with { type: 'json'
 import subjectPage from '../src/kernel/recorded/subject-page.json' with { type: 'json' };
 import agentPage from '../src/kernel/recorded/agent-page.json' with { type: 'json' };
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const resource = 'https://api.rezics.test';
@@ -57,10 +54,7 @@ const facetTypes = [
 ];
 
 let matchCount = 1;
-let child: ChildProcess | undefined;
 let browser: Browser | undefined;
-let originPromise: Promise<string> | undefined;
-let serverOutput = '';
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -210,58 +204,26 @@ const fake = Bun.serve({
   },
 });
 
-async function freePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Could not reserve a web test port');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
-}
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
 
-async function site(): Promise<string> {
-  originPromise ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? 'http://127.0.0.1:3000',
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-      serverOutput = output;
-    };
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
-      }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
-  return originPromise;
+function site(): Promise<string> {
+  started ??= startDevServer({
+    env: {
+      PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? 'http://127.0.0.1:3000',
+      KERNEL_ORIGIN: fake.url.origin,
+      AUTH_ISSUER: `${fake.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: clientId,
+      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+      API_RESOURCE: resource,
+      WEBSITE_SCOPES: scopes.join(' '),
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
+  return started;
 }
 
 async function openLive(path: string): Promise<Page> {
@@ -281,7 +243,7 @@ async function openLive(path: string): Promise<Page> {
       .innerText()
       .catch(() => 'unavailable');
     throw new Error(
-      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; calls: ${JSON.stringify(calls.slice(-12))}; server: ${serverOutput}`,
+      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; calls: ${JSON.stringify(calls.slice(-12))}; server: ${server?.diagnostics() ?? ''}`,
     );
   }
   try {
@@ -292,7 +254,7 @@ async function openLive(path: string): Promise<Page> {
       .innerText()
       .catch(() => 'unavailable');
     throw new Error(
-      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; server: ${serverOutput}`,
+      `${String(error)}; page errors: ${errors.join(' | ')}; body: ${details.slice(0, 2000)}; server: ${server?.diagnostics() ?? ''}`,
     );
   }
   return page;
@@ -306,12 +268,7 @@ const expectedAcceptLanguage = (locale: (typeof locales)[number]) =>
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await server?.stop();
 });
 
 test(
@@ -341,7 +298,7 @@ test(
           await option.waitFor({ timeout: 10_000 });
         } catch (error) {
           throw new Error(
-            `${String(error)}; suggestion calls: ${JSON.stringify(calls.filter((call) => call.path.includes('suggest')))}; body: ${(await suggestionsPage.locator('body').innerText()).slice(0, 1500)}; server: ${serverOutput}`,
+            `${String(error)}; suggestion calls: ${JSON.stringify(calls.filter((call) => call.path.includes('suggest')))}; body: ${(await suggestionsPage.locator('body').innerText()).slice(0, 1500)}; server: ${server?.diagnostics() ?? ''}`,
           );
         }
         if (locale === 'zh-Hans') {

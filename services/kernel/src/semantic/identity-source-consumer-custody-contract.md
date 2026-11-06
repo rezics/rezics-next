@@ -967,11 +967,12 @@ the installed `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` (Source-owned sched
 local reads/controls/mutation bodies, directory plan, receiving selection/reconcile/command,
 commit/role, binding-cut and accepted-account receiver), History's typed
 `IDENTITY_HISTORY_ACCOUNTS_DECLARATION` getter with numeric reached multiplicities,
-and the remaining foreign gaps: Access original-source, Mapping/Search/Library
-participant reconcile, and Core's event-callback executor. Fixture parent permissions
+and the reached owner children: Access original-source, Mapping/Search/Library
+participant reconcile, binding consumer work, Library `revalidateHold`, and Core's
+`event-callback-source-association` executor. Fixture parent permissions
 install as trusted grant rows rather than the grant command, because platform.governance
-reach now requires `gate:any` on the acting token. Accounts still refuses whole-parent
-admission while those foreign gaps remain; independent receiving/accounting remains installed.
+reach now requires `gate:any` on the acting token. Whole-parent admission follows those
+installed declarations; independent receiving/accounting remains installed.
 
 The whole parent before first discovery/control IO is exactly:
 
@@ -1006,8 +1007,9 @@ fund Source or Library. No single cached receiving probe replaces them.
 Accounts' additive allocation/control/private grant and fixed child integration are
 installed. History composition binds `IDENTITY_HISTORY_ACCOUNTS_DECLARATION` as a getter
 and Access original-work reads the installed Source child. A complete numeric parent
-remains unavailable while Access original-source, Mapping/Search/Library participant
-reconcile and Core's event-callback profile stay foreign. Search recovery enrollment and the
+sums Access original-source, Mapping/Search/Library participant reconcile, Library
+hold, binding consumer and Core's event-callback-source-association profile from
+those owners' installed declarations. Search recovery enrollment and the
 physical owner's receiving/writer closure remain independent foreign prerequisites.
 Source cannot classify invented foreign SQL, promote null to a grant, or count an absent
 declaration as successful zero child work. The exact local formulas above are the available
@@ -1138,11 +1140,12 @@ the actual single-source-fence profile to the same private original and immutabl
 barrier account, reserving its complete effect plus cleanup from Source. Its native
 body SQL is charged separately on Source; both Library checks use the exact Library
 ledger, and SEMANTIC_ERASURE_PROGRESS is preserved. Preparation, checkpoint and
-finalization include other events/callbacks. Their wider-profile gaps refuse
-before unsupported dispatch, preserve the event semantics and yield pending without
-claiming closure. Intermediate compatible currentness can run without publishing a
-fence or advancing a checkpoint. Positive receiving-selection hold/reconcile also
-requires the actual native hold/role/control child declarations before dispatch.
+finalization dispatch Core's `event-callback-source-association` profile: the same
+progress event plus at most two Source callbacks for producer roles and custody
+insert or terminal append. History record-sources stay refused. Intermediate compatible
+currentness can run without publishing a fence or advancing a checkpoint. Positive
+receiving-selection hold/reconcile charges the Library `revalidateHold` declaration
+and the Source selection/reconcile terms before dispatch.
 
 `readIdentitySourceOriginalCostDisposition` now reports immutable local reads,
 mutation components, closed callsites/schedule, actual Core controls, actual
@@ -1152,8 +1155,12 @@ caller's enforced multiplicities, bindings, original Account reader/technical an
 reversal children, native directory and receiving/native-hold declarations, Library
 same-work literal composition and wider Core executor profiles. The installed
 History private callback/command adapter and Library selected declaration resolve
-those specific operands; they do not fill the other missing whole Source terms. No successful whole Source
-declaration is exported and Accounts' fully spent local allowance is not reused.
+those specific operands. Whole-parent completeness follows the reached owner declarations, never
+getter presence alone. Accounts' fully spent local allowance is not reused.
+
+Decision: original-source native cases admit the Accounts job through `prepareAdmission` and keep
+the original intent. Accounts verify/unverify resume stays on worker-installed Search and Library
+participants.
 
 The additional fixture cases cover genuine one-original/two-attempt/overlap/reentry,
 unavailable/failure and real Core rollback, exact counter/ledger/deadline behavior,

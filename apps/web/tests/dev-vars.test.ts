@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
-import { ensureLocalWorkerVars } from '../scripts/dev-vars.ts';
+import { ensureLocalWorkerVars, readExampleWorkerVars } from '../scripts/dev-vars.ts';
 import { ensureLocalWorkerVars as checkPreparation } from '../scripts/check.ts';
 import { startDevServer } from './support/dev-server.ts';
 
@@ -38,6 +38,18 @@ test('explicit Worker-variable preparation is re-exported and preserves existing
   rmSync(join(directory, '.dev.vars.example'));
   ensureLocalWorkerVars(directory);
   expect(readFileSync(join(directory, '.dev.vars'), 'utf8')).toBe(existing);
+});
+
+test('example Worker vars parse committed development bindings without writing a local file', () => {
+  const directory = join(temporary, 'example-only');
+  mkdirSync(directory);
+  writeFileSync(join(directory, '.dev.vars.example'), readFileSync(join(app, '.dev.vars.example')));
+  expect(readExampleWorkerVars(directory)).toMatchObject({
+    WEBSITE_CLIENT_ID: 'rezics-web-test',
+    KERNEL_ORIGIN: 'http://127.0.0.1:3200',
+  });
+  expect(readExampleWorkerVars(directory).WEBSITE_CLIENT_KEY).toContain('"kty":"EC"');
+  expect(existsSync(join(directory, '.dev.vars'))).toBe(false);
 });
 
 function sandbox(name: string): { checkout: string; directory: string } {

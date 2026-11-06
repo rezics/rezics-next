@@ -1,12 +1,9 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
 
-const app = join(import.meta.dir, '..');
-const timeout = 780_000;
+const timeout = 300_000;
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 type Media = {
@@ -125,80 +122,28 @@ function reserve(bytes: Uint8Array, overrides: Partial<Media> = {}): Media {
   return entry;
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+// The documented command, pointed at the fake through the environment it reads in development.
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
-// The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
+  started ??= startDevServer({
+    env: {
       KERNEL_ORIGIN: fake.url.origin,
-      WEBSITE_CLIENT_KEY: JSON.stringify({ ...privateKey.export({ format: 'jwk' }), kid: 'media-worker-test' }),
-    };
-    // This fixture owns the R2 transport; task-local native bindings must not replace its store.
-    delete env.LOCAL_MEDIA_ORIGIN;
-    delete env.LOCAL_MEDIA_TOKEN;
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    // Diagnostic for the Worker startup: Vite's optimizer timeline (scan, crawl end, rerun) reaches the check log.
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...env, DEBUG: 'vite:deps' },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const missingMedia = `${origin}/media/${randomUUID()}/original`;
-    // Vite's configuration, the Paraglide step and the Cloudflare plugin's Worker graph load run before the port
-    // listens. On a loaded check host that took more than four minutes, so this probe allows 720 seconds; it still
-    // requires the real Worker's media response.
-    const deadline = Date.now() + 720_000;
-    let probe = 'no response yet';
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        // The fixture implements media APIs, so readiness must not depend on home-page discovery or rendering.
-        const response = await fetch(missingMedia, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
-        const ready =
-          response.status === 404 && response.headers.get('content-type')?.includes('application/problem+json');
-        probe = `HTTP ${response.status} ${response.headers.get('content-type') ?? 'no content type'}`;
-        await response.body?.cancel();
-        if (ready) return origin;
-      } catch (error) {
-        probe = error instanceof Error ? error.message : String(error);
-      }
-      if (Date.now() > deadline)
-        throw new Error(`dev server did not serve the media route in time; last probe: ${probe}\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+      LOCAL_MEDIA_ORIGIN: '',
+      LOCAL_MEDIA_TOKEN: '',
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
-afterAll(() => {
+afterAll(async () => {
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 const upload = async (
@@ -444,21 +389,6 @@ test(
     const count = asked().length;
     expect((await fetch(`${origin}/media/${entry.id}/png-12`, { redirect: 'manual' })).status).toBe(404);
     expect(asked().length).toBe(count);
-  },
-  timeout,
-);
-
-test(
-  'the dev server denies a browser read of the config dependency that the Worker imports and still loads it',
-  async () => {
-    // The Worker imports session routes, which import website-scopes. The Cloudflare plugin denies that file to browsers.
-    const origin = await site();
-    const browser = await fetch(`${origin}/src/session/website-scopes.ts`, { redirect: 'manual' });
-    expect(browser.status).toBeGreaterThanOrEqual(400);
-    expect(await browser.text()).not.toContain('commerce_sale:list');
-    const worker = await fetch(`${origin}/media/${randomUUID()}/original`, { redirect: 'manual' });
-    expect(worker.status).toBe(404);
-    expect(worker.headers.get('content-type')).toStartWith('application/problem+json');
   },
   timeout,
 );

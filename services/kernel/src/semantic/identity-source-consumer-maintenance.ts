@@ -10,6 +10,8 @@ import {
   COMMAND_DISPATCH_ALLOWANCE,
   withSourceFenceCommandDispatchLifetime,
   SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE,
+  withSourceAssociationCommandDispatchLifetime,
+  SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE,
 } from '../command/dispatch-lifetime.ts';
 import {
   NativeCollectionWork,
@@ -579,10 +581,55 @@ export function withIdentitySourceFenceCommand<T>(
   );
 }
 
-/** Owner receiving disposition. SourceHistoryNativeAllReachedCalls is the installed
- * IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION. History's typed getter supplies
- * eight-axis children and reached multiplicities; Core's event-callback profile and
- * Access original-source / participant-reconcile bodies remain named foreign gaps. */
+/** Custody prepare/checkpoint/finish: Core's event-callback-source-association profile. */
+export function withIdentitySourceAssociationCommand<T>(
+  pool: Pool,
+  deadline: number,
+  accountId: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  const frame = current.getStore();
+  if (!frame || !live(frame, pool, deadline))
+    throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
+  if (!frame.original) return body();
+  if (!frame.custodyClaimed || accountId !== frame.original.parent.position.account_id)
+    throw new IdentitySourceOriginalUnavailable('identity-source-custody-step-not-claimed');
+  return withSourceAssociationCommandDispatchLifetime(
+    pool,
+    deadline,
+    Object.freeze({
+      original: frame.original.parent.original,
+      validate() {
+        if (!live(frame, pool, deadline)) throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
+      },
+      reserve(allowance: typeof SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE) {
+        if (allowance !== SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE || !live(frame, pool, deadline))
+          throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-changed');
+        const cost = allowance.total.work;
+        if (
+          !reserveIdentitySourceConsumerNativeWork(
+            pool,
+            frame.token,
+            {
+              rows: cost.nativeRows,
+              points: cost.nativePoints,
+              statements: cost.statements,
+              bytes: cost.bytes,
+              engineRequests: 0,
+            },
+            cost,
+          )
+        )
+          throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-exhausted');
+      },
+    }),
+    accountId,
+    body,
+  );
+}
+
+/** Owner receiving disposition. Installed owner getters supply eight-axis children;
+ * any absent operand names its owner and callable. */
 export async function readIdentitySourceOriginalCostDisposition() {
   const {
     IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION: IDENTITY_SOURCE_HISTORY_GUARD_DECLARATIONGetter,
@@ -601,6 +648,11 @@ export async function readIdentitySourceOriginalCostDisposition() {
   const history = historyComposition();
   const library = await import('../library/collection-source-work.ts');
   const effects = await import('../library/identity-scope-effects.ts');
+  const access = await import('../access/agent-verification-identity.ts');
+  const reversal = await import('../access/agent-verification-identity-reversal.ts');
+  const participants = await import('./identity-epoch-participant-cost.ts');
+  const binding = await import('./identity-adapters/identity-epoch-binding.ts');
+  const libraryOriginal = await import('../library/identity-original-work.ts');
   const ownValue = (module: object, name: string): unknown => {
     const field = Object.getOwnPropertyDescriptor(module, name);
     return field && 'value' in field ? field.value : undefined;
@@ -608,6 +660,12 @@ export async function readIdentitySourceOriginalCostDisposition() {
   const invoke = (module: object, name: string): unknown => {
     const value = ownValue(module, name);
     return typeof value === 'function' ? (value as () => unknown)() : value;
+  };
+  const asWork = (value: unknown): Readonly<{ work: WorkDimensions; engineRequests: 0 }> | null => {
+    if (!value || typeof value !== 'object') return null;
+    const declaration = value as { work?: WorkDimensions; engineRequests?: number };
+    if (declaration.engineRequests !== 0 || !declaration.work) return null;
+    return Object.freeze({ work: declaration.work, engineRequests: 0 as const });
   };
   const libraryValue = invoke(library, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
   const libraryDeclaration =
@@ -655,7 +713,20 @@ export async function readIdentitySourceOriginalCostDisposition() {
       ? value.multiplicities
       : ('requires executable reached History caller multiplicities' as const),
   });
-  const whole = composeIdentitySourceReachedCosts([
+  const schedule = IDENTITY_SOURCE_ORIGINAL_SCHEDULE.source;
+  const accessOriginal = asWork(invoke(access, 'ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION'));
+  const accessReversal = asWork(invoke(reversal, 'ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION'));
+  const jobRead = asWork(invoke(participants, 'IDENTITY_EPOCH_JOB_READ_DECLARATION'));
+  const stepReconcile = asWork(invoke(participants, 'IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION'));
+  const bindingConsumer = asWork(invoke(binding, 'IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION'));
+  const nativeHold = (() => {
+    const hold = ownValue(libraryOriginal, 'declareLibraryIdentityCustodyOperation');
+    if (typeof hold !== 'function') return null;
+    const declared = (hold as (operation: 'revalidateHold') => unknown)('revalidateHold');
+    return asWork(declared);
+  })();
+  const association = SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE.total;
+  const reached = composeIdentitySourceReachedCosts([
     {
       name: 'AccountsLocalControl',
       calls: 1,
@@ -667,6 +738,25 @@ export async function readIdentitySourceOriginalCostDisposition() {
       name: 'AdditionalOriginalTransferControl',
       calls: 1,
       declaration: { work: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, engineRequests: 0 },
+    },
+    {
+      name: 'Access.originalSource',
+      calls: schedule.original + schedule.prepare + schedule.checkpoint + schedule.finish,
+      declaration: accessOriginal,
+    },
+    { name: 'Access.reversalSettlement', calls: 1, declaration: accessReversal },
+    { name: 'Mapping.readJob', calls: schedule.published, declaration: jobRead },
+    {
+      name: 'Mapping.Search.Library.reconcileStepReceipt',
+      calls: schedule.participantReconcile,
+      declaration: stepReconcile,
+    },
+    { name: 'Binding.consumerWork', calls: 1, declaration: bindingConsumer },
+    { name: 'Library.revalidateHold', calls: schedule.receivingSelection, declaration: nativeHold },
+    {
+      name: 'Core.eventCallbackSourceAssociation',
+      calls: schedule.prepare + schedule.checkpoint + schedule.finish,
+      declaration: association,
     },
   ]);
   const missing = Object.freeze([
@@ -681,10 +771,25 @@ export async function readIdentitySourceOriginalCostDisposition() {
           'LibraryAllReachedCalls: readLibraryScopeEffectsPageWithWork on the exact original ledger; complete bounded page/current/locked-plan/seal/six-driver declarations; IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION',
         ]
       : []),
-    'Access original source: readAccountIdentitySource eight-axis declaration',
-    'Mapping/Search/Library participantReconcile: identityEpochStore.readJob and reconcileStepReceipt',
-    'Core wider executor profile: Source callback/association, custody preparation/checkpoint/finish',
+    ...(reached.state === 'missing' ? reached.missing : []),
   ]);
+  const whole =
+    reached.state === 'complete'
+      ? reached
+      : composeIdentitySourceReachedCosts([
+          {
+            name: 'AccountsLocalControl',
+            calls: 1,
+            declaration: { work: HISTORY_ORIGINAL_LOCAL_ALLOWANCE, engineRequests: 0 },
+          },
+          { name: 'SourceHistoryNativeAllReachedCalls', calls: 1, declaration: sourceDeclaration },
+          { name: 'LibraryAllReachedCalls', calls: 1, declaration: libraryDeclaration },
+          {
+            name: 'AdditionalOriginalTransferControl',
+            calls: 1,
+            declaration: { work: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, engineRequests: 0 },
+          },
+        ]);
   return Object.freeze({
     state: whole.state === 'complete' && missing.length === 0 ? ('complete' as const) : ('missing' as const),
     whole,
@@ -698,6 +803,7 @@ export async function readIdentitySourceOriginalCostDisposition() {
       mutations: IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS,
       callsites: IDENTITY_SOURCE_LOCAL_CALLS,
       command: COMMAND_DISPATCH_ALLOWANCE,
+      association,
     }),
     schedule: IDENTITY_SOURCE_ORIGINAL_SCHEDULE,
     widerExecutor: IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS,
@@ -705,6 +811,11 @@ export async function readIdentitySourceOriginalCostDisposition() {
     historyCallableInstalled: typeof history.withPrepaidAgentIdentityHistoryUnit === 'function',
     libraryDeclaration,
     librarySameWorkCallableInstalled: typeof ownValue(effects, 'readLibraryScopeEffectsPageWithWork') === 'function',
+    accessOriginal,
+    jobRead,
+    stepReconcile,
+    bindingConsumer,
+    nativeHold,
     missing,
   });
 }

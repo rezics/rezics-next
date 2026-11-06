@@ -105,6 +105,19 @@ asks `authorizationFor` for the job home and each source home it delivers. Indep
 the one-hop 308 plus the survivor GET. Foreign-home reviewed Person evidence answers HTTP 503
 `atomic_guard_unavailable`. `done: true` still requires mapping and both participant receipts.
 
+Original-funded Identity Source receiving prepares, checkpoints and finishes through Core's
+`event-callback-source-association` profile on the same Pool, Work client, ledger, reservation,
+receipt, source position and deadline. Publication rereads Mapping `readJob` and the three
+complete participant ACKs without inserting a new event. Access owns the original-source reader
+and reversal settlement; Commerce and Search own their participant bodies; Library owns
+`revalidateHold`. Installed owner declarations determine the disposition. Absent operands name
+that owner and callable. Subject erasure keeps a separate source walk. Native History composition
+installs the Accounts declaration binder before commands; merge, replay, custody and Accounts
+readback keep those original bodies. Worker-installed Search and Library participants remain
+required before Accounts verify/unverify can resume a job. Original-source native cases admit
+that Accounts job through `prepareAdmission` and keep the original intent; they do not resume
+publication without those worker participants.
+
 ## Concurrent control and coherent admission
 
 ### Immutable cut before any new effect
