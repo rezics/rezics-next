@@ -7,12 +7,8 @@ import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import type { CloudEvent, Envelope } from '../../../src/events/log.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createNativeContentSystemWithWriteRateOverrides, nativeGrantor, nativeOperator } from './native-system.ts';
-import {
-  grantAccountActions,
-  grantResource,
-  installRealmMember,
-  provisionNativeDiscussionBoard,
-} from './native-board-host.ts';
+import { seedGovernanceAuthority } from './disclosure-fixtures.ts';
+import { grantResource, installRealmMember, provisionNativeDiscussionBoard } from './native-board-host.ts';
 
 const WRITE_RATE_OVERRIDES = JSON.stringify({
   'new-account': { write: { maximum: 10_000, seconds: 86_400 } },
@@ -47,7 +43,11 @@ export async function replyNoticeFixture() {
     instrumentNativePool(system.database.pool, growth);
     const operator = nativeOperator(system);
     const grantor = nativeGrantor(system);
-    const board = await provisionNativeDiscussionBoard(system.kernel, operator, { label: 'Reply notice' });
+    const board = await provisionNativeDiscussionBoard(system.kernel, operator, {
+      label: 'Reply notice',
+      creatorAccountId: operator.actor.accountId,
+      grantor,
+    });
     const recipient = system.actors.author;
     const actor = system.actors.other;
     const principal = system.actors.moderator;
@@ -57,7 +57,7 @@ export async function replyNoticeFixture() {
       [principal.actor.accountId, principal.bearer],
     ]);
     async function grant(subject: string, action: string, target: { route: number; id: string }): Promise<void> {
-      await grantAccountActions(system.kernel, grantor, target, subject, [action]);
+      await seedGovernanceAuthority(system.database.pool, target.route, target.id, subject, [action]);
     }
     for (const id of credentials.keys()) {
       await grant(id, 'account:read', grantResource(id));

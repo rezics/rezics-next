@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AccountActor } from '../../../src/request/access.ts';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
-import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -14,7 +13,8 @@ import {
   registerNativeContentAccount,
   type NativeContentSystem,
 } from './native-system.ts';
-import { grantAccountActions, provisionNativeDiscussionBoard } from './native-board-host.ts';
+import { seedGovernanceAuthority } from './disclosure-fixtures.ts';
+import { grantNativeCreationAuthority, provisionNativeDiscussionBoard } from './native-board-host.ts';
 import type { ApiResult, Fixture, NoticeKind, Persona } from '../../../../../specs/content-notification-driver.ts';
 
 const AUDIENCE = 'https://content.test';
@@ -174,6 +174,8 @@ async function createBoard(
   const board = await provisionNativeDiscussionBoard(system.kernel, nativeOperator(system), {
     label: `${label} notification`,
     realmVisibility,
+    creatorAccountId: nativeOperator(system).actor.accountId,
+    grantor: nativeGrantor(system),
   });
   return { id: board.id, realmId: board.realmId, sourceIds: board.sourceIds };
 }
@@ -184,13 +186,9 @@ async function installGrant(
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  await grantAccountActions(
-    system.kernel,
-    nativeGrantor(system),
-    { route: route(resourceId), id: resourceId },
-    accountId,
-    actions,
-  );
+  // thread:read and post:read are not Global-reach actions, and Content owner
+  // roles do not include access:grant, so POST /v1/grants cannot admit them.
+  await seedGovernanceAuthority(system.database.pool, route(resourceId), resourceId, accountId, actions);
 }
 
 export async function createNotificationFixture(options: { growth?: boolean } = {}): Promise<NotificationFixture> {
@@ -257,22 +255,18 @@ export async function createNotificationFixture(options: { growth?: boolean } = 
     };
     let currentNow = fixture.now;
     const contentPartitions = new Set<number>();
+    // Native-system already issued the operator's Global creation receipts. A second
+    // random-key POST is Access-forbidden; RealmOwner still needs its own receipt,
+    // issued before the fixture clock moves.
+    await grantNativeCreationAuthority(system.kernel, nativeGrantor(system), realmOwner.id);
     await system.clock.setCommandTime(fixture.now);
     await system.clock.setCursorVerificationTime(fixture.now);
     await bootstrapRelease(system.database.pool, bundledRelease, () => new Date(fixture.now));
-    // Author already holds parent-creation grants from the native system. RealmOwner needs the
-    // same ordinary receipts; boards themselves are created by governance so delivery does not
-    // wait on Access admitting Space creation for ordinary accounts.
-    await grantAccountActions(system.kernel, nativeGrantor(system), PLATFORM_RESOURCE, realmOwner.id, [
-      'space:create',
-      'realm:create',
-      'subject:create',
-    ]);
 
-    const [publicBoard, protectedBoard] = await Promise.all([
-      createBoard(system, 'public', 'public'),
-      createBoard(system, 'protected', 'protected'),
-    ]);
+    // One operator creates both boards. Parallel subject writes hash onto nearby
+    // partitions and exhaust the command fence; provision them in order.
+    const publicBoard = await createBoard(system, 'public', 'public');
+    const protectedBoard = await createBoard(system, 'protected', 'protected');
     fixture.publicBoardId = publicBoard.id;
     fixture.protectedBoardId = protectedBoard.id;
     for (const id of [...publicBoard.sourceIds, ...protectedBoard.sourceIds])

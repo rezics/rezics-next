@@ -295,31 +295,45 @@ function requirements(
   validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
 ) {
   const deadlines = new WeakMap<AuthoritativeTime, number>();
+  async function prepareAnchors(
+    actor: Parameters<NonNullable<Access['prepare']>>[0],
+    context: Parameters<NonNullable<Access['prepare']>>[3],
+    primaryPrepare: () => Promise<unknown> | undefined,
+  ) {
+    const attempt = accessCommandAttempt(context);
+    if (!attempt) throw new GrantDeniedError();
+    const primary = await primaryPrepare();
+    let deadline = Math.min(context.deadline, permissionEvidenceDeadline(primary) ?? -Infinity);
+    const checks: (Requirement & { evidence: unknown })[] = [];
+    for (const requirement of extra) {
+      const evidence = await access.prepare?.(actor, requirement.action, requirement.resource, context);
+      deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+      checks.push({ ...requirement, evidence });
+    }
+    if (Date.now() >= deadline) throw new GrantDeniedError();
+    await within(deadline, () =>
+      withConnection(context.pool, async (client) => {
+        const bounded = deadlineClient(client, deadline);
+        if (validate && !(await validate(bounded, attempt.time))) throw new GrantDeniedError();
+        for (const check of checks)
+          if (!(await access.authorize(bounded, actor, check.action, check.resource, check.evidence, attempt.time)))
+            throw new GrantDeniedError();
+      }),
+    );
+    deadlines.set(attempt.time, deadline);
+    return primary;
+  }
   const combined = deriveAccess(access, {
     async prepare(actor, action, resource, context) {
-      const attempt = accessCommandAttempt(context);
-      if (!attempt) throw new GrantDeniedError();
-      const primary = await access.prepare?.(actor, action, resource, context);
-      let deadline = Math.min(context.deadline, permissionEvidenceDeadline(primary) ?? -Infinity);
-      const checks: (Requirement & { evidence: unknown })[] = [];
-      for (const requirement of extra) {
-        const evidence = await access.prepare?.(actor, requirement.action, requirement.resource, context);
-        deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-        checks.push({ ...requirement, evidence });
-      }
-      if (Date.now() >= deadline) throw new GrantDeniedError();
-      await within(deadline, () =>
-        withConnection(context.pool, async (client) => {
-          const bounded = deadlineClient(client, deadline);
-          if (validate && !(await validate(bounded, attempt.time))) throw new GrantDeniedError();
-          for (const check of checks)
-            if (!(await access.authorize(bounded, actor, check.action, check.resource, check.evidence, attempt.time)))
-              throw new GrantDeniedError();
-        }),
-      );
-      deadlines.set(attempt.time, deadline);
-      return primary;
+      return prepareAnchors(actor, context, () => access.prepare?.(actor, action, resource, context));
     },
+    ...(access.preparePage
+      ? {
+          async preparePage(actor, action, page, context) {
+            return prepareAnchors(actor, context, () => access.preparePage?.(actor, action, page, context));
+          },
+        }
+      : {}),
   });
   const roles = resourceRoleCatalogue(access);
   if (roles) installResourceRoleCatalogue(combined, roles);

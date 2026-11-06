@@ -67,7 +67,9 @@ async function expectCreated<T>(
   return result.value;
 }
 
-/** Ordinary grant command with a durable receipt. Identity-only SQL rows are not a substitute. */
+/** Ordinary grant command with a durable receipt. Identity-only SQL rows are not a substitute.
+ * The receipt key is the exact grant intent so a later identical POST replays instead of
+ * inserting a second row. Access maps that unique conflict to 403, not 409. */
 export async function grantAccountActions(
   kernel: NativeHttpKernel,
   grantor: NativeHttpActor,
@@ -89,10 +91,28 @@ export async function grantAccountActions(
         valid: '(,)',
       },
       origin,
+      {
+        'idempotency-key': JSON.stringify(
+          `accounts.grant:${resource.route}:${resource.id}:${accountId}:${action}`,
+        ),
+      },
     );
     if (result.status !== 201 && result.status !== 409)
       throw new Error(`Grant ${action} on ${resource.id} failed (${result.status}): ${result.text}`);
   }
+}
+
+/** Space, Realm and subject creation on the Global Context. Fixture creators that provision native
+ * sources receive these as ordinary receipts, the same way the media fixtures grant them. */
+export const NATIVE_CREATION_ACTIONS = ['space:create', 'realm:create', 'subject:create'] as const;
+
+export async function grantNativeCreationAuthority(
+  kernel: NativeHttpKernel,
+  grantor: NativeHttpActor,
+  accountId: string,
+  origin = 'https://content.test',
+): Promise<void> {
+  await grantAccountActions(kernel, grantor, resourceOf(GLOBAL_CONTEXT), accountId, NATIVE_CREATION_ACTIONS, origin);
 }
 
 function resourceOf(id: string): { route: number; id: string } {
@@ -109,6 +129,10 @@ export async function provisionNativeDiscussionBoard(
     label: string;
     origin?: string;
     realmVisibility?: 'public' | 'protected';
+    /** Creator account that receives an ordinary space:manage receipt on the new Space. */
+    creatorAccountId?: string;
+    /** Grantor with `access:grant`; defaults to the Space creator. */
+    grantor?: NativeHttpActor;
   },
 ): Promise<NativeDiscussionBoard> {
   const origin = options.origin ?? 'https://content.test';
@@ -126,6 +150,15 @@ export async function provisionNativeDiscussionBoard(
     `${label} space creation`,
   );
   const spaceId = stringField(jsonObject(spaceBody.space, `${label} space`).spaceId, `${label} space id`);
+  if (options.creatorAccountId)
+    await grantAccountActions(
+      kernel,
+      options.grantor ?? creator,
+      resourceOf(spaceId),
+      options.creatorAccountId,
+      ['space:manage'],
+      origin,
+    );
 
   const realmBody = await expectCreated(
     await command<{ realm: { realmId: string; headRevisionId: string } }>(

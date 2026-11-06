@@ -162,6 +162,7 @@ async function runWorker(): Promise<void> {
     { launchWork, shutdownWork },
     { registerEffects, effectWorkflowId },
     { readBatch },
+    { installNativeHistory },
   ] = await Promise.all([
     import('@dbos-inc/dbos-sdk'),
     import('pg'),
@@ -171,7 +172,11 @@ async function runWorker(): Promise<void> {
     import('../../../src/events/effects.ts'),
     import('../../../src/events/effects.ts'),
     import('../../../src/events/log.ts'),
+    import('../../../src/composition/history.ts'),
   ]);
+  // This child is a plain bun process, not `bun test`, so bunfig test preloads
+  // do not install History. Enqueue and effect.run both call isIdentityOriginalEffect.
+  installNativeHistory();
   const databaseUrl = process.env.NOTIFICATION_EFFECT_DATABASE_URL;
   if (!databaseUrl) throw new Error('NOTIFICATION_EFFECT_DATABASE_URL is required');
   const pool = new Pool({ connectionString: databaseUrl, max: 12 });

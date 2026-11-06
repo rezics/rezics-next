@@ -23,6 +23,7 @@ export class RecordSourceSetUnavailableError extends Error {
 // Load the exact owner only on first use. A top-level dynamic import would deadlock if
 // Source imports History's declaration port while History is awaiting that import.
 // A declaration file alone is unavailable; failures in an existing module propagate.
+// The owner is Semantic's public record-source-set entry, two directories above this adapter.
 const requireNative = createRequire(import.meta.url);
 const ownerModule = fileURLToPath(new URL('../../semantic/record-source-set.ts', import.meta.url));
 let producer: RecordSourceSetProducer | undefined;

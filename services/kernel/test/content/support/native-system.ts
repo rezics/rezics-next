@@ -487,7 +487,25 @@ async function createNativeContentSystemWithOptions(
     // Fixture provisioning uses its own native client, independent of the suite's
     // ordinary scope ceiling. Bootstrap installs grants, never client consent.
     const grantorClientId = `${namespace}_grantor`;
-    const grantorScopes = ['access:grant', 'space:create', 'realm:create', 'subject:create', 'account:suspend'];
+    const grantorScopes = [
+      'access:grant',
+      'space:create',
+      'space:manage',
+      'realm:create',
+      'realm:manage',
+      'subject:create',
+      'account:suspend',
+      'account:read',
+      'account:update',
+      'board:read',
+      'thread:create',
+      'thread:read',
+      'post:create',
+      'post:read',
+      'report:create',
+      'moderation:takedown',
+      'moderation:read_reports',
+    ];
     await nativeAuth.internal.registerClient({ clientId: grantorClientId, firstParty: true, scopes: grantorScopes });
     const grantor = await issue({
       accountId: governance.actor.accountId,
@@ -527,9 +545,12 @@ async function createNativeContentSystemWithOptions(
       await assertSetupResponse(response, request, status);
     };
     // Ordinary grant receipts on the Global parent, issued with the grantor's access:grant
-    // token. Whether Access admits those rows for Space/Realm creation is Access-owned.
+    // token. Governance bootstrap installs the platform role and organization:create only;
+    // Space/Realm/subject creation are separate receipts for the operator who provisions
+    // boards and for the ordinary personas who may author later. Whether Access admits those
+    // rows for Space/Realm creation is Access-owned.
     const parentCreation = ['space:create', 'realm:create', 'subject:create'] as const;
-    for (const actor of [author, other, moderator, suspended])
+    for (const actor of [governance, author, other, moderator, suspended])
       await grantAccountActions(kernel, grantor, PLATFORM_RESOURCE, actor.actor.accountId, parentCreation);
     await command(`/v1/accounts/${suspended.actor.accountId}:suspend`, { reason: 'Native suspended persona' }, 200);
 

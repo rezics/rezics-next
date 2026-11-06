@@ -595,6 +595,12 @@ notice unique key alone do not prove this selected race outcome. Required modera
 outcomes remain available independently of optional toggles, including the existing suspended-recipient policy;
 missing, pending or deleted recipients retain their refusal. Inbox/target reads apply current disclosure again.
 The manager coordinates this consumption boundary with Content and Web in their owner documents.
+Notice fixtures provision sources with ordinary Global creation receipts, sequential native boards, and
+`seedGovernanceAuthority` for `thread:read`/`post:read` because those actions are not Global-reach and Content
+owner roles omit `access:grant`. Isolated notification effect hosts install native History before enqueue, matching
+the production worker; bun test preloads do not apply to that child. Account-erasure notice fixtures consume
+`post.published` as notice authority. Native source-set commands cannot return `noEffect` after begin registers
+the seal-guard callback.
 
 Turning an optional kind off affects future optional sends, not old inbox entries, content authority or follows.
 Preserve effective defaults, null-reset merge patch, shared `expectedVersion` CAS, idempotency and self-only

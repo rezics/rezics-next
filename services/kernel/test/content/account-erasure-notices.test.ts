@@ -24,9 +24,10 @@ import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createPersonas } from '../support/personas.ts';
 import { testKernel, testRouteKey } from '../support/test-kernel.ts';
+import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import { observeSql } from './support/sql-observer.ts';
 import {
-  grantAccountActions,
+  grantNativeCreationAuthority,
   grantResource,
   installRealmMember,
   provisionNativeDiscussionBoard,
@@ -54,9 +55,16 @@ beforeAll(async () => {
     pool: db.pool,
     workClient: client,
     auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
-    writeRate: createWriteRateLimiter({ secret: 'account-notice-erasure-native-test-secret' }),
+    writeRate: createWriteRateLimiter({
+      secret: 'account-notice-erasure-native-test-secret',
+      overrides: HIGH_RATE_OVERRIDES,
+    }),
   });
   people = await createPersonas(kernel, { version: 1, pool: db.pool, auth });
+  // Governance bootstrap does not mint space:create. Staff provisions native
+  // boards through ordinary Space/Realm routes, so it holds the same Global
+  // creation receipts the notification fixtures issue to the operator.
+  await grantNativeCreationAuthority(kernel, people.staff, people.staff.accountId, 'https://ordinary.api.test');
   await bootstrapRelease(db.pool, bundledRelease);
   // The same production Access instance is used for direct delivery before Auth
   // hands the DBOS SDK to Content, and for the registered Content worker effects.
@@ -100,20 +108,15 @@ async function startContentWork(options: { relays?: boolean } = {}) {
 }
 
 async function grant(accountId: string, action: string, resourceId: string): Promise<void> {
-  await grantAccountActions(
-    kernel,
-    people.staff,
-    grantResource(resourceId),
-    accountId,
-    [action],
-    'https://ordinary.api.test',
-  );
+  const resource = grantResource(resourceId);
+  await seedGovernanceAuthority(db.pool, resource.route, resource.id, accountId, [action]);
 }
 
 async function nativeBoard(title: string) {
   return provisionNativeDiscussionBoard(kernel, people.staff, {
     label: title,
     origin: 'https://ordinary.api.test',
+    creatorAccountId: people.staff.accountId,
   });
 }
 
@@ -134,7 +137,7 @@ function mentionBody(accountIds: readonly string[]) {
   });
 }
 
-async function postCreatedEvent(postId: string): Promise<CloudEvent> {
+async function postPublishedEvent(postId: string): Promise<CloudEvent> {
   const { rows } = await db.admin.query<{
     id: string;
     partition_no: number;
@@ -146,7 +149,7 @@ async function postCreatedEvent(postId: string): Promise<CloudEvent> {
     data: unknown;
   }>(
     `SELECT id::text,partition_no,epoch,type,recorded_at,position::text,subject::text,data
-     FROM core.outbox WHERE type='com.rezics.content.post.created.v1' AND data->>'itemId'=$1`,
+     FROM core.outbox WHERE type='com.rezics.content.post.published.v1' AND data->>'itemId'=$1`,
     [postId],
   );
   expect(rows).toHaveLength(1);
@@ -279,7 +282,7 @@ async function measureAccountErasureWorker(subjects: readonly ErasureWorkerSubje
 }
 
 async function deliverNoticeEffects(postId: string): Promise<void> {
-  const event = await postCreatedEvent(postId);
+  const event = await postPublishedEvent(postId);
   for (const effect of noticeEffects) if (effect.types.includes(event.type)) await effect.run(event);
 }
 
@@ -415,7 +418,7 @@ test("account notice erasure deletes the account's inbox and seen marker in boun
       ),
     ).toBe(true);
   }
-  const mentionEvent = await postCreatedEvent(mentionPost.id);
+  const mentionEvent = await postPublishedEvent(mentionPost.id);
   const mentionData = mentionEvent.data as { actorId: string; itemId: string; revisionId: string; threadId: string };
   expect(mentionData).toMatchObject({
     actorId: people.bob.accountId,
