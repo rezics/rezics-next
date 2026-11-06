@@ -22,12 +22,6 @@ ceilings. A plan node without `Rows Removed by *` is omitted from the removed-ro
 
 ## Growth checks
 
-Decision: retain the original harness assertions and add only causal regressions from the seeded HTTP/page walk;
-isolated stack acceptance uses the same selected Auth issuer at the API and browser.
-The native launcher regressions retain their original assertions while acquiring walk admission and a migrated
-compiler database before browser startup or SQL imports. Prerequisite success alone does not qualify the Library
-journey or its measured growth.
-
 A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
 shared blocks and statements, never time. An optional `byteBounds` can also bound `requestBytes` and/or `responseBytes`
 using the same `constant`, `logarithmic` and `linear` rules. Its default slack is 0 absolute and 10% relative, and a
