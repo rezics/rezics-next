@@ -53,8 +53,7 @@ import {
   type AgentSelfSource as CandidateAgentSelfSource,
   type CandidateSource,
 } from './fences.ts';
-import { checkMediaObject } from '../content/cover-reference.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
+import { contentLifecycleOf } from './adapters/content-lifecycle.ts';
 import { resolvedSemanticDomain } from './adapters/registry.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
@@ -105,7 +104,7 @@ function composedDomain(pool?: Pool) {
 }
 
 function contentLifecycle(pool?: Pool) {
-  return resolvedSemanticDomain(pool)?.ports.contentLifecycle;
+  return contentLifecycleOf(pool);
 }
 
 export { writeFacts } from './write-facts.ts';
@@ -876,19 +875,15 @@ export async function readSubject(
   // its selected media's exact source home before disclosing the cover metadata.
   if (summary?.cover && routeKey) {
     const lifecycle = contentLifecycle(pool);
-    const media = lifecycle
-      ? await lifecycle.checkCover({ query: pool.query.bind(pool) }, summary.cover.media)
-      : await checkMediaObject({ query: pool.query.bind(pool) }, summary.cover.media, 'cover');
+    const media = await lifecycle.checkCover({ query: pool.query.bind(pool) }, summary.cover.media);
     if (!media?.source) summary.cover = null;
     else {
       const { source, external_id, field_group } = media.source;
       const tuple = {
-        route: lifecycle
-          ? lifecycle.importedTupleRoute(routeKey, source, external_id)
-          : tupleRoute(routeKey, source, external_id),
+        route: lifecycle.importedTupleRoute(routeKey, source, external_id),
         source,
         external_id,
-        field_group: field_group as 'facts' | 'summary' | 'cover',
+        field_group,
       };
       const [fence] = await readAnchoredFences(pool, partitionOf(tuple.route), [tuple]);
       if (!fence || fence.takenDown) summary.cover = null;

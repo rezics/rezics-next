@@ -2,8 +2,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withReadTransaction } from './read.ts';
-import { VoteReviewStaleError, VoteReviewUnavailableError } from '../rating/own-votes-review.ts';
-import { resolvedSemanticDomain } from './adapters/registry.ts';
+import { ratingReviewOf } from './adapters/rating-review.ts';
 import type { IdentityRatingEpochObservation, RatingReviewPort } from './contract/domain-ports.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityEpochStore } from './identity-adapters/index.ts';
@@ -19,18 +18,7 @@ export type IdentityRatingEpochWitness = IdentityRatingEpochObservation;
 export type IdentityRatingEpochReader = (tx: CommandTransaction, home: number) => Promise<IdentityEpochState>;
 
 function review(): RatingReviewPort {
-  return (
-    resolvedSemanticDomain()?.ports.ratingReview ?? {
-      subjectChanged: () => new VoteReviewStaleError('subject_changed'),
-      identityEpochChanged: () => new VoteReviewStaleError('identity_epoch_changed'),
-      pending: () => new VoteReviewUnavailableError('identity_pending'),
-      moved: (home) => Object.assign(new VoteReviewUnavailableError('identity_observation_unavailable'), { home }),
-      absent: () => new VoteReviewUnavailableError('identity_observation_unavailable'),
-      undisclosed: () => new VoteReviewUnavailableError('identity_observation_unavailable'),
-      unavailable: () => new VoteReviewUnavailableError('identity_observation_unavailable'),
-      foreignControl: () => new VoteReviewUnavailableError('atomic_guard_unavailable'),
-    }
-  );
+  return ratingReviewOf();
 }
 
 /** Released native-home observations. These do not fence identity publication through an owner commit. */

@@ -2,8 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
-import { VoteReviewStaleError, VoteReviewUnavailableError } from '../rating/own-votes-review.ts';
-import { resolvedSemanticDomain } from './adapters/registry.ts';
+import { ratingReviewOf, VoteReviewUnavailableError } from './adapters/rating-review.ts';
 import {
   IDENTITY_RATING_REVIEW_MAX_CONTROL_LOCATORS,
   IDENTITY_RATING_REVIEW_MAX_KEYS,
@@ -531,7 +530,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         native.evidence,
       );
       if (reviewed.state === 'changed')
-        throw resolvedSemanticDomain()?.ports.ratingReview.subjectChanged() ?? new VoteReviewStaleError('subject_changed');
+        throw ratingReviewOf().subjectChanged();
       // A withdrawn/replaced directory can make the new cut unclassifiable while
       // its source epoch stays unchanged. It still invalidates this exact review.
       if (
@@ -539,10 +538,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         reviewed.reason !== 'missing-owner' &&
         identityRatingReviewEvidence(native.evidence) !== operand.evidence
       )
-        throw (
-          resolvedSemanticDomain()?.ports.ratingReview.identityEpochChanged() ??
-          new VoteReviewStaleError('identity_epoch_changed')
-        );
+        throw ratingReviewOf().identityEpochChanged();
       if (reviewed.state !== 'reviewed') throwUnavailable(reviewed);
       if (
         reviewed.operand.evidence !== operand.evidence ||
@@ -555,10 +551,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
             locator.group !== operand.controlLocators[index]?.group,
         )
       )
-        throw (
-          resolvedSemanticDomain()?.ports.ratingReview.identityEpochChanged() ??
-          new VoteReviewStaleError('identity_epoch_changed')
-        );
+        throw ratingReviewOf().identityEpochChanged();
       requireAccessDeadline(deadline);
       const publishedHeads = operand.controlLocators.map((locator) => {
         const row = native.evidence.mapping.currentRows.find(

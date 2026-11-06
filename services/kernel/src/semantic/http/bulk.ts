@@ -15,8 +15,7 @@ import type { OpenAPIV3 } from 'openapi-types';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandUnavailableError } from '../../command/command.ts';
 import { resourceAuthorization } from '../../access/resource-authorization.ts';
-import { checkMediaObject } from '../../content/cover-reference.ts';
-import { resolvedSemanticDomain } from '../adapters/registry.ts';
+import { contentLifecycleOf } from '../adapters/content-lifecycle.ts';
 import { discardConnection, withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
@@ -115,14 +114,8 @@ async function probeCovers(pool: Pool, partition: number, ids: readonly string[]
       if (!state || state.writeState === 'moved')
         throw new CommandUnavailableError(state?.writeState === 'moved' ? 'moved' : 'deadline', partition);
       const available = new Map<string, boolean>();
-      const lifecycle = resolvedSemanticDomain(pool)?.ports.contentLifecycle;
-      for (const id of ids)
-        available.set(
-          id,
-          lifecycle
-            ? (await lifecycle.checkCover(connection, id)) !== null
-            : (await checkMediaObject(connection, id, 'cover')) !== null,
-        );
+      const lifecycle = contentLifecycleOf(pool);
+      for (const id of ids) available.set(id, (await lifecycle.checkCover(connection, id)) !== null);
       await connection.query('COMMIT');
       return available;
     } catch (error) {

@@ -2,9 +2,7 @@ import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
-import { checkMediaObjects, type CoverReference } from '../content/cover-reference.ts';
-import { tupleRoute } from '../content/imported-contract.ts';
-import { resolvedSemanticDomain } from './adapters/registry.ts';
+import { contentLifecycleOf } from './adapters/content-lifecycle.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -427,12 +425,8 @@ async function projectSummaries(
     }),
   ))
     partitions.add(partition);
-  const lifecycle = resolvedSemanticDomain(deps.pool)?.ports.contentLifecycle;
-  const media = mediaIds.length
-    ? lifecycle
-      ? await lifecycle.checkCovers(deps.client, mediaIds)
-      : await checkMediaObjects(deps.client, mediaIds, 'cover')
-    : new Map<string, CoverReference | null>();
+  const lifecycle = contentLifecycleOf(deps.pool);
+  const media = mediaIds.length ? await lifecycle.checkCovers(deps.client, mediaIds) : new Map();
   // Read each exact selected source tuple once, in independently anchored homes.
   // Media custody and source fences are facts, not permission or disclosure caches.
   const tuples = new Map<string, SourceFenceTuple>();
@@ -440,9 +434,7 @@ async function projectSummaries(
     if (!reference) continue;
     const { source, external_id, field_group } = reference.source;
     const tuple = {
-      route: lifecycle
-        ? lifecycle.importedTupleRoute(deps.routeKey, source, external_id)
-        : tupleRoute(deps.routeKey, source, external_id),
+      route: lifecycle.importedTupleRoute(deps.routeKey, source, external_id),
       source,
       external_id,
       field_group,
@@ -488,9 +480,7 @@ async function projectSummaries(
       continue;
     const { source, external_id, field_group } = reference.source;
     const tuple = {
-      route: lifecycle
-        ? lifecycle.importedTupleRoute(deps.routeKey, source, external_id)
-        : tupleRoute(deps.routeKey, source, external_id),
+      route: lifecycle.importedTupleRoute(deps.routeKey, source, external_id),
       source,
       external_id,
       field_group,

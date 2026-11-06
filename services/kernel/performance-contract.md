@@ -23,6 +23,18 @@ retirement against fake ports; the existing growth-work-client, selected-runtime
 sdk-retirement-fence and growth-retention fixtures remain the bounded-work proof. Derived cost stays on the existing
 admitted path.
 
+## Semantic domain composition
+
+Decision: Semantic contract/core/application add no SQL, scan or extra statement. Public ports are Library custody,
+Search currentness, Rating review, Content lifecycle including batch cover reads, hashing, routing and the fact
+store. Native adapters are bound by ordinary `createKernel` / `server` / `worker` composition through
+`composeSemanticDomain` and `createSemanticWorkModule`. Rating-review keys 2 / locators 2 / operand 16,384 bytes live
+in identity-core `rating-review-bounds.ts`. Observed counters remain item facts 512, those rating-review limits,
+identity page 100 originals, epoch segment 100 pages and frontier 8 keys / 2,048 bytes / 100 step rows. Compact
+fake-port and ordinary composition tests pin the domain; cost stays on the existing identity-epoch and item growth
+contracts. Native identity-epoch, actor/request/deadline, proof identity, Source custody, original/terminal admission
+and architecture acceptance remain the later capability repair.
+
 ## Finite bounds
 
 Producer bounds are immutable, closed declarations over all nine axes. Composition uses overflow-safe sums, applies
