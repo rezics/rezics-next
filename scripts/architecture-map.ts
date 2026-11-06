@@ -14,7 +14,7 @@ const COMPACT_KIND: Record<ModuleKind, string> = {
   'composition root': 'r',
   'UI/transport library': 'u',
 };
-export const MAX_MODULE_MAP_CHARACTERS = 7_000;
+export const MAX_MODULE_MAP_CHARACTERS = 12_000;
 
 function compactModuleId(id: string): string {
   return id.replace(/^kernel-/, 'k').replace(/^web-/, 'w');
@@ -71,9 +71,15 @@ export function formatModuleMap(manifest: ArchitectureManifest): string {
       ].join('|');
     });
   const result = [legend, ...rows].join('\n');
-  if (result.length > MAX_MODULE_MAP_CHARACTERS)
-    throw new Error(`Generated module map is ${result.length} characters; maximum is ${MAX_MODULE_MAP_CHARACTERS}.`);
-  return result;
+  if (result.length <= MAX_MODULE_MAP_CHARACTERS) return result;
+  // Every worker prompt carries this map, so an oversized manifest degrades it rather than failing every start.
+  const omitted = '\n... more modules: read docs/architecture/modules.json';
+  let kept = legend;
+  for (const row of rows) {
+    if (kept.length + 1 + row.length + omitted.length > MAX_MODULE_MAP_CHARACTERS) return kept + omitted;
+    kept += `\n${row}`;
+  }
+  return kept;
 }
 
 export function loadManifest(rootInput: string): ArchitectureManifest {
