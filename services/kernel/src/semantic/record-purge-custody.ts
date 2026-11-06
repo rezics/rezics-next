@@ -45,7 +45,9 @@ type ResourceHistoryCommand =
   | 'zone.configure'
   | 'zone.publish'
   | 'zone.delete'
-  | 'zone.restore';
+  | 'zone.restore'
+  | 'zone.takedown'
+  | 'zone.release_takedown';
 
 type Locator = Readonly<{
   reference: NativeRecordPurgeReference;

@@ -13,6 +13,7 @@ import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../t
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ZoneConfigurationResponse, ZoneMetadataResponse, ZoneOwned, ZonePublic } from './contract.ts';
 import { zoneReadable, zoneReadEligibility, zoneWithheld } from './eligibility.ts';
+import { hasWithholding } from './takedown.ts';
 import { hasZoneOwnerRole, ownerZoneKeys, readZoneHead, type ZoneHead, zoneOwnerIsActive } from './resource-store.ts';
 
 export function requireZoneAccount(actor: Actor): asserts actor is AccountActor {
@@ -163,6 +164,8 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
         if (!owner || !allowed) throw new ProblemError('forbidden');
         if (!row.restoreUntil || Date.parse(at) >= Date.parse(row.restoreUntil)) throw new ProblemError('not_found');
       } else if (!editable && !(owner && allowed)) throw new ProblemError('forbidden');
+      // Stored configuration carries the retained originals of any takedown; only the owner reads it then.
+      if (!owner && hasWithholding(row)) throw new ProblemError('forbidden');
       return { zone: zoneOwned(row), configuration: row.configuration, mounts: row.mounts };
     });
   }

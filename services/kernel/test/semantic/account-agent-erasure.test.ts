@@ -7,17 +7,21 @@ import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck, type AccountActor, type Resource } from '../../src/request/access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { SUBJECT_REVISED } from '../../src/semantic/events.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/record.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 const admin = new pg.Pool({ connectionString: url, max: 2 });
 const route = 0x3460;
 const accounts = { owner: newId(route), organization: newId(route), software: newId(route) };
@@ -55,6 +59,14 @@ async function authorization(action: string, resource: Resource): Promise<Comman
     denied,
     async authorize(tx, attempt) {
       if (!(await check(tx, attempt.time))) throw denied();
+      // The verified check is the evidence Access binds for the actor's own history roles.
+      bindCommandHistoryEvidence(tx, [
+        {
+          accountRoute: routeOf(owner.accountId)!,
+          accountId: owner.accountId,
+          roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+        },
+      ]);
       return 'execute' as const;
     },
   };
@@ -95,6 +107,12 @@ test("an erased account's agent keeps no label, current or past, and a later ens
   expect(
     (await admin.query("SELECT body FROM semantic.fact WHERE subject_id = $1 AND kind = 'label'", [agent])).rows,
   ).toEqual([{ body: secondName }]);
+  // The replaced label survives only as restricted erasure-source custody, recorded in the producer's transaction.
+  const removed = await admin.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM semantic.erasure_source_disposition WHERE partition_no = $1 AND store = 'fact' AND disposition = 'removed'",
+    [partitionOf(routeOf(agent)!)],
+  );
+  expect(removed.rows[0]!.n).toBeGreaterThan(0);
   await realAccess.grant({ route, id: agent }, 'owner', 'subject:read');
   const read = async () => {
     const check = await accessCheck(

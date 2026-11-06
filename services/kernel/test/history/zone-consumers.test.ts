@@ -11,6 +11,7 @@ import { commandHistoryKind } from '../../src/history/record.ts';
 import { HistoryRegistry, type HistoryArtifact, type HistoryBarrier } from '../../src/history/registry.ts';
 import { registerZoneHistoryConsumers } from '../../src/history/zone-consumers.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createBody, resourceFixture, type ResourceFixture } from '../zones/resource-fixture.ts';
 
 let f: ResourceFixture;
@@ -27,6 +28,28 @@ test('actual Zone command custody reaches the registered owners and waits for th
   body.configuration.scope = [];
   const zone = await f.create(body);
   const path = `/v1/zones/${zone.id}`;
+  // PROBE (temporary, removed before landing): owner role row versus the fixture authority clock.
+  const probeRows = await f.db.admin.query(
+    'SELECT subject_kind, subject_id, subject_role, grant_role, valid::text AS valid FROM access.resource_role_grant WHERE resource_id = $1',
+    [zone.id],
+  );
+  const probeAt = f.clock().toISOString();
+  const probeHeld = await f.db.admin.query(
+    "SELECT count(*)::int AS n FROM access.resource_role_grant WHERE resource_id = $1 AND grant_role = 'semantic.zone.owner' AND subject_id = $2 AND valid @> $3::timestamptz",
+    [zone.id, f.accounts.owner, probeAt],
+  );
+  const probeNow = await f.db.admin.query('SELECT now()::text AS db_now');
+  console.log(
+    'PROBE',
+    JSON.stringify({
+      rows: probeRows.rows,
+      at: probeAt,
+      held: probeHeld.rows,
+      dbNow: probeNow.rows,
+      owner: f.accounts.owner,
+      route: routeOf(zone.id),
+    }),
+  );
 
   const configuration = structuredClone(body.configuration);
   configuration.labels.en = 'Private receipt payload';
@@ -50,6 +73,23 @@ test('actual Zone command custody reaches the registered owners and waits for th
   expect(deleted.status).toBe(200);
   const restored = await f.call('owner', 'POST', `${path}:restore`, {}, f.conditional(deleted.body.zone.revision));
   expect(restored.status).toBe(200);
+  await f.access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'operator', 'moderation:takedown');
+  const taken = await f.call(
+    'operator',
+    'POST',
+    `${path}:takedown`,
+    { pointers: ['/labels/en'] },
+    f.conditional(restored.body.zone.revision),
+  );
+  expect(taken.status).toBe(200);
+  const released = await f.call(
+    'operator',
+    'POST',
+    `${path}:releaseTakedown`,
+    { pointers: ['/labels/en'] },
+    f.conditional(taken.body.zone.revision),
+  );
+  expect(released.status).toBe(200);
 
   const route = routeOf(zone.id)!;
   const partition = partitionOf(route);
@@ -59,7 +99,7 @@ test('actual Zone command custody reaches the registered owners and waits for th
      WHERE partition_no=$1 AND source_key=$2 ORDER BY artifact_type,locator`,
     [partition, sourceKey],
   );
-  expect(sources.rows).toHaveLength(10);
+  expect(sources.rows).toHaveLength(14);
 
   const storedEvents = await f.events(zone.id);
   expect(storedEvents.map((event) => event.type).sort()).toEqual([...ZONE_HISTORY_EVENT_TYPES].sort());
@@ -71,7 +111,7 @@ test('actual Zone command custody reaches the registered owners and waits for th
   const registry = new HistoryRegistry();
   registerZoneHistoryConsumers({ history: registry });
   expect(registry.familyGaps('zones')).toEqual(['zones:durable-work/v1']);
-  expect(registry.familyDefinitions().find((definition) => definition.family === 'zones')?.sources).toHaveLength(10);
+  expect(registry.familyDefinitions().find((definition) => definition.family === 'zones')?.sources).toHaveLength(14);
 
   await f.tombstoneOwner();
   const barrierRow = (
@@ -119,7 +159,7 @@ test('actual Zone command custody reaches the registered owners and waits for th
     return noEffect(observations);
   });
   expect(readiness.value).toEqual(
-    Array.from({ length: 10 }, () => ({ ready: false, gap: 'zone-history-terminal-account-branch-required' })),
+    Array.from({ length: 14 }, () => ({ ready: false, gap: 'zone-history-terminal-account-branch-required' })),
   );
   expect((await f.raw(zone.id))?.configuration).not.toBeNull();
 }, 180_000);

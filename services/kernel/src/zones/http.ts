@@ -17,6 +17,7 @@ import {
   ZoneCreateInputSchema,
   ZoneConfigureInputSchema,
   ZonePublishInputSchema,
+  ZoneTakedownInputSchema,
   ZoneResponseSchema,
   ZoneMetadataResponseSchema,
   ZoneConfigurationResponseSchema,
@@ -111,7 +112,10 @@ export function zoneRoutes(
         headers: headers(),
         body: zoneSchema(ZoneCreateInputSchema()),
         response: { 201: zoneSchema(ZoneResponseSchema()), ...failures() },
-        detail: { ...detail('create', 'zone:create', false, true), 'x-resource-types': ['semantic.zone'] },
+        detail: {
+          ...detail('create', 'zone:create', false, true),
+          'x-resource-types': ['semantic.zone', 'semantic.context'],
+        },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireZoneAccount(actor);
@@ -342,6 +346,48 @@ export function zoneRoutes(
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           commands().mutate(actor, params.id, 'restore', null, expected, key, job.deadline),
+        );
+        session.record(result);
+        cache(set, result.value.zone.revision);
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/zones/:id', 'takedown'),
+      {
+        params,
+        headers: conditionalHeaders(),
+        body: zoneSchema(ZoneTakedownInputSchema),
+        response: { 200: zoneSchema(ZoneResponseSchema()), ...failures() },
+        detail: detail('takedown', 'moderation:takedown', false, true),
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireZoneAccount(actor);
+        const expected = zoneIfMatch(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          commands().mutate(actor, params.id, 'takedown', body, expected, key, job.deadline),
+        );
+        session.record(result);
+        cache(set, result.value.zone.revision);
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/zones/:id', 'releaseTakedown'),
+      {
+        params,
+        headers: conditionalHeaders(),
+        body: zoneSchema(ZoneTakedownInputSchema),
+        response: { 200: zoneSchema(ZoneResponseSchema()), ...failures() },
+        detail: detail('release_takedown', 'moderation:takedown', false, true),
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireZoneAccount(actor);
+        const expected = zoneIfMatch(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          commands().mutate(actor, params.id, 'release_takedown', body, expected, key, job.deadline),
         );
         session.record(result);
         cache(set, result.value.zone.revision);
