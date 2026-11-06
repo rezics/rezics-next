@@ -129,7 +129,7 @@ export async function createReleasedLibraryPopulation(
       try {
         await close();
       } catch (cleanup) {
-        throw new AggregateError([error, cleanup], 'Released Library setup and cleanup failed');
+        throw new AggregateError([error, cleanup], 'Released Library setup and cleanup failed', { cause: error });
       }
       throw error;
     }

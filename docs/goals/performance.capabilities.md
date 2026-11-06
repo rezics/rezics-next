@@ -115,14 +115,18 @@ hidden/denied/suspended/empty controls. Bound derivation is
 
 **Test choice:** Fewest tests: one HTTP/native helper per admitted public cell covering first/deep/empty together,
 sparse and unrelated-history growth as independent axes, one composed 16-read page, one alias/duplicate, one resume,
-one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites.
+one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites. Isolated Auth's
+Access pool binds the parent Kernel receipt ring before public registration; the composed world settles growth admin
+independently of the driver-owned runtime pool and keeps the original setup error.
 
-**Remaining evidence limits:** `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels` remain frozen on
-Commerce's unadopted completion/history and owner-query/libraryOperations contracts. Privacy-reduction served-share
-grows hidden unrelated subjects and checks a nondecreasing served share for the selected public job; it does not yet
-prove a production acknowledgement delay `τ`. Original/terminal alias uses native `POST /v1/subjects:merge`; if
-identity publication is still preparing, that cell reports the producer failure rather than a local matcher. Owner
-direct/prepared plans stay with Commerce. Native/browser/root acceptance after integration still owns promotion.
+**Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access receipt
+composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`
+remain frozen on Commerce's unadopted completion/history and owner-query/libraryOperations contracts.
+Privacy-reduction served-share grows hidden unrelated subjects and checks a nondecreasing served share for the
+selected public job; it does not yet prove a production acknowledgement delay `τ`. Original/terminal alias uses
+native `POST /v1/subjects:merge`; if identity publication is still preparing, that cell reports the producer
+failure rather than a local matcher. Owner direct/prepared plans stay with Commerce. Native/browser/root
+acceptance after integration still owns promotion.
 
 ## private-follow-edge
 
