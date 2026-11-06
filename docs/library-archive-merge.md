@@ -40,11 +40,11 @@ only fixed codes, without raw JSON parser messages, archive values or private na
 The output preserves records and manifest omissions as private evidence. Every installed section reports its
 computed count, `present` or `empty` capture, and one of these treatments:
 
-| Sections                                                                     | Treatment                                                       |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| entries, labels, assignments, annotations, journals, provenance              | `requires-explicit-mapping`; validation admits no native effect |
-| sessions, units, history, holdings, collections, collectionPins, occurrences | `retained-unsupported`                                          |
-| bangumiUploads, bangumiEvidence, malImports, malEvidence, V4 provider sections         | `retained-unsupported`                                          |
+| Sections                                                                       | Treatment                                                       |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| entries, labels, assignments, annotations, journals, provenance                | `requires-explicit-mapping`; validation admits no native effect |
+| sessions, units, history, holdings, collections, collectionPins, occurrences   | `retained-unsupported`                                          |
+| bangumiUploads, bangumiEvidence, malImports, malEvidence, V4 provider sections | `retained-unsupported`                                          |
 
 Excluded trash, Commerce/financial evidence, publication output and unavailable sources remain the producer's
 explicit omissions. Source observations require their native admit/correct review; their privacy never grants publication or becomes an annotation.
