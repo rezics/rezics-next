@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
@@ -260,10 +260,57 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
+/** Present Vite with copied fake modules whose copied-tree relative graph resolves. */
+function dropUnresolvedFakeModules(kernel: string) {
+  const prefix = kernel.endsWith('/') ? kernel : `${kernel}/`;
+  const known = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  const moduleAvailable = (specifier: string, importerDir: string): boolean => {
+    if (!specifier.startsWith('.')) return true;
+    let resolved: string;
+    try {
+      resolved = Bun.resolveSync(specifier, importerDir);
+    } catch {
+      return false;
+    }
+    const path = resolved.split('?')[0]!;
+    if (path !== kernel && !path.startsWith(prefix)) return true;
+    const remembered = known.get(path);
+    if (remembered !== undefined) return remembered;
+    if (visiting.has(path)) return true;
+    visiting.add(path);
+    try {
+      if (!/\.(?:[cm]?[jt]sx?)$/.test(path)) {
+        known.set(path, true);
+        return true;
+      }
+      const source = readFileSync(path, 'utf8');
+      const dir = path.replace(/[/\\][^/\\]+$/, '') || path;
+      for (const match of source.matchAll(/(?:from\s+|import\(\s*)['"]([^'"]+)['"]/g)) {
+        const inner = match[1];
+        if (inner?.startsWith('.') && !moduleAvailable(inner, dir)) {
+          known.set(path, false);
+          return false;
+        }
+      }
+      known.set(path, true);
+      return true;
+    } finally {
+      visiting.delete(path);
+    }
+  };
+  const fake = join(kernel, 'fake');
+  for (const name of readdirSync(fake)) {
+    if (!name.endsWith('.ts')) continue;
+    if (!moduleAvailable(`./fake/${name}`, kernel)) rmSync(join(fake, name));
+  }
+}
+
 test(
   'Storybook discovers the same new files through Vite in the browser',
   async () => {
     const directory = sandbox();
+    dropUnresolvedFakeModules(join(directory, 'src/kernel'));
     let custody: ReturnType<typeof ownBunProcess> | undefined;
     let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
     await withCleanup(async () => {

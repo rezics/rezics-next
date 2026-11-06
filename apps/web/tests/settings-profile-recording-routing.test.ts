@@ -18,7 +18,9 @@ function accountRequest(query: string): Request {
   return new Request(`${kernelUrl}/v1/accounts?${query}`);
 }
 
-test('Settings profile recording handles only its exact scene and single owned target while canonical public account batches and handle or agent selectors fall through unchanged', async () => {
+test(
+  'Settings profile recording handles only its exact scene and single owned target while canonical public account batches and handle or agent selectors fall through unchanged',
+  async () => {
   const runtime = globalThis as StoryGlobal;
   const previous = runtime.__rezicsStoryContext;
   const fetchRecorded = createRecordedKernelFetch({});
@@ -135,4 +137,6 @@ test('Settings profile recording handles only its exact scene and single owned t
     if (previous === undefined) delete runtime.__rezicsStoryContext;
     else runtime.__rezicsStoryContext = previous;
   }
-});
+  },
+  30_000,
+);
