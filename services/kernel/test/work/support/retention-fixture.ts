@@ -26,12 +26,7 @@ export const UNIT_RETENTION_PAYLOAD: RetentionPayloadFanout = {
   output: 1,
 };
 
-const familyInsert: Readonly<
-  Record<
-    (typeof WORKFLOW_RETENTION_PAYLOAD_FAMILIES)[number]['table'],
-    Readonly<{ columns: string; values: string; key: string }>
-  >
-> = {
+const familyInsert = {
   workflow_status: { columns: '', values: '', key: 'workflow_uuid' },
   workflow_input: { columns: 'inputs', values: "'[]'", key: 'workflow_uuid' },
   workflow_output: { columns: 'output, error', values: "'null', NULL", key: 'workflow_uuid' },
@@ -56,7 +51,7 @@ const familyInsert: Readonly<
     values: "'retention-fixture-' || ordinal, 'null', ordinal - 1, 1, 'portable_json'",
     key: 'workflow_uuid',
   },
-};
+} as const;
 
 export function expectedRetentionInventory(
   selected: number,
@@ -73,6 +68,7 @@ export async function insertRetentionPayload(
 ): Promise<void> {
   if (ids.length === 0) return;
   const copies = {
+    workflow_status: 0,
     workflow_input: Math.min(1, fanout.input),
     workflow_output: Math.min(1, fanout.output),
     operation_outputs: fanout.operations,
@@ -80,12 +76,11 @@ export async function insertRetentionPayload(
     workflow_events_history: fanout.history,
     notifications: fanout.notifications,
     streams: fanout.streams,
-  } as const;
+  } as const satisfies WorkflowRetentionPayloadInventory;
   for (const family of WORKFLOW_RETENTION_PAYLOAD_FAMILIES) {
-    if (family.table === 'workflow_status') continue;
     const copiesForTable = copies[family.table];
-    if (copiesForTable === 0) continue;
     const spec = familyInsert[family.table];
+    if (copiesForTable === 0) continue;
     const repeating = family.table === 'workflow_input' || family.table === 'workflow_output';
     await pool.query(
       repeating
@@ -119,20 +114,21 @@ export async function insertRetentionStatus(
         created_at, updated_at, completed_at, application_name)
      SELECT value, $2, 'retention.fixture', '[]', 0, $3, $4, $5, $6
        FROM unnest($1::text[]) AS value`,
-    [ids, fields.status, fields.createdAt, fields.completedAt ?? fields.createdAt, fields.completedAt, fields.application],
+    [
+      ids,
+      fields.status,
+      fields.createdAt,
+      fields.completedAt ?? fields.createdAt,
+      fields.completedAt,
+      fields.application,
+    ],
   );
 }
 
-export const RETENTION_OWNED_TABLES = WORKFLOW_RETENTION_PAYLOAD_FAMILIES.map((family) => ({
-  table: family.table,
-  key: family.key,
-})) as const;
+export const RETENTION_OWNED_TABLES = WORKFLOW_RETENTION_PAYLOAD_FAMILIES;
 
 /** Payload tables have no status FK; status delete still cascades events, history, notifications and streams. */
-export async function deleteOwnedRetentionRows(
-  pool: Pick<Pool, 'query'>,
-  idPattern: string,
-): Promise<void> {
+export async function deleteOwnedRetentionRows(pool: Pick<Pool, 'query'>, idPattern: string): Promise<void> {
   for (const table of ['workflow_input', 'workflow_output', 'operation_outputs'] as const) {
     await pool.query(`DELETE FROM dbos.${table} WHERE workflow_uuid LIKE $1`, [idPattern]);
   }

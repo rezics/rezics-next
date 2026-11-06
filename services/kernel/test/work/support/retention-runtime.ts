@@ -20,8 +20,9 @@ const pause = async () => {
   await new Promise(() => {});
 };
 
-const originalQuery = pool.query.bind(pool);
-pool.query = ((query: unknown, values?: unknown, ...rest: unknown[]) => {
+const originalQuery = pool.query.bind(pool) as (...args: unknown[]) => ReturnType<typeof pool.query>;
+pool.query = ((...args: unknown[]) => {
+  const [query, values] = args;
   const config = typeof query === 'string' ? { text: query, values } : (query as { text?: string; values?: unknown });
   const text = String(config.text ?? '');
   if (text.includes(WORKFLOW_RETENTION_SELECT_TAG) || text.includes('ORDER BY completed_at, workflow_uuid')) {
@@ -31,11 +32,7 @@ pool.query = ((query: unknown, values?: unknown, ...rest: unknown[]) => {
     const limit = params.find((value) => value === 1000) ?? 1000;
     console.log(`selection:${String(cutoff)} application:${String(named)} limit:${String(limit)}`);
   }
-  return rest.length === 0 && values === undefined
-    ? originalQuery(query as never)
-    : rest.length === 0
-      ? originalQuery(query as never, values as never)
-      : originalQuery(...([query, values, ...rest] as never[]));
+  return originalQuery(...args);
 }) as typeof pool.query;
 
 const isolated = new Proxy(client, {

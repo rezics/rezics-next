@@ -182,7 +182,10 @@ function logEvidence(name: string, report: GrowthReport, runs: readonly RunEvide
         backgroundBlocks: cost.backgroundBlocks ?? 0,
         backgroundStatements: cost.backgroundStatements ?? 0,
         relations: Object.fromEntries(
-          Object.entries(cost.relations).map(([relation, value]) => [relation, { rows: value.rows, blocks: value.blocks }]),
+          Object.entries(cost.relations).map(([relation, value]) => [
+            relation,
+            { rows: value.rows, blocks: value.blocks },
+          ]),
         ),
         statementsList: (report.samples.find((sample) => sample.scale === scale)?.statementRepetitions[0] ?? []).map(
           (entry) => ({
@@ -252,12 +255,7 @@ function applicationFor(series: string): string {
   return `${prefix}${series}`;
 }
 
-async function growUnrelated(
-  growth: GrowthDatabase,
-  series: string,
-  scale: number,
-  previous: number,
-): Promise<void> {
+async function growUnrelated(growth: GrowthDatabase, series: string, scale: number, previous: number): Promise<void> {
   const added = historyCount(scale) - historyCount(previous);
   const offset = historyCount(previous);
   const application = applicationFor(series);
