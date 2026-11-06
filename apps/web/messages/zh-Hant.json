@@ -25,6 +25,7 @@
   "game_visit_context": "Context：{context}",
   "game_visit_realm": "Realm：{realm}",
   "game_visit_return": "返回目前的遊戲閱讀",
+  "game_visit_restart": "從目前的遊戲閱讀重新開始",
   "game_visit_inspect": "檢視",
   "game_visit_inspect_assertion": "檢視目前的「{property}」陳述",
   "game_visit_inspection_title": "目前的分類陳述",

@@ -25,6 +25,7 @@
   "game_visit_context": "Contexto: {context}",
   "game_visit_realm": "Realm: {realm}",
   "game_visit_return": "Volver a la lectura actual del juego",
+  "game_visit_restart": "Empezar de nuevo desde la lectura actual del juego",
   "game_visit_inspect": "Inspeccionar",
   "game_visit_inspect_assertion": "Inspeccionar la afirmación actual de {property}",
   "game_visit_inspection_title": "Afirmación de clasificación actual",

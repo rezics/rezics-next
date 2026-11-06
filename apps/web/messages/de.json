@@ -25,6 +25,7 @@
   "game_visit_context": "Kontext: {context}",
   "game_visit_realm": "Realm: {realm}",
   "game_visit_return": "Zur aktuellen Spielansicht zurückkehren",
+  "game_visit_restart": "Erneut mit der aktuellen Spielansicht beginnen",
   "game_visit_inspect": "Prüfen",
   "game_visit_inspect_assertion": "Aktuelle Aussage zu „{property}“ prüfen",
   "game_visit_inspection_title": "Aktuelle Klassifikationsaussage",

@@ -214,6 +214,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Catalogue pages keep the statement-propose viewer; quotation `{ kind }` overlays stay off this envelope. */
+function cataloguePageViewer(
+  viewer: SubjectPageData['viewer'] | { kind: 'anonymous' | 'account'; account?: string } | undefined,
+): SubjectPageData['viewer'] | undefined {
+  return viewer && 'state' in viewer ? viewer : undefined;
+}
+
 /** Whether the template places a node of this type anywhere, including inside slots. */
 function placesType(content: readonly unknown[], type: string): boolean {
   return content.some(
@@ -350,18 +357,32 @@ export async function loadSubjectPage(
           return { kind: 'redirect', id: profile.handle, target: 'account' };
       }
       // An absent, handleless or foreign profile supplies no admitted public @ address.
-      const { account: _account, ...catalogue } = result.data;
+      const { account: _account, viewer, ...catalogue } = result.data;
       if (catalogue.subject !== id || (options.realm && !catalogue.context))
         throw new PageReadError('dependency_unavailable', 503);
-      return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
+      const pageViewer = cataloguePageViewer(viewer);
+      return {
+        kind: 'page',
+        page: {
+          ...catalogue,
+          subject: id,
+          ...(options.realm ? { requestedRealm: options.realm } : {}),
+          ...(pageViewer ? { viewer: pageViewer } : {}),
+        },
+      };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     if (options.realm && !result.data.context) throw new PageReadError('dependency_unavailable', 503);
-    const { account: _account, ...page } = result.data;
+    const { account: _account, viewer, ...page } = result.data;
+    const pageViewer = cataloguePageViewer(viewer);
     // Read the existing mounted Terms authority resource once, alongside this page reading.
     // An advice outage must never fail or conceal the admitted public page.
-    const currentPage = page as SubjectPageData;
+    const currentPage = {
+      ...page,
+      subject: page.subject ?? null,
+      ...(pageViewer ? { viewer: pageViewer } : {}),
+    } as SubjectPageData;
     const reading = subjectBody(currentPage);
     const eligible =
       reading &&
@@ -384,7 +405,8 @@ export async function loadSubjectPage(
       page: {
         ...page,
         subject: page.subject ?? null,
-        requestedRealm: options.realm,
+        ...(options.realm ? { requestedRealm: options.realm } : {}),
+        ...(pageViewer ? { viewer: pageViewer } : {}),
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };
@@ -1109,10 +1131,10 @@ export function SubjectPage({
               realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
               definition={page.catalogue?.digest}
               via={storyArcPublicOrigin({
-                currentHref,
                 id: read.subject.id,
                 locale,
-                realm: page.context?.population.kind === 'realm' ? page.context.population.id : undefined,
+                ...(currentHref ? { currentHref } : {}),
+                ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
               })}
             />
           )}
@@ -1177,9 +1199,9 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               locale={locale}
               context={page.context?.id ?? read.subject.context}
-              realm={realm}
               type={read.subject.type}
               definition={read.subject.release}
+              {...(realm ? { realm } : {})}
               {...(currentHref ? { source: currentHref } : {})}
             />
           )}
@@ -1486,7 +1508,7 @@ export function SubjectPage({
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
-                onContinue={onWorkContinue}
+                {...(onWorkContinue ? { onContinue: onWorkContinue } : {})}
               />
             ) : null}
             {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
