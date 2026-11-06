@@ -1583,6 +1583,8 @@ remain independent obligations.
 Default legacy bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
 home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
 advances the cursor; one later local command takes at most 100 independently released native closure receipts.
+A contended home is skipped inside the batch so successful empty-home seals still reach that take; a later batch
+reads the retained native closure instead of re-exporting.
 Four initial native wake events seed bounded chains under the same worker registration. The first actual source ACK
 in each batch commits its continuation at that source home, preserving the existing queue partitioning instead of
 serializing every batch on topology home 0. A crash before the ACK is recovered by the already durable DBOS effect.
