@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -49,6 +50,7 @@ import {
   CHECK_HOST_MIN_TMP_INODES,
   BASE_REFRESH_INTERVAL_SECONDS,
   BASE_RETENTION_SECONDS,
+  retireExpiredBasesShell,
   sshControlDirectory,
   unixListenerFits,
   installedPackageCacheCheck,
@@ -3488,6 +3490,29 @@ test('bases older than the retention period are removed by host cleanup while th
   expect(cleanup).toContain('current=$(readlink -f /srv/rezics-check/bases/current');
   expect(cleanup).toContain('[ "$base" = "$current" ] && continue');
   expect(cleanup).toContain('flock -x 9');
+});
+
+test('expired bases leave the bases lock as renames; the recursive delete runs after the lock is released', async () => {
+  const checkRoot = mkdtempSync(join(repository, '.temp/base-retire-'));
+  try {
+    mkdirSync(join(checkRoot, 'bases/base-now'), { recursive: true });
+    mkdirSync(join(checkRoot, 'bases/base-old/tree'), { recursive: true });
+    writeFileSync(join(checkRoot, 'bases/base-old/tree/payload'), 'old');
+    symlinkSync(join(checkRoot, 'bases/base-now'), join(checkRoot, 'bases/current'));
+    const old = new Date(Date.now() - 3 * BASE_RETENTION_SECONDS * 1000);
+    utimesSync(join(checkRoot, 'bases/base-old'), old, old);
+    const retire = spawnSync('sh', ['-c', retireExpiredBasesShell(checkRoot)], { encoding: 'utf8' });
+    expect(retire.status, retire.stderr).toBe(0);
+    expect(existsSync(join(checkRoot, 'bases/base-old'))).toBe(false);
+    expect(readlinkSync(join(checkRoot, 'bases/current'))).toBe(join(checkRoot, 'bases/base-now'));
+    expect(spawnSync('flock', ['-n', join(checkRoot, 'bases/.lock'), 'true']).status).toBe(0);
+    for (let waited = 0; waited < 50 && readdirSync(join(checkRoot, 'bases')).some((name) => name.startsWith('.retired-')); waited++) {
+      await Bun.sleep(100);
+    }
+    expect(readdirSync(join(checkRoot, 'bases')).filter((name) => name.startsWith('.retired-'))).toEqual([]);
+  } finally {
+    rmSync(checkRoot, { recursive: true, force: true });
+  }
 });
 
 test('an rsync exit 24 completes the upload and changing build outputs stay out of the upload', async () => {
