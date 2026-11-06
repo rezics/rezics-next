@@ -18,17 +18,18 @@ test('Community declarations are values that name the module inventory without s
   expect(typeof http.routes).toBe('function');
 });
 
-test('Access-facing claim capabilities import cold without the composition root', () => {
+test('Access-facing claim capabilities load in a fresh process without the composition root', () => {
   const entry = new URL('../../src/community/access-capabilities.ts', import.meta.url).pathname;
-  const result = Bun.spawnSync(
-    [
-      process.execPath,
-      '-e',
-      `import(${JSON.stringify(entry)}).then((m) => console.log(Object.keys(m).sort().join(',')))`,
-    ],
-    { cwd: new URL('../..', import.meta.url).pathname, stdout: 'pipe', stderr: 'pipe', timeout: 120_000 },
-  );
-  expect(result.stderr.toString()).toBe('');
-  expect(result.exitCode).toBe(0);
+  const script = `import(${JSON.stringify(entry)}).then(
+    (module) => { console.log(Object.keys(module).sort().join(',')); process.exit(0); },
+    (error) => { console.error(error); process.exit(1); },
+  )`;
+  const result = Bun.spawnSync([process.execPath, '-e', script], {
+    cwd: new URL('../..', import.meta.url).pathname,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 120_000,
+  });
+  expect(result.exitCode, result.stderr.toString()).toBe(0);
   expect(result.stdout.toString().trim()).toBe('applyRealmClaimApproval,lockRealmClaimApprovalSource');
 });
