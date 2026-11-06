@@ -1,21 +1,22 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { CREDIT_SEARCH_LIMITS } from '../../src/search/credit-search.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { itemFacts } from '../../src/semantic/item.ts';
 import {
   createCreditSearchSource,
   receiveCreditSearch,
   receiveCreditSearchMatch,
 } from '../../src/semantic/credit-search.ts';
+import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -110,68 +111,21 @@ const authorOf = (work: Record<string, any>, target: string) =>
     (entry) => entry.value.content === target,
   )!;
 
-async function seedPeople(count: number, prefix: string) {
-  const ids = Array.from({ length: count }, () => newId(44100));
-  const client = await admin.connect();
-  try {
-    await client.query('BEGIN');
-    const subjects: unknown[] = [];
-    const revisions: unknown[] = [];
-    const facts: unknown[] = [];
-    for (const [index, id] of ids.entries()) {
-      const transaction = randomUUID();
-      const rows = itemFacts(id, { labels: { en: `${prefix} ${index}` } });
-      subjects.push({
-        route: routeOf(id),
-        subject_id: id,
-        type: 'schema:Person',
-        recorded_transaction_id: transaction,
-        current_facts: rows.length,
-        current_release: bundledDigest,
-      });
-      revisions.push({
-        route: routeOf(id),
-        subject_id: id,
-        recorded_transaction_id: transaction,
-        release: bundledDigest,
-      });
-      for (const fact of rows)
-        facts.push({
-          route: routeOf(id),
-          subject_id: id,
-          recorded_transaction_id: transaction,
-          ...fact,
-        });
-    }
-    await client.query(
-      `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,current_facts,current_release)
-       SELECT route,subject_id,type,recorded_transaction_id,current_facts,current_release
-       FROM jsonb_to_recordset($1::jsonb) AS s(route integer, subject_id uuid, type text, recorded_transaction_id uuid, current_facts integer, current_release text)`,
-      [JSON.stringify(subjects)],
-    );
-    await client.query(
-      `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
-       SELECT route,subject_id,1,'create',release,recorded_transaction_id
-       FROM jsonb_to_recordset($1::jsonb) AS r(route integer, subject_id uuid, recorded_transaction_id uuid, release text)`,
-      [JSON.stringify(revisions)],
-    );
-    await client.query(
-      `INSERT INTO semantic.fact(route,subject_id,slot_id,log_seq,operation,kind,language,property,statement_id,body,recorded_transaction_id,release,relation)
-       SELECT route,subject_id,slot_id,log_seq,operation,kind,language,property,statement_id,body,recorded_transaction_id,NULL,false
-       FROM jsonb_to_recordset($1::jsonb) AS f(
-         route integer, subject_id uuid, slot_id uuid, log_seq integer, operation text, kind text, language text,
-         property text, statement_id uuid, body jsonb, recorded_transaction_id uuid
-       )`,
-      [JSON.stringify(facts)],
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-  return ids;
+async function renamePerson(id: string, name: string) {
+  await admin.query(
+    `INSERT INTO semantic.fact (
+       route, subject_id, slot_id, log_seq, operation, kind, language, property, statement_id, body,
+       recorded_transaction_id, release, relation
+     )
+     SELECT route, subject_id, slot_id, log_seq + 1, 'assert', kind, language, property, statement_id,
+            to_jsonb($2::text), $3::uuid, release, relation
+     FROM semantic.current_term_fact
+     WHERE subject_id = $1 AND kind = 'label' AND language = 'en'
+     ORDER BY log_seq DESC
+     LIMIT 1`,
+    [id, name, randomUUID()],
+  );
+  await admin.query('UPDATE semantic.subject SET current_facts = current_facts WHERE subject_id = $1', [id]);
 }
 
 test('installed adapter and Search receiver match VN aliases and anime homonyms', async () => {
@@ -283,12 +237,7 @@ test('credit, name, concealment, merge and release changes invalidate the origin
   if (afterAdd.state !== 'complete') throw new Error('complete after restore');
   expect(afterAdd.names.some((name) => name.targetId === extra.id)).toBe(true);
 
-  await admin.query(
-    `UPDATE semantic.fact SET body = to_jsonb($2::text)
-     WHERE subject_id = $1 AND kind = 'label' AND language = 'en' AND operation = 'assert'`,
-    [author.id, 'Renamed Author'],
-  );
-  await admin.query('UPDATE semantic.subject SET current_facts = current_facts WHERE subject_id = $1', [author.id]);
+  await renamePerson(author.id, 'Renamed Author');
   const afterRename = await receiveCreditSearch(adapter, work.id);
   expect(afterRename.state).toBe('complete');
   if (afterRename.state !== 'complete') throw new Error('complete after rename');
@@ -309,7 +258,29 @@ test('credit, name, concealment, merge and release changes invalidate the origin
 
   const survivor = extra.id < duplicate.id ? extra.id : duplicate.id;
   const redirected = extra.id < duplicate.id ? duplicate.id : extra.id;
-  await ok('/v1/subjects:merge', { subjects: [survivor, redirected] }, 202);
+  const access = realAccess.access({
+    actions: new Map(ACTIONS.map((action) => [action, { anonymous: false }])),
+  });
+  const deadline = Date.now() + 30_000;
+  const actor = await access.authenticate(realAccess.bearer('editor'), { pool, deadline });
+  if (actor.kind !== 'account') throw new Error('editor');
+  const mergeKey = randomUUID();
+  await mergeSubjects(pool, {
+    actor,
+    subjects: [survivor, redirected],
+    idempotencyKey: mergeKey,
+    digest: createHash('sha256').update(mergeKey).digest(),
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorization: await accessCommandAuthorization(
+      access,
+      actor,
+      'subject:merge',
+      { route: 0, id: GLOBAL_CONTEXT },
+      { pool, deadline },
+      () => new Error('Denied merge'),
+    ),
+    deadline,
+  });
   expect(await adapter.unchanged(work.id, afterRename.observation)).toBe(false);
 
   const current = await adapter.current(
@@ -338,14 +309,16 @@ test('fourth-page and name-coverage cases stay incomplete without dropping readi
   expect(names.state).toBe('incomplete');
   expect(await ready(named.id)).toBe(true);
 
-  const authors = await seedPeople(CREDIT_SEARCH_LIMITS.pages * CREDIT_SEARCH_LIMITS.creditsPerPage + 1, 'Page author');
+  const authors = [];
+  for (let index = 0; index < CREDIT_SEARCH_LIMITS.pages * CREDIT_SEARCH_LIMITS.creditsPerPage + 1; index++)
+    authors.push(await person(`Page author ${index}`));
   const paged = (
     await ok(
       '/v1/subjects',
       {
         type: 'wd:Q689445',
         labels: { en: 'Four page credits' },
-        statements: { 'schema:author': authors.map((id) => statement('schema:author', id)) },
+        statements: { 'schema:author': authors.map((author) => statement('schema:author', author.id)) },
       },
       201,
     )
