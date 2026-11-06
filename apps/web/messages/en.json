@@ -6774,6 +6774,7 @@
   "relation_window_completed_stop": "Visible items in {label}: {count}. Start again to continue.",
   "relation_window_cycle": "This list repeated a page cursor. Start again to read its current entries.",
   "relation_window_limit": "You have reached the reading limit. Start again to read from the first page.",
+  "relation_window_pending": "Recently added relations may not appear yet. Read again before treating this list as current.",
   "configured_list_recovery_pending": "Checking the current reader and loading this list…",
   "configured_list_recovery_retry": "Retry list",
   "configured_list_recovery_unavailable": "This list is temporarily unavailable. Try again.",

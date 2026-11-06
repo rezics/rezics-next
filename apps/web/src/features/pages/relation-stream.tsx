@@ -23,6 +23,7 @@ import { admitRelationRetryAt, relationRetryAfterFromCause, relationRetryBlocks 
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
 import { admitRelationPage } from './relation-page-admission';
 import { sameRelationStream } from './relation-stream-descriptor';
+import { isRecord } from './shared';
 import {
   advanceRelationProgress,
   relationCursor,
@@ -400,6 +401,9 @@ function StreamState({
       actualReading?.admitted === true);
   const readerUnavailable = owner.expectedReader !== null && !currentSession;
   const visiblePage = currentSession ? page : undefined;
+  // The native projection reports whether this window had caught up; a window that had not is not presented as current.
+  const incomingPending =
+    visiblePage?.ok === true && isRecord(visiblePage.body.freshness) && visiblePage.body.freshness.caught_up === false;
   const decodedItems = windowItems(visiblePage, value);
   const malformedPage = visiblePage?.ok && decodedItems === undefined;
   const stopped = currentSession ? progress.stopped : undefined;
@@ -731,6 +735,11 @@ function StreamState({
                 : m.relation_window_completed_more({ label: title, count: visibleCompletion.count }, options)
             : null}
       </p>
+      {incomingPending && (
+        <p role="status" data-slot="relation-stream-pending" className="text-sm text-muted-foreground">
+          {m.relation_window_pending({}, options)}
+        </p>
+      )}
       {visibleCompletion?.terminal && (
         <p
           ref={end}

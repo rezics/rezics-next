@@ -1810,6 +1810,11 @@ Relations are shown from the reader's side of the fact: on a sequel the original
 property's inverse label. Symmetric relations appear on both sides under the same label. A relation group shows its
 count, and the full Relations view pages through each group.
 
+Decision: a Global relation window shows the subject's revision history beside it. Its selection (node, property,
+direction and cursor) is exact on retry and return through the changes page. Revision pages continue from their own
+native cursor; a failed page is unavailable history, never the end. Counts are unknown unless the native read supplies
+one, and a window whose incoming projection had not caught up says so. Realm readings keep their own reader.
+
 Characters, credits and relations come from the subject's facts on every page; they never depend on a wiki Zone,
 a Realm or any other site having been set up for the subject.
 
