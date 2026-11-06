@@ -4,6 +4,7 @@ import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from '
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createAniListImport } from '../../src/library/list-import-anilist.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
@@ -110,6 +111,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     subjects.push(result.value.id);
   }
   const subjectId = subjects[0]!;
+  await f.catchUpIdentity(partitionOf(routeOf(subjectId)!));
   const votes = createVoteCommands({ pool: f.pool, access: f.access });
   await votes.putVoteOutcome(
     importer.actor,
@@ -438,9 +440,15 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(datesDenied.status).toBeGreaterThanOrEqual(401);
 }, 120000);
 test('native redirect requires a deliberate review of the canonical AniList target', async () => {
-  const importer = await f.identity(['subject:read', 'library_entry:update', 'library_entry:read', 'rating:vote']);
+  const importer = await f.identity(
+    ['subject:read', 'library_entry:update', 'library_entry:read', 'rating:vote'],
+    0,
+  );
   await f.grantLibraryGate(importer.actor.accountId);
-  const subjects = [await f.createSubject('game'), await f.createSubject('game')].sort();
+  const subjects = [
+    await f.createHomeSubject('game', importer, 0),
+    await f.createHomeSubject('game', importer, 0),
+  ].sort();
   const canonical = subjects[0]!;
   const selected = subjects[1]!;
   const votes = createVoteCommands({ pool: f.pool, access: f.access });

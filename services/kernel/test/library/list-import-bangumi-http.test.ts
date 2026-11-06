@@ -2,7 +2,7 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createBangumiImport } from '../../src/library/list-import-bangumi.ts';
 import { purgeExpiredBangumiUploadPage } from '../../src/library/list-import-bangumi-retention.ts';
@@ -54,14 +54,9 @@ async function setState(state: string) {
   );
 }
 async function voteOwner() {
-  const identity = await f.identity([...f.owner.actor.scopes, 'rating:vote']);
+  const identity = await f.identity([...f.owner.actor.scopes, 'rating:vote'], 0);
   await f.grantLibraryGate(identity.actor.accountId);
   return identity;
-}
-async function createVoterSubject(bearer: string) {
-  const response = await f.send(bearer, 'POST', '/v1/subjects', { type: 'ex:Child', labels: { en: 'game' } });
-  expect(response.status).toBe(201);
-  return (await response.json()).subject.id as string;
 }
 function voteFixture(voter: Awaited<ReturnType<typeof voteOwner>>) {
   return {
@@ -71,7 +66,7 @@ function voteFixture(voter: Awaited<ReturnType<typeof voteOwner>>) {
     commands: f.commands,
     owner: voter,
     admitSubjectMerge: (canonical: string, selected: string) => f.admitSubjectMerge(canonical, selected),
-    createSubject: (_vertical = 'game') => createVoterSubject(voter.bearer),
+    createSubject: (_vertical = 'game') => f.createHomeSubject('game', voter, 0),
     send: (persona: string, method: string, path: string, body?: unknown) =>
       f.send(persona === 'owner' ? voter.bearer : persona, method, path, body),
   };
@@ -104,6 +99,7 @@ async function admitBangumiClaim(externalId: number, label: string, digest = 'a'
 beforeAll(async () => {
   f = await createProfileEntryFixture();
   matched = await admitBangumiClaim(providerId, 'Source title');
+  await f.catchUpIdentity(partitionOf(routeOf(matched)!));
 }, 120000);
 afterAll(async () => {
   await f?.close();

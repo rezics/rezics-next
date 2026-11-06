@@ -49,7 +49,9 @@ to exercise `platform.governance`. Bootstrap installs that role on the Global Co
 `gate:any` and the extra import actions. Every fixture grant authenticates that original bearer onto a fresh wall-clock
 command boundary, matching grant-routes, so Access admits the live account/resource/role binding. `gate:any` covers
 library-gate delegation. Subject merge for a Rating redirect authenticates that steward onto a token that also carries
-`subject:merge` and `gate:subject_identity`, grants those actions on Global, then posts the mounted merge. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
+`subject:merge` and `gate:subject_identity`, grants those actions on Global, then posts the mounted merge.
+Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish
+identity bootstrap on that partition before Rating review or merge. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
 snapshot, `deadlineFor` from a leaked request budget, or putting `gate:personal_library` on the grantor identity
 drops coverage. Unique-typed extra grants (`definitions:publish`, `definitions:activate`) require Access to project
 the existing `deadline_live` operand as `deadlineLive`; without that fact the policy core treats a live governance

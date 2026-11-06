@@ -317,14 +317,12 @@ test('native conflict defaults preserve facts; replacement has revision and rele
 });
 
 test('MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer', async () => {
-  const actor = await native.identity([
-    ...native.owner.actor.scopes,
-    'rating:vote',
-    'definitions:read',
-    'subject:read',
-  ]);
+  const actor = await native.identity(
+    [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
+    0,
+  );
   const targets: string[] = [];
-  for (let index = 0; index < 4; index++) targets.push(await native.createSubject('game'));
+  for (let index = 0; index < 4; index++) targets.push(await native.createHomeSubject('game', actor, 0));
   await native.grantLibraryGate(actor.actor.accountId);
   const id = (
     await json(
@@ -725,14 +723,15 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
   await json('DELETE', `${base}/${id}`);
 });
 test('native redirect requires a deliberate review of the canonical MAL target', async () => {
-  const actor = await native.identity([
-    ...native.owner.actor.scopes,
-    'rating:vote',
-    'definitions:read',
-    'subject:read',
-  ]);
+  const actor = await native.identity(
+    [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
+    0,
+  );
   await native.grantLibraryGate(actor.actor.accountId);
-  const subjects = [await native.createSubject('game'), await native.createSubject('game')].sort();
+  const subjects = [
+    await native.createHomeSubject('game', actor, 0),
+    await native.createHomeSubject('game', actor, 0),
+  ].sort();
   const canonical = subjects[0]!;
   const selected = subjects[1]!;
   const votes = createVoteCommands({ pool: native.pool, access: native.access });

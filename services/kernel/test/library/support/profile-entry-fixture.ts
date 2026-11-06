@@ -33,6 +33,9 @@ import { accessCheck, type Access, type AccountActor } from '../../../src/reques
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
+import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
+import { subjectTarget } from '../../../src/semantic/subject.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
 import {
@@ -40,8 +43,6 @@ import {
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
-import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
-
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
 export const entryStates = { game: 'playing', recipe: 'cooking', record: 'listening' };
@@ -365,6 +366,13 @@ export async function createProfileEntryFixture(
     // Extend its standing creation authority through ordinary, fully authorized grants.
     await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
     await installIdentityEpochBootstrap(pool);
+    async function catchUpIdentity(home: number) {
+      for (let n = 0; n < 1000; n++) {
+        if ((await stepIdentityEpochBootstrap(pool, home)).state === 'caught-up') return;
+      }
+      throw new Error('Native identity bootstrap did not finish');
+    }
+    await catchUpIdentity(0);
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
       grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
@@ -460,6 +468,7 @@ export async function createProfileEntryFixture(
         { 'idempotency-key': JSON.stringify(entryKey()) },
       );
       expect([200, 202]).toContain(response.status);
+      for (const id of [canonical, selected]) await catchUpIdentity(partitionOf(routeOf(id)!));
     }
     async function createSubject(vertical: ProfileVertical, label: string = vertical) {
       const response = await send('owner', 'POST', '/v1/subjects', {
@@ -469,8 +478,37 @@ export async function createProfileEntryFixture(
       expect(response.status).toBe(201);
       const body = (await response.json()) as { subject: { id: string; type: string } };
       expect(body.subject.type).toBe(entryTypes[vertical]);
-      partitions.add(partitionOf(routeOf(body.subject.id)!));
+      const id = body.subject.id;
+      partitions.add(partitionOf(routeOf(id)!));
       await drainSubjectLinks();
+      await catchUpIdentity(partitionOf(routeOf(id)!));
+      return id;
+    }
+    async function createHomeSubject(
+      vertical: ProfileVertical,
+      person: { actor: AccountActor; bearer: string },
+      home = 0,
+      label: string = vertical,
+    ) {
+      let key = entryKey();
+      while (partitionOf(subjectTarget(routeKey, person.actor.accountId, key).route) !== home) key = entryKey();
+      const response = await send(
+        person.bearer,
+        'POST',
+        '/v1/subjects',
+        {
+          type: entryTypes[vertical],
+          labels: { en: label },
+        },
+        key,
+      );
+      expect(response.status).toBe(201);
+      const body = (await response.json()) as { subject: { id: string; type: string } };
+      expect(body.subject.type).toBe(entryTypes[vertical]);
+      expect(partitionOf(routeOf(body.subject.id)!)).toBe(home);
+      partitions.add(home);
+      await drainSubjectLinks();
+      await catchUpIdentity(home);
       return body.subject.id;
     }
     async function inspect(accountId = owner.actor.accountId) {
@@ -555,6 +593,8 @@ export async function createProfileEntryFixture(
       send,
       sendWithHeaders,
       createSubject,
+      createHomeSubject,
+      catchUpIdentity,
       admitSubjectMerge,
       publish,
       activate,
