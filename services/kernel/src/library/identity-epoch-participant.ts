@@ -3,10 +3,7 @@ import { shareAccount } from '../access/account-share.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import type {
-  IdentityEpochStep,
-  IdentityJobRef,
-} from '../semantic/identity-epoch-contract.ts';
+import type { IdentityEpochStep, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import {
   identityEpochStore,
   identityJobPartition,
@@ -299,14 +296,19 @@ export async function prepareLibraryIdentityNativeEffect(
     throw stale('Sealed Library operation differs from its exact receiving selection');
 
   const effect = await prepareIdentityReceivingEffect(pool, selection);
-  await registerLibraryIdentityNativeEffect(pool, effect, {
-    role,
-    sourceRoute: sourceIdentity.route,
-    sourceId: sourceIdentity.collectionId,
-    planKey: libraryIdentityPlanKey(key),
-    disposition: selection.disposition,
-    deadline: context.deadline,
-  }, source.run);
+  await registerLibraryIdentityNativeEffect(
+    pool,
+    effect,
+    {
+      role,
+      sourceRoute: sourceIdentity.route,
+      sourceId: sourceIdentity.collectionId,
+      planKey: libraryIdentityPlanKey(key),
+      disposition: selection.disposition,
+      deadline: context.deadline,
+    },
+    source.run,
+  );
   return effect;
 }
 
@@ -359,12 +361,16 @@ export async function advanceLibraryIdentityNativeScope(
   });
   const retainedAfter = savedCursor
     ? savedCursor.after_effect_key
-      ? { effectKey: savedCursor.after_effect_key, disposition: savedCursor.after_disposition as LibraryExpectedEffectAfter['disposition'] }
+      ? {
+          effectKey: savedCursor.after_effect_key,
+          disposition: savedCursor.after_disposition as LibraryExpectedEffectAfter['disposition'],
+        }
       : null
     : null;
   if (
     (savedCursor?.after_effect_key === '' && savedCursor.after_disposition !== '') ||
-    (savedCursor?.after_effect_key !== undefined && !!savedCursor.after_effect_key !== !!savedCursor.after_disposition) ||
+    (savedCursor?.after_effect_key !== undefined &&
+      !!savedCursor.after_effect_key !== !!savedCursor.after_disposition) ||
     JSON.stringify(after) !== JSON.stringify(retainedAfter)
   )
     throw stale('Library native scope cursor differs from its retained page frontier');
@@ -449,10 +455,8 @@ async function registerLibraryIdentityNativeEffect(
 ): Promise<void> {
   const { deadline } = locator;
   await withRequestDeadline(deadline, async () => {
-    const observed = await run(
-      pool,
-      { partition: effect.receipt.partition, deadline },
-      async (tx) => noEffect(await lookupIdentityReceivingEffect(tx, effect)),
+    const observed = await run(pool, { partition: effect.receipt.partition, deadline }, async (tx) =>
+      noEffect(await lookupIdentityReceivingEffect(tx, effect)),
     );
     const record = observed.value;
     if (!record || record.source.scope !== 'collection-source' || record.source.home !== record.source.receivingHome)
@@ -666,7 +670,17 @@ async function retainOwnerHandoff(
     `INSERT INTO library.identity_epoch_participant_handoff
      (partition_no,job_id,job_epoch,effect_key,owner_id,owner_partition,role,reason,locator)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) ON CONFLICT DO NOTHING`,
-    [partition, input.job.jobId, input.job.epoch.toString(), input.effectKey, input.owner, partitionOf(ownerRoute), input.role, input.reason, locator],
+    [
+      partition,
+      input.job.jobId,
+      input.job.epoch.toString(),
+      input.effectKey,
+      input.owner,
+      partitionOf(ownerRoute),
+      input.role,
+      input.reason,
+      locator,
+    ],
   );
   const saved = await tx.query<{ locator: unknown }>(
     `SELECT locator FROM library.identity_epoch_participant_handoff
@@ -826,7 +840,15 @@ async function applyLibraryPlanEffect(
     }
     await recordIdentityReceivingEffect(tx, effect, {
       frontier: {
-        after: [role, row.source_id, row.plan_key, row.original, row.disposition, basis.ready_generation, basis.working_generation],
+        after: [
+          role,
+          row.source_id,
+          row.plan_key,
+          row.original,
+          row.disposition,
+          basis.ready_generation,
+          basis.working_generation,
+        ],
         segment: 0,
       },
     });
@@ -1017,7 +1039,8 @@ function canonicalCallCeiling(): Readonly<{
 
 function canonicalUsage(used: CanonicalWork): WorkDimensions {
   return Object.freeze({
-    candidateKeys: used.candidateKeys + used.aliasKeys + used.duplicateKeys + used.lookaheadKeys + used.internalDriverKeys,
+    candidateKeys:
+      used.candidateKeys + used.aliasKeys + used.duplicateKeys + used.lookaheadKeys + used.internalDriverKeys,
     nativeRows: used.nativeRows,
     identityMetadataRows: used.identityMetadataRows,
     emptySeeks: used.emptySeeks,
@@ -1036,14 +1059,11 @@ async function chargedCanonicalCall<T extends { readonly work: CanonicalWork }>(
   call: (allowance: CanonicalAllowance) => Promise<T>,
 ): Promise<T> {
   const ceiling = canonicalCallCeiling();
-  const settled = await frame.compose(
-    async (allowance) => {
-      const result = await call({ ...ceiling.allowance, reservationId: allowance.reservationId });
-      const receipt: WorkReceipt = { reservationId: allowance.reservationId, used: canonicalUsage(result.work) };
-      return { result, work: receipt };
-    },
-    ceiling.dimensions,
-  );
+  const settled = await frame.compose(async (allowance) => {
+    const result = await call({ ...ceiling.allowance, reservationId: allowance.reservationId });
+    const receipt: WorkReceipt = { reservationId: allowance.reservationId, used: canonicalUsage(result.work) };
+    return { result, work: receipt };
+  }, ceiling.dimensions);
   return settled.result;
 }
 
@@ -1212,7 +1232,7 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
     });
     if (pending.value) {
       if (pending.value.source_route !== null)
-        throw unavailable('Native six-driver Library effects require Semantic\'s live prepaid Source receiver');
+        throw unavailable("Native six-driver Library effects require Semantic's live prepaid Source receiver");
       await applySourceInvalidation(pool, job, pending.value, deadline, runCommand);
     }
     // No complete step/native ACK. Invalidation is only part of the ALL-role contract.

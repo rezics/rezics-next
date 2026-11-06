@@ -153,7 +153,14 @@ export async function applyFollowIdentityPage(
      ) followers
      WHERE ($4::integer IS NULL OR (owner_partition,account_id)>($4,$5::uuid))
      ORDER BY owner_partition,account_id LIMIT $6`,
-    [input.original, oldRoute, input.previousTerminal, input.after?.partition ?? null, input.after?.accountId ?? null, limit + 1],
+    [
+      input.original,
+      oldRoute,
+      input.previousTerminal,
+      input.after?.partition ?? null,
+      input.after?.accountId ?? null,
+      limit + 1,
+    ],
   );
   const selected = rows.rows.slice(0, limit);
   const handoffs: FollowIdentityHandoff[] = [];
@@ -168,7 +175,11 @@ export async function applyFollowIdentityPage(
       continue;
     }
     if ([...targetHomes].some((home) => home !== input.partition)) {
-      handoffs.push({ accountId, ownerPartition: [...targetHomes].find((home) => home !== input.partition)!, reason: 'foreign-target' });
+      handoffs.push({
+        accountId,
+        ownerPartition: [...targetHomes].find((home) => home !== input.partition)!,
+        reason: 'foreign-target',
+      });
       continue;
     }
 

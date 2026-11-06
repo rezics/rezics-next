@@ -35,7 +35,10 @@ export async function registerLibraryOwnerIdentityScope(
     throw new IdentityEpochStoreError('identity_effect_stale', 'Missing unapplied Library scope receiving record');
   const role = expectedRole ?? libraryIdentityInvalidationRole(record.source.scope);
   if (expectedRole && record.source.scope !== 'collection-source')
-    throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Native owner scope needs a Collection Source receipt');
+    throw new IdentityEpochStoreError(
+      'identity_epoch_unavailable',
+      'Native owner scope needs a Collection Source receipt',
+    );
   const command = currentCommand(tx);
   const route = routeOf(record.source.id);
   const ownerRoute = routeOf(record.owner);
@@ -150,7 +153,10 @@ export async function applyLibraryIdentityCandidate(
   if (truth.presence === null) return { state: 'unready', truth };
   // Curated collection membership is itself the retained structural fact. Private roles must be
   // independently live in the owner's original tables; a removed label parent never contributes.
-  const present = input.role === 'member' || (input.role === 'output' && input.sourceScope === 'active_explicit_output') || truth.presence;
+  const present =
+    input.role === 'member' ||
+    (input.role === 'output' && input.sourceScope === 'active_explicit_output') ||
+    truth.presence;
   if (!present) return { state: 'applied', truth };
   const inserted = await tx.query(
     `INSERT INTO library.owner_identity_candidate_support
@@ -179,7 +185,8 @@ export async function readLibraryIdentityCandidatePage(
   input: Readonly<{ partition: number; owner: string; canonical: string; after: string | null; limit?: number }>,
 ) {
   const limit = input.limit ?? 100;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Owner identity candidate page must be 1..100');
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+    throw new RangeError('Owner identity candidate page must be 1..100');
   const ownerRoute = nativeRoute(input.owner);
   if (partitionOf(ownerRoute) !== input.partition || partitionOf(nativeRoute(input.canonical)) !== input.partition)
     throw new TypeError('Owner identity candidate page crossed its native home');

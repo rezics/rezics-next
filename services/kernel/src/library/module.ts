@@ -98,7 +98,11 @@ export function createLibraryIdentityEpochReceiver({
       );
     },
     async prepareEffect(selection: IdentityReceivingSelection, context: IdentitySourceConsumerMaintenanceContext) {
-      return prepareLibraryIdentityNativeEffect(pool, selection, resolveLiveLibrarySource(frame, pool, context, command));
+      return prepareLibraryIdentityNativeEffect(
+        pool,
+        selection,
+        resolveLiveLibrarySource(frame, pool, context, command),
+      );
     },
   });
 }
