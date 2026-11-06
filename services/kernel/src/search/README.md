@@ -15,8 +15,12 @@ Decision: Search, suggest and facet HTTP problems share one typed family (`inval
 publishes ready. `503 semantic_not_ready` is source preparation, never an empty success. Generation or identity
 change restarts the executed request. Suggest `503` documents `semantic_not_ready` with the other unavailable codes.
 HTTP search, grouped releases, facets, typeahead and mixed discovery classify those families through
-`searchHttpExecute`; optional problem fields are omitted rather than passed as undefined. Decision: canonical Search
-admits self only from a published mapped-self row supplied by revision-1 creation or bounded original recovery;
+`searchHttpExecute`; optional problem fields are omitted rather than passed as undefined.
+Decision: executed-request recovery classifies the public `problem-error.ts` ProblemError identity; query privacy
+heads consume Semantic's public `PrivacyReductionHead` and `PrivacyReductionObservation`; current-text analyzer
+concurrency is the module-init literal 16 matching `ENGINE_ANALYSIS_LIMITS` because that owner file is not a literal
+leaf.
+Decision: canonical Search admits self only from a published mapped-self row supplied by revision-1 creation or bounded original recovery;
 absent mappings use the existing preparation path. Four native HTTP cases pin executed-request recovery.
 
 Decision: native identity receiving refuses a missing or incomplete Source directory definition with typed unavailable;
@@ -400,7 +404,7 @@ and item facet labels also use current source checks. This suppresses stale resu
 subject to the pending real-source/composition proof in [Indexed membership, current disclosure and convergence](#indexed-membership-current-disclosure-and-convergence).
 Match evidence is unavailable when an engine excerpt cannot be mapped uniquely to one current public title, alias or description value and language; locale fallback is never evidence. Positive named field probes retain the installed text query as the sole required clause and add no score. Engine excerpts are parsed on the server and only bounded safe text spans leave the service.
 Decision: names, descriptions and copied search text store character offsets so the unified highlighter returns exact source text, including `und` aliases, rather than ICU-folded tokens. Display locale never rewrites evidence language. Native truncation keeps the engine excerpt and the 32 KiB current-name scan; a later alias beyond that scan cannot become evidence.
-`engine-analysis.ts` is the installed-node `_analyze` and plugin inventory: `requireDevelopmentAnalyzer` proves OpenSearch 3.x with `analysis-icu` and ICU folding, and `analyzeInstalled` returns native offsets for the generation analyzer. Malformed analyzer or plugin replies are `SearchUnavailableError` and never retain engine bodies. `disclosure/current-text.ts` reuses those analyzers for query and prefix disclosure, including the same 16-way analyze bound as sort-key preparation.
+`engine-analysis.ts` is the installed-node `_analyze` and plugin inventory: `requireDevelopmentAnalyzer` proves OpenSearch 3.x with `analysis-icu` and ICU folding, and `analyzeInstalled` returns native offsets for the generation analyzer. Malformed analyzer or plugin replies are `SearchUnavailableError` and never retain engine bodies. `disclosure/current-text.ts` reuses those analyzers for query and prefix disclosure, including the same 16-way analyze bound as sort-key preparation, held as a module-init literal rather than a load-time read of `ENGINE_ANALYSIS_LIMITS`.
 
 Projection runs inside the existing bounded candidate and current-source pass; it adds no per-hit search or history scan. Limits are 128 zero-score field probes per query, three 128-character fragments per field and hit, every current public title, alias and description within 32 KiB scanned per hit, 256 KiB of engine evidence per page and 128 KiB of serialized evidence per page. Evidence beyond any cap is marked unavailable while the hit, ranking and cursor remain unchanged.
 It does **not** establish immediate count privacy: general search totals and facet bucket counts can still include

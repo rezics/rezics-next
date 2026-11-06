@@ -554,7 +554,9 @@ Performance reviews native physical captures. The manager obtains co-owner revie
 
 ### Co-owner review boundary and remaining evidence
 
-The canonical import/re-export is `PublicFilterQueriedObservation` from Search. Source retains
+The canonical import/re-export is `PublicFilterQueriedObservation` from Search. Search consumes
+`PrivacyReductionHead` and `PrivacyReductionObservation` through `semantic/index.ts`; those types remain defined here.
+Source retains
 `PublicFilterDependencyKey`, nullable `PublicFilterProjectionRecord.indexed`, `PublicFilterReadContext`,
 `PrivacyReductionObservationRequest.population.{queried,start,execution,context}` and
 `PrivacyReductionObservation.observed.blocking`. It removes duplicate requirements/returned-subject input types

@@ -21,7 +21,7 @@ import type {
   PublicFilterConsumerOperations,
   PublicFilterConsumerStatus,
 } from '../../src/search/public-filter-consumer-contract.ts';
-import type { PrivacyReductionObservation } from '../../src/semantic/public-filter-source-contract.ts';
+import type { PrivacyReductionObservation } from '../../src/semantic/index.ts';
 import { privacyBarrier, privacyHead, privacyHeads } from './support/query-privacy-heads.ts';
 
 const book = 'schema:Book';
