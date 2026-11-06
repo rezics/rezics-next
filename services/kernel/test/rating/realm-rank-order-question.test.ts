@@ -17,6 +17,7 @@ test('scored compatibility pages keep standard and Realm question authority dist
       deadline: Date.now() + 30_000,
     });
     const source = createRealmRankSource({
+      deadlineNow: () => Date.now(),
       pool: fixture.database.pool,
       access: system.access,
       tokens: system.tokenKeys,

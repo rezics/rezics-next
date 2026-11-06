@@ -1,12 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import {
-  createContentSystemWithOrdinaryScopes,
-  contentGovernanceCredential,
-  type ContentSystem,
-} from '../content/support/system.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createContentSystemWithOrdinaryScopes, type ContentSystem } from '../content/support/system.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { listRealmDiscovery, type DiscoveryPage } from '../../src/community/discovery.ts';
 import { projectRealmDiscovery } from '../../src/community/discovery-projection.ts';
@@ -29,9 +25,7 @@ beforeAll(async () => {
       ),
     ),
   );
-  const governance = await contentGovernanceCredential(system);
-  const release = await call('/v1/definitions/releases', { release: bundledRelease }, governance);
-  await call(`/v1/definitions/releases/${release.digest}:activate`, { expected_head: null }, governance);
+  await bootstrapRelease(system.database.pool, bundledRelease);
   first = Math.floor(Date.now() / DAY) * DAY + DAY;
   await time(first);
 }, 120_000);
@@ -108,13 +102,19 @@ async function start(boardId: string) {
 }
 async function catchUp(realmId: string) {
   // Every step is the production pool reader; no manufactured source record is accepted.
-  while (await projectRealmDiscovery(system.database.pool, realmId, { clock })) {
+  while (await projectRealmDiscovery(system.database.pool, realmId, { clock, deadlineNow: () => Date.now() })) {
     /* bounded committed pages */
   }
 }
 function page(sort: 'popular' | 'trending', cursor?: string, limit = 20): Promise<DiscoveryPage> {
   return listRealmDiscovery(
-    { pool: system.database.pool, access: system.access, tokens: system.tokenKeys, clock },
+    {
+      pool: system.database.pool,
+      access: system.access,
+      tokens: system.tokenKeys,
+      clock,
+      deadlineNow: () => Date.now(),
+    },
     Date.now() + 30_000,
     { sort, limit, ...(cursor ? { cursor } : {}) },
   );
@@ -139,7 +139,7 @@ test('native public Popular and Trending Realm discovery ranks real bounded wind
   );
   await catchUp(publicRealm.realm.realmId);
   await catchUp(privateRealm.realm.realmId);
-  await expireRealmDiscovery(system.database.pool, { clock });
+  await expireRealmDiscovery(system.database.pool, { clock, deadlineNow: () => Date.now() });
   const popular = await page('popular', undefined, 1);
   expect(popular.realms.map((r) => r.realmId)).toEqual([publicRealm.realm.realmId]);
   expect(popular.realms[0]).toEqual({
@@ -172,14 +172,14 @@ test('native public Popular and Trending Realm discovery ranks real bounded wind
   await catchUp(privateRealm.realm.realmId);
   expect((await page('popular')).realms.map((r) => r.realmId)).toEqual([control.realm.realmId]);
   await time(first + 31 * DAY);
-  await expireRealmDiscovery(system.database.pool, { clock });
+  await expireRealmDiscovery(system.database.pool, { clock, deadlineNow: () => Date.now() });
   expect((await page('trending')).realms.map((r) => r.realmId)).toEqual([privateRealm.realm.realmId]);
   await expect(page('popular', popular.next!, 1)).rejects.toMatchObject({ code: 'stale_cursor' });
   await time(first + 32 * DAY);
-  await expireRealmDiscovery(system.database.pool, { clock });
+  await expireRealmDiscovery(system.database.pool, { clock, deadlineNow: () => Date.now() });
   expect((await page('trending')).realms).toEqual([]);
   await time(first + 62 * DAY);
-  await expireRealmDiscovery(system.database.pool, { clock });
+  await expireRealmDiscovery(system.database.pool, { clock, deadlineNow: () => Date.now() });
   expect((await page('popular')).realms).toEqual([]);
   // Retaining Context is an identity invariant, never permission to fall back to Global.
   expect(publicNow.realm.contextId).toBe(GLOBAL_CONTEXT);

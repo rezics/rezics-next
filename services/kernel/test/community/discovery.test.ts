@@ -149,7 +149,7 @@ test('the assigned real current-authorized journey binds its native source while
     // Existing fixture discussion starts are real native source records. Read the
     // next complete day without changing their original qualification or counts.
     const clock = () => new Date(Math.floor(Date.now() / 86_400_000) * 86_400_000 + 86_400_000);
-    while (await projectRealmDiscovery(fixture.db.pool, realmId, { clock })) {
+    while (await projectRealmDiscovery(fixture.db.pool, realmId, { clock, deadlineNow: () => Date.now() })) {
       /* existing bounded committed-source steps */
     }
     const nativeKernel = testKernel({ pool: fixture.db.pool, auth, clock });
@@ -162,11 +162,15 @@ test('the assigned real current-authorized journey binds its native source while
       return value as import('../../src/community/discovery.ts').DiscoveryPage;
     };
     const read = (currentAccess = access, cursor?: string) =>
-      listRealmDiscovery({ pool: fixture.db.pool, access: currentAccess, tokens, clock }, Date.now() + 30_000, {
-        sort: 'popular',
-        limit: 1,
-        ...(cursor === undefined ? {} : { cursor }),
-      });
+      listRealmDiscovery(
+        { pool: fixture.db.pool, access: currentAccess, tokens, clock, deadlineNow: () => Date.now() },
+        Date.now() + 30_000,
+        {
+          sort: 'popular',
+          limit: 1,
+          ...(cursor === undefined ? {} : { cursor }),
+        },
+      );
     expect((await wire()).realms[0]?.avatar).toBeNull();
     const bytes = await sharp({ create: { width: 96, height: 48, channels: 3, background: '#123456' } })
       .png()
@@ -214,7 +218,7 @@ test('the assigned real current-authorized journey binds its native source while
     };
     await select(imageId);
     const native = await readRealmPresentationImages(
-      { pool: fixture.db.pool, access },
+      { pool: fixture.db.pool, access, deadlineNow: () => Date.now() },
       {
         realmId,
         avatarMediaId: imageId,

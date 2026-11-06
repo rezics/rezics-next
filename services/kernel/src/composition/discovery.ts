@@ -1,7 +1,7 @@
 import { accountDiscoverySource } from '../access/account-discovery-source.ts';
 import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
 import { publicCollectionDiscoverySource } from '../library/collection-discovery-source.ts';
-import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/index.ts';
+import { readSpaceDiscoverySummaries, spaceDiscoverySource, systemCommunityAmbient } from '../community/index.ts';
 import type { DiscoveryProducerEntry } from '../search/index.ts';
 import { createDiscoveryOwnerAdapters } from './discovery-adapters.ts';
 import { createRatedSubjectSource } from '../search/rated-source.ts';
@@ -22,19 +22,22 @@ export function createDiscoveryProducerEntry(input: {
   access: Access;
   tokens?: KeyRing;
   clock?: KernelClock;
+  /** Real wall time for request deadlines; defaults to the system clock. */
+  deadlineNow?: () => number;
   subjects?: SubjectSource;
   reviewSource?: ReviewDiscoverySource;
 }): DiscoveryProducerEntry {
   const { pool, routeKey, access, clock } = input;
+  const deadlineNow = input.deadlineNow ?? systemCommunityAmbient.deadlineNow;
   const reviewSource =
     input.reviewSource ??
     (input.tokens
-      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, ...(clock ? { clock } : {}) }, () => ({
+      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, deadlineNow, ...(clock ? { clock } : {}) }, () => ({
           actor: { kind: 'anonymous' },
           deadline: Date.now() + 30_000,
         }))
       : undefined);
-  const spaceDependencies = { pool, access, ...(clock ? { clock } : {}) };
+  const spaceDependencies = { pool, access, ...(clock ? { clock } : {}), deadlineNow };
   const space = createSpaceDiscoveryAdapter(spaceDiscoverySource(spaceDependencies), (ids, context) =>
     readSpaceDiscoverySummaries(spaceDependencies, ids, context),
   );

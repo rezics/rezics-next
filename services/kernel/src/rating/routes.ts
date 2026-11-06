@@ -93,8 +93,9 @@ type Dependencies = {
   routeKey: Uint8Array;
   capabilities?: RatingCapabilities;
   clock?: KernelClock;
+  deadlineNow?: () => number;
 };
-type ReadDependencies = Pick<Dependencies, 'pool'> & { access: Access };
+type ReadDependencies = Pick<Dependencies, 'pool' | 'deadlineNow'> & { access: Access };
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 import { parseVoteObservation } from './vote-observation.ts';

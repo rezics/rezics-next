@@ -2,7 +2,6 @@ import { randomBytes } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
-import { accessClock } from '../access/access-clock.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { PLATFORM_RESOURCE } from '../access/bootstrap-governance.ts';
 import globalContext from '../access/bootstrap-governance-read.sql';
@@ -172,7 +171,7 @@ function sameInspection(left: InspectionRow | null | undefined, right: Inspectio
  * Accounts' approval command remains the only writer and grant producer.
  */
 export async function listRealmClaimRequests(
-  deps: { pool: Pool; access: Access; clock?: () => Date },
+  deps: { pool: Pool; access: Access; clock: () => Date; deadlineNow: () => number },
   actor: Actor,
   input: { realmId: string; cursor?: string; limit?: number; inspectRequestId?: string },
   context: { deadline: number },
@@ -180,7 +179,8 @@ export async function listRealmClaimRequests(
   const { realmId } = input;
   const route = routeOf(realmId);
   if (actor.kind !== 'account' || route === null) throw denied();
-  if (!Number.isFinite(context.deadline) || Date.now() >= context.deadline) throw new ProblemError('deadline_exceeded');
+  if (!Number.isFinite(context.deadline) || deps.deadlineNow() >= context.deadline)
+    throw new ProblemError('deadline_exceeded');
   const limit = input.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const examined = Math.min(limit, 20);
@@ -188,7 +188,7 @@ export async function listRealmClaimRequests(
     input.inspectRequestId !== undefined && routeOf(input.inspectRequestId) === route
       ? input.inspectRequestId
       : undefined;
-  const clock = deps.clock ?? accessClock(deps.access);
+  const clock = deps.clock;
   const accessContext = { pool: deps.pool, deadline: context.deadline };
   const binding = {
     operation: 'community.realm.claim-review',
@@ -249,13 +249,14 @@ export async function listRealmClaimRequests(
       throw denied();
   }
   async function readPresentation(): Promise<RealmClaimReviewPresentation> {
-    if (Date.now() >= context.deadline) throw new ProblemError('deadline_exceeded');
+    if (deps.deadlineNow() >= context.deadline) throw new ProblemError('deadline_exceeded');
     try {
       const community = await readRealmHomePresentation(
         {
           pool: deps.pool,
           access: deps.access,
-          ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+          deadlineNow: deps.deadlineNow,
+          clock: deps.clock,
         },
         realmId,
         { actor, deadline: context.deadline },
@@ -264,7 +265,10 @@ export async function listRealmClaimRequests(
         ? { state: 'unavailable' }
         : { state: 'available', name: community.name, description: community.description };
     } catch (error) {
-      if (Date.now() >= context.deadline || (error instanceof ProblemError && error.code === 'deadline_exceeded'))
+      if (
+        deps.deadlineNow() >= context.deadline ||
+        (error instanceof ProblemError && error.code === 'deadline_exceeded')
+      )
         throw new ProblemError('deadline_exceeded');
       return { state: 'unavailable' };
     }

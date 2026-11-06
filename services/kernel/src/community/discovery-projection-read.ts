@@ -11,6 +11,7 @@ import {
   DISCOVERY_PARTITION,
   discoverySnapshot,
   stateColumns,
+  type DiscoveryBudget,
   type DiscoveryState,
 } from './discovery-projection-store.ts';
 
@@ -55,7 +56,7 @@ export async function readDiscoveryCards(
   candidates: readonly DiscoveryCandidate[],
   cutoff: string,
   at: string,
-  deadline: number,
+  budget: DiscoveryBudget,
 ): Promise<Map<string, DiscoveryCard>> {
   const groups = new Map<number, DiscoveryCandidate[]>();
   for (const candidate of candidates) {
@@ -68,7 +69,7 @@ export async function readDiscoveryCards(
   }
   const cards = new Map<string, DiscoveryCard>();
   for (const [partition, group] of groups) {
-    const visible = await discoverySnapshot(pool, partition, deadline, async (client) => {
+    const visible = await discoverySnapshot(pool, partition, budget, async (client) => {
       const ids = group.map((c) => c.realm_id);
       const routes = ids.map((id) => routeOf(id)!);
       const heads = (
@@ -197,10 +198,10 @@ export async function readDiscoveryCards(
 export async function currentDiscoveryCandidates(
   pool: Pool,
   candidates: readonly DiscoveryCandidate[],
-  deadline: number,
+  budget: DiscoveryBudget,
 ): Promise<DiscoveryCandidate[]> {
   if (!candidates.length) return [];
-  return discoverySnapshot(pool, DISCOVERY_PARTITION, deadline, async (client) => {
+  return discoverySnapshot(pool, DISCOVERY_PARTITION, budget, async (client) => {
     const rows = (
       await client.query<DiscoveryState>(
         `SELECT ${stateColumns} FROM community.discovery_realm

@@ -243,7 +243,7 @@ export async function realmBoardWorld() {
         pool: db.pool,
         access,
         routeKey: testRouteKey(),
-        realmParticipation: createRealmParticipationCheck({ pool: db.pool, access }),
+        realmParticipation: createRealmParticipationCheck({ deadlineNow: () => Date.now(), pool: db.pool, access }),
       },
       actor,
       { realmId: realm.realmId, conceptId: id, title: 'Native Concept board', visibility: 'published' },

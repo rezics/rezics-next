@@ -4,6 +4,14 @@ A Space is the stable, routed identity for a future Realm (community) or Zone (s
 Its metadata is an append-only revision chain; the Space points to its current head.
 This module provides commands, point reads and HTTP routes.
 
+## Declaration and ambient operands
+
+Two declared values, built from one `CommunityAmbient`, are the only way composition reaches Community. `createCommunityDeclaration(ambient)` in `declaration.ts` gives the work module, the event catalogue entries, and the membership and participation factories. `createCommunityHttpDeclaration(ambient)` in `http-declaration.ts` gives the routes, viewer permissions and native container actions; workers never load it. Constructing either runs nothing. The only ambient operand is `CommunityAmbient.deadlineNow`, the wall time request deadlines compare against; domain time stays a `KernelClock` passed beside it. Composition roots supply `systemCommunityAmbient`, and focused tests pass a fixed one. Realm membership and participation deadlines, publication, realm, container, board and settings reads, realm claim review, realm discovery projection and expiry, and own-Realm reads take the supplied clock from their dependencies. `deadlineFor` takes that clock as an optional argument, so a request deadline inherited inside request work is still shared.
+
+Domain clocks are required operands wherever the caller holds one: membership reads, sitemap pages, claim review and the route eligibility checks. `systemCommunityClock` in `ambient.ts` is the only production wall clock Community names. It stays the default for three callers that do not yet pass a clock: `spaceReadEligibility`, space address verification and the space discovery entry batch. Access-facing claim approval enters through `access-capabilities.ts`, a public entry that re-exports `realm-claim-approval.ts`.
+
+Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm witness revision/replay native test including stale work; no extra stories.
+
 ## Public Realm discovery
 
 Popular ranks originally qualified public discussion starts in the previous 30 complete UTC days. Trending ranks

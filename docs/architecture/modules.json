@@ -320,6 +320,9 @@
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
       "publicEntries": [
         "services/kernel/src/community/index.ts",
+        "services/kernel/src/community/declaration.ts",
+        "services/kernel/src/community/http-declaration.ts",
+        "services/kernel/src/community/events.ts",
         "services/kernel/src/community/access-capabilities.ts",
         "services/kernel/src/community/space-discovery.ts"
       ],

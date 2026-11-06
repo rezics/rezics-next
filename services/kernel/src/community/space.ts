@@ -31,6 +31,7 @@ import append from './space-revision.sql';
 import moveHead from './space-head.sql';
 import eligibilityRead from './space-eligibility-read.sql';
 import { viewerActionEligibilityWork, spaceEligibilityAccessWork } from './eligibility-access-work.ts';
+import { systemCommunityClock, type CommunityAmbient } from './ambient.ts';
 
 export type SpaceDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
 export type SpaceContext = Readonly<{ idempotencyKey: string; deadline: number }>;
@@ -132,7 +133,7 @@ export async function readSpace(
  * the derived Realm id always uses the ordinary Realm reader and its own authorization.
  */
 export async function readSpaceForViewer(
-  deps: Pick<SpaceDependencies, 'pool' | 'access'>,
+  deps: Pick<SpaceDependencies, 'pool' | 'access'> & Partial<CommunityAmbient>,
   actor: Actor,
   spaceId: string,
   time: string,
@@ -171,7 +172,10 @@ export async function readSpaceForViewer(
   });
 }
 
-export function spaceReadEligibility(identity: Resource): ResourceEligibility {
+export function spaceReadEligibility(
+  identity: Resource,
+  clock: () => Date = systemCommunityClock,
+): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
   const native = spaceEligibilityAccessWork<Awaited<ReturnType<typeof eligibilityRead.run>>>(resource);
   return createResourcePublicEligibility<NonNullable<Awaited<ReturnType<typeof eligibilityRead.run>>>>({
@@ -181,7 +185,7 @@ export function spaceReadEligibility(identity: Resource): ResourceEligibility {
     prepare(context) {
       return native.prepare(context, async (dispatch) => {
         const { pool, resource: identity } = context;
-        const parameters = { route: identity.route, id: identity.id, at: new Date().toISOString() };
+        const parameters = { route: identity.route, id: identity.id, at: clock().toISOString() };
         return (
           (await dispatch(native.spacePlan, parameters, () => eligibilityRead.run(pool, parameters), true)) ?? null
         );

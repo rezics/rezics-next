@@ -40,7 +40,7 @@ async function call(method: string, path: string, body: unknown, head?: string) 
 
 test('native authored heads publish complete absence independently of eligibility and reject a stale owner cut', async () => {
   const pool = system.database.pool;
-  const source = spaceDiscoverySource({ pool, access: system.access });
+  const source = spaceDiscoverySource({ pool, access: system.access, deadlineNow: () => Date.now() });
   const { space } = await call('POST', '/v1/spaces', { title: 'Native place' });
   const home = partitionOf(routeOf(space.spaceId)!);
   while (await initializeSpaceDiscoveryDependencies(pool, home)) {
@@ -106,7 +106,7 @@ test('native authored heads publish complete absence independently of eligibilit
         partition: home,
         epoch: first.native!.epoch,
         position: first.native!.position,
-        eventId: crypto.randomUUID(),
+        eventId: Bun.randomUUIDv7(),
         resourceId: space.spaceId,
         type: 'com.rezics.community.native-heads.observed.v1',
       },

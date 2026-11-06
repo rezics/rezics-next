@@ -9,6 +9,7 @@ import type { Access } from '../../src/request/access.ts';
 import { createKernelRuntimeDefaults } from '../../src/server.ts';
 import { createKernel, createKernelAccessResolver, type Kernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, mountedRouteCatalogue } from '../../src/http/request.ts';
+import { testReceiptKeys } from './receipt-keys.ts';
 import {
   registerTestClient,
   testAccess,
@@ -49,6 +50,7 @@ function routeContract(kernel: Kernel) {
 function productionComposition(): { kernel: Kernel; access: Access } {
   const defaults = createKernelRuntimeDefaults({
     tokens: testTokens(),
+    receiptKeys: testReceiptKeys(),
     auth: testAuth,
     writeRate: allowWrites,
   });
@@ -57,6 +59,7 @@ function productionComposition(): { kernel: Kernel; access: Access } {
     pool,
     tokens: runtime.tokens,
     clock: runtime.clock,
+    deadlineNow: runtime.deadlineNow,
     access: runtime.access,
   });
   const kernel = createKernel({ pool, routeKey: testRouteKey(), ...runtime, access: accessComposition.resolveAccess });

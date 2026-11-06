@@ -8,7 +8,9 @@ import { createAuthConsentReader, readAuthConsentConfig } from '../../src/access
 import { createAccountsWorkModule } from '../../src/access/membership-work.ts';
 import { createRealmMembershipReconciler } from '../../src/access/realm-membership-transition-legacy.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
-import { communityWorkModule } from '../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -57,6 +59,8 @@ const access = createAccess({
 const consent = readAuthConsentConfig(env);
 assert(consent);
 const realm = createRealmMembership({
+  clock: () => new Date(),
+  deadlineNow: () => Date.now(),
   pool: db.pool,
   access,
   referenceKeys: tokens,

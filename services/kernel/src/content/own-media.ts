@@ -72,6 +72,7 @@ export type OwnMediaDependencies = Readonly<{
   access: Access;
   tokens: KeyRing;
   clock: () => Date;
+  deadlineNow?: () => number;
 }>;
 type ReadHome = Readonly<{ partition: number; ids: readonly string[] }>;
 type DecisionSet = Readonly<Record<string, { allowed: boolean; explicit: boolean }>>;
@@ -412,7 +413,17 @@ async function currentRealmActions(
     let realmVisible = false;
     if (realmRoute !== null) {
       try {
-        realmVisible = (await readRealm({ pool: deps.pool, access: deps.access }, actor, realmId, context)) !== null;
+        realmVisible =
+          (await readRealm(
+            {
+              pool: deps.pool,
+              access: deps.access,
+              ...(deps.deadlineNow === undefined ? {} : { deadlineNow: deps.deadlineNow }),
+            },
+            actor,
+            realmId,
+            context,
+          )) !== null;
       } catch (error) {
         if (!(error instanceof GrantDeniedError) && !(error instanceof ProblemError && error.code === 'not_found'))
           throw error;

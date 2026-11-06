@@ -184,7 +184,7 @@ async function createNativeContentSystemWithOptions(
         actions,
         clock,
         realmRoleReader: (client, input) => {
-          realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+          realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
           return realmMembership.roleReader(client, input);
         },
         auth: {

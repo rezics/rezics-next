@@ -74,6 +74,7 @@ test('native canonical names seek across ties and missing names and bind committ
       deadline: context().deadline,
     });
     const rank = createRealmRankOrderSource({
+      deadlineNow: () => Date.now(),
       pool: fixture.database.pool,
       access: system.access,
       tokens: system.tokenKeys,

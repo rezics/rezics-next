@@ -1,3 +1,4 @@
+export { systemCommunityAmbient, type CommunityAmbient } from './ambient.ts';
 /** Community-owned Space discovery producer entry. Source readiness and incarnation remain native. */
 export { readSpaceDiscoverySummaries, spaceDiscoverySource } from './space-discovery.ts';
 export type {

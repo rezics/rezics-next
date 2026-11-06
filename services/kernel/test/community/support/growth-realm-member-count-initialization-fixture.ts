@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto';
 import type { CommunityDriver, CommunityGrowth, Fixture } from '../../../../../specs/community-driver.ts';
 import { composeWork } from '../../../src/work/registry.ts';
 import { createWorkClient, type WorkClient } from '../../../src/work/client.ts';
-import { communityWorkModule } from '../../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import type { GrowthDatabase } from '../../support/growth.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
