@@ -27,7 +27,14 @@ import { platformRootAnchor } from '../commerce/catalogue.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
+import {
+  accessCheck,
+  type Access,
+  type AccessContext,
+  type Actor,
+  type Resource,
+  type ResourcePage,
+} from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
@@ -298,30 +305,35 @@ function requirements(
   validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
 ) {
   const deadlines = new WeakMap<AuthoritativeTime, number>();
+  async function prepareExtras(actor: Actor, context: AccessContext, primary: unknown) {
+    const attempt = accessCommandAttempt(context);
+    if (!attempt) throw new GrantDeniedError();
+    let deadline = Math.min(context.deadline, permissionEvidenceDeadline(primary) ?? -Infinity);
+    const checks: (Requirement & { evidence: unknown })[] = [];
+    for (const requirement of extra) {
+      const evidence = await access.prepare?.(actor, requirement.action, requirement.resource, context);
+      deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+      checks.push({ ...requirement, evidence });
+    }
+    if (deadlineNow() >= deadline) throw new GrantDeniedError();
+    await within(deadline, () =>
+      withConnection(context.pool, async (client) => {
+        const bounded = deadlineClient(client, deadline);
+        if (validate && !(await validate(bounded, attempt.time))) throw new GrantDeniedError();
+        for (const check of checks)
+          if (!(await access.authorize(bounded, actor, check.action, check.resource, check.evidence, attempt.time)))
+            throw new GrantDeniedError();
+      }),
+    );
+    deadlines.set(attempt.time, deadline);
+    return primary;
+  }
   const combined = deriveAccess(access, {
     async prepare(actor, action, resource, context) {
-      const attempt = accessCommandAttempt(context);
-      if (!attempt) throw new GrantDeniedError();
-      const primary = await access.prepare?.(actor, action, resource, context);
-      let deadline = Math.min(context.deadline, permissionEvidenceDeadline(primary) ?? -Infinity);
-      const checks: (Requirement & { evidence: unknown })[] = [];
-      for (const requirement of extra) {
-        const evidence = await access.prepare?.(actor, requirement.action, requirement.resource, context);
-        deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-        checks.push({ ...requirement, evidence });
-      }
-      if (deadlineNow() >= deadline) throw new GrantDeniedError();
-      await within(deadline, () =>
-        withConnection(context.pool, async (client) => {
-          const bounded = deadlineClient(client, deadline);
-          if (validate && !(await validate(bounded, attempt.time))) throw new GrantDeniedError();
-          for (const check of checks)
-            if (!(await access.authorize(bounded, actor, check.action, check.resource, check.evidence, attempt.time)))
-              throw new GrantDeniedError();
-        }),
-      );
-      deadlines.set(attempt.time, deadline);
-      return primary;
+      return prepareExtras(actor, context, await access.prepare?.(actor, action, resource, context));
+    },
+    async preparePage(actor, action, page: ResourcePage, context) {
+      return prepareExtras(actor, context, await access.preparePage?.(actor, action, page, context));
     },
   });
   const roles = resourceRoleCatalogue(access);

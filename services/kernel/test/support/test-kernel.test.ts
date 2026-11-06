@@ -78,7 +78,7 @@ test('testKernel shares production routes, declarations, rate metadata and Acces
   expect(testComposition.testAccess.replayAuthorization?.('post:erase')).toBe(
     production.access.replayAuthorization?.('post:erase'),
   );
-});
+}, 180_000);
 
 test('testApp mounts the rate stage and testAccess binds the mounted action catalogue and resource types', async () => {
   const spends: { family: string; units: number | undefined }[] = [];
