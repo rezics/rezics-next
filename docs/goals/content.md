@@ -96,6 +96,8 @@ keys as text so `jsonb_to_recordset` never sees a non-array. Composition tests c
 `accessActionCatalogue` of the mounted routes. The Realm minting test records `preparePage` for the Global parent
 and `prepare` for Space/Context extras; sequential fixtures unfence and re-issue tokens at the current
 authentication floor after suspension and never decrease `minimum_authn_epoch`.
+Boolean Realm-read and publication disclosure checks conceal eligibility `not_found` as a closed miss;
+the publication list fixture deletes `search_selection_state` before the subject.
 
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior. Community domain clocks stay required on holders that already have one; deadlineNow is a

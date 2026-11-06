@@ -21,7 +21,7 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SpaceDependencies } from './space.ts';
 import type { CommunityAmbient } from './ambient.ts';
-import { realmReadEligibility } from './realm.ts';
+import { allowRealmRead, realmReadEligibility } from './realm.ts';
 import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
 import { realmGovernanceAuthorization } from './realm-continuity.ts';
 import realmActive from './publication-realm.sql';
@@ -365,9 +365,9 @@ export async function readPublication(
   if (!before || before.publicationId === null) return null;
   const subjectCheck = await prepareSubject(deps, context.actor, subjectId, context.deadline);
   const result = await snapshot(deps.pool, context.deadline, async (client) => {
-    if (!(await realmCheck(client))) return null;
+    if (!(await allowRealmRead(realmCheck, client))) return null;
     const head = await readHead.run(client, { route, realm: realmId, subject: subjectId });
-    if (!head?.publishedAt || !(await subjectCheck(client))) return null;
+    if (!head?.publishedAt || !(await allowRealmRead(subjectCheck, client))) return null;
     return view(realmId, subjectId, head.publicationId, head.publishedAt);
   });
   if (!result || result.publicationId !== before.publicationId) return null;
@@ -375,7 +375,8 @@ export async function readPublication(
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     const at = await mintReadTime(bounded, deps.clock);
-    if (!(await realmCheck(bounded, at)) || !(await revalidateContainerBinding(bounded, before, at))) return null;
+    if (!(await allowRealmRead(realmCheck, bounded, at)) || !(await revalidateContainerBinding(bounded, before, at)))
+      return null;
     return result;
   });
 }
@@ -452,13 +453,19 @@ export async function preparePublicationPage(
     subjects.set(row.subjectId, await prepareSubject(deps, context.actor, row.subjectId, context.deadline));
   const result = await snapshot(deps.pool, context.deadline, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
-    if (!partition || !(await realmCheck(client))) return null;
+    if (!partition || !(await allowRealmRead(realmCheck, client))) return null;
     if (cursorEpoch !== null && cursorEpoch !== partition.epoch) throw new PublicationCursorError('stale');
     const items: PublicationHead[] = [];
     for (const row of window) {
       const head = (await readHead.run(client, { route, realm: realmId, subject: row.subjectId })) as HeadRow | null;
       const subjectCheck = subjects.get(row.subjectId);
-      if (!head || head.publicationId !== row.publicationId || !subjectCheck || !(await subjectCheck(client))) continue;
+      if (
+        !head ||
+        head.publicationId !== row.publicationId ||
+        !subjectCheck ||
+        !(await allowRealmRead(subjectCheck, client))
+      )
+        continue;
       items.push(view(realmId, row.subjectId, head.publicationId, head.publishedAt));
     }
     const last = window.at(-1);
@@ -488,10 +495,15 @@ export async function preparePublicationPage(
         // Exact selected keys, never a second page or a publication-history scan.
         for (const item of result.items) {
           const head = await readHead.run(bounded, { route, realm: realmId, subject: item.subjectId });
-          if (head?.publicationId !== item.publicationId || !(await finalSubjects.get(item.subjectId)!(bounded, at)))
+          if (
+            head?.publicationId !== item.publicationId ||
+            !(await allowRealmRead(finalSubjects.get(item.subjectId)!, bounded, at))
+          )
             return false;
         }
-        return (await finalRealm(bounded, at)) && (await revalidateContainerBinding(bounded, before, at));
+        return (
+          (await allowRealmRead(finalRealm, bounded, at)) && (await revalidateContainerBinding(bounded, before, at))
+        );
       });
     },
   };

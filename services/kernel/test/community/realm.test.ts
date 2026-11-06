@@ -445,26 +445,26 @@ test('protected reads hide existence from non-members; public eligibility tracks
     { ...resource, eligibility: realm.realmReadEligibility(resource) },
     { pool, deadline: Date.now() + 5000 },
   );
-  expect(await check(pool)).toBe(false);
+  expect(await realm.allowRealmRead(check, pool)).toBe(false);
   const second = await realm.updateRealm(
     deps(),
     f.actor,
     { realmId, expectedHead: first.value.revisionId, visibility: 'public' },
     context(),
   );
-  expect(await check(pool)).toBe(true);
+  expect(await realm.allowRealmRead(check, pool)).toBe(true);
   expect(await realm.readRealm(deps(), { kind: 'anonymous' }, realmId, { deadline: Date.now() + 5000 })).toMatchObject({
     visibility: 'public',
   });
   const standing = await accessCheck(f.access, f.other, 'realm:read', resource, { pool, deadline: Date.now() + 5000 });
-  expect(await standing(pool)).toBe(false);
+  expect(await realm.allowRealmRead(standing, pool)).toBe(false);
   await realm.updateRealm(
     deps(),
     f.actor,
     { realmId, expectedHead: second.value.revisionId, visibility: 'protected' },
     context(),
   );
-  expect(await check(pool)).toBe(false);
+  expect(await realm.allowRealmRead(check, pool)).toBe(false);
   await suspendAccount(admin, f.actor.accountId);
   const before = await snapshot();
   expect(

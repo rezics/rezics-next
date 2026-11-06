@@ -30,6 +30,8 @@ import { ProblemError } from '../http/problem.ts';
 import {
   accessCheck,
   type Access,
+  type AccessCheck,
+  type AccessClient,
   type AccessContext,
   type Actor,
   type Resource,
@@ -220,20 +222,20 @@ export async function readRealm(
   const eligibility = readEligibility(resource, (row) => {
     current = row;
   });
-  const check = await accessCheck(
-    deps.access,
-    actor,
-    'realm:read',
-    { ...resource, eligibility },
-    { pool: deps.pool, deadline: context.deadline },
-  );
   try {
+    const check = await accessCheck(
+      deps.access,
+      actor,
+      'realm:read',
+      { ...resource, eligibility },
+      { pool: deps.pool, deadline: context.deadline },
+    );
     return await withConnection(deps.pool, async (client) => {
-      if (!(await check(deadlineClient(client, context.deadline)))) return null;
+      if (!(await allowRealmRead(check, deadlineClient(client, context.deadline)))) return null;
       return current ? record(current) : null;
     });
   } catch (error) {
-    if (error instanceof Error && realmReadDenials.has(error)) return null;
+    if (realmReadDenied(error)) return null;
     throw error;
   }
 }
@@ -244,6 +246,27 @@ function realmReadDeniedError(): ProblemError {
   const error = new ProblemError('not_found');
   realmReadDenials.add(error);
   return error;
+}
+
+function realmReadDenied(error: unknown): boolean {
+  return (
+    (error instanceof Error && realmReadDenials.has(error)) ||
+    (error instanceof ProblemError && error.code === 'not_found')
+  );
+}
+
+/** Boolean Realm-read checks conceal eligibility not_found as a closed miss. */
+export async function allowRealmRead(
+  check: AccessCheck,
+  client: AccessClient,
+  time?: AuthoritativeTime,
+): Promise<boolean> {
+  try {
+    return await check(client, time);
+  } catch (error) {
+    if (realmReadDenied(error)) return false;
+    throw error;
+  }
 }
 
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {

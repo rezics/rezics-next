@@ -489,6 +489,7 @@ test("a Realm's publication list is a keyset page whose every item passes final 
     await publication.listPublications(deps(), realmId, readContext({ kind: 'anonymous' }), { limit: 10 }),
   ).toBeNull();
   expect(await publication.readPublication(deps(), realmId, subjects[2]!, readContext(f.other))).toBeNull();
+  await admin.query('DELETE FROM semantic.search_selection_state WHERE subject_id=$1', [subjects[1]]);
   await admin.query('DELETE FROM semantic.subject WHERE subject_id=$1', [subjects[1]]);
   const disclosed = await publication.listPublications(deps(), realmId, owner, { limit: 10 });
   expect(disclosed!.items.map((item) => item.subjectId)).not.toContain(subjects[1]);
