@@ -224,6 +224,7 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: `https://site.test/en/my/zones/${zoneId}/edit` });
+Object.defineProperty(window, 'scrollTo', { configurable: true, writable: true, value: () => {} });
 const globals = {
   window,
   document: window.document,
@@ -231,6 +232,7 @@ const globals = {
   HTMLElement: window.HTMLElement,
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLInputElement: window.HTMLInputElement,
+  HTMLSelectElement: window.HTMLSelectElement,
   Element: window.Element,
   Node: window.Node,
   DocumentFragment: window.DocumentFragment,
@@ -239,6 +241,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
