@@ -398,7 +398,7 @@ export async function createComposedDiscoveryWorld(options: {
     });
     const fixture = population.base;
     await fixture.setup.openFeatures(['search', 'search_advanced', 'personal_library', 'reading_progress']);
-    // One editor stream: classification/diet/books/recipes share that account's command home.
+    // Shared memoized promises, one editor stream: concurrent callers cannot double-create subjects.
     const classification = await fixture.classification();
     const diet = await fixture.diet();
     const books = await fixture.books();

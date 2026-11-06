@@ -2054,9 +2054,11 @@ the original response only after current admission, even if a later command has 
   plus a continuation event or, on an empty page, writes `cleanup_pending=false` and one terminal cleanup event. The
   follow-up envelope is a no-effect command: actor lock, no-effect fence (partition share and receipt), no domain row
   and no outbox append. Exact replay of lifecycle, empty cleanup or the follow-up is receipt lookup then commit.
-- Bound: One actor key per command. Empty, follow-up and replay do not rescan unrelated ballots or write
-  `cleanup_pending` again. The empty write uses the event fence; the follow-up uses the no-effect fence; replay writes
-  neither. Unrelated actors and ballot history do not expand the selected actor's empty/replay path.
+- Bound: One actor key per command, charged as the original actor under the current request deadline
+  (`deadlineFor` inherits an enclosing request, otherwise a fresh 2s envelope per source envelope). Empty, follow-up
+  and replay do not rescan unrelated ballots or write `cleanup_pending` again. The empty write uses the event fence;
+  the follow-up uses the no-effect fence; replay writes neither. Unrelated actors and ballot history do not expand
+  the selected actor's empty/replay path.
 - Growth check: `test/rating/classification-ballot.test.ts` pins empty emission, follow-up no-effect and repeated
   empty/replay on one actor with no ballots. Native 256/1024/4096 remain with the withdraw/cleanup growth obligation.
 

@@ -1,12 +1,19 @@
 import { projectBatch } from '../events/log.ts';
-import { runCommand, currentCommand, noEffect, authoritativeTimeValue } from '../command/command.ts';
+import {
+  runCommand,
+  currentCommand,
+  noEffect,
+  authoritativeTimeValue,
+  DEFAULT_REQUEST_DEADLINE_MS,
+  type CommandEvent,
+} from '../command/command.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { ACCESS_EVENTS } from '../access/events.ts';
-import type { CommandEvent } from '../command/command.ts';
 import type { CloudEvent, Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -120,6 +127,28 @@ function validateEventAddress(event: CloudEvent, envelope: Envelope): void {
     throw new TypeError('Classification ballot event source does not match its envelope');
 }
 
+function commandFrame(
+  partition: number,
+  event: CloudEvent,
+  envelope: Envelope,
+  actorAccountId: string,
+  kind: string,
+  deadline: number,
+  clock?: () => Date,
+) {
+  return {
+    partition,
+    deadline,
+    ...(clock ? { clock } : {}),
+    receipt: {
+      actorAccountId,
+      kind,
+      key: receiptKey(event, envelope),
+      digest: receiptDigest(event, envelope),
+    },
+  };
+}
+
 async function ensureActorState(tx: Parameters<typeof actorStateRead.run>[0], actorId: string): Promise<ActorState> {
   const route = routeOfRequired(actorId);
   let state = (await actorStateRead.run(tx, { route, actor_id: actorId })) as ActorState | null;
@@ -135,6 +164,7 @@ async function applyLifecycle(
   pool: Pool,
   event: CloudEvent,
   envelope: Envelope,
+  deadline: number,
   clock?: () => Date,
   capabilities?: RatingCapabilities,
 ) {
@@ -148,16 +178,15 @@ async function applyLifecycle(
     throw new TypeError('Account lifecycle event has an invalid classification ballot home');
   await (capabilities?.command ?? runCommand)(
     pool,
-    {
-      partition: envelope.partition,
-      ...(clock ? { clock } : {}),
-      receipt: {
-        actorAccountId: accountId,
-        kind: 'rating.classification-ballot.lifecycle',
-        key: receiptKey(event, envelope),
-        digest: receiptDigest(event, envelope),
-      },
-    },
+    commandFrame(
+      envelope.partition,
+      event,
+      envelope,
+      accountId,
+      'rating.classification-ballot.lifecycle',
+      deadline,
+      clock,
+    ),
     async (tx) => {
       const state = await actorStateLifecycle.run(tx, {
         route,
@@ -186,6 +215,7 @@ async function applyCleanup(
   pool: Pool,
   event: CloudEvent,
   envelope: Envelope,
+  deadline: number,
   clock?: () => Date,
   capabilities?: RatingCapabilities,
 ) {
@@ -204,16 +234,15 @@ async function applyCleanup(
     throw new TypeError('Classification ballot cleanup has an invalid actor home');
   await (capabilities?.command ?? runCommand)(
     pool,
-    {
-      partition: envelope.partition,
-      ...(clock ? { clock } : {}),
-      receipt: {
-        actorAccountId: data.actorId,
-        kind: 'rating.classification-ballot.cleanup',
-        key: receiptKey(event, envelope),
-        digest: receiptDigest(event, envelope),
-      },
-    },
+    commandFrame(
+      envelope.partition,
+      event,
+      envelope,
+      data.actorId,
+      'rating.classification-ballot.cleanup',
+      deadline,
+      clock,
+    ),
     async (tx) => {
       const state = await ensureActorState(tx, data.actorId);
       if (state.generation !== data.generation || !state.cleanup_pending) return noEffect(null);
@@ -274,6 +303,7 @@ async function applyChanged(
   pool: Pool,
   event: CloudEvent,
   envelope: Envelope,
+  deadline: number,
   clock?: () => Date,
   capabilities?: RatingCapabilities,
 ) {
@@ -307,16 +337,15 @@ async function applyChanged(
   const next = { assessment: data.assessment, falsePositive: data.falsePositive, eligible: data.eligible };
   await (capabilities?.command ?? runCommand)(
     pool,
-    {
-      partition: partitionOf(subjectRoute),
-      ...(clock ? { clock } : {}),
-      receipt: {
-        actorAccountId: data.actorId,
-        kind: 'rating.classification-ballot.project',
-        key: receiptKey(event, envelope),
-        digest: receiptDigest(event, envelope),
-      },
-    },
+    commandFrame(
+      partitionOf(subjectRoute),
+      event,
+      envelope,
+      data.actorId,
+      'rating.classification-ballot.project',
+      deadline,
+      clock,
+    ),
     async (tx, context) => {
       const address = {
         route: subjectRoute,
@@ -414,14 +443,17 @@ async function applyEnvelope(
   capabilities?: RatingCapabilities,
 ): Promise<void> {
   validateEnvelope(envelope);
-  for (const event of envelope.events) {
-    validateEventAddress(event, envelope);
-    if (ACTOR_LIFECYCLE.has(event.type)) await applyLifecycle(pool, event, envelope, clock, capabilities);
-    else if (event.type === CLASSIFICATION_BALLOT_CHANGED)
-      await applyChanged(pool, event, envelope, clock, capabilities);
-    else if (event.type === CLASSIFICATION_BALLOT_CLEANUP)
-      await applyCleanup(pool, event, envelope, clock, capabilities);
-  }
+  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  await withRequestDeadline(deadline, async () => {
+    for (const event of envelope.events) {
+      validateEventAddress(event, envelope);
+      if (ACTOR_LIFECYCLE.has(event.type)) await applyLifecycle(pool, event, envelope, deadline, clock, capabilities);
+      else if (event.type === CLASSIFICATION_BALLOT_CHANGED)
+        await applyChanged(pool, event, envelope, deadline, clock, capabilities);
+      else if (event.type === CLASSIFICATION_BALLOT_CLEANUP)
+        await applyCleanup(pool, event, envelope, deadline, clock, capabilities);
+    }
+  });
 }
 
 export function createClassificationBallotRelay(
