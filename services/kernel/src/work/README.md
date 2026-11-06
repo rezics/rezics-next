@@ -145,6 +145,56 @@ Sources inspected: the indexed `native-scheduler-funded-design/dbos-transact-ts`
 sections of `src/system_database.ts`, and migrations 108–112; installed SDK client/queue declarations, deletion and
 native migration implementation. Payload `retention_timestamp` indexes do not decide workflow eligibility.
 
+## Bounded workflow-status scan
+
+Decision: Auth retention and copy retirement consume a payload-free SDK status scan on the static `DBOS` and
+`DBOSClient` boundaries. `GetWorkflowsInput` keeps inclusive created ranges, OFFSET and eligibility filters before
+LIMIT, so pending and recently completed prefixes can starve later eligible copies and cannot resume a stable tie.
+Remove the scan patch when upstream supplies the same bounded keyset producer. Performance keeps the Auth callback,
+native 256/1024/4096 proof and retirement integration; this producer does not decide custody readiness.
+
+The installed methods are `openWorkflowStatusScan({ applicationName, createdBefore })` and
+`readWorkflowStatusScanPage(continuation, { rawLimit })`. Opening fixes one application, an inclusive `created_at`
+cutoff and the indexed upper key then present in that range. Pages walk `(created_at ASC, workflow_uuid ASC)` with an
+exclusive last-examined key, `rawLimit` at most 1000, and no OFFSET. The persistable continuation repeats the
+application, cutoff and upper key plus the last examined key. Terminal eligibility
+(`SUCCESS`/`ERROR`/`CANCELLED`/`MAX_RECOVERY_ATTEMPTS_EXCEEDED` and `completed_at <= createdBefore`) runs after the
+raw limit. Returned copies are status metadata only: id, name, status, created/completed timestamps and application.
+Examined count is the raw rows of that page, including pending custody and ineligible recent completion. Exhaustion
+is explicit.
+
+The key is the SDK `workflow_status` invariant: `created_at` is a bigint assigned at insert and `workflow_uuid` is the
+immutable primary key. The SDK-owned covering index `idx_workflow_status_scan` on
+`(application_name, created_at, workflow_uuid) INCLUDE (name, status, completed_at)` is an append-only migration after
+selected execution; existing positional fence migrations stay put. Fresh schema install and an upgraded
+`dbos_migrations.version` both create that index. Application anchoring and seeks use that range: keys after the
+captured upper bound or behind the last examined key are outside this sweep.
+
+Concurrent visibility is READ COMMITTED under the fixed horizon. Inserts with keys `<= upperKey` and after
+`lastExaminedKey` can appear on a later page of the same open. Inserts after the upper key, and inserts already
+behind the continuation, wait for the next `openWorkflowStatusScan`. Completing or deleting an already examined row
+does not rewind the continuation; a later pending copy becomes eligible on a subsequent open, which Auth owns.
+Timestamp ties split across pages by `workflow_uuid`. Deleting the previous key does not loop or skip later keys
+because continuation is exclusive on the stored key, not on a live row.
+
+Auth must not query private SDK tables. Ordinary resolution receives this producer without a dependency hold.
+
+### Cost: workflow status scan
+
+- Touches: one indexed upper-key seek at open; each page one indexed exclusive range on `workflow_status` with a raw
+  limit of at most 1,000. No input/output/operations joins and no OFFSET.
+- Bound: open examines one row; a page examines at most `rawLimit` status rows and returns only those eligible copies.
+  Unrelated applications, keys after the upper bound and keys already examined stay unvisited. Prefixes of pending or
+  recently completed copies consume the raw budget and advance the continuation, so they cannot hide later eligible
+  copies behind a filtered LIMIT.
+- Growth check: `test/work/sdk-workflow-selection-growth.test.ts` grows pending, old-created/recent-completed and
+  unrelated-application prefixes independently at 256/1024/4096 with selected eligible copies fixed, and captures
+  plans, examined rows, buffers and payload projection for opening and each page.
+
+Pin with `test/work/sdk-workflow-selection.test.ts` (ties, full/short/empty pages, prefixes, unrelated applications,
+serialized restart, previous-key deletion, concurrent insert/completion, later pending recovery, fresh and upgraded
+schema) plus the growth file. Existing `sdk-retirement-fence.test.ts` remains the native retirement producer.
+
 ## Bounded legacy membership child discovery
 
 `WorkClient.discoverLegacyLeaveChild(workflowId)` resolves a strict `realm:leave:<realm-id>:<member-id>` locator to
