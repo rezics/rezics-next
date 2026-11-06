@@ -190,7 +190,6 @@ async function drainLibrary(pool: Pool, job: IdentityJobRef, bound = 32) {
   throw new Error(`ALL-Library identity did not finish within ${bound} bounded steps`);
 }
 
-
 async function profileRatingFixture() {
   const db = await identityEpochDatabase();
   try {
