@@ -7,15 +7,25 @@ const { Window } = require(
 );
 let currentSignal: AbortSignal | undefined;
 const nativeEnv = { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' };
+// Start's compiled RPC bridge validates input; the fixture forwards the value unchanged.
+type ServerFnBuilder = {
+  validator(validate: unknown): ServerFnBuilder;
+  handler(
+    handler: (context: { data?: unknown; signal?: AbortSignal }) => unknown,
+  ): (options?: { data?: unknown; signal?: AbortSignal }) => unknown;
+};
+function serverFn(): ServerFnBuilder {
+  const builder: ServerFnBuilder = {
+    validator: () => builder,
+    handler: (handler) => (options) => {
+      currentSignal = options?.signal;
+      return handler({ data: options?.data, signal: options?.signal });
+    },
+  };
+  return builder;
+}
 mock.module('@tanstack/react-start', () => ({
-  createServerFn: () => ({
-    handler:
-      (handler: (context: { data?: unknown; signal?: AbortSignal }) => unknown) =>
-      (options?: { data?: unknown; signal?: AbortSignal }) => {
-        currentSignal = options?.signal;
-        return handler({ data: options?.data, signal: options?.signal });
-      },
-  }),
+  createServerFn: () => serverFn(),
   createServerOnlyFn: <T extends (...args: never[]) => unknown>(handler: T) => handler,
 }));
 mock.module('cloudflare:workers', () => ({ env: nativeEnv }));

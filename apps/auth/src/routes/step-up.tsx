@@ -187,10 +187,22 @@ function StepUpForm({
   const returnStatus = useRef<HTMLParagraphElement>(null);
   const router = useRouter({ warn: false });
   const isCurrent = useCallback(() => journey.isCurrent(), [journey]);
-  const query = useMemo(() => window.location.search, [href]);
-  const origin = useMemo(() => window.location.origin, [href]);
+  // The server render has no browser location. The mounted form captures its exact request after hydration;
+  // nothing location-derived is rendered, so the server and first client markup agree.
+  const [browserRequest, setBrowserRequest] = useState<{ query: string; origin: string } | null>(null);
+  useLayoutEffect(() => {
+    setBrowserRequest({ query: window.location.search, origin: window.location.origin });
+  }, [href]);
+  const query = browserRequest?.query ?? '';
+  const origin = browserRequest?.origin ?? '';
   const returning = history !== null && !fresh;
-  const returnReview = useStepUpReturnReview(query, origin, returning, advice.state, isCurrent);
+  const returnReview = useStepUpReturnReview(
+    query,
+    origin,
+    returning && browserRequest !== null,
+    advice.state,
+    isCurrent,
+  );
   const [continuing, setContinuing] = useState(false);
   const continuingRef = useRef(false);
   const [reviewRequiresFreshRead, setReviewRequiresFreshRead] = useState(false);

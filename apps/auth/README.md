@@ -1312,6 +1312,11 @@ Each confirmation belongs to the current page and exact request URL; departure, 
 restoration retires its callbacks and clears private inputs. Password submission may replace a passkey prompt,
 cancelling the browser ceremony without undoing a dispatched server sign-in or automatically replaying it.
 
+The server render has no browser location. The mounted form captures the exact request query and origin once after
+hydration, and return review waits for that capture. Server markup contains no location-derived value, so the server
+and first client markup agree. A server render that reads `window` switches its boundary to client rendering, so
+`step-up-server-render.test.ts` renders each page in a realm without `window` and rejects that marker.
+
 Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
 
 The management return consumes the full bounded human proof without reducing it to account-session advice. Only the
