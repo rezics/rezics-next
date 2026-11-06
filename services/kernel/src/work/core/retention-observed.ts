@@ -48,21 +48,21 @@ export type WorkflowRetentionObservedWork = WorkflowRetentionCompleteWork &
 
 export type WorkflowRetentionPlanNode = Readonly<{
   nodeType: string;
-  indexName?: string;
-  relationName?: string;
-  schema?: string;
-  alias?: string;
-  actualRows?: number;
-  sharedHit?: number;
-  sharedRead?: number;
+  indexName?: string | undefined;
+  relationName?: string | undefined;
+  schema?: string | undefined;
+  alias?: string | undefined;
+  actualRows?: number | undefined;
+  sharedHit?: number | undefined;
+  sharedRead?: number | undefined;
   children: readonly WorkflowRetentionPlanNode[];
 }>;
 
 export type WorkflowRetentionPlanDocument = Readonly<{
   query: string;
   kind: WorkflowRetentionStatementKind;
-  table?: string;
-  plan?: WorkflowRetentionPlanNode;
+  table?: string | undefined;
+  plan?: WorkflowRetentionPlanNode | undefined;
   nodes: readonly string[];
   indexes: readonly string[];
   relations: readonly string[];
@@ -447,11 +447,11 @@ export function retentionFamilyTables(): readonly WorkflowRetentionPayloadFamily
   return WORKFLOW_RETENTION_PAYLOAD_FAMILIES.map((family) => family.table);
 }
 
-export function retentionExplicitDeleteTables(): readonly (typeof WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES)[number] {
+export function retentionExplicitDeleteTables(): typeof WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES {
   return WORKFLOW_RETENTION_EXPLICIT_DELETE_TABLES;
 }
 
-export function retentionCascadeTables(): readonly (typeof WORKFLOW_RETENTION_CASCADE_TABLES)[number] {
+export function retentionCascadeTables(): typeof WORKFLOW_RETENTION_CASCADE_TABLES {
   return WORKFLOW_RETENTION_CASCADE_TABLES;
 }
 
