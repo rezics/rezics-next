@@ -3,7 +3,9 @@ import { recordSemanticProducerRole } from './erasure-producer.ts';
 import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../history/record.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -289,6 +291,29 @@ async function ensureInTransaction(
   };
 }
 
+/** Trusted native client that maintains an account's own agent node; it is never request-supplied. */
+const ACCOUNT_AGENT_PRODUCER = 'semantic-account-agent';
+
+/** The agent's own account is the attributed principal of its producer command. The write basis then exists, so a
+ * replaced label's erasure-source removal is recorded in this transaction. Evidence is bound only for that account. */
+function accountAgentProducer(account: string, agentRoute: number, agentId: string): CommandAuthorization {
+  return {
+    action: 'semantic.account-agent-ensure',
+    resource: Object.freeze({ route: agentRoute, id: agentId }),
+    denied: () => new TypeError('Account agent producer authorization failed'),
+    async authorize(tx) {
+      bindCommandHistoryEvidence(tx, [
+        {
+          accountRoute: routeOf(account)!,
+          accountId: account,
+          roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+        },
+      ]);
+      return 'execute';
+    },
+  };
+}
+
 /** Ensure one account graph agent at its deterministic account-partition id. */
 export async function ensureAccountAgent(
   pool: Pool,
@@ -304,7 +329,11 @@ export async function ensureAccountAgent(
   try {
     const outcome = await runIdentityTerminalCommand(
       pool,
-      { partition: partitionOf(agentRoute) },
+      {
+        partition: partitionOf(agentRoute),
+        basis: { actorAccountId: account, clientId: ACCOUNT_AGENT_PRODUCER, requestedBy: null },
+        authorization: accountAgentProducer(account, agentRoute, agentId),
+      },
       async (tx, { transactionId }) => {
         await recordSemanticProducerRole(tx, transactionId, accountIdOf(options.account), 'subject');
         const state = await tx.query(

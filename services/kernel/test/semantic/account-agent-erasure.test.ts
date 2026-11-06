@@ -15,6 +15,8 @@ import { SUBJECT_REVISED } from '../../src/semantic/events.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/record.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -57,6 +59,14 @@ async function authorization(action: string, resource: Resource): Promise<Comman
     denied,
     async authorize(tx, attempt) {
       if (!(await check(tx, attempt.time))) throw denied();
+      // The verified check is the evidence Access binds for the actor's own history roles.
+      bindCommandHistoryEvidence(tx, [
+        {
+          accountRoute: routeOf(owner.accountId)!,
+          accountId: owner.accountId,
+          roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject,
+        },
+      ]);
       return 'execute' as const;
     },
   };
