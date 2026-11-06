@@ -146,10 +146,7 @@ export function compileTaggedWorkFilter(
   return compileFilter(remaining, { prefix, relationOverflow: true });
 }
 
-export function compileTaggedWorkPlanFilter(
-  plan: TaggedWorkPlan,
-  prefix = 'tagged',
-): ReturnType<typeof compileFilter> {
+export function compileTaggedWorkPlanFilter(plan: TaggedWorkPlan, prefix = 'tagged'): ReturnType<typeof compileFilter> {
   return compileTaggedWorkFilter(taggedWorkCatalogueFilter(plan), prefix);
 }
 

@@ -186,10 +186,7 @@ type DefinitionImportRoutes = {
     };
   };
 };
-type InstalledDefinitionRoutes = SharedRoutes<
-  Routes['definitions'] & DefinitionImportRoutes,
-  Routes['definitions']
->;
+type InstalledDefinitionRoutes = SharedRoutes<Routes['definitions'] & DefinitionImportRoutes, Routes['definitions']>;
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.

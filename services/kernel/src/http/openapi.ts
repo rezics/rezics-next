@@ -198,9 +198,7 @@ function restoreJsonRequestBody(operation: Operation, route: Route): void {
     const content: Record<string, MediaType> = {};
     for (const [type, media] of Object.entries(authored.content)) {
       if (!isRecord(media)) continue;
-      content[type] = media.schema
-        ? { ...media, schema: unwrapSchema(media.schema as never) ?? media.schema }
-        : media;
+      content[type] = media.schema ? { ...media, schema: unwrapSchema(media.schema as never) ?? media.schema } : media;
     }
     operation.requestBody = {
       ...operation.requestBody,

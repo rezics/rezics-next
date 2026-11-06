@@ -30,11 +30,7 @@ import { ContextNotFoundError, editorialContextAnchor, publicContextEligibility 
 import { routeOf } from '../../route/route.ts';
 import { MAX_BODY_LIMIT } from '../../http/body.ts';
 import type { Resource } from '../../request/access.ts';
-import {
-  previewImportedDocument,
-  type DefinitionImportRequest,
-  type ImportedPreview,
-} from '../definition-import.ts';
+import { previewImportedDocument, type DefinitionImportRequest, type ImportedPreview } from '../definition-import.ts';
 import {
   activateExtension,
   activeExtension,

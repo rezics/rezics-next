@@ -1029,8 +1029,7 @@ export type ClientKernel = Elysia<
   KernelComposition['~Singleton'],
   KernelComposition['~Definitions'],
   KernelComposition['~Metadata'],
-  ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']> &
-    DefinitionImportRoutes,
+  ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']> & DefinitionImportRoutes,
   KernelComposition['~Ephemeral'],
   KernelComposition['~Volatile']
 >;
