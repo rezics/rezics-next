@@ -10,6 +10,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
+import { messagesCurrent } from './scripts/messages-ready.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
 const nativeWebHost = process.env.NATIVE_WEB_TEST_HOST;
@@ -68,8 +69,9 @@ export default defineConfig((context) => {
       {
         name: 'generate-localization',
         async config(_config, { command }) {
-          // Create generated localization modules before Vite scans the browser routes.
-          if (command === 'serve') {
+          // Create generated localization modules before Vite scans the browser routes. A check or `bun run generate`
+          // that already compiled current catalogues is reused, so a cold start compiles them once.
+          if (command === 'serve' && !messagesCurrent(appRoot)) {
             await new Promise<void>((resolve, reject) => {
               const child = spawn('bun', ['scripts/generate.ts'], { stdio: 'inherit' });
               child.once('error', reject);
