@@ -4,10 +4,9 @@ import { Link } from '@tanstack/react-router';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import type { useSession } from '../../session/query';
-import type { DiaryPage as KernelDiaryPage } from '../../../../../services/kernel/src/library/diary-model.ts';
 import type { PrivateDiaryLoad, PrivateDiaryLoadResult } from './server';
 import { cancelPrivateDiary } from './server';
-import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';
+import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT, type DiaryPage } from './native';
 import { ReadingOccurrence } from './reading-occurrence';
 import { ReadingPeriod } from './reading-period';
 import { PrivateDiaryWindowNavigation } from './window-navigation';
@@ -17,7 +16,7 @@ const useReviewCommitEffect = typeof window === 'undefined' ? useEffect : useLay
 type NonPageDiaryRead = Exclude<PrivateDiaryLoad['diary'], { kind: 'ready' }>;
 export type PrivateDiaryReadingLoadResult =
   | (Omit<PrivateDiaryLoad, 'diary'> & {
-      diary: { kind: 'ready'; page: KernelDiaryPage } | NonPageDiaryRead;
+      diary: { kind: 'ready'; page: DiaryPage } | NonPageDiaryRead;
     })
   | Exclude<PrivateDiaryLoadResult, PrivateDiaryLoad>;
 

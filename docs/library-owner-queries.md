@@ -579,6 +579,10 @@ keeps `startWorker`'s default composition so Content ambient and the Semantic do
 decorates those live modules instead of substituting `KERNEL_WORK_MODULES`. Fewest tests stay the three catalogue
 publication cases already named; no extra stories.
 
+Decision: Web diary and import consumers take Diary, Bangumi and MAL tag types from the generated `@rezics/client`
+public entry, not Kernel source. Saved-results rule and publish links stay in the first HTML from page viewerActions.
+Fewest tests remain the existing catalogue publication cases plus `saved-query-results.test.ts`.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.

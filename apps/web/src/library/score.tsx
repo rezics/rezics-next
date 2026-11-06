@@ -72,7 +72,13 @@ export function LibraryOwnScore({
   viewerFacts?: LibraryViewerFacts;
   locale: string;
 }) {
-  const own = ownScoreUnits({ subjectId, rowKey, personalScore, scoreQuestion, viewerFacts });
+  const own = ownScoreUnits({
+    subjectId,
+    ...(rowKey === undefined ? {} : { rowKey }),
+    ...(personalScore === undefined ? {} : { personalScore }),
+    ...(scoreQuestion === undefined ? {} : { scoreQuestion }),
+    ...(viewerFacts === undefined ? {} : { viewerFacts }),
+  });
   if (!own) return null;
   const meaning = own.question.meaning;
   const title = meaning?.trim() ? meaning : undefined;
