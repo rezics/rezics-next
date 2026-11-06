@@ -298,8 +298,8 @@ beforeAll(async () => {
     env: workerTestEnv({
       KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
       OPENSEARCH_URL: process.env.OPENSEARCH_URL,
-      // Test files share one OpenSearch per check run; each composed Search owns its own index names.
-      KERNEL_SEARCH_PREFIX: 'page-address-',
+      // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
+      KERNEL_SEARCH_PREFIX: `page-address-${randomUUID().slice(0, 8)}-`,
     }),
     receiptKeys: testReceiptKeys(),
   });

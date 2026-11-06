@@ -37,8 +37,8 @@ beforeAll(async () => {
     env: workerTestEnv({
       KERNEL_ROUTE_KEY: Buffer.from(new Uint8Array(32).fill(37)).toString('base64url'),
       OPENSEARCH_URL: process.env.OPENSEARCH_URL,
-      // Test files share one OpenSearch per check run; each composed Search owns its own index names.
-      KERNEL_SEARCH_PREFIX: 'canonical-targets-',
+      // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
+      KERNEL_SEARCH_PREFIX: `canonical-targets-${randomUUID().slice(0, 8)}-`,
     }),
     receiptKeys: testReceiptKeys(),
   });
@@ -73,7 +73,8 @@ async function linked(handle: string | null) {
   await real.grant({ route: routeOf(accountId)!, id: accountId }, 'owner', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'reviewer', 'account:verify_agent');
   const context = async (persona: 'owner' | 'reviewer') => {
-    const deadline = Date.now() + 5000;
+    // Approval publishes the identity through the coordinator, which needs the same budget as the page fixture.
+    const deadline = Date.now() + 30_000;
     return {
       pool: f.pool,
       deadline,
