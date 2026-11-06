@@ -77,6 +77,10 @@ advances the displayed visit. Expiry offers explicit Restart. Failed catalogue r
 recovery requires deliberate fresh selection without replacing captured parent command intent. Source and destination
 receipt readbacks settle independently; either miss leaves reconciliation unavailable without inventing order.
 
+Decision: Confirmation adopts current membership only from an independently ready source page. A matching destination
+header updates that side's revision; members-only success never invents identity or a ready receipt. Receipt
+observation, native transfer revisions and independently admitted membership stay distinct.
+
 Decision: browse visits retain the current page plus one previous cursor; Previous steps back once, and Restart
 explicitly rereads page one, so deep browsing never stores cursor history.
 

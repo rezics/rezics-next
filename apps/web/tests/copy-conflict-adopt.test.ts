@@ -38,6 +38,16 @@ test('conflict review keeps local field edits and adopts newly read values for u
   expect(adopted.kind).toBe('print');
 });
 
+test('a local clear stays local while untouched fields adopt newer saved values', () => {
+  const baseline = { draft: draft('Original note', 'Study'), kind: 'print' };
+  const local = { draft: draft('Original note', ''), kind: 'print' };
+  const adopted = adoptCopyConflictDraft(baseline, local, copy('Current note', 10));
+  expect(adopted.draft.location).toBe('');
+  expect(adopted.copy.location).toBeNull();
+  expect(adopted.draft.note).toBe('Current note');
+  expect(adopted.copy.revision).toBe(10);
+});
+
 test('untouched drafts take every newly read field including a blank stored value', () => {
   const baseline = { draft: draft('Original note', 'Study'), kind: 'print' };
   const adopted = adoptCopyConflictDraft(baseline, baseline, { ...copy('Current note'), location: null });

@@ -44,6 +44,7 @@ test('retry keeps the captured visit; independent source and destination misses 
   const page2 = nextPageVisit(firstPageVisit(), 'opaque-page-2');
   expect(nextPageVisit(page2, 'opaque-page-3').cursor).toBe('opaque-page-3');
   expect(previousPageVisit(page2)).toEqual(firstPageVisit());
-  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'other' })).toBe('unavailable');
-  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'dest' })).toBe('ready');
+  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'other' }, true)).toBe('unavailable');
+  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'dest' })).toBe('unavailable');
+  expect(collectionTransferReadback('source', 'dest', { id: 'source' }, { id: 'dest' }, true)).toBe('ready');
 });

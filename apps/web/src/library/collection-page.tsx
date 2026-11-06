@@ -1363,15 +1363,32 @@ function CollectionPageLifetime({
         );
         setTransferReceipt(receipt);
         const [sourceRead, destinationRead] = await Promise.allSettled([
-          reloadCollection(true),
+          refreshPage(),
           readTransferDestination(capturedTransfer.destination.id),
         ]);
         if (!isCurrent()) return;
         const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-        const destination = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
+        const destinationReadback =
+          destinationRead.status === 'fulfilled'
+            ? destinationRead.value
+            : { destination: undefined, membersAdmitted: false };
         const sourceReady = collectionTransferMatchedSource(capturedTransfer.sourceId, sourcePage);
-        resetEditor(sourceReady ?? run.page, true);
-        setTransferReceipt(collectionTransferReceiptUpdate(receipt, sourceReady, destination));
+        if (sourceReady) {
+          queryClient.setQueryData(queryKey, sourceReady);
+          await router.invalidate();
+          if (!isCurrent()) return;
+          resetEditor(sourceReady, true);
+        } else {
+          resetEditor(page, true);
+        }
+        setTransferReceipt(
+          collectionTransferReceiptUpdate(
+            receipt,
+            sourceReady,
+            destinationReadback.destination,
+            destinationReadback.membersAdmitted,
+          ),
+        );
         return;
       }
       const refreshed = await reloadCollection(true);
@@ -1430,7 +1447,10 @@ function CollectionPageLifetime({
       ]);
       if (!isCurrent()) return;
       const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-      const destination = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
+      const destinationReadback =
+        destinationRead.status === 'fulfilled'
+          ? destinationRead.value
+          : { destination: undefined, membersAdmitted: false };
       const sourceReady = collectionTransferMatchedSource(previousReceipt.sourceId, sourcePage);
       if (sourceReady) {
         queryClient.setQueryData(queryKey, sourceReady);
@@ -1438,7 +1458,14 @@ function CollectionPageLifetime({
         if (!isCurrent()) return;
         if (editing) resetEditor(sourceReady);
       }
-      setTransferReceipt(collectionTransferReceiptUpdate(previousReceipt, sourceReady, destination));
+      setTransferReceipt(
+        collectionTransferReceiptUpdate(
+          previousReceipt,
+          sourceReady,
+          destinationReadback.destination,
+          destinationReadback.membersAdmitted,
+        ),
+      );
     } catch {
       if (isCurrent()) setTransferReceipt({ ...previousReceipt, state: 'unavailable' });
     } finally {

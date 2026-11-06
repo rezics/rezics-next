@@ -108,8 +108,9 @@ export function BulkOperationUndoView({
           {operation.action !== 'remove_from_library' ? (
             <p>{m.library_bulk_undo_other_action()}</p>
           ) : (
-            <section aria-label={m.bulk_operation_results()}>
-              <h2 className="text-xl font-semibold">{m.bulk_operation_results()}</h2>
+            <section aria-label={m.library_bulk_undo_native_effects()}>
+              <h2 className="text-xl font-semibold">{m.library_bulk_undo_native_effects()}</h2>
+              <p className="text-sm text-muted-foreground">{m.bulk_operation_results()}</p>
               {state?.page?.outcomes.length === 0 && <p>{m.bulk_operation_empty_page()}</p>}
               <ul className="space-y-4">
                 {state?.page?.outcomes.map((outcome) => {
@@ -151,35 +152,39 @@ export function BulkOperationUndoView({
           )}
         </>
       )}
-      {authorized &&
-        [...attempts].map(([ordinal, attempt]) => (
-          <section key={ordinal} className="space-y-2" aria-label={attempt.command.subjectId}>
-            <p>
-              <code>{attempt.command.subjectId}</code>
-            </p>
-            {attempt.status === 'sending' ? (
-              <p role="status">{m.library_bulk_undo_sending()}</p>
-            ) : attempt.status === 'uncertain' && writeAvailable ? (
-              <>
-                <p role="status">{m.library_bulk_undo_uncertain()}</p>
-                <EntryUndoForm
-                  undo={attempt.command}
-                  retry
-                  locale={locale}
-                  returnTo={href}
-                  csrfToken={attempt.headers.get('x-csrf-token')}
-                  disabled={busy}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    onRestore(ordinal, true);
-                  }}
-                />
-              </>
-            ) : null}
-            {attempt.result && <EntryRestoreFeedback restore={attempt.result} locale={locale} />}
-            {attempt.result?.ok && <p role="status">{m.library_bulk_undo_restored()}</p>}
-          </section>
-        ))}
+      {authorized && attempts.size ? (
+        <section className="space-y-4" aria-label={m.library_bulk_undo_restore_attempts()}>
+          <h2 className="text-xl font-semibold">{m.library_bulk_undo_restore_attempts()}</h2>
+          {[...attempts].map(([ordinal, attempt]) => (
+            <section key={ordinal} className="space-y-2" aria-label={attempt.command.subjectId}>
+              <p>
+                <code>{attempt.command.subjectId}</code>
+              </p>
+              {attempt.status === 'sending' ? (
+                <p role="status">{m.library_bulk_undo_sending()}</p>
+              ) : attempt.status === 'uncertain' && writeAvailable ? (
+                <>
+                  <p role="status">{m.library_bulk_undo_uncertain()}</p>
+                  <EntryUndoForm
+                    undo={attempt.command}
+                    retry
+                    locale={locale}
+                    returnTo={href}
+                    csrfToken={attempt.headers.get('x-csrf-token')}
+                    disabled={busy}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      onRestore(ordinal, true);
+                    }}
+                  />
+                </>
+              ) : null}
+              {attempt.result && <EntryRestoreFeedback restore={attempt.result} locale={locale} />}
+              {attempt.result?.ok && <p role="status">{m.library_bulk_undo_restored()}</p>}
+            </section>
+          ))}
+        </section>
+      ) : null}
     </main>
   );
 }

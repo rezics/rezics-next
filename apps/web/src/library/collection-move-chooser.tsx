@@ -167,11 +167,7 @@ export function CollectionMoveChooser({
       if (issue === 'changed' || issue === 'denied') {
         readAttempt.current = null;
         setDestination(null);
-        if (issue === 'changed' || issue === 'denied') {
-          readAttempt.current = null;
-          setDestination(null);
-          if (issue === 'denied') setDestinationId('');
-        }
+        if (issue === 'denied') setDestinationId('');
         setSelectedAnchor(null);
         setPlacements({ members: [], next: null });
       }

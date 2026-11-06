@@ -6,6 +6,12 @@ import type { CollectionTransferReceipt } from './collection-placement-journey/t
 const link =
   'inline-flex min-h-11 max-w-full items-center break-words rounded-lg border px-3 py-2 underline-offset-4 hover:underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
+function admissionStatus(receipt: CollectionTransferReceipt) {
+  if (receipt.state === 'reading') return m.library_collection_move_reconciling();
+  if (receipt.state === 'ready') return m.library_collection_move_reconciled();
+  return m.library_collection_move_reconcile_failed();
+}
+
 export function CollectionTransferReceiptPanel({
   receipt,
   pending,
@@ -32,11 +38,28 @@ export function CollectionTransferReceiptPanel({
           destination: receipt.destinationRevision,
         })}
       </p>
-      {receipt.state === 'reading' ? <p role="status">{m.library_collection_move_reconciling()}</p> : null}
-      {receipt.state === 'ready' ? <p role="status">{m.library_collection_move_reconciled()}</p> : null}
+      <p role="status">{admissionStatus(receipt)}</p>
+      {receipt.state !== 'reading' ? (
+        <ul className="space-y-1 text-sm">
+          <li>
+            {receipt.sourceAdmitted
+              ? m.library_collection_move_receipt_source_ready()
+              : m.library_collection_move_receipt_source_unavailable()}
+          </li>
+          <li>
+            {receipt.destinationAdmitted && receipt.membersAdmitted
+              ? m.library_collection_move_receipt_destination_ready()
+              : receipt.destinationAdmitted
+                ? m.library_collection_move_receipt_destination_header()
+                : m.library_collection_move_receipt_destination_unavailable()}
+          </li>
+          {receipt.destinationAdmitted && !receipt.membersAdmitted ? (
+            <li>{m.library_collection_move_receipt_members_unavailable()}</li>
+          ) : null}
+        </ul>
+      ) : null}
       {receipt.state === 'unavailable' ? (
         <div role="alert" className="space-y-2">
-          <p>{m.library_collection_move_reconcile_failed()}</p>
           <Button
             type="button"
             variant="outline"
