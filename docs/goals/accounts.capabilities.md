@@ -51,7 +51,7 @@ runs the Taskfile's Bun commands when neither `go-task` nor `task` is present. F
 registration close/relaunch, native consumer startup/cleanup and the official dev-stack invocation remains
 the execution evidence; these source repairs do not establish an integrated registration-to-Home completion.
 Decision: keep the installed host-lifecycle tests and one first-actual-failure cause regression; no extra stories.
-Decision: `AccountOperation.operationKey` lives on the shared contract so native bindings and the Auth host keep one port type; isolated hosts persist the workflow request; first actual step failures remain the registration cause.
+Decision: `AccountOperation.operationKey` lives on the shared contract so native bindings and the Auth host keep one port type; isolated hosts persist the workflow request; first actual step failures remain the registration cause. Kernel durable approvals match that host type on revoke and transfer-acceptance instead of intersecting the union again.
 The subsequent internal service-factory move passed the architecture check against its landing base. Two
 supported remote submissions lost their connection during Auth service typing. Only Auth Pages typing
 completed on that revision; service typing and focused native tests have no completed result after the move.

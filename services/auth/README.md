@@ -1160,9 +1160,11 @@ which is how the owner producer recognizes pending-registration cleanup. Mock wo
 hosts that exercise native operations supply creation context, actor roles and approval
 bindings; they do not reconstruct those from an unprotected callback. `authorizeOperation`
 receives the host-bound `operationKey` on that same operation; the shared contract
-carries the optional key so native bindings keep one port type. The official dev-stack
-copy omits check-host `.last-test-file` artifacts so a concurrent check receipt cannot
-break the isolated checkout.
+carries the optional key so native bindings keep one port type. Kernel durable
+approvals use that same host operation type: revoke and transfer-acceptance carry
+the optional key on the variant, and the union is not intersected again. The official
+dev-stack copy omits check-host `.last-test-file` artifacts so a concurrent check receipt
+cannot break the isolated checkout.
 
 Before resolving, `host.start()` also registers the first-party client
 `rezics-auth-account-operations` through trusted `registerClient` in
