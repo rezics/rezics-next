@@ -151,3 +151,10 @@ kernel-library and kernel zones.
 Decision: Management walk setup idle-in-transaction and Access-deadline termination is received through that same
 throwaway/isolated-stack database lifetime. Content keeps the launcher, stack and cleanup. Original walks remain
 open. Driver main versus canonical publication is a control-plane owner item.
+
+Decision: a signed-in member follows a supported target through the native command and recovers that exact private
+edge on FULL list and point reads; replay returns the acknowledged result; a changed Source withholds the target and
+keeps the edge; empty, other-member and anonymous views use their own admission; return from a target restores the
+original list frontier with the current session. Web binds list GET and the callable point separately. Fewest tests:
+one HTTP journey, one FULL withhold, one transport bind, one return-frontier pin. Native, browser and growth walks
+remain later integration.

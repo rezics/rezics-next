@@ -40,6 +40,14 @@ import { prepareFollowing } from './following-reading/presentation';
 import { useFollowingSelection } from './following-reading/current-selection';
 import { FollowingInspection, type FollowingSpaceReader } from './following-reading/inspection';
 import { useFollowingReturn } from './following-reading/return';
+import {
+  clearFollowingReturn,
+  followingDestinationClick,
+  followingReturnFrontier,
+  followingReturnMatchesWindow,
+  followingReturnTrigger,
+  readFollowingReturn,
+} from './following-reading/return-context';
 import { SubjectCover } from './subject-row';
 import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 
@@ -546,6 +554,7 @@ function MineFollowingPageState({
   const [follows, setFollows] = useState(page.follows);
   const [removed, setRemoved] = useState(false);
   const listHeading = useRef<HTMLHeadingElement>(null);
+  const article = useRef<HTMLElement>(null);
 
   const locale = getLocale();
   const prepared = useMemo(() => prepareFollowing(page, locale), [page, locale]);
@@ -570,7 +579,24 @@ function MineFollowingPageState({
       !page.forbidden &&
       !addressRejected,
   });
-  useFollowingReturn(reading.returnCurrent, reading.suspend, onRefresh, reading.restoreFocus);
+  const restoreFollowingFrontier = () => {
+    reading.restoreFocus();
+    if (!readingOrigin.subject || !origin.isCurrent()) return;
+    const frontier = readFollowingReturn(locale, readingOrigin.subject);
+    if (!frontier || !followingReturnMatchesWindow(frontier, cursor, kind)) return;
+    followingReturnTrigger(article.current, frontier.targetId)?.focus();
+    clearFollowingReturn();
+  };
+  useFollowingReturn(reading.returnCurrent, reading.suspend, onRefresh, restoreFollowingFrontier);
+  useLayoutEffect(() => {
+    if (!origin.isCurrent() || !readingOrigin.subject || status) return;
+    const frontier = readFollowingReturn(locale, readingOrigin.subject);
+    if (!frontier || !followingReturnMatchesWindow(frontier, cursor, kind)) return;
+    const trigger = followingReturnTrigger(article.current, frontier.targetId);
+    if (!trigger) return;
+    trigger.focus();
+    clearFollowingReturn();
+  }, [active, locale, cursor, kind, readingOrigin.subject, origin, status]);
   const focusedMovement = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (navigation?.focusId === undefined || focusedMovement.current === navigation.focusId || !origin.isCurrent())
@@ -606,7 +632,7 @@ function MineFollowingPageState({
   };
 
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
+    <article ref={article} className="max-w-4xl space-y-8 text-foreground">
       <header>
         <PageHeading ref={listHeading} tabIndex={-1}>
           {m.library_following_heading()}
@@ -700,6 +726,17 @@ function MineFollowingPageState({
           canReadCollection={canReadCollection}
           close={reading.close}
           readSpace={readSpace}
+          returnFrontier={
+            readingOrigin.subject
+              ? followingReturnFrontier(
+                  locale,
+                  readingOrigin.subject,
+                  cursor,
+                  kind,
+                  reading.selection.row.follow.targetId,
+                )
+              : null
+          }
         />
       ) : null}
       {!addressRejected && !page.forbidden && active.length ? (
@@ -713,6 +750,7 @@ function MineFollowingPageState({
             return (
               <ContentItem
                 key={follow.targetId}
+                data-follow-target={follow.targetId}
                 data-follow-target-type={follow.targetType}
                 className="px-4"
                 title={title.text}
@@ -720,8 +758,11 @@ function MineFollowingPageState({
                 headingLevel={3}
                 {...(href ? { href } : {})}
                 onClickCapture={(event) => {
-                  if (event.target instanceof Element && event.target.closest('a') && !reading.current())
-                    event.preventDefault();
+                  if (!(event.target instanceof Element) || !event.target.closest('a')) return;
+                  const frontier = readingOrigin.subject
+                    ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
+                    : null;
+                  followingDestinationClick(event, () => reading.current(), frontier);
                 }}
                 visual={follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" /> : undefined}
                 metadata={

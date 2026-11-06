@@ -501,6 +501,31 @@ test('inferred subject and Collection follows return either state but list only 
   await entry(id, 'paused', implied.revision);
 });
 
+test('follow replay returns the acknowledged own edge and other viewers keep their own authority', async () => {
+  const targetId = await subject();
+  const key = randomUUID();
+  const created = await json(await request('PUT', `/v1/follows/${targetId}`, undefined, 'owner', key));
+  expect(created.follow).toMatchObject({ targetId, targetType: 'subject', state: 'following', reason: 'explicit' });
+  expect(await json(await request('PUT', `/v1/follows/${targetId}`, undefined, 'owner', key))).toEqual(created);
+  expect(await json(await request('GET', `/v1/follows/${targetId}`))).toEqual(created);
+  const full = await json(await request('GET', `/v1/follows/${targetId}?view=FULL`));
+  expect(full.follow).toMatchObject({ ...created.follow, target: expect.objectContaining({ id: targetId }) });
+  const page = await json(await request('GET', '/v1/follows?view=FULL&limit=20'));
+  expect(page.follows.some((row: { targetId: string }) => row.targetId === targetId)).toBe(true);
+  await problem(await request('GET', `/v1/follows/${targetId}`, undefined, 'other'), 404, 'not_found');
+  await problem(await request('GET', `/v1/follows/${targetId}`, undefined, 'anonymous'), 401);
+  expect((await json(await request('GET', '/v1/follows', undefined, 'other'))).follows).toEqual([]);
+  const removeKey = randomUUID();
+  const removed = await json(await request('DELETE', `/v1/follows/${targetId}`, undefined, 'owner', removeKey));
+  expect(removed.follow.state).toBe('unfollowed');
+  expect(await json(await request('DELETE', `/v1/follows/${targetId}`, undefined, 'owner', removeKey))).toEqual(removed);
+  expect(
+    (await json(await request('GET', '/v1/follows?view=FULL'))).follows.some(
+      (row: { targetId: string }) => row.targetId === targetId,
+    ),
+  ).toBe(false);
+});
+
 test('private reads conceal owner unknown and malformed ids and denied writes leave state unchanged', async () => {
   const id = await subject();
   const owned = await entry(id, 'in_progress'),

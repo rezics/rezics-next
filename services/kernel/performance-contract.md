@@ -73,6 +73,11 @@ the application growth claim. A failed or unavailable native run is neither deni
 module and native evidence distinct; use [verification](../../docs/development/verification.md#native-growth-evidence)
 for evidence handling and check placement.
 
+Library follow create/list/remove growth remains the existing personal-writes, personal-reads, follows,
+following-kind-growth, follow-discovery, personal-http and full-views suites with the five Search scope/work-context
+suites. Native/browser/growth walks for a real followed private edge stay open until those owning checks pass after
+integration.
+
 ## Measured native units
 
 Native engine units come from the harness `Cost` on every scale and repetition. `connections` and `slots` are counted

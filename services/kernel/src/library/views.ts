@@ -122,6 +122,13 @@ class ViewReader {
     });
   }
 
+  /** Follow FULL keeps the private edge and withholds a changed Source; other FULL views still refuse. */
+  discloseSource(originalId: string | undefined, currentId: string | undefined, observationCurrent: boolean): boolean {
+    if (observationCurrent && currentId === originalId) return true;
+    if (this.follow) return false;
+    throw new ProblemError('dependency_unavailable');
+  }
+
   /** Original/terminal authorization, identity/Source/cover fences and language/profile/type currentness
    * come from Semantic's bounded summary/observation producer, not a full Subject home read.
    */
@@ -132,8 +139,7 @@ class ViewReader {
       displayFallback: true,
     });
     const current = await this.resolve(id);
-    if (!(await observed.current()) || current?.subjectId !== resolved.subjectId)
-      throw new ProblemError('dependency_unavailable');
+    if (!this.discloseSource(resolved.subjectId, current?.subjectId, await observed.current())) return null;
     return observed.summaries.get(resolved.subjectId) ?? null;
   }
 
@@ -148,10 +154,13 @@ class ViewReader {
     const terminals = [...new Set(resolved.values())];
     if (terminals.length === 0) return;
     const observed = await readSubjectSummaryObservation(this.observationDeps(), terminals, { displayFallback: true });
-    if (!(await observed.current())) throw new ProblemError('dependency_unavailable');
+    const observationCurrent = await observed.current();
     await bounded([...resolved], async ([requested, terminal]) => {
       const current = await this.resolve(requested);
-      if (current?.subjectId !== terminal) throw new ProblemError('dependency_unavailable');
+      if (!this.discloseSource(terminal, current?.subjectId, observationCurrent)) {
+        this.subjects.set(requested, null);
+        return;
+      }
       this.subjects.set(requested, observed.summaries.get(terminal) ?? null);
     });
   }

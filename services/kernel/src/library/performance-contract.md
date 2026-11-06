@@ -142,6 +142,15 @@ state and native epoch; frontiers retain raw updatedAt/targetId. BASIC adds no d
 summaries, indexed active-label fallback and Community actions; repeated original/current disclosure withholds a
 changed source. Serialization never refunds hidden work.
 
+Decision: FULL follow original/current Source mismatch or a non-current summary observation withholds that target
+(`target: null`) and keeps the private edge; it does not 503 the list or point. Other FULL Library views still refuse
+with `dependency_unavailable`. Create/unfollow freeze original actor, client, owner, edge, request key, typed target
+body and absolute deadline before receipt replay; replay returns that acknowledged result. Empty exhaustion and
+other-member/anonymous views use their own admission. Web binds list GET and the callable point separately; Following
+return stores cursor, kind and target on the private list history entry with the current session. Fewest tests: one
+HTTP follow/replay/foreign/empty journey, one FULL withhold, one typed transport bind, one return-frontier pin.
+Native/browser/growth walks stay with later integration.
+
 ## Whole-query publication
 
 The 50-original branch is inadmissible. Its two `resolveSubject` disclosure passes alone require
