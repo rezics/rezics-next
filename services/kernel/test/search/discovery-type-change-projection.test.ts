@@ -173,6 +173,11 @@ test('replay of a Subject changing between released Types deletes its old kind a
     return body.hits.hits.find((row) => row._id === documentId);
   }
   try {
+    await admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete,display_name,discovery_revision)
+       VALUES ($1,$2,'actor','active',$2,true,$3,$4)`,
+      [route, id, account.displayName, String(account.revision)],
+    );
     const baseline = await append([{ type: 'com.rezics.fixture.created.v1', subject: 'walk-b-374d19', data: {} }]);
     expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: baseline });
     await projection.project(partition, [personKey]);
@@ -184,7 +189,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     subject.type = 'schema:Book';
     await admin.query(
       `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind)
-       VALUES ($1,$2,$3,$4,'schema:Book') ON CONFLICT DO NOTHING`,
+       VALUES ($1,$2,$3,$4,'schema:Book'),($1,$2,$3,$4,'account') ON CONFLICT DO NOTHING`,
       [route, id, prefix, target.generation],
     );
     failWrite = true;
@@ -232,6 +237,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     await admin.query('DELETE FROM search.discovery_copy WHERE prefix=$1', [prefix]);
     await admin.query('DELETE FROM search.discovery_population WHERE prefix=$1', [prefix]);
     await admin.query('DELETE FROM search.discovery_generation WHERE prefix=$1', [prefix]);
+    await admin.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, id]);
     await admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [consumer]);
     for (const value of positions)
       await admin.query('DELETE FROM core.outbox WHERE partition_no=$1 AND position=$2', [partition, String(value)]);
