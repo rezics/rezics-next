@@ -176,6 +176,8 @@ native History composition plus Library domain. The root typecheck runner is not
 tests keep pinning the seeded voter, second-account and anonymous score journey; fewer test lines than product lines.
 
 Decision: FULL published-log views add Access `readContributionAttributions` in the existing enrichment: live
-`{id,displayName}`, an id-free Deleted account/organization label, or null unknown. Missing and pending identity stay
-unknown. Unit tests pin those three Log states; host-walk tests keep pinning the seeded voter, second-account and
-anonymous score journey. Fewer test lines than product lines.
+`{id,kind,displayName}`, an id-free Deleted account/organization label, or null unknown. Missing and pending identity stay
+unknown. A live actor or organization with an id remains live when displayName is Deleted account or Deleted
+organization; only the id-free producer variant is deletion. Unit tests pin those three Log states plus that live-name
+edge in the existing contribution files; host-walk tests keep pinning the seeded voter, second-account and anonymous
+score journey. Fewer test lines than product lines; no extra story.

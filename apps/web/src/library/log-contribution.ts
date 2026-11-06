@@ -26,18 +26,12 @@ function deletedName(value: unknown): DeletedLogContribution['displayName'] | un
 export function logContribution(value: unknown): LogContribution {
   const row = record(value);
   if (!row) return { kind: 'unknown' };
-  if (row.kind === 'unknown') return { kind: 'unknown' };
+  const id = typeof row.id === 'string' && row.id.length > 0 ? row.id : undefined;
+  if (id && (typeof row.displayName === 'string' || row.displayName === null))
+    return { kind: 'live', id, displayName: row.displayName };
   const deleted = deletedName(row.displayName);
-  if (row.kind === 'deleted' || deleted) {
-    if (deleted && !('id' in row)) return { kind: 'deleted', displayName: deleted };
-    return { kind: 'unknown' };
-  }
-  if (
-    typeof row.id === 'string' &&
-    row.id.length > 0 &&
-    (typeof row.displayName === 'string' || row.displayName === null)
-  )
-    return { kind: 'live', id: row.id, displayName: row.displayName };
+  if (deleted && !('id' in row) && row.kind !== 'actor' && row.kind !== 'organization')
+    return { kind: 'deleted', displayName: deleted };
   return { kind: 'unknown' };
 }
 

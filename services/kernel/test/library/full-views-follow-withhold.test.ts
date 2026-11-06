@@ -7,9 +7,10 @@ const deleted = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
 const missing = '0192f3a0-6c1e-7b2a-9d4e-000000000004';
 const resolutions: string[] = [];
 let observationCurrent = true;
-const attributions = new Map<string, { id: string; displayName: string } | { displayName: 'Deleted account' } | null>([
-  [original, { id: original, displayName: 'Owner' }],
-]);
+const attributions = new Map<
+  string,
+  { id: string; kind: 'actor'; displayName: string } | { displayName: 'Deleted account' } | null
+>([[original, { id: original, kind: 'actor', displayName: 'Owner' }]]);
 
 mock.module('../../src/library/subject-anchor.ts', () => ({
   resolveSubject: async (_deps: unknown, _actor: unknown, id: string) => {
@@ -103,7 +104,7 @@ test('FULL published-log withholds a changed Source and keeps the public snapsho
     ...snapshot,
     subject: null,
     account: { id: original, handle: 'owner', displayName: 'Owner' },
-    attribution: { id: original, displayName: 'Owner' },
+    attribution: { id: original, kind: 'actor', displayName: 'Owner' },
   });
 });
 
@@ -130,7 +131,7 @@ test('FULL published-log attribution keeps live identity, an id-free deletion la
     { withholdChangedSource: true },
   );
   expect(page.publishedLogs.map((row) => row.attribution)).toEqual([
-    { id: original, displayName: 'Owner' },
+    { id: original, kind: 'actor', displayName: 'Owner' },
     { displayName: 'Deleted account' },
     null,
   ]);

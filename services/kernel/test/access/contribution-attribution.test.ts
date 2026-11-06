@@ -14,6 +14,11 @@ test('only authoritative deletion de-identifies retained people and organization
     const live = { id, kind, state: 'active', displayName: 'Current name', handle: 'current' };
     expect(contributionAttribution(live)).toEqual({ id, kind, displayName: 'Current name' });
     expect(contributionAttribution({ ...live, state: 'suspended' })).toEqual({ id, kind, displayName: 'Current name' });
+    expect(contributionAttribution({ ...live, displayName: 'Deleted account' })).toEqual({
+      id,
+      kind,
+      displayName: 'Deleted account',
+    });
     const deleted = contributionAttribution({ ...live, state: 'deleted' });
     expect(deleted).toEqual({ displayName: kind === 'organization' ? 'Deleted organization' : 'Deleted account' });
     expect(contributionDeleted(deleted)).toBe(true);
