@@ -1316,6 +1316,8 @@ The server render has no browser location. The mounted form captures the exact r
 hydration, and return review waits for that capture. Server markup contains no location-derived value, so the server
 and first client markup agree. A server render that reads `window` switches its boundary to client rendering, so
 `step-up-server-render.test.ts` renders each page in a realm without `window` and rejects that marker.
+Hydration is checked through the real Start client: `start-client-handoff.test.ts` mounts the captured dev-server
+documents for login, Security and step-up, and each must hydrate without recoverable errors.
 
 Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
 
