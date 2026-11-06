@@ -348,10 +348,13 @@ async function until(check: () => boolean) {
   expect({
     ready: check(),
     writes: nativeWrites.map((write) => write.kind),
-    own: client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] }).map((query) => ({
-      status: query.state.status,
-      value: (query.state.data as { value?: unknown } | undefined)?.value,
-    })),
+    own: client
+      .getQueryCache()
+      .findAll({ queryKey: ['subject-own-reaction'] })
+      .map((query) => ({
+        status: query.state.status,
+        value: (query.state.data as { value?: unknown } | undefined)?.value,
+      })),
     chips: chips().map((button) => ({
       text: button.textContent,
       pressed: button.getAttribute('aria-pressed'),
@@ -559,9 +562,7 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   holdPersonalCalls = new Set([1, 2, 5]);
   const firstOutcome = zoneOutcome(subjectId);
   await paint(firstOutcome);
-  await until(
-    () => personalCalls.length === 1 && personalCalls[0]!.result !== undefined,
-  );
+  await until(() => personalCalls.length === 1 && personalCalls[0]!.result !== undefined);
 
   const firstPersonal = personalCalls[0]!.result!;
   expect(personalCalls[0]!.input.data).toEqual({
@@ -1028,10 +1029,7 @@ test('production Zone reloads its personal source after session loss while react
     await tick();
   });
   await until(
-    () =>
-      ownReads.length === 2 &&
-      followButton()?.disabled === false &&
-      chips().some((button) => !button.disabled),
+    () => ownReads.length === 2 && followButton()?.disabled === false && chips().some((button) => !button.disabled),
   );
   const recoveredFollowReads = followReads.length;
   expect(recoveredFollowReads).toBeGreaterThan(mountedFollowReads);
