@@ -10,6 +10,7 @@ import { createApp } from '../../src/http/app.ts';
 import { defineRateLimit } from '../../src/http/rate-limit.ts';
 import { createWriteRateStage } from '../../src/access/write-rate-stage.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { mountedRouteCatalogue } from '../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -62,7 +63,7 @@ const request = (path: string, count?: number, headers: Record<string, string> =
   });
 const opening = Bun.randomUUIDv7();
 beforeAll(async () => {
-  for (const group of ['search', 'search_advanced']) {
+  for (const group of ['search', 'search_advanced', 'selling']) {
     if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open) {
       await pool.query(
         `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
@@ -173,9 +174,10 @@ test('the default kernel composition declares every mounted write and installs t
     receiptKeys: testReceiptKeys(),
     ratePeer: () => '192.0.2.1',
   });
-  const writes = app.routes.filter((route) => {
-    const action = route.hooks?.detail?.['x-action'];
-    const readOnly = typeof action === 'string' && /^[a-z][a-z_]*:(read|list)$/.test(action);
+  const writes = mountedRouteCatalogue(app).routes.filter((route) => {
+    const detail = route.hooks?.detail as Record<string, unknown> | undefined;
+    const action = detail?.['x-action'];
+    const readOnly = typeof action === 'string' && /:(?:read|list)(?:_[a-z][a-z_]*)?(?![\s\S])/.test(action);
     return !['GET', 'HEAD', 'OPTIONS'].includes(route.method) && !readOnly;
   });
   expect(writes.length).toBeGreaterThan(0);
@@ -206,7 +208,10 @@ test('createKernel subject:read POST custom search authorizes without a write ch
     routeKey: new Uint8Array(32),
     receiptKeys: testReceiptKeys(),
     access: ({ actions: catalogue }) => {
-      expect(catalogue.get('subject:read')).toEqual({ anonymous: true });
+      expect(catalogue.get('subject:read')).toEqual({
+        anonymous: true,
+        'x-resource-types': ['community.realm', 'semantic.context', 'semantic.subject'],
+      });
       return {
         async authenticate() {
           throw new Error('unused');

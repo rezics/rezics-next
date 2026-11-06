@@ -137,19 +137,24 @@ describe('real constructor binding and native reuse', () => {
     const deadline = Date.now() + 600_000;
     const account = await driver.fixtures.person('editor');
     const actor = await access.authenticate(account.bearer, { pool: runtime.pool, deadline });
-    const observed = deriveAccess(
-      access,
-      new Proxy(access, {
-        get(target, key) {
-          const value = Reflect.get(target, key);
-          if (typeof value !== 'function') return value;
-          return (...args: unknown[]) => {
-            if (key === 'prepare' || key === 'preparePage') contexts.push(args);
-            return value.apply(target, args);
-          };
-        },
-      }),
-    );
+    const observed = deriveAccess(access, {
+      ...(access.prepare
+        ? {
+            async prepare(...args) {
+              contexts.push(args);
+              return access.prepare!(...args);
+            },
+          }
+        : {}),
+      ...(access.preparePage
+        ? {
+            async preparePage(...args) {
+              contexts.push(args);
+              return access.preparePage!(...args);
+            },
+          }
+        : {}),
+    });
     options = {
       access: observed,
       actor,

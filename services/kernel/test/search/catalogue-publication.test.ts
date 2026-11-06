@@ -67,12 +67,15 @@ function catalogueClient(options: {
       if (path.endsWith('/_settings')) {
         return { status: 200, body: { [index]: { settings: { index: { uuid } } } } as T };
       }
+      const after =
+        record(_body) && record(_body.params) && Array.isArray(_body.params.after) ? _body.params.after[0] : undefined;
+      const selected = typeof after === 'string' ? ids.filter((id) => id > after) : ids;
       return {
         status: 200,
         body: {
           timed_out: false,
           _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
-          hits: { hits: ids.map((id) => hit(id, index)) },
+          hits: { hits: selected.map((id) => hit(id, index)) },
         } as T,
       };
     },

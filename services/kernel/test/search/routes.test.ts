@@ -23,8 +23,9 @@ import {
 } from '../../src/search/query.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { createSearchService } from '../../src/search/service.ts';
-import type { IndexedSubject } from '../../src/search/source.ts';
+import { subjectPartition, type IndexedSubject } from '../../src/search/source.ts';
 import { createFakeSource } from './support/fake-source.ts';
+import { epochFixture } from '../semantic/support/identity-epoch.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const missingFigure: PublicFigureView = {
@@ -191,6 +192,7 @@ test('search and suggest pass the caller, the body and the query to the service,
         summary: null,
         figure: missingFigure,
         kind: result.type,
+        matchEvidence: { state: 'absent' },
         base: {
           id: result.id,
           kind: result.type,
@@ -519,40 +521,46 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     cursors: ring,
     release: async () => version,
   });
-  const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
-  const subjects: IndexedSubject[] = Array.from({ length: 5 }, (_, n) => ({
-    id: id(n),
-    type: n < 3 ? 'schema:Book' : 'kind:Kind1',
-    visibility: 'visible',
-    redirect: null,
-    securityRevision: 1,
-    labels: [{ language: 'en', value: `Book ${n}` }],
-    aliases: [],
-    descriptions: [],
-    statements: [],
-  }));
+  let identity: Awaited<ReturnType<typeof epochFixture>> | undefined;
+  const subjects: IndexedSubject[] = [];
   beforeAll(async () => {
+    identity = await epochFixture(database, { pool });
+    for (let n = 0; n < 5; n++) {
+      const created = await identity.create(`Book ${n}`, 0xa0);
+      const subject: IndexedSubject = {
+        id: created.id,
+        type: n < 3 ? 'schema:Book' : 'kind:Kind1',
+        visibility: 'visible',
+        redirect: null,
+        securityRevision: 1,
+        labels: [{ language: 'en', value: `Book ${n}` }],
+        aliases: [],
+        descriptions: [],
+        statements: [],
+      };
+      subjects.push(subject);
+      fake.put(subject);
+    }
     await installTemplates(native, prefix);
     await createSubjectIndex(native, prefix, 1);
-    for (const subject of subjects) fake.put(subject);
-    await native.bulk(
-      bulkLines(
-        index,
-        documentActions(
-          { partition: 10, position: 5n, subjects },
-          subjects.map((s) => s.id),
-        ),
-      ),
-      { query: { refresh: 'wait_for' } },
-    );
+    const partitions = new Map<number, string[]>();
+    for (const subject of subjects) {
+      const partition = subjectPartition(subject.id);
+      partitions.set(partition, [...(partitions.get(partition) ?? []), subject.id]);
+    }
+    for (const [partition, ids] of partitions) {
+      const snapshot = await fake.read(partition, ids);
+      await native.bulk(bulkLines(index, documentActions(snapshot, ids)), { query: { refresh: 'wait_for' } });
+    }
     await native.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(prefix) } }] });
-  });
+  }, 600_000);
   afterAll(async () => {
     await native.request('DELETE', `/${index}`);
     for (const name of [HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
       await native.request('DELETE', `/_scripts/${prefix}${name}`);
+    await identity?.close();
     await pool.end();
-  });
+  }, 600_000);
   const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
   test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {
     const before = queries;

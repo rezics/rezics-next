@@ -114,9 +114,11 @@ selected realm. TypeList completion, revocation and suspension reuse that same s
 Decision: typecheck repairs keep those assertions; fixtures carry `source` (owner unless catalogue), omit
 undefined `expected`, and FULL members pages pass only cursor, limit and languages. Catalogue publication
 observation uses the stored accepted release digest; it does not hash FilterRelease as Release. HTTP
-createKernel fixtures pass dedicated receipt keys, open gate:search exposure, call the official SearchService
-`complete` callback, and keep index prefixes within 48 characters. Native kind-metadata fixtures install the
-released templates before indexing.
+createKernel fixtures pass dedicated receipt keys, open gate:search and selling exposure, call the official SearchService
+`complete` callback, and keep index prefixes within 48 characters. Native kind-metadata SearchService hits use
+identity-admitted created subjects and install the released templates before indexing. Catalogue producer mocks honor
+`search_after`. Access observation wraps only prepare ports. createKernel write fixtures inspect mounted composed
+rates and the merged `subject:read` resource types.
 
 ## Readiness
 
