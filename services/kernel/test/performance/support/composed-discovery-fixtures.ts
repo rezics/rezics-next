@@ -398,12 +398,11 @@ export async function createComposedDiscoveryWorld(options: {
     });
     const fixture = population.base;
     await fixture.setup.openFeatures(['search', 'search_advanced', 'personal_library', 'reading_progress']);
-    const [books, recipes, classification, diet] = await Promise.all([
-      fixture.books(),
-      fixture.recipes(),
-      fixture.classification(),
-      fixture.diet(),
-    ]);
+    // One editor stream: classification/diet/books/recipes share that account's command home.
+    const classification = await fixture.classification();
+    const diet = await fixture.diet();
+    const books = await fixture.books();
+    const recipes = await fixture.recipes();
     const filters = fixture.filters(classification, diet);
     const filterErrors = [...PUBLIC_JOBS].flatMap((job) =>
       validateDocumentFilters(

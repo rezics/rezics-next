@@ -26,6 +26,7 @@ const accounts = {
   voter3: '019a1b2c-3d4e-7f00-8a00-5ab1ec700104',
   voter4: '019a1b2c-3d4e-7f00-8a00-5ab1ec700105',
   voter5: '019a1b2c-3d4e-7f00-8a00-5ab1ec700106',
+  voterEmpty: '019a1b2c-3d4e-7f00-8a00-5ab1ec700107',
 } as const;
 type Persona = keyof typeof accounts;
 type TestSubject = { id: string; statements: Record<string, Array<{ id: string }>> };
@@ -270,6 +271,19 @@ test('classification ballot and aggregate events have registered schemas separat
     }),
   ).toBe(true);
   expect(EVENT_TYPES()[CLASSIFICATION_AGGREGATE_CHANGED]).toBeDefined();
+});
+
+test('lifecycle cleanup of an actor with no ballots still emits a command event', async () => {
+  const actorId = accounts.voterEmpty;
+  const partition = partitionOf(routeOf(actorId)!)!;
+  await seedCheckpoint(partition);
+  await suspendAccount(database.admin, actorId);
+  await driveWorker([partition]);
+  const pending = await database.admin.query<{ cleanup_pending: boolean }>(
+    'SELECT cleanup_pending FROM rating.classification_ballot_actor WHERE route = $1 AND actor_id = $2',
+    [routeOf(actorId), actorId],
+  );
+  expect(pending.rows).toEqual([{ cleanup_pending: false }]);
 });
 
 test('mounted classification ballots stay private and converge through the durable worker under current disclosure', async () => {

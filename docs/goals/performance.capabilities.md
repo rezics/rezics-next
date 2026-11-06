@@ -118,7 +118,9 @@ sparse and unrelated-history growth as independent axes, one composed 16-read pa
 one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites. Isolated Auth's
 fork installs the ordinary History composition and product event catalogue (bun test preloads do not apply there),
 binds the parent Kernel receipt ring to its Access pool, reports the original Access error on the child stream, and
-settles acquired fixture resources on setup failure as well as completion.
+settles acquired fixture resources on setup failure as well as completion. Released classification, diet, books and
+recipes share one promise each and run on one editor stream so concurrent composed setup cannot double-create
+subjects. Empty classification-ballot cleanup after Access lifecycle still emits a command event.
 
 **Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access/History
 composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`

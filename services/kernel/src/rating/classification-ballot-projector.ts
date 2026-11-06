@@ -254,14 +254,16 @@ async function applyCleanup(
           eligible: state.eligible,
         },
       }));
-      if (page.length > PAGE_SIZE) {
-        events.push({
-          type: CLASSIFICATION_BALLOT_CLEANUP,
-          subject: data.actorId,
-          data: { actorId: data.actorId, generation: data.generation },
-        });
-      } else {
+      const cleanup: CommandEvent = {
+        type: CLASSIFICATION_BALLOT_CLEANUP,
+        subject: data.actorId,
+        data: { actorId: data.actorId, generation: data.generation },
+      };
+      if (page.length > PAGE_SIZE) events.push(cleanup);
+      else {
+        // cleanupDone writes cleanup_pending; an empty page is still a domain write.
         await cleanupDone.run(tx, { route, actor_id: data.actorId, generation: data.generation });
+        if (events.length === 0) events.push(cleanup);
       }
       return { value: null, events };
     },
