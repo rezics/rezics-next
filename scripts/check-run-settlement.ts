@@ -2225,8 +2225,10 @@ export async function allocateCheckRunPhysical(
     if (record.phase !== 'queued' && record.phase !== 'uploading')
       throw new Error(`check-run-settlement: cannot allocate a run from ${record.phase}`);
     const physical = validatePhysical({ host, run });
-    if (record.physical && (record.physical.host !== physical.host || record.physical.run !== physical.run))
-      throw new Error('check-run-settlement: invocation already owns a different physical run');
+    if (record.physical && (record.physical.host !== physical.host || record.physical.run !== physical.run)) {
+      if (record.phase !== 'uploading')
+        throw new Error('check-run-settlement: invocation already owns a different physical run');
+    }
     return updateRecord(directory, record, { phase: 'uploading', physical });
   });
 }

@@ -69,6 +69,13 @@ Stderr reports connection work and probe failures (including `unix_listener` ove
 execution. `--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
 including the 11 GiB wait that still places on host b.
 
+A waiting check stays on the host that holds its upload while that host has a free slot. After two minutes with none,
+if another performance host can start it now, the check uploads there, takes the slot, and releases the first copy
+for host cleanup. A later move needs another two minutes full on the new host. Gate and landing-priority runs keep
+today's waiter order on the host they move to. `REMOTE_CHECK_PLACEMENT_MOVE_MS` is the test seam for that wait.
+Decision: pin the move with both host names and the wait before it in the check log; a host with a free slot never
+moves.
+
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, a labelled volume rather than 1 GiB tmpfs, nonce
@@ -82,7 +89,7 @@ returned file is merged.
 
 | Check        | Placement                                                                                                                                                                                                                                                                                                                      |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Worker       | The shared classifier keeps only proven typecheck, formatter and bounded small-unit commands local. Heavy and unknown commands use the performance hosts; `--local`, off markers and learned memory weight cannot force local execution. Missing hosts and remote transport failure return nonzero without local replay.                   |
+| Worker       | The shared classifier keeps only proven typecheck, formatter and bounded small-unit commands local. Heavy and unknown commands use the performance hosts; `--local`, off markers and learned memory weight cannot force local execution. Missing hosts and remote transport failure return nonzero without local replay.       |
 | Kernel       | Kernel checks and ordinary SQL-mapped typechecks use hosts a/b. The dev train's serial prelanding root typecheck runs on the train host and reuses compiler state from the prior dev commit; state is keyed by candidate commit and compiler/schema inputs and is published only after typecheck and database cleanup succeed. |
 | Auth service | `bun run --cwd services/auth check [files...]` places the database, compiler and test work through `stackRun`. `bun run --cwd services/auth typecheck` follows the kernel typecheck placement rule above, using a throwaway migrated Auth database when `DATABASE_URL` is absent.                                              |
 | Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                                   |
@@ -171,7 +178,8 @@ bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute
 
 Reconciliation without `--hosts` handles a prepared/queued invocation with no physical run: it durably cancels the
 start, then removes only the recorded snapshot and records that custody. If a physical host/run was already recorded,
-reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. A final
+reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. While the
+invocation is still uploading, a placement move may replace that physical identity; once running it stays fixed. A final
 record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
 For a preparation process lost before a registration record exists, use
 `bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--state-dir <absolute-dir>]`.

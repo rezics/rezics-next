@@ -291,6 +291,9 @@ the same attempt before it reserves a host. The refusal decides nothing about co
 dev verifier still check every candidate.
 Decision: a live worker slot holds a session that is writing code; check-host placement parks on the wrapper the way
 acceptance already does.
+Decision: a check waiting on a full upload host moves after two minutes when another performance host can start it now;
+it uploads there, takes the slot, releases the first copy, and keeps gate and landing order on the host it moves to.
+A later move needs another two minutes full. A host with a free slot never moves.
 Decision: the minimal combined check runs every command in one `sh -c` script and never joins them with `&&`, so a typecheck failure cannot hide test results. Product outcomes land when they type-check: a type error blocks a minimal worker, a failing test does so only in payment, payout, order settlement, points or balance code, and other failing test files go to the owning manager as repairs. Its result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
 
 Ordinary contracts can be amended before their first worker starts:
