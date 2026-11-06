@@ -166,7 +166,15 @@ export async function withCommandDispatchLifetime<T>(
   owner: CommandDispatchOwner,
   body: () => Promise<T>,
 ): Promise<T> {
-  return withDispatchScope(pool, deadline, owner, () => owner.reserve(COMMAND_DISPATCH_ALLOWANCE), undefined, false, body);
+  return withDispatchScope(
+    pool,
+    deadline,
+    owner,
+    () => owner.reserve(COMMAND_DISPATCH_ALLOWANCE),
+    undefined,
+    false,
+    body,
+  );
 }
 
 /** Additive exact Source exhausted native-fence profile; preserves the callback's normal result ABI. */

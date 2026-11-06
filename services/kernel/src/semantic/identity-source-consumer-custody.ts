@@ -1126,11 +1126,7 @@ async function published(
               ])
             ).rows[0];
             if (!jobRow || jobRow.state !== 'published') return null;
-            const outstanding = await tx.query(storeSelectEffectReceipt.sql, [
-              reference.job.jobId,
-              step,
-              home,
-            ]);
+            const outstanding = await tx.query(storeSelectEffectReceipt.sql, [reference.job.jobId, step, home]);
             if (outstanding.rowCount) return null;
             const ack = (await tx.query<{ progress: unknown }>(storeSelectAck2.sql, [reference.job.jobId, step, home]))
               .rows[0];
@@ -1217,50 +1213,50 @@ export async function readIdentitySourceConsumerCustody(
         'prepare',
         () =>
           runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
-          const current = await acceptedClaim(tx, reference);
-          if (
-            !current ||
-            current.generation !== binding.generation ||
-            current.binding_transaction_id !== binding.binding_transaction_id ||
-            current.scope_digest !== binding.scope_digest ||
-            json(current.sources) !== json(binding.sources)
-          )
-            return noEffect(null);
-          chargeDeclared(
-            pool,
-            context.deadline,
-            ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
-            'identity-source-original-Account-reader-declaration-missing',
-          );
-          const live = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
-          const owner = await readPartition(tx, reference.source.partition);
-          if (!sameSource(reference, live) || !owner || owner.writeState !== 'active') return noEffect(null);
-          const values = referenceValues(reference);
-          const existing = (await tx.query<Retained>(select.sql, values)).rows[0];
-          if (existing) return noEffect(existing);
-          bindSemanticProducerRoles(tx, live.roles);
-          registerCommandCallback(tx, async (transactionId) => {
-            await recordSemanticSourceCommit(tx, transactionId);
-            await tx.query(insert.sql, [
-              ...values,
-              current.generation,
-              current.binding_transaction_id,
-              current.scope_digest,
-              owner.epoch,
-              transactionId,
-            ]);
-          });
-          return {
-            value: null,
-            events: [
-              {
-                type: SEMANTIC_ERASURE_PROGRESS,
-                subject: reference.barrier.accountId,
-                data: { accountId: reference.barrier.accountId },
-              },
-            ],
-          };
-        }),
+            const current = await acceptedClaim(tx, reference);
+            if (
+              !current ||
+              current.generation !== binding.generation ||
+              current.binding_transaction_id !== binding.binding_transaction_id ||
+              current.scope_digest !== binding.scope_digest ||
+              json(current.sources) !== json(binding.sources)
+            )
+              return noEffect(null);
+            chargeDeclared(
+              pool,
+              context.deadline,
+              ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+              'identity-source-original-Account-reader-declaration-missing',
+            );
+            const live = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+            const owner = await readPartition(tx, reference.source.partition);
+            if (!sameSource(reference, live) || !owner || owner.writeState !== 'active') return noEffect(null);
+            const values = referenceValues(reference);
+            const existing = (await tx.query<Retained>(select.sql, values)).rows[0];
+            if (existing) return noEffect(existing);
+            bindSemanticProducerRoles(tx, live.roles);
+            registerCommandCallback(tx, async (transactionId) => {
+              await recordSemanticSourceCommit(tx, transactionId);
+              await tx.query(insert.sql, [
+                ...values,
+                current.generation,
+                current.binding_transaction_id,
+                current.scope_digest,
+                owner.epoch,
+                transactionId,
+              ]);
+            });
+            return {
+              value: null,
+              events: [
+                {
+                  type: SEMANTIC_ERASURE_PROGRESS,
+                  subject: reference.barrier.accountId,
+                  data: { accountId: reference.barrier.accountId },
+                },
+              ],
+            };
+          }),
       );
       // A newly inserted retained receipt is deliberately not used before its native commit.
       // No foreign home is held while the bounded consumer continuation runs.
@@ -1505,59 +1501,59 @@ async function checkpoint(
   return (
     await withWiderSourceCommand(pool, deadline, reference.barrier.accountId, 'checkpoint', () =>
       runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
-      const claim = await acceptedClaim(tx, reference);
-      if (!claim || claim.generation !== retained.binding_generation) return noEffect(false);
-      const current = await latest(tx, retained);
-      if ((current?.sequence ?? null) !== (previous?.sequence ?? null) || (current && terminal(current.state)))
-        return noEffect(false);
-      const owner = await readPartition(tx, reference.source.partition);
-      chargeDeclared(
-        pool,
-        deadline,
-        ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
-        'identity-source-original-Account-reader-declaration-missing',
-      );
-      const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
-      if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
-      bindSemanticProducerRoles(tx, roles);
-      registerCommandCallback(tx, async (transactionId) => {
-        await recordSemanticSourceCommit(tx, transactionId);
-        await tx.query(appendSQL.sql, [
-          reference.source.partition,
-          retained.erasure_key,
-          (BigInt(previous?.sequence ?? '0') + 1n).toString(),
-          previous?.sequence ?? null,
-          next.state,
-          next.directory ? json(next.directory) : null,
-          next.ticket,
-          next.after ? json(next.after) : null,
-          next.seal ? hash(next.seal) : null,
-          next.fence?.partition ?? null,
-          next.fence?.epoch ?? null,
-          next.fence?.position.toString() ?? null,
-          next.fence?.transactionId ?? null,
-          generation.replayGeneration,
-          generation.undoGeneration,
-          generation.restoreGeneration,
-          owner.epoch,
-          transactionId,
-          null,
-          null,
-          null,
-          null,
-        ]);
-      });
-      return {
-        value: true,
-        events: [
-          {
-            type: SEMANTIC_ERASURE_PROGRESS,
-            subject: reference.barrier.accountId,
-            data: { accountId: reference.barrier.accountId },
-          },
-        ],
-      };
-    }),
+        const claim = await acceptedClaim(tx, reference);
+        if (!claim || claim.generation !== retained.binding_generation) return noEffect(false);
+        const current = await latest(tx, retained);
+        if ((current?.sequence ?? null) !== (previous?.sequence ?? null) || (current && terminal(current.state)))
+          return noEffect(false);
+        const owner = await readPartition(tx, reference.source.partition);
+        chargeDeclared(
+          pool,
+          deadline,
+          ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+          'identity-source-original-Account-reader-declaration-missing',
+        );
+        const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+        if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
+        bindSemanticProducerRoles(tx, roles);
+        registerCommandCallback(tx, async (transactionId) => {
+          await recordSemanticSourceCommit(tx, transactionId);
+          await tx.query(appendSQL.sql, [
+            reference.source.partition,
+            retained.erasure_key,
+            (BigInt(previous?.sequence ?? '0') + 1n).toString(),
+            previous?.sequence ?? null,
+            next.state,
+            next.directory ? json(next.directory) : null,
+            next.ticket,
+            next.after ? json(next.after) : null,
+            next.seal ? hash(next.seal) : null,
+            next.fence?.partition ?? null,
+            next.fence?.epoch ?? null,
+            next.fence?.position.toString() ?? null,
+            next.fence?.transactionId ?? null,
+            generation.replayGeneration,
+            generation.undoGeneration,
+            generation.restoreGeneration,
+            owner.epoch,
+            transactionId,
+            null,
+            null,
+            null,
+            null,
+          ]);
+        });
+        return {
+          value: true,
+          events: [
+            {
+              type: SEMANTIC_ERASURE_PROGRESS,
+              subject: reference.barrier.accountId,
+              data: { accountId: reference.barrier.accountId },
+            },
+          ],
+        };
+      }),
     )
   ).value;
 }
@@ -1714,9 +1710,9 @@ async function advanceConsumers(
                   IDENTITY_SOURCE_RECEIVING_SELECTION_DECLARATION(),
                   'identity-source-receiving-selection-native-hold-declaration-missing',
                 );
-                const hold = (await import('../library/identity-original-work.ts')).declareLibraryIdentityCustodyOperation(
-                  'revalidateHold',
-                );
+                const hold = (
+                  await import('../library/identity-original-work.ts')
+                ).declareLibraryIdentityCustodyOperation('revalidateHold');
                 chargeDeclared(
                   pool,
                   deadline,
@@ -1928,104 +1924,104 @@ async function finishConsumers(
   // original-source admission/replay/undo/restore consumer, as required of the owner hook.
   const result = await withWiderSourceCommand(pool, deadline, reference.barrier.accountId, 'finish', () =>
     runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) => {
-    const claim = await acceptedClaim(tx, reference);
-    const saved = await latest(tx, retained);
-    if (
-      !claim ||
-      claim.generation !== retained.binding_generation ||
-      (saved?.sequence ?? null) !== (previous?.sequence ?? null)
-    )
-      return noEffect(false);
-    const owner = await readPartition(tx, reference.source.partition);
-    chargeDeclared(
-      pool,
-      deadline,
-      ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
-      'identity-source-original-Account-reader-declaration-missing',
-    );
-    const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
-    if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
-    const disposition = await ports.binding.lockIdentitySourceConsumerCut!(
-      tx,
-      reference,
-      generation,
-      reversal ?? undefined,
-    );
-    if (
-      !disposition ||
-      (reference.erasedRole === 'subject' && disposition !== 'discharged') ||
-      (reference.receipt.kind === 'account-agent.verify' &&
-        reference.erasedRole !== 'subject' &&
-        disposition !== 'transferred')
-    )
-      return noEffect(false);
-    let receiving: IdentityNativeReceipt | null = null;
-    if (disposition === 'transferred') {
+      const claim = await acceptedClaim(tx, reference);
+      const saved = await latest(tx, retained);
       if (
-        !ports.technical.acceptAccountIdentityTechnicalSource ||
-        !ports.technical.verifyAccountIdentityTechnicalSource
+        !claim ||
+        claim.generation !== retained.binding_generation ||
+        (saved?.sequence ?? null) !== (previous?.sequence ?? null)
       )
         return noEffect(false);
-      receiving = await ports.technical.acceptAccountIdentityTechnicalSource(tx, reference);
-      if (!receiving) return noEffect(false);
-      if (
-        receiving.partition !== reference.source.partition ||
-        receiving.epoch !== owner.epoch ||
-        receiving.position <= 0n ||
-        !uuid.test(receiving.transactionId) ||
-        !(await ports.technical.verifyAccountIdentityTechnicalSource(tx, reference, receiving))
-      )
-        throw new IdentityEpochStoreError('identity_effect_stale', 'Technical source acceptance lost native custody');
-    }
-    if (
-      !(await ports.binding.verifyIdentitySourceConsumerCut!(
+      const owner = await readPartition(tx, reference.source.partition);
+      chargeDeclared(
+        pool,
+        deadline,
+        ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+        'identity-source-original-Account-reader-declaration-missing',
+      );
+      const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+      if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
+      const disposition = await ports.binding.lockIdentitySourceConsumerCut!(
         tx,
         reference,
         generation,
-        disposition,
         reversal ?? undefined,
-      ))
-    )
-      throw new IdentityEpochStoreError('identity_effect_stale', 'Original consumer fence changed during transfer');
-    bindSemanticProducerRoles(tx, roles);
-    registerCommandCallback(tx, async (transactionId) => {
-      await recordSemanticSourceCommit(tx, transactionId);
-      await tx.query(appendSQL.sql, [
-        reference.source.partition,
-        retained.erasure_key,
-        (BigInt(previous?.sequence ?? '0') + 1n).toString(),
-        previous?.sequence ?? null,
-        disposition,
-        json(directory.frontier),
-        next.ticket,
-        null,
-        next.seal ? hash(next.seal) : null,
-        next.fence?.partition ?? null,
-        next.fence?.epoch ?? null,
-        next.fence?.position.toString() ?? null,
-        next.fence?.transactionId ?? null,
-        generation.replayGeneration,
-        generation.undoGeneration,
-        generation.restoreGeneration,
-        owner.epoch,
-        transactionId,
-        receiving?.partition ?? null,
-        receiving?.epoch ?? null,
-        receiving?.position.toString() ?? null,
-        receiving?.transactionId ?? null,
-      ]);
-    });
-    return {
-      value: true,
-      events: [
-        {
-          type: SEMANTIC_ERASURE_PROGRESS,
-          subject: reference.barrier.accountId,
-          data: { accountId: reference.barrier.accountId },
-        },
-      ],
-    };
-  }),
+      );
+      if (
+        !disposition ||
+        (reference.erasedRole === 'subject' && disposition !== 'discharged') ||
+        (reference.receipt.kind === 'account-agent.verify' &&
+          reference.erasedRole !== 'subject' &&
+          disposition !== 'transferred')
+      )
+        return noEffect(false);
+      let receiving: IdentityNativeReceipt | null = null;
+      if (disposition === 'transferred') {
+        if (
+          !ports.technical.acceptAccountIdentityTechnicalSource ||
+          !ports.technical.verifyAccountIdentityTechnicalSource
+        )
+          return noEffect(false);
+        receiving = await ports.technical.acceptAccountIdentityTechnicalSource(tx, reference);
+        if (!receiving) return noEffect(false);
+        if (
+          receiving.partition !== reference.source.partition ||
+          receiving.epoch !== owner.epoch ||
+          receiving.position <= 0n ||
+          !uuid.test(receiving.transactionId) ||
+          !(await ports.technical.verifyAccountIdentityTechnicalSource(tx, reference, receiving))
+        )
+          throw new IdentityEpochStoreError('identity_effect_stale', 'Technical source acceptance lost native custody');
+      }
+      if (
+        !(await ports.binding.verifyIdentitySourceConsumerCut!(
+          tx,
+          reference,
+          generation,
+          disposition,
+          reversal ?? undefined,
+        ))
+      )
+        throw new IdentityEpochStoreError('identity_effect_stale', 'Original consumer fence changed during transfer');
+      bindSemanticProducerRoles(tx, roles);
+      registerCommandCallback(tx, async (transactionId) => {
+        await recordSemanticSourceCommit(tx, transactionId);
+        await tx.query(appendSQL.sql, [
+          reference.source.partition,
+          retained.erasure_key,
+          (BigInt(previous?.sequence ?? '0') + 1n).toString(),
+          previous?.sequence ?? null,
+          disposition,
+          json(directory.frontier),
+          next.ticket,
+          null,
+          next.seal ? hash(next.seal) : null,
+          next.fence?.partition ?? null,
+          next.fence?.epoch ?? null,
+          next.fence?.position.toString() ?? null,
+          next.fence?.transactionId ?? null,
+          generation.replayGeneration,
+          generation.undoGeneration,
+          generation.restoreGeneration,
+          owner.epoch,
+          transactionId,
+          receiving?.partition ?? null,
+          receiving?.epoch ?? null,
+          receiving?.position.toString() ?? null,
+          receiving?.transactionId ?? null,
+        ]);
+      });
+      return {
+        value: true,
+        events: [
+          {
+            type: SEMANTIC_ERASURE_PROGRESS,
+            subject: reference.barrier.accountId,
+            data: { accountId: reference.barrier.accountId },
+          },
+        ],
+      };
+    }),
   );
   if (!result.value) return null;
   const proof = Object.freeze({
