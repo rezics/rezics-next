@@ -115,7 +115,7 @@ async function call(
   );
   return { response, value: await response.json() };
 }
-const inputFor = (accountId: string, actions = ['context:create']) => ({
+const inputFor = (accountId: string, actions = ['account:suspend']) => ({
   resource: PLATFORM_RESOURCE,
   subject: { kind: 'account' as const, id: accountId },
   actions,
@@ -308,24 +308,8 @@ test('native Auth and mounted platform suspension commit the real terminal state
   await expect(commands.suspend(cached, cachedInput)).rejects.toThrow();
   await expect(commands.suspend(cached, { accountId: recipient.accountId, key: Bun.randomUUIDv7() })).rejects.toThrow();
   await grants.create(await context(root.bearer), { ...inputFor(recipient.accountId), key: Bun.randomUUIDv7() });
-  const published = await call(root.bearer, '/v1/definitions/releases', {
-    release: {
-      format: 'https://rezics.com/definitions/release/1',
-      catalogue: { id: 'https://rezics.com/catalogue/test', version: '1' },
-      generator: { name: 'test', version: '1' },
-      prefixes: {},
-      types: {},
-      properties: {},
-    },
-  });
-  expect(published.response.status).toBe(201);
-  const { digest } = published.value as { digest: string };
-  expect(
-    (await call(root.bearer, `/v1/definitions/releases/${digest}:activate`, { expected_head: null })).response.status,
-  ).toBe(200);
-  expect((await call(recipient.bearer, '/v1/contexts', { labels: { en: 'Unrelated account' } })).response.status).toBe(
-    201,
-  );
+  const unrelated = await person('unrelated_victim');
+  expect((await call(recipient.bearer, pathFor(unrelated.accountId), {})).response.status).toBe(200);
 });
 
 test('the mounted action checks Global Context at the sole clock and independently denies actor, scope and principal ceilings', async () => {
@@ -447,12 +431,16 @@ test('suspension preserves membership, first-owner and operator reservations ind
     const after = await account(subject.accountId);
     expect(after).toMatchObject({
       ...before,
+      discovery_revision: expect.any(String),
+      public_changed_at: expect.any(Date),
       state: 'suspended',
       authn_fenced: true,
       minimum_authn_epoch: String(Number(before.minimum_authn_epoch) + 1),
       fence_receipt_id: expect.any(String),
       transaction_id: expect.any(String),
     });
+    expect(BigInt(after.discovery_revision)).toBeGreaterThan(BigInt(before.discovery_revision));
+    expect(after.public_changed_at.getTime()).toBeGreaterThanOrEqual(before.public_changed_at.getTime());
     const effectsAfter = (await effects())[0]!;
     expect(effectsAfter).toEqual({
       ...effectsBefore[0]!,
