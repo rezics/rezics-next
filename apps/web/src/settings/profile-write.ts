@@ -41,7 +41,7 @@ export type ProfileEditorState = {
   commandRetryAt: number;
   readRetryAt: number;
   /** Current field advice; null retires action authority, undefined keeps test/local drafts writable. */
-  editing?: ProfileEditing | null;
+  editing?: ProfileEditing | null | undefined;
   failure?: (EditableProfileFailure & { message: string }) | undefined;
 };
 
@@ -156,7 +156,9 @@ export class ProfileEditor {
     return this.current() && (this.io.canWrite?.() ?? true);
   }
   /** Exact current control name for keyboard return; pointer return never reads it. */
-  lastFocus: string | undefined;
+  lastFocus: string | undefined = undefined;
+  /** Field name captured for the next keyboard restore; pointer return leaves focus alone. */
+  pendingReturnFocus: string | undefined = undefined;
   captureReturn() {
     const { known, draft, readAuthority } = this.state;
     if (!this.current() || readAuthority !== 'allowed' || !known || !draft) return null;
@@ -166,6 +168,7 @@ export class ProfileEditor {
     if (!this.canWrite() || this.state.readAuthority !== 'allowed' || !this.state.known) return;
     if (snapshot.known.accountId !== this.state.known.accountId) return;
     this.lastFocus = snapshot.lastFocus;
+    this.pendingReturnFocus = snapshot.lastFocus;
     const next = rebaseProfile(snapshot.known, snapshot.draft, this.state.known);
     this.edit({
       displayName: next.displayName,
@@ -184,6 +187,7 @@ export class ProfileEditor {
     this.readVersion++;
     this.laterEdits = {};
     this.lastFocus = undefined;
+    this.pendingReturnFocus = undefined;
     this.update({
       known: null,
       draft: null,

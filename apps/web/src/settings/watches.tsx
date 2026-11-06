@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { m } from '../paraglide/messages.js';
 import { useSettingsDisposal, useSettingsSessionOwner } from './settings-session-owner';
 import { useSettingsNavigationDraft } from './reading-navigation';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { usePreferenceRetry } from './preferences';
 import { WatchController, type WatchReturnReceipt } from './watch-controller';
 import { readWatchInventory, removeWatchSubscription } from './actions';
 import type { WatchManagementIO } from './watch-native';
@@ -263,7 +263,9 @@ function OwnedWatches({
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
-                  {state.rows.map((row) => (
+                  {state.rows.map((row) => {
+                    const target = row.target;
+                    return (
                     <li
                       key={row.subscriptionId}
                       className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-4"
@@ -272,10 +274,10 @@ function OwnedWatches({
                         <p className="text-xs text-muted-foreground">
                           {row.kind === 'thread' ? m.settings_watches_thread() : m.settings_watches_board()}
                         </p>
-                        {row.target ? (
+                        {target ? (
                           onVisitTarget ? (
                             <Link
-                              to={row.target.href as never}
+                              to={target.href as never}
                               onClick={(event) => {
                                 if (
                                   event.defaultPrevented ||
@@ -291,18 +293,18 @@ function OwnedWatches({
                                   row.subscriptionId,
                                   event.detail === 0 && document.activeElement === event.currentTarget,
                                 );
-                                if (receipt && !onVisitTarget(receipt, row.target.href)) event.preventDefault();
+                                if (receipt && !onVisitTarget(receipt, target.href)) event.preventDefault();
                               }}
                               className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
                             >
-                              {row.target.title}
+                              {target.title}
                             </Link>
                           ) : (
                             <a
-                              href={row.target.href}
+                              href={target.href}
                               className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
                             >
-                              {row.target.title}
+                              {target.title}
                             </a>
                           )
                         ) : (
@@ -329,7 +331,8 @@ function OwnedWatches({
                         {m.settings_watches_stop()}
                       </Button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
               <div className="flex flex-wrap gap-3">

@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { officialProfileRead } from '../../src/settings/editable-profile-source';
 import type { ProfileValues } from '../../src/settings/profile-data';
 
 type Envelope = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['accounts']>['profile']['get']>>['data']>;
@@ -34,7 +35,7 @@ export function editableProfile({
 }
 
 export function profileEnvelope(profile = editableProfile()): Envelope {
-  return { profile: structuredClone(profile) };
+  return officialProfileRead(structuredClone(profile)) as Envelope;
 }
 
 export function profileAvatar(): NonNullable<Profile['avatar']> {

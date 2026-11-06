@@ -8,7 +8,7 @@ import { ProfileFeedback } from './profile';
 import { profileChanges, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { usePreferenceRetry } from './preferences';
 
 export function PublicViewsSection() {
   const { editor, readable, writable } = useProfileEditor();

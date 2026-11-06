@@ -11,6 +11,8 @@ import {
 } from '../src/settings/profile-write';
 import { parseProfileWrite } from '../src/settings/profile-write-input';
 import { profileNeedsNavigationDecision } from '../src/settings/profile-navigation';
+import { preferenceRetryDeadline, usePreferenceRetry } from '../src/settings/preferences';
+import { captureProfileReturn, isProfileReturnSnapshot } from '../src/settings/settings-return';
 
 function initial(): ProfileValues {
   return profileValues(
@@ -697,4 +699,35 @@ test('the ten-second Profile deadline releases a stalled command, ignores late a
     globalThis.clearTimeout = clear;
     editor.retire();
   }
+});
+
+test('Settings preferences export the installed retry hook used by Profile recovery', () => {
+  expect(typeof usePreferenceRetry).toBe('function');
+  expect(preferenceRetryDeadline('30', 1_000)).toBe(31_000);
+});
+
+test('a successful Profile save reads back only that account, then an unsaved draft restores after a Watch visit', async () => {
+  const boundary = api();
+  const editor = new ProfileEditor(boundary.io, initial());
+  editor.edit({ displayName: 'Saved name' });
+  await editor.submit('profile');
+  expect(editor.snapshot().phase).toBe('saved');
+  expect(boundary.writes).toHaveLength(1);
+  expect(boundary.reads).toEqual([`/v1/accounts/${initial().accountId}/profile`]);
+  editor.edit({ biography: 'Later unsaved notes' });
+  editor.lastFocus = 'biography';
+  const snapshot = captureProfileReturn(
+    editor.snapshot().known,
+    editor.snapshot().draft,
+    editor.lastFocus,
+  );
+  expect(snapshot && isProfileReturnSnapshot(snapshot)).toBe(true);
+  expect(snapshot?.draft.biography).toBe('Later unsaved notes');
+  const current = { ...boundary.current(), displayName: 'Native later name', biography: 'Native later notes' };
+  editor.receive(current);
+  editor.restoreReturn(snapshot!);
+  expect(editor.snapshot().draft?.displayName).toBe('Native later name');
+  expect(editor.snapshot().draft?.biography).toBe('Later unsaved notes');
+  expect(editor.lastFocus).toBe('biography');
+  expect(editor.pendingReturnFocus).toBe('biography');
 });

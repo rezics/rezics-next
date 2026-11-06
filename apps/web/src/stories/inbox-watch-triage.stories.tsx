@@ -51,12 +51,19 @@ function nativeNotice(id: string, kind: InboxNotice['kind']): InboxNotice {
         boardTitle: board ? 'Books and reading' : null,
       };
   const actor = moderation
-    ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
+    ? {
+        state: 'system' as const,
+        displayName: 'Moderation team' as const,
+        handle: null,
+        avatar: null,
+        avatarUrl: null,
+      }
     : {
         state: 'available' as const,
         accountId: 'actor-1',
         displayName: 'Momo',
         handle: 'momo',
+        avatar: null,
         avatarUrl: null,
         automated: false,
       };

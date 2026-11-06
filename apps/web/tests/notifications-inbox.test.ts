@@ -523,7 +523,7 @@ test('native service failures never claim preparation, preserve problem details,
 test('actual Retry-After survives the composed list failure; only a valid header supplies a wait', async () => {
   const { inboxReadFailure } = await import('../src/inbox/inbox-read');
   const { MediaProblem } = await import('../src/media/kernel');
-  const { preferenceRetryDeadline } = await import('../src/settings/preference-failure-retry');
+  const { preferenceRetryDeadline } = await import('../src/settings/preferences');
   const now = Date.parse('2026-10-31T00:00:00.000Z');
   for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined]) {
     const paths: string[] = [];
@@ -745,7 +745,7 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
 
 test('Retain native failure metadata when marking Inbox notices seen with original request/privacy/recovery bounds intact', async () => {
   const { InboxSeenError, loadInboxSeen } = await import('../src/inbox/inbox-read');
-  const { preferenceRetryDeadline } = await import('../src/settings/preference-failure-retry');
+  const { preferenceRetryDeadline } = await import('../src/settings/preferences');
   const token = 'A'.repeat(22);
   const sessionEnv = {
     SITE_ORIGINS: 'https://site.example.test',

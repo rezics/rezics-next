@@ -1,4 +1,4 @@
-import { editableProfile } from './factories/profile';
+import { editableProfile, profileEnvelope } from './factories/profile';
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import {
@@ -375,4 +375,10 @@ test('native applicability and each public-view flag gate complete patches witho
     draft: { displayName: 'Keep for review' },
   });
   expect(writes).toBe(0);
+});
+
+test('the shared profile fixture returns the installed profile and editing envelope', () => {
+  const envelope = profileEnvelope(profile);
+  expect(envelope.profile).toEqual(profile);
+  expect(envelope.editing).toEqual(closedProfileEditing(profile));
 });

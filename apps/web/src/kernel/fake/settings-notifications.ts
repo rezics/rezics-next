@@ -7,20 +7,20 @@ const optionalDefaults = {
   mention: true,
   thread_watch: true,
   board_activity: true,
-} as const;
+} as const satisfies Record<Exclude<PreferencePage['kinds'][number]['kind'], 'moderation_decision'>, true>;
 
 /** Recorded Settings page matching the native catalogue projection. */
 export function settingsPreferencePage(notifications: NotificationPreferences, version: number): PreferencePage {
   return {
     version,
     kinds: [
-      ...Object.entries(optionalDefaults).map(([kind, defaultEnabled]) => ({
+      ...(Object.keys(optionalDefaults) as (keyof typeof optionalDefaults)[]).map((kind) => ({
         kind,
         optional: true,
-        default: defaultEnabled,
-        enabled: notifications[kind] ?? defaultEnabled,
+        default: optionalDefaults[kind],
+        enabled: notifications[kind] ?? optionalDefaults[kind],
       })),
-      { kind: 'moderation_decision', optional: false, default: true, enabled: true },
+      { kind: 'moderation_decision' as const, optional: false, default: true, enabled: true },
     ],
     actions: [
       { name: 'edit', expectedVersion: version },

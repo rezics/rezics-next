@@ -26,7 +26,7 @@ import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
 import type { NativePreferenceFailure, SettingsPage } from './preferences';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { usePreferenceRetry } from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
@@ -223,21 +223,28 @@ function RetainedSettingsPanel({
     setHydrated(true);
     if (selected && !previous.current) {
       const heading = panel.current?.querySelector<HTMLElement>('h2, [data-settings-focus-region]') ?? panel.current;
+      const returned = panel.current?.querySelector<HTMLElement>('[data-settings-return-focus]');
       const remembered = lastFocus.current;
       const exact =
-        remembered &&
-        remembered.isConnected &&
-        panel.current?.contains(remembered) &&
-        !remembered.hasAttribute('disabled') &&
-        remembered.getAttribute('aria-disabled') !== 'true'
-          ? remembered
-          : null;
+        returned &&
+        returned.isConnected &&
+        !returned.hasAttribute('disabled') &&
+        returned.getAttribute('aria-disabled') !== 'true'
+          ? returned
+          : remembered &&
+              remembered.isConnected &&
+              panel.current?.contains(remembered) &&
+              !remembered.hasAttribute('disabled') &&
+              remembered.getAttribute('aria-disabled') !== 'true'
+            ? remembered
+            : null;
       if (sectionFocus === 'keyboard') {
         const target = exact ?? heading;
         if (target) {
           if (target.tabIndex < 0) target.tabIndex = -1;
           target.focus();
         }
+        returned?.removeAttribute('data-settings-return-focus');
       }
     }
     previous.current = selected;
