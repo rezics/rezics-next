@@ -14,6 +14,7 @@ import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 
@@ -274,6 +275,7 @@ beforeAll(async () => {
   });
   const url = pool.options.connectionString!;
   growth = await openGrowthDatabase(url);
+  configureTestReceiptKeys(growth.pool);
   growth.pool.options.max = 1; // Every cross-partition checkout must be released.
   const { space } = await http<{ space: { spaceId: string } }>('other', 'POST', '/v1/spaces', {
     title: 'Erasure space',

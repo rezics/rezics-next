@@ -12,6 +12,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { accessCommandAttempt } from '../../src/access/command-admission.ts';
+import type { CommandAttempt } from '../../src/command/command.ts';
 import { accessCheck, type AccountActor, type AccessContext } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -219,15 +220,20 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   const spaceId = await createSpace();
   await f.grant(f.actor.accountId, root, 'realm:create');
   const request = context();
-  const preparations: { action: string; context: AccessContext; via: 'prepare' | 'preparePage' }[] = [];
+  const preparations: {
+    action: string;
+    context: AccessContext;
+    attempt: CommandAttempt | undefined;
+    via: 'prepare' | 'preparePage';
+  }[] = [];
   const prepare = f.access.prepare!.bind(f.access);
   const preparePage = f.access.preparePage!.bind(f.access);
   f.access.prepare = async (actor, action, resource, context) => {
-    preparations.push({ action, context, via: 'prepare' });
+    preparations.push({ action, context, attempt: accessCommandAttempt(context), via: 'prepare' });
     return prepare(actor, action, resource, context);
   };
   f.access.preparePage = async (actor, action, page, context) => {
-    preparations.push({ action, context, via: 'preparePage' });
+    preparations.push({ action, context, attempt: accessCommandAttempt(context), via: 'preparePage' });
     return preparePage(actor, action, page, context);
   };
   let created;
@@ -254,9 +260,9 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   expect(contextRead!.via).toBe('prepare');
   expect(owner!.context).toBe(parent!.context);
   expect(contextRead!.context).toBe(parent!.context);
-  expect(accessCommandAttempt(parent!.context)).toBeDefined();
-  expect(accessCommandAttempt(owner!.context)).toBe(accessCommandAttempt(parent!.context));
-  expect(accessCommandAttempt(contextRead!.context)).toBe(accessCommandAttempt(parent!.context));
+  expect(parent!.attempt).toBeDefined();
+  expect(owner!.attempt).toBe(parent!.attempt);
+  expect(contextRead!.attempt).toBe(parent!.attempt);
   expect(await read(realmId)).toMatchObject({
     realmId,
     spaceId,
