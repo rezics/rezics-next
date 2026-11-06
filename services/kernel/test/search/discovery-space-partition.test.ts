@@ -32,7 +32,7 @@ test('Space invalidation uses the native resolver and only the relay partition',
       spaces.push([...ids]);
     },
   } as unknown as DiscoveryProjection;
-  const consumer = `space-part-${crypto.randomUUID()}`;
+  const consumer = `space_part_${crypto.randomUUID().replaceAll('-', '')}`;
   const relay = createDiscoveryIndexer(pool, projection, consumer);
   const positions: bigint[] = [];
   try {
