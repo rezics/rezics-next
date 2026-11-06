@@ -211,10 +211,6 @@ function coversAll(candidate: string[], other: string[], policy: ControlPolicy['
   );
 }
 
-function coversAny(candidate: string[], other: string[], policy: ControlPolicy['brief']): boolean {
-  return candidate.some((path) => other.some((pattern) => pathsOverlap(path, pattern, policy)));
-}
-
 function continuationBatchPrefix(taskId: string, attempt: number): string {
   return `continuation-${taskId.slice(0, 8)}-${attempt}-`;
 }
@@ -275,7 +271,6 @@ export function continuationOverlap(
       ? continuationBatchPrefix(sourceTask, sourceAttempt)
       : undefined;
   const duplicate = (reason: string): ContinuationOverlap => ({ reason, after: [] });
-  const after = new Set<string>();
   const rows = db
     .query(`SELECT id, body FROM worker_tasks
     WHERE json_extract(body, '$.brief.goal') = ?
@@ -291,7 +286,6 @@ export function continuationOverlap(
       return duplicate(`overlaps task ${row.id}; merge the remainder into that task's scope`);
     if (coversAll(remaining, other.paths, policy))
       return duplicate(`overlaps task ${row.id}; merge the remainder into that task's scope`);
-    if (coversAny(remaining, other.paths, policy)) after.add(row.id);
   }
   for (const directory of CONTINUATION_OVERLAP_DIRECTORIES.map((relative) => join(projection.root, relative))) {
     const entries = projection.overlapDirectories.get(directory);
@@ -308,7 +302,8 @@ export function continuationOverlap(
         return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
     }
   }
-  return { after: [...after] };
+  // Partial overlap orders nothing: concurrent edits to shared files are the train resolver's job.
+  return { after: [] };
 }
 
 /** Explicit per-Goal values override the default derived from the Goal's durable brief history. */
