@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
@@ -143,6 +143,15 @@ let started: Promise<string> | undefined;
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      KERNEL_ORIGIN: fake.url.origin,
+      WEBSITE_CLIENT_KEY: JSON.stringify({ ...privateKey.export({ format: 'jwk' }), kid: 'media-worker-test' }),
+    };
+    // This fixture owns the R2 transport; task-local native bindings must not replace its store.
+    delete env.LOCAL_MEDIA_ORIGIN;
+    delete env.LOCAL_MEDIA_TOKEN;
     let output = '';
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
@@ -151,7 +160,7 @@ function site(): Promise<string> {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KERNEL_ORIGIN: fake.url.origin },
+      env,
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);

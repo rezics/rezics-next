@@ -169,7 +169,9 @@ Decision: local development uses the existing media port with a fixed 20 MiB-per
 Bangumi media host `lain.bgm.tv`; R2 remains the only production storage configuration.
 
 The site uses the same original and derivative files through a private loopback object transport on the native
-host. Setup writes its purpose-bound credential and origin into the ignored Web bindings. The existing site
+host. Setup writes its purpose-bound credential and origin into the ignored Web bindings. With both
+`LOCAL_MEDIA_ORIGIN` and `LOCAL_MEDIA_TOKEN` present, Worker configuration binds the origin and secret instead
+of the development R2 bucket so the site and native worker share the same objects. The existing site
 reservation, uploader-bound upload, completion and current download handlers remain the only browser media
 transport; their Auth/Access decisions run before object access. The object endpoint accepts at most 20 MiB per
 original, confines keys to the native media layout and exposes neither its credential nor storage URLs to pages.

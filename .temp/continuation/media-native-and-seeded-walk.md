@@ -96,3 +96,11 @@ all original assertions remain. The complete log is `.temp/check-logs/a79e70c3-0
 Retained unrelated compiler diagnostics include Search HTTP/scope admission, Semantic optional operands,
 terminal erasure fixture, kernel fixture, second-scope collections and music context admission. There is
 no compiler diagnostic in the local media bridge or its changed fixtures.
+
+Focused web receiving `c9392a57-62bd-4844-9575-22bf6e10966f` passed 20 cases but its three real Worker
+cases stopped at startup because the fixture omitted required `WEBSITE_CLIENT_KEY`. The fixture now generates
+its own private P-256 key without logging it and explicitly retains its R2 store. Inspection also found that
+Worker configuration discarded the native local media bindings and always selected R2; explicit local origin
+and credential now replace that binding together. Configuration acceptance pins both storage selections and
+keeps the local credential a Worker secret. This changes `apps/web/cloudflare.config.ts` outside the expected
+path list, plus the existing owner descriptions. It adds no upload writer or authorization bypass.
