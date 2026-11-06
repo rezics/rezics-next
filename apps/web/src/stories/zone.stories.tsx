@@ -57,6 +57,12 @@ async function staticHomeReady({ canvasElement }: { canvasElement: HTMLElement }
     true,
   );
   expect(canvasElement.querySelector('[data-zone-type-list]')).not.toBeNull();
+  const seeAll = await view.findByRole('link', { name: m.home_see_all() });
+  expect(seeAll).toHaveAttribute('href', `/${getLocale()}/zones/${zone}?list=books`);
+  const more = await view.findByRole('link', { name: m.library_more() });
+  expect(more.getAttribute('href')).toContain(`/zones/${zone}`);
+  expect(more.getAttribute('href')).toContain('list=books');
+  expect(more.getAttribute('href')).not.toContain('/search/list');
   await view.findByRole('link', { name: zoneRouteLabel('guide') });
 }
 
@@ -207,6 +213,34 @@ export const KeyboardNavigation: Story = {
   play: keyboardNavigationReady,
   globals: { viewport: { value: 'desktop1280' } },
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
+};
+
+async function typeListFullReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  await pageReady({ canvasElement });
+  const view = within(canvasElement);
+  await view.findByRole('heading', { level: 1 });
+  expect(view.queryByRole('link', { name: m.home_see_all() })).toBeNull();
+  const subjectLabel = staticSubject.subject.labels[getLocale()];
+  expect(
+    view.getAllByRole('link', { name: subjectLabel }).some((link) =>
+      link.getAttribute('href')?.includes(`/zones/${zone}/subjects/`),
+    ),
+  ).toBe(true);
+}
+
+export const TypeListFull: Story = {
+  parameters: { __id: 'pages-zones-type-list-full-page-on-route' },
+  name: 'TypeList full page stays on the Zone route',
+  play: typeListFullReady,
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
+};
+
+export const TypeListFullPhone: Story = {
+  name: 'TypeList full page on a narrow layout',
+  play: typeListFullReady,
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
 };
 
 export const HomePhone: Story = {

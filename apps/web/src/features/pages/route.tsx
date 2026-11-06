@@ -212,6 +212,17 @@ export function ZoneRoutePage({
   );
 }
 
-export function zonePageDestinations(zoneId: string, locale: string, route: string, cursor?: string): ZoneDestinations {
-  return { zoneId, locale, route, ...(cursor ? { cursor } : {}) };
+export function zonePageDestinations(
+  zoneId: string,
+  locale: string,
+  route: string,
+  search: { cursor?: string; list?: string } = {},
+): ZoneDestinations {
+  return {
+    zoneId,
+    locale,
+    route,
+    ...(search.list ? { list: search.list } : {}),
+    ...(search.cursor ? { cursor: search.cursor } : {}),
+  };
 }

@@ -30,4 +30,9 @@ test('Zone TypeList observed keys match readPage search canonical form including
   };
   expect(zoneObservedReadKey(members, languages)).toBe(canonicalize(members) as string);
   expect(zoneObservedReadKey(members, languages)).not.toBe(zoneObservedReadKey(descriptor, languages));
+  const collections: PageRead = {
+    kind: 'search',
+    body: { filter: { type: { in: ['schema:Book'] } }, sort: 'collections' },
+  };
+  expect(zoneObservedReadKey(collections, languages)).not.toBe(zoneObservedReadKey(descriptor, languages));
 });

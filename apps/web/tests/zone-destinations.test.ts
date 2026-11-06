@@ -29,4 +29,10 @@ test('a TypeList continuation keeps the localized Zone route and list identity',
     `/en/zones/${zone}?list=books&cursor=opaque-native-cursor`,
   );
   expect(zoneSubjectHref('zh-Hans', zone, subject, 'overview')).toBe(`/zh-Hans/zones/${zone}/subjects/${subject}`);
+  expect(zonePageSearch('?list=books&cursor=opaque-native-cursor')).toEqual({
+    cursor: 'opaque-native-cursor',
+    list: 'books',
+  });
+  expect(zonePageSearch('?cursor=opaque-native-cursor')).toEqual({ cursor: 'opaque-native-cursor' });
+  expect(zonePageSearch('?list=not valid')).toEqual({});
 });

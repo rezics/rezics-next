@@ -88,7 +88,7 @@ export const staticZoneHomeFake = {
             summary: null,
           },
         ],
-        next: null,
+        next: 'opaque-native-cursor',
       },
     },
   },

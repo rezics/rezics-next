@@ -66,7 +66,7 @@ function ConfiguredZoneRoute() {
                   locale={locale}
                   heading={route === '' ? zonePageTitle(zone, '', locale) : zoneRouteHeading(route, locale)}
                   messages={subjectPageMessages()}
-                  destinations={zonePageDestinations(id, locale, route, search.cursor)}
+                  destinations={zonePageDestinations(id, locale, route, search)}
                   {...(nonce !== undefined ? { nonce } : {})}
                 />
               )}

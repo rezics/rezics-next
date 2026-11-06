@@ -403,7 +403,7 @@ Released fixture: sources extension: actual public/unlisted/private curated Coll
 
 Scenarios and binding: Existing native Zone resource/typed/membership contracts; TO-FREEZE zone-user-site and full native default readPage composition. Original page outcomes remain bound.
 
-Stages: Declared: yes. Bound/exposed: resource, membership, mounted GET subjects, TypeList observed-key, served Zone routes and reader stale-cursor restart. API-passed: no; promoted: no. Full persona/growth/browser acceptance remains deferred.
+Stages: Declared: yes. Bound/exposed: resource, membership, mounted GET subjects, TypeList observed-key, served Zone routes, TypeList list-query identity and reader stale-cursor restart. API-passed: no; promoted: no. Full persona/growth/browser acceptance remains deferred.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):
 

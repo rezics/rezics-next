@@ -74,6 +74,7 @@ async function zoneTypeListMembership(
   const sourceMembership = await createZoneMembership(dependencies, {
     ...base,
     sources: { ...input.sources, scopes: [], mounts: [source.id] },
+    pageSize: descriptor.limit,
     ...(descriptor.filter ? { filter: parseFilter(JSON.parse(descriptor.filter) as FilterDocument) } : {}),
   });
   const streams = sourceMembership.streams.map((stream) => ({

@@ -53,7 +53,7 @@ function ZoneHomeRoute() {
                   locale={locale}
                   heading={zonePageTitle(zone, '', locale)}
                   messages={subjectPageMessages()}
-                  destinations={zonePageDestinations(id, locale, '', search.cursor)}
+                  destinations={zonePageDestinations(id, locale, '', search)}
                   {...(nonce !== undefined ? { nonce } : {})}
                 />
               )}

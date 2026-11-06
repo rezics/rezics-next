@@ -115,6 +115,7 @@ export type ZoneDestinations = {
   zoneId: string;
   locale: string;
   route: string;
+  list?: string;
   cursor?: string;
 };
 
@@ -148,7 +149,7 @@ export function ZoneTypeList(props: Record<string, unknown>) {
   const title = pageText(props.title, value.locale);
   const options = { locale: value.locale as never };
   const page = section?.ok ? nativeTypeListPage(section.read, section.body) : undefined;
-  const full = destinations.cursor !== undefined;
+  const full = destinations.list === id;
   const items: Item[] = (page?.subjects ?? []).map((hit) => {
     const label = pageText(hit.labels, value.locale);
     const workId = homeLibraryEnabled ? admittedCatalogueWorkId({ id: hit.id, summary: hit.summary }) : undefined;
