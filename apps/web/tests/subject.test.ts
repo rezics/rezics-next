@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -8,6 +8,8 @@ import { createKernelClient, type KernelClient } from '@rezics/client';
 import { slug } from '@rezics/definitions/slug';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const app = join(import.meta.dir, '..');
 const desktop = { width: 1280, height: 860 };

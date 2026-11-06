@@ -74,6 +74,7 @@ covered merely by linking a kernel test.
   `public-discovery-and-cache: Alice warming a public page cannot leak personal facts to anonymous or Bob`;
   `public-discovery-and-cache: private hydration requires Alice current authority`.
   Semantic/content/commerce own native publication feeds; web owns export consumption and served documents.
+  Focused bun tests pin overlay HTML, JSON-LD and sharing heads; they do not replace the composed native driver.
 - **Acceptance command**: `bun specs/support/verify-outcome-suite.ts specs/web-publication-outcomes.test.ts WEB_PUBLICATION_DRIVER "Web publication driver is required"`.
 
 ## Page states
