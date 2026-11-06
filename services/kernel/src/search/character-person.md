@@ -34,7 +34,9 @@ source-type facet admission and the complete same-statement qualifier conjunctio
 
 Decision: keep inverse selection on the existing `statement.inverse: true` form with explicit source UUIDs; consumers opt in only when they execute current inverse evidence, and inverse range or concept expansion remains unsupported. Do not add a second top-level inverse form.
 Decision: inverse syntax uses `statement.inverse: true` with explicit source UUIDs; consumers opt in only when they execute current inverse evidence, and inverse range or concept expansion remains unsupported.
-Decision: the installed page accepts exact work subject UUIDs and role concept UUIDs; a role filter requires at least one selected work.
+Decision: Characters and People accept exact work subject UUIDs and released role concept UUIDs; a role filter
+requires at least one selected work. Works mode searches credited Person names directly and applies its optional role
+to the same released credit statement.
 
 Both polarities retain candidates without trusting outbound index samples. The current Boolean
 matcher resolves inverse leaves through this seam and retains unknown inverse negatives.
@@ -121,11 +123,12 @@ per admitted variant; retained raw rows remain at most 1000. Existing source, ta
 disclosure work is unchanged. Progress writes at most A cursor rows using the existing lifecycle.
 
 This is one bounded native evidence step, not an absence certificate, a whole-page bound or a
-measurement of total preparation. Complete journey spoiler thresholds, measured finite
-authorized preparation, matching context previews and the installed character/person Web journey
-still require the continuation contract.
-A complete whole-page K must be
-derived before dispatch for that integrated plan; a raw native LIMIT cannot certify it.
+measurement of total preparation. The mounted credited-works mode retains same-credit qualifiers in
+result, kind facet, share and cursor requests; kind counts are current lower bounds, and incomplete
+producer evidence remains readiness. Selected kinds occupy AND leaf 0 so remaining-predicate counts
+keep the nested same-credit text; a bare kind filter is not an admitted count leaf. Work links carry
+the executed query back address, including the credited name, role, kinds, languages, threshold,
+ordering and current cursor.
 
 Runtime binding adds two exact activation-pointer reads per native relation probe or nonempty
 relation snapshot: capture and final observation. Each can require one stored release-body read

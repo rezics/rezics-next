@@ -15,6 +15,8 @@ import type { FacetPopulationSource } from '../semantic/facet-population-contrac
 import type { OpenSearch } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { compileText } from './text.ts';
+import { compileCreditedText } from './credit-search-query.ts';
+import { creditEvidenceFromEngineHit, verifyCreditedHit } from './credit-hit.ts';
 import { compileCurrentFilter } from './current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from './current-leaf.ts';
 import { subjectPartition, type SubjectSource, type RelationFacetMatch } from './source.ts';
@@ -142,12 +144,18 @@ export function createFacetDiscoveryStorage(
         property: plan.property,
         meaning: plan.meaning.digest,
         kinds: plan.kinds ?? null,
+        text: plan.text ?? null,
+        textField: plan.textField ?? null,
+        creditQualifiers: plan.creditQualifiers ?? null,
         ...(scope === null ? {} : { scope }),
       }),
       hash({
         observation: queried.snapshot.observation,
         property: plan.property,
         kinds: plan.kinds ?? null,
+        text: plan.text ?? null,
+        textField: plan.textField ?? null,
+        creditQualifiers: plan.creditQualifiers ?? null,
         ...(scope === null ? {} : { scope }),
       }),
     ];
@@ -163,11 +171,12 @@ export function createFacetDiscoveryStorage(
     if (joined.status !== 'joined') return null;
     // The actual Source definition must cover value membership AND target labels, including excluded contributors.
     const keys = joined.definition.dependencyKeys;
+    const capturedText = plan.textField === 'credited_creator' ? undefined : plan.text;
     if (
       hash({
         filter: joined.definition.capture.filterDocument ?? null,
         text: joined.definition.capture.text ?? null,
-      }) !== hash({ filter: plan.filterDocument ?? null, text: plan.text ?? null }) ||
+      }) !== hash({ filter: plan.filterDocument ?? null, text: capturedText ?? null }) ||
       joined.definition.meaning.digest !== plan.meaning.digest ||
       !keys.some((key) =>
         plan.valueKind === 'type' ? key.kind === 'type' : key.kind === 'property' && key.property === plan.property,
@@ -176,6 +185,52 @@ export function createFacetDiscoveryStorage(
     )
       return null;
     return joined;
+  }
+  async function creditedMembership(
+    plan: FacetNativePlan,
+    observation: PublicFilterQueriedObservation | undefined,
+    subject: string,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ): Promise<'match' | 'absent' | 'unready'> {
+    if (plan.textField !== 'credited_creator') return 'match';
+    if (!plan.text || !observation || observation.snapshot.kind !== 'pit') return 'unready';
+    const predicate = compileCreditedText(plan.text, plan.creditQualifiers ?? []).query;
+    const response = await search.request<{
+      hits: { hits: { _id: string; inner_hits?: unknown }[] };
+    }>(
+      'POST',
+      '/_search',
+      {
+        pit: { id: observation.snapshot.pit, keep_alive: '1m' },
+        size: 1,
+        track_total_hits: false,
+        version: true,
+        _source: false,
+        query: {
+          bool: {
+            filter: [
+              { ids: { values: [subject] } },
+              ...(plan.kinds?.length ? [{ terms: { kind: [...plan.kinds] } }] : []),
+              predicate,
+            ],
+          },
+        },
+      },
+      { timeoutMs: Math.max(1, context.deadline - Date.now()) },
+    );
+    meter.engineSearches++;
+    assertCompleteSearch(response.body);
+    const hits = response.body.hits.hits;
+    if (hits.length === 0) return 'absent';
+    const hit = hits[0];
+    if (hits.length !== 1 || !hit || hit._id !== subject) return 'unready';
+    const evidence = creditEvidenceFromEngineHit(hit);
+    if (!evidence) return 'unready';
+    const verified = await verifyCreditedHit(subjects.creditSearch, subject, evidence);
+    if (verified.state === 'current') return 'match';
+    if (verified.state === 'absent') return 'absent';
+    return 'unready';
   }
   async function safe(
     queried: PublicFilterQueriedObservation,
@@ -437,28 +492,34 @@ export function createFacetDiscoveryStorage(
               BigInt(hit._version) !== page.source.position
             )
               return false;
-            const matched = await search.request<{ hits: { hits: { _id: string }[] } }>(
-              'POST',
-              '/_search',
-              {
-                ...body,
-                query: {
-                  bool: {
-                    filter: [
-                      body.query,
-                      ...(plan.kinds?.length ? [{ terms: { kind: [...plan.kinds] } }] : []),
-                      compileText(plan.text, { field: 'search_text', prefix: 'facet-text-' }).query,
-                    ],
+            if (plan.textField === 'credited_creator') {
+              const membership = await creditedMembership(plan, textObservation, subject, context, meter);
+              if (membership === 'unready') return false;
+              textMatches = membership === 'match';
+            } else {
+              const matched = await search.request<{ hits: { hits: { _id: string }[] } }>(
+                'POST',
+                '/_search',
+                {
+                  ...body,
+                  query: {
+                    bool: {
+                      filter: [
+                        body.query,
+                        ...(plan.kinds?.length ? [{ terms: { kind: [...plan.kinds] } }] : []),
+                        compileText(plan.text, { field: 'search_text', prefix: 'facet-text-' }).query,
+                      ],
+                    },
                   },
                 },
-              },
-              { timeoutMs: Math.max(1, context.deadline - Date.now()) },
-            );
-            meter.engineSearches++;
-            assertCompleteSearch(matched.body);
-            if (matched.body.hits.hits.length > 1 || matched.body.hits.hits.some((entry) => entry._id !== subject))
-              return false;
-            textMatches = matched.body.hits.hits.length === 1;
+                { timeoutMs: Math.max(1, context.deadline - Date.now()) },
+              );
+              meter.engineSearches++;
+              assertCompleteSearch(matched.body);
+              if (matched.body.hits.hits.length > 1 || matched.body.hits.hits.some((entry) => entry._id !== subject))
+                return false;
+              textMatches = matched.body.hits.hits.length === 1;
+            }
           }
           if (match && textMatches) {
             if (plan.valueKind === 'type' && subjectType)
@@ -619,6 +680,12 @@ export function createFacetDiscoveryStorage(
     return { status: 'candidates' as const, rows, asOf: selected[0].as_of, cost: meter };
   }
 
+  async function verifyCreditedCandidate(read: FacetNativeRead, subject: string, context: PublicFilterConsumerContext) {
+    const meter: Meter = { ...emptyCost() };
+    const status = await creditedMembership(read.plan, read.textObservation, subject, context, meter);
+    return { status, cost: meter };
+  }
+
   /** Retire the exact retained value generation as soon as its contributor/target observation fails. */
   async function retireFacetCandidates(read: FacetNativeRead, context: PublicFilterConsumerContext) {
     const meter: Meter = { ...emptyCost() };
@@ -689,5 +756,11 @@ export function createFacetDiscoveryStorage(
       db.release();
     }
   }
-  return { prepareFacetStep: step, readFacetCandidates, retireFacetCandidates, expireFacetStep };
+  return {
+    prepareFacetStep: step,
+    readFacetCandidates,
+    verifyCreditedCandidate,
+    retireFacetCandidates,
+    expireFacetStep,
+  };
 }

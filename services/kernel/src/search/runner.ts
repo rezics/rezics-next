@@ -30,6 +30,7 @@ import {
   ensureSubjectRatingMapping,
   observedWrite,
   readSubjectCalendarMappingFormat,
+  readSubjectCreditMappingFormat,
   readSubjectActivationTime,
   subjectGenerations,
   subjectIndexName,
@@ -185,6 +186,7 @@ export async function startSearchIndexing(options: {
         const relays = await Promise.all(
           liveGenerations.map(async (generation) => {
             const calendarFormat = await readSubjectCalendarMappingFormat(options.search, options.prefix, generation);
+            const creditFormat = await readSubjectCreditMappingFormat(options.search, options.prefix, generation);
             return createSubjectIndexer({
               pool: options.pool,
               search: options.search,
@@ -193,6 +195,7 @@ export async function startSearchIndexing(options: {
               index: subjectIndexName(options.prefix, generation),
               consumer: subjectConsumer(options.prefix, generation),
               ...(calendarFormat === null ? {} : { calendarFormat }),
+              ...(creditFormat === null ? {} : { creditFormat }),
               writer: createSearchWriterGuard({
                 consumer: subjectConsumer(options.prefix, generation),
                 pool: options.pool,
@@ -201,6 +204,7 @@ export async function startSearchIndexing(options: {
                 listing: options.listing,
                 index: subjectIndexName(options.prefix, generation),
                 ...(calendarFormat === null ? {} : { calendarFormat }),
+                ...(creditFormat === null ? {} : { creditFormat }),
               }),
               ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
             });

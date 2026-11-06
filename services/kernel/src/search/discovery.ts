@@ -71,6 +71,8 @@ export const DISCOVERY_DOCUMENT_FORMAT = 1;
 export const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
 /** Calendar facts are written only to a physical generation using the matching successor mapping. */
 export const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
+/** Calendar and credited-name successor: Subject documents carry complete credit projections. */
+export const MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT = 4;
 export const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
 
@@ -171,7 +173,8 @@ type DocumentIdentity = {
   document_format:
     | typeof DISCOVERY_DOCUMENT_FORMAT
     | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT
-    | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
+    | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
+    | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
   identity?: string;
   id: string;
   kind: string;
@@ -205,7 +208,8 @@ export type DiscoveryIndexDefinition = {
       discovery_document_format:
         | typeof DISCOVERY_DOCUMENT_FORMAT
         | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT
-        | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
+        | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
+        | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
       identity?: string;
       name_sort_format: number;
       document_identity: string;
@@ -224,6 +228,8 @@ export type DiscoveryEngineHit = Readonly<{
   sourceVersion?: string | null;
   matched: readonly string[];
   engineEvidence?: EngineMatchEvidence;
+  /** Engine inner hits of the credited-name query, already structurally validated and unverified. */
+  creditEvidence?: readonly import('./credit-search.ts').CreditSearchWitness[];
   sort: readonly (string | number | null)[];
 }>;
 export type DiscoveryEngineResult = Readonly<{ generation?: number; hits: readonly DiscoveryEngineHit[] }>;

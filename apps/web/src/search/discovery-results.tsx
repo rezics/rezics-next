@@ -15,12 +15,14 @@ import {
   isAccountHit,
   isPublicDiscoveryHit,
   type AccountDiscoverySummary,
+  type DiscoveryCreditMatch,
   type DiscoveryViewerFact,
   type DiscoveryViewerQuestion,
   type DiscoveryState,
   type DiscoveryHit,
 } from './discovery';
 import { DiscoveryPublicRow } from './discovery-public-rows';
+import { creditRoles } from './character-person';
 
 function messageOptions(locale?: string) {
   return locale === undefined ? {} : { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -201,6 +203,44 @@ export function discoveryMessage(status: DiscoveryState['status'], locale?: stri
   }
 }
 
+/** Factual credit context for a credited-name hit; the work row keeps its own destination. */
+function CreditMatchRow({
+  match,
+  roleLabels,
+  locale,
+  subjectHrefFor,
+}: {
+  match: DiscoveryCreditMatch;
+  roleLabels: Readonly<Record<string, { label: string }>> | undefined;
+  locale: string;
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
+}) {
+  const options = messageOptions(locale);
+  const person = { id: match.targetId, label: match.name.value };
+  const roles = creditRoles(match);
+  return (
+    <li
+      data-slot="discovery-credit-match"
+      className="ml-6 list-none rounded-md border px-3 py-2 text-sm text-muted-foreground"
+    >
+      {m.subject_credit_named({}, options)}{' '}
+      <a
+        className="text-primary underline underline-offset-4"
+        href={subjectHrefFor?.(person) ?? subjectHref(person, locale).href}
+      >
+        {match.name.value}
+      </a>
+      {match.name.language ? <span lang={match.name.language}> ({match.name.language})</span> : null}
+      {roles.length > 0 ? (
+        <>
+          {' · '}
+          {m.subject_credit_role({}, options)}: {roles.map((id) => roleLabels?.[id]?.label ?? id).join(', ')}
+        </>
+      ) : null}
+    </li>
+  );
+}
+
 export function DiscoveryResults({
   state,
   locale,
@@ -209,6 +249,7 @@ export function DiscoveryResults({
   restartHref,
   subjectHrefFor,
   renderPersonal,
+  creditRoleLabels,
 }: {
   renderPersonal?: ((hit: DiscoveryHit, title: string) => ReactNode) | undefined;
   state: DiscoveryState;
@@ -217,6 +258,8 @@ export function DiscoveryResults({
   factDefinitions?: import('./work-context/facts').ResultFactDefinitions | undefined;
   restartHref?: string | undefined;
   subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
+  /** Role labels keyed by lowercase id; an unlabelled role shows its id. */
+  creditRoleLabels?: Readonly<Record<string, { label: string }>> | undefined;
 }) {
   if (state.status !== 'ready' || state.page.hits.length === 0) {
     const options = messageOptions(locale);
@@ -327,6 +370,14 @@ export function DiscoveryResults({
                 factDefinitions={factDefinitions}
                 subjectHrefFor={subjectHrefFor}
               />
+              {hit.creditMatch ? (
+                <CreditMatchRow
+                  match={hit.creditMatch}
+                  roleLabels={creditRoleLabels}
+                  locale={locale}
+                  subjectHrefFor={subjectHrefFor}
+                />
+              ) : null}
               {viewerRows.get(discoveryKey(hit)) ? (
                 <ViewerFactsRow
                   title={label?.value ?? summary.label?.value ?? hit.key.id}

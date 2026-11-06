@@ -11,6 +11,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Access } from '../request/access.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
+import { createKernelCreditSearchSource } from './runtime-defaults.ts';
 
 /**
  * Bind each native producer once for the live mixed query and its default indexer.
@@ -48,7 +49,9 @@ export function createDiscoveryProducerEntry(input: {
     space,
   });
   return Object.freeze({
-    subjects: input.subjects ?? createRatedSubjectSource(pool, routeKey).source,
+    subjects:
+      input.subjects ??
+      createRatedSubjectSource(pool, routeKey, createKernelCreditSearchSource(pool, routeKey)).source,
     accounts: accountDiscoverySource(pool),
     ...(reviewSource ? { reviewSource } : {}),
     ownerAdapters,

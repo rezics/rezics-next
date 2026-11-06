@@ -1,7 +1,7 @@
 import { FILTER_LIMITS } from '@rezics/filter';
-import type { DiscoveryRequest, DiscoveryState } from './discovery';
+import type { DiscoveryCreditMatch, DiscoveryHit, DiscoveryRequest, DiscoveryState } from './discovery';
 
-export type CharacterPersonMode = 'characters' | 'people';
+export type CharacterPersonMode = 'characters' | 'people' | 'works';
 export type CharacterPersonSort = 'name' | 'relevance';
 export type CharacterPersonSearch = {
   mode: CharacterPersonMode;
@@ -11,6 +11,7 @@ export type CharacterPersonSearch = {
   languages: string[];
   threshold: 0 | 1 | 2;
   sort: CharacterPersonSort;
+  kinds: string[];
   cursor?: string;
 };
 export type CharacterPersonForm = {
@@ -30,6 +31,7 @@ export type ParsedCharacterPersonSearch = {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const language = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
+const creditRoleProperty = 'wdt:P3831';
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -46,8 +48,11 @@ function localeLanguages(locale: string): string[] {
 /** Keep malformed URL values in the form so the user can repair the request in place. */
 export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale: string): ParsedCharacterPersonSearch {
   const rawMode = stringValue(raw.mode) ?? 'characters';
+  // Works mode has no work operand: valid work values are kept out of the search and the form.
+  const worksMode = rawMode === 'works';
   const rawName = stringValue(raw.name) ?? '';
   const rawRole = stringValue(raw.role) ?? '';
+  const rawKinds = values(raw.kinds ?? raw.kind).map((item) => (typeof item === 'string' ? item : item));
   const rawThreshold = raw.threshold === undefined ? '0' : String(raw.threshold);
   const rawSort = stringValue(raw.sort) ?? 'name';
   const rawWorks = values(raw.work)
@@ -66,7 +71,7 @@ export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale:
   const form: CharacterPersonForm = {
     mode: rawMode,
     name: rawName,
-    works: rawWorks.map(String).join('\n'),
+    works: worksMode ? '' : rawWorks.map(String).join('\n'),
     role: rawRole,
     languages: rawLanguages.length ? rawLanguages.map(String).join(', ') : localeLanguages(locale).join(', '),
     threshold: rawThreshold,
@@ -76,14 +81,18 @@ export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale:
   let error: ParsedCharacterPersonSearch['error'];
   if (
     (raw.mode !== undefined && typeof raw.mode !== 'string') ||
-    !['characters', 'people'].includes(rawMode) ||
+    !['characters', 'people', 'works'].includes(rawMode) ||
     (raw.name !== undefined && typeof raw.name !== 'string') ||
     new TextEncoder().encode(rawName).length > 512 ||
+    (worksMode && rawName.trim() === '') ||
     rawWorks.length > FILTER_LIMITS.in ||
     rawWorks.some((item) => typeof item !== 'string' || !uuid.test(item)) ||
     new Set(rawWorks).size !== rawWorks.length ||
     (raw.role !== undefined && typeof raw.role !== 'string') ||
     (rawRole !== '' && !uuid.test(rawRole)) ||
+    rawKinds.length > FILTER_LIMITS.in ||
+    rawKinds.some((kind) => typeof kind !== 'string' || !kind || kind.length > 128 || !kind.isWellFormed()) ||
+    new Set(rawKinds).size !== rawKinds.length ||
     (raw.language !== undefined &&
       (rawLanguages.length < 1 ||
         rawLanguages.length > 8 ||
@@ -97,10 +106,10 @@ export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale:
     (raw.cursor !== undefined && (rawCursor === undefined || rawCursor.length === 0 || rawCursor.length > 4864))
   )
     error = 'invalid_input';
-  else if (rawRole && rawWorks.length === 0) error = 'role_requires_work';
+  else if (rawRole && rawWorks.length === 0 && !worksMode) error = 'role_requires_work';
 
-  const mode: CharacterPersonMode = rawMode === 'people' ? 'people' : 'characters';
-  const works = rawWorks.filter((item): item is string => typeof item === 'string' && uuid.test(item));
+  const mode: CharacterPersonMode = worksMode ? 'works' : rawMode === 'people' ? 'people' : 'characters';
+  const works = worksMode ? [] : rawWorks.filter((item): item is string => typeof item === 'string' && uuid.test(item));
   const languages = rawLanguages.length
     ? rawLanguages.filter((tag): tag is string => typeof tag === 'string' && language.test(tag))
     : localeLanguages(locale);
@@ -115,6 +124,7 @@ export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale:
       languages,
       threshold,
       sort,
+      kinds: worksMode ? rawKinds.filter((item): item is string => typeof item === 'string') : [],
       ...(rawCursor ? { cursor: rawCursor } : {}),
     },
     form,
@@ -122,8 +132,50 @@ export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale:
   };
 }
 
+/** Drop optional-undefined fields so exact-optional server input matches CharacterPersonSearch. */
+export function characterPersonSearchFromFields(search: {
+  mode: CharacterPersonMode;
+  name: string;
+  works: string[];
+  kinds: string[];
+  role?: string | undefined;
+  languages: string[];
+  threshold: 0 | 1 | 2;
+  sort: CharacterPersonSort;
+  cursor?: string | undefined;
+}): CharacterPersonSearch {
+  return {
+    mode: search.mode,
+    name: search.name,
+    works: search.works,
+    kinds: search.kinds,
+    languages: search.languages,
+    threshold: search.threshold,
+    sort: search.sort,
+    ...(search.role ? { role: search.role } : {}),
+    ...(search.cursor ? { cursor: search.cursor } : {}),
+  };
+}
+
 /** Build one admitted universal Search request; inverse evidence stays on the native statement. */
 export function characterPersonRequest(search: CharacterPersonSearch): DiscoveryRequest {
+  if (search.mode === 'works')
+    return {
+      representation: 'discovery-v1',
+      limit: 20,
+      descriptions: true,
+      languages: search.languages,
+      spoilerThreshold: search.threshold,
+      sort: search.sort,
+      kindPage: { limit: 8 },
+      // Credited-name matching has no type or work condition; the role qualifies the matched credit statement.
+      textField: 'credited_creator',
+      text: search.name,
+      // Kind counts occupy AND leaf 0 so remaining-predicate proof keeps the nested same-credit text.
+      ...(search.kinds.length ? { filter: { and: [{ kind: { in: search.kinds } }] }, kindCountLeaf: 0 } : {}),
+      ...(search.role ? { creditQualifiers: [{ property: creditRoleProperty, value: search.role }] } : {}),
+      ...(search.cursor ? { cursor: search.cursor } : {}),
+    };
   const conditions: unknown[] = [{ type: { in: [search.mode === 'people' ? 'schema:Person' : 'schema:Character'] } }];
   if (search.works.length) {
     const qualifiers = search.role ? [{ property: 'wdt:P3831', in: [search.role] }] : undefined;
@@ -150,6 +202,20 @@ export function characterPersonRequest(search: CharacterPersonSearch): Discovery
   };
 }
 
+/** Released role item ids on one credited match, lowercased to match the label reader's keys. */
+export function creditRoles(match: DiscoveryCreditMatch): string[] {
+  return match.qualifiers
+    .filter((qualifier) => qualifier.property === creditRoleProperty)
+    .map((qualifier) => qualifier.value.toLowerCase());
+}
+
+/** Distinct role ids across a page, so each role label is read once. */
+export function creditRoleIds(hits: readonly DiscoveryHit[]): string[] {
+  return [
+    ...new Set(hits.flatMap((hit) => ('creditMatch' in hit && hit.creditMatch ? creditRoles(hit.creditMatch) : []))),
+  ];
+}
+
 /** Query identity prevents a prior request, principal, or locale from supplying visible rows. */
 export function characterPersonQueryKey(locale: string, principal: string, search: CharacterPersonSearch) {
   return ['character-person-search', locale, principal, characterPersonRequest(search)] as const;
@@ -173,6 +239,7 @@ export function characterPersonHref(locale: string, search: CharacterPersonSearc
   if (search.works.length === 1) params.set('work', search.works[0]!);
   else if (search.works.length > 1) params.set('work', JSON.stringify(search.works));
   if (search.role) params.set('role', search.role);
+  for (const kind of search.kinds) params.append('kinds', kind);
   if (search.languages.length === 1) params.set('language', search.languages[0]!);
   else if (search.languages.length > 1) params.set('language', JSON.stringify(search.languages));
   params.set('threshold', String(search.threshold));

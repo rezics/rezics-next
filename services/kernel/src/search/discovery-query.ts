@@ -7,8 +7,14 @@ import {
 import { assertCompleteSearch } from './complete-search.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { SearchSortValue } from './cursor.ts';
-import { MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT, MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
+import {
+  MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT,
+  MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT,
+  MIXED_DISCOVERY_DOCUMENT_FORMAT,
+} from './discovery.ts';
 import { discoveryNativeQuery } from './discovery-native-query.ts';
+import { parseCreditedNameEvidence } from './credit-search-query.ts';
+import type { CreditSearchWitness } from './credit-search.ts';
 import {
   MATCH_EVIDENCE_LIMITS,
   readEngineMatchEvidence,
@@ -24,6 +30,7 @@ export type DiscoveryCandidate = {
   sort: SearchSortValue[];
   matched?: readonly string[];
   engineEvidence?: EngineMatchEvidence;
+  creditEvidence?: readonly CreditSearchWitness[];
 };
 export type DiscoveryQueryPlan = {
   sort: DiscoveryOrder;
@@ -34,6 +41,8 @@ export type DiscoveryQueryPlan = {
   filter: Record<string, unknown>;
   after?: readonly SearchSortValue[];
   matchEvidence?: MatchEvidenceQuery;
+  /** The query is credited-creator text: read its nested credit inner hits as evidence. */
+  creditEvidence?: boolean;
 };
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -139,6 +148,7 @@ export function readDiscoveryCandidates(
       document,
       sort: hit.sort,
       ...(hit.matched_queries === undefined ? {} : { matched: hit.matched_queries }),
+      ...(plan.creditEvidence ? { creditEvidence: creditEvidenceOf(hit) } : {}),
       ...(engineEvidence === undefined
         ? {}
         : {
@@ -201,10 +211,11 @@ export function readDiscoveryEngineResult(
 ): DiscoveryEngineResult {
   const candidates = readDiscoveryCandidates(body, registry, physicalTarget, plan);
   return {
-    hits: candidates.map(({ key, document, index, sort, matched, engineEvidence }) => {
+    hits: candidates.map(({ key, document, index, sort, matched, engineEvidence, creditEvidence }) => {
       if (
         (document.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT &&
-          document.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) ||
+          document.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT &&
+          document.document_format !== MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT) ||
         (plan.sort === 'name' && sort[0] !== document.name_sort)
       )
         malformed();
@@ -217,8 +228,20 @@ export function readDiscoveryEngineResult(
         ...(ownerDocument ? { sourceVersion: document.source_version } : {}),
         matched: matched ?? [],
         ...(engineEvidence === undefined ? {} : { engineEvidence }),
+        ...(creditEvidence === undefined ? {} : { creditEvidence }),
         sort,
       };
     }),
   };
+}
+
+/** Inner hits are third-party engine output: each credited-name document must parse as one exact witness. */
+function creditEvidenceOf(hit: Record<string, unknown>): CreditSearchWitness[] {
+  const inner = record(hit.inner_hits) ? hit.inner_hits.credited_names : undefined;
+  const hits = record(inner) && record(inner.hits) && Array.isArray(inner.hits.hits) ? inner.hits.hits : [];
+  return hits.map((item: unknown) => {
+    const witness = parseCreditedNameEvidence(record(item) ? item._source : undefined);
+    if (witness === undefined) malformed();
+    return witness;
+  });
 }

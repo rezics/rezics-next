@@ -10,6 +10,7 @@ import type {
 import type { FacetDiscoveryValue } from './facet-discovery-contract.ts';
 import type { ScopedFacetAdmission } from './scoped-facet-source.ts';
 import type { TextNode } from './text.ts';
+import type { CreditQualifierOperand } from './credit-search-query.ts';
 
 /** Native facet plan after ordinary facet admission. A scoped request is supplied internally by its owner;
  * its source identity, meaning, population observation and current authorization are retained and rechecked.
@@ -19,6 +20,8 @@ export type FacetNativePlan = Readonly<{
   filterDocument: FilterDocument | undefined;
   kinds?: readonly string[];
   text: TextNode | undefined;
+  textField?: 'credited_creator';
+  creditQualifiers?: readonly CreditQualifierOperand[];
   property: string;
   valueKind: 'item' | 'code' | 'type';
   meaning: PublicFilterProjectionMeaning;
@@ -29,6 +32,7 @@ export type FacetNativePlan = Readonly<{
 export type FacetNativeRead = Readonly<{
   plan: FacetNativePlan;
   queried: PublicFilterQueriedObservation;
+  textObservation?: PublicFilterQueriedObservation;
   size: number;
   after: string | null;
 }>;
@@ -63,7 +67,7 @@ export interface FacetNativeOperations {
   captureFacet(
     request: Readonly<{ plan: FacetNativePlan }>,
     context: PublicFilterConsumerContext,
-  ): Promise<PublicFilterConsumerCapture>;
+  ): Promise<PublicFilterConsumerCapture & { textObservation?: PublicFilterQueriedObservation }>;
   /** One atomic common page, including shared native START/FINAL, current targets and all siblings. */
   pageFacets(
     request: Readonly<{ reads: readonly FacetNativeRead[] }>,

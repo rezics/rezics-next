@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import { withConnection, discardConnection } from '../database/pool.ts';
+import { readCreditIndexSnapshot } from './credit-index.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { Release } from '@rezics/definitions';
@@ -9,7 +10,7 @@ import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
 import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
 import {
   discoveryDocumentActions,
@@ -35,6 +36,7 @@ import {
   type AccountSnapshot,
   type IndexedAccount,
 } from './discovery.ts';
+import { MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 import { reviewDiscoveryDocument } from './review-discovery.ts';
 import { assertDiscoveryCapabilityBinding, DiscoveryProducerCoverageError } from './generations.ts';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
@@ -45,6 +47,27 @@ import type { SubjectSource } from './source.ts';
 
 const MAX_NATIVE_REVISION = 9_223_372_036_854_775_807n;
 const MAX_EXTERNAL_VERSION = MAX_NATIVE_REVISION;
+
+/** A creator change selects works citing it; a release activation selects works with any stale release stamp. */
+export type CreditDependentQuery = { creators: readonly string[] } | { staleRelease: string };
+
+function chunksOf<T>(values: readonly T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(values.length / size) }, (_, index) =>
+    values.slice(index * size, index * size + size),
+  );
+}
+
+function creditDependentClause(query: CreditDependentQuery, creators: readonly string[]): Record<string, unknown> {
+  return {
+    nested: {
+      path: 'credited_names',
+      query:
+        'creators' in query
+          ? { terms: { 'credited_names.targetId': creators } }
+          : { bool: { must_not: [{ term: { 'credited_names.release': query.staleRelease } }] } },
+    },
+  };
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -498,7 +521,10 @@ export function createDiscoveryProjection(options: {
         }
     } else {
       if (!subject || subject.owner !== 'semantic') throw new Error('Subject source is required');
-      const snapshot = await subject.source.read(partition, ids);
+      const snapshot =
+        codec === 'mixed-credit-v1'
+          ? await readCreditIndexSnapshot(subject.source, partition, ids)
+          : await subject.source.read(partition, ids);
       validateObservation(snapshot, partition, ids, atLeast, true);
       const counts = await listing.read(
         partition,
@@ -871,8 +897,60 @@ export function createDiscoveryProjection(options: {
     if (value < 0n || value > 9_223_372_036_854_775_807n) throw new TypeError(`Native ${kind} position is invalid`);
     return value;
   }
+  /**
+   * Works whose indexed credited names cite one of these creators, in every partition of this family.
+   * A creator's rename, merge or concealment re-projects these works; each returned key routes to its own partition.
+   */
+  async function creditDependents(query: CreditDependentQuery): Promise<DiscoveryKey[]> {
+    const index = discoveryIndexName(target.prefix, target.generation);
+    // Only a credit-codec generation can index credited names; older generations have no dependents to refresh.
+    if ((await (documentCodec ??= readDiscoveryDocumentCodec(search, index))) !== 'mixed-credit-v1') return [];
+    const found = new Map<string, DiscoveryKey>();
+    for (const chunk of 'creators' in query ? chunksOf(query.creators, 256) : [[]]) {
+      let after: unknown[] | undefined;
+      for (;;) {
+        const response = await search.request<unknown>('POST', `/${index}/_search`, {
+          size: 500,
+          _source: ['id', 'route', 'kind'],
+          query: {
+            bool: {
+              filter: [
+                { term: { document_format: MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT } },
+                creditDependentClause(query, chunk),
+              ],
+            },
+          },
+          sort: [{ identity: 'asc' }],
+          ...(after === undefined ? {} : { search_after: after }),
+        });
+        const body = response.body;
+        if (response.status !== 200 || !record(body) || !record(body.hits) || !Array.isArray(body.hits.hits))
+          throw new SearchUnavailableError('Credited-name dependents are unavailable');
+        const hits = body.hits.hits as {
+          _source?: { id?: unknown; route?: unknown; kind?: unknown };
+          sort?: unknown[];
+        }[];
+        for (const hit of hits) {
+          const source = hit._source;
+          if (typeof source?.id !== 'string' || typeof source.kind !== 'string' || typeof source.route !== 'number')
+            throw new SearchUnavailableError('Credited-name dependent is malformed');
+          found.set(`${source.kind}:${source.id}`, {
+            owner: 'semantic',
+            kind: source.kind,
+            id: source.id,
+            route: source.route,
+          } as DiscoveryKey);
+        }
+        if (hits.length < 500) break;
+        after = hits.at(-1)?.sort;
+        if (after === undefined) throw new SearchUnavailableError('Credited-name dependent page lost its cursor');
+      }
+    }
+    return [...found.values()];
+  }
   return {
     project,
+    creditDependents,
     prepareRepair,
     applyRepair,
     prepareReviews,
