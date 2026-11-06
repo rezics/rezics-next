@@ -33,8 +33,10 @@ import { accessCheck, type Access, type AccountActor } from '../../../src/reques
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
+import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
+import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-mapping.ts';
 import { subjectTarget } from '../../../src/semantic/subject.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
@@ -451,6 +453,35 @@ export async function createProfileEntryFixture(
       expect(active?.digest).toBe(digest);
       return active!;
     }
+    async function drainIdentityMerge(jobId: string) {
+      const found = (
+        await pool.query<{ partition_no: number; epoch: string }>(
+          'SELECT partition_no, epoch::text AS epoch FROM semantic.identity_epoch_job WHERE job_id=$1',
+          [jobId],
+        )
+      ).rows[0];
+      if (!found) throw new Error('Native merge identity job was not retained');
+      await catchUpIdentity(found.partition_no);
+      const job = { jobId, epoch: BigInt(found.epoch) };
+      let admitted = false;
+      for (let attempt = 0; attempt < 16; attempt++) {
+        const progress = await stepIdentityEpochAdmission(pool, job);
+        if (progress.state === 'pending') {
+          admitted = true;
+          break;
+        }
+        expect(progress.state).toBe('preparing');
+      }
+      expect(admitted).toBe(true);
+      for (let attempt = 0; attempt < 512; attempt++) {
+        const progress = await stepIdentityEpochMapping(pool, job);
+        if (progress.state === 'complete') {
+          await catchUpIdentity(found.partition_no);
+          return;
+        }
+      }
+      throw new Error('Native merge mapping did not finish');
+    }
     async function admitSubjectMerge(canonical: string, selected: string) {
       const opened = await send('steward', 'POST', '/v1/platform/exposure/subject_identity:open');
       expect(opened.status).toBe(200);
@@ -468,6 +499,8 @@ export async function createProfileEntryFixture(
         { 'idempotency-key': JSON.stringify(entryKey()) },
       );
       expect([200, 202]).toContain(response.status);
+      const body = (await response.json()) as { operation?: { id: string } };
+      if (body.operation?.id) await drainIdentityMerge(body.operation.id);
       for (const id of [canonical, selected]) await catchUpIdentity(partitionOf(routeOf(id)!));
     }
     async function createSubject(vertical: ProfileVertical, label: string = vertical) {

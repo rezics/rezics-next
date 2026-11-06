@@ -135,7 +135,7 @@ native matching.
 Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
 the explicit UUID submitted to `review.target` is identity.
 
-Decision: native redirect checks reuse the fixture steward on a token and Global grant that both carry `subject:merge` and `gate:subject_identity`; a reduced sibling token is denied even when the role row exists. Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish identity bootstrap on that partition before Rating review or merge.
+Decision: native redirect checks reuse the fixture steward on a token and Global grant that both carry `subject:merge` and `gate:subject_identity`; a reduced sibling token is denied even when the role row exists. Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish identity bootstrap on that partition before Rating review or merge. Guarded Rating apply uses the same `rating:vote` token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal admits the job and mapping applies the redirect.
 
 Integration decision: MAL and Bangumi retain their separate native review guards, routes and erasure phases.
 

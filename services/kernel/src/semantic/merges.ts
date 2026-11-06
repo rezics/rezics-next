@@ -5,7 +5,7 @@ import { invalidateSubjectPage } from './subject-page-publication-native.ts';
 import { identityEpochStore, identityJobPartition } from './identity-adapters/index.ts';
 import selectJobById from './identity-epoch-store-select-job-by-id.sql';
 import type { Pool } from 'pg';
-import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { noEffect, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -198,8 +198,15 @@ export async function admitMergeSubjects(
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     },
     async (tx, { transactionId }) => {
-      // prepareAdmission already compared and locked the paired evidence in its
-      // authorized first-effect transaction. Do not compare it again after admission.
+      const mapping = (
+        await tx.query<{ closure_state: string }>(
+          'SELECT closure_state FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2',
+          [route, redirected],
+        )
+      ).rows[0];
+      // Active terminal mappings apply the catalogue redirect inside mapping work.
+      // A persist-command redirect against those rows raises identity_epoch_unavailable.
+      if (mapping && mapping.closure_state !== 'legacy') return noEffect({ operation: { id: job.jobId } });
       const merged = await mergeSubjectsInCommand(tx, transactionId, {
         survivor,
         redirected,
