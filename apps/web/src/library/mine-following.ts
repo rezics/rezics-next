@@ -45,13 +45,19 @@ export type MineFollowingPage = {
   cursorReset?: true;
 };
 
+/** Subject and collection/space summaries have `type`; account and deleted-account targets do not. */
+function followSubject(target: RawFollow['target']): LibrarySubject | null {
+  if (!target || !('id' in target) || !('type' in target)) return null;
+  return subjectOf(target);
+}
+
 function present(follow: RawFollow): MineFollow {
   return {
     targetId: follow.targetId,
     targetType: follow.targetType,
     state: follow.state,
     reason: follow.reason,
-    target: follow.target ? subjectOf(follow.target) : null,
+    target: followSubject(follow.target),
     ...(follow.destination ? { destination: follow.destination } : {}),
     ...(follow.actions ? { actions: follow.actions } : {}),
     idempotencyKey: crypto.randomUUID(),
