@@ -75,6 +75,7 @@ async function startContentWork(options: { relays?: boolean } = {}) {
               readCurrentConsent({ actorAccountId: input.actorAccountId, clientId: input.clientId }),
             routeKey: testRouteKey(),
             fetchConfig: { allowedHosts: [] },
+            now: () => Date.now(),
             collectionPartitions: [0],
           }).register(context);
           context.addEffects([

@@ -332,6 +332,7 @@ async function runDisclosureWorker(): Promise<void> {
             }),
             routeKey: Buffer.from(process.env.CONTENT_TEST_ROUTE_KEY ?? '', 'base64url'),
             fetchConfig: { allowedHosts: ['images.example.org'] },
+            now: () => Date.now(),
             registerErasureParticipant: process.env.CONTENT_TEST_DISABLE_ERASURE_PARTICIPANT !== 'true',
           }).register(testContext);
           const effectNames = new Set(['content_author_erasure', 'content_media_image']);

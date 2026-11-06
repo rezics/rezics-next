@@ -158,7 +158,8 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
-  const now = options.now ?? tryContentApplication()?.ambient.now ?? (() => Date.now());
+  const now = options.now ?? tryContentApplication()?.ambient.now;
+  if (!now) throw new Error('Content worker now is not supplied');
   registerReviewDiscoveryWork(context);
   registerReviewCensusWork(context, options.access, partitions);
   const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });

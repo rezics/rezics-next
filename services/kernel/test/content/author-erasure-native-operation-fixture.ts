@@ -475,6 +475,7 @@ async function runWorker() {
       storage,
       routeKey: Buffer.from(process.env.KERNEL_ROUTE_KEY!, 'base64url'),
       fetchConfig: { allowedHosts: [] },
+      now: () => Date.now(),
       collectionPartitions: [0],
     });
     work = await composeWork(

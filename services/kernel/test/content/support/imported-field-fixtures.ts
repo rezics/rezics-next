@@ -207,6 +207,7 @@ if (process.argv.includes('--imported-field-native-worker')) {
       readConsent: readCurrentConsent,
       routeKey,
       fetchConfig: { allowedHosts: ['images.example.test'] },
+      now: () => Date.now(),
     }),
     {
       name: 'content-relays',

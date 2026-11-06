@@ -68,6 +68,7 @@ function contentWithStepRetryDelay(stepRetryDelaySeconds: number): WorkModule {
         readConsent: dependencies.readConsent,
         routeKey: readMembershipRouteKey(context.env),
         fetchConfig: dependencies.fetchConfig,
+        now: () => Date.now(),
         collectionPartitions: [partition],
         stepRetryDelaySeconds,
       }).register(context);

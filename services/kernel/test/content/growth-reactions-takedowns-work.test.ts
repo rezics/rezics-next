@@ -273,6 +273,7 @@ beforeAll(async () => {
         }),
         routeKey,
         fetchConfig: { allowedHosts: ['images.example.org'] },
+        now: () => Date.now(),
         collectionPartitions: [workPartition],
       }).register(workContext);
       workContext.addEffects(contentEffects(workContext.pool, workContext.client));

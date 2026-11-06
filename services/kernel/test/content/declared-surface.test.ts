@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { readDocument } from '../../src/content/document-read.ts';
 import { contentDeclaration } from '../../src/content/register.ts';
+import { createContentWork } from '../../src/content/work.ts';
 import { contentHttpDeclaration } from '../../src/content/http.ts';
 import { contentDeclaredEvents } from '../../src/content/declared-catalogue.ts';
 import { readContentConfig } from '../../src/content/config.ts';
@@ -36,6 +37,26 @@ test('native ambient supplies clock, now, id and fetch as explicit operands', ()
   expect(ambient.now()).toBe(42);
   expect(ambient.id()).toBe('id');
   expect(ambient.clock().getTime()).toBe(0);
+});
+
+test('content work register requires an explicit now when the application is unbound', async () => {
+  unbindContentApplication();
+  const module = createContentWork({
+    storage: {
+      async get() {
+        return null;
+      },
+      async put() {},
+      async deletePrefix() {},
+    },
+    access: {} as never,
+    readConsent: async () => {
+      throw new Error('unused');
+    },
+    routeKey: new Uint8Array(32),
+    fetchConfig: { allowedHosts: [] },
+  });
+  await expect(module.register({} as never)).rejects.toThrow('Content worker now is not supplied');
 });
 
 test('startContentApplication binds the supplied clock and stop restores the process', () => {

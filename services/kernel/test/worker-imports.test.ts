@@ -33,4 +33,6 @@ test('the kernel worker never loads the HTTP server', () => {
   const server = resolve(src, 'server.ts');
   expect(parents.has(server) ? chain(parents, server) : null).toBeNull();
   expect(parents.has(resolve(src, 'composition/work-modules.ts'))).toBe(true);
+  expect(parents.has(resolve(src, 'composition/content.ts'))).toBe(true);
+  expect(chain(parents, resolve(src, 'content/register.ts'))).toContain('composition/work-modules.ts');
 });
