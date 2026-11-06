@@ -8,9 +8,11 @@
  * Kernel worker and a second Kernel process until after native HTTP. Kernel HTTP
  * is served from the Auth host. Issuer starts before Auth pages; Web starts after.
  */
+import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { importJWK, SignJWT, type JWK } from 'jose';
 
 /** Public first-party identities from packages/auth-contract. Web cannot depend on that package. */
 const AUTH_PAGE_OPERATION_CLIENT_ID = 'rezics-auth-account-operations';
@@ -23,6 +25,12 @@ const AUTH_MANAGEMENT_SCOPES = {
   'transfer-acceptance': ['account:manage'] as const,
   opening: ['account:manage'] as const,
 };
+const WEBSITE_CLIENT_ID = 'rezics-website';
+const WEBSITE_AUDIENCE = 'https://api.rezics.test';
+
+function requestedWebsiteScopes(configured: string): string {
+  return [...new Set(['openid', 'offline_access', ...configured.split(/\s+/).filter(Boolean)])].join(' ');
+}
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/accounts');
@@ -254,14 +262,85 @@ async function signIn(
   };
 }
 
-async function websiteToken(stack: Origins, person: Pick<Person, 'email'>, bindings: Record<string, string>) {
-  const session = await signIn(stack, person, bindings.WEBSITE_CLIENT_ID ?? 'rezics-website', [
-    ...(bindings.WEBSITE_SCOPES ?? '').split(' ').filter(Boolean),
-  ]);
-  const token = await auth(stack, '/token', session, {}, 30_000);
-  requireStatus(token, 'website token', 200);
-  if (typeof token.value.access_token !== 'string') throw new Error('website token omitted access_token');
-  return { session, bearer: token.value.access_token };
+async function websiteAssertion(stack: Origins, websiteKey: JWK): Promise<string> {
+  if (typeof websiteKey.kid !== 'string' || !websiteKey.kid || !websiteKey.d)
+    throw new Error('keys.json omitted the website client private key');
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({})
+    .setProtectedHeader({ alg: 'ES256', kid: websiteKey.kid })
+    .setIssuer(WEBSITE_CLIENT_ID)
+    .setSubject(WEBSITE_CLIENT_ID)
+    .setAudience(stack.issuer)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 120)
+    .setJti(randomBytes(24).toString('base64url'))
+    .sign(await importJWK(websiteKey, 'ES256'));
+}
+
+/** Confidential website client is OAuth-only. Identity is the zero-scope login client. */
+async function websiteToken(
+  stack: Origins,
+  person: Pick<Person, 'email'>,
+  bindings: Record<string, string>,
+  websiteKey: JWK,
+  secret = password,
+): Promise<{ session: Session; bearer: string }> {
+  const session = await signIn(stack, person, 'login', [], secret);
+  const verifier = randomBytes(48).toString('base64url');
+  const state = randomBytes(24).toString('base64url');
+  const redirectUri = `${stack.web}/auth/callback`;
+  const resource = bindings.API_RESOURCE ?? WEBSITE_AUDIENCE;
+  const authorize = new URL('/authorize', stack.native);
+  authorize.search = new URLSearchParams({
+    client_id: WEBSITE_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: requestedWebsiteScopes(bindings.WEBSITE_SCOPES ?? ''),
+    state,
+    nonce: state,
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    resource,
+  }).toString();
+  const authorization = await fetch(authorize, {
+    headers: { cookie: session.cookie, origin: stack.issuer },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (![302, 303].includes(authorization.status)) {
+    const body = await authorization.text();
+    throw new Error(
+      `website authorize for ${person.email} returned HTTP ${authorization.status}: ${body.slice(0, 240)}`,
+    );
+  }
+  const location = authorization.headers.get('location');
+  if (!location) throw new Error(`website authorize for ${person.email} omitted location`);
+  const redirected = new URL(location, stack.web);
+  if (redirected.searchParams.get('state') !== state)
+    throw new Error(`website authorize for ${person.email} returned a foreign state`);
+  const code = redirected.searchParams.get('code');
+  if (!code) throw new Error(`website authorize for ${person.email} omitted code (${redirected.pathname})`);
+  const token = await fetch(`${stack.native}/token`, {
+    method: 'POST',
+    headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: WEBSITE_CLIENT_ID,
+      client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      client_assertion: await websiteAssertion(stack, websiteKey),
+      resource,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const issued = (await token.json()) as Json;
+  if (token.status !== 200 || typeof issued.access_token !== 'string')
+    throw new Error(
+      `website token for ${person.email} returned HTTP ${token.status}: ${JSON.stringify(publicFields(issued))}`,
+    );
+  return { session, bearer: issued.access_token };
 }
 
 async function operate(
@@ -420,8 +499,10 @@ async function startFrontend(action: 'pages' | 'web') {
 
 await untilAnswers(`${stack.native}/`, 'native Auth');
 note('native-ready');
+await persistEvidence();
 const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as {
   password: string;
+  website: JWK;
 };
 const developer: Person = {
   handle: 'developer',
@@ -454,16 +535,11 @@ async function developerSignIn(clientId: string, scopes: readonly string[]): Pro
   };
 }
 
-const website = await (async () => {
-  const session = await developerSignIn(bindings.WEBSITE_CLIENT_ID ?? 'rezics-website', [
-    ...(bindings.WEBSITE_SCOPES ?? '').split(' ').filter(Boolean),
-  ]);
-  const token = await auth(stack, '/token', session, {}, 30_000);
-  requireStatus(token, 'developer website token', 200);
-  return { session, bearer: token.value.access_token as string };
-})();
+const website = await websiteToken(stack, developer, bindings, keys.website, developerPassword);
+developer.accountId = website.session.accountId;
 evidence.native.push({ developer: developer.accountId });
 note('developer-token');
+await persistEvidence();
 
 const opened = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:open', {
   bearer: website.bearer,
@@ -876,13 +952,13 @@ evidence.native.push({
   },
 });
 
-const outsiderToken = await websiteToken(stack, outsider, bindings);
+const outsiderToken = await websiteToken(stack, outsider, bindings, keys.website);
 const outsiderInventory = await kernel(stack, 'GET', '/v1/me/managedAccounts', { bearer: outsiderToken.bearer });
 const outsiderDetail = await kernel(stack, 'GET', `/v1/accounts/${organizationId}/management`, {
   bearer: outsiderToken.bearer,
 });
 if (outsiderDetail.status === 200) evidence.defects.push('outsider read organization management');
-const memberToken = await websiteToken(stack, member, bindings);
+const memberToken = await websiteToken(stack, member, bindings, keys.website);
 const memberDetail = await kernel(stack, 'GET', `/v1/accounts/${organizationId}/management`, {
   bearer: memberToken.bearer,
 });
@@ -891,7 +967,7 @@ if (memberDetail.status === 200 && (memberDetail.value.authActions as Json | und
   if (operationsList.some((entry) => entry.operationId === 'auth.operator.transfer'))
     evidence.defects.push('nondelegated member received transfer operations');
 }
-const delegatedToken = await websiteToken(stack, delegated, bindings);
+const delegatedToken = await websiteToken(stack, delegated, bindings, keys.website);
 const delegatedSoftware = orgSoftwareId
   ? await kernel(stack, 'GET', `/v1/accounts/${orgSoftwareId}/management`, { bearer: delegatedToken.bearer })
   : { status: 0, value: {} as Json };

@@ -243,7 +243,9 @@ catalogue identities. Auth HTTP for the walk uses native Auth. `REZICS_WALK_DEFE
 the Kernel worker and a second Kernel process off until native HTTP finishes. Kernel HTTP is served from the Auth host
 that already assembled it. Issuer then Web start only for mounted pages. Kernel on a full walk slot runs `start` rather
 than `--watch`. A single Chromium process covers desktop, phone, zh-Hant, ja, light and dark. The walk inlines the
-public Auth page-operation and management client identities because Web cannot depend on auth-contract.
+public Auth page-operation and management client identities because Web cannot depend on auth-contract. Kernel
+website bearers use the zero-scope `login` client and the confidential website OAuth code exchange; native `/signin`
+never authenticates `rezics-website`.
 
 ## 3. Credentials, sessions and tokens
 
