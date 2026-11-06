@@ -443,8 +443,10 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number): OwnedTree {
   };
 
   sample(true);
-  timer = setInterval(tick, sampleMs);
-  timer.unref?.();
+  // The sampler must never keep the test process alive; it also stops itself once no owned process remains.
+  const started = setInterval(tick, sampleMs);
+  (started as unknown as { unref?: () => void }).unref?.();
+  timer = started;
 
   return {
     sample,
