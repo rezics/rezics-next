@@ -383,7 +383,9 @@ function expectDerivedStatements(
     expect(sample.cost.statements, `application statements at scale ${sample.scale}`).toBe(
       derived.applicationStatements,
     );
-    expect(sample.cost.controlStatements, `control statements at scale ${sample.scale}`).toBe(derived.controlStatements);
+    expect(sample.cost.controlStatements, `control statements at scale ${sample.scale}`).toBe(
+      derived.controlStatements,
+    );
     expect(
       sample.cost.statements + sample.cost.controlStatements,
       `application plus control statements at scale ${sample.scale}`,
