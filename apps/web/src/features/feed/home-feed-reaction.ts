@@ -3,11 +3,11 @@ import { reactionKinds, type ReactionKind } from '@rezics/ui/reactions';
 import type { FeedReaction } from './vote-control';
 
 type FeedOrigin = { key: string; reader: string | null; isCurrent(): boolean };
-// Flip only when the serial publisher installs this field in KernelClient's response.
-// The conditional makes an accidental enabling against the old publication a type error.
-type ContentRow = Extract<FeedItem, { key: { owner: 'content' } }>;
-export const homeNativeReactionAdviceInstalled: 'reactionAdvice' extends keyof ContentRow['summary'] ? true : false =
-  false;
+// The installed Content thread, post and review rows carry reactionAdvice. The conditional turns a
+// republication that drops the field into a type error here instead of a silent unavailable state.
+type ReactionRow = Extract<FeedItem, { destination: { kind: 'thread' | 'post' } }>;
+export const homeNativeReactionAdviceInstalled: 'reactionAdvice' extends keyof ReactionRow['summary'] ? true : false =
+  true;
 const isReactionKind = (value: unknown): value is ReactionKind => reactionKinds.some((kind) => kind === value);
 const subjectKinds = new Set<ReactionKind>(['like', 'love', 'laugh', 'insightful', 'sad']);
 const record = (value: unknown): Record<string, unknown> | undefined =>

@@ -161,6 +161,43 @@ test('signed-in Home keeps Content reaction facts visible but disables writes wi
   expect(nativeFetch).not.toHaveBeenCalled();
 });
 
+test('native thread advice enables exactly the advised kinds, and an empty advice denies every Home write', async () => {
+  const advised = (allowed: ('upvote' | 'downvote')[]): FeedItem => ({
+    id: 'occurrence:advised',
+    source: 'following',
+    occurredAt: null,
+    key: { owner: 'content', kind: 'thread', route: 0, id },
+    summary: {
+      id,
+      kind: 'discussion',
+      title: 'Advised',
+      createdAt: '2026-11-04T00:00:00Z',
+      reactionTarget: { targetKind: 'thread', targetId: id },
+      reactions: { upvote: 2 },
+      viewerReaction: null,
+      reactionAdvice: { target: { targetKind: 'thread', targetId: id }, state: 'current', allowed },
+    },
+    destination: { kind: 'thread', id, title: 'Advised' },
+  });
+  const pageWith = (item: FeedItem): FeedPage => ({
+    ...result.page,
+    feedItems: [item],
+    reactionsAsOf: { epoch: 1, position: '2' },
+  });
+  await paint(<HomeFeed result={{ state: 'ready', page: pageWith(advised(['upvote'])) }} locale="en" signedIn />);
+  const arrows = host.querySelectorAll<HTMLButtonElement>('[data-slot="vote-control"] button');
+  expect(arrows[0]!.disabled).toBe(false);
+  expect(arrows[1]!.disabled).toBe(true);
+  expect(host.querySelector('[data-slot="feed-reaction-admission"]')).toBeNull();
+  expect(nativeFetch).not.toHaveBeenCalled();
+
+  await paint(<HomeFeed result={{ state: 'ready', page: pageWith(advised([])) }} locale="en" signedIn />);
+  expect(host.querySelector('[data-slot="feed-reaction-admission"]')?.textContent).toContain(m.reaction_forbidden());
+  const denied = host.querySelectorAll<HTMLButtonElement>('[data-slot="vote-control"] button');
+  expect([...denied].every((button) => button.disabled)).toBe(true);
+  expect(nativeFetch).not.toHaveBeenCalled();
+});
+
 test('a Home baseline retires across session, request, provider and route incarnations', async () => {
   const baseline = { ...result, page: { ...result.page } };
   let latestOrigin: ReturnType<typeof useHomeReactionCurrentness>['origin'] | undefined;
