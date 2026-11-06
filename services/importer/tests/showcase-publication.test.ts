@@ -753,3 +753,35 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
+
+test('explicit 422 replaces a collided review receipt; unknown delivery keeps the sealed key', () => {
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const action = 'accept:target-a';
+    const body = { context: globalContext, expected_head: 1 };
+    journal.prepareAction(action, body, 'sealed-key');
+    expect(journal.prepareAction(action, body, 'caller-key')).toEqual(body);
+    expect(journal.action(action)).toMatchObject({
+      idempotency_key: 'sealed-key',
+      state: 'prepared',
+    });
+
+    journal.refuseAction(action, 'review-http-422');
+    expect(journal.prepareAction(action, body, 'replacement-key')).toEqual(body);
+    expect(journal.action(action)).toMatchObject({
+      idempotency_key: 'replacement-key',
+      state: 'prepared',
+      error_code: null,
+    });
+
+    journal.refuseAction(action, 'review-http-409');
+    expect(journal.prepareAction(action, body, 'ignored-key')).toEqual(body);
+    expect(journal.action(action)).toMatchObject({
+      idempotency_key: 'replacement-key',
+      state: 'refused',
+      error_code: 'review-http-409',
+    });
+  } finally {
+    journal.close();
+  }
+});
