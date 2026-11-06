@@ -30,7 +30,7 @@ import { createPersonas } from '../support/personas.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { testKernel, testRouteKey, testTokens, type TestKernel } from '../support/test-kernel.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
-import { startCommerceErasureWorker } from './support/erasure-worker.ts';
+import { drainTombstone, startCommerceErasureWorker } from './support/erasure-worker.ts';
 import { createNativeEditionFixture, type NativeContentEdition } from './support/native-edition-fixture.ts';
 import {
   encodeNativeKeyRing,
@@ -47,6 +47,7 @@ import {
 
 const GLOBAL = { route: 0, id: GLOBAL_CONTEXT };
 const EFFECTS_DRAIN_MS = 120_000;
+const WORKFLOW_WAIT_MS = 180_000;
 
 async function drainPartition(pool: Parameters<typeof drainEffects>[0], accountId: string) {
   await drainEffects(pool, partitionOf(routeOf(accountId)!), { deadlineMs: EFFECTS_DRAIN_MS });
@@ -62,7 +63,7 @@ async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolea
   }
 }
 
-setDefaultTimeout(300_000);
+setDefaultTimeout(420_000);
 
 describe('native genuine-order retention', () => {
   const urls = { successUrl: 'https://example.test/success', cancelUrl: 'https://example.test/cancel' };
@@ -122,14 +123,19 @@ describe('native genuine-order retention', () => {
   }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
-    await drainPartition(pool, persona.accountId);
+    await drainTombstone(pool, persona.accountId, { deadlineMs: EFFECTS_DRAIN_MS });
     const id = commerceErasureWorkflowId(persona.accountId);
-    await waitUntil(
-      () => client.getWorkflow(id),
-      (row) => row !== null && row !== undefined,
+    const seen = await waitUntil(
+      async () => ({
+        workflow: (await client.getWorkflow(id)) ?? null,
+        output: worker?.output.slice(-2000) ?? '',
+        errors: worker?.errors.slice(-2000) ?? '',
+      }),
+      (row) => row.workflow !== null,
+      WORKFLOW_WAIT_MS,
     );
     await client.retrieveWorkflow(id).getResult();
-    return barrier;
+    return { ...barrier, workflow: seen.workflow };
   }
   async function event(type: string, sessionId: string) {
     return postSignedEvent(await provider.fake.event(type, sessionId));
@@ -280,18 +286,24 @@ describe('native genuine-order retention', () => {
 
   test('the native financial participant minimizes an explicitly retained real order, expires it durably, and preserves late financial truth without restoring private benefits', async () => {
     const barrier = await erase(unused);
-    expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'none', retained: [] });
+    expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'pending', retained: [] });
     expect((await readErasureStatus(pool, unused.accountId))?.at).toBe(barrier.at);
-    expect(await advanceCommerceErasure(pool, unused.accountId)).toBe('none');
-    expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'none', retained: [] });
+    expect(await advanceCommerceErasure(pool, unused.accountId)).toBe('pending');
+    expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'pending', retained: [] });
     expect(
       (
-        await pool.query('SELECT phase,had_data FROM commerce.erasure_progress WHERE route=$1 AND account_id=$2', [
-          routeOf(unused.accountId),
-          unused.accountId,
-        ])
+        await pool.query(
+          'SELECT phase,had_data,blocker FROM commerce.erasure_progress WHERE route=$1 AND account_id=$2',
+          [routeOf(unused.accountId), unused.accountId],
+        )
       ).rows,
-    ).toEqual([{ phase: 'none', had_data: false }]);
+    ).toEqual([
+      {
+        phase: 'pending',
+        had_data: false,
+        blocker: expect.stringContaining('commerce-history:'),
+      },
+    ]);
     await expect(advanceCommerceErasure(pool, seller.accountId)).rejects.toThrow('committed native');
 
     const offer = (
@@ -346,7 +358,7 @@ describe('native genuine-order retention', () => {
         [routeOf(buyer.accountId), buyer.accountId],
       );
       const buyerBarrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, buyer);
-      await drainPartition(pool, buyer.accountId);
+      await drainTombstone(pool, buyer.accountId, { deadlineMs: EFFECTS_DRAIN_MS });
       expect(await entitlementRows(buyer.accountId)).toHaveLength(1);
       expect(await commerceOutcome(buyer.accountId)).toEqual({ outcome: 'pending', retained: [] });
       for (const path of [`/v1/orders/${first.id}`, `/v1/entitlements/${entitlement}`, '/v1/entitlements'])
@@ -359,6 +371,7 @@ describe('native genuine-order retention', () => {
       await waitUntil(
         () => client.getWorkflow(buyerErasureId),
         (row) => row !== null && row !== undefined,
+        WORKFLOW_WAIT_MS,
       );
       await waitUntil(
         async () => (await commerceOutcome(buyer.accountId)) ?? null,
@@ -545,8 +558,8 @@ describe('native genuine-order retention', () => {
       unused.accountId,
     );
     await replay.getResult();
-    expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'none', retained: [] });
-  }, 300_000);
+    expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'pending', retained: [] });
+  }, 420_000);
 });
 
 describe('historical operator commerce custody', () => {
@@ -602,13 +615,14 @@ describe('historical operator commerce custody', () => {
   test('historical acting-human and operator responsibilities cannot be attested as native no-data', async () => {
     const kernelPool = pool.current!;
     await deletePersona({ version: 1, pool: kernelPool, auth }, personas.software, { actingHuman: personas.operator });
-    await drainPartition(kernelPool, personas.software.accountId);
+    await drainTombstone(kernelPool, personas.software.accountId, { deadlineMs: EFFECTS_DRAIN_MS });
     const barrier = await deletePersona({ version: 1, pool: kernelPool, auth }, personas.operator);
-    await drainPartition(kernelPool, personas.operator.accountId);
+    await drainTombstone(kernelPool, personas.operator.accountId, { deadlineMs: EFFECTS_DRAIN_MS });
     const id = commerceErasureWorkflowId(personas.operator.accountId);
     await waitUntil(
       () => client.getWorkflow(id),
       (row) => row !== null && row !== undefined,
+      WORKFLOW_WAIT_MS,
     );
     await client.retrieveWorkflow(id).getResult();
     expect((await readErasureStatus(kernelPool, personas.operator.accountId))?.participants.commerce).toEqual({

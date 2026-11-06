@@ -1004,13 +1004,15 @@ current-role seam. `grant.create` authenticates the governance bearer on that Ac
 same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
 `board:create` and `offer:create` only, because Content already installed `subject:create`. The composed worker is
 the production module list under `workerTestEnv`; readiness waits for the effects consumer to observe and catch up
-and uses the existing 5ms queue poll. Tombstone drain uses the 120s ceiling other native erasure suites use. The
-board-read current-role projection stays with Accounts.
+and uses the existing 5ms queue poll. Tombstone drain waits for that account's tombstone envelope, not a moving
+partition head, with the 120s ceiling other native erasure suites use. The board-read current-role projection stays
+with Accounts.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
-retains its recorded source bindings and unavailable measurements. Preserve the unused-account test's `none`
-expectation: local emptiness cannot prove absence of historical financial roles. Commerce now consults the actual
-History owner coverage before that acknowledgement. Complete native History coverage must precede a safe `none`.
+retains its recorded source bindings and unavailable measurements. Local emptiness cannot prove absence of
+historical financial roles. Commerce consults the actual History owner coverage before a `none` acknowledgement.
+Until that family coverage exists, the unused-account fixture asserts `pending` with an explicit history gap rather
+than inventing `none`. Complete native History coverage must precede a safe `none`.
 The bounded local Checkout
 retention journey is implemented; production financial field expiry and external-payment attestation still require
 their owners' decisions.
