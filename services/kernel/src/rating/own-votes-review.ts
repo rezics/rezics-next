@@ -246,7 +246,8 @@ export function normalizeVoteReviewGuard(value: unknown, requestedTargetId: stri
 }
 
 function freezeIdentityOperand(operand: IdentityRatingReviewOperand): IdentityRatingReviewOperand {
-  const { requestedOriginalId, canonicalTerminalId, sourceIdentities, sourceHomes, controlLocators, evidence } = operand;
+  const { requestedOriginalId, canonicalTerminalId, sourceIdentities, sourceHomes, controlLocators, evidence } =
+    operand;
   return Object.freeze({
     version: 1,
     requestedOriginalId,
