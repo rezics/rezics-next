@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
@@ -39,7 +40,15 @@ const isCommunity = (request: Request) =>
   new URL(request.url).pathname === `/v1/subjects/${communitySubject.id}/threads`;
 function pageHtml(page: SubjectPageData) {
   return renderToStaticMarkup(
-    createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+    createElement(QueryClientProvider, {
+      client: new QueryClient(),
+      children: createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages: subjectPageMessages(),
+        renderJsonLd: false,
+      }),
+    }),
   );
 }
 

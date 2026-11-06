@@ -58,6 +58,7 @@ export function Byline({
   size = 'default',
   className,
   children,
+  locale = getLocale(),
 }: {
   author: BylineAuthor | undefined;
   createdAt: string;
@@ -66,10 +67,11 @@ export function Byline({
   showAuthor?: boolean;
   size?: 'default' | 'sm';
   className?: string;
+  locale?: string;
   /** Further facts that follow the time, such as when a post was edited. */
   children?: ReactNode;
 }) {
-  const locale = getLocale();
+  const options = { locale: locale as never };
   // A deleted account is known by `state` and `kind` alone; whatever else the read carries is not shown.
   const deleted = author?.state === 'deleted';
   const unknown = showAuthor && !deleted && (!author || (!author.displayName && !author.handle));
@@ -100,10 +102,12 @@ export function Byline({
             <span className="block min-w-0 whitespace-normal [overflow-wrap:anywhere]" title={identityTitle}>
               {deleted ? (
                 <span>
-                  {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
+                  {author?.kind === 'organization'
+                    ? m.thread_author_deleted_organization({}, options)
+                    : m.thread_author_deleted({}, options)}
                 </span>
               ) : unknown ? (
-                <span>{m.thread_author_unknown()}</span>
+                <span>{m.thread_author_unknown({}, options)}</span>
               ) : (
                 <>
                   {author?.displayName ? (
@@ -137,7 +141,7 @@ export function Byline({
               </time>,
               revisedAt && new Date(revisedAt).getTime() > new Date(createdAt).getTime() ? (
                 <time dateTime={revisedAt} title={fullDateTime(revisedAt, locale)}>
-                  {m.thread_post_edited()}
+                  {m.thread_post_edited({}, options)}
                 </time>
               ) : null,
               children,

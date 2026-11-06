@@ -32,7 +32,7 @@ export function CommunityNativeByline({
       ) : (
         <bdi>{name}</bdi>
       )}
-      <Byline author={undefined} createdAt={createdAt} now={now} showAuthor={false} size="sm" />
+      <Byline locale={locale} author={undefined} createdAt={createdAt} now={now} showAuthor={false} size="sm" />
     </div>
   );
 }

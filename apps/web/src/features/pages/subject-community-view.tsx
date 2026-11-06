@@ -346,6 +346,7 @@ export function SubjectCommunityRegion({
                       />
                     ) : (
                       <Byline
+                        locale={locale}
                         author={authors?.[thread.authorId]}
                         createdAt={thread.createdAt}
                         now={now}

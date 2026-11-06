@@ -94,6 +94,13 @@ export function useSubjectCommunityReading(input: {
   queryKey?: readonly unknown[] | undefined;
 }) {
   const client = useContext(QueryClientContext);
+  // Keep the browser subscription mounted while a new source installs its cache witness.
+  const observationStore = client ? browserObservation(client) : undefined;
+  useSyncExternalStore(
+    observationStore?.subscribe ?? noSubscribe,
+    observationStore?.getSnapshot ?? unknownSnapshot,
+    observationStore?.getServerSnapshot ?? unknownSnapshot,
+  );
   const queryIdentity = JSON.stringify(input.queryKey);
   const environment = useMemo(
     () => observeCommunityEnvironment(client, input.queryKey),
