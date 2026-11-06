@@ -26,7 +26,7 @@ import {
   currentCommandWorkAssociation,
   currentLibraryOperationAccounting,
   withLibraryOperationAccounting,
-} from '../command/index.ts';
+} from '../command/work-context.ts';
 import {
   consumeSessionWork,
   sessionCommandPlan,

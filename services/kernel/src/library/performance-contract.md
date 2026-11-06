@@ -644,11 +644,13 @@ Decision: compose each Published Log command, read and worker operation at its e
 nine-axis envelope, suppress duplicate nested SQL leaves, keep Access authorization in its existing accounting
 owner, and count the bounded DBOS continuation on the segment's `engineRequests` axis. Access and Command keep
 policy and SQL ownership through public owner leaves (`account-public-read.sql`, `account-command-state.sql`,
-`work.ts`, `read-receipt.sql`, `command/work-context.ts` and `command/index.ts`). `published-log-native.ts` executes
-those SQL leaves and binds the interceptor; `published-log-bounds.ts` is the pure envelope producer and does not
-import `command-support.ts`. Command-support binds that native producer. Fewest tests: keep
-`published-log-operation-bounds.test.ts` for envelope and reservation, including consume-skip on the reserved
-frame without Reylo `.run()` (schema rebuild stays with native Log acceptance); no second lifecycle file.
+`work.ts`, `read-receipt.sql` and `command/work-context.ts`; `command/index.ts` re-exports the work frame).
+`published-log-native.ts` executes those SQL leaves and binds the interceptor; `published-log-bounds.ts` is the
+pure envelope producer and does not import `command-support.ts`. Command-support binds that native producer.
+Library files import `command/work-context.ts` directly so `command/index.ts` does not join their value cycle.
+Fewest tests: keep `published-log-operation-bounds.test.ts` for envelope and reservation, including consume-skip
+on the reserved frame without Reylo `.run()` (schema rebuild stays with native Log acceptance); no second
+lifecycle file.
 
 `published-log-bounds.ts` retains exact SQL leaves and now composes them into publish, retract, restore, public point,
 public page, exact purge, retention page and retention segment operations. Every operation is a sum of named bounds;
