@@ -20,6 +20,7 @@ import { normalizeSessionObservation } from '../../session/browser-state';
 import { ProfileCard, ProfileFeedback } from '../../settings/profile';
 import { PublicViewsCard } from '../../settings/public-views';
 import { ProfileNavigation } from '../../settings/profile-navigation';
+import { usePreferenceRetry } from '../../settings/preference-failure-retry';
 import { readAccountProfile, saveAccountProfile } from './actions';
 import { AccountProfileEditor } from './editor';
 import { profilePageReadError, type ProfilePage } from './data';
@@ -154,6 +155,8 @@ export function AccountProfileView({
     editor.confirmationSnapshot,
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  // The editor refuses reads before a captured Retry-After deadline; the control shows that wait.
+  const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
   if (!page && state.readStatus !== 'failed') return <p role="status">{m.settings_profile_loading()}</p>;
   page ??= { state: 'unavailable' };
   if (page.state !== 'ready')
@@ -178,9 +181,20 @@ export function AccountProfileView({
               readable={page.state !== 'signed-out'}
             />
           ) : (
-            <Button variant="outline" disabled={state.phase === 'reloading'} onClick={() => void editor.reload()}>
-              {m.settings_profile_reload_current()}
-            </Button>
+            <>
+              {readWaiting ? (
+                <p role="status">
+                  {m.settings_profile_reload_current()}: {m.settings_retry_wait()}
+                </p>
+              ) : null}
+              <Button
+                variant="outline"
+                disabled={state.phase === 'reloading' || readWaiting}
+                onClick={() => void editor.reload()}
+              >
+                {m.settings_profile_reload_current()}
+              </Button>
+            </>
           )}
           {page.state === 'signed-out' ? (
             <a
