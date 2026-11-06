@@ -326,4 +326,5 @@ export type OwnVoteEntry = OwnVotesPage['votes'][number];
 export type OwnVoteActions = OwnVoteEntry['actions'];
 export type VoteRead = Routes['subjects'][':id']['ratings'][':questionId']['vote']['get']['response'][200];
 export type PublicFigureRead = Routes['subjects'][':id']['figure']['get']['response'][200]['figure'];
-export type RatingQuestionRead = Routes['rating-questions'][':questionId']['get']['response'][200];
+type RatingQuestionReadCall = ReturnType<ReturnType<KernelClient['rating-questions']>['get']>;
+export type RatingQuestionRead = NonNullable<Awaited<RatingQuestionReadCall>['data']>;
