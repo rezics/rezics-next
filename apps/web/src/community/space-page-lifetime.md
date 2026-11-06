@@ -81,14 +81,17 @@ first-render producer/SSR contract remains deferred.
 The mounted Kernel home now composes a current viewer observation with its container, presentation and shelves.
 Its anonymous observation is `{ state: 'anonymous' }` with sign-in advice. Its signed-in observation carries native
 readability, membership episode and participation, plus current entry, management and leave advice. It does not
-supply join or claim advice. The installed generated Client declaration still omits home, boardShelf and
-publicationShelf. The prepared consumer and its local operation seam do not establish generated default-route
-availability; the normal producer and controller retain generation and native acceptance.
+supply join or claim advice. The installed generated Client declaration owns `home`, `boardShelf` and
+`publicationShelf`. Web binds those methods once and maps recent and Board visibility from the installed types;
+it does not assemble a substitute DTO. Native producer recordings remain with their owners.
 
 Membership and each command require their own explicit composed native advice. Separate standing, participation,
 setup or claim reads cannot manufacture that observation. Missing publication support remains unavailable; it must
-not fall back to per-publication Subject hydration, another DTO or an endpoint assembled by Web. The legacy fixture
-helpers retain their original reads until the generated replacement is installed.
+not fall back to per-publication Subject hydration, another DTO or an endpoint assembled by Web. Legacy fixture
+helpers retain their original list reads for stories that still exercise the pre-composed producer.
+
+Decision: connected visit, membership, publication and space-page lifetime tests are the fewest that pin the
+supplying-shelf journey, once-only completion, observer-chatter bound and disposal; no extra stories.
 
 Decision: a same-source admitted Home refresh is a new page under the original admission. The visit admits it by
 source identity only when nested observation actually changed, remounts neither membership nor publication hosts,
