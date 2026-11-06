@@ -5,7 +5,7 @@ import type { Pool } from 'pg';
 import { authoritativeTimeValue, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contract/contracts.ts';
 import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
-import { declareCommandHistory } from '../history/application/records.ts';
+import { declareCommandHistory } from '../history/adapters/record.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { liveCoverage, purgeIntent, retainCoveredPayload, withPurgeIntent } from './cleanup-intent.ts';
 import { compareAndSetZone, lockZoneHead, type ZoneHead } from './resource-head.ts';

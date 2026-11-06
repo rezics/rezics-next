@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, createElement } from 'react';
 import { queryOptions } from '@tanstack/react-query';
+import * as start from '../.storybook/react-start';
 import {
   configuredListRetryAdmission,
   configuredListRetryWaiting,
@@ -51,8 +52,12 @@ function unavailable(input: Read, retryAt?: number): TypeListQueryResult {
   };
 }
 
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/query', () => ({
   AnonymousSessionContext: createContext(false),
+  sessionCsrfToken: () => null,
   sessionQuery,
   useSession: () => ({ state: 'unknown' as const, csrfToken: null }),
 }));

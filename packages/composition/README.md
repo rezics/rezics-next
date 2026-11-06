@@ -86,6 +86,17 @@ Integer and Number values that meet their numeric type requirements but exceed i
 bounds produce `limit` at the value's pointer (HTTP `out_of_range`). Wrong types, fractional Integer
 values and nonfinite numbers remain `invalid` (HTTP `invalid_format`); validation never coerces values.
 
+Decision: a paged list's raw `limit` is checked against its inclusive bound before the `paged` clamp to twelve, so
+`limit` 30 with `paged` returns `limit` at `/content/0/props/limit`. `test/public-entry.test.ts` imports the package
+name and is the public-startup proof for this rule, for the Zone starter exports, and for profile publication refusing
+executable `javascript:` links at the registry boundary. Consumer proof for Zone editors and kernel Zone routes is
+left to the web zones and kernel zones owners rather than duplicated here.
+
+Decision: the fewest tests pin user-visible publish and read: executable profile input, raw TypeList limits, first
+native duplicate occurrence, mixed sibling Retry-After with recorded Search and reaction pages, and public
+ReactionSummary totals. Members keep recorded native duplicates because common-members already canonicalizes. No extra
+page stories.
+
 ## Safety
 
 Every string a registry admits is one of:

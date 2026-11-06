@@ -2,6 +2,7 @@ import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
+import { OverviewContext } from './overview-context';
 import { PageReadState } from './page-read-state';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
@@ -20,16 +21,7 @@ import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rez
 import { ListRowControl } from '@rezics/ui/list-row';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -179,7 +171,7 @@ export type OverviewValue = {
   memberHref?: (subject: { id: string; label: string }) => string;
 };
 
-export const OverviewContext = createContext<OverviewValue | null>(null);
+export { OverviewContext };
 
 const SUMMARY_PROPERTY = 'schema:abstract';
 
