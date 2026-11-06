@@ -88,6 +88,26 @@ test('a positive native reservation and admitted step supply no unbound Source d
   await expect(result).rejects.toMatchObject({ code: 'dependency_unavailable' });
 });
 
+test('native reservation retains distinct owner and catalogue populations for the same filter', async () => {
+  const f = await native.fixture();
+  const selected = definition();
+  const definitions = [selected, { ...selected, source: { kind: 'catalogue' as const } }];
+  const { episodes } = await f.store.reserve(f.actor, f.collectionId, definitions);
+  expect(episodes).toHaveLength(2);
+  const rows = await native.rows(f.owner);
+  for (const [index, episode] of episodes.entries()) {
+    const row = rows.find((row) => row.episode_id === episode.locator.episodeId)!;
+    expect(
+      await restorePreparationDefinition(
+        f.owner.accountId,
+        f.collectionId,
+        { canonicalBasis: row.canonical_basis, basisDigest: row.basis_digest },
+        async () => selected.release.value,
+      ),
+    ).toEqual(definitions[index]);
+  }
+});
+
 test('preparation keys deduplicate only identical accepted owner definitions', () => {
   const owner = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
   const collection = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
