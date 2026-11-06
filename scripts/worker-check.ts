@@ -2357,11 +2357,11 @@ function wrapperExecutionArgv(argv: readonly string[]): string[] {
 export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): string {
   if (argv.length === 0) throw new Error('A check command is required');
   const root = resolve(cwd);
-  const ownership = ownershipFromEnvironment(process.env);
-  registryForStart(process.env, ownership);
   const execution = wrapperExecutionArgv(argv);
   refuseOrdinaryProductTestCheck(process.env, execution, root);
   refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(execution, root));
+  const ownership = ownershipFromEnvironment(process.env);
+  registryForStart(process.env, ownership);
   const id = randomUUID();
   const physicalRunId = randomUUID();
   const file = logPath(root, id);
