@@ -22,7 +22,7 @@ not become current again.
 Native readers, permission checks, media reservation, upload completion, derivative summaries and server commands
 remain the authorities for visibility and persisted appearance.
 
-Decision: the site reservation forwards the caller's `idempotency-key` unchanged to the mounted Realm media route,
-so a repeated exact reservation command returns the same reservation. The site mints a key only when the caller
-supplies none. A retry with a known reservation resumes that reservation and never reserves another object; a
-retry without a known reservation is a new selection.
+Decision: the caller mints one reservation key per selected file and retains it with the file. The site forwards that
+key unchanged to the mounted Realm media route and mints one only when the caller supplies none. A retry of an
+uncertain reservation repeats the same key and file, so the kernel returns the reservation it already created instead
+of a second object. A retry with a known media id resumes that reservation; a new selection mints a new key.

@@ -171,7 +171,8 @@ test('draft selections, uploaded references and original requests survive manual
   await control.save();
   expect(commands[1]).toEqual(commands[0]);
   expect(commands[1]?.head).toBe(current.head);
-  expect(keys).toBe(1);
+  // The file selection mints its reservation key; the uncertain save retry reuses the save key and mints none.
+  expect(keys).toBe(2);
   await control.refresh();
   expect(control.getSnapshot().draft?.presentation.avatarMediaId).toBe(id);
   control.reviewConflict();
@@ -179,7 +180,8 @@ test('draft selections, uploaded references and original requests survive manual
   await control.save();
   expect(commands[2]?.head).toBe(revisionId);
   expect(commands[2]?.presentation).toEqual(commands[0]?.presentation);
-  expect(keys).toBe(2);
+  // The conflict review's attempt mints its own key, as before; the file selection adds one more.
+  expect(keys).toBe(3);
   expect(control.getSnapshot().phase).toBe('saved');
   expect(control.getSnapshot().read.kind).toBe('ready');
   const hidden = createRealmAppearance(realmId, { kind: 'ready', snapshot: { ...current, state: 'removed' } }, adapter);
