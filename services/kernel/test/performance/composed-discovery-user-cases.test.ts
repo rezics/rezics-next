@@ -98,9 +98,9 @@ test('every reserved public and deferred cell is named before the remaining surf
     expect(cell.name).toBe(scenarioName(cell.job, cell.surface, cell.scenario));
     expect(applicableScenarios(cell.job, cell.surface)).toContain(cell.scenario);
   }
-  expect(cells.filter(({ deferred }) => deferred).every(({ job }) => (DEFERRED_JOBS as readonly string[]).includes(job))).toBe(
-    true,
-  );
+  expect(
+    cells.filter(({ deferred }) => deferred).every(({ job }) => (DEFERRED_JOBS as readonly string[]).includes(job)),
+  ).toBe(true);
 });
 
 test('released long-harem book plan keeps native work bounded as sparse Books grow at 64/512/4096', async () => {

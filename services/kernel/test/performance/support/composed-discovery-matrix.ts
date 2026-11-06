@@ -40,12 +40,7 @@ export const SHARED_SCENARIOS = [
   'preparation-frontier-resume',
   'foreign-dependency-revoked-midway',
 ] as const;
-export const CONTROL_SCENARIOS = [
-  'hidden-control',
-  'denied-control',
-  'suspended-control',
-  'empty-control',
-] as const;
+export const CONTROL_SCENARIOS = ['hidden-control', 'denied-control', 'suspended-control', 'empty-control'] as const;
 export const BULK_SCENARIOS = ['bulk-captured-population', 'bulk-retry-cancel-revoke'] as const;
 export const SCENARIOS = [...PAGE_SCENARIOS, ...SHARED_SCENARIOS, ...CONTROL_SCENARIOS, ...BULK_SCENARIOS] as const;
 
@@ -57,7 +52,12 @@ export type PublicPersona = (typeof PUBLIC_PERSONAS)[number];
 
 export const BOOK_JOB_NAMES = ['B-long'] as const satisfies readonly BookName[];
 export const BOOK_DEEP_NAMES = ['B-long', 'B-edge', 'B-characters'] as const satisfies readonly BookName[];
-export const RECIPE_JOB_NAMES = ['R-quick', 'R-edge', 'R-cooked', 'R-other-cooked'] as const satisfies readonly RecipeName[];
+export const RECIPE_JOB_NAMES = [
+  'R-quick',
+  'R-edge',
+  'R-cooked',
+  'R-other-cooked',
+] as const satisfies readonly RecipeName[];
 export const RECIPE_NOT_COOKED_NAMES = ['R-quick', 'R-edge', 'R-other-cooked'] as const satisfies readonly RecipeName[];
 
 export type JobFilterSet = Readonly<{
@@ -103,16 +103,10 @@ export function jobType(job: PublicJob): 'schema:Book' | 'schema:Recipe' {
 export function emptyFilter(job: PublicJob, haremId: string): FilterDocument {
   return job === 'long-harem-light-novels'
     ? {
-        and: [
-          { type: { in: ['schema:Recipe'] } },
-          { statement: { property: 'schema:keywords', in: [haremId] } },
-        ],
+        and: [{ type: { in: ['schema:Recipe'] } }, { statement: { property: 'schema:keywords', in: [haremId] } }],
       }
     : {
-        and: [
-          { type: { in: ['schema:Book'] } },
-          { statement: { property: 'schema:suitableForDiet', in: [haremId] } },
-        ],
+        and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:suitableForDiet', in: [haremId] } }],
       };
 }
 
@@ -137,8 +131,7 @@ export function applicableScenarios(job: DiscoveryJob, surface: DiscoverySurface
   ];
   if (surface === 'mounted-zone') shared.push('composed-page-at-limits');
   if (surface === 'own-state' || surface === 'everything-without-state') shared.push('unrelated-owner-history');
-  if (surface === 'catalogue-direct' || surface === 'catalogue-prepared')
-    shared.push('privacy-reduction-served-share');
+  if (surface === 'catalogue-direct' || surface === 'catalogue-prepared') shared.push('privacy-reduction-served-share');
   return shared;
 }
 

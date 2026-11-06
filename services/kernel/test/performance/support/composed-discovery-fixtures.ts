@@ -6,6 +6,7 @@ import {
   planReads,
   platformRegistry,
   readCost,
+  UI_LOCALES,
   validateComposition,
   validateDocumentFilters,
   type CompositionDocument,
@@ -14,6 +15,7 @@ import {
   type ZoneStarter,
 } from '@rezics/composition';
 import type { FilterDocument } from '@rezics/filter';
+import type { Pool } from 'pg';
 import bookZoneStarter from '../../../../../packages/definitions/presentation/book/zone.json';
 import recipeZoneStarter from '../../../../../packages/definitions/presentation/recipe/zone.json';
 import type { CollectionView, DynamicCollectionView } from '../../../../../specs/dynamic-collections-driver.ts';
@@ -24,19 +26,9 @@ import {
   createReleasedLibraryPopulation,
   type ReleasedLibraryPopulation,
 } from '../../library/support/released-library-population.ts';
-import {
-  discoveryKey,
-  type CreatedSubject,
-  type ReleasedDiscoveryFixture,
-} from '../../support/released-discovery.ts';
+import { discoveryKey, type CreatedSubject, type ReleasedDiscoveryFixture } from '../../support/released-discovery.ts';
 import { COMPOSED_READS, COMPOSED_SLOT_EACH, COMPOSED_SLOTS, PAGE_SLOTS } from './composed-discovery-bounds.ts';
-import {
-  PUBLIC_JOBS,
-  jobFilter,
-  jobType,
-  type JobFilterSet,
-  type PublicJob,
-} from './composed-discovery-matrix.ts';
+import { PUBLIC_JOBS, jobFilter, jobType, type JobFilterSet, type PublicJob } from './composed-discovery-matrix.ts';
 
 export type StatusResponse = Awaited<ReturnType<ReleasedDiscoveryFixture['request']>>;
 
@@ -116,26 +108,86 @@ export function listDocument(read: TypeListRead): CompositionDocument {
   return { root: { props: {} }, content: [typeListNode(read)] };
 }
 
-export function composedLimitReads(filters: JobFilterSet, classification: { lightNovel: { id: string }; harem: { id: string } }, diet: { vegetarian: { id: string }; nonvegetarian: { id: string } }, meaning: ReleasedDiscoveryFixture['meaning']): readonly TypeListRead[] {
+export function composedLimitReads(
+  filters: JobFilterSet,
+  classification: { lightNovel: { id: string }; harem: { id: string } },
+  diet: { vegetarian: { id: string }; nonvegetarian: { id: string } },
+  meaning: ReleasedDiscoveryFixture['meaning'],
+): readonly TypeListRead[] {
   const book = ['schema:Book'] as const;
   const recipe = ['schema:Recipe'] as const;
   const reads: TypeListRead[] = [
-    { id: 'words', types: book, filter: { statement: { property: meaning.words, range: { gte: 1000001, unit: '1' } } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'form', types: book, filter: { statement: { property: meaning.form, in: [classification.lightNovel.id] } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'harem', types: book, filter: { statement: { property: 'schema:keywords', in: [classification.harem.id] } }, limit: COMPOSED_SLOT_EACH },
+    {
+      id: 'words',
+      types: book,
+      filter: { statement: { property: meaning.words, range: { gte: 1000001, unit: '1' } } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'form',
+      types: book,
+      filter: { statement: { property: meaning.form, in: [classification.lightNovel.id] } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'harem',
+      types: book,
+      filter: { statement: { property: 'schema:keywords', in: [classification.harem.id] } },
+      limit: COMPOSED_SLOT_EACH,
+    },
     { id: 'form-harem', types: book, filter: filters.formHarem, limit: COMPOSED_SLOT_EACH },
     { id: 'combined', types: book, filter: filters.combined, limit: COMPOSED_SLOT_EACH },
     { id: 'books', types: book, limit: COMPOSED_SLOT_EACH },
-    { id: 'edge-words', types: book, filter: { statement: { property: meaning.words, range: { gte: 1000000, unit: '1' } } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'empty-words', types: book, filter: { statement: { property: meaning.words, range: { gte: 2000000, unit: '1' } } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'diet', types: recipe, filter: { statement: { property: meaning.diet, in: [diet.vegetarian.id] } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'time', types: recipe, filter: { statement: { property: meaning.time, range: { lte: 30, unit: meaning.minuteFilter } } }, limit: COMPOSED_SLOT_EACH },
+    {
+      id: 'edge-words',
+      types: book,
+      filter: { statement: { property: meaning.words, range: { gte: 1000000, unit: '1' } } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'empty-words',
+      types: book,
+      filter: { statement: { property: meaning.words, range: { gte: 2000000, unit: '1' } } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'diet',
+      types: recipe,
+      filter: { statement: { property: meaning.diet, in: [diet.vegetarian.id] } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'time',
+      types: recipe,
+      filter: { statement: { property: meaning.time, range: { lte: 30, unit: meaning.minuteFilter } } },
+      limit: COMPOSED_SLOT_EACH,
+    },
     { id: 'diet-time', types: recipe, filter: filters.dietTime, limit: COMPOSED_SLOT_EACH },
     { id: 'recipes', types: recipe, limit: COMPOSED_SLOT_EACH },
-    { id: 'quick', types: recipe, filter: { statement: { property: meaning.time, range: { lte: 25, unit: meaning.minuteFilter } } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'meat', types: recipe, filter: { statement: { property: meaning.diet, in: [diet.nonvegetarian.id] } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'slow', types: recipe, filter: { statement: { property: meaning.time, range: { gte: 31, unit: meaning.minuteFilter } } }, limit: COMPOSED_SLOT_EACH },
-    { id: 'recipe-harem', types: recipe, filter: { statement: { property: 'schema:keywords', in: [classification.harem.id] } }, limit: COMPOSED_SLOT_EACH },
+    {
+      id: 'quick',
+      types: recipe,
+      filter: { statement: { property: meaning.time, range: { lte: 25, unit: meaning.minuteFilter } } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'meat',
+      types: recipe,
+      filter: { statement: { property: meaning.diet, in: [diet.nonvegetarian.id] } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'slow',
+      types: recipe,
+      filter: { statement: { property: meaning.time, range: { gte: 31, unit: meaning.minuteFilter } } },
+      limit: COMPOSED_SLOT_EACH,
+    },
+    {
+      id: 'recipe-harem',
+      types: recipe,
+      filter: { statement: { property: 'schema:keywords', in: [classification.harem.id] } },
+      limit: COMPOSED_SLOT_EACH,
+    },
   ];
   if (reads.length !== COMPOSED_READS) throw new Error(`Composed page must declare ${COMPOSED_READS} TypeLists`);
   return reads;
@@ -306,7 +358,7 @@ async function builtinCollection(
 export async function createComposedDiscoveryWorld(options: {
   version: 1;
   search: 'native';
-  kernelPool: NonNullable<Parameters<typeof createReleasedLibraryPopulation>[0]>['kernelPool'];
+  kernelPool: (url: string) => Pool | Promise<Pool>;
 }): Promise<ComposedDiscoveryWorld> {
   const population = await createReleasedLibraryPopulation(options);
   const fixture = population.base;
@@ -379,7 +431,9 @@ export async function createComposedDiscoveryWorld(options: {
     recipeConfiguration.pages = [{ route: '', document: recipeDocument }];
     const composedConfiguration = structuredClone(bookZoneStarter) as ZoneStarter;
     composedConfiguration.pages = [{ route: '', document: composedDocument }];
-    composedConfiguration.labels = { en: 'Composed discovery' };
+    composedConfiguration.labels = Object.fromEntries(
+      UI_LOCALES.map((locale) => [locale, 'Composed discovery']),
+    ) as ZoneStarter['labels'];
     const [bookZone, recipeZone, composedZone] = await Promise.all([
       publishZone(population, fixture, bookConfiguration, [mount.id]),
       publishZone(population, fixture, recipeConfiguration, [mount.id]),
@@ -423,13 +477,7 @@ export async function createComposedDiscoveryWorld(options: {
       const existing = await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`);
       if (existing.status === 404) {
         requireStatus(
-          await population.request(
-            'alice',
-            'PUT',
-            `/v1/libraryEntries/${subject.id}`,
-            { state },
-            discoveryKey(),
-          ),
+          await population.request('alice', 'PUT', `/v1/libraryEntries/${subject.id}`, { state }, discoveryKey()),
           201,
           `Admit Alice state for ${subject.id}`,
         );
@@ -441,7 +489,11 @@ export async function createComposedDiscoveryWorld(options: {
       'schema:Recipe': await builtinCollection(population, fixture, 'state', 'schema:Recipe'),
     };
     for (const persona of ['anonymous', 'bob'] as const) {
-      requireStatus(await population.request(persona, 'GET', `/v1/collections/${everythingId}`), 404, 'Conceal Everything');
+      requireStatus(
+        await population.request(persona, 'GET', `/v1/collections/${everythingId}`),
+        404,
+        'Conceal Everything',
+      );
       requireStatus(
         await population.request(persona, 'GET', `/v1/collections/${ownStateIds['schema:Book']}`),
         404,
@@ -493,10 +545,7 @@ export function orderedByLabel(ids: readonly string[], labels: ReadonlyMap<strin
   });
 }
 
-export function occurrenceSubjectIds(
-  source: PublicSource,
-  selected: readonly string[],
-): string[] {
+export function occurrenceSubjectIds(source: PublicSource, selected: readonly string[]): string[] {
   return source.occurrences
     .map(({ member }) => member.subjectId)
     .filter((id) => selected.includes(id))

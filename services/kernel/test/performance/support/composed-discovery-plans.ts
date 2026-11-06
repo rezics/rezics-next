@@ -118,10 +118,7 @@ export async function nativePlan(
   }
 }
 
-export async function resumePrepared(
-  world: ComposedDiscoveryWorld,
-  filter: FilterDocument,
-): Promise<PlanEvidence> {
+export async function resumePrepared(world: ComposedDiscoveryWorld, filter: FilterDocument): Promise<PlanEvidence> {
   const native = world.fixture.search;
   if (!native) throw new Error('The default native Search consumer is unavailable');
   const request = { plan: capturePlan(filter), snapshot: 'prepared' as const };
@@ -203,6 +200,7 @@ export async function revokeDuringPreparation(
 
 function preparing(response: HttpResponse) {
   expect(response.status, JSON.stringify(response.body)).toBe(503);
+  assert(typeof response.body.code === 'string');
   expect(['index_not_ready', 'semantic_not_ready']).toContain(response.body.code);
   expect(response.headers.get('retry-after')).toBeTruthy();
   for (const key of ['subjects', 'members', 'next', 'total', 'count', 'as_of', 'job', 'repair'])
@@ -354,14 +352,13 @@ async function configuredPages(
     for (;;) {
       const response = await requestPage(persona, cursor);
       if (response.status === 200) {
-        result = configuredRead(
-          response,
-          document,
-          node,
-          !zone && cursor ? { node, cursor } : undefined,
-        );
+        result =
+          !zone && cursor
+            ? configuredRead(response, document, node, { node, cursor })
+            : configuredRead(response, document, node);
         if (result.status === 200) break;
         expect(result.status, JSON.stringify(result.body)).toBe(503);
+        assert(typeof result.body.code === 'string');
         expect(['index_not_ready', 'semantic_not_ready']).toContain(result.body.code);
       } else if (zone && response.status === 202) {
         expect(Object.keys(response.body)).toEqual(['next']);
@@ -539,11 +536,7 @@ export async function composedLimitPage(world: ComposedDiscoveryWorld, persona: 
   return { reads: Object.keys(plan.reads).length, slots, combined, recipes };
 }
 
-export async function assertPublicCell(
-  world: ComposedDiscoveryWorld,
-  job: PublicJob,
-  surface: DiscoverySurface,
-) {
+export async function assertPublicCell(world: ComposedDiscoveryWorld, job: PublicJob, surface: DiscoverySurface) {
   for (const persona of personasFor(surface)) {
     const first = await surfacePages(world, job, surface, persona, 'job');
     expect(first.ids.length).toBeGreaterThan(0);
