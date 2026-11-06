@@ -776,6 +776,14 @@ separate from identity hold release. Library receives that live frame as an inje
 (`libraryWork(pool, token, deadline)`) in `createLibraryIdentityEpochReceiver` and `createLibraryIdentityNativePlanner`;
 the participant never imports the frame module, so the adapter index keeps only type re-exports and adds no value cycle.
 
+Stage order inside one frame call (`stepLibraryIdentityEpochWithSource`): native receiving effects, then source
+scopes, then one follow page, then one canonical store call, then handoff and closure reporting. A follow
+obligation rides on the FIRST native OLD, NEW or first-apply row per (job, original, disposition); its cursor is the
+row's `follow_partition`/`follow_after`, and it reads its terminals from `identity_scope_effect.operation.change`.
+Each canonical store call is composed under the frame at its declared per-call ceiling and settled from the usage the
+store returns. The step reports `closed` only when every stage closes; a foreign follower is recorded as an
+owner handoff with its target in the locator, and it never blocks supported account-backed follows.
+
 Remaining integration is Semantic's prepaid schedule and Source/coordinator composition: it must account for all
 planner steps, source discovery, page/verification and transitive receiving/control operations; drive every saved
 admitted change through first-apply and late-birth closure; invoke follow pages and resolve target/account handoffs;
