@@ -21,11 +21,7 @@ import {
   readVndbCharacterVocabularyBindings,
   type VndbCharacterTraitPlan,
 } from './vndb-character-traits.ts';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-  type CrossMediaTables,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan, type CrossMediaPort, type CrossMediaTables } from './showcase-contract.ts';
 import {
   showcaseDigest,
   showcaseLimits,

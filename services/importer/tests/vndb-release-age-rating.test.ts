@@ -10,10 +10,7 @@ import { CrossMediaDumpFiles, crossMediaAliases, type CrossMediaPort } from '../
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { Importer } from '../src/importer.ts';
 import type { ImportTransport, SourceRegistration } from '../src/import-contract.ts';
-import {
-  planVndbReleaseFidelity,
-  readVndbReleaseBindings,
-} from '../src/vndb-release-fidelity.ts';
+import { planVndbReleaseFidelity, readVndbReleaseBindings } from '../src/vndb-release-fidelity.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 

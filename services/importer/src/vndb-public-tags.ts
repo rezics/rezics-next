@@ -25,10 +25,7 @@ import {
   type CrossMediaReading,
   type CrossMediaTables,
 } from './showcase-contract.ts';
-import type {
-  seedCrossMedia,
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 import type { VndbTagRatingSnapshot } from './showcase-vndb-tag-ratings.ts';
 import {

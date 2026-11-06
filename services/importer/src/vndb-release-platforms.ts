@@ -10,10 +10,7 @@ import {
   vndbReleaseMediumTaxonomy,
   vndbReleasePlatformTaxonomy,
 } from '@rezics/conversion/support';
-import {
-  type CrossMediaGap,
-  type CrossMediaTables,
-} from './showcase-contract.ts';
+import { type CrossMediaGap, type CrossMediaTables } from './showcase-contract.ts';
 
 type Row = Record<string, unknown>;
 export type VndbReleaseAssociation = Readonly<{ code: string; path: string }>;

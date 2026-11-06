@@ -17,11 +17,7 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
-import {
-  planShowcaseBooks,
-  showcaseBookFamily,
-  showcaseBooksToCrossMediaPlan,
-} from '../src/showcase-books.ts';
+import { planShowcaseBooks, showcaseBookFamily, showcaseBooksToCrossMediaPlan } from '../src/showcase-books.ts';
 import pinned from '../../kernel/test/imports/showcase-books-source.json';
 import { importShowcaseBooks } from '../src/selected-import.ts';
 

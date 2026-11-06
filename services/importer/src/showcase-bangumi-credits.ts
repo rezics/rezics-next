@@ -16,13 +16,8 @@ import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/sup
 import type { SourceRecord } from '@rezics/conversion';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { BangumiCreatorCreditDraft } from './bangumi-creator-credits.ts';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-} from './showcase-contract.ts';
-import type {
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
+import type { CrossMediaSeedResult } from './cross-media-seed.ts';
 import {
   showcaseDigest,
   showcaseLimits,

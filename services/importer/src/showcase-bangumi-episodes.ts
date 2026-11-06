@@ -14,9 +14,7 @@ import {
   type CrossMediaTables,
   type Franchise,
 } from './showcase-contract.ts';
-import {
-  type CrossMediaPort,
-} from './showcase-contract.ts';
+import { type CrossMediaPort } from './showcase-contract.ts';
 import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 import type { Owner } from './record-bindings.ts';
 import type { ImportConversion } from './import-contract.ts';

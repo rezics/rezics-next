@@ -13,9 +13,7 @@ import {
   type ShowcaseAssertion,
   type ShowcaseVocabularyRecord,
 } from './showcase-contract.ts';
-import {
-  showcaseDigest,
-} from './showcase-contract.ts';
+import { showcaseDigest } from './showcase-contract.ts';
 
 const HAREM_EDITOR_TAG = '后宫';
 const globalContext = '00000000-0000-8000-8000-000000000000';

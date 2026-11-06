@@ -16,10 +16,7 @@ import type { NativeIdentity, SourceVocabularyBindings } from '@rezics/conversio
 import { vndbCharacterBloodTypeSchemeUri, vndbCharacterBloodTypeTaxonomy } from '@rezics/conversion/vndb-vocabulary';
 import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import type { ImporterOptions } from './importer.ts';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
 import {
   showcaseDigest,
   showcaseVocabularyExternalId,

@@ -13,10 +13,7 @@ import {
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import { vndbTagsRatingMetric } from '../../../../packages/conversion/src/vndb-vocabulary.ts';
-import {
-  parseAuthoredVndbCopy,
-  readVndbPublicTagBindings,
-} from '../../../importer/src/vndb-public-tags.ts';
+import { parseAuthoredVndbCopy, readVndbPublicTagBindings } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';

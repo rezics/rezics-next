@@ -1,6 +1,10 @@
 import type { SourceId } from '@rezics/conversion';
 import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
-import { converter_revision as crossMediaRevision, bangumiRecordUrl, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import {
+  converter_revision as crossMediaRevision,
+  bangumiRecordUrl,
+  vndbRecordUrl,
+} from '@rezics/conversion/cross-media-entities';
 import { converter_revision as openLibraryRevision } from '@rezics/conversion/open-library';
 import { converter_revision as vndbRevision } from '@rezics/conversion/vndb';
 import { converter_revision as wikidataRevision } from '@rezics/conversion/wikidata';

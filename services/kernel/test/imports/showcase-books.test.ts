@@ -11,10 +11,7 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
-import {
-  showcaseBookFamily,
-  showcaseBooksToCrossMediaPlan,
-} from '../../../importer/src/showcase-books.ts';
+import { showcaseBookFamily, showcaseBooksToCrossMediaPlan } from '../../../importer/src/showcase-books.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';

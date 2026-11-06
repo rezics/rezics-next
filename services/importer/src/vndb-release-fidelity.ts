@@ -22,10 +22,7 @@ import {
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
 } from './showcase-contract.ts';
-import type {
-  seedCrossMedia,
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 import {
   planVndbReleasePlatforms,

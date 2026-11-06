@@ -1,17 +1,11 @@
 import { Type, type Static, type TSchema } from 'typebox';
 import { Check } from 'typebox/schema';
 import type { AccountTokenProvider } from './credentials.ts';
-import {
-  type CrossMediaSelection,
-} from './showcase-contract.ts';
-import type {
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import { type CrossMediaSelection } from './showcase-contract.ts';
+import type { CrossMediaSeedResult } from './cross-media-seed.ts';
 import { createImportFetch } from './import-fetch.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
-import {
-  showcaseDigest,
-} from './showcase-contract.ts';
+import { showcaseDigest } from './showcase-contract.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 
 /** Separate creator credential; these are not importer scopes or additional platform grants. */

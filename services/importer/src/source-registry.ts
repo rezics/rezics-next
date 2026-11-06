@@ -23,7 +23,12 @@ import type {
   SourceVocabularyRow,
 } from '@rezics/conversion';
 import { projectSourceClassification } from '@rezics/conversion';
-import type { ImportConversion, ImportSourceStatistic, ImportSourceStatisticClear, SourceRegistration } from './import-contract.ts';
+import type {
+  ImportConversion,
+  ImportSourceStatistic,
+  ImportSourceStatisticClear,
+  SourceRegistration,
+} from './import-contract.ts';
 import {
   admittedSourceAdmissions,
   crossMediaBangumiRevision,

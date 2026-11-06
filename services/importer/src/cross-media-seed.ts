@@ -154,11 +154,7 @@ import {
   type BangumiCreditRoleBinding,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
-import {
-  showcaseLimits,
-  type ShowcaseAcknowledgement,
-  type ShowcaseManifest,
-} from './showcase-contract.ts';
+import { showcaseLimits, type ShowcaseAcknowledgement, type ShowcaseManifest } from './showcase-contract.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;

@@ -12,10 +12,7 @@ import {
   vndbReleasePlatformSchemeUri,
   vndbReleasePlatformTaxonomy,
 } from '../../../../packages/conversion/src/support.ts';
-import {
-  readVndbReleaseBindings,
-  type VndbReleaseBindingGroup,
-} from '../../../importer/src/vndb-release-fidelity.ts';
+import { readVndbReleaseBindings, type VndbReleaseBindingGroup } from '../../../importer/src/vndb-release-fidelity.ts';
 import { CrossMediaDumpFiles, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';

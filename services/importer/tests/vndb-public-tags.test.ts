@@ -17,11 +17,7 @@ import {
   VNDB_PUBLIC_TAG_COLUMNS,
 } from '../src/vndb-tables.ts';
 import { importVndbPublicTags } from '../src/selected-import.ts';
-import {
-  parseAuthoredVndbCopy,
-  planVndbPublicTags,
-  readVndbPublicTagBindings,
-} from '../src/vndb-public-tags.ts';
+import { parseAuthoredVndbCopy, planVndbPublicTags, readVndbPublicTagBindings } from '../src/vndb-public-tags.ts';
 
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');
 const associationHeader = VNDB_PUBLIC_TAG_COLUMNS.tags_vn.join('\t');

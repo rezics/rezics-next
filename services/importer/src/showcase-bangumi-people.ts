@@ -1,6 +1,4 @@
-import {
-  type CrossMediaPlan,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan } from './showcase-contract.ts';
 import {
   acquireBangumiPersonCareerSources,
   type BangumiPersonCareerSourceJournal,

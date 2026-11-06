@@ -7,10 +7,7 @@ import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts'
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
-import type {
-  CrossMediaSeedResult,
-  VndbWorkRelationOutcome,
-} from './cross-media-seed.ts';
+import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
   showcaseDigest,
   showcaseLimits,
@@ -31,11 +28,7 @@ import {
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import {
-  buildShowcaseManifest,
-  showcaseStatementMatches,
-  showcaseMediaContext,
-} from './showcase-manifest.ts';
+import { buildShowcaseManifest, showcaseStatementMatches, showcaseMediaContext } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';

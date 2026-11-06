@@ -9,11 +9,7 @@ import {
   planVndbReleaseFidelity,
   type VndbReleaseFidelityResult,
 } from './vndb-release-fidelity.ts';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-  type CrossMediaTables,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan, type CrossMediaPort, type CrossMediaTables } from './showcase-contract.ts';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import type { seedCrossMedia } from './cross-media-seed.ts';
 

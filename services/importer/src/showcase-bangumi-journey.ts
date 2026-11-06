@@ -4,9 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import type {
-  CrossMediaSeedReport,
-} from './cross-media-seed.ts';
+import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/anime-journey');

@@ -6,18 +6,18 @@ This pure package deterministically turns one licensed provider record into boun
 
 The public subpaths are defined in [package.json](package.json).
 
-| Subpath                                 | Public entry                                                                                                    |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Subpath                                 | Public entry                                                                                                     |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | @rezics/conversion                      | Shared source and conversion types, diagnostics, errors, source-classification projection and conversion helpers |
-| @rezics/conversion/support              | Converter context, digest, command key, cover intent and released URI helpers for community tools               |
-| @rezics/conversion/bangumi              | Bangumi converter, revision, book grain and Game-genre helpers                                                  |
-| @rezics/conversion/bangumi-vocabulary   | Bangumi vocabulary mapper and revision                                                                          |
-| @rezics/conversion/vndb                 | VNDB converter, revision, limits and result                                                                     |
-| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight and parent producers and row types                                 |
-| @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                                           |
-| @rezics/conversion/open-library         | Open Library converter, revision and result                                                                     |
-| @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                                                 |
-| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                                      |
+| @rezics/conversion/support              | Converter context, digest, command key, cover intent and released URI helpers for community tools                |
+| @rezics/conversion/bangumi              | Bangumi converter, revision, book grain and Game-genre helpers                                                   |
+| @rezics/conversion/bangumi-vocabulary   | Bangumi vocabulary mapper and revision                                                                           |
+| @rezics/conversion/vndb                 | VNDB converter, revision, limits and result                                                                      |
+| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight and parent producers and row types                                  |
+| @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                                            |
+| @rezics/conversion/open-library         | Open Library converter, revision and result                                                                      |
+| @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                                                  |
+| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                                       |
 
 Current exports are Bangumi bangumi@17, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@17. Live-action platform grain lives on the Bangumi subject-profile contract; the entity converter re-exports it. Registration imports these revisions; source records cannot choose them. Community tools load converters and `@rezics/conversion/support` without importer acquisition.
 

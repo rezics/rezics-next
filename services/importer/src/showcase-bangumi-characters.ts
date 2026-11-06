@@ -10,18 +10,10 @@ import type { SourceVocabularyBindings, SourceVocabularyGap } from '@rezics/conv
 import { mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import { currentBangumiCharacterVocabularyBindings } from './bangumi-character-fidelity.ts';
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-} from './showcase-contract.ts';
-import {
-  showcaseDigest,
-  showcaseVocabularyExternalId,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
+import { showcaseDigest, showcaseVocabularyExternalId } from './showcase-contract.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
-import {
-  type ShowcaseVocabularyRequirement,
-} from './showcase-contract.ts';
+import { type ShowcaseVocabularyRequirement } from './showcase-contract.ts';
 
 const adapterRevision = 'bangumi-character-vocabulary@3';
 const taxonomy = {

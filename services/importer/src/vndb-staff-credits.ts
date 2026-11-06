@@ -19,10 +19,7 @@ import {
   type CrossMediaReading,
   type CrossMediaTables,
 } from './showcase-contract.ts';
-import type {
-  seedCrossMedia,
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 
 export const creditTypeSchemeUri = 'https://vndb.org/credit-types';

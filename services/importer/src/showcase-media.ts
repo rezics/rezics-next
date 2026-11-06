@@ -3,9 +3,7 @@ import type { SourceRecord } from '@rezics/conversion';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import { safeSourceUrl, sourceDigest } from '@rezics/conversion/support';
 import { createBoundedPublicGet, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from './import-fetch.ts';
-import {
-  type CrossMediaPlan,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan } from './showcase-contract.ts';
 
 const BANGUMI_ORIGIN = 'https://api.bgm.tv';
 const SUBJECT_PATH = '/v0/subjects/';

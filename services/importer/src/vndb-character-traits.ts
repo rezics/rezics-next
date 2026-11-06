@@ -19,10 +19,7 @@ import {
   type CrossMediaReading,
   type CrossMediaTables,
 } from './showcase-contract.ts';
-import type {
-  seedCrossMedia,
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
 import { VNDB_CHARACTER_APPEARANCE_COLUMNS, VNDB_CHARACTER_TRAIT_COLUMNS } from './vndb-tables.ts';
 

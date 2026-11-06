@@ -20,10 +20,7 @@ import {
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
 } from './showcase-contract.ts';
-import type {
-  seedCrossMedia,
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import {

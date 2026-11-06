@@ -1,13 +1,7 @@
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
-import {
-  type CrossMediaPort,
-  type CrossMediaTables,
-} from './showcase-contract.ts';
-import type {
-  seedCrossMedia,
-  CrossMediaSeedResult,
-} from './cross-media-seed.ts';
+import { type CrossMediaPort, type CrossMediaTables } from './showcase-contract.ts';
+import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
 import {
   planVndbReleaseFidelity,
   vndbReleaseVocabularyAdmission,

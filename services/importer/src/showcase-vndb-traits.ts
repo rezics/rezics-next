@@ -1,7 +1,4 @@
-import {
-  type CrossMediaPlan,
-  type CrossMediaPort,
-} from './showcase-contract.ts';
+import { type CrossMediaPlan, type CrossMediaPort } from './showcase-contract.ts';
 import {
   readVndbCharacterVocabularyBindings,
   vndbCharacterVocabularyAdmission,
