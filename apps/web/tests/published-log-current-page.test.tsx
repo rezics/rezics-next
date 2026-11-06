@@ -56,6 +56,7 @@ function transport(calls: Call[], input: Input) {
 }
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/library/logs-server', () => ({
+  publishProgressLog: async () => ({ ok: false, reason: 'closed' }),
   removePublishedLog: (input: Input) => transport(removes, input),
   restorePublishedLog: (input: Input) => transport(restores, input),
 }));
@@ -75,6 +76,7 @@ mock.module('../src/kernel/exposure', () => ({
     observeDelete(children);
     return <Fragment>{children}</Fragment>;
   },
+  useOperation: () => true,
 }));
 const { UndoNotice } = await import('../src/library/copies-undo');
 let undoProps: Parameters<typeof UndoNotice>[0] | undefined;
@@ -410,6 +412,26 @@ test('same-page uncertain retries keep exact payloads, evidence and deadline; on
   } finally {
     await h.close();
     clock.mockRestore();
+  }
+});
+
+test('owner retract, confirm and Undo keep 44px keyboard-visible targets', async () => {
+  const h = await mount();
+  try {
+    const tokens = ['min-h-11', 'min-w-11', 'max-w-full', 'whitespace-normal', 'focus-visible:outline-2'];
+    const remove = h.button(m.library_logs_delete());
+    for (const name of tokens) expect(remove.className).toContain(name);
+    await h.click(m.library_logs_delete());
+    for (const name of tokens) {
+      expect(h.button(m.library_logs_confirm_delete()).className).toContain(name);
+      expect(h.button(m.library_logs_cancel()).className).toContain(name);
+    }
+    await h.confirm();
+    await complete(removes.at(-1)!, 'success');
+    const undo = h.button(m.editor_undo());
+    for (const name of tokens) expect(undo.className).toContain(name);
+  } finally {
+    await h.close();
   }
 });
 

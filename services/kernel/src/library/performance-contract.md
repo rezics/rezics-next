@@ -702,6 +702,16 @@ next-page two-stream sentinel, retention's 100/100 controls and exact locator me
 reservation behavior. The existing HTTP/native/growth causal suites retain their public detail/list, receipt replay,
 Undo deadline, stale deletion and scale assertions. None of these declarations or tests claims native receiving.
 
+Decision: nested original and terminal Source gates reuse the reached `sessionSourceWork` producer with a routable
+subject UUID; FULL presentation adds a second currentness gate, Follow subject-summary observation and the public
+account read. Commands size retry slots from remaining original deadline milliseconds; aborted and successful
+attempts share that envelope. HTTP `present`/`fullView` and `resolveSubject` keep the same absolute cutoff and pass
+Access work. A changed Source on FULL published-log is withheld (`subject: null`) so later private session edits
+leave the snapshot readable. The native interceptor catalogues reached SQL and skips consume while the enclosing
+operation reservation is open; an empty subject list is the zero operand. Growth suites keep scales 1/4/16 until
+native receiving observes 64/512/4096. Fewest tests: extend the existing operation-bounds composition suite and the
+retract causal for exact Undo, plus one FULL withhold, rather than a second lifecycle file.
+
 ## Private Collection pin operations
 
 Decision: pin bounds retain the full 100-ID owner projection, charge the real insert arbitration/CAS schedule and its

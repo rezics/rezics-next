@@ -229,6 +229,28 @@ test('an owner publishes an immutable snapshot that anyone, including anonymous,
     publishedAt: clock().toISOString(),
   });
   expect(await commands.readPublishedLog(anonymous, published.value.id)).toEqual(published.value);
+  const retired = await withAdmin((client) =>
+    progress.updateSession(
+      client,
+      route,
+      session.id,
+      completed.revision,
+      {
+        amount: completed.amount,
+        locator: completed.locator,
+        position: completed.position,
+        completedUnitCount: completed.completedUnitCount,
+        state: 'retired',
+        completedAt,
+      },
+      { transactionId: newId(route), time: completedAt },
+    ),
+  );
+  expect(retired).toMatchObject({ state: 'retired' });
+  expect(await commands.readPublishedLog(anonymous, published.value.id)).toEqual(published.value);
+  expect(await commands.readPublishedLog(anonymous, again.value.id)).toEqual(again.value);
+  expect((await storedLog(published.value.id)).session_state).toBe('active');
+  expect((await storedLog(again.value.id)).session_state).toBe('completed');
 
   const page = await commands.listPublishedLogs(anonymous, { accountId: owner.accountId });
   const firstIndex = page.publishedLogs.findIndex((log) => log.id === published.value.id);
@@ -311,6 +333,21 @@ test('only the owner retracts a log, and a retracted log reads as a safe structu
     { partition_no: partitionOf(route), subject: owner.accountId, data: { logId: published.id } },
   ]);
   expect(await rowsNaming(published.id)).toBe(0);
+  if (removed.deletionId === undefined) throw new Error('Retract did not return a deletion episode');
+  const restored = await commands.restoreLog(
+    owner,
+    published.id,
+    { deletionId: removed.deletionId, revision: original.revision + 1 },
+    key(),
+  );
+  expect(restored.replayed).toBe(false);
+  expect(restored.value).toEqual(published);
+  for (const viewer of [anonymous, other, owner]) {
+    expect(await commands.readPublishedLog(viewer, published.id)).toEqual(published);
+  }
+  expect(
+    (await commands.listPublishedLogs(anonymous, { accountId: owner.accountId, limit: 100 })).publishedLogs,
+  ).toContainEqual(published);
 });
 
 test("another account's session cannot be published and its log cannot be retracted", async () => {

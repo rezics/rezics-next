@@ -2893,8 +2893,8 @@ identity/custody and cost proof is pending; source typing does not certify these
 
 ### Published log read
 
-- Touches: A repeatable-read transaction and one `published_log` primary key. The read is public, including anonymous. There is no account admit. A missing row is not found.
-- Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus begin and commit. No authorization read.
+- Touches: A repeatable-read transaction and one `published_log` primary key. The read is public, including anonymous. There is no account admit. A missing row is not found. A live FULL presentation then runs original and terminal Source gates, Follow subject-summary observation and the public-account read inside the original request deadline.
+- Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus begin and commit. No authorization read. Nested Source/Semantic units are declared on `published-log-bounds.ts` point and page operations.
 - Growth check: `test/library/growth-published-logs.test.ts`: `Published log read has constant rows and statements as published logs grow`. Whole-operation rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the account's own and other accounts' published logs, progress sessions, receipts, outbox, write-basis and Access account rows grow by 500 x scale per population in the owner and other partitions.
 
 ### Published log page

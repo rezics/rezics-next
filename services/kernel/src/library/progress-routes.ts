@@ -1124,7 +1124,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         set.headers['cache-control'] = 'private, no-store';
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => publishedCommands().publishLog(actor, body, requestKey)),
+          mapped(() => publishedCommands().publishLog(actor, body, requestKey, job.deadline)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
@@ -1156,10 +1156,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       async ({ params, query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
-            const result = await publishedCommands().readWithRevision(actor, params.logId);
+            const result = await publishedCommands().readWithRevision(actor, params.logId, {
+              deadline: job.deadline,
+              present: (body) =>
+                fullView(config(), actor, query.view, body, {
+                  deadline: job.deadline,
+                  withholdChangedSource: true,
+                }),
+            });
             set.headers['cache-control'] = 'private, no-store';
             if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
-            return fullView(config(), actor, query.view, { publishedLog: result.publishedLog });
+            return { publishedLog: result.publishedLog };
           }, 'not_found'),
         ),
     )
@@ -1183,7 +1190,14 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         admission.run('normal', job, () =>
           mapped(async () => {
             const page = basicQuery(query);
-            return fullView(config(), actor, query.view, await publishedCommands().listPublishedLogs(actor, page));
+            return publishedCommands().listPublishedLogs(actor, page, {
+              deadline: job.deadline,
+              present: (body) =>
+                fullView(config(), actor, query.view, body, {
+                  deadline: job.deadline,
+                  withholdChangedSource: true,
+                }),
+            });
           }),
         ),
     )
@@ -1223,7 +1237,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         requireAccount(actor);
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => publishedCommands().retractLog(actor, params.logId, requestKey, query.revision)),
+          mapped(() => publishedCommands().retractLog(actor, params.logId, requestKey, query.revision, job.deadline)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         if (result.deletionId !== undefined && result.revision !== undefined) {
@@ -1261,7 +1275,13 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         requireAccount(actor);
         const result = await admission.run('normal', job, () =>
           mapped(() =>
-            publishedCommands().restoreLog(actor, params.logId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+            publishedCommands().restoreLog(
+              actor,
+              params.logId,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              job.deadline,
+            ),
           ),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });

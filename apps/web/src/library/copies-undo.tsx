@@ -47,7 +47,12 @@ export function UndoNotice({
       <p role="status">{message}</p>
       {available && !expired ? (
         <Exposure operation={operation}>
-          <Button variant="outline" disabled={pending} onClick={() => void undo()}>
+          <Button
+            variant="outline"
+            disabled={pending}
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onClick={() => void undo()}
+          >
             {m.editor_undo()}
           </Button>
         </Exposure>

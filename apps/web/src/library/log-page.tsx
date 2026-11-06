@@ -1,5 +1,5 @@
 import { Exposure } from '../kernel/exposure';
-import { RelativeTime } from './logs-progress';
+import { RelativeTime } from './logs-relative-time';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -12,7 +12,7 @@ import { AccountRef } from './account-ref';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
-  'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function stateLabel(state: PublishedLog['sessionState']): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -312,7 +312,13 @@ export function PublishedLogPageView({
               </button>
             ) : (
               <>
-                <button type="button" className={buttonClass} disabled={pending} onClick={() => void remove()}>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={pending}
+                  autoFocus
+                  onClick={() => void remove()}
+                >
                   {m.library_logs_confirm_delete()}
                 </button>
                 <button

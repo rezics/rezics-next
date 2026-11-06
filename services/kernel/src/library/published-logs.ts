@@ -2,12 +2,19 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { readAccountCommandState } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, type CommandOutcome, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  commandAttemptDeadline,
+  type CommandAttempt,
+  type CommandOutcome,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor } from '../request/access.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -17,6 +24,7 @@ import {
   requireRoute,
   runLibraryBoundedOperation,
   sameAccountRoute,
+  WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import type { ProgressState } from './progress.ts';
 import { readSession } from './progress-store.ts';
@@ -35,9 +43,11 @@ import {
   publishedLogPageReadOperationPlan,
   publishedLogPointReadOperationPlan,
   publishedLogPublishOperationPlan,
+  publishedLogRemainingMs,
   publishedLogRestoreOperationPlan,
   publishedLogRetractOperationPlan,
 } from './published-log-bounds.ts';
+import { publishedLogAccessContext, withPublishedLogNativeWork } from './published-log-native.ts';
 
 const UPDATED = 'com.rezics.library.published_log.updated.v1';
 const DELETED = 'com.rezics.library.published_log.deleted.v1';
@@ -59,6 +69,8 @@ export type PublishedLogTombstone = { id: string; deleted: true };
 export type PublishedLogPageResult = { publishedLogs: PublishedLog[]; next: string | null };
 type Receipt = { publishedLog: PublishedLog; revision: number; deletionId?: string };
 export type PublishedLogOutcome = CommandOutcome<PublishedLog> & { revision?: number; deletionId?: string };
+export type PublishedLogPresent<T> = (body: T) => Promise<T>;
+export type PublishedLogReadOptions<T> = { deadline?: number; present?: PublishedLogPresent<T> };
 function outcome(result: CommandOutcome<Receipt | PublishedLog>): PublishedLogOutcome {
   // Old authorized receipts retain their exact body, without invented CAS or deletion metadata.
   if (!('publishedLog' in result.value)) return { ...result, value: result.value };
@@ -109,23 +121,29 @@ function stale(): never {
 export function createPublishedLogCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
-  async function source(actor: Actor, subjectId: string, at?: AuthoritativeTime) {
-    if (!(await resolveSubject({ pool, access }, actor, subjectId, at))) throw new LibraryNotFoundError();
+  function operationDeadline(deadline?: number) {
+    return deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
   }
-  async function prepareLog(actor: Actor, logId: string, at: AuthoritativeTime) {
+  async function source(actor: Actor, subjectId: string, at: AuthoritativeTime | undefined, deadline: number) {
+    if (!(await resolveSubject({ pool, access }, actor, subjectId, at, publishedLogAccessContext(pool, deadline))))
+      throw new LibraryNotFoundError();
+  }
+  async function prepareLog(actor: Actor, logId: string, attempt: CommandAttempt) {
     if (actor.kind !== 'account') throw new GrantDeniedError();
+    const deadline = commandAttemptDeadline(attempt);
     const route = sameAccountRoute(actor.accountId, logId);
     const row = await withConnection(pool, (client) => readStoredLog(client, route, logId));
     if (!row) throw new LibraryNotFoundError();
     if (!row.accountId && row.deleted) throw new ProblemError('published_log_restore_expired');
     if (row.accountId !== actor.accountId) throw new LibraryNotFoundError();
-    if (row.subjectId) await source(actor, row.subjectId, at);
+    if (row.subjectId) await source(actor, row.subjectId, attempt.time, deadline);
     return row;
   }
   async function publishLog(
     actor: Actor,
     input: { sessionId: string; note?: string | null },
     requestKey: string,
+    deadline?: number,
   ): Promise<PublishedLogOutcome> {
     if (actor.kind !== 'account') throw new GrantDeniedError();
     const accountId = actor.accountId;
@@ -137,6 +155,7 @@ export function createPublishedLogCommands(config: Dependencies) {
     )
       throw new ProblemError('invalid_request');
     const sessionId = input.sessionId;
+    const commandDeadline = operationDeadline(deadline);
     return outcome(
       await runner.ownAccountPrepared<
         { session: NonNullable<Awaited<ReturnType<typeof readSession>>> } | { error: unknown },
@@ -148,6 +167,8 @@ export function createPublishedLogCommands(config: Dependencies) {
           kind: 'published_log.create',
           requestKey,
           input: { sessionId, note },
+          deadline: commandDeadline,
+          execution: (dispatch) => withPublishedLogNativeWork(commandDeadline, dispatch),
           executionPlan: {
             operation: 'published-log.publish',
             total: publishedLogPublishOperationPlan({
@@ -156,6 +177,7 @@ export function createPublishedLogCommands(config: Dependencies) {
               note,
               requestKey,
               receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
+              durationMs: publishedLogRemainingMs(commandDeadline),
             }).total,
           },
           async prepare(attempt) {
@@ -163,7 +185,7 @@ export function createPublishedLogCommands(config: Dependencies) {
               const route = sameAccountRoute(accountId, sessionId);
               const session = await withConnection(pool, (c) => readSession(c, route, sessionId));
               if (!session || session.accountId !== accountId) throw new LibraryNotFoundError();
-              await source(actor, session.subjectId, attempt.time);
+              await source(actor, session.subjectId, attempt.time, commandAttemptDeadline(attempt));
               return { session };
             } catch (error) {
               return { error };
@@ -201,10 +223,12 @@ export function createPublishedLogCommands(config: Dependencies) {
     logId: string,
     requestKey: string,
     revision?: number,
+    deadline?: number,
   ): Promise<PublishedLogOutcome> {
     if (actor.kind !== 'account') throw new GrantDeniedError();
     const accountId = actor.accountId;
     if (revision !== undefined) expectedRevision(revision);
+    const commandDeadline = operationDeadline(deadline);
     return outcome(
       await runner.ownAccount<Receipt | PublishedLog>(
         actor,
@@ -212,8 +236,10 @@ export function createPublishedLogCommands(config: Dependencies) {
           action: 'published_log:delete',
           kind: 'published_log.delete',
           requestKey,
+          deadline: commandDeadline,
           // Preserve pre-CAS receipt identity so exact old authorized acknowledgements remain replayable.
           input: revision === undefined ? { logId } : { logId, revision },
+          execution: (dispatch) => withPublishedLogNativeWork(commandDeadline, dispatch),
           executionPlan: {
             operation: 'published-log.retract',
             total: publishedLogRetractOperationPlan({
@@ -222,6 +248,7 @@ export function createPublishedLogCommands(config: Dependencies) {
               requestKey,
               ...(revision === undefined ? {} : { revision }),
               receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
+              durationMs: publishedLogRemainingMs(commandDeadline),
             }).total,
           },
         },
@@ -249,6 +276,7 @@ export function createPublishedLogCommands(config: Dependencies) {
     logId: string,
     input: unknown,
     requestKey: string,
+    deadline?: number,
   ): Promise<PublishedLogOutcome> {
     if (actor.kind !== 'account') throw new GrantDeniedError();
     if (
@@ -266,6 +294,7 @@ export function createPublishedLogCommands(config: Dependencies) {
     )
       throw new ProblemError('invalid_request');
     const accountId = actor.accountId;
+    const commandDeadline = operationDeadline(deadline);
     return outcome(
       await runner.ownAccountPrepared<{ row: PublishedLogRecord } | { error: unknown }, Receipt>(
         actor,
@@ -274,6 +303,8 @@ export function createPublishedLogCommands(config: Dependencies) {
           kind: 'published_log.restore',
           requestKey,
           input: { logId, deletionId, revision },
+          deadline: commandDeadline,
+          execution: (dispatch) => withPublishedLogNativeWork(commandDeadline, dispatch),
           executionPlan: {
             operation: 'published-log.restore',
             total: publishedLogRestoreOperationPlan({
@@ -283,11 +314,12 @@ export function createPublishedLogCommands(config: Dependencies) {
               revision,
               requestKey,
               receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
+              durationMs: publishedLogRemainingMs(commandDeadline),
             }).total,
           },
           async prepare(attempt) {
             try {
-              return { row: await prepareLog(actor, logId, attempt.time) };
+              return { row: await prepareLog(actor, logId, attempt) };
             } catch (error) {
               return { error };
             }
@@ -319,39 +351,59 @@ export function createPublishedLogCommands(config: Dependencies) {
   async function readWithRevision(
     viewer: Actor,
     logId: string,
+    options: PublishedLogReadOptions<{ publishedLog: PublishedLog | PublishedLogTombstone }> = {},
   ): Promise<{ publishedLog: PublishedLog | PublishedLogTombstone; revision?: number }> {
+    const deadline = operationDeadline(options.deadline);
     const route = requireRoute(logId);
     const operation = publishedLogPointReadOperationPlan({ route, logId });
-    return runLibraryBoundedOperation(operation.kind, operation.total, async () => {
-      // Release the owner checkout before native original and terminal subject checkouts.
-      const result = await withConnection(pool, async (client) => {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const row = await readStoredLog(client, route, logId);
-          if (!row) throw new LibraryNotFoundError();
-          const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
-          await client.query('COMMIT');
-          return { row, owner };
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
+    return withRequestDeadline(deadline, () =>
+      runLibraryBoundedOperation(operation.kind, operation.total, () =>
+        withPublishedLogNativeWork(deadline, async () => {
+        // Release the owner checkout before native original and terminal subject checkouts.
+        const result = await withConnection(pool, async (client) => {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          try {
+            const row = await readStoredLog(client, route, logId);
+            if (!row) throw new LibraryNotFoundError();
+            const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
+            await client.query('COMMIT');
+            return { row, owner };
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+          }
+        });
+        const { row, owner } = result;
+        if (row.deleted || !owner || owner.state !== 'active' || owner.fenced) {
+          const tombstone = { publishedLog: { id: logId, deleted: true as const } };
+          return options.present ? options.present(tombstone) : tombstone;
         }
-      });
-      const { row, owner } = result;
-      if (row.deleted || !owner || owner.state !== 'active' || owner.fenced)
-        return { publishedLog: { id: logId, deleted: true } };
-      const value = view(row);
-      await source(viewer, value.subjectId);
-      return {
-        publishedLog: value,
-        ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
-      };
-    });
+        const value = view(row);
+        await source(viewer, value.subjectId, undefined, deadline);
+        const body = {
+          publishedLog: value,
+          ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
+        };
+        if (!options.present) return body;
+        const presented = await options.present({ publishedLog: value });
+        return { ...body, publishedLog: presented.publishedLog };
+        }),
+      ),
+    );
   }
-  async function readOne(viewer: Actor, logId: string) {
-    return (await readWithRevision(viewer, logId)).publishedLog;
+  async function readOne(
+    viewer: Actor,
+    logId: string,
+    options?: PublishedLogReadOptions<{ publishedLog: PublishedLog | PublishedLogTombstone }>,
+  ) {
+    return (await readWithRevision(viewer, logId, options)).publishedLog;
   }
-  async function list(viewer: Actor, page: Page): Promise<PublishedLogPageResult> {
+  async function list(
+    viewer: Actor,
+    page: Page,
+    options: PublishedLogReadOptions<PublishedLogPageResult> = {},
+  ): Promise<PublishedLogPageResult> {
+    const deadline = operationDeadline(options.deadline);
     const route = requireRoute(page.accountId),
       size = page.limit ?? 20;
     if (!Number.isInteger(size) || size < 1 || size > 100) throw new ProblemError('invalid_request');
@@ -361,61 +413,66 @@ export function createPublishedLogCommands(config: Dependencies) {
       limit: size,
       hasCursor: page.cursor !== undefined,
     });
-    return runLibraryBoundedOperation(operation.kind, operation.total, async () => {
-      const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
-      const result = await withConnection(pool, async (client) => {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const partition = await readPartition(client, partitionOf(route));
-          const owner = await readAccountCommandState(client, route, page.accountId);
-          let after: { publishedAt: string; logId: string } | null = null;
-          if (page.cursor !== undefined) {
-            const cursor = decodeCursor(tokens, binding, page.cursor);
-            const publishedAt = cursor.ok ? cursor.after[0] : undefined,
-              logId = cursor.ok ? cursor.after[1] : undefined;
-            if (
-              !cursor.ok ||
-              cursor.after.length !== 2 ||
-              typeof publishedAt !== 'string' ||
-              !Number.isFinite(Date.parse(publishedAt)) ||
-              typeof logId !== 'string' ||
-              routeOf(logId) !== route
-            )
-              throw new ProblemError('invalid_cursor');
-            if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-            after = { publishedAt, logId };
+    return withRequestDeadline(deadline, () =>
+      runLibraryBoundedOperation(operation.kind, operation.total, () =>
+        withPublishedLogNativeWork(deadline, async () => {
+        const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
+        const result = await withConnection(pool, async (client) => {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          try {
+            const partition = await readPartition(client, partitionOf(route));
+            const owner = await readAccountCommandState(client, route, page.accountId);
+            let after: { publishedAt: string; logId: string } | null = null;
+            if (page.cursor !== undefined) {
+              const cursor = decodeCursor(tokens, binding, page.cursor);
+              const publishedAt = cursor.ok ? cursor.after[0] : undefined,
+                logId = cursor.ok ? cursor.after[1] : undefined;
+              if (
+                !cursor.ok ||
+                cursor.after.length !== 2 ||
+                typeof publishedAt !== 'string' ||
+                !Number.isFinite(Date.parse(publishedAt)) ||
+                typeof logId !== 'string' ||
+                routeOf(logId) !== route
+              )
+                throw new ProblemError('invalid_cursor');
+              if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+              after = { publishedAt, logId };
+            }
+            const rows =
+              owner?.state === 'active' && !owner.fenced
+                ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
+                : [];
+            await client.query('COMMIT');
+            return { partition, rows };
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
           }
-          const rows =
-            owner?.state === 'active' && !owner.fenced
-              ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
-              : [];
-          await client.query('COMMIT');
-          return { partition, rows };
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
+        });
+        const shown = result.rows.slice(0, size),
+          publishedLogs: PublishedLog[] = [];
+        for (const row of shown) {
+          try {
+            const value = view(row);
+            await source(viewer, value.subjectId, undefined, deadline);
+            publishedLogs.push(value);
+          } catch (error) {
+            if (!(error instanceof LibraryNotFoundError)) throw error;
+          }
         }
-      });
-      const shown = result.rows.slice(0, size),
-        publishedLogs: PublishedLog[] = [];
-      for (const row of shown) {
-        try {
-          const value = view(row);
-          await source(viewer, value.subjectId);
-          publishedLogs.push(value);
-        } catch (error) {
-          if (!(error instanceof LibraryNotFoundError)) throw error;
-        }
-      }
-      const last = shown.at(-1);
-      return {
-        publishedLogs,
-        next:
-          result.rows.length > size && last && result.partition
-            ? encodeCursor(tokens, binding, { epoch: result.partition.epoch, after: [last.publishedAt!, last.id] })
-            : null,
-      };
-    });
+        const last = shown.at(-1);
+        const pageResult = {
+          publishedLogs,
+          next:
+            result.rows.length > size && last && result.partition
+              ? encodeCursor(tokens, binding, { epoch: result.partition.epoch, after: [last.publishedAt!, last.id] })
+              : null,
+        };
+        return options.present ? options.present(pageResult) : pageResult;
+        }),
+      ),
+    );
   }
   return { publishLog, retractLog, restoreLog, readWithRevision, readPublishedLog: readOne, listPublishedLogs: list };
 }

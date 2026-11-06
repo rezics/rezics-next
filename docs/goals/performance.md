@@ -158,3 +158,9 @@ keeps the edge; empty, other-member and anonymous views use their own admission;
 original list frontier with the current session. Web binds list GET and the callable point separately. Fewest tests:
 one HTTP journey, one FULL withhold, one transport bind, one return-frontier pin. Native, browser and growth walks
 remain later integration.
+Decision: Published Log nested Source/Semantic units come from reached `sessionSourceWork` and Follow summary
+producers with actual/ceiling subject IDs and the original remaining deadline; aborted attempts keep that envelope;
+SQL leaves stay at zero engine/witness axes. FULL public snapshots withhold a changed Source. My Logs return uses
+history-state frontier so the public log URL never carries the private cursor. Seven Log suites plus five Search
+scope/work-context suites own the check; 64/512/4096 growth remains deferred. Fewest tests: extend operation-bounds
+and retract causal, plus one FULL withhold and one return-frontier pin.

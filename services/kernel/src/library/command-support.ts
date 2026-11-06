@@ -46,6 +46,7 @@ import {
   withFollowCommandWork,
 } from './follow-operation-bounds.ts';
 import { consumeLabelCommandAttempt, withLabelCommandAttempt } from './label-operation-bounds.ts';
+import { withPublishedLogNativeWork } from './published-log-native.ts';
 
 export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
@@ -311,7 +312,8 @@ export function createLibraryCommandRunner(config: {
           {
             pool,
             deadline,
-            ...(request.followOperation && currentCommandWorkAssociation()
+            ...((request.followOperation || request.kind.startsWith('published_log.')) &&
+            currentCommandWorkAssociation()
               ? { work: currentCommandWorkAssociation()!.access }
               : {}),
           },

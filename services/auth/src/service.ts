@@ -2342,7 +2342,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           throw new Denied(403);
         // Validate before the attempt limit so a malformed address is not charged.
         if (url.pathname === '/recovery/start' && !attemptDispatch.getStore())
-          recoveryAddress(await bodyOf(request.clone()));
+          recoveryAddress(await bodyOf(request.clone() as Request));
         const attemptPath = {
           '/signin': '/sign-in/email',
           '/signin/key': '/sign-in/email',

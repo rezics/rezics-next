@@ -15,6 +15,7 @@ import { PARTITIONS, partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { requireRoute, runLibraryBoundedOperation, workStepDeadline } from './command-support.ts';
+import { withPublishedLogNativeWork } from './published-log-native.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
 import { lockPublishedLog } from './published-log-store.ts';
 import {
@@ -80,6 +81,7 @@ export async function purgeExpiredPublishedLog(
   const durationMs = Math.max(1, Math.floor(deadline - Date.now()));
   const operation = publishedLogRetentionPurgeOperationPlan(key, receiptKeysFor(pool).keys.size + 1, durationMs);
   return runLibraryBoundedOperation(operation.kind, operation.total, () =>
+    withPublishedLogNativeWork(deadline, () =>
     runCommand(
       pool,
       {
@@ -117,6 +119,7 @@ export async function purgeExpiredPublishedLog(
           ],
         };
       },
+    ),
     ),
   );
 }
@@ -167,7 +170,8 @@ export async function registerLibraryPublishedLogRetentionWork({ pool, client, c
         receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
         durationMs,
       });
-      return runLibraryBoundedOperation(operation.kind, operation.total, async () => {
+      return runLibraryBoundedOperation(operation.kind, operation.total, () =>
+        withPublishedLogNativeWork(deadline, async () => {
         const result: Page = { cursor: { ...start }, examined: 0, purged: 0, pending: 0, probes: 0 };
         let loaded: number | undefined;
         let seeks = 0;
@@ -226,7 +230,8 @@ export async function registerLibraryPublishedLogRetentionWork({ pool, client, c
         }
         // No published log payload or full command outcome crosses the durable step boundary.
         return result;
-      });
+        }),
+      );
     },
     { name: 'library.publishedLogRetentionPage', ...COMMAND_STEP_RETRIES },
   );
@@ -251,13 +256,15 @@ export async function registerLibraryPublishedLogRetentionWork({ pool, client, c
       receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
       durationMs,
     });
-    return runLibraryBoundedOperation(operation.kind, operation.total, async () => {
+    return runLibraryBoundedOperation(operation.kind, operation.total, () =>
+      withPublishedLogNativeWork(workStepDeadline(), async () => {
       let cursor = input.cursor;
       for (let n = 0; n < PUBLISHED_LOG_RETENTION_SEGMENT_BOUND && cursor.partition < PARTITIONS; n++) {
         cursor = (await page(input.cutoff, cursor)).cursor;
       }
       if (cursor.partition < PARTITIONS) await continueSweep({ ...input, sequence: input.sequence + 1, cursor });
-    });
+      }),
+    );
   };
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
   DBOS.registerWorkflow(
