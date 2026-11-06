@@ -164,7 +164,7 @@ test('a subject page resolves its type template and runs its reads in one round 
   expect(answer.body.document).toEqual(templateViews(profile.types[0]!).overview);
   expect(Object.keys(answer.body.reads).sort()).toEqual(['r0', 'r1']);
   const standalone = await call('GET', `/v1/subjects/${id}`);
-  expect(answer.body.reads.r0).toEqual({ status: 200, body: { ...standalone.body, documents: {} } });
+  expect(answer.body.reads.r0).toEqual({ status: 200, body: standalone.body });
   const links = await call('GET', `/v1/subjects/${id}/links?property=schema%3Aauthor&limit=6`);
   expect(answer.body.reads.r1.status).toBe(links.response.status);
   expect(links.response.status).toBe(200);
@@ -250,9 +250,8 @@ test('a subject without a type template falls back through its structural bases'
   expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
   expect(answer.body.template).toEqual({ scope: 'base', key: base.base });
   expect(answer.body.document).toEqual(profile.bases[0]!.document);
-  expect(answer.body.reads).toEqual({
-    r0: { status: 200, body: { ...(await call('GET', `/v1/subjects/${id}`)).body, documents: {} } },
-  });
+  const standalone = await call('GET', `/v1/subjects/${id}`);
+  expect(answer.body.reads).toEqual({ r0: { status: 200, body: standalone.body } });
 });
 
 test('a view target answers that view, falling back to the generic view, and lists the views a page defines', async () => {
