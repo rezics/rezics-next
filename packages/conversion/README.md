@@ -18,7 +18,7 @@ The public subpaths are defined in [package.json](package.json).
 | @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                              |
 | @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                   |
 
-Current exports are Bangumi bangumi@16, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@16. Registration imports these revisions; source records cannot choose them.
+Current exports are Bangumi bangumi@17, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@17. Registration imports these revisions; source records cannot choose them.
 
 ConversionInput carries the provider-native external ID, record revision and record. Revisions are not inferred from dump dates, checksums, row order or converter versions. A missing native revision stays null where permitted; Wikidata uses unversioned only when the entity has no lastrevid. Other required provider revisions must match the native record. The importer records the source revision or unversioned digest alongside the converter revision.
 
@@ -47,7 +47,7 @@ Game environment and genre mappings stay separate from names, publication dates 
 
 Character mappings preserve exact source values and uncertainty. The spoil_gender field uses only its released enumeration; unknown or malformed values remain omitted instead of being inferred. Character identity, appearances, aliases and physical quantities stay on Character. Units and blood-type Concepts are never guessed.
 
-The bangumi@16 converter admits only the archive's closed { / [value] / } alias lists for TVAnime, Book, Manga and Game templates. Manga retains its Book identity and Book name properties. Preserve exact source text and und language, the 24-name and 500-character limits, and occurrence citations. Unclosed, nested or mixed lists omit only that field and never publish bracket syntax as a name. Ordinary and selected-family registration revisions trigger the existing finite per-record refresh.
+The bangumi@17 converter admits only the archive's closed { / [value] / } alias lists for TVAnime, Game and the book-family templates Book, BookSeries, Manga, Novel and PhotoBook. Book series and volumes share one name grammar: their aliases are exact und `schema:name` values, so a light-novel Novel template keeps its aliases. Manga retains its Book identity and Book name properties. Preserve exact source text and und language, the 24-name and 500-character limits, and occurrence citations. Unclosed, nested or mixed lists omit only that field and never publish bracket syntax as a name. Ordinary and selected-family registration revisions trigger the existing finite per-record refresh.
 
 ### VNDB
 

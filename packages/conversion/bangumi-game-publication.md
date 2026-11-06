@@ -1,16 +1,16 @@
 # Bangumi Game first publication date
 
-Decision: `bangumi@16` includes Game names, environment mappings and source genres, plus TVAnime websites; selected-family envelopes use `cross-media-entities@15+bangumi@16`.
+Decision: `bangumi@17` includes Game names, environment mappings and source genres, plus TVAnime websites; selected-family envelopes use `cross-media-entities@15+bangumi@17`.
 
 Decision: accept only one unqualified strict ISO Gregorian `发行日期` value
 (`YYYY`, `YYYY-MM` or `YYYY-MM-DD`); type-4 top-level `date`, qualified,
 duplicate and unsupported occurrences remain unavailable. Selected-family
-Bangumi envelopes use `cross-media-entities@15+bangumi@16` so an unchanged
+Bangumi envelopes use `cross-media-entities@15+bangumi@17` so an unchanged
 selected row refreshes when either mapping changes.
 
 The pinned Game mapping already admits `schema:datePublished` on
 `schema:VideoGame` as the publication or first-release date with source
-precision. `bangumi@16` reads only that Game-template field. It uses the current
+precision. `bangumi@17` reads only that Game-template field. It uses the current
 Gregorian year/month/day parser, preserves the exact precision, and cites the
 exact Bangumi subject URL. Qualified platform, market, edition and region dates
 are withheld as a whole; no type-4 top-level fallback, release subject or work
