@@ -288,6 +288,8 @@ export function realmReadEligibility(identity: Resource): ResourceEligibility {
 type Requirement = { action: string; resource: Resource };
 /** Add independently anchored checks to the parent's exact trusted context.
  * Production Access caches its single admission observation by actor/live T.
+ * Typed Global parent creation uses `preparePage`; extra host/context checks
+ * wrap that port too, or permission evidence has no deadline.
  */
 function requirements(
   access: Access,

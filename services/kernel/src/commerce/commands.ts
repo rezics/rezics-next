@@ -479,7 +479,7 @@ export function createCommerceCommands(config: {
       const offer = parent.at(attempt.time);
       return requireCurrentContentEdition(
         offer.contentEdition,
-        { pool, access, clock: config.clock },
+        { pool, access, ...saleConsent },
         { actor, deadline },
       );
     });
@@ -595,7 +595,7 @@ export function createCommerceCommands(config: {
         order: current,
         contentEdition: await requireMechanicalContentEdition(
           current.contentEdition,
-          { pool, access, clock: config.clock },
+          { pool, access, ...saleConsent },
           { deadline },
         ),
       };
@@ -942,7 +942,7 @@ export function createCommerceCommands(config: {
           order: current,
           contentEdition: await requireMechanicalContentEdition(
             current.contentEdition,
-            { pool, access, clock: config.clock },
+            { pool, access, ...saleConsent },
             { deadline },
           ),
         };
