@@ -3,23 +3,26 @@
 goal: web
 manager: web
 
-This branch's transport source is committed. Remaining checks fail for reasons owned by other outcomes and must rerun
-after those closures land.
+This branch's caller, reservation-key and native attachment source is committed. Remaining check 6284aa99
+(`6284aa99-a84a-4c94-8353-b12beb9dd722`) failures are owned by shared startup 2e0b5513, not by this source.
 
-Owned by other outcomes (not repaired here):
-- Library 348e68dd-f2e1-453c-999a-998dae6c163f: native source/type closure in `services/kernel/src/library`. It
-  blocks kernel typecheck, emit-client, Auth typecheck and web Client closure.
-- Zones 6c61d74e-e5bf-4e4b-95d8-c6fe801977d9: kernel zones typing errors reported by web typecheck.
-- Auth e2ca8446-c51f-43ec-aa84-3ac8c66d0f2e: Auth typecheck until Library exports land; original full native
-  acceptance remains owed.
-- Vite startup / Performance snapshot: `bun run dev` inside `tests/media-reserve.test.ts` did not start on the
-  check host (`dev server did not start: $ bun scripts/storybook-dev.ts --app`). Site-walk reservation tests stay
-  with that startup outcome.
+Check 6284aa99: 13 fail, 1 error. Generation/startup:
+- `error: dev server did not start: $ bun scripts/storybook-dev.ts --app --host "127.0.0.1" --port "43631" --strictPort`
+- `error: ENOENT reading ".../apps/web/src/paraglide/messages/access_account.js"`
 
-Rerun on the commit that contains these closures:
-1. `bun run --cwd services/kernel typecheck`, then `bun run --cwd services/kernel typecheck --emit-client`.
-2. `bun run --cwd services/auth typecheck`.
-3. `bun run --cwd apps/web typecheck` after the Client closure is reconciled.
-4. Focused Web landing set including `tests/media-reserve.test.ts` once `bun run dev` starts.
+Failing files/cases:
+- `tests/media-reserve.test.ts`: a signed-in uploader reserves through the site and uploads to the address it returns
+- `tests/media-reserve.test.ts`: an avatar reservation keeps the account container and avatar purpose through the site upload route
+- `tests/media-reserve.test.ts`: reservations are read through the site by their uploader only
+- `tests/media-reserve.test.ts`: the reserve route refuses malformed or oversized bodies before calling the kernel
+- `tests/media-reserve.test.ts`: a future thread is reserved in place of a container, and any other target is refused
+- `tests/media-reserve.test.ts`: a lost avatar reservation acknowledgement retries the original key and body through the site
+- `tests/media-reserve.test.ts`: a Realm appearance reservation forwards the caller key so a repeated command finds the same reservation
+- `tests/media-reserve.test.ts`: avatar upload advice uses the installed Content handle and preserves its native constraints
+- `tests/community-presentation.test.ts`: actual Realm appearance management Page uses current route/native admission composition and reaches its real main-content without a resource404 or fake permission
+- `tests/community-presentation.test.ts`: management host ownership read admits the configured native owner without bypassing current page continuity
+- `tests/community-presentation.test.ts`: appearance action source failures offer an unavailable read retry while native denials remain hidden
+- `tests/community-presentation.test.ts`: The default admitted community management journey resolves a same-site image or exact rules revision link through native selection and saves the exact reviewed reference while stale selections and uncertain original writes stay isolated
+- `tests/thread-board-reading.test.ts`: unhandled error between tests (empty body after the access_account.js ENOENT)
 
-Do not change the assertions of those checks to pass them.
+Do not change those assertions here. Rerun after 2e0b5513 lands generated `access_account.js` and a dev that answers `/en`.
