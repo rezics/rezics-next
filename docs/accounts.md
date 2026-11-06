@@ -486,6 +486,9 @@ ownership and operator responsibilities retain their existing deletion barriers.
 
 ## 6. Auth ownership and registration
 
+Decision: retain the native account, session and consent contracts and catalogue-derived website scopes; qualify
+the installed Auth renderer before replacing production behavior already supplied by those owners.
+
 Auth owns credentials, login/recovery email, native sessions, refresh families, authentication evidence, signing
 keys/JWKS, client registration, consent and token issuance. Access owns handles, profiles, state, operator and
 membership relations, grants, birth dates, content preferences and private account data. Better Auth's
