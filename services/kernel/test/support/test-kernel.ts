@@ -8,8 +8,6 @@ import type { ResourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import type { WriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { WriteRateStageOptions } from '../../src/access/write-rate-stage.ts';
 import type { CommerceDependencies } from '../../src/commerce/routes.ts';
-import type { ContentRuntime } from '../../src/content/runtime.ts';
-import type { ContentBoardDependencies } from '../../src/content/boards.ts';
 import type { Access, AccessRealmRoleReader, ActionCatalogue } from '../../src/request/access.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import type { WorkClient } from '../../src/work/client.ts';
@@ -136,7 +134,7 @@ export type TestKernelOptions = TestRuntimeOptions & {
   viewerActionResources?: KernelDependencies['viewerActionResources'];
   requestDeadlineMs?: number;
   workClient?: WorkClient;
-  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
+  content?: KernelDependencies['content'];
   commerce?: CommerceDependencies;
   search?: KernelDependencies['search'];
   reports?: { anonymousVerifier?: NonNullable<ContentRuntime['anonymousVerifier']> };

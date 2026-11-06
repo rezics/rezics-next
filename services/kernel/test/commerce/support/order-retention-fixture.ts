@@ -13,7 +13,6 @@ export async function inspectNativeRetainedOrder(pool: Pool, orderId: string) {
   const route = routeOf(orderId);
   if (route === null) throw new Error('Invalid native retained-order locator');
   return withConnection(pool, async (connection) => {
-    const rows = await inspectRetained.run(connection, { route, order_id: orderId });
-    return rows[0] ?? null;
+    return inspectRetained.run(connection, { route, order_id: orderId });
   });
 }
