@@ -6,7 +6,6 @@ import type { CoverSummary } from '@rezics/ui/cover';
 import recorded from '../src/kernel/recorded/subject-page.json';
 import missing from '../src/kernel/recorded/missing-subject-page.json';
 import { renderSubject } from './helpers/subject-render';
-import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Stmt } from '../src/features/pages/shared';
 import type { Related } from '../src/subject/types';
 import { subjectHref } from '../src/subject/subject-href';
@@ -15,6 +14,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadSubjectPage, SubjectPage, subjectBody } = await import('../src/features/pages/subject');
 const { subjectHead } = await import('../src/features/pages/subject-head');
 const { QUESTION } = await import('../src/features/pages/subject-ratings');
+type SubjectPageData = import('../src/features/pages/subject').SubjectPageData;
 
 const origin = 'https://public.example.test';
 const id = recorded.subject;
