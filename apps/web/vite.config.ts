@@ -324,7 +324,6 @@ export default defineConfig((context) => {
       exclude: [...webViteClientOptimizeDeps.exclude],
     },
     ssr: {
-      resolve: { alias: [urlpatternPolyfillAlias] },
       optimizeDeps: {
         ...workerSsrOptimizeDeps,
         include: [...workerSsrOptimizeDeps.include],
