@@ -10,10 +10,21 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
+import { SOURCE_FENCE_COMMAND_DISPATCH_CONTROLS as FENCE } from '../command/dispatch-lifetime.ts';
 import { withReadTransaction } from './read.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
+import {
+  classifyIdentityMappings,
+  comparableIdentityEvidence,
+  type IdentityControlEvidence,
+  type IdentityMappingEvidence,
+  type IdentityOwnerEvidence,
+  type IdentityPendingEvidence,
+  type IdentitySourceEvidence,
+} from './identity-core/index.ts';
+import type { IdentityMapping } from './identity-adapters/identity-epoch-contract.ts';
+import { identitySourceSupportJob } from './identity-source-support-scope.ts';
 import { refreshSemanticErasureSourceRecord, SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
 import { readSemanticSourceDisposition, recordSemanticSourceCommit } from './erasure-producer.ts';
 import type {
@@ -32,6 +43,10 @@ import type {
 import { type HistoryBarrier } from '../history/contract/index.ts';
 import observeOriginalSql from './account-erasure-source-observe.sql';
 import mappingRecheckSql from './account-erasure-source-mapping.sql';
+import ownersSql from './identity-epoch-read-owners.sql';
+import sourcesSql from './identity-epoch-read-sources.sql';
+import pendingSql from './identity-epoch-read-pending.sql';
+import currentSql from './identity-terminal-closure-current.sql';
 
 export type { SubjectErasureSourceOverflow, SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
 
@@ -98,21 +113,30 @@ class BudgetEnded extends Error {
 }
 
 const WIRE_BYTES = 65536;
-/** Hidden fence children: partition advance, outbox append, write_basis insert, fence result. */
-const COMMAND_EFFECT_CHILDREN = 4;
-/** no-effect fence shares the partition row and writes no basis or outbox. */
-const COMMAND_NO_EFFECT_CHILDREN = 1;
-/** Double-collected mapping: owners+sources then owners+pending+current, twice. */
-const MAPPING_CHILDREN = 10;
-const MAPPING_RECHECK_CHILDREN = 1;
-const READ_CHILDREN = 1;
-const SELECT_BODY_CHILDREN = 2;
-const SEEK_BODY_CHILDREN = 2;
-const HOLD_BODY_CHILDREN = 4;
-const TRANSFER_BODY_CHILDREN = 2;
-const COMMAND_BYTES = 4096;
-const MAPPING_BYTES = 8192;
-const READ_BYTES = 2048;
+/** fence.sql always writes editorial.write_basis when this producer supplies platform basis. */
+const BASIS_CHILD = 1;
+const SELECT_BODY = 2;
+const SEEK_BODY = 2;
+const HOLD_EOF_BODY = 3;
+const HOLD_ROLE_BODY = 6;
+const HOLD_OBSERVE_BODY = 7;
+const HOLD_CROSS_BODY = 4;
+const TRANSFER_BODY = 5;
+const READ_BODY = 1;
+const MAPPING_SOURCE_BODY = 2;
+const MAPPING_CONTROL_BODY = 3;
+const STATEMENT_BYTES = 256;
+const effectFence = () => ({
+  keys: FENCE.eventFence.work.nativeRows + BASIS_CHILD,
+  bytes:
+    FENCE.eventFence.work.bytes +
+    FENCE.eventShape.work.bytes +
+    FENCE.eventSerialization.work.bytes +
+    FENCE.eventValidation.work.bytes,
+});
+const idleFence = () => ({ keys: FENCE.noEffectFence.work.nativeRows, bytes: FENCE.noEffectFence.work.bytes });
+const bodyBytes = (keys: number) => keys * STATEMENT_BYTES;
+const wireBytes = (...values: unknown[]) => Math.max(STATEMENT_BYTES, Buffer.byteLength(JSON.stringify(values)));
 
 class PageBudget {
   bytes = 0;
@@ -424,23 +448,64 @@ function sourceFactory(
       const budget = new PageBudget(cost, input.inputLimit, deadline);
       const command = <T>(
         partition: number,
-        children: number,
+        effect: boolean,
+        body: number,
         run: (tx: CommandTransaction) => Promise<import('../command/command.ts').CommandResult<T>>,
       ) => {
-        budget.reserve(children, COMMAND_BYTES);
+        const fence = effect ? effectFence() : idleFence();
+        budget.reserve(fence.keys + body, fence.bytes + bodyBytes(body));
         return runCommand(pool, { partition, basis: platform, clock: config.clock, deadline }, run);
       };
-      const mappingOf = async (original: string) => {
-        budget.reserve(MAPPING_CHILDREN, MAPPING_BYTES);
-        return (await readIdentityMappings(pool, [original]))[0];
+      const mappingOf = async (original: string): Promise<IdentityMapping | undefined> => {
+        const originalRoute = routeOf(original);
+        if (originalRoute === null) throw new TypeError('Identity original must be a native routed ID');
+        const sourceHome = partitionOf(originalRoute);
+        const collect = async (): Promise<IdentityMappingEvidence> => {
+          const sourceOwners: IdentityOwnerEvidence[] = [];
+          const sourceRows: IdentitySourceEvidence[] = [];
+          budget.reserve(MAPPING_SOURCE_BODY, wireBytes([[sourceHome]], [[original], [originalRoute]]));
+          await withReadTransaction(pool, async (tx) => {
+            sourceOwners.push(...(await tx.query(ownersSql.sql, [[sourceHome]])).rows);
+            sourceRows.push(...(await tx.query(sourcesSql.sql, [[original], [originalRoute]])).rows);
+          });
+          const available = sourceRows.filter(
+            (row) => row.original && row.control_partition !== null && row.control_group,
+          );
+          const controlOwners: IdentityOwnerEvidence[] = [];
+          const pendingRows: IdentityPendingEvidence[] = [];
+          const currentRows: IdentityControlEvidence[] = [];
+          for (const home of new Set(available.map((row) => row.control_partition!))) {
+            const group = available.filter((row) => row.control_partition === home);
+            const owners = [[home]];
+            const pending = [group.map(() => home), group.map((row) => row.control_group)];
+            const current = [
+              group.map(() => home),
+              group.map((row) => row.control_group),
+              group.map((row) => row.original),
+            ];
+            budget.reserve(MAPPING_CONTROL_BODY, wireBytes(owners, pending, current));
+            await withReadTransaction(pool, async (tx) => {
+              controlOwners.push(...(await tx.query(ownersSql.sql, owners)).rows);
+              pendingRows.push(...(await tx.query(pendingSql.sql, pending)).rows);
+              currentRows.push(...(await tx.query(currentSql.sql, current)).rows);
+            });
+          }
+          return { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows };
+        };
+        const first = await collect();
+        const last = await collect();
+        if (comparableIdentityEvidence(first) !== comparableIdentityEvidence(last))
+          return { state: 'unavailable', reason: 'bootstrap' };
+        return classifyIdentityMappings([{ original, sourceHome }], last, identitySourceSupportJob() ?? null)[0];
       };
-      const mappingStill = async (original: string, expected: NonNullable<Awaited<ReturnType<typeof mappingOf>>>) => {
+      const mappingStill = async (original: string, expected: NonNullable<IdentityMapping>) => {
         if (expected.state !== 'mapped') return false;
-        budget.reserve(MAPPING_RECHECK_CHILDREN, READ_BYTES);
+        const originalRoute = routeOf(original);
+        budget.reserve(READ_BODY, wireBytes([originalRoute, original]));
         const current = await withReadTransaction(
           pool,
           async (tx) =>
-            (await tx.query<{ terminal: string; epoch: string }>(mappingRecheckSql.sql, [routeOf(original), original]))
+            (await tx.query<{ terminal: string; epoch: string }>(mappingRecheckSql.sql, [originalRoute, original]))
               .rows[0],
         );
         return current?.terminal === expected.terminal && current.epoch === expected.epoch.toString();
@@ -448,7 +513,7 @@ function sourceFactory(
       return withRequestDeadline(deadline, async () => {
         try {
           // Raw seek precedes all eligibility, visibility, role and current-state filtering.
-          const selected = await command(accountHome, COMMAND_NO_EFFECT_CHILDREN + SELECT_BODY_CHILDREN, async (tx) => {
+          const selected = await command(accountHome, false, SELECT_BODY, async (tx) => {
             cost.accessPoints++;
             if (!(await root(tx, barrier))) return noEffect(null);
             const page = (
@@ -491,7 +556,7 @@ function sourceFactory(
           const after = previous?.store
             ? [previous.store, previous.record_key, previous.role, previous.delivery_position, previous.origin_key]
             : ['', '0', '', '0', ''];
-          const sought = await command(sourceHome, COMMAND_NO_EFFECT_CHILDREN + SEEK_BODY_CHILDREN, async (tx) => {
+          const sought = await command(sourceHome, false, SEEK_BODY, async (tx) => {
             const seal = await tx.query(
               `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
               [sourceHome, barrier.accountId, barrier.version, barrier.at],
@@ -538,7 +603,7 @@ function sourceFactory(
           const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
           if (raw) {
             // Exact native role/body proof. Read and release this home before any identity control home.
-            budget.reserve(READ_CHILDREN, READ_BYTES);
+            budget.reserve(READ_BODY, wireBytes(cursorValues(next)));
             const detail = await withReadTransaction(
               pool,
               async (tx) =>
@@ -582,19 +647,23 @@ function sourceFactory(
             }
             const originalHome = detail.original ? partitionOf(routeOf(detail.original)!) : next.source_partition;
             const cross = !!detail.original && originalHome !== next.source_partition;
-            const holdChildren = COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN;
-            budget.afford(
-              (detail.original ? MAPPING_CHILDREN + MAPPING_RECHECK_CHILDREN : 0) +
-                holdChildren * (cross ? 2 : 1) +
-                READ_CHILDREN * (cross ? 2 : 1) +
-                COMMAND_EFFECT_CHILDREN +
-                TRANSFER_BODY_CHILDREN,
-              COMMAND_BYTES * (cross ? 3 : 2) +
-                (detail.original ? MAPPING_BYTES + READ_BYTES : 0) +
-                READ_BYTES * (cross ? 2 : 1),
-            );
             const mapping = detail.original ? await mappingOf(detail.original) : null;
             if (detail.original && mapping?.state !== 'mapped') return pendingPage(budget);
+            const observe = !!detail.original && originalHome === next.source_partition;
+            const holdBody = observe ? HOLD_OBSERVE_BODY : HOLD_ROLE_BODY;
+            const fence = effectFence();
+            budget.afford(
+              fence.keys +
+                holdBody +
+                (cross ? fence.keys + HOLD_CROSS_BODY : 0) +
+                READ_BODY * (cross ? 2 : 1) +
+                (detail.original ? READ_BODY : 0) +
+                fence.keys +
+                TRANSFER_BODY,
+              fence.bytes * (cross ? 3 : 2) +
+                bodyBytes(holdBody + (cross ? HOLD_CROSS_BODY : 0) + TRANSFER_BODY) +
+                bodyBytes(READ_BODY * (cross ? 2 : 1) + (detail.original ? READ_BODY : 0)),
+            );
             const observeOriginal = async (
               tx: CommandTransaction,
               home: number,
@@ -733,16 +802,13 @@ function sourceFactory(
                 );
               });
             };
-            const held = await command<HeldRecord>(
-              next.source_partition,
-              COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN,
-              async (tx) => {
-                const seal = await tx.query(
-                  `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
-                  [next.source_partition, barrier.accountId, barrier.version, barrier.at],
-                );
-                const local = await tx.query(
-                  `SELECT 1 FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
+            const held = await command<HeldRecord>(next.source_partition, true, holdBody, async (tx) => {
+              const seal = await tx.query(
+                `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
+                [next.source_partition, barrier.accountId, barrier.version, barrier.at],
+              );
+              const local = await tx.query(
+                `SELECT 1 FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
                   USING(partition_no,account_id,role,store,record_key)
                 WHERE d.partition_no=$1 AND d.account_id=$2 AND d.role=$3 AND d.store=$4
                   AND d.record_key=$5 AND l.state='minimized' AND d.source_transaction_id IS NOT DISTINCT FROM $6::uuid
@@ -752,31 +818,30 @@ function sourceFactory(
                     WHERE c.partition_no=d.partition_no AND c.account_id=d.account_id AND c.role=d.role
                       AND c.transaction_id=d.source_transaction_id AND c.outbox_position IS NOT DISTINCT FROM d.source_position))
                 FOR SHARE OF d,l`,
-                  [
-                    next.source_partition,
-                    barrier.accountId,
-                    next.role,
-                    next.store,
-                    next.record_key,
-                    detail.source_transaction_id,
-                    detail.source_position,
-                    next.origin_key,
-                    next.delivery_position,
-                  ],
-                );
-                if (!seal.rowCount || !local.rowCount) return noEffect({ ready: false as const, record: null });
-                if (!(await readSemanticSourceDisposition(tx, next.store, next.record_key)))
-                  return noEffect({ ready: false as const, record: null, stale: true });
-                let output: SubjectErasureSourceRecord | null = null;
-                if (detail.original && originalHome === next.source_partition) {
-                  output = await observeOriginal(tx, originalHome);
-                  if (!output) return noEffect({ ready: false as const, record: null });
-                }
-                // The held record is an exact native disposition, not permission to read a terminal's body.
-                hold(tx, next.source_partition, output);
-                return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
-              },
-            );
+                [
+                  next.source_partition,
+                  barrier.accountId,
+                  next.role,
+                  next.store,
+                  next.record_key,
+                  detail.source_transaction_id,
+                  detail.source_position,
+                  next.origin_key,
+                  next.delivery_position,
+                ],
+              );
+              if (!seal.rowCount || !local.rowCount) return noEffect({ ready: false as const, record: null });
+              if (!(await readSemanticSourceDisposition(tx, next.store, next.record_key)))
+                return noEffect({ ready: false as const, record: null, stale: true });
+              let output: SubjectErasureSourceRecord | null = null;
+              if (detail.original && originalHome === next.source_partition) {
+                output = await observeOriginal(tx, originalHome);
+                if (!output) return noEffect({ ready: false as const, record: null });
+              }
+              // The held record is an exact native disposition, not permission to read a terminal's body.
+              hold(tx, next.source_partition, output);
+              return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
+            });
             if (!held.value.ready) {
               if ('stale' in held.value) await refresh();
               return pendingPage(budget);
@@ -784,21 +849,17 @@ function sourceFactory(
             roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
             let sourceHeld = held;
             if (detail.original && originalHome !== next.source_partition) {
-              sourceHeld = await command<HeldRecord>(
-                originalHome,
-                COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN,
-                async (tx) => {
-                  const seal = await tx.query(
-                    `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
-                    [originalHome, barrier.accountId, barrier.version, barrier.at],
-                  );
-                  if (!seal.rowCount) return noEffect({ ready: false as const, record: null });
-                  const output = await observeOriginal(tx, originalHome);
-                  if (!output) return noEffect({ ready: false as const, record: null });
-                  hold(tx, originalHome, output);
-                  return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
-                },
-              );
+              sourceHeld = await command<HeldRecord>(originalHome, true, HOLD_CROSS_BODY, async (tx) => {
+                const seal = await tx.query(
+                  `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
+                  [originalHome, barrier.accountId, barrier.version, barrier.at],
+                );
+                if (!seal.rowCount) return noEffect({ ready: false as const, record: null });
+                const output = await observeOriginal(tx, originalHome);
+                if (!output) return noEffect({ ready: false as const, record: null });
+                hold(tx, originalHome, output);
+                return { value: { ready: true as const, record: output }, events: events(barrier.accountId) };
+              });
               if (!sourceHeld.value.ready) return pendingPage(budget);
             }
             record = sourceHeld.value.record;
@@ -816,15 +877,12 @@ function sourceFactory(
               return pendingPage(budget);
           } else {
             // A real native sealed EOF also needs held custody; it is not a caller's empty array.
+            const eofFence = effectFence();
             budget.afford(
-              COMMAND_EFFECT_CHILDREN +
-                HOLD_BODY_CHILDREN +
-                READ_CHILDREN +
-                COMMAND_EFFECT_CHILDREN +
-                TRANSFER_BODY_CHILDREN,
-              COMMAND_BYTES * 2 + READ_BYTES,
+              eofFence.keys + HOLD_EOF_BODY + READ_BODY + eofFence.keys + TRANSFER_BODY,
+              eofFence.bytes * 2 + bodyBytes(HOLD_EOF_BODY + TRANSFER_BODY + READ_BODY),
             );
-            const held = await command(sourceHome, COMMAND_EFFECT_CHILDREN + HOLD_BODY_CHILDREN, async (tx) => {
+            const held = await command(sourceHome, true, HOLD_EOF_BODY, async (tx) => {
               const seal = await tx.query(
                 `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                 [sourceHome, barrier.accountId, barrier.version, barrier.at],
@@ -847,7 +905,7 @@ function sourceFactory(
           // Resolve actual durable hold/commit rows while still in their respective homes. The
           // transfer below owns this released custody; account verification never joins homes.
           const resolveHold = async (home: number, native: NativeCustody) => {
-            budget.reserve(READ_CHILDREN, READ_BYTES);
+            budget.reserve(READ_BODY, wireBytes([home, id, native.transactionId]));
             return withReadTransaction(
               pool,
               async (tx) =>
@@ -894,7 +952,7 @@ function sourceFactory(
             return { status: 'unavailable', cost };
           // Only this private producer can transfer a just-committed native hold. No public boolean,
           // arbitrary receipt constructor, copied body, or current-role count can enter this path.
-          const accepted = await command(accountHome, COMMAND_EFFECT_CHILDREN + TRANSFER_BODY_CHILDREN, async (tx) => {
+          const accepted = await command(accountHome, true, TRANSFER_BODY, async (tx) => {
             cost.accessPoints++;
             if (!(await root(tx, barrier))) return noEffect(false);
             const current = (

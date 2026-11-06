@@ -300,9 +300,10 @@ mint this proof. Neither chain depends on Search's final copy ACK, shared-histor
 participant ACK. History coverage and copied histories remain separate obligations.
 
 Every call shares the shorter of the caller deadline and 5000 ms, at most 100 examined inputs including native
-metadata and lookahead, and the existing 65536-byte native work bound. Mapping and command children, including
-hidden basis and outbox writes, are reserved before effects; unaffordable work returns Financial's
-count/error/funding operands and persists continuation so an affordable call finishes. SQL, failed points,
+metadata and lookahead, and the existing 65536-byte native work bound. Mapping source/control collects and Source
+fence children, including hidden write_basis and outbox writes, are composed and reserved before effects;
+unaffordable work returns Financial's count/error/funding operands and persists continuation so an affordable
+call finishes. SQL, failed points,
 command fences, rows, wire bytes and replay work are charged. The retained frontier is one UUID within the
 existing 8-scalar / 2048-byte frontier and 4096-byte workflow-reference bounds. Bodies stay at their actual
 owners. Focused native fixture scenarios are in `test/semantic/subject-erasure-source.test.ts`; their privacy,
