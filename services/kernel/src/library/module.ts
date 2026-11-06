@@ -19,11 +19,12 @@ import {
   prepareLibraryIdentityNativeEffect,
   resolveLiveLibrarySource,
   stepLibraryIdentityEpochWithSource,
+  type LibraryCommandRunner,
   type LibrarySourceFrame,
 } from './identity-epoch-participant.ts';
 import type { LibraryScopeEffectsKey, LibraryExpectedEffectAfter } from './identity-scope-effects.ts';
 
-export type { LibrarySourceFrame } from './identity-epoch-participant.ts';
+export type { LibrarySourceFrame, LibraryCommandRunner } from './identity-epoch-participant.ts';
 
 /** Named public ports retain the opaque seal through its owning page union during declaration emission. */
 export type LibraryIdentityNativePlanner = Readonly<{
@@ -37,14 +38,17 @@ export type LibraryIdentityNativePlanner = Readonly<{
 }>;
 
 /** Default native producer ports. These never borrow receiving acknowledgments or publish a ready Source.
- * `frame` is Semantic's live Source accessor; Library never imports the frame module itself.
+ * `frame` is Semantic's live Source accessor; Library never imports the frame module itself. `command` is the
+ * optional step runner for the prepaid path and defaults to runCommand.
  */
 export function createLibraryIdentityNativePlanner({
   pool,
   frame,
+  command,
 }: {
   pool: Pool;
   frame: LibrarySourceFrame;
+  command?: LibraryCommandRunner;
 }): LibraryIdentityNativePlanner {
   return Object.freeze({
     advance: (input: LibraryIdentityPlanInput) => advanceLibraryIdentityNativePlan(pool, input),
@@ -55,7 +59,7 @@ export function createLibraryIdentityNativePlanner({
       input: Omit<LibraryIdentityPlanInput, 'allowance'>,
       context: IdentitySourceConsumerMaintenanceContext,
     ) {
-      const source = resolveLiveLibrarySource(frame, pool, context);
+      const source = resolveLiveLibrarySource(frame, pool, context, command);
       if (input.deadline !== context.deadline) throw new TypeError('Missing live prepaid Library partition');
       return advanceLibraryIdentityNativePlanWithWork(pool, input, source.work);
     },
@@ -66,21 +70,35 @@ export function createLibraryIdentityNativePlanner({
  * It deliberately exposes bounded scope advancement, retained native selections and one-effect
  * receiving progress; the fixed IdentityEpochStep receipt remains Semantic's final composition.
  * Every method resolves the caller's context through `frame` first, so a copied or settled context is refused.
+ * `command` defaults to runCommand; an injected runner carries every step of this binding.
  */
-export function createLibraryIdentityEpochReceiver({ pool, frame }: { pool: Pool; frame: LibrarySourceFrame }) {
+export function createLibraryIdentityEpochReceiver({
+  pool,
+  frame,
+  command,
+}: {
+  pool: Pool;
+  frame: LibrarySourceFrame;
+  command?: LibraryCommandRunner;
+}) {
   return Object.freeze({
     async step(job: IdentityJobRef, context: IdentitySourceConsumerMaintenanceContext) {
-      return stepLibraryIdentityEpochWithSource(pool, job, resolveLiveLibrarySource(frame, pool, context));
+      return stepLibraryIdentityEpochWithSource(pool, job, resolveLiveLibrarySource(frame, pool, context, command));
     },
     async advanceScope(
       key: LibraryScopeEffectsKey,
       after: LibraryExpectedEffectAfter | null,
       context: IdentitySourceConsumerMaintenanceContext,
     ) {
-      return advanceLibraryIdentityNativeScope(pool, key, after, resolveLiveLibrarySource(frame, pool, context));
+      return advanceLibraryIdentityNativeScope(
+        pool,
+        key,
+        after,
+        resolveLiveLibrarySource(frame, pool, context, command),
+      );
     },
     async prepareEffect(selection: IdentityReceivingSelection, context: IdentitySourceConsumerMaintenanceContext) {
-      return prepareLibraryIdentityNativeEffect(pool, selection, resolveLiveLibrarySource(frame, pool, context));
+      return prepareLibraryIdentityNativeEffect(pool, selection, resolveLiveLibrarySource(frame, pool, context, command));
     },
   });
 }
