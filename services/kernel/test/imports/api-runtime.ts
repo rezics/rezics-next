@@ -149,6 +149,8 @@ export async function openApiRuntime(
   const evidenceRoot = resolve(import.meta.dir, '../../../../.temp');
   mkdirSync(evidenceRoot, { recursive: true });
   function recordPhase(phase: string, started: number) {
+    if (process.env.IMPORT_VNDB_STATISTICS_DRIVER)
+      console.error(`VNDB native ${fixture}: ${phase} completed in ${Date.now() - started} ms`);
     appendFileSync(
       `${evidenceRoot}/import-api-timings.jsonl`,
       `${JSON.stringify({ fixture, processId: process.pid, phase, atMs: Date.now(), elapsedMs: Date.now() - started })}\n`,
@@ -156,6 +158,7 @@ export async function openApiRuntime(
   }
   async function time<T>(phase: string, action: () => Promise<T>): Promise<T> {
     const started = Date.now();
+    if (process.env.IMPORT_VNDB_STATISTICS_DRIVER) console.error(`VNDB native ${fixture}: ${phase} started`);
     try {
       return await action();
     } finally {
