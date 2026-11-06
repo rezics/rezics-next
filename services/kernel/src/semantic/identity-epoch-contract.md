@@ -500,7 +500,8 @@ Required `semantic/identity-epoch-store.ts` export `identityEpochStore: Identity
    `identity_epoch_busy`, and `identity_participants_incomplete` for the conditions named here.
 3. `initializeSubject(tx, original)` in the real revision-1 creation transaction. It records an exact initial-self
    mapping from actual creation; it does not infer self from a missing row, touch Search or advance a structural epoch.
-   All creation paths, including account-agent and imports, must bind it. No per-read lazy write.
+   `writeSubject`, unlabeled account-agent birth and imports bind it after the revision-1 insert, under native
+   `subject:create` authorization and the executor transaction identity. No per-read lazy write.
 4. `findJob(tx, receipt, binding?)` requires current native authorization before replay/conflict disclosure,
    an explicit released binding proof for a foreign binding home, and the exact native job-home transaction.
    A locator or reconstructed JSON object grants neither custody nor Access. `readEpoch`, `readJob`, and
@@ -1158,10 +1159,13 @@ Accounts receives `resumeIdentityEpochJob` and `waitIdentityEpochPublished` from
 the public Semantic barrel does not re-export them, because that value edge closed a coordinator cycle.
 Empty-home ALL-Library coverage seals after a committed 16-route original scan with no building plans and no members
 of this job's originals; homes with collections still require the live Source frame and six-driver manifests.
-Fewest tests: one Accounts mapping drain plus JSONB reviewed-vote consent, including JSONB object-key order on the
-operand; History composition binds `IDENTITY_HISTORY_ACCOUNTS_DECLARATION` as a typed getter with numeric
-reached multiplicities, and Access original-work reads the installed Source child through that same
-binding; exact-self creation remains a separate producer defect.
+Fewest tests: keep the existing Accounts mapping drain, JSONB reviewed-vote consent (including JSONB object-key
+order), bootstrap, voter, growth, merge and `identity-epoch-store` exact-self cases; do not add a second suite.
+History composition binds `IDENTITY_HISTORY_ACCOUNTS_DECLARATION` as a typed getter with numeric reached
+multiplicities, and Access original-work reads the installed Source child through that same binding.
+Exact-self creation is this Identity producer: `writeSubject`, unlabeled account-agent birth and imports call
+`initializeSubject` in the same revision-1 command, with native `subject:create` authorization and executor
+transaction identity; `identity-epoch-store.test.ts` covers commit and rollback.
 
 The three source roles are registered in Access's existing indexed erasure inventory. Source roles also travel
 through the existing Semantic receiving-role binder when claims, reservations and accepted pointers commit.
