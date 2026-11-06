@@ -533,6 +533,9 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
         publicClient: publicClient,
         tagWeightObservations: prepared.tagWeightObservations,
         tagWeightRefreshes: prepared.tagWeightRefreshes,
+        tagAssociations: prepared.associationBindings,
+        tagAssociationRefreshes: prepared.associationRefreshes,
+        tagAssociationWithdrawals: prepared.tagAssociationWithdrawals,
       });
     const published = await publish();
     expect(published.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
@@ -578,6 +581,11 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
       });
       expect(JSON.stringify(weight.references)).toContain(digest);
     }
+    const memberships = genres.filter(
+      (row) => !row.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
+    );
+    expect(memberships.map((row) => row.value.content).sort()).toEqual(concepts.map((row) => row.id).sort());
+    expect(JSON.stringify(memberships)).not.toContain(digest);
     expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
     console.log(
       JSON.stringify({

@@ -32,6 +32,7 @@ import {
 import {
   bindShowcaseTagParents,
   showcaseTagParentCommand,
+  showcaseTagParentMetadata,
   showcaseTagParentSourceFence,
   withholdShowcaseTagAssociations,
 } from './showcase-cross-provider-tags.ts';
@@ -1029,7 +1030,7 @@ async function sendMissingTagCommands(input: {
 /** Journal and propose exact source-parent assertions only while their current source tuple is open. */
 export async function prepareShowcaseTagParentPublications(input: {
   evidence: readonly ShowcaseTagParentBinding[];
-  port: Pick<CrossMediaPort, 'batch' | 'fence'>;
+  port: Pick<CrossMediaPort, 'batch' | 'fence' | 'setSourceRecordMetadata'>;
   journal: ShowcaseJournal;
 }): Promise<{
   acknowledgements: ShowcaseAcknowledgement[];
@@ -1053,6 +1054,12 @@ export async function prepareShowcaseTagParentPublications(input: {
       });
       continue;
     }
+    const metadata = showcaseTagParentMetadata(binding);
+    // Replay still obtains a current-authorized native ACK before proposing or reusing a candidate.
+    await input.port.setSourceRecordMetadata({
+      command: metadata,
+      idempotencyKey: `vndb-tag-parent-metadata:${showcaseDigest(metadata)}`,
+    });
     const command = showcaseTagParentCommand(binding);
     commands.push(command);
     byKey.set(command.key, binding);
