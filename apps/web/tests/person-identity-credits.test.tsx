@@ -1,7 +1,9 @@
 import './support/ensure-document.ts';
 import { expect, mock, test } from 'bun:test';
-import { createElement as h } from 'react';
+import { dirname } from 'node:path';
+import { act, createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { relationActor, relationFixture, relationProperty } from '../src/kernel/fake/catalogue-relations';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
@@ -31,7 +33,10 @@ test('Person identity keeps names, sites, biography and named unsupported occupa
     expect(html).toContain('href="#connections"');
     expect(html).toContain(m.person_identity_unconfirmed({}, { locale }));
     expect(html).toContain(m.people_biography_unsupported({}, { locale }));
-    expect(/<input[^>]*type="search"[^>]*>/.exec(html)?.[0] ?? '').toContain('min-h-11');
+    const filter = /<input[^>]*type="search"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(filter).toContain('min-h-11');
+    expect(filter).toContain('min-w-11');
+    expect(html).toContain('whitespace-normal [overflow-wrap:anywhere]');
     expect(
       personGroups(fixture.release, fixture.read, locale)[1]!.fields
         .filter((field) => !field.admitted)
@@ -105,4 +110,66 @@ test('Person identity keeps names, sites, biography and named unsupported occupa
   expect(subjectVisitReturn(origin, 'en')).toBeUndefined();
   expect(creditReturn(new URL(origin, 'https://site.test').hash)).toMatchObject({ statement: assertion.id });
   expect(holderItems({ links: [] }, 20)!.items).toEqual([]);
+});
+
+test('Person names filter accepts keyboard entry and keeps the supplied identity readable', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { sessionQuery } = await import('../src/session/query');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-out' });
+  const fixture = personReaderExample();
+  try {
+    await act(async () =>
+      root.render(
+        h(
+          QueryClientProvider,
+          { client },
+          h(PersonReader, { public: fixture.read, release: fixture.release, documents: fixture.documents, locale: 'en' }),
+        ),
+      ),
+    );
+    expect(host.textContent).toContain('Mira Sato');
+    expect(host.textContent).toContain(m.person_identity_unconfirmed({}, { locale: 'en' }));
+    const summary = host.querySelector<HTMLElement>('#supplied-names summary')!;
+    summary.focus();
+    await act(async () => summary.click());
+    const input = host.querySelector<HTMLInputElement>('#supplied-names input')!;
+    expect(input.className).toContain('min-w-11');
+    input.focus();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'ミラ');
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    expect(input.value).toBe('ミラ');
+    expect(
+      [...host.querySelectorAll('#supplied-names [data-supplied-name]')].some((node) => node.textContent === '佐藤ミラ'),
+    ).toBe(true);
+    expect(host.textContent).toContain('Mira Sato');
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    await window.happyDOM.close();
+    for (const [key, descriptor] of saved)
+      descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
+  }
 });
