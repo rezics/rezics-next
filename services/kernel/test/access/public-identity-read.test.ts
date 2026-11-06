@@ -11,7 +11,6 @@ import {
   readPublicIdentityObservations,
   type PublicIdentity,
 } from '../../src/access/account-data.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

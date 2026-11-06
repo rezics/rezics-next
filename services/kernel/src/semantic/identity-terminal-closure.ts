@@ -11,7 +11,6 @@ import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import { IDENTITY_EPOCH_BOOTSTRAP } from './events.ts';
 import bootstrapHome from './identity-epoch-bootstrap-insert-bootstrap-home.sql';
 import deleteEmptySlot from './identity-terminal-closure-delete-empty-slot.sql';
-import { type Pending } from '../history/contract/index.ts';
 
 export type TerminalClosureSource = Readonly<{
   route: number;

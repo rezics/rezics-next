@@ -33,7 +33,6 @@ import { discoveryIndexName, discoveryAlias } from '../../src/search/indices.ts'
 import { createOpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
 import { parseDiscoveryHitIdentity } from '../../src/search/discovery-documents.ts';
 import type { DiscoveryKey } from '../../src/search/discovery.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const databaseUrl = process.env.DATABASE_URL,
   searchUrl = process.env.OPENSEARCH_URL;

@@ -12,7 +12,6 @@ import { createPool } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');

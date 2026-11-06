@@ -102,7 +102,8 @@ History application and contract entries, including Work registry, selected-runt
 paths and Access `shared-history` re-exports. Test choice: use the focused causal History regressions for application/native composition, prepaid identity,
 identity-history recording, Zone receiving, record purge, agent verification reversal and receipt-key cutover, plus
 the architecture test; do not add a duplicate synthetic suite. Original native acceptance remains open after
-land-first verification.
+land-first verification. Decision: only typed History vocabulary imports the contract; comment or string matches of
+`Pending` are not consumers. The inherited ZoneWorkLedger ClassDeclaration load-time read is `membership.ts:90`.
 
 ## Kernel Access domain inversion
 

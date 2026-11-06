@@ -12,7 +12,6 @@ import close from './account-erasure-memberships-close.sql';
 import purge from './account-erasure-memberships-purge.sql';
 import unlink from './account-erasure-memberships-unlink.sql';
 import status from './account-erasure-memberships-status.sql';
-import { type Pending } from '../history/contract/index.ts';
 
 /** One Realm segment for the membership producer's retained owner locator.
  * The locator selects work only: Accounts prepares the genuine committed root

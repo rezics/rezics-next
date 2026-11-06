@@ -80,7 +80,6 @@ import {
   listImportMetadataOrConflict,
   persistListImportMetadata,
 } from './list-import-metadata-core.ts';
-import { type Pending } from '../history/contract/index.ts';
 
 type Config = Parameters<typeof createEntryCommands>[0] & { routeKey: Uint8Array };
 const VNDB_DECISIONS_BYTES = 8_388_608;

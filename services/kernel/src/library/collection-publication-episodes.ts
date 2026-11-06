@@ -63,7 +63,7 @@ import headQuery from './collection-source-output-head.sql';
 import operationQuery from './collection-publication-episode-read.sql';
 import receiptQuery from './collection-publication-episode-receipt.sql';
 import { commandHistoryIdentityAccounts } from '../history/application/index.ts';
-import { type Pending, encodeRoles, unionHistoryScope } from '../history/contract/index.ts';
+import { encodeRoles, unionHistoryScope } from '../history/contract/index.ts';
 
 export const COLLECTION_PUBLICATION_COMMAND = 'library.collection.publication.begin';
 export const COLLECTION_PUBLICATION_WORKFLOW = 'library.collectionPublication';

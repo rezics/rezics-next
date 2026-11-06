@@ -33,7 +33,6 @@ import {
 } from './erasure-native-stores.ts';
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { discoverErasurePage, ERASURE_DISCOVERY_ROLES, type ErasureDiscoveryPage } from './erasure-progress.ts';
-import { type Pending } from '../history/contract/index.ts';
 
 /** Delivered native groups only. The rest of the inventory is explicitly pending.
  * Ordering consumes handle effect children before their terminal operation parents.

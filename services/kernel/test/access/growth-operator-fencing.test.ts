@@ -8,7 +8,6 @@ import { createCommittedContinuations } from '../../src/access/committed-continu
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const route = 0x7540;
 const governor = newId(route);

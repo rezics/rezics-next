@@ -11,7 +11,6 @@ import { admittedAccess, authenticateAccount } from '../support/admitted-access.
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');

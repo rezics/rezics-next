@@ -258,7 +258,7 @@ describe('architecture boundaries', () => {
         column: 30,
         file: 'services/kernel/src/zones/membership.ts',
         initializer: 'ClassDeclaration',
-        line: 87,
+        line: 90,
         specifier: '../library/collection-source-work.ts',
       },
     ]);

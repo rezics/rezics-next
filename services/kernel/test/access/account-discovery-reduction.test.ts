@@ -9,7 +9,6 @@ import { redriveAccountDiscovery } from '../../src/access/account-discovery-work
 import { AccessUnavailableError, CommandUnavailableError } from '../../src/access/unavailable.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 const source = accountDiscoverySource(pool);

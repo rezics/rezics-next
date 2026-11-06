@@ -45,7 +45,6 @@ import readReservation from './shelf-type-key-reservation.sql';
 import ownerCurrent from './type-preparation-owner-current.sql';
 import preparationTime from './type-preparation-time.sql';
 import type { ShelfWrite } from './shelf-contract.ts';
-import { type Pending } from '../history/contract/index.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type Checkpoint = { state: string; typeId: string | null; chunk: string; offset: string; nodeId: string | null };

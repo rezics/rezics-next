@@ -36,7 +36,6 @@ import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts
 import { capture, openGrowthDatabase } from '../support/growth.ts';
 import { testRouteKey, TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { createRealAccess } from './real-access.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

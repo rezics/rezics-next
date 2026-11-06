@@ -1,6 +1,5 @@
 import type { WorkClient } from '../../../src/work/client.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import { type Pending } from '../../../src/history/contract/identity-types.ts';
 
 /** The fixture owns this child and its two pipes, never the Auth executor. */
 export async function startErasureWorker(url: string, client: WorkClient) {

@@ -6,7 +6,6 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createNativePointFixture, type NativePointFixture } from './moderation-native-point-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 let fixture: NativePointFixture;
 beforeAll(async () => {

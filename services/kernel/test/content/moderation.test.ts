@@ -14,7 +14,6 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { observeSql } from './support/sql-observer.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 let f: Awaited<ReturnType<typeof standingFixture>>;
 let actor: Awaited<ReturnType<typeof f.context>>['actor'];

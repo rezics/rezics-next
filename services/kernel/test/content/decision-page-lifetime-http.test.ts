@@ -6,7 +6,6 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { createNativePointFixture, type NativePointFixture } from './moderation-native-point-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
-import { type Pending } from '../../src/history/contract/identity-types.ts';
 
 let fixture: NativePointFixture;
 beforeAll(async () => {

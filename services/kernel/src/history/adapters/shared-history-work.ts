@@ -11,7 +11,7 @@ import {
 } from '../../access/shared-history-context.ts';
 import { registerZoneHistoryConsumers } from './zone-consumers.ts';
 import { searchObservationSource } from './handles.ts';
-import { type HistoryReceivingContext, type Pending } from '../contract/index.ts';
+import { type HistoryReceivingContext } from '../contract/index.ts';
 
 /** One native receiving worker. Its progress, barrier and errors are never a DBOS argument or
  * generic effect payload. Pending jobs sleep until an actual custody/registration change. */
