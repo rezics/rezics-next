@@ -534,7 +534,9 @@ export class WorkerJob implements GateOutcomeSink {
           leasePolicy: this.tasks.settings.policy?.leases,
           urgent: task.brief.urgent,
           goal: task.brief.goal,
-          goalMaxInFlight: this.tasks.settings.policy?.goalMaxInFlight ?? defaultPolicy.goalMaxInFlight,
+          // A parked attempt resuming is already in flight: the Goal cap limits new starts only. Applying it here
+          // deadlocked every Goal at or over its cap, since none of its parked attempts could resume (2026-11-06).
+          goalMaxInFlight: Number.POSITIVE_INFINITY,
           excludeTaskId: task.id,
         },
       );
