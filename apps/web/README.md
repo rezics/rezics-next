@@ -94,18 +94,25 @@ The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run de
 
 Decision: native test defaults in `tests/factories` derive from generated client responses; renderer projections use their consumer types. Only this factory directory joins ordinary Web compilation. Malformed boundary inputs remain explicit in journey tests.
 
-For a focused fake, component, route-loader or story-render test that does not need native services, run it locally:
+For a focused fake, component, route-loader or story-render test that does not need native services, run it locally
+from the repository root. Browser files that start the public app use `--private-network` so Vite and the tests share
+one loopback namespace:
 
 ```sh
-bun scripts/focused.ts -- bun test tests/<focused-file>.test.ts
+bun apps/web/scripts/focused.ts --private-network -- bun test tests/<focused-file>.test.ts
 ```
+
+From `apps/web`, the same runner is `bun scripts/focused.ts --private-network -- bun test tests/<focused-file>.test.ts`.
+The controller retains check-host placement and physical custody; this focused path is the execution command.
 
 Session BFF caller identity is asserted by `tests/session-bff-identity.test.ts`. The Vite `session.test.ts` and Playwright `session-controls.test.ts` suites remain integration evidence.
 
 The focused runner prepares generated messages and routes, gives the command an owned temporary Worker state root, and
 removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
-database leases, Docker, a database or remote dispatch. Add `--private-network` before `--` when a focused browser test
-needs the normal loopback-only browser namespace. An explicit `bun test tests/*.host.test.ts` through this runner uses
+database leases, Docker, a database or remote dispatch. A `bun test` command starts one shared Web dev server for that
+invocation; test files acquire it through `tests/support/dev-server.ts` and keep their own browser, context and Worker
+fixture overlay. Vite dependency pre-bundling uses a host-local cache keyed by `bun.lock` and is reused across runs and
+worktrees until the lock changes. An explicit `bun test tests/*.host.test.ts` through this runner uses
 the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does
 not hide a named file.
 

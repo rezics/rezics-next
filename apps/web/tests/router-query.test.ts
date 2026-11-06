@@ -1,6 +1,5 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
@@ -17,47 +16,26 @@ const kernel = Bun.serve({
     return fake(request);
   },
 });
-let child: ChildProcess | undefined;
 let browser: Browser | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
-function site() {
-  return (started ??= (async () => {
-    const port = await new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const port = (server.address() as { port: number }).port;
-        server.close(() => resolve(port));
-      });
-    });
-    let output = '';
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KERNEL_ORIGIN: kernel.url.origin },
-    });
-    child.stdout!.on('data', (data) => (output += data));
-    child.stderr!.on('data', (data) => (output += data));
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(output);
-      try {
-        if ((await fetch(`${origin}/en/`)).status < 500) return origin;
-      } catch {}
-      await Bun.sleep(250);
-    }
-    throw new Error(output);
-  })());
+
+function site(): Promise<string> {
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: kernel.url.origin,
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
+  return started;
 }
 afterAll(async () => {
   await browser?.close();
   kernel.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 test('router creates an isolated query client, integrates SSR and sets navigation defaults', async () => {

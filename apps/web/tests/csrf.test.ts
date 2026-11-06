@@ -1,13 +1,12 @@
+import { startDevServer } from './support/dev-server.ts';
 import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import type { KernelClient } from '@rezics/client';
 import { chromium, type Browser } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, withCleanup } from './support/server-custody.ts';
 
 type ReadResult = Awaited<ReturnType<ReturnType<KernelClient['media']>['get']>>;
 type KernelProblem = NonNullable<ReadResult['error']>['value'];
@@ -180,23 +179,13 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
 type ResourceScope = 'suite' | 'test';
 type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
 type ResourceLease<T> = OwnedResource & { value: Promise<T> };
 const resources = new Set<OwnedResource>();
-const servers = new Set<ProcessCustody>();
-const started = new Map<boolean, Promise<string>>();
+const sites = new Map<boolean, Promise<string>>();
+const runningServers: Awaited<ReturnType<typeof startDevServer>>[] = [];
 let browserLease: ResourceLease<Browser> | undefined;
 let teardownStarted = false;
 
@@ -254,63 +243,28 @@ function resourceCleanupActions(scope?: ResourceScope) {
     .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
 }
 
-// The documented command, pointed at the fake through the environment it reads in development.
 function site(configured = false): Promise<string> {
-  if (started.has(configured)) return started.get(configured)!;
-  const starting = (async () => {
-    const port = await freePort();
-    const origin = `http://127.0.0.1:${port}`;
-    let custody: ProcessCustody | undefined;
-    try {
-      if (teardownStarted) throw new Error('CSRF Vite acquisition began after suite teardown');
-      const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          KERNEL_ORIGIN: fake.url.origin,
-          AUTH_ISSUER: `${fake.url.origin}/auth`,
-          WEBSITE_CLIENT_ID: clientId,
-          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-          API_RESOURCE: resource,
-          WEBSITE_SCOPES: scopes.join(' '),
-          SITE_ORIGINS: configured ? `http://127.0.0.1:${port},${secondOrigin}` : undefined,
-        },
-      });
-      custody = ownNodeProcess(child, {
-        label: `CSRF ${configured ? 'configured' : 'default'} Vite server`,
-        outputLimit: 8000,
-      });
-      servers.add(custody);
-      const deadline = Date.now() + 150_000;
-      for (;;) {
-        if (teardownStarted) throw new Error('CSRF Vite readiness ended when suite teardown began');
-        if (child.exitCode !== null)
-          throw new Error(`dev server exited with ${child.exitCode}:\n${custody.diagnostics()}`);
-        try {
-          const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-          if (response.status < 500) return origin;
-        } catch {}
-        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
-        await Bun.sleep(500);
-      }
-    } catch (error) {
-      if (!custody) throw error;
-      await withCleanup(async () => {
-        throw error;
-      }, [
-        {
-          label: `CSRF ${configured ? 'configured' : 'default'} Vite startup`,
-          run: () => custody!.close(),
-          timeoutMs: 7000,
-        },
-      ]);
-      throw error;
-    }
-  })();
-  started.set(configured, starting);
-  return starting;
+  let current = sites.get(configured);
+  if (!current) {
+    current = startDevServer({
+      exclusive: configured,
+      env: {
+        KERNEL_ORIGIN: fake.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: clientId,
+        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+        API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' '),
+        ...(configured ? { SITE_ORIGINS: `http://127.0.0.1:0,${secondOrigin}` } : {}),
+      },
+      warmUpPaths: [],
+    }).then((running) => {
+      runningServers.push(running);
+      return running.origin;
+    });
+    sites.set(configured, current);
+  }
+  return current;
 }
 
 afterAll(async () => {
@@ -319,9 +273,9 @@ afterAll(async () => {
     () => cleanupAll(resourceCleanupActions('test')),
     [
       ...resourceCleanupActions('suite'),
-      ...[...servers].map((server, index) => ({
+      ...runningServers.map((running, index) => ({
         label: `CSRF Vite server ${index + 1}`,
-        run: () => server.close(),
+        run: () => running.stop(),
         timeoutMs: 7000,
       })),
       { label: 'CSRF Auth and kernel fake', run: () => fake.stop(true), timeoutMs: 5000 },

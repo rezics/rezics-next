@@ -1,6 +1,5 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { slug } from '@rezics/definitions/slug';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
@@ -146,61 +145,31 @@ const kernel = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
+
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000));
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: kernel.url.origin,
-        PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
-        AUTH_ISSUER: `${kernel.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: 'rezics-website',
-        API_RESOURCE: 'https://api.rezics.test',
-        WEBSITE_SCOPES: 'media:create media:read',
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+  started ??= startDevServer({
+    env: {
+      KERNEL_ORIGIN: kernel.url.origin,
+      PUBLIC_ORIGIN: 'http://127.0.0.1:0',
+      AUTH_ISSUER: `${kernel.url.origin}/auth`,
+      WEBSITE_CLIENT_ID: 'rezics-website',
+      API_RESOURCE: 'https://api.rezics.test',
+      WEBSITE_SCOPES: 'media:create media:read',
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
 afterAll(async () => {
   kernel.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 async function response(path: string) {

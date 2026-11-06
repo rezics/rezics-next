@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
+import { commandNeedsSharedDevServer } from './with-dev-server.ts';
 
 export type TestCommandLane = { args: string[]; isolate: boolean };
 
@@ -120,6 +121,9 @@ async function main(): Promise<void> {
         let interrupted = false;
         for (const run of commands) {
           const privateNetwork = isolated && run.isolate;
+          const args = commandNeedsSharedDevServer(run.args)
+            ? ['bun', 'scripts/with-dev-server.ts', '--', ...run.args]
+            : run.args;
           const invocation = privateNetwork
             ? [
                 'unshare',
@@ -130,9 +134,9 @@ async function main(): Promise<void> {
                 '-c',
                 'ip link set lo up && exec "$@"',
                 'sh',
-                ...run.args,
+                ...args,
               ]
-            : run.args;
+            : args;
           if (linux && run.isolate && !privateNetwork) {
             process.stderr.write(
               'the tests are running on the host network, so host network changes can break browser tests.\n',

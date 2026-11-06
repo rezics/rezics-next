@@ -1,10 +1,9 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { basename, join, resolve, sep } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import fixtures from '../src/kernel/fixtures.json';
+import { startDevServer } from './support/dev-server.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -15,46 +14,28 @@ const storybook = join(app, 'node_modules/.bin/storybook');
 const subjectId = fixtures.subjects[0]!.id;
 const paths = ['/en', `/en/subjects/${subjectId}`, '/en/search', '/en/library'];
 
-let devServer: ChildProcess | undefined;
-let devOutput = '';
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let browser: Browser | undefined;
 let staticServer: ReturnType<typeof Bun.serve> | undefined;
 
-function appendOutput(chunk: Buffer) {
-  devOutput = (devOutput + chunk.toString()).slice(-64_000);
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolvePort(port));
-    });
-  });
-}
-
-async function startDevServer(): Promise<string> {
-  const port = await freePort();
-  devServer = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort', '--force'], {
+async function launchForcedDevServer(): Promise<string> {
+  server = await startDevServer({
+    exclusive: true,
     cwd: app,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    command: ({ port }) => [
+      'bun',
+      'run',
+      'dev',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--strictPort',
+      '--force',
+    ],
+    warmUpPaths: [],
   });
-  devServer.stdout!.on('data', appendOutput);
-  devServer.stderr!.on('data', appendOutput);
-  const origin = `http://127.0.0.1:${port}`;
-  const deadline = Date.now() + 150_000;
-  for (;;) {
-    if (devServer.exitCode !== null) throw new Error(`Vite exited with ${devServer.exitCode}:\n${devOutput}`);
-    try {
-      const response = await fetch(`${origin}/en`, { signal: AbortSignal.timeout(10_000) });
-      if (response.status < 500) return origin;
-    } catch {}
-    if (Date.now() > deadline) throw new Error(`Vite did not serve /en in time:\n${devOutput}`);
-    await Bun.sleep(500);
-  }
+  return server.origin;
 }
 
 async function buildStorybook(): Promise<void> {
@@ -73,15 +54,12 @@ async function buildStorybook(): Promise<void> {
 afterAll(async () => {
   await browser?.close();
   staticServer?.stop(true);
-  if (devServer?.pid)
-    try {
-      process.kill(-devServer.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
   rmSync(storybookOutput, { recursive: true, force: true });
 });
 
 test('the cold client optimizer serves first page loads without reloads or unresolved dependencies', async () => {
-  const origin = await startDevServer();
+  const origin = await launchForcedDevServer();
   browser = await chromium.launch();
 
   for (const path of paths) {
@@ -94,8 +72,9 @@ test('the cold client optimizer serves first page loads without reloads or unres
     await context.close();
   }
 
-  expect(devOutput).not.toMatch(/Failed to resolve dependency|Cannot optimize dependency/i);
-  expect(devOutput).not.toMatch(/optimized dependencies changed\. reloading/i);
+  const output = server?.diagnostics() ?? '';
+  expect(output).not.toMatch(/Failed to resolve dependency|Cannot optimize dependency/i);
+  expect(output).not.toMatch(/optimized dependencies changed\. reloading/i);
 }, 900_000);
 
 test('Storybook builds and serves a page story with the development optimizer configuration', async () => {

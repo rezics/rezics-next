@@ -1,7 +1,6 @@
+import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { createKernelClient, type KernelClient } from '@rezics/client';
@@ -36,65 +35,30 @@ async function messages(locale: string): Promise<Record<string, string>> {
   return (await Bun.file(join(app, 'messages', `${locale}.json`)).json()) as Record<string, string>;
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
-let child: ChildProcess | undefined;
-let started: Promise<string> | undefined;
 let browser: Browser | undefined;
 
 // The documented command, in its own process group so that Vite and workerd stop with it.
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
+  started ??= startDevServer({
+    env: {
       KERNEL_ORIGIN: kernel.url.origin,
-      PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
-      REZICS_TEST_RUNTIME: '1',
-    };
-    for (const name of [
-      'AUTH_ISSUER',
-      'WEBSITE_CLIENT_ID',
-      'WEBSITE_CLIENT_KEY',
-      'API_RESOURCE',
-      'WEBSITE_SCOPES',
-      'SITE_ORIGINS',
-      'WORKER_INSPECTOR_PORT',
-    ])
-      delete env[name];
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en/`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en/ in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+      AUTH_ISSUER: '',
+      WEBSITE_CLIENT_ID: '',
+      WEBSITE_CLIENT_KEY: '',
+      API_RESOURCE: '',
+      WEBSITE_SCOPES: '',
+      SITE_ORIGINS: '',
+      WORKER_INSPECTOR_PORT: '',
+    },
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
@@ -111,10 +75,7 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
 
 afterAll(async () => {
   await browser?.close();
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
   await kernel.stop(true);
 });
 
