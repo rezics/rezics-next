@@ -55,7 +55,7 @@ import type {
 import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
-import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
+import { vndbTagsRatingMetric, vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import type {
   VndbTagRatingBinding,
   VndbTagRatingObservation,
@@ -617,7 +617,7 @@ type CandidateRead = {
   source: BatchCommand['source'] | null;
   statement: BatchStatement;
   head: number | null;
-  decision?: 'accept' | 'reject' | 'abstain' | null;
+  decision?: 'accepted' | 'rejected' | 'abstained' | null;
 };
 type CandidatePage = {
   candidates: CandidateRead[];
@@ -770,7 +770,7 @@ function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boo
     assertion.property === 'skos:broader' &&
     assertion.ownerKey === record.sourceKey &&
     assertion.tagParentPath === assertion.source.external_id &&
-    assertion.source.converter_revision === 'vndb-public-tag-vocabulary@1' &&
+    ['vndb-public-tag-vocabulary@1', vndbPublicTagParentRevision].includes(assertion.source.converter_revision) &&
     assertion.source.field_group === 'facts' &&
     /^\/tags_parents\/g[1-9][0-9]{0,9}\/g[1-9][0-9]{0,9}$/u.test(assertion.tagParentPath);
   return (
@@ -784,7 +784,7 @@ function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boo
 function managedSourceTagParent(candidate: CandidateRead, alias: string): boolean {
   return (
     candidate.source?.source === alias &&
-    candidate.source.converter_revision === 'vndb-public-tag-vocabulary@1' &&
+    ['vndb-public-tag-vocabulary@1', vndbPublicTagParentRevision].includes(candidate.source.converter_revision) &&
     candidate.source.field_group === 'facts' &&
     /^\/tags_parents\/g[1-9][0-9]{0,9}\/g[1-9][0-9]{0,9}$/u.test(candidate.source.external_id) &&
     candidate.statement.property.id === 'skos:broader'
@@ -800,6 +800,26 @@ const bangumiAppearanceRolesSource =
   'https://github.com/bangumi/Archive/blob/959474a4fcb833f6dabe8dd2f4fe192f82a71140/README.md';
 const bangumiPersonCareersSource =
   'https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/PersonCareer';
+
+function vndbParentDictionaryCitation(record: ShowcaseRecord, assertion: ShowcaseAssertion, uri: string): boolean {
+  if (
+    record.provider !== 'vndb' ||
+    record.kind !== 'source-vocabulary' ||
+    assertion.property !== 'skos:broader' ||
+    !assertion.tagParentPath
+  )
+    return false;
+  try {
+    const parsed = new URL(uri);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'rezics.com' &&
+      parsed.pathname.startsWith('/schemes/vndb/public-tags/')
+    );
+  } catch {
+    return false;
+  }
+}
 
 function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean {
   if (record.provider !== 'bangumi' || record.kind !== 'source-vocabulary' || !record.sourceUri) return false;
@@ -1902,7 +1922,9 @@ export async function publishShowcase(input: {
                 ) &&
                 !(assertion.property === 'schema:image' && host === 'lain.bgm.tv') &&
                 !sourceVocabularyCitation(record, uri)
-              : host !== 'vndb.org' && !host.endsWith('.vndb.org');
+              : host !== 'vndb.org' &&
+                !host.endsWith('.vndb.org') &&
+                !vndbParentDictionaryCitation(record, assertion, uri);
         } catch {
           return true;
         }
@@ -2024,8 +2046,8 @@ export async function publishShowcase(input: {
       }
     }
     const candidate = validated.get(assertion.candidateId)!;
-    if (candidate.decision === 'accept') continue;
-    if (candidate.decision === 'reject') {
+    if (candidate.decision === 'accepted') continue;
+    if (candidate.decision === 'rejected') {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
       stoppedSubjects.add(id);
       continue;
@@ -2273,12 +2295,12 @@ export async function publishShowcase(input: {
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'vocabulary-binding-not-current' });
       continue;
     }
-    if (candidate.decision === 'reject') {
+    if (candidate.decision === 'rejected') {
       setParentOutcome(binding, 'withheld', edge.assertion.candidateId, 'parent candidate is rejected');
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'candidate-currently-rejected' });
       continue;
     }
-    if (candidate.decision !== 'accept') {
+    if (candidate.decision !== 'accepted') {
       const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
       const key = actionKey('accept', edge.assertion.candidateId, edge.assertion.candidateDigest);
       const idempotencyKey = actionIdempotencyKey(key, body);
@@ -2349,7 +2371,7 @@ export async function publishShowcase(input: {
         fence !== 'open' ||
         !(await parentBindingCurrent(edge.binding)) ||
         !candidate ||
-        candidate.decision !== 'accept' ||
+        candidate.decision !== 'accepted' ||
         !showcaseSourceMatches(candidate.source, edge.assertion.source) ||
         !showcaseStatementMatches(candidate.statement, edge.assertion.statement)
       ) {
@@ -2524,8 +2546,8 @@ export async function publishShowcase(input: {
     const association = tagAssociationFor(record, assertion, manifest.tagAssociations ?? []);
     if (!association || withheldParentTags.has(association.tagId)) continue;
     const candidate = validated.get(assertion.candidateId)!;
-    if (candidate.decision === 'accept') continue;
-    if (candidate.decision === 'reject') {
+    if (candidate.decision === 'accepted') continue;
+    if (candidate.decision === 'rejected') {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
       continue;
     }

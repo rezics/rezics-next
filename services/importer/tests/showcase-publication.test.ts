@@ -260,12 +260,17 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       async reviewedCandidates(id, query) {
         expect(query.context).toBe(globalContext);
         return {
-          candidates: [...candidates.values()].filter(
-            (candidate) =>
-              (candidate.source?.external_id === subjects.get(id)?.sourceExternalId &&
-                candidate.statement.property.id === query.property) ||
-              (candidate.id === unrelatedId && id === workId && query.property === 'schema:name'),
-          ),
+          candidates: [...candidates.values()]
+            .filter(
+              (candidate) =>
+                (candidate.source?.external_id === subjects.get(id)?.sourceExternalId &&
+                  candidate.statement.property.id === query.property) ||
+                (candidate.id === unrelatedId && id === workId && query.property === 'schema:name'),
+            )
+            .map((candidate) => ({
+              ...candidate,
+              decision: accepted.has(candidate.id) ? 'accepted' : null,
+            })),
           next: null,
           adoption: adopted.get(`${id}\0${query.property}`) ?? null,
         } as never;
@@ -737,6 +742,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ?.assertions.find((assertion) => assertion.candidateId === refusedCandidate.id);
     if (!refusedAssertion) throw new Error('Missing selected synopsis for permanent refusal recovery');
     const refusedAction = `accept:${showcaseDigest({ identity: refusedCandidate.id, digest: refusedAssertion.candidateDigest })}`;
+    accepted.delete(refusedCandidate.id);
     journal.refuseAction(refusedAction, 'review-http-403');
     const refusedCallsBefore = acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id).length;
     const permanentlyRefused = await publishShowcase({

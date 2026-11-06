@@ -19,10 +19,7 @@ import {
   type NativeProcessIdentity,
   type NativeProcessOwnership,
 } from './lifecycle.ts';
-import { createCommerceWork } from '../../../../services/kernel/src/commerce/enqueue.ts';
-import { readCommerceConfig } from '../../../../services/kernel/src/commerce/config.ts';
-import { createStripePort } from '../../../../services/kernel/src/commerce/stripe.ts';
-import { createWorkClient, type WorkClient } from '../../../../services/kernel/src/work/client.ts';
+import type { WorkClient } from '../../../../services/kernel/src/work/client.ts';
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 
 export type NativeCredentials = { authorization: string; cookie?: string };
@@ -708,6 +705,13 @@ async function startStack(): Promise<
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
+    const [{ createCommerceWork }, { readCommerceConfig }, { createStripePort }, { createWorkClient }] =
+      await Promise.all([
+        import('../../../../services/kernel/src/commerce/enqueue.ts'),
+        import('../../../../services/kernel/src/commerce/config.ts'),
+        import('../../../../services/kernel/src/commerce/stripe.ts'),
+        import('../../../../services/kernel/src/work/client.ts'),
+      ]);
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
     const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
     const searchConfig = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: searchPrefix });

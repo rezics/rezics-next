@@ -4,6 +4,8 @@ The reader uses the catalogue admission for one subject, locale and original rol
 
 A failed hierarchy request retains a separately identified last readable page only when subject, release, revision, context, type, role and session receipt all match; retry repeats the failed input and navigation intent.
 
+Decision: retain the delivered eight hierarchy page addresses within the existing 8 KiB visit descriptor. Truncation announces the retained window and offers a fresh first-page restart; tests exercise that current limit rather than the former five-address window.
+
 Whole-subject failure withdraws source data and private advice. Native correction advice remains independent of hierarchy readiness. The existing classification origin allowlist also applies to direct callers; graph query and selection returns belong to the graph journey.
 
 The human name and definition lead the visit. Aliases retain their language; the original identity and release are optional disclosures. Scheme, code and broader sections iterate original native assertions, including distinct assertions of the same target. Each whole assertion, its target, inspection address, qualifiers and citations uses the existing numeric `rezics:spoilerLevel` gate and current reader preference. A boolean warning is not native spoiler admission. Unlabelled or withheld item values never fall back to their IDs. Bounded inverse rows without an inspectable assertion show unavailable evidence.
