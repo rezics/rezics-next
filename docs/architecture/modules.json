@@ -205,7 +205,8 @@
         "services/kernel/src/access/handle-policy.ts",
         "services/kernel/src/access/authenticate.ts",
         "services/kernel/src/access/write-rate.ts",
-        "services/kernel/src/access/write-rate-stage.ts"
+        "services/kernel/src/access/write-rate-stage.ts",
+        "services/kernel/src/access/membership-work-config.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -330,7 +331,8 @@
       "publicEntries": [
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
-        "services/kernel/src/library/collection-discovery-summaries.ts"
+        "services/kernel/src/library/collection-discovery-summaries.ts",
+        "services/kernel/src/library/identity-epoch-participant.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -380,7 +382,9 @@
         "services/kernel/src/search/space-discovery.ts",
         "services/kernel/src/search/work.ts",
         "services/kernel/src/search/discovery-filter.ts",
-        "services/kernel/src/search/catalogue-publication.ts"
+        "services/kernel/src/search/catalogue-publication.ts",
+        "services/kernel/src/search/identity-epoch-participant.ts",
+        "services/kernel/src/search/opensearch.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -412,7 +416,8 @@
         "services/kernel/src/semantic/index.ts",
         "services/kernel/src/semantic/identity-adapters/index.ts",
         "services/kernel/src/semantic/identity-adapters/read.ts",
-        "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+        "services/kernel/src/semantic/work-module.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -427,11 +432,19 @@
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
-        "kernel-zones"
+        "kernel-zones",
+        "kernel-semantic-application",
+        "kernel-semantic-contract",
+        "kernel-semantic-core"
       ],
       "capabilities": ["semantic", "canonical-identity-native"],
       "postgresPaths": ["services/kernel/src/semantic/**"],
-      "excludes": ["services/kernel/src/semantic/identity-core/**"]
+      "excludes": [
+        "services/kernel/src/semantic/identity-core/**",
+        "services/kernel/src/semantic/contract/**",
+        "services/kernel/src/semantic/core/**",
+        "services/kernel/src/semantic/application/**"
+      ]
     },
     {
       "id": "kernel-zones",
@@ -531,7 +544,9 @@
         "kernel-library",
         "kernel-platform",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "kernel-semantic-application",
+        "kernel-semantic-contract"
       ],
       "capabilities": []
     },
@@ -1066,8 +1081,38 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/identity-core/**"],
       "publicEntries": ["services/kernel/src/semantic/identity-core/index.ts"],
-      "allowedDependencies": [],
+      "allowedDependencies": ["kernel-semantic-contract"],
       "capabilities": ["canonical-identity-rules"]
+    },
+    {
+      "id": "kernel-semantic-contract",
+      "kind": "contract",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/semantic/contract/**"],
+      "publicEntries": [
+        "services/kernel/src/semantic/contract/identity-values.ts",
+        "services/kernel/src/semantic/contract/identity-epoch-ports.ts"
+      ],
+      "allowedDependencies": [],
+      "capabilities": ["semantic-contract"]
+    },
+    {
+      "id": "kernel-semantic-core",
+      "kind": "core",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/semantic/core/**"],
+      "publicEntries": ["services/kernel/src/semantic/core/identity-epoch-sequence.ts"],
+      "allowedDependencies": ["kernel-semantic-contract"],
+      "capabilities": ["semantic-identity-sequence"]
+    },
+    {
+      "id": "kernel-semantic-application",
+      "kind": "application",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/semantic/application/**"],
+      "publicEntries": ["services/kernel/src/semantic/application/identity-epoch-participants.ts"],
+      "allowedDependencies": ["kernel-semantic-contract"],
+      "capabilities": ["semantic-identity-participants"]
     },
     {
       "id": "progress",

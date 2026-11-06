@@ -31,6 +31,7 @@ import type {
 /** Native identity storage and fixed participant protocol. Mapping conveys no permission. */
 import type { Pool } from 'pg';
 import type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
+import type { IdentityEpochParticipantPorts } from '../contract/identity-epoch-ports.ts';
 export type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
 import type {
   CommandBasis,
@@ -191,12 +192,8 @@ export type IdentityEpochStep = (pool: Pool, job: IdentityJobRef) => Promise<Ide
  * Both adapters consume Store + Step contracts; neither imports the final coordinator.
  * No default/noData implementation and no request-selected participant list.
  */
-export type IdentityEpochParticipants = Readonly<{
-  version: 1;
-  'search-canonical-index': IdentityEpochStep;
-  /** Same participant/receipt ABI; all canonical removals/additions/fences/directory rekeys must be custodied. */
-  'library-private-follow-counts': IdentityEpochStep;
-}>;
+/** Same participant/receipt ABI; the composition root binds the pool (contract/identity-epoch-ports.ts). */
+export type IdentityEpochParticipants = IdentityEpochParticipantPorts<Pool>;
 
 /** Final composition: semantic/identity-epoch-coordinator.ts.
  * DBOS resumes job identity only. Completion reads persisted native receipts, not this return value.

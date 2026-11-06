@@ -7208,11 +7208,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/server.ts",
-          "edge": "value import \"./search/opensearch.ts\" #1 => services/kernel/src/search/opensearch.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/server.ts",
           "edge": "value import \"./search/public-preparation-store.ts\" #1 => services/kernel/src/search/public-preparation-store.ts"
         },
         {
@@ -8634,11 +8629,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/feed-work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/feed-work.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
@@ -9844,11 +9834,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/register.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/register.ts",
           "edge": "value import \"../access/resource-roles.json\" #1 => services/kernel/src/access/resource-roles.json"
         },
         {
@@ -10230,11 +10215,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/review-census-work.ts",
           "edge": "type import \"../work/registry.ts\" #1 => services/kernel/src/work/registry.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/review-census-work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",
@@ -12080,11 +12060,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-work.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
@@ -12701,11 +12676,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-publication-work.ts",
           "edge": "type import \"../work/registry.ts\" #1 => services/kernel/src/work/registry.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",
@@ -13961,11 +13931,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/follow-activity-work.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/follow-activity-work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",
@@ -15486,11 +15451,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/members-preparation-work.ts",
           "edge": "value import \"../access/lifecycle-20261025094010-command.ts\" #1 => services/kernel/src/access/lifecycle-20261025094010-command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/members-preparation-work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",
@@ -20226,11 +20186,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/work/authorization.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/authorization.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
         },
         {
@@ -20247,11 +20202,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/work/modules.ts",
           "edge": "value import \"../access/erasure.ts\" #1 => services/kernel/src/access/erasure.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",
@@ -20287,11 +20237,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/work/modules.ts",
           "edge": "value import \"../rating/work-module.ts\" #1 => services/kernel/src/rating/work-module.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../semantic/work-module.ts\" #1 => services/kernel/src/semantic/work-module.ts"
         },
         {
           "rule": "rule 2",
@@ -22998,11 +22943,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/erasure.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/erasure.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
@@ -24424,11 +24364,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/work.ts",
           "edge": "value import \"../access/erasure.ts\" #1 => services/kernel/src/access/erasure.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/work.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",
@@ -26589,27 +26524,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-epoch-coordinator.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-coordinator.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-coordinator.ts",
-          "edge": "value import \"../library/identity-epoch-participant.ts\" #1 => services/kernel/src/library/identity-epoch-participant.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-coordinator.ts",
-          "edge": "value import \"../search/identity-epoch-participant.ts\" #1 => services/kernel/src/search/identity-epoch-participant.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-coordinator.ts",
-          "edge": "value import \"../search/opensearch.ts\" #1 => services/kernel/src/search/opensearch.ts"
         },
         {
           "rule": "rule 2",
@@ -28315,11 +28230,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/work-module.ts",
           "edge": "value import \"../access/account-agent-effect.ts\" #1 => services/kernel/src/access/account-agent-effect.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/work-module.ts",
-          "edge": "value import \"../access/membership-work-config.ts\" #1 => services/kernel/src/access/membership-work-config.ts"
         },
         {
           "rule": "rule 2",

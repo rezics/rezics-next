@@ -1,7 +1,9 @@
 import { registerDefinitionCatalogueWork } from './register.ts';
 import { contextDirectoryEffect, populateContextDirectory, registerContextDirectoryWork } from './context-directory.ts';
 import { startRelays } from '../events/relays.ts';
-import type { WorkModule } from '../work/registry.ts';
+import type { WorkContext, WorkModule } from '../work/registry.ts';
+import type { Pool } from 'pg';
+import type { IdentityEpochParticipantPorts } from './contract/identity-epoch-ports.ts';
 import { runIdentityEpochBootstrapBatch, identityBootstrapWake } from './identity-epoch-bootstrap.ts';
 import {
   IDENTITY_EPOCH_BOOTSTRAP,
@@ -50,83 +52,90 @@ export function createSemanticErasureEffect(pool: Parameters<typeof synchronizeA
   };
 }
 
+/** Process composition supplies the fixed identity participants for one worker context. Null leaves the identity
+ * coordinator unavailable; this module never selects Library or Search implementations itself.
+ */
+export type SemanticIdentityParticipantComposer = (context: WorkContext) => IdentityEpochParticipantPorts<Pool> | null;
+
 /** Native relation projection shares the worker pool and registered service lifecycle. */
-export const semanticWorkModule: WorkModule = {
-  name: 'semantic',
-  async register(context) {
-    // Establish the writer cut before DBOS can resume an old bootstrap delivery.
-    await installIdentityEpochBootstrap(context.pool);
-    const config = readMembershipWorkConfig(context.env);
-    const names = new Set(Object.values(roles.roles).flat());
-    const actions = new Map(
-      [...names].map((action) => [
-        action,
-        { anonymous: action === 'subject:read' || action === 'definitions:read' || action === 'presentation:read' },
-      ]),
-    );
-    const access = createAccess({ actions, auth: config.auth, clock: context.clock });
-    const binding = { pool: context.pool, access, clock: context.clock, routeKey: config.routeKey };
-    const publication = createSubjectPagePublication(binding);
-    const relay = createSubjectPagePublicationRelay(binding);
-    registerSubjectPagePublicationWork(context, publication);
-    registerDefinitionCatalogueWork(context);
-    const scheduleErasure = registerSemanticErasureWork(context);
-    await registerRecordRetentionWork(context);
-    await registerIdentityScopedObservationWork(context);
-    registerProviderReviewWork(context);
-    registerIdentityEpochCoordinator(context);
-    await registerContextDirectoryWork(context);
-    context.addEffects([
-      contextDirectoryEffect(context.pool, context.clock),
-      createSemanticErasureEffect(context.pool),
-      createSemanticLocatorEffect(context.pool),
-      {
-        name: 'semantic_erasure_local',
-        types: [SEMANTIC_ERASURE_SCHEDULED],
-        async run(event) {
-          const accountId = (event.data as { accountId: string }).accountId;
-          await scheduleErasure(accountId);
+export function createSemanticWorkModule(composeParticipants: SemanticIdentityParticipantComposer): WorkModule {
+  return {
+    name: 'semantic',
+    async register(context) {
+      // Establish the writer cut before DBOS can resume an old bootstrap delivery.
+      await installIdentityEpochBootstrap(context.pool);
+      const config = readMembershipWorkConfig(context.env);
+      const names = new Set(Object.values(roles.roles).flat());
+      const actions = new Map(
+        [...names].map((action) => [
+          action,
+          { anonymous: action === 'subject:read' || action === 'definitions:read' || action === 'presentation:read' },
+        ]),
+      );
+      const access = createAccess({ actions, auth: config.auth, clock: context.clock });
+      const binding = { pool: context.pool, access, clock: context.clock, routeKey: config.routeKey };
+      const publication = createSubjectPagePublication(binding);
+      const relay = createSubjectPagePublicationRelay(binding);
+      registerSubjectPagePublicationWork(context, publication);
+      registerDefinitionCatalogueWork(context);
+      const scheduleErasure = registerSemanticErasureWork(context);
+      await registerRecordRetentionWork(context);
+      await registerIdentityScopedObservationWork(context);
+      registerProviderReviewWork(context);
+      registerIdentityEpochCoordinator(context, composeParticipants(context));
+      await registerContextDirectoryWork(context);
+      context.addEffects([
+        contextDirectoryEffect(context.pool, context.clock),
+        createSemanticErasureEffect(context.pool),
+        createSemanticLocatorEffect(context.pool),
+        {
+          name: 'semantic_erasure_local',
+          types: [SEMANTIC_ERASURE_SCHEDULED],
+          async run(event) {
+            const accountId = (event.data as { accountId: string }).accountId;
+            await scheduleErasure(accountId);
+          },
         },
-      },
-      {
-        name: 'identity_epoch_admission_wake',
-        types: [IDENTITY_EPOCH_HOME_AVAILABLE],
-        run: async (event) => {
-          const data = event.data as { partition: number; after: string };
-          await wakeIdentityEpochAdmissionWaiters(context.pool, data.partition, data.after);
+        {
+          name: 'identity_epoch_admission_wake',
+          types: [IDENTITY_EPOCH_HOME_AVAILABLE],
+          run: async (event) => {
+            const data = event.data as { partition: number; after: string };
+            await wakeIdentityEpochAdmissionWaiters(context.pool, data.partition, data.after);
+          },
         },
-      },
-      {
-        name: 'identity_epoch_admission',
-        types: [IDENTITY_EPOCH_ADMITTED],
-        run: async (event) => {
-          const data = event.data as { jobId: string; epoch: string };
-          await resumeIdentityEpochJob(context.pool, { jobId: data.jobId, epoch: BigInt(data.epoch) });
+        {
+          name: 'identity_epoch_admission',
+          types: [IDENTITY_EPOCH_ADMITTED],
+          run: async (event) => {
+            const data = event.data as { jobId: string; epoch: string };
+            await resumeIdentityEpochJob(context.pool, { jobId: data.jobId, epoch: BigInt(data.epoch) });
+          },
         },
-      },
-      {
-        name: 'identity_epoch_bootstrap',
-        types: [
-          IDENTITY_EPOCH_BOOTSTRAP,
-          IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
-          SUBJECT_MERGED,
-          SUBJECT_REVISED,
-          LINKS_MOVING,
-          'com.rezics.subject.created.v1',
-        ],
-        run: async () => {
-          await runIdentityEpochBootstrapBatch(context.pool);
+        {
+          name: 'identity_epoch_bootstrap',
+          types: [
+            IDENTITY_EPOCH_BOOTSTRAP,
+            IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
+            SUBJECT_MERGED,
+            SUBJECT_REVISED,
+            LINKS_MOVING,
+            'com.rezics.subject.created.v1',
+          ],
+          run: async () => {
+            await runIdentityEpochBootstrapBatch(context.pool);
+          },
         },
-      },
-    ]);
-    context.addService(async () => {
-      await populateContextDirectory(context.pool, context.clock);
-      await runCommand(context.pool, { partition: 0 }, async () => ({
-        value: null,
-        // Four bounded wake chains share the existing effect registration and queue limits.
-        events: Array.from({ length: 4 }, (_, partition) => identityBootstrapWake(partition, 1n)),
-      }));
-      return startRelays(context.pool, [linkProjection(context.pool), providerReviewProjection(context.pool), relay]);
-    });
-  },
-};
+      ]);
+      context.addService(async () => {
+        await populateContextDirectory(context.pool, context.clock);
+        await runCommand(context.pool, { partition: 0 }, async () => ({
+          value: null,
+          // Four bounded wake chains share the existing effect registration and queue limits.
+          events: Array.from({ length: 4 }, (_, partition) => identityBootstrapWake(partition, 1n)),
+        }));
+        return startRelays(context.pool, [linkProjection(context.pool), providerReviewProjection(context.pool), relay]);
+      });
+    },
+  };
+}
