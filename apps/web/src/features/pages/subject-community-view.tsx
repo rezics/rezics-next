@@ -21,7 +21,7 @@ import { CommunityCardPresentation } from './subject-community-card-view';
 import { CommunityNativeByline, CommunityNativePresentation } from './subject-community-card-view';
 import type { VerificationConfig } from '../../report/turnstile';
 import { SubjectCommunityInteractions } from './subject-community-interactions';
-import { BoardStartThread } from '../../threads/board-community-actions';
+import { BoardStartThread } from '../../threads/community-entry';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 export const SubjectCommunityVerificationContext = createContext<VerificationConfig | undefined>(undefined);

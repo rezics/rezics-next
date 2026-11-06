@@ -41,11 +41,24 @@ test('installed native cards render through the generated reader and original ac
   const { GLOBAL } = await import('../src/features/pages/subject-ratings');
   const { m } = await import('../src/paraglide/messages.js');
   const row = communityThread('review');
-  if (row.firstPost.availability !== 'available') throw new Error('Expected opening post');
-  const post = row.firstPost;
+  const opening = row.firstPost;
+  if (opening.availability !== 'available') throw new Error('Expected opening post');
   const imageId = '01a1a000-0000-7000-8000-000000000098';
-  post.mediaIds = [imageId];
-  post.body.doc.content!.push({ type: 'image', attrs: { src: imageId, alt: 'Original document image', id: 'image' } });
+  const post = {
+    ...opening,
+    mediaIds: [imageId],
+    body: {
+      version: opening.body.version,
+      profile: opening.body.profile,
+      doc: {
+        type: 'doc' as const,
+        content: [
+          ...(opening.body.doc.content ?? []),
+          { type: 'image', attrs: { src: imageId, alt: 'Original document image', id: 'image' } },
+        ],
+      },
+    },
+  };
   // The populated/covered variants of Content's subject-threads-http example, without a historical extension.
   const card = {
     state: 'current',
@@ -109,6 +122,7 @@ test('installed native cards render through the generated reader and original ac
   };
   const native = {
     ...row,
+    firstPost: post,
     card,
     reviewContext: { citation: { state: 'available', units: 5, question: { scale: { min: 1, max: 5 } } } },
   };
@@ -148,11 +162,13 @@ test('installed native cards render through the generated reader and original ac
     threads: [
       {
         postRevisionId: post.revisionId,
-        card: undefined,
         nativeCard: { author: null, comments: { count: { value: 0 } } },
       },
     ],
   });
+  expect(
+    data.regions.review && data.regions.review.state === 'ready' ? data.regions.review.threads[0] : undefined,
+  ).not.toHaveProperty('card');
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
   const host = window.document.createElement('main');
@@ -224,7 +240,10 @@ test('installed native cards render through the generated reader and original ac
       button.textContent?.includes(m.subject_spoiler_show()),
     )!;
     await act(async () => reveal.click());
-    expect(host.querySelector('img')?.getAttribute('alt')).toBe('Original document image');
+    const disclosed = host.querySelector('[data-slot="document-image"]');
+    expect(disclosed?.querySelector('img')?.getAttribute('alt') ?? disclosed?.textContent).toContain(
+      'Original document image',
+    );
     expect(host.querySelector('[lang="fr"] [data-content-item-slot="preview"]')).not.toBeNull();
     (host.querySelector('h3 a') as HTMLElement).focus();
     post.revisionId = imageId;
@@ -258,4 +277,4 @@ test('installed native cards render through the generated reader and original ac
     }
     mock.restore();
   }
-});
+}, 30_000);

@@ -1074,7 +1074,9 @@
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
         "apps/web/src/media/cover-src.ts",
-        "apps/web/src/threads/post-command-lifetime.ts"
+        "apps/web/src/threads/community-entry.ts",
+        "apps/web/src/threads/post-command-lifetime.ts",
+        "apps/web/src/threads/thread-reading-context.ts"
       ],
       "allowedDependencies": [
         "client",
