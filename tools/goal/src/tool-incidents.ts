@@ -1,8 +1,11 @@
+import { statSync } from 'node:fs';
 import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import type { AttemptRef, ManagerInbox, ManagerEvent } from './contracts.ts';
 import { blockerFingerprint } from './attempt-progress.ts';
+import { agentAdapter } from './agents.ts';
 import { TRANSPORT_FAILURE_EVENT } from './agents/shared.ts';
+import { readLogFromOffset } from './records.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Settings, Task } from './types.ts';
 
@@ -36,7 +39,30 @@ type StoredEvent = {
   body: string;
 };
 
-type IncidentState = { status: 'open' | 'resolved'; incident: ToolIncident };
+type IncidentResolutionEvidence =
+  | {
+      kind: 'provider-log-progress';
+      probe: AttemptRef;
+      failureSequence: number;
+      workerRunSequence: number;
+      logStartOffset: number;
+      observedLogSize: number;
+    }
+  | {
+      kind: 'attempt-ended';
+      probe: AttemptRef;
+      state: Attempt['state'];
+      failureKind: Attempt['failureKind'];
+      fingerprint: string | null;
+    };
+
+type IncidentState = {
+  status: 'open' | 'resolved';
+  incident: ToolIncident;
+  openingFailureSequence?: number;
+  probeRunSequence?: number;
+  resolution?: { probe: AttemptRef; evidence: IncidentResolutionEvidence };
+};
 
 function parse<T>(value: string): T | null {
   try {
@@ -203,8 +229,92 @@ function exampleTasks(rows: readonly StoredEvent[], limit: number): Array<{ task
   return examples;
 }
 
-function saveState(store: WorkerStore, ref: AttemptRef, status: IncidentState['status'], incident: ToolIncident): void {
-  insertEvent(store, ref, STATE_EVENT, new Date().toISOString(), { status, incident });
+function saveState(
+  store: WorkerStore,
+  ref: AttemptRef,
+  status: IncidentState['status'],
+  incident: ToolIncident,
+  metadata: Partial<Pick<IncidentState, 'openingFailureSequence' | 'probeRunSequence' | 'resolution'>> = {},
+): void {
+  const current = currentStates(store).get(incident.fingerprint);
+  insertEvent(store, ref, STATE_EVENT, new Date().toISOString(), {
+    status,
+    incident,
+    ...(current?.status === 'open'
+      ? {
+          openingFailureSequence: current.openingFailureSequence,
+          probeRunSequence: current.probeRunSequence,
+        }
+      : {}),
+    ...metadata,
+  });
+}
+
+function latestWorkerRun(store: WorkerStore, ref: AttemptRef): StoredEvent | null {
+  return (
+    (store.db
+      .query(
+        `SELECT sequence,task_id,attempt,at,body FROM worker_events
+          WHERE task_id=? AND attempt=? AND kind='worker-run-started' ORDER BY sequence DESC LIMIT 1`,
+      )
+      .get(ref.taskId, ref.attempt) as StoredEvent | undefined) ?? null
+  );
+}
+
+function latestFailureForTask(store: WorkerStore, taskId: string, fingerprint: string): StoredEvent | null {
+  return (
+    (store.db
+      .query(
+        `SELECT sequence,task_id,attempt,at,body FROM worker_events
+          WHERE kind=? AND task_id=? AND json_extract(body,'$.fingerprint')=? ORDER BY sequence DESC LIMIT 1`,
+      )
+      .get(FAILURE_EVENT, taskId, fingerprint) as StoredEvent | undefined) ?? null
+  );
+}
+
+function runLogStartOffset(run: StoredEvent): number | null {
+  const body = parse<{ logStartOffset?: unknown }>(run.body);
+  return typeof body?.logStartOffset === 'number' && Number.isSafeInteger(body.logStartOffset) && body.logStartOffset >= 0
+    ? body.logStartOffset
+    : null;
+}
+
+function hasProviderProgress(store: WorkerStore, attempt: Attempt, logStartOffset: number): boolean {
+  const adapter = agentAdapter(attempt.profile.cli);
+  return readLogFromOffset(attempt.logPath, logStartOffset, store.policy.worker.logTailBytes)
+    .split(/\r?\n/)
+    .some((line) => {
+      try {
+        const value: unknown = JSON.parse(line);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const event = value as Record<string, unknown>;
+        return adapter.matchesEvent(event) && adapter.failure(event) === null;
+      } catch {
+        return false;
+      }
+    });
+}
+
+function releaseIncidentRetries(store: WorkerStore, incident: ToolIncident): void {
+  for (const intent of store.retryIntents()) {
+    if (intent.status !== 'pending' || !incident.taskIds.includes(intent.taskId)) continue;
+    delete intent.options.notBefore;
+    store.db
+      .query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
+      .run(JSON.stringify(intent), intent.taskId, intent.attempt);
+  }
+}
+
+function resolvedIncident(
+  store: WorkerStore,
+  ref: AttemptRef,
+  incident: ToolIncident,
+  evidence: IncidentResolutionEvidence,
+): ToolIncident {
+  const resolved = { ...incident, probe: ref };
+  saveState(store, ref, 'resolved', resolved, { resolution: { probe: ref, evidence } });
+  releaseIncidentRetries(store, incident);
+  return resolved;
 }
 
 function ensurePendingRetry(store: WorkerStore, ref: AttemptRef, options: RetryIntent['options'] = {}): void {
@@ -293,7 +403,9 @@ export function recordToolBlockerFailure(
         const examples = [...current.exampleTasks];
         if (!examples.some((example) => example.taskId === task.id))
           examples.push({ taskId: task.id, attempt: attempt.attempt });
-        const probingFailure = current.probe.taskId === ref.taskId && ref.attempt === current.probe.attempt + 1;
+        const probingFailure =
+          current.probe.taskId === ref.taskId &&
+          (ref.attempt === current.probe.attempt || ref.attempt === current.probe.attempt + 1);
         const updated: ToolIncident = {
           ...current,
           updatedAt: at,
@@ -301,7 +413,8 @@ export function recordToolBlockerFailure(
           exampleTasks: examples.slice(0, policy.exampleTasks),
           ...(probingFailure ? { probe: ref, nextProbeAt: new Date(now + policy.probeMs).toISOString() } : {}),
         };
-        saveState(store, ref, 'open', updated);
+        const run = probingFailure ? latestWorkerRun(store, ref) : null;
+        saveState(store, ref, 'open', updated, run ? { probeRunSequence: run.sequence } : {});
         return updated;
       }
 
@@ -324,7 +437,12 @@ export function recordToolBlockerFailure(
         noticeDelivered: false,
       };
       opened = true;
-      saveState(store, ref, 'open', created);
+      const openingFailure = rows.at(-1);
+      const run = latestWorkerRun(store, ref);
+      saveState(store, ref, 'open', created, {
+        ...(openingFailure ? { openingFailureSequence: openingFailure.sequence } : {}),
+        ...(run ? { probeRunSequence: run.sequence } : {}),
+      });
       return created;
     })
     .immediate();
@@ -431,6 +549,106 @@ export function holdRetryForToolIncident(
   return true;
 }
 
+/** Promote a post-failure launch from an affected task to the probe for its incident. */
+export function noteToolIncidentProbeStarted(store: WorkerStore, ref: AttemptRef): ToolIncident[] {
+  const run = latestWorkerRun(store, ref);
+  if (!run) return [];
+
+  return store.db
+    .transaction(() => {
+      const promoted: ToolIncident[] = [];
+      for (const state of currentStates(store).values()) {
+        const { incident } = state;
+        if (state.status !== 'open' || !incident.taskIds.includes(ref.taskId)) continue;
+        const previousFailure = latestFailureForTask(store, ref.taskId, incident.fingerprint);
+        const openingSequence = state.openingFailureSequence ?? 0;
+        const previousProbeSequence = state.probeRunSequence ?? 0;
+        const failureSequence = previousFailure?.sequence ?? 0;
+        const boundary = Math.max(openingSequence, previousProbeSequence, failureSequence);
+        if (run.sequence <= boundary || (previousFailure && previousFailure.attempt > ref.attempt)) continue;
+        if (
+          state.openingFailureSequence === undefined &&
+          (!Number.isFinite(Date.parse(run.at)) || Date.parse(run.at) <= Date.parse(incident.openedAt))
+        )
+          continue;
+
+        const next = { ...incident, probe: ref };
+        saveState(store, ref, 'open', next, { probeRunSequence: run.sequence });
+        promoted.push(next);
+      }
+      return promoted;
+    })
+    .immediate();
+}
+
+/** Resolve when the current probe has appended provider output after its post-failure run boundary. */
+export function resolveToolIncidentsAfterProviderProgress(
+  store: WorkerStore,
+  ref: AttemptRef,
+  task: Task,
+  attempt: Attempt,
+): ToolIncident[] {
+  const run = latestWorkerRun(store, ref);
+  if (!run) return [];
+  const logStartOffset = runLogStartOffset(run);
+  if (logStartOffset === null) return [];
+  const observedLogSize = statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0;
+  if (observedLogSize <= logStartOffset || !hasProviderProgress(store, attempt, logStartOffset)) return [];
+
+  const attemptFingerprint =
+    attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree, store.policy.worker) : null;
+  const transport = lastTransportFailure(store, ref);
+  const transportFingerprint = transport
+    ? blockerFingerprint({ blocker: transport.line, result: '' }, task.worktree, store.policy.worker)
+    : null;
+
+  return store.db
+    .transaction(() => {
+      const resolved: ToolIncident[] = [];
+      for (const state of currentStates(store).values()) {
+        const { incident } = state;
+        if (
+          state.status !== 'open' ||
+          incident.probe.taskId !== ref.taskId ||
+          incident.probe.attempt !== ref.attempt ||
+          state.probeRunSequence !== run.sequence ||
+          attemptFingerprint === incident.fingerprint
+        )
+          continue;
+
+        const previousFailure = latestFailureForTask(store, ref.taskId, incident.fingerprint);
+        if (previousFailure && previousFailure.sequence >= run.sequence) continue;
+        if (
+          transportFingerprint === incident.fingerprint &&
+          transport !== null &&
+          transport.sequence > run.sequence
+        )
+          continue;
+
+        const failureSequence = Math.max(
+          state.openingFailureSequence ?? 0,
+          previousFailure?.sequence ?? 0,
+          transportFingerprint === incident.fingerprint && transport && transport.sequence < run.sequence
+            ? transport.sequence
+            : 0,
+        );
+        if (!failureSequence || failureSequence >= run.sequence) continue;
+        resolved.push(
+          resolvedIncident(store, ref, incident, {
+            kind: 'provider-log-progress',
+            probe: ref,
+            failureSequence,
+            workerRunSequence: run.sequence,
+            logStartOffset,
+            observedLogSize,
+          }),
+        );
+      }
+      return resolved;
+    })
+    .immediate();
+}
+
 /** Close incidents whose probe attempt no longer reports the same tool blocker and release held retries. */
 export function resolveToolIncidentsAfterAttempt(
   store: WorkerStore,
@@ -440,22 +658,29 @@ export function resolveToolIncidentsAfterAttempt(
 ): ToolIncident[] {
   const fingerprint =
     attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree, store.policy.worker) : null;
-  const resolved: ToolIncident[] = [];
-  for (const incident of listOpenToolIncidents(store)) {
-    if (
-      incident.probe.taskId !== ref.taskId ||
-      ref.attempt < incident.probe.attempt ||
-      fingerprint === incident.fingerprint
-    )
-      continue;
-    saveState(store, ref, 'resolved', incident);
-    for (const intent of store.retryIntents()) {
-      if (intent.status !== 'pending' || !incident.taskIds.includes(intent.taskId)) continue;
-      store.updateRetryIntent(intent, (current) => {
-        delete current.options.notBefore;
-      });
-    }
-    resolved.push(incident);
-  }
-  return resolved;
+  return store.db
+    .transaction(() => {
+      const resolved: ToolIncident[] = [];
+      for (const state of currentStates(store).values()) {
+        const { incident } = state;
+        if (
+          state.status !== 'open' ||
+          incident.probe.taskId !== ref.taskId ||
+          ref.attempt < incident.probe.attempt ||
+          fingerprint === incident.fingerprint
+        )
+          continue;
+
+        resolvedIncident(store, ref, incident, {
+          kind: 'attempt-ended',
+          probe: ref,
+          state: attempt.state,
+          failureKind: attempt.failureKind,
+          fingerprint,
+        });
+        resolved.push(incident);
+      }
+      return resolved;
+    })
+    .immediate();
 }

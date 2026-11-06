@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { Attempt } from './types.ts';
 import type { ManagerInbox } from './contracts.ts';
 import { blockerFingerprint } from './attempt-progress.ts';
@@ -9,12 +9,16 @@ import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
 import {
   listOpenToolIncidents,
+  noteToolIncidentProbeStarted,
   projectToolIncidentStatus,
+  recordTransportFailure,
   recordToolBlockerFailure,
   resolveToolIncidentsAfterAttempt,
+  resolveToolIncidentsAfterProviderProgress,
   toolIncidentRetryAllowed,
   TOOL_INCIDENT_PROBE_MS,
 } from './tool-incidents.ts';
+import { TRANSPORT_FAILURE_EVENT } from './agents/shared.ts';
 
 function incidentAttempt(taskId: string, attempt: number, blocker: string | null): Attempt {
   const now = new Date().toISOString();
@@ -56,7 +60,15 @@ function seedIncident(h: ReturnType<typeof harness>, now: number, errorLine: str
     const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) =>
       incidentAttempt(task.id, number, errorLine),
     );
-    return { taskId: task.id, attempt: attempt.attempt };
+    const ref = { taskId: task.id, attempt: attempt.attempt };
+    const logPath = join(h.root, '.temp', 'goal', 'runs', task.id, `${attempt.attempt}.jsonl`);
+    mkdirSync(dirname(logPath), { recursive: true });
+    writeFileSync(logPath, '{"type":"item.started"}\n');
+    h.store.updateAttempt(ref, (current) => {
+      current.logPath = logPath;
+    });
+    h.store.event(ref, 'worker-run-started', { logStartOffset: 0, resuming: false });
+    return ref;
   });
   for (const ref of refs)
     recordToolBlockerFailure(h.store, h.store.task(ref.taskId), h.store.attempt(ref), h.settings, inbox, now);
@@ -152,6 +164,135 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
     expect(messages[0]?.event.summary).toContain(`${incident.id}: ${errorLine}`);
     expect(messages[0]?.event.summary).toContain(`Example tasks: ${tasks[0]!.id}#1`);
     expect(messages[0]?.event.summary).toContain(`Source location (git grep): README.md:1:${errorLine}`);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('provider output after a post-failure run resolves the incident before its attempt ends', () => {
+  const h = harness(),
+    now = Date.now(),
+    errorLine = 'ENOSPC: shared cache read failed';
+  try {
+    const { refs, incident } = seedIncident(h, now, errorLine);
+    const probeRef = incident.probe;
+    const probeTask = h.store.task(probeRef.taskId);
+    const logPath = h.store.attempt(probeRef).logPath;
+    const initialSize = statSync(logPath).size;
+    const laterNotBefore = new Date(now + 60 * 60_000).toISOString();
+    const heldRefs = refs.filter((ref) => ref.taskId !== probeRef.taskId);
+    for (const ref of refs)
+      h.store.updateRetryIntent(ref, (intent) => {
+        intent.options.notBefore = laterNotBefore;
+      });
+
+    h.store.updateAttempt(probeRef, (attempt) => {
+      attempt.state = 'running';
+      attempt.failureKind = null;
+      attempt.blocker = null;
+      attempt.result = '';
+    });
+    noteToolIncidentProbeStarted(h.store, probeRef);
+    expect(
+      resolveToolIncidentsAfterProviderProgress(
+        h.store,
+        probeRef,
+        probeTask,
+        h.store.attempt(probeRef),
+      ),
+    ).toEqual([]);
+    expect(listOpenToolIncidents(h.store)).toEqual([incident]);
+
+    h.store.event(probeRef, 'worker-run-started', { logStartOffset: initialSize, resuming: true });
+    noteToolIncidentProbeStarted(h.store, probeRef);
+    expect(
+      resolveToolIncidentsAfterProviderProgress(
+        h.store,
+        probeRef,
+        probeTask,
+        h.store.attempt(probeRef),
+      ),
+    ).toEqual([]);
+    expect(listOpenToolIncidents(h.store)[0]?.probe).toEqual(probeRef);
+
+    const output = '{"type":"thread.started","thread_id":"recovered-session"}\n';
+    writeFileSync(logPath, output, { flag: 'a' });
+    expect(
+      resolveToolIncidentsAfterProviderProgress(
+        h.store,
+        probeRef,
+        probeTask,
+        h.store.attempt(probeRef),
+      ),
+    ).toEqual([{ ...incident, probe: probeRef }]);
+    expect(listOpenToolIncidents(h.store)).toEqual([]);
+    expect(heldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([true, true]);
+    expect(heldRefs.map((ref) => h.store.retryIntent(ref)?.options.notBefore)).toEqual([undefined, undefined]);
+
+    const resolutions = h.store
+      .events(probeRef.taskId, probeRef.attempt)
+      .filter((event) => event.kind === 'tool-blocker-incident-state')
+      .map((event) => JSON.parse(event.body) as { status?: string; resolution?: Record<string, unknown> })
+      .filter((event) => event.status === 'resolved');
+    expect(resolutions).toHaveLength(1);
+    expect(resolutions[0]?.resolution).toMatchObject({
+      probe: probeRef,
+      evidence: {
+        kind: 'provider-log-progress',
+        probe: probeRef,
+        workerRunSequence: h.store
+          .events(probeRef.taskId, probeRef.attempt)
+          .findLast((event) => event.kind === 'worker-run-started')?.sequence,
+        logStartOffset: initialSize,
+        observedLogSize: initialSize + Buffer.byteLength(output),
+      },
+    });
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a probe that repeats its transport fingerprint stays open and advances its next probe time', () => {
+  const h = harness(),
+    now = Date.now(),
+    errorLine = 'stream disconnected';
+  try {
+    const { incident, inbox } = seedIncident(h, now, errorLine);
+    const retry = h.store.nextAttempt(incident.probe, (attempt) =>
+      incidentAttempt(incident.probe.taskId, attempt, errorLine),
+    );
+    const ref = { taskId: retry.taskId, attempt: retry.attempt };
+    const nextResumeAt = new Date(now + 75_000).toISOString();
+    h.store.event(ref, 'worker-run-started', { logStartOffset: 0, resuming: true });
+    noteToolIncidentProbeStarted(h.store, ref);
+    h.store.event(ref, TRANSPORT_FAILURE_EVENT, {
+      count: 2,
+      line: errorLine,
+      delayMs: 60_000,
+      nextResumeAt,
+    });
+
+    const result = recordTransportFailure(
+      h.store,
+      h.store.task(ref.taskId),
+      h.store.attempt(ref),
+      h.settings,
+      inbox,
+      errorLine,
+      now + 1_000,
+    );
+
+    expect(result.opened).toBe(false);
+    expect(listOpenToolIncidents(h.store)).toEqual([
+      { ...incident, probe: ref, updatedAt: new Date(now + 1_000).toISOString(), nextProbeAt: nextResumeAt },
+    ]);
+    expect(
+      h.store
+        .events(ref.taskId, ref.attempt)
+        .filter((event) => event.kind === 'tool-blocker-incident-state')
+        .map((event) => JSON.parse(event.body) as { status?: string })
+        .filter((event) => event.status === 'resolved'),
+    ).toHaveLength(0);
   } finally {
     h.dispose();
   }
