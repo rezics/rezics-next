@@ -50,7 +50,9 @@ to exercise `platform.governance`. Bootstrap installs that role on the Global Co
 command boundary, matching grant-routes, so Access admits the live account/resource/role binding. `gate:any` covers
 library-gate delegation. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
 snapshot, `deadlineFor` from a leaked request budget, or putting `gate:personal_library` on the grantor identity
-drops coverage.
+drops coverage. Unique-typed extra grants (`definitions:publish`, `definitions:activate`) require Access to project
+the existing `deadline_live` operand as `deadlineLive`; without that fact the policy core treats a live governance
+role as unknown and denies grant administration.
 
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
 same-logical-home target in the existing AniList row; foreign-home support remains deferred. Confirmation

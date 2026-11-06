@@ -312,11 +312,17 @@ export async function createProfileEntryFixture(
       }
       return {
         role: PLATFORM_GOVERNANCE_ROLE,
+        roleActions,
         roles: roles.rows,
         grants: held.rows,
         account: account.rows[0] ?? null,
+        actor: { accountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
         bound: actor.accountId === steward.actor.accountId && actor.clientId === steward.actor.clientId,
+        resource: global,
+        requested: granted,
+        deadline: boundary.deadline,
         scopes: actor.scopes.length,
+        tokenScopes: needed.filter((action) => actor.scopes.includes(action)),
         missingFromToken: needed.filter((action) => !actor.scopes.includes(action)),
         missingFromRole: needed.filter((action) => !roleActions.includes(action)),
         permitted,
