@@ -139,6 +139,11 @@ function makeProcessCustody(
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
       }
+      try {
+        process.kill(pid, signal);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupErrors.push(error);
+      }
     };
 
     if (pid !== undefined) {

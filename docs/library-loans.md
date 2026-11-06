@@ -92,11 +92,13 @@ extend and return commands beside the copy form for the inspected holding, so lo
 links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
 or `date-fns`. Web's Vite plugin uses `configEnvironment` and a later `configResolved` pin so the
 Cloudflare Worker environment cannot turn SSR discovery back on at serve time. Vite concatenates
-`optimizeDeps.include`, so the pin replaces the Worker include list with only the Paraglide
-URLPattern polyfill and excludes the calendar packages from client and Worker optimizeDeps. That
-stops TanStack from enqueueing `react-dom/server` into the Worker optimizer, so Copies and other
-signed-in routes can print ready without prebundling them. Return uses the mounted
-`POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method.
+`optimizeDeps.include`, so the pin replaces the Worker include list with an empty array and
+excludes `react`, `react-dom`, `react-dom/server` and the calendar packages. Worker modules
+transform on the first SSR request instead of hanging Rolldown before Copies can print ready.
+Isolated tests already ran Paraglide generate, so serve skips that compile unless a test supplies
+`REZICS_PARAGLIDE_COMPILER_MODULE`; parallel Vite configs take a `.temp` lock when they do
+generate. Return uses the mounted `POST /v1/copy-loans/:loanId/return` path, not an AIP-136
+`:return` method.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
 page/browser cases. No extra page stories.

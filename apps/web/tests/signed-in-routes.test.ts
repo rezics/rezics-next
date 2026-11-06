@@ -210,6 +210,7 @@ function site() {
           stdio: ['ignore', 'pipe', 'pipe'],
           env: {
             ...process.env,
+            REZICS_TEST_RUNTIME: '1',
             KERNEL_ORIGIN: backend.url.origin,
             PUBLIC_ORIGIN: 'https://www.rezics.test',
             WEBSITE_CLIENT_ID: process.env.WEBSITE_CLIENT_ID ?? 'web',
@@ -220,7 +221,12 @@ function site() {
           },
         },
       );
-      siteCustody = ownNodeProcess(child, { label: 'Signed-in-routes Vite server', outputLimit: 12_000 });
+      siteCustody = ownNodeProcess(child, {
+        label: 'Signed-in-routes Vite server',
+        outputLimit: 12_000,
+        termGraceMs: 2_000,
+        settleTimeoutMs: 5_000,
+      });
       custody = siteCustody;
       const deadline = Date.now() + 150_000;
       while (Date.now() < deadline) {
@@ -236,7 +242,7 @@ function site() {
       if (siteCustody) {
         await withCleanup(async () => {
           throw error;
-        }, [{ label: 'Signed-in-routes Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }]);
+        }, [{ label: 'Signed-in-routes Vite startup', run: () => siteCustody!.close(), timeoutMs: 16_000 }]);
       } else if (directory) {
         const partialDirectory = directory;
         await withCleanup(async () => {
@@ -264,7 +270,7 @@ afterAll(async () => {
         () => cleanupAll(resourceCleanupActions('test')),
         [
           ...resourceCleanupActions('suite'),
-          { label: 'Signed-in-routes Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+          { label: 'Signed-in-routes Vite server', run: () => custody?.close(), timeoutMs: 16_000 },
           { label: 'Signed-in-routes fixture backend', run: () => backend.stop(true), timeoutMs: 5000 },
         ],
       ),

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
 import { createServer as createViteServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
+import { shouldGenerateLocalization } from '../vite.config.ts';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
@@ -126,17 +127,15 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
             if (name === 'client') continue;
             const optimizeDeps = environment.optimizeDeps;
             assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name);
-            assert.deepEqual(
-              optimizeDeps.include,
-              ['@inlang/paraglide-js/urlpattern-polyfill'],
-              command + ':' + name + ':include',
-            );
+            assert.deepEqual(optimizeDeps.include, [], command + ':' + name + ':include');
             for (const pkg of ['react', 'react-dom', 'react-dom/server', 'react-day-picker', 'date-fns'])
               assert.equal(
                 optimizeDeps.include.includes(pkg),
                 false,
                 command + ':' + name + ':without:' + pkg,
               );
+            for (const pkg of ['react', 'react-dom', 'react-dom/server'])
+              assert.ok(optimizeDeps.exclude.includes(pkg), command + ':' + name + ':exclude:' + pkg);
             for (const pkg of ['react-day-picker', 'date-fns', '@date-fns/tz'])
               assert.ok(optimizeDeps.exclude.includes(pkg), command + ':' + name + ':' + pkg);
           }
@@ -182,4 +181,12 @@ test('Workers resolve both share-card public Wasm exports through the installed 
   });
   if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
   expect(result.exitCode).toBe(0);
+});
+
+test('serve skips Paraglide generate under test runtime unless a compiler module is supplied', () => {
+  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1' })).toBe(false);
+  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1', REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' })).toBe(
+    true,
+  );
+  expect(shouldGenerateLocalization({})).toBe(true);
 });
