@@ -44,10 +44,7 @@ async function sqlLoader() {
     const entries = (await readFile(process.env.MEDIA_SQL_CACHE, 'utf8'))
       .split('\n')
       .filter(Boolean)
-      .map((line) => JSON.parse(line)) as [
-      string,
-      { source: string; code: string },
-    ][];
+      .map((line) => JSON.parse(line)) as [string, { source: string; code: string }][];
     for (const [file, value] of entries) compiledSql.set(file, value);
   }
   const directory = await mkdtemp(resolve(import.meta.dir, '../../../../.temp/media-sql-'));
