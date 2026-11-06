@@ -193,38 +193,23 @@ test('provider output after a post-failure run resolves the incident before its 
       attempt.result = '';
     });
     noteToolIncidentProbeStarted(h.store, probeRef);
-    expect(
-      resolveToolIncidentsAfterProviderProgress(
-        h.store,
-        probeRef,
-        probeTask,
-        h.store.attempt(probeRef),
-      ),
-    ).toEqual([]);
+    expect(resolveToolIncidentsAfterProviderProgress(h.store, probeRef, probeTask, h.store.attempt(probeRef))).toEqual(
+      [],
+    );
     expect(listOpenToolIncidents(h.store)).toEqual([incident]);
 
     h.store.event(probeRef, 'worker-run-started', { logStartOffset: initialSize, resuming: true });
     noteToolIncidentProbeStarted(h.store, probeRef);
-    expect(
-      resolveToolIncidentsAfterProviderProgress(
-        h.store,
-        probeRef,
-        probeTask,
-        h.store.attempt(probeRef),
-      ),
-    ).toEqual([]);
+    expect(resolveToolIncidentsAfterProviderProgress(h.store, probeRef, probeTask, h.store.attempt(probeRef))).toEqual(
+      [],
+    );
     expect(listOpenToolIncidents(h.store)[0]?.probe).toEqual(probeRef);
 
     const output = '{"type":"thread.started","thread_id":"recovered-session"}\n';
     writeFileSync(logPath, output, { flag: 'a' });
-    expect(
-      resolveToolIncidentsAfterProviderProgress(
-        h.store,
-        probeRef,
-        probeTask,
-        h.store.attempt(probeRef),
-      ),
-    ).toEqual([{ ...incident, probe: probeRef }]);
+    expect(resolveToolIncidentsAfterProviderProgress(h.store, probeRef, probeTask, h.store.attempt(probeRef))).toEqual([
+      { ...incident, probe: probeRef },
+    ]);
     expect(listOpenToolIncidents(h.store)).toEqual([]);
     expect(heldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([true, true]);
     expect(heldRefs.map((ref) => h.store.retryIntent(ref)?.options.notBefore)).toEqual([undefined, undefined]);

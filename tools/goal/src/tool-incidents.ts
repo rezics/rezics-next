@@ -274,7 +274,9 @@ function latestFailureForTask(store: WorkerStore, taskId: string, fingerprint: s
 
 function runLogStartOffset(run: StoredEvent): number | null {
   const body = parse<{ logStartOffset?: unknown }>(run.body);
-  return typeof body?.logStartOffset === 'number' && Number.isSafeInteger(body.logStartOffset) && body.logStartOffset >= 0
+  return typeof body?.logStartOffset === 'number' &&
+    Number.isSafeInteger(body.logStartOffset) &&
+    body.logStartOffset >= 0
     ? body.logStartOffset
     : null;
 }
@@ -618,11 +620,7 @@ export function resolveToolIncidentsAfterProviderProgress(
 
         const previousFailure = latestFailureForTask(store, ref.taskId, incident.fingerprint);
         if (previousFailure && previousFailure.sequence >= run.sequence) continue;
-        if (
-          transportFingerprint === incident.fingerprint &&
-          transport !== null &&
-          transport.sequence > run.sequence
-        )
+        if (transportFingerprint === incident.fingerprint && transport !== null && transport.sequence > run.sequence)
           continue;
 
         const failureSequence = Math.max(
