@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { verifyDev } from './dev-verifier.ts';
+import { verifyDev, type TestFailureRepair } from './dev-verifier.ts';
 import type { Settings, Task } from './types.ts';
 
 const roots: string[] = [];
@@ -191,41 +191,38 @@ test('Post integration affected verifier catches wrong owner resolution and retu
   ];
   const ctx = setup(root, tasks);
   ctx.settings.affectedTests = [{ paths: ['services/kernel/**'], command: ['bun', checkScript] }];
-  await verifyDev(ctx);
+  const repairs: TestFailureRepair[] = [];
+  const dispatchTestRepair = (repair: TestFailureRepair) => {
+    repairs.push(repair);
+    if (!repair.existingTaskId)
+      tasks.push({
+        id: 'test-repair',
+        state: 'ready',
+        brief: {
+          urgent: true,
+          markdown: `Test failure repair for \`${repair.test}\``,
+          goal: 'kernel',
+          manager: 'resolution-manager',
+        },
+      } as Task);
+  };
+  await verifyDev({ ...ctx, dispatchTestRepair });
 
-  const revertedHead = git(root, 'rev-parse', 'dev');
-  expect(revertedHead).toBe(git(root, 'rev-parse', 'dev-verified'));
-  expect(git(root, 'show', `dev:${behavior}`)).toContain("mode = 'right'");
+  expect(git(root, 'show', `dev:${behavior}`)).toContain("mode = 'wrong'");
   expect(git(root, 'show', 'dev:docs/unrelated.md')).toContain('unrelated documentation');
-  expect(ctx.updates).toEqual(['wrong-resolution']);
-  expect(ctx.inboxEvents).toHaveLength(1);
-  expect(ctx.inboxEvents[0].managerId).toBe('resolution-manager');
-  expect(ctx.inboxEvents[0].taskId).toBe('wrong-resolution');
-  expect(ctx.inboxEvents[0].evidencePath).toBeTruthy();
-  expect(readFileSync(ctx.inboxEvents[0].evidencePath, 'utf8')).toContain(
-    'AssertionError: integrated behavior must remain right',
-  );
-  expect(ctx.inboxEvents[0].summary).toContain('AssertionError: integrated behavior must remain right');
+  expect(ctx.updates).toEqual([]);
+  expect(repairs).toHaveLength(1);
+  expect(repairs[0]!.owner.id).toBe('wrong-resolution');
+  expect(repairs[0]!.owner.brief.manager).toBe('resolution-manager');
+  expect(repairs[0]!.error).toContain('AssertionError: integrated behavior must remain right');
   expect(git(resolutionTree, 'rev-parse', 'HEAD')).toBe(resolutionCommit);
   expect(readFileSync(join(resolutionTree, behavior), 'utf8')).toContain("mode = 'wrong'");
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(verifiedBase);
 
-  git(resolutionTree, 'reset', '--hard', revertedHead);
-  writeFileSync(join(resolutionTree, behavior), "export const mode = 'right';\nexport const ownerFix = true;\n");
-  git(resolutionTree, 'add', '--', behavior);
-  git(resolutionTree, 'commit', '-m', 'owner fixes integrated resolution');
-  const fixedCommit = git(resolutionTree, 'rev-parse', 'HEAD');
-  git(root, 'update-ref', 'refs/heads/dev', fixedCommit, revertedHead);
-  const resolutionTask = tasks.find((task) => task.id === 'wrong-resolution')!;
-  Object.assign(resolutionTask, {
-    state: 'integrated',
-    integratedBase: revertedHead,
-    integratedCommit: fixedCommit,
-    integratedCommits: [fixedCommit],
-  });
-  await verifyDev(ctx);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(fixedCommit);
-  expect(ctx.inboxEvents).toHaveLength(1);
-  expect(readFileSync(join(resolutionTree, behavior), 'utf8')).toContain('ownerFix = true');
+  await verifyDev({ ...ctx, dispatchTestRepair });
+  expect(repairs).toHaveLength(2);
+  expect(repairs[1]!.existingTaskId).toBe('test-repair');
+  expect(git(root, 'show', `dev:${behavior}`)).toContain("mode = 'wrong'");
 });
 
 test('a check-host transport failure during owner bisection is not assigned as an assertion', async () => {

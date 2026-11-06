@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { SqliteManagerInbox } from './inbox.ts';
 import { createRuntimeRepairRouting } from './runtime-repair-routing.ts';
-import type { BootSmokeRepair } from './dev-verifier.ts';
+import type { BootSmokeRepair, TestFailureRepair } from './dev-verifier.ts';
 import { harness } from './test-support.ts';
 
 test('runtime repair callbacks update the existing boot task or dispatch one urgent task to its owner', () => {
@@ -58,6 +58,17 @@ test('runtime repair callbacks update the existing boot task or dispatch one urg
     });
 
     routing.dispatchBootSmokeRepair(repair);
+
+    const testRepair: TestFailureRepair = {
+      test: 'apps/web/tests/library.test.ts',
+      commit: 'broken-head',
+      error: 'AssertionError: library filter failed',
+      owner,
+    };
+    routing.dispatchTestFailureRepair(testRepair);
+    const createdTest = h.store.task(dispatches.at(-1)!.id);
+    expect(createdTest.brief.markdown).toContain('Test failure repair for `apps/web/tests/library.test.ts`');
+    expect(createdTest.brief.urgent).toBe(true);
 
     const [call] = dispatches;
     const created = h.store.task(call!.id);

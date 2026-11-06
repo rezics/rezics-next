@@ -46,6 +46,7 @@ import { hostsLocation } from './stack-run.ts';
 import { classifyCheck, isCheckHostRun, performanceHosts, splitEnvironmentCommand } from './check-placement.ts';
 import {
   refuseExcessWorkerCheckHostRun,
+  refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
   workerCheckHostCommandReached,
 } from '../tools/goal/src/worker-check-budget.ts';
@@ -2356,7 +2357,9 @@ function wrapperExecutionArgv(argv: readonly string[]): string[] {
 export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): string {
   if (argv.length === 0) throw new Error('A check command is required');
   const root = resolve(cwd);
-  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(wrapperExecutionArgv(argv), root), root);
+  const execution = wrapperExecutionArgv(argv);
+  refuseOrdinaryProductTestCheck(process.env, execution, root);
+  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(execution, root), root);
   const ownership = ownershipFromEnvironment(process.env);
   registryForStart(process.env, ownership);
   const id = randomUUID();

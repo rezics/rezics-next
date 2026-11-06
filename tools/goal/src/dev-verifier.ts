@@ -31,6 +31,7 @@ import { recordFlow } from './flow.ts';
 import type { Database } from 'bun:sqlite';
 import { classifyRun, stableAssertions } from './dev-verifier-classification.ts';
 import { executeCheck, installDependenciesCached } from './dev-verifier-execution.ts';
+import { verifierFailureRevertsLanding } from './worker-check-budget.ts';
 import {
   checkSourceFiles,
   placeInWorkspace,
@@ -94,6 +95,7 @@ export type BootSmokeRepair = {
   owner: Task;
   existingTaskId?: string;
 };
+export type TestFailureRepair = BootSmokeRepair;
 
 export type DevVerifierOptions = {
   settings: Settings;
@@ -103,6 +105,7 @@ export type DevVerifierOptions = {
   /** Local boot-smoke runner; defaults to `runGate` so tests can spy on one path. */
   runBootSmoke?: GateRunner;
   dispatchRepair?: (repair: BootSmokeRepair) => void;
+  dispatchTestRepair?: (repair: TestFailureRepair) => void;
   /** Runs the separately scheduled seeded page-data stack when the policy interval is due. */
   runPageData?: () => Promise<unknown>;
 };
@@ -118,9 +121,8 @@ function bootSmokePathPattern(test: string): string {
   return area && name && ['apps', 'services', 'packages'].includes(area) ? `${area}/${name}/**` : test;
 }
 
-export function bootSmokeRepairBrief(repair: BootSmokeRepair, policy = defaultPolicy.verifier): string {
+function repairBriefFrontMatter(repair: BootSmokeRepair): string {
   const paths = repair.owner.brief.paths.length ? repair.owner.brief.paths : [bootSmokePathPattern(repair.test)];
-  const error = repair.error.slice(-policy.diagnosticCharacters);
   return `---\n${JSON.stringify(
     {
       goal: repair.owner.brief.goal,
@@ -136,18 +138,56 @@ export function bootSmokeRepairBrief(repair: BootSmokeRepair, policy = defaultPo
     },
     null,
     2,
-  )}\n---\n\n# Repair the boot failure\n\nBoot-smoke repair for \`${repair.test}\`.\n\nCommit \`${repair.commit}\` broke the repository boot smoke.\n\n\`\`\`\n${error}\n\`\`\`\n`;
+  )}\n---\n`;
 }
 
-function openBootRepair(store: Pick<WorkerStore, 'tasks'>, test: string): Task | undefined {
+export function bootSmokeRepairBrief(repair: BootSmokeRepair, policy = defaultPolicy.verifier): string {
+  const error = repair.error.slice(-policy.diagnosticCharacters);
+  return `${repairBriefFrontMatter(repair)}\n# Repair the boot failure\n\nBoot-smoke repair for \`${repair.test}\`.\n\nCommit \`${repair.commit}\` broke the repository boot smoke.\n\n\`\`\`\n${error}\n\`\`\`\n`;
+}
+
+export function testFailureRepairBrief(repair: TestFailureRepair, policy = defaultPolicy.verifier): string {
+  const error = repair.error.slice(-policy.diagnosticCharacters);
+  return `${repairBriefFrontMatter(repair)}\n# Repair the failing test\n\nTest failure repair for \`${repair.test}\`.\n\nCommit \`${repair.commit}\` broke \`${repair.test}\` after landing.\n\n\`\`\`\n${error}\n\`\`\`\n`;
+}
+
+function openRepair(store: Pick<WorkerStore, 'tasks'>, marker: string): Task | undefined {
   return store
     .tasks()
     .find(
       (task) =>
-        OPEN_REPAIR_STATES.has(task.state) &&
-        task.brief.urgent === true &&
-        task.brief.markdown.includes(`Boot-smoke repair for \`${test}\``),
+        OPEN_REPAIR_STATES.has(task.state) && task.brief.urgent === true && task.brief.markdown.includes(marker),
     );
+}
+
+function openBootRepair(store: Pick<WorkerStore, 'tasks'>, test: string): Task | undefined {
+  return openRepair(store, `Boot-smoke repair for \`${test}\``);
+}
+
+function openTestRepair(store: Pick<WorkerStore, 'tasks'>, test: string): Task | undefined {
+  return openRepair(store, `Test failure repair for \`${test}\``);
+}
+
+function checkRepairPath(check: Check): string {
+  return bootSmokeTestPath(check);
+}
+
+function dispatchTestFailure(
+  options: DevVerifierOptions,
+  check: IndexedCheck,
+  evidence: DevVerifierEvidence,
+  owner: Task,
+  target: string,
+): void {
+  const test = checkRepairPath(check);
+  const existing = openTestRepair(options.store, test);
+  options.dispatchTestRepair?.({
+    test,
+    commit: owner.integratedCommit ?? owner.mergedCommit ?? target,
+    error: evidence.output,
+    owner,
+    ...(existing ? { existingTaskId: existing.id } : {}),
+  });
 }
 
 function bootSmokeChecks(settings: Settings, commit: string): IndexedCheck[] {
@@ -498,13 +538,40 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
         entry.findings = [...new Map(entry.findings.map((finding) => [finding.identity, finding])).values()];
       }
       if (!byTask.size) return;
-      const postRevert = await revertCulprits(options, history, [...byTask.values()]);
-      if (!postRevert) return;
-      finalHead = postRevert;
-      finalHistory = projectVerifierLandings(checkout, store, verified, postRevert);
-      const afterRevert = await reconcileComparison(options, finalHistory);
-      if (afterRevert.unknown || afterRevert.groups.length) return;
-      finalPassedTasks = new Set(afterRevert.comparison.passTaskIds);
+      const revertEntries = [...byTask.values()].filter((entry) =>
+        entry.findings.some((finding) => verifierFailureRevertsLanding(finding.check)),
+      );
+      const revertedIds = new Set(revertEntries.map((entry) => entry.task.id));
+      for (const item of owned) {
+        if (verifierFailureRevertsLanding(item.group.check)) continue;
+        const evidence = item.group.findings[0]?.head;
+        if (!evidence) continue;
+        for (const owner of item.owners) {
+          if (revertedIds.has(owner.id)) continue;
+          dispatchTestFailure(options, item.group.check, evidence, owner, history.interval.target);
+        }
+      }
+      if (revertEntries.length) {
+        const postRevert = await revertCulprits(options, history, revertEntries);
+        if (!postRevert) return;
+        finalHead = postRevert;
+        finalHistory = projectVerifierLandings(checkout, store, verified, postRevert);
+        const afterRevert = await reconcileComparison(options, finalHistory);
+        if (afterRevert.unknown) return;
+        const remainingRevert = afterRevert.groups.filter((group) => verifierFailureRevertsLanding(group.check));
+        if (remainingRevert.length) return;
+        for (const group of afterRevert.groups) {
+          const ownerId = group.findings.find((finding) => finding.taskId)?.taskId;
+          const owner = ownerId ? store.task(ownerId) : undefined;
+          const evidence = group.findings[0]?.head;
+          if (!owner || !evidence) continue;
+          dispatchTestFailure(options, group.check, evidence, owner, postRevert);
+        }
+        if (afterRevert.groups.length) return;
+        finalPassedTasks = new Set(afterRevert.comparison.passTaskIds);
+      } else {
+        return;
+      }
     } else if (initialUnknown) {
       return;
     }

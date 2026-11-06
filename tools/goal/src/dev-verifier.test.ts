@@ -31,11 +31,13 @@ import {
   projectVerifierLandings,
   sourcePresentAt,
   checkInput,
+  testFailureRepairBrief,
   VERIFY_CONCURRENCY,
   verifyDev,
   withTreeBun,
   type BootSmokeRepair,
   type DevVerifierCheck,
+  type TestFailureRepair,
 } from './dev-verifier.ts';
 import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types.ts';
 
@@ -577,7 +579,7 @@ test('passes all work since dev-verified once and advances the ref to the captur
 
 import './dev-verifier-ownership.test.ts';
 
-test('failure bisects workspace suspects, reverts only the culprit, returns its task with the log, and advances verified', async () => {
+test('a test failure outside payment paths creates a repair for the owning manager and never reverts the landing', async () => {
   const root = repo(),
     base = git(root, 'rev-parse', 'dev-verified');
   const good = commit(root, 'services/kernel/good.ts', 'export const good = true;\n', 'good landing');
@@ -594,6 +596,7 @@ test('failure bisects workspace suspects, reverts only the culprit, returns its 
     } as Task,
   ];
   const ctx = setup(root, tasks);
+  const repairs: TestFailureRepair[] = [];
   const runGate = async (command: readonly string[], cwd: string, logPath: string) => {
     const files = git(cwd, 'ls-files');
     if (command.includes('affected-check') && files.includes('services/kernel/bad.ts')) {
@@ -602,13 +605,81 @@ test('failure bisects workspace suspects, reverts only the culprit, returns its 
     }
     return { passed: true, output: '', timedOut: false };
   };
+  const dispatchTestRepair = (repair: TestFailureRepair) => {
+    repairs.push(repair);
+    if (!repair.existingTaskId)
+      tasks.push({
+        id: 'test-repair',
+        state: 'ready',
+        brief: {
+          urgent: true,
+          markdown: `Test failure repair for \`${repair.test}\``,
+          goal: 'kernel',
+          manager: 'kernel-manager',
+        },
+      } as Task);
+  };
+  await verifyDev({ ...ctx, runGate, dispatchTestRepair });
+  expect(spawnSync('git', ['cat-file', '-e', `dev:${'services/kernel/bad.ts'}`], { cwd: root }).status).toBe(0);
+  expect(git(root, 'show', `dev:${'services/kernel/good.ts'}`)).toContain('good');
+  expect(ctx.updates).toEqual([]);
+  expect(repairs).toHaveLength(1);
+  expect(repairs[0]).toMatchObject({ owner: { id: 'bad' } });
+  expect(testFailureRepairBrief(repairs[0]!).includes('"urgent": true')).toBe(true);
+  expect(git(root, 'rev-parse', 'dev')).toBe(unrelatedCommit);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+  await verifyDev({ ...ctx, runGate, dispatchTestRepair });
+  expect(repairs).toHaveLength(2);
+  expect(repairs[1]!.existingTaskId).toBe('test-repair');
+  expect(git(root, 'show', `dev:${'services/kernel/bad.ts'}`)).toContain('bad');
+});
+
+test('a typecheck failure still reverts the culprit landing', async () => {
+  const root = repo(),
+    base = git(root, 'rev-parse', 'dev-verified');
+  const good = commit(root, 'services/kernel/good.ts', 'export const good = true;\n', 'good landing');
+  const bad = commit(root, 'services/kernel/bad.ts', 'export const bad = false;\n', 'bad landing');
+  git(root, 'branch', '-f', 'dev', bad);
+  const ctx = setup(root, [landedTask(base, good, 'good'), landedTask(base, bad, 'bad')]);
+  const runGate = async (command: readonly string[], cwd: string, logPath: string) => {
+    const files = git(cwd, 'ls-files');
+    if (command.some((part) => part.includes('typecheck.ts')) && files.includes('services/kernel/bad.ts')) {
+      writeFileSync(logPath, 'error: typecheck failed');
+      return { passed: false, output: 'error: typecheck failed', timedOut: false };
+    }
+    return { passed: true, output: '', timedOut: false };
+  };
   await verifyDev({ ...ctx, runGate });
   expect(spawnSync('git', ['cat-file', '-e', `dev:${'services/kernel/bad.ts'}`], { cwd: root }).status).not.toBe(0);
   expect(git(root, 'show', `dev:${'services/kernel/good.ts'}`)).toContain('good');
   expect(ctx.updates).toEqual(['bad']);
   expect(ctx.inboxEvents[0].managerId).toBe('kernel-manager');
-  expect(ctx.inboxEvents[0].evidencePath).toBeTruthy();
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(git(root, 'rev-parse', 'dev'));
+});
+
+test('a payment-path test failure still reverts the culprit landing', async () => {
+  const root = repo(),
+    base = git(root, 'rev-parse', 'dev-verified');
+  const good = commit(root, 'services/kernel/src/commerce/good.ts', 'export const good = true;\n', 'good landing');
+  const bad = commit(root, 'services/kernel/src/commerce/order.ts', 'export const bad = false;\n', 'bad landing');
+  git(root, 'branch', '-f', 'dev', bad);
+  const ctx = setup(root, [landedTask(base, good, 'good'), landedTask(base, bad, 'bad')]);
+  ctx.settings.affectedTests = [{ paths: ['services/kernel/src/commerce/**'], command: ['commerce-check'] }];
+  const runGate = async (command: readonly string[], cwd: string, logPath: string) => {
+    const files = git(cwd, 'ls-files');
+    if (command.includes('commerce-check') && files.includes('services/kernel/src/commerce/order.ts')) {
+      writeFileSync(logPath, 'assertion failed');
+      return { passed: false, output: 'assertion failed', timedOut: false };
+    }
+    return { passed: true, output: '', timedOut: false };
+  };
+  await verifyDev({ ...ctx, runGate });
+  expect(
+    spawnSync('git', ['cat-file', '-e', `dev:${'services/kernel/src/commerce/order.ts'}`], { cwd: root }).status,
+  ).not.toBe(0);
+  expect(git(root, 'show', `dev:${'services/kernel/src/commerce/good.ts'}`)).toContain('good');
+  expect(ctx.updates).toEqual(['bad']);
+  expect(ctx.inboxEvents[0].managerId).toBe('kernel-manager');
 });
 
 test('promotion candidates use dev-verified while worker bases use the dev head', async () => {

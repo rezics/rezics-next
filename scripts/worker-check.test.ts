@@ -32,6 +32,7 @@ import {
   requestWorkerCheckCancellation,
   workerCheckCancellation,
 } from './worker-check.ts';
+import { WORKER_CHECK_TESTS_AFTER_LANDING } from '../tools/goal/src/worker-check-budget.ts';
 import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 import {
   controllerProofReservationPath,
@@ -154,6 +155,35 @@ afterAll(() => {
 });
 afterEach(() => {
   for (const directory of dirs.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('an ordinary product attempt refuses a test, native, browser or growth command before any upload', () => {
+  const directory = mkdtempSync(join(suiteRoot, 'ordinary-product-'));
+  dirs.push(directory);
+  const previousBudget = process.env.GOAL_WORKER_CHECK_BUDGET;
+  const previousDirectory = process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
+  try {
+    mkdirSync(join(directory, 'scripts'), { recursive: true });
+    writeFileSync(join(directory, 'scripts/worker-check.ts'), '');
+    const budget = join(directory, 'runs', 'task', '1.check-host-runs');
+    mkdirSync(budget, { recursive: true });
+    process.env.GOAL_WORKER_CHECK_BUDGET = '2';
+    process.env.GOAL_WORKER_CHECK_BUDGET_DIR = budget;
+    for (const command of [
+      ['bun', 'test', 'apps/web/tests/library.test.ts'],
+      ['bun', 'apps/auth/scripts/isolated.ts', 'bun', 'test'],
+      ['npx', 'playwright', 'test'],
+      ['env', 'GROWTH_PROFILE=profiles/x', 'bun', 'test', 'x.test.ts'],
+    ]) {
+      expect(() => startWorkerCheck(command, directory)).toThrow(WORKER_CHECK_TESTS_AFTER_LANDING);
+    }
+    expect(existsSync(join(directory, '.temp/goal/checks'))).toBe(false);
+  } finally {
+    if (previousBudget === undefined) delete process.env.GOAL_WORKER_CHECK_BUDGET;
+    else process.env.GOAL_WORKER_CHECK_BUDGET = previousBudget;
+    if (previousDirectory === undefined) delete process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
+    else process.env.GOAL_WORKER_CHECK_BUDGET_DIR = previousDirectory;
+  }
 });
 
 test('nested worker checks start with default placement environment', () => {
