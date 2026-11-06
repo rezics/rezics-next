@@ -19,6 +19,8 @@ import { createClassificationBallotRelay } from '../../src/rating/classification
 import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
 import { createRealAccess, type RealAccessFixture } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 
 const route = 0x5ab1;
 const accountId = newId(route);
@@ -55,6 +57,8 @@ const questionId = newId(route);
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
+  configureTestReceiptKeys(database.pool);
+  await installIdentityEpochBootstrap(database.pool);
   await bootstrapRelease(database.pool, bundledRelease);
   access = await createRealAccess(database.admin, { voter: accountId }, actions);
   await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'voter', 'subject:create');
@@ -83,6 +87,7 @@ beforeAll(async () => {
     tokens,
     routeKey,
     rating: capabilities,
+    receiptKeys: testReceiptKeys(),
     writeRate: access.writeRate,
   });
 });
