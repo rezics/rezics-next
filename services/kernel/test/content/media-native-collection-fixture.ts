@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import pg, { type Pool } from 'pg';
 import { R2Storage } from '../../src/content/r2-storage.ts';
-import { registerContent } from '../../src/content/register.ts';
+import { createContentWorkModule } from '../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { effectWorkflowId, relayEffects } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';

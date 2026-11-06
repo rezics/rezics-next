@@ -23,6 +23,7 @@ import { accessCommandAuthorization, type AccountActor } from '../../src/request
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(120_000);
 
@@ -100,6 +101,7 @@ async function rejectSql(sql: string, values: unknown[]) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   db.pool.options.max = 1;
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -466,11 +468,16 @@ test("an authored field is admitted under a Global Context authorization when th
     [route, stored.id, newId(route), newId(route + 1)],
   );
   const { eraseAuthoredField } = await import('../../src/content/authored-fields.ts');
-  await eraseAuthoredField({ pool: db.pool, access: creationAccess }, creationActor, stored.id, {
-    deadline: Date.now() + 10_000,
-    idempotencyKey: crypto.randomUUID(),
-    requestId: crypto.randomUUID(),
-  });
+  await eraseAuthoredField(
+    { clock: () => new Date(), pool: db.pool, access: creationAccess },
+    creationActor,
+    stored.id,
+    {
+      deadline: Date.now() + 10_000,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    },
+  );
   expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({
     anchor,
     availability: 'erased',

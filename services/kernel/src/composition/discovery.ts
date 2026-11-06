@@ -21,7 +21,7 @@ export function createDiscoveryProducerEntry(input: {
   routeKey: Uint8Array;
   access: Access;
   tokens?: KeyRing;
-  clock?: KernelClock;
+  clock: KernelClock;
   subjects?: SubjectSource;
   reviewSource?: ReviewDiscoverySource;
 }): DiscoveryProducerEntry {
@@ -29,12 +29,12 @@ export function createDiscoveryProducerEntry(input: {
   const reviewSource =
     input.reviewSource ??
     (input.tokens
-      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, ...(clock ? { clock } : {}) }, () => ({
+      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, clock }, () => ({
           actor: { kind: 'anonymous' },
           deadline: Date.now() + 30_000,
         }))
       : undefined);
-  const spaceDependencies = { pool, access, ...(clock ? { clock } : {}) };
+  const spaceDependencies = { pool, access, clock };
   const space = createSpaceDiscoveryAdapter(spaceDiscoverySource(spaceDependencies), (ids, context) =>
     readSpaceDiscoverySummaries(spaceDependencies, ids, context),
   );
@@ -42,7 +42,7 @@ export function createDiscoveryProducerEntry(input: {
     pool,
     routeKey,
     access,
-    ...(clock ? { clock } : {}),
+    clock,
     collectionSource: publicCollectionDiscoverySource({ pool }),
     ...(reviewSource ? { reviewSource } : {}),
     space,

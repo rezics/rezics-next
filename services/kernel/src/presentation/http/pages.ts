@@ -266,12 +266,14 @@ function nativePageRoute<App, const Path extends string>(
     routeKey,
     access,
     tokens,
+    clock,
     dispatch,
   }: {
     pool: Pool;
     routeKey: Uint8Array;
     access?: Access | AccessFactory;
     tokens: KeyRing;
+    clock: () => Date;
     dispatch: (request: Request) => Promise<Response>;
   },
   path: Path,
@@ -431,6 +433,7 @@ function nativePageRoute<App, const Path extends string>(
           pool,
           access: pageAccess,
           routeKey,
+          clock,
         },
         actor,
         deadline: job.deadline,

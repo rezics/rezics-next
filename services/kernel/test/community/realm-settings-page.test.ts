@@ -16,9 +16,14 @@ afterAll(async () => {
 });
 
 function read(realmId: string, access = f.base.system.access) {
-  return readRealmSettingsPage({ pool: f.db.pool, access }, f.base.system.actors.author.actor, realmId, {
-    deadline: Date.now() + 30_000,
-  });
+  return readRealmSettingsPage(
+    { clock: () => new Date(), pool: f.db.pool, access },
+    f.base.system.actors.author.actor,
+    realmId,
+    {
+      deadline: Date.now() + 30_000,
+    },
+  );
 }
 
 // Inject transitions only at released owner preparation boundaries; all successful
@@ -206,7 +211,7 @@ test.serial(
         }
       });
       await expect(
-        readRealmSettingsPage({ pool: f.db.pool, access }, actor, s.realmId, {
+        readRealmSettingsPage({ clock: () => new Date(), pool: f.db.pool, access }, actor, s.realmId, {
           deadline: Date.now() + 30_000,
         }),
       ).rejects.toMatchObject({ code: 'not_found' });

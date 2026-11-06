@@ -85,7 +85,8 @@ export function profileRoutes(
     access,
     tokens,
     routeKey,
-  }: { pool: Pool; access?: Access | AccessFactory; tokens: KeyRing; routeKey: Uint8Array },
+    clock,
+  }: { pool: Pool; access?: Access | AccessFactory; tokens: KeyRing; routeKey: Uint8Array; clock: () => Date },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
@@ -313,6 +314,7 @@ export function profileRoutes(
     pool,
     routeKey,
     tokens,
+    clock,
     dispatch: (request) => app.handle(request),
     ...(access === undefined ? {} : { access }),
   });

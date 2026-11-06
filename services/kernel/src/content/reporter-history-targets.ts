@@ -66,6 +66,7 @@ async function observeTargets(
     pool: dependencies.pool,
     access: dependencies.access,
     tokens: { current: 1, keys: new Map([[1, dependencies.routeKey]]) },
+    clock: dependencies.clock,
   };
   const boards = unique.filter((target) => target.kind === 'board');
   const disclosedBoards = await readBoards(
@@ -157,7 +158,7 @@ async function observeTargets(
         });
     }
   }
-  const at = (dependencies.clock?.() ?? new Date()).toISOString();
+  const at = dependencies.clock().toISOString();
   for (const target of communityTargets) {
     if (target.kind === 'realm') {
       const realm = await readRealm(dependencies, context.actor, target.id, context);

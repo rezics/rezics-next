@@ -176,10 +176,14 @@ test('native immutable authored edition binds exact source revision creator sale
   });
   expect((await wire(f.token, `${base}/revision`)).status).toBe(404);
   expect(
-    await readContentEditionSaleAuthority({ pool: f.native.database.pool, access: f.native.access }, id, {
-      actor: f.buyer.actor,
-      deadline: Date.now() + 10000,
-    }),
+    await readContentEditionSaleAuthority(
+      { clock: () => new Date(), pool: f.native.database.pool, access: f.native.access },
+      id,
+      {
+        actor: f.buyer.actor,
+        deadline: Date.now() + 10000,
+      },
+    ),
   ).toBeNull();
   expect(
     (
@@ -194,10 +198,14 @@ test('native immutable authored edition binds exact source revision creator sale
   const published = await value(wire(f.token, `${base}:publish`, 'POST', {}, '1', key), 200);
   expect(await value(wire(f.token, `${base}:publish`, 'POST', {}, '1', key), 200)).toEqual(published);
   await seedGovernanceAuthority(f.native.database.pool, f.route, id, f.buyer.actor.accountId, ['edition:read']);
-  const sale = await readContentEditionSaleAuthority({ pool: f.native.database.pool, access: f.native.access }, id, {
-    actor: f.buyer.actor,
-    deadline: Date.now() + 10000,
-  });
+  const sale = await readContentEditionSaleAuthority(
+    { clock: () => new Date(), pool: f.native.database.pool, access: f.native.access },
+    id,
+    {
+      actor: f.buyer.actor,
+      deadline: Date.now() + 10000,
+    },
+  );
   expect(sale).toEqual({
     benefit: {
       kind: 'content-edition',
@@ -353,7 +361,7 @@ test('edition target requires an existing readable association in the selected o
   ).toBe(404);
   expect(
     await readContentEditionSaleAuthority(
-      { pool: f.native.database.pool, access: f.native.access },
+      { clock: () => new Date(), pool: f.native.database.pool, access: f.native.access },
       f.draft.editionId,
       { actor: f.author.actor, deadline: Date.now() + 10000 },
     ),

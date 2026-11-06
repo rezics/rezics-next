@@ -5,7 +5,7 @@ import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
 import { communityWorkModule } from '../community/work.ts';
-import { registerContent } from '../content/register.ts';
+import { contentDeclaration, type ContentWorkAmbient } from '../content/register.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
@@ -40,14 +40,17 @@ const accountsWorkModule: WorkModule = {
   },
 };
 
-/** Add each module's registration here, in dependency order, once. */
+/** Add each module's registration here, in dependency order, once. The process network capability is supplied
+ * by trusted composition; the default is the platform fetch. */
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
   composeSemantic: SemanticIdentityParticipantComposer,
+  ambient: ContentWorkAmbient = { fetch: (request) => globalThis.fetch(request) },
 ): readonly WorkModule[] {
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
+  const contentWorkModule = contentDeclaration().work(ambient);
   return [
     accountsWorkModule,
     erasureWorkModule,
@@ -59,7 +62,7 @@ export function createKernelWorkModules(
     semanticWorkModule,
     searchWorkModule,
     importsWorkModule,
-    registerContent,
+    contentWorkModule,
     workflowRetentionWorkModule,
   ];
 }

@@ -57,6 +57,7 @@ test('native Home context retains a review target, zero citation and only the im
     const secondReplyId = secondReply.value.post.id as string;
 
     const dependencies = {
+      clock: () => new Date(),
       pool: fixture.system.database.pool,
       routeKey: fixture.system.routeKey,
       access: fixture.system.access,

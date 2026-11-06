@@ -67,7 +67,7 @@ export function createContinueReads(
             access: deps.access,
             contentAccess: deps.access,
             tokens: deps.tokens,
-            ...(deps.clock ? { clock: deps.clock } : {}),
+            clock: deps.clock ?? systemClock,
           },
           actor,
           query.spaceId,

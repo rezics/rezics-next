@@ -3,7 +3,9 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { principalCommandIdentity } from '../../../src/command/command.ts';
-import { registerContent } from '../../../src/content/register.ts';
+import { createContentWorkModule } from '../../../src/content/register.ts';
+
+const registerContent = createContentWorkModule({ fetch: (request) => fetch(request) });
 import { setReaction } from '../../../src/content/reactions.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../../src/events/log.ts';
@@ -85,7 +87,7 @@ export async function createMembershipGrowthFixture() {
       [other, otherOnly, 'love'],
     ] as const) {
       const result = await setReaction(
-        { pool: growth.pool, access: system.access },
+        { clock: () => new Date(), pool: growth.pool, access: system.access },
         who,
         { targetKind: 'subject', targetId, kind },
         { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },

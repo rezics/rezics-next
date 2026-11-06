@@ -16,10 +16,11 @@ test('a current reviewer selects one exact native destination and sparse pages r
     const access = world.kernel.testAccess;
     const actor = await access.authenticate(world.owner.bearer, { pool: world.db.pool, deadline });
     const dependencies = {
+      clock: () => new Date(),
       pool: world.db.pool,
       access,
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
     };
     const created = await createBoard(
       dependencies,

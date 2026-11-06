@@ -35,6 +35,7 @@ export function registerReviewCensusWork(context: WorkContext, access: Access, p
           pool: context.pool,
           access,
           tokens: readMembershipWorkConfig(context.env).referenceKeys,
+          clock: context.clock,
         },
         () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
       );

@@ -49,7 +49,7 @@ const request = () => ({
 test('default mixed supervisor applies current reviews and recovers exact journal progress', async () => {
   await bootstrapRelease(fixture.pool, bundledRelease);
   const author = (await fixture.context()).actor;
-  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const board = (
     await fixture.reader.query(
       "SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews' AND visibility='published'",

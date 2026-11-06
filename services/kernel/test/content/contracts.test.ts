@@ -332,12 +332,12 @@ function publishedModels(): void {
         access: Access;
         routeKey: Uint8Array;
         realmParticipation?: RealmParticipationCheck;
-        clock?: () => Date;
+        clock: () => Date;
       }>
     >
   >();
   same<
-    Equal<reads.ContentReadDependencies, Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>>
+    Equal<reads.ContentReadDependencies, Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }>>
   >();
   same<
     Equal<
@@ -346,7 +346,7 @@ function publishedModels(): void {
         pool: Pool;
         access: Access;
         realmParticipation?: RealmParticipationCheck;
-        clock?: () => Date;
+        clock: () => Date;
         downloadContext?: DownloadContext;
       }>
     >
@@ -786,7 +786,7 @@ function publishedModels(): void {
         pool: Pool;
         access: Access;
         routeKey: Uint8Array;
-        clock?: () => Date;
+        clock: () => Date;
         anonymousVerifier?: TurnstileVerifier;
       }>
     >
@@ -794,7 +794,7 @@ function publishedModels(): void {
   same<
     Equal<
       moderation.ModerationDependencies,
-      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
+      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>
     >
   >();
   same<
@@ -822,7 +822,7 @@ function publishedModels(): void {
   same<
     Equal<
       erasePost.ErasePostDependencies,
-      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
+      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>
     >
   >();
   same<Equal<moderation.EraseStandaloneMediaInput, Readonly<{ mediaId: string; reason: string }>>>();

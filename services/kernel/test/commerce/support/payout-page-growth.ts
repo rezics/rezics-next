@@ -125,7 +125,7 @@ export async function payoutPageGrowthFixture() {
       key: Bun.randomUUIDv7(),
     },
   );
-  const commands = createCommerceCommands({ pool: db.pool, access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool: db.pool, access });
   const offer = (
     await commands.createOffer(
       await actor(creator),

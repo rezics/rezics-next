@@ -39,7 +39,7 @@ test('offer revise canonical intent binds the exact authorized target so a same-
         key: entryKey(),
       },
     );
-  const commands = createCommerceCommands({ pool: f.pool, access: f.access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool: f.pool, access: f.access });
   const targetSubjectId = await f.createSubject('game');
   const input = {
     targetSubjectId,

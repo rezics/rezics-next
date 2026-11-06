@@ -58,7 +58,7 @@ const nativeAccess = permissionAccess({
 function viewer(accountId: string, scopes = ['board:read', 'thread:read', 'post:read']): Actor {
   return { kind: 'account', accountId, scopes, clientId: 'web', requestedBy: null, authnEpoch: 1 };
 }
-const deps = () => ({ pool: database.pool, access: nativeAccess, tokens });
+const deps = () => ({ clock: () => new Date(), pool: database.pool, access: nativeAccess, tokens });
 const ctx = (selected: Actor = actor) => ({ actor: selected, deadline: Date.now() + 5_000 });
 
 async function account() {
@@ -343,7 +343,10 @@ test('readBoard returns current public metadata with an authoritative partition 
      VALUES ($1, $2, $3, 'Public board', 'published', 1, $2)`,
     [route, freshBoardId, subject],
   );
-  const result = await readBoard({ pool: database.pool, access, tokens }, freshBoardId, { actor, ...context() });
+  const result = await readBoard({ clock: () => new Date(), pool: database.pool, access, tokens }, freshBoardId, {
+    actor,
+    ...context(),
+  });
   expect(result.value).toMatchObject({ id: freshBoardId, route, title: 'Public board', securityRevision: '1' });
   const partition = await readPartition(database.admin, partitionOf(route));
   expect(partition).not.toBeNull();
@@ -379,9 +382,12 @@ test('checkGrowth bounds real board disclosure as unrelated data in the same par
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: (_db, scale, previous) => populate(scale, previous),
     async operation(db) {
-      const result = await readBoard({ pool: db.pool, access, tokens }, board.id, { actor, ...context() });
+      const result = await readBoard({ clock: () => new Date(), pool: db.pool, access, tokens }, board.id, {
+        actor,
+        ...context(),
+      });
       expect(result.value?.id).toBe(board.id);
-      const dependencies = { pool: db.pool, access: nativeAccess, tokens };
+      const dependencies = { clock: () => new Date(), pool: db.pool, access: nativeAccess, tokens };
       expect((await readPost(dependencies, f.thread, f.post, ctx())).value?.id).toBe(f.post);
       expect((await listThreadPosts(dependencies, f.thread, ctx(), undefined, 1)).entries[0]?.id).toBe(f.post);
       expect((await listPostRevisions(dependencies, f.thread, f.post, ctx(), undefined, 1)).entries[0]?.id).toBe(

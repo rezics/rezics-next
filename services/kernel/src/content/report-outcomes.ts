@@ -157,7 +157,7 @@ export async function dismissReport(deps: ReportDependencies, actor: Actor, id: 
       ...principalCommandIdentity(actor),
       partition: partitionOf(route),
       deadline: context.deadline,
-      ...(deps.clock ? { clock: deps.clock } : {}),
+      clock: deps.clock,
       authorization,
       receipt: {
         kind: 'content.report.dismiss',

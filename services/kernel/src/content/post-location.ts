@@ -47,7 +47,7 @@ export async function locateThreadPost(
           },
         },
         { epoch: final.anchor.epoch, after: [key.at!, key.id] },
-        (dependencies.clock ?? (() => new Date()))().getTime(),
+        dependencies.clock().getTime(),
       )
     : null;
   return { value: { cursor }, anchor: final.anchor };

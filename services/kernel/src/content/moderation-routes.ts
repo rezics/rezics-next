@@ -119,7 +119,7 @@ export function moderationRoutes(
     get access() {
       return deps.access;
     },
-    clock: deps.clock ?? (() => new Date()),
+    clock: deps.clock,
     get workflows() {
       // An unstarted operation needs only its native identity row. A status
       // lookup requiring a workflow adapter fails closed if not composed.

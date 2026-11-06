@@ -4,12 +4,13 @@ import type { Access } from '../request/access.ts';
 import type { ContentEditionSaleAuthority } from './edition-model.ts';
 import type { EditionRow } from './edition-store.ts';
 import type { ReadContext } from './model.ts';
-export { mountContentEditionConsent } from './edition-sale-consent.ts';
+
+export type { ContentEditionConsentReader } from './edition-sale-native.ts';
 
 // Commerce imports this port while initializing its catalogue. Defer the native
 // Content/community/Access dependency graph until a read actually starts.
 export async function readContentEditionSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: ReadContext,
 ): Promise<ContentEditionSaleAuthority | null> {
@@ -19,7 +20,7 @@ export async function readContentEditionSaleAuthority(
 
 /** Server-only Commerce eligibility port. It never authorizes delivery to a buyer. */
 export async function readContentEditionMechanicalSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: Readonly<{ deadline: number }>,
 ): Promise<ContentEditionSaleAuthority | null> {
@@ -28,7 +29,7 @@ export async function readContentEditionMechanicalSaleAuthority(
 }
 
 export async function prepareContentEditionSale(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
   editionId: string,
   context: ReadContext,
   time: AuthoritativeTime,

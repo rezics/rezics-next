@@ -72,7 +72,7 @@ export async function listWatches(
       authnEpoch: ownerObservation.authnEpoch,
     },
   };
-  const now = deps.clock?.() ?? new Date();
+  const now = deps.clock();
   let after: [string, string] | null = null;
   if (input.cursor !== undefined) {
     const cursor = await decodeListCursor(deps.tokens, binding, input.cursor, now);

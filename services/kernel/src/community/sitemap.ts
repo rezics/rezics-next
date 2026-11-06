@@ -29,8 +29,8 @@ export type CommunitySitemapDependencies = Readonly<{
   pool: Pool;
   access: Access;
   tokens: KeyRing;
-  clock?: () => Date;
-  cursorNow?: () => number;
+  clock: () => Date;
+  cursorNow: () => number;
 }>;
 
 type Feed = 'realms' | 'spaces';
@@ -50,7 +50,7 @@ function binding(feed: Feed): ListCursorBinding {
 }
 
 function cursorTime(dependencies: CommunitySitemapDependencies): number {
-  return (dependencies.cursorNow ?? (() => (dependencies.clock ?? (() => new Date()))().getTime()))();
+  return dependencies.cursorNow();
 }
 
 async function positionOf(
@@ -100,7 +100,7 @@ function pageLimit(input: CommunitySitemapInput): number {
 }
 
 function observedAt(dependencies: CommunitySitemapDependencies): string {
-  return (dependencies.clock ?? (() => new Date()))().toISOString();
+  return dependencies.clock().toISOString();
 }
 
 function comparableTimestamp(value: string): string {

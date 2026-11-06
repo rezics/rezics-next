@@ -123,7 +123,7 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
     type: 'com.rezics.search.source-tuple.changed.v1',
     resourceId: space.spaceId,
   });
-  const source = spaceDiscoverySource({ pool: system.database.pool, access: system.access });
+  const source = spaceDiscoverySource({ clock: () => new Date(), pool: system.database.pool, access: system.access });
   await registerSpaceDiscoveryTupleProducer(system.database.pool, {
     generation: 'space-source-test-generation',
     cut: 'space-source-test-cut',
@@ -274,7 +274,7 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
 
   const governance = await contentGovernanceCredential(system);
   await takedownSourceFence(
-    { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
     governance.actor,
     {
       source: tuple.source,
@@ -356,7 +356,7 @@ test('shared native Context changes drain sparse retained identities, survive re
     [home, home * 16, routeOf(first.spaceId), first.spaceId],
   );
   expect(await drainSpaceDiscoveryFrontier(pool, key, 1)).toBe('preparing');
-  const source = spaceDiscoverySource({ pool, access: system.access });
+  const source = spaceDiscoverySource({ clock: () => new Date(), pool, access: system.access });
   expect((await source.dependencies()).state).toBe('preparing');
   while (await initializeSpaceDiscoveryDependencies(pool, home, 1)) {
     /* raw bounded installation pages */
@@ -366,7 +366,9 @@ test('shared native Context changes drain sparse retained identities, survive re
     capabilities: { 'source-fence': 'preparing' },
   });
   const hydrate = (ids: string[]) =>
-    readSpaceDiscoverySummaries({ pool, access: system.access }, ids, { deadline: Date.now() + 30_000 });
+    readSpaceDiscoverySummaries({ clock: () => new Date(), pool, access: system.access }, ids, {
+      deadline: Date.now() + 30_000,
+    });
   expect((await hydrate(owners.map((o) => o.space.spaceId))).size).toBe(0);
   await expect(drainSpaceDiscoveryFrontier(crashBeforeAcknowledgement(pool), key, 1)).rejects.toThrow(
     'simulated frontier acknowledgement crash',
@@ -451,7 +453,7 @@ test('native exposure wakes include standalone Spaces; tuple fences wait for com
   expect((direct.data as SpaceDiscoveryInvalidation).target).toEqual({ kind: 'space', id: space.spaceId });
   const tuple = { source: 'example', external_id: 'space-dependency-unavailable', field_group: 'cover' as const };
   await takedownSourceFence(
-    { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
     governance.actor,
     { ...tuple, reason: 'Private evidence' },
     { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },

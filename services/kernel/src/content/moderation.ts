@@ -4,7 +4,7 @@ import type { Access, Actor } from '../request/access.ts';
 import { erasePostLogical, mutateContentPoint, type ErasePostInput } from './erase-post.ts';
 import type { MediaId, PostId, RequestContext, ThreadId } from './model.ts';
 
-export type ModerationDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
+export type ModerationDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>;
 export type TakedownTarget =
   | Readonly<{ kind: 'board'; id: string }>
   | Readonly<{ kind: 'thread'; id: ThreadId }>

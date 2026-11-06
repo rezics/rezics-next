@@ -282,6 +282,10 @@
         "services/kernel/src/content/document-public.ts",
         "services/kernel/src/content/realm-board-home.ts",
         "services/kernel/src/content/index.ts",
+        "services/kernel/src/content/events.ts",
+        "services/kernel/src/content/http.ts",
+        "services/kernel/src/content/report-locator-events.ts",
+        "services/kernel/src/content/register.ts",
         "services/kernel/src/content/review-discovery.ts",
         "services/kernel/src/content/access-capabilities.ts"
       ],

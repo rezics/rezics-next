@@ -57,6 +57,7 @@ const access = createAccess({
 const consent = readAuthConsentConfig(env);
 assert(consent);
 const realm = createRealmMembership({
+  clock: () => new Date(),
   pool: db.pool,
   access,
   referenceKeys: tokens,

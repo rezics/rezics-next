@@ -304,6 +304,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         };
         const outcome = await createThread(
           {
+            clock: () => new Date(),
             pool: commandPool as ReturnType<typeof createPool>,
             access,
             routeKey: new Uint8Array(32).fill(43),

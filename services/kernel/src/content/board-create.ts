@@ -39,7 +39,7 @@ export type BoardCreationDependencies = Readonly<{
   access: Access;
   routeKey?: Uint8Array;
   realmParticipation?: RealmParticipationCheck;
-  clock?: () => Date;
+  clock: () => Date;
 }>;
 
 export type BoardCreationContext = Readonly<{ idempotencyKey: string; deadline: number }>;

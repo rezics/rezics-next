@@ -190,7 +190,7 @@ test('native metadata-only refresh commits one interpretation, refuses supersede
     const orderId = newId(route);
     const stripe = provider(fake);
     const session = await stripe.createCheckoutSession(request(orderId, buyer.actor.accountId), `order:${orderId}`);
-    const commands = createCommerceCommands({ pool: f.pool, access: f.access });
+    const commands = createCommerceCommands({ clock: () => new Date(), pool: f.pool, access: f.access });
     await f.pool.query(
       `INSERT INTO commerce.purchase_order
       (route, order_id, buyer_account_id, offer_id, offer_revision, creator_account_id, title, currency,

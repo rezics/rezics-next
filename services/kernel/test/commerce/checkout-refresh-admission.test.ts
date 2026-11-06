@@ -89,8 +89,8 @@ beforeAll(async () => {
       }
     }) as PoolClient['query'];
   });
-  commands = createCommerceCommands({ pool, access: f.access });
-  otherCommands = createCommerceCommands({ pool: f.pool, access: f.access });
+  commands = createCommerceCommands({ clock: () => new Date(), pool, access: f.access });
+  otherCommands = createCommerceCommands({ clock: () => new Date(), pool: f.pool, access: f.access });
   buyer = await f.identity(['order:create', 'order:read', 'entitlement:read', 'entitlement:list']);
   for (const group of ['selling', 'purchases'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`, {})).status).toBe(200);

@@ -185,10 +185,13 @@ test('Review discovery source versions and continued reads stay physically bound
   const withheldRoute = partition * 16 + 2;
   const subjectIds: string[] = [];
   const liveReviews: Array<{ id: string; itemId: string }> = [];
-  const source = createReviewDiscoverySource({ pool: db.pool, access: fixture.access, tokens }, () => ({
-    actor: { kind: 'anonymous' },
-    deadline: Date.now() + 30_000,
-  }));
+  const source = createReviewDiscoverySource(
+    { clock: () => new Date(), pool: db.pool, access: fixture.access, tokens },
+    () => ({
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    }),
+  );
   async function addLiveReview(scale: number) {
     const subjectId = newId(0x6b52);
     subjectIds.push(subjectId);
@@ -198,7 +201,7 @@ test('Review discovery source versions and continued reads stay physically bound
       [routeOf(subjectId), subjectId],
     );
     const created = await createThread(
-      { pool: db.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: db.pool, access: fixture.access, routeKey },
       author,
       {
         kind: 'review',
@@ -218,7 +221,7 @@ test('Review discovery source versions and continued reads stay physically bound
       id: created.value.itemId,
     });
     const deleted = await softDeletePost(
-      { pool: db.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: db.pool, access: fixture.access, routeKey },
       author,
       { postId: created.value.itemId, reason: 'Growth lifecycle' },
       requestAt(),
@@ -226,7 +229,7 @@ test('Review discovery source versions and continued reads stay physically bound
     await invalidate(db.pool, deleted, 'com.rezics.content.post.erased.v1');
     expect((await source.hydrate(partition, [created.value.threadId])).reviews).toEqual([]);
     const restored = await restorePost(
-      { pool: db.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: db.pool, access: fixture.access, routeKey },
       author,
       created.value.itemId,
       requestAt(),

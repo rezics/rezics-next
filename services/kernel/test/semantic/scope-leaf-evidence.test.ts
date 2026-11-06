@@ -407,7 +407,7 @@ test('native imported source fences invalidate leaf progress and a final recorde
   const before = current(await read(db.pool, f.request(book, languageLeaf), f.options()));
   expect(before.facts[0]!.statement.value).toBe('en');
   await takedownSourceFence(
-    { pool: db.pool, access: f.access, routeKey },
+    { clock: () => new Date(), pool: db.pool, access: f.access, routeKey },
     f.editor,
     {
       source: source.source,

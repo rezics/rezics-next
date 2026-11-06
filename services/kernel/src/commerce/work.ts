@@ -75,7 +75,8 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
       // Keep the consumer declaration here until its producer-owned registry binding lands.
       const authorizedContext = context as WorkContext & { getAuthorization(): WorkerAuthorization };
       if (typeof authorizedContext.getAuthorization !== 'function') throw new AccessUnavailableError('overloaded');
-      const commands = createCommerceCommands({ pool, access: authorizedContext.getAuthorization().access });
+      const { access, readConsent } = authorizedContext.getAuthorization();
+      const commands = createCommerceCommands({ pool, access, readConsent, clock: authorizedContext.clock });
       const stripeRetries = {
         retriesAllowed: true,
         intervalSeconds: 1,

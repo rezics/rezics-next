@@ -703,14 +703,18 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
           const value =
             variant === 'mechanical'
               ? await readContentEditionMechanicalSaleAuthority(
-                  { pool: appDb.pool, access: measuredAccess },
+                  { clock: () => new Date(), pool: appDb.pool, access: measuredAccess },
                   editionId,
                   { deadline },
                 )
-              : await readContentEditionSaleAuthority({ pool: appDb.pool, access: measuredAccess }, editionId, {
-                  actor,
-                  deadline,
-                });
+              : await readContentEditionSaleAuthority(
+                  { clock: () => new Date(), pool: appDb.pool, access: measuredAccess },
+                  editionId,
+                  {
+                    actor,
+                    deadline,
+                  },
+                );
           return {
             value,
             trace: {

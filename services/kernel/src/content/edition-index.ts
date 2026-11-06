@@ -22,7 +22,7 @@ export type CreatorEditionPage = Readonly<{
   next: string | null;
 }>;
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date }>;
 const created = 'com.rezics.content.edition.created.v1';
 export class InvalidCreatorEditionCursorError extends Error {}
 
@@ -39,7 +39,7 @@ export async function readCreatorEditions(
   const requested = input.limit ?? 20;
   if (!Number.isSafeInteger(requested) || requested < 1) throw new RangeError('Invalid edition page limit');
   const limit = Math.min(requested, 20);
-  const now = deps.clock?.() ?? new Date();
+  const now = deps.clock();
   // The exact producer interface needs no additional configuration. Derive a dedicated
   // cursor key from the existing pool-bound native key ring, never reuse receipt MACs.
   const native = receiptKeysFor(deps.pool);
@@ -116,7 +116,7 @@ export async function readCreatorEditions(
 
 /** Committed creation -> released original edition home -> one creator-home command.
  * The candidate confers no metadata, source, sale, delivery or erasure authority. */
-export function createCreatorEditionIndexEffect(pool: Pool): Effect {
+export function createCreatorEditionIndexEffect(pool: Pool, clock: () => Date): Effect {
   return {
     name: 'content_creator_edition',
     types: [created],
@@ -141,7 +141,7 @@ export function createCreatorEditionIndexEffect(pool: Pool): Effect {
       )
         throw new TypeError('Invalid creator edition event envelope');
       const original = await editionSnapshot(
-        { pool },
+        { pool, clock },
         data.editionId,
         { deadline: Date.now() + 3000 },
         async (client) => {

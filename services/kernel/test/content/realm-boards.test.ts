@@ -269,6 +269,7 @@ async function startMembershipWorker() {
     realmRoleReader: (client, input) => membership.roleReader(client, input),
   });
   membership = createRealmMembership({
+    clock: () => new Date(),
     pool: db.pool,
     access: workerAccess,
     referenceKeys: tokens,

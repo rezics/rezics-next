@@ -163,7 +163,7 @@ test('actual native follow writers atomically retain per-original source replace
     },
   );
   const space = await createSpace(
-    { pool: db.pool, access: fixture.access, routeKey: testRouteKey() },
+    { clock: () => new Date(), pool: db.pool, access: fixture.access, routeKey: testRouteKey() },
     spaceOwner.actor,
     { title: 'Native membership source' },
     { idempotencyKey: entryKey(), deadline: deadlineFor(30_000) },
