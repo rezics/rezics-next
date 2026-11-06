@@ -7,7 +7,6 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { createPublicRatingSource } from '../rating/public-rating-source.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
-import { createCreditSearchSource } from '../semantic/credit-search.ts';
 import { subjectSource } from '../semantic/search-source.ts';
 import type { PublicRatingSource } from './rating-source.ts';
 import { withPublicRatings } from './rating-subject-source.ts';
@@ -24,7 +23,6 @@ export function createRatedSubjectSource(
   if (!(routeKey instanceof Uint8Array) || routeKey.byteLength !== 32) throw new ConfigError('KERNEL_ROUTE_KEY');
   const ratings = createPublicRatingSource(pool);
   const native = subjectSource(pool, routeKey);
-  const creditSearch = createCreditSearchSource(pool, routeKey);
   const rated = withPublicRatings(native, ratings, {
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,
@@ -34,7 +32,7 @@ export function createRatedSubjectSource(
       ...rated,
       canonicalNames: native.canonicalNames,
       readSubjectKeyPage: native.readSubjectKeyPage.bind(native),
-      creditSearch,
+      ...(native.creditSearch ? { creditSearch: native.creditSearch } : {}),
     },
     ratings,
   };

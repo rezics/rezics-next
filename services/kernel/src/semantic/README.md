@@ -650,10 +650,11 @@ without expanding omitted creators; creator names and identity are bound by `nam
 checks and whole-dependency `unchanged`, and an incomplete fourth page or name coverage keeps selection ready.
 
 The installed port is `createCreditSearchSource` from `semantic/credit-search.ts`, a public Semantic entry outside
-the barrel: `createRatedSubjectSource` attaches it as `creditSearch`, and runtime defaults expose
-`createKernelCreditSearchSource` (re-exported by `server.ts`). Search calls either factory; `page`, `current` and
-`unchanged` are the producer methods. It uses released `listWorkPlan` / `workCreditProperties` outgoing credit
-properties, never a role roster or the three-entry work-context preview.
+the barrel. Runtime defaults expose `createKernelCreditSearchSource` (re-exported by `server.ts`). Search calls
+either factory; `page`, `current` and `unchanged` are the producer methods. Attaching the adapter onto
+`subjectSource` or `createRatedSubjectSource` stays Search-owned, because those files already participate in the
+Semantic value-import cycle. It uses released `listWorkPlan` / `workCreditProperties` outgoing credit properties,
+never a role roster or the three-entry work-context preview.
 `receiveCreditSearch` and `receiveCreditSearchMatch` are the receiving entries; restart maps onto `changed`, so the
 existing pipeline publishes preparing, incomplete, changed or complete. Hidden or concealed credits and creators are
 omitted, not counted as incomplete. Identity `absent` follows the public redirect chain; pending identity is
@@ -661,10 +662,10 @@ preparing; any other unavailable identity (moved, bootstrap or missing owner) is
 chain never stands in for unknown identity.
 
 Decision: CreditSearchSource is a public Search contract; the native producer is a public Semantic entry composed
-by `createKernelCreditSearchSource` and `createRatedSubjectSource`, not the Semantic barrel or `subjectSource`, so
-it stays outside the existing value-import cycle. Landing tests keep the existing native adapter, fourth-page,
-preparation and growth assertions and pin that composition; Search-owned writer, facet and native user-case proof
-stay with the receiving Person Search outcome.
+by `createKernelCreditSearchSource`, not the Semantic barrel, `subjectSource` or `createRatedSubjectSource`, so it
+stays outside the existing value-import cycle. Landing tests keep the existing native adapter, fourth-page,
+preparation and growth assertions and pin that composition; Search-owned writer, facet, source attachment and
+native user-case proof stay with the receiving Person Search outcome.
 
 Modules: `credit-search-cut.ts` holds the installed ceilings, observation, cursor and digests;
 `credit-search-selection.ts` holds the work cut, selected-credit seeks, release plan, parsing and native disclosure;

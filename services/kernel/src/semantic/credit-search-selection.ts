@@ -53,8 +53,6 @@ export type CreditPlan = {
   releases: Map<string, Release>;
 };
 
-const inCreditSnapshot = inSearchSnapshot;
-
 export async function loadReleases(client: PoolClient, digests: readonly string[]): Promise<Map<string, Release>> {
   const unique = [...new Set(digests)];
   if (!unique.length) return new Map();
@@ -75,7 +73,7 @@ export async function workCut(pool: Pool, workId: string): Promise<WorkCut | 'un
   const route = routeOf(workId);
   if (route === null) return 'unavailable';
   const partition = partitionOf(route);
-  return inCreditSnapshot(pool, async (client) => {
+  return inSearchSnapshot(pool, async (client) => {
     const home = await readPartition(client, partition);
     if (!home) return 'unavailable';
     if (home.writeState === 'moved') return 'moved';
@@ -98,7 +96,7 @@ export async function resumeSelection(pool: Pool, work: WorkHeader): Promise<voi
 export async function creditPlan(pool: Pool, work: WorkHeader): Promise<CreditPlan | 'unsupported'> {
   const digest = work.currentRelease;
   if (!digest) return 'unsupported';
-  const releases = await inCreditSnapshot(pool, async (client) => loadReleases(client, [digest]));
+  const releases = await inSearchSnapshot(pool, async (client) => loadReleases(client, [digest]));
   const release = releases.get(digest);
   if (!release) return 'unsupported';
   const properties = workCreditProperties(
@@ -119,7 +117,7 @@ export async function selectedCredits(
 ): Promise<SelectedCredit[]> {
   if (!properties.length || limit < 1) return [];
   const partition = partitionOf(work.route);
-  return inCreditSnapshot(pool, async (client) => {
+  return inSearchSnapshot(pool, async (client) => {
     const home = await readPartition(client, partition);
     if (!home || home.writeState === 'moved') return [];
     return (await readCreditPage.run(client, {
@@ -143,7 +141,7 @@ export async function exactCredit(
   statementId: string,
 ): Promise<SelectedCredit | undefined> {
   const partition = partitionOf(work.route);
-  const rows = await inCreditSnapshot(pool, async (client) => {
+  const rows = await inSearchSnapshot(pool, async (client) => {
     const home = await readPartition(client, partition);
     if (!home || home.writeState === 'moved') return [];
     return (await readCreditStatement.run(client, {
@@ -163,7 +161,7 @@ export async function discloseCredits(
   rows: readonly SelectedCredit[],
 ): Promise<SelectedCredit[]> {
   if (!routeKey || !rows.length) return [...rows];
-  return inCreditSnapshot(pool, async (client) =>
+  return inSearchSnapshot(pool, async (client) =>
     withoutFencedEntries(
       client,
       routeKey,
@@ -201,7 +199,7 @@ export async function parsePage(
 ): Promise<ParsedCredit[]> {
   const digests = [...new Set(rows.map((row) => row.release).filter((digest) => !plan.releases.has(digest)))];
   if (digests.length) {
-    const extra = await inCreditSnapshot(pool, async (client) => loadReleases(client, digests));
+    const extra = await inSearchSnapshot(pool, async (client) => loadReleases(client, digests));
     for (const [digest, release] of extra) plan.releases.set(digest, release);
   }
   const admitted = new Set(plan.properties);

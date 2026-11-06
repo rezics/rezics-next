@@ -8,7 +8,6 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { createKernelCreditSearchSource } from '../../src/composition/runtime-defaults.ts';
 import { CREDIT_SEARCH_LIMITS } from '../../src/search/credit-search.ts';
-import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   createCreditSearchSource,
@@ -132,7 +131,6 @@ async function renamePerson(id: string, name: string) {
 }
 
 test('installed adapter and Search receiver match VN aliases and anime homonyms', async () => {
-  expect(createRatedSubjectSource(pool, routeKey).source.creditSearch).toBeDefined();
   const composed = createKernelCreditSearchSource(pool, routeKey);
   expect(composed.page).toBeDefined();
   expect(composed.current).toBeDefined();
