@@ -185,6 +185,12 @@ closes the action; conflict requires deliberate current-page review. Accepted se
 bounded aggregate refresh, never a per-target read or an optimistic following value. The host retires private
 rows and focus with its reader/source episode; public Collection cards remain usable during recovery.
 
+Decision: Collection directory runs only when a ready Collection adapter advertises `collectionDirectory`;
+missing capability is `index_not_ready` before admission. Recency/popularity order the complete hydrated frontier;
+identity-ordered `source.page` is the indexing walk. Selected public catalogue A is the pinned generation/uuid/index
+plus stored identities; a lost engine response rereads that native observation and retries, and working B cannot
+replace it. Owner: [collection discovery](collection-discovery.md).
+
 `discovery-http.ts` retains the stable exports. Catalogue, grouped releases/children, facets and suggestions own
 their response definitions and adapters in `http/{catalogue,releases,facets,suggest}.ts`; `http/routes.ts` registers,
 admits and dispatches requests. Family changes belong in their module. Shared envelope or route changes must name

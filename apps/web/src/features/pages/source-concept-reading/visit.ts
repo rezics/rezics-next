@@ -115,7 +115,12 @@ function publish(
       result.narrower.cursor !== destination.input.cursor)
   )
     result = candidateFailure(400);
-  if (result.ok && (!conceptSourceFits(result.public) || result.narrower.rows.length > CONCEPT_PAGE_CAP))
+  if (
+    result.ok &&
+    (!conceptSourceFits(result.public) ||
+      result.narrower.rows.length > CONCEPT_PAGE_CAP ||
+      result.membership.rows.length > CONCEPT_PAGE_CAP * 2)
+  )
     result = { ok: false, reason: 'unavailable', oversized: true };
   const done = { loading: false, busy: false, completed: state.completed + 1 };
   if (!result.ok)

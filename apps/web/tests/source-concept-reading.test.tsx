@@ -66,8 +66,13 @@ async function response(
         headers: { 'rezics-session-token': options.receipt ?? 'receipt-A' },
       }),
       links: {
-        get: async () =>
-          state === 'preparing' || state === 'unavailable'
+        get: async ({ query }: { query?: { property?: string } } = {}) => {
+          if (query?.property === 'schema:genre' || query?.property === 'schema:keywords')
+            return {
+              status: 200,
+              data: { links: [], next: null, freshness: { caught_up: true }, count: { value: 0, exact: true } },
+            };
+          return state === 'preparing' || state === 'unavailable'
             ? { status: 503, data: { code: state === 'preparing' ? 'semantic_not_ready' : 'dependency_unavailable' } }
             : {
                 status: 200,
@@ -99,7 +104,8 @@ async function response(
                   freshness: { consistency: 'eventual', target_seconds: 10, caught_up: state !== 'lagging' },
                   ...(options.empty ? { count: { value: 0, exact: true } } : {}),
                 },
-              },
+              };
+        },
       },
     }),
   } as unknown as KernelClient;

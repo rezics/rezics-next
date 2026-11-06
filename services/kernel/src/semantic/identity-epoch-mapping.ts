@@ -13,6 +13,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import {
+  admittedAccountMappingSource,
   identityEpochStore,
   identityJobPartition,
   identityEpochChangeTerminal,
@@ -21,6 +22,7 @@ import {
   serializeIdentityValue as json,
 } from './identity-adapters/index.ts';
 import type {
+  IdentityAdmissionInput,
   IdentityChange,
   IdentityEpochStep,
   IdentityFrontier,
@@ -84,7 +86,7 @@ type Saved = {
   remainder_terminal: string | null;
   intent: IdentityIntent;
   state: string;
-  receipt: { kind: string };
+  receipt: IdentityAdmissionInput['receipt'];
   inputs: Input[];
   head: Head | null;
   roles: SemanticCopyRole[];
@@ -389,7 +391,9 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
   if (saved.head?.frontier.after[1] === 'complete') return completed(pool, job, saved.head, measured);
   if (saved.state !== 'pending') throw stale();
   // Accounts admission has its own actual source-intent authority. Ordinary authority cannot substitute for it.
-  if (saved.receipt.kind !== 'subject.merge') throw unavailable('Accounts immutable source-intent custody is required');
+  if (saved.receipt.kind === 'account-agent.verify' || saved.receipt.kind === 'account-agent.unverify')
+    await admittedAccountMappingSource(pool, saved.receipt, saved.intent);
+  else if (saved.receipt.kind !== 'subject.merge') throw stale();
   const intent = saved.intent;
   if (
     intent.kind !== 'merge' &&
@@ -410,29 +414,29 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     )
       throw unavailable('Unmerge requires its actually published undo job and fixed participant custody');
     if (undo.intent.kind === 'unmerge') throw stale();
-    if (saved.intent.verificationReceipt !== null)
-      throw unavailable('Accounts reversal requires actual immutable source-intent custody');
   }
   if (!saved.head) {
     let type: string | undefined;
-    for (const input of saved.inputs) {
-      const row = await withReadTransaction(
-        pool,
-        async (tx) =>
-          (
-            await query(
-              tx,
-              measured,
-              `SELECT s.type,s.visibility,
+    if (saved.receipt.kind === 'subject.merge') {
+      for (const input of saved.inputs) {
+        const row = await withReadTransaction(
+          pool,
+          async (tx) =>
+            (
+              await query(
+                tx,
+                measured,
+                `SELECT s.type,s.visibility,
         EXISTS(SELECT 1 FROM semantic.account_agent_subject a WHERE a.route=s.route AND a.subject_id=s.subject_id) linked
         FROM semantic.subject s WHERE s.route=$1 AND s.subject_id=$2`,
-              [routed(input.terminal), input.terminal],
-            )
-          ).rows[0],
-      );
-      if (!row || row.visibility !== 'visible' || row.linked || (type !== undefined && type !== row.type))
-        throw unavailable('Native ordinary merge eligibility changed');
-      type = row.type;
+                [routed(input.terminal), input.terminal],
+              )
+            ).rows[0],
+        );
+        if (!row || row.visibility !== 'visible' || row.linked || (type !== undefined && type !== row.type))
+          throw unavailable('Native ordinary merge eligibility changed');
+        type = row.type;
+      }
     }
     const outputs: Output[] = [];
     if (saved.intent.kind === 'merge') {

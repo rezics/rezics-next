@@ -2,6 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import {
+  collectionDirectoryPartitions,
+  collectionDirectoryQuery,
+  consumeCollectionDirectoryFrontier,
+  executeCollectionDirectory,
+} from '../../src/search/collection-directory.ts';
+import {
   createCollectionDiscoveryAdapter,
   createNativeCollectionDiscoveryAdapter,
   CollectionDiscoveryReadinessError,
@@ -14,6 +20,7 @@ import { createCollectionPublicationEpisodes } from '../../src/library/collectio
 import { createNativeDiscoveryRegistry, hydrateOwnerDiscoveryHits } from '../../src/search/discovery-hydration.ts';
 import { mintReadTime, releaseOperationalTime, authoritativeTimeValue } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
+import type { SearchSortValue } from '../../src/search/cursor.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
 import { accountDiscoverySource } from '../../src/access/account-discovery-source.ts';
@@ -129,7 +136,7 @@ describe('connected native Collection reader journey', () => {
   let f: CollectionRulesFixture;
   let actor: Actor;
   beforeAll(async () => {
-    f = await createCollectionRulesFixture();
+    f = await createCollectionRulesFixture(['follow:create', 'follow:delete']);
     actor = await f.runtime.identity.access.authenticate(f.owner, {
       pool: f.database.pool,
       deadline: Date.now() + 30000,
@@ -415,6 +422,102 @@ describe('connected native Collection reader journey', () => {
       )
     ).rows[0]!.micros;
     expect(current?.operands.recency).toEqual([micros, routeOf(collection.id)!, collection.id]);
+  }, 120000);
+
+  test('directory walks native complete pages, orders recency/popularity, resumes, drops removals, and keeps selected A', async () => {
+    const { leaf } = connected();
+    const oldest = await f.collection({ visibility: 'public', title: 'Directory oldest' });
+    const middle = await f.collection({ visibility: 'public', title: 'Directory middle' });
+    const newest = await f.collection({ visibility: 'public', title: 'Directory newest' });
+    expect(
+      (await f.send('PATCH', `/v1/collections/${oldest.id}`, { revision: oldest.revision, title: 'Directory bumped' }))
+        .status,
+    ).toBe(200);
+    const identities = [oldest.id, middle.id, newest.id];
+    const partitions = collectionDirectoryPartitions(identities);
+    const deadline = Date.now() + 120000;
+    const walked = new Set<string>();
+    for (const partition of partitions) {
+      let after: ReturnType<typeof key> | null = null;
+      do {
+        const page = await leaf.source.page(partition, after, 1, { order: 'recency' }, { deadline });
+        if (page.status !== 'available') throw new Error('Directory partition unavailable');
+        for (const item of page.items) if (item.status === 'indexable') walked.add(item.key.id);
+        after = page.next;
+      } while (after);
+    }
+    expect([...identities].every((id) => walked.has(id))).toBe(true);
+    const frontier = await consumeCollectionDirectoryFrontier({
+      source: leaf.source,
+      partitions,
+      query: { order: 'recency' },
+      deadline,
+      scanBound: 600,
+    });
+    expect(frontier.exhausted).toBe(true);
+    expect(identities.every((id) => frontier.identities.includes(id))).toBe(true);
+    const readContext = (selection: { order: 'recent' | 'popular' }) => ({
+      access: f.runtime.identity.access,
+      actor: { kind: 'anonymous' as const },
+      deadline,
+      collectionQuery: collectionDirectoryQuery(selection),
+    });
+    const directory = (
+      ids: readonly string[],
+      selection: { order: 'recent' | 'popular' },
+      after: readonly SearchSortValue[],
+      limit: number,
+    ) =>
+      executeCollectionDirectory({
+        identities: ids,
+        readCurrent: (ids, current) => leaf.registration.adapter.readCurrent(ids, current),
+        async revalidate(current) {
+          return current;
+        },
+        selection,
+        context: readContext(selection),
+        after,
+        limit,
+      });
+    const recency = await directory(identities, { order: 'recent' }, [], 2);
+    expect(recency.items.map((item) => item.key.id)).toEqual([oldest.id, newest.id]);
+    expect(recency.exhausted).toBe(false);
+    const resumed = await directory(identities, { order: 'recent' }, recency.nextAfter!, 2);
+    expect(resumed.items.map((item) => item.key.id)).toEqual([middle.id]);
+    expect(resumed.nextAfter).toBeNull();
+    expect((await f.send('PUT', `/v1/follows/${newest.id}`)).status).toBe(200);
+    expect((await f.send('PUT', `/v1/follows/${newest.id}`, undefined, f.other)).status).toBe(200);
+    const popular = await directory(identities, { order: 'popular' }, [], 10);
+    expect(popular.items[0]?.key.id).toBe(newest.id);
+    expect((await f.send('DELETE', `/v1/collections/${middle.id}?revision=${middle.revision}`)).status).toBe(204);
+    const remaining = await directory(identities, { order: 'recent' }, [], 10);
+    expect(remaining.items.map((item) => item.key.id)).toEqual([oldest.id, newest.id]);
+    const a = await saved();
+    const published = await f.send('POST', `/v1/collections/${a.id}:publishSelected`, {
+      revision: a.revision,
+      subjectIds: [],
+    });
+    expect(published.status).toBe(200);
+    const selected = await published.json();
+    await createCollectionPublicationEpisodes(deps()).begin(
+      actor,
+      { collectionId: a.id, revision: selected.collection.revision, visibility: 'public' },
+      randomUUID(),
+    );
+    const before = await leaf.hydrate([a.id], context(a.id));
+    expect(before).toMatchObject({
+      state: 'ready',
+      summaries: [{ id: a.id, membershipKind: 'dynamic', outputGeneration: selected.publication.generation }],
+    });
+    expect(
+      (await f.send('PATCH', `/v1/collections/${a.id}`, { revision: selected.collection.revision, title: 'Working B' }))
+        .status,
+    ).toBe(200);
+    const afterEdit = await leaf.hydrate([a.id], context(a.id));
+    expect(afterEdit).toMatchObject({
+      state: 'ready',
+      summaries: [{ id: a.id, outputGeneration: selected.publication.generation }],
+    });
   }, 120000);
 });
 

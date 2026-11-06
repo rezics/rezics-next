@@ -22,8 +22,8 @@ import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables.ts';
-import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { captureShowcaseCommands, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
 import { importShowcaseTags } from '../src/selected-import.ts';
 import {
@@ -34,6 +34,10 @@ import {
   prepareShowcaseVndbPublicTagVocabulary,
   readShowcaseVndbPublicTagVocabulary,
   projectShowcaseTagTables,
+  openReviewedTagCandidates,
+  readReviewedTagCandidatePage,
+  importerOwnedReviewedTagRetirements,
+  completeReviewedSharedTagFlow,
 } from '../src/showcase-tags.ts';
 
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');
@@ -1010,3 +1014,424 @@ test('selected rating evidence survives response loss and reopen before terminal
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('reviewed-tag pages separate pending acceptance from rejected rows and retire vanished importer candidates', () => {
+  const page = readReviewedTagCandidatePage({
+    candidates: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        decision: null,
+        retracted: null,
+        head: 1,
+        source: { source: 'vndb', external_id: 'g311' },
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        decision: 'accepted',
+        retracted: null,
+        rank: 'normal',
+        head: 2,
+        source: { source: 'vndb', external_id: 'g12' },
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000003',
+        decision: 'rejected',
+        retracted: null,
+        head: 3,
+        source: { source: 'vndb', external_id: 'g88' },
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000004',
+        decision: 'accepted',
+        retracted: null,
+        head: 4,
+        source: { source: 'vndb', external_id: 'g99' },
+      },
+    ],
+    next: null,
+    adoption: { head: 4, selection: [{ candidate: '00000000-0000-4000-8000-000000000002', rank: 'normal' }] },
+  });
+  const opened = openReviewedTagCandidates(page);
+  expect(opened.pending.map((row) => row.id)).toEqual(['00000000-0000-4000-8000-000000000001']);
+  expect(opened.accepted.map((row) => row.id)).toEqual([
+    '00000000-0000-4000-8000-000000000002',
+    '00000000-0000-4000-8000-000000000004',
+  ]);
+  expect(opened.rejected.map((row) => row.id)).toEqual(['00000000-0000-4000-8000-000000000003']);
+  expect(importerOwnedReviewedTagRetirements(page, new Set(['g311', 'g12']))).toEqual([
+    '00000000-0000-4000-8000-000000000004',
+  ]);
+});
+
+const schemeId = '00000000-0000-4000-8000-000000000010';
+const schemeBId = '00000000-0000-4000-8000-000000000015';
+const conceptId = '00000000-0000-4000-8000-000000000011';
+const parentBId = '00000000-0000-4000-8000-000000000016';
+const workId = '00000000-0000-4000-8000-000000000012';
+const pageOneId = '00000000-0000-4000-8000-000000000021';
+const pageTwoId = '00000000-0000-4000-8000-000000000022';
+const editorialId = '00000000-0000-4000-8000-000000000023';
+const vanishedId = '00000000-0000-4000-8000-000000000024';
+const extraEditorialId = '00000000-0000-4000-8000-000000000025';
+
+function candidateRow(
+  id: string,
+  source: { source: string; external_id: string } | null,
+  decision: 'accepted' | 'rejected' | null = null,
+  rank: 'normal' | 'preferred' | null = null,
+) {
+  return { id, decision, retracted: null, head: 1, rank, source };
+}
+
+function journaledReview(options: {
+  schemeAvailable?: boolean;
+  loseAdopt?: boolean;
+  conflictOnce?: boolean;
+  conceptBroader?: string[];
+  extraSubjects?: Record<string, ReviewedSubjectRead>;
+  workCandidates: {
+    first: ReturnType<typeof candidateRow>[];
+    second: ReturnType<typeof candidateRow>[];
+    adoption?: { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] } | null;
+  };
+}) {
+  const accepted = new Set<string>();
+  const adoptKeys: string[] = [];
+  const adoptBodies: unknown[] = [];
+  const committedAdoptions = new Map<
+    string,
+    { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }
+  >();
+  let schemeAvailable = options.schemeAvailable ?? true;
+  let loseAdopt = options.loseAdopt ?? false;
+  let conflictOnce = options.conflictOnce ?? false;
+  const workCandidates = {
+    first: options.workCandidates.first.map((row) => ({ ...row })),
+    second: options.workCandidates.second.map((row) => ({ ...row })),
+    adoption: options.workCandidates.adoption ?? null,
+  };
+  const markAccepted = (id: string) => {
+    accepted.add(id);
+    for (const row of [...workCandidates.first, ...workCandidates.second]) if (row.id === id) row.decision = 'accepted';
+  };
+  const valueStatement = (content: string) => ({
+    value: { type: 'value', content },
+  });
+  const subjects: Record<string, ReviewedSubjectRead> = {
+    [schemeId]: { subject: { id: schemeId, type: 'skos:ConceptScheme', statements: {} } } as ReviewedSubjectRead,
+    [conceptId]: {
+      subject: {
+        id: conceptId,
+        type: 'skos:Concept',
+        statements: {
+          'skos:inScheme': [valueStatement(schemeId)],
+          ...(options.conceptBroader?.length
+            ? { 'skos:broader': options.conceptBroader.map((id) => valueStatement(id)) }
+            : {}),
+        },
+      },
+    } as unknown as ReviewedSubjectRead,
+    [workId]: {
+      subject: {
+        id: workId,
+        type: 'schema:VideoGame',
+        statements: {
+          'schema:genre': [
+            {
+              id: pageOneId,
+              rank: 'normal',
+              property: { id: 'schema:genre' },
+              value: { type: 'value', content: conceptId },
+              qualifiers: [
+                {
+                  property: { id: 'rezics:sourceTagWeight' },
+                  value: { type: 'value', content: { amount: '+2.6', unit: '1' } },
+                },
+                {
+                  property: { id: 'rezics:sourceTagWeightMetric' },
+                  value: { type: 'value', content: 'vndbTagsRating' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    } as unknown as ReviewedSubjectRead,
+    ...options.extraSubjects,
+  };
+  const review = {
+    adoptKeys,
+    adoptBodies,
+    accepted,
+    setSchemeAvailable(value: boolean) {
+      schemeAvailable = value;
+    },
+    addCandidate(row: ReturnType<typeof candidateRow>) {
+      workCandidates.first.push({ ...row });
+    },
+    setSubject(id: string, read: ReviewedSubjectRead) {
+      subjects[id] = read;
+    },
+    async reviewedCandidates(id: string, query: { property: string; cursor?: string }) {
+      if (id !== workId || query.property !== 'schema:genre') return { candidates: [], next: null, adoption: null };
+      if (query.cursor === 'page-2')
+        return { candidates: workCandidates.second, next: null, adoption: workCandidates.adoption };
+      return {
+        candidates: workCandidates.first,
+        next: workCandidates.second.length ? 'page-2' : null,
+        adoption: workCandidates.adoption,
+      };
+    },
+    async acceptReviewedCandidate(_id: string, candidate: string) {
+      markAccepted(candidate);
+      return { candidate };
+    },
+    async adoptReviewedCandidates(_id: string, body: unknown, key: string) {
+      adoptKeys.push(key);
+      adoptBodies.push(body);
+      const recovered = committedAdoptions.get(key);
+      if (recovered) {
+        workCandidates.adoption = recovered;
+        return { adoption: recovered };
+      }
+      if (conflictOnce) {
+        conflictOnce = false;
+        workCandidates.adoption = {
+          head: (workCandidates.adoption?.head ?? 1) + 1,
+          selection: workCandidates.adoption?.selection ?? [],
+        };
+        throw new ImportTransportError(409);
+      }
+      const selection = isRecord(body) && Array.isArray(body.selection) ? body.selection : [];
+      const adoption = {
+        head: (workCandidates.adoption?.head ?? 1) + 1,
+        selection: selection as { candidate: string; rank: 'normal' | 'preferred' }[],
+      };
+      workCandidates.adoption = adoption;
+      committedAdoptions.set(key, adoption);
+      if (loseAdopt) {
+        loseAdopt = false;
+        throw new Error('Lost committed adoption');
+      }
+      return { adoption };
+    },
+    async readReviewedSubject(id: string) {
+      if (id === schemeId && !schemeAvailable) throw new ImportTransportError(404);
+      const read = subjects[id];
+      if (!read) throw new ImportTransportError(404);
+      return read;
+    },
+    moveHead() {
+      if (!workCandidates.adoption) return;
+      workCandidates.adoption = { ...workCandidates.adoption, head: workCandidates.adoption.head + 1 };
+    },
+    conflictNextAdopt() {
+      conflictOnce = true;
+    },
+  };
+  return review;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+test('journaled caller paginates, binds distinct refresh keys, applies managed retirement beside editorial selection, and replays unknown delivery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-flow-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  try {
+    const review = journaledReview({
+      loseAdopt: true,
+      workCandidates: {
+        first: [
+          candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }),
+          candidateRow(editorialId, { source: 'editorial', external_id: 'note' }, 'accepted', 'preferred'),
+          candidateRow(vanishedId, { source: 'vndb', external_id: 'g99' }, 'accepted', 'normal'),
+        ],
+        second: [candidateRow(pageTwoId, { source: 'vndb', external_id: 'g12' })],
+        adoption: {
+          head: 4,
+          selection: [
+            { candidate: editorialId, rank: 'preferred' },
+            { candidate: vanishedId, rank: 'normal' },
+          ],
+        },
+      },
+    });
+    const input = {
+      review: review as unknown as ShowcaseReviewPort,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'] as const,
+    };
+    await expect(
+      completeReviewedSharedTagFlow({
+        ...input,
+        journal,
+        keepExternalIds: new Set(['g311', 'g12', 'g99']),
+      }),
+    ).rejects.toThrow('Lost committed adoption');
+    expect([...review.accepted].sort()).toEqual([pageOneId, pageTwoId].sort());
+    expect(review.adoptKeys).toHaveLength(1);
+    const sealedKey = review.adoptKeys[0]!;
+    review.moveHead();
+    review.addCandidate(
+      candidateRow(extraEditorialId, { source: 'editorial', external_id: 'note-2' }, 'accepted', 'preferred'),
+    );
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+
+    const replayed = await completeReviewedSharedTagFlow({
+      ...input,
+      journal,
+      keepExternalIds: new Set(['g311', 'g12', 'g99']),
+    });
+    expect(review.adoptKeys[0]).toBe(sealedKey);
+    expect(review.adoptKeys[1]).toBe(sealedKey);
+    expect(review.adoptKeys[2]).not.toBe(sealedKey);
+    expect(review.adoptKeys).toHaveLength(3);
+    expect([...replayed.accepted].sort()).toEqual(
+      [editorialId, extraEditorialId, pageOneId, pageTwoId, vanishedId].sort(),
+    );
+    expect(replayed.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
+      [editorialId, extraEditorialId, pageOneId, pageTwoId, vanishedId].sort(),
+    );
+
+    review.conflictNextAdopt();
+    const retired = await completeReviewedSharedTagFlow({
+      ...input,
+      journal,
+      keepExternalIds: new Set(['g311', 'g12']),
+      intent: 'retire-g99',
+    });
+    expect(retired.retiredCandidateIds).toEqual([vanishedId]);
+    expect(review.adoptKeys[3]).not.toBe(sealedKey);
+    expect(review.adoptKeys[4]).not.toBe(review.adoptKeys[3]);
+    expect(retired.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
+      [editorialId, extraEditorialId, pageOneId, pageTwoId].sort(),
+    );
+    expect(
+      retired.adopted[`${workId}:schema:genre`]?.selection.find((row) => row.candidate === editorialId)?.rank,
+    ).toBe('preferred');
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('unavailable Scheme withholds membership until independent recovery on unchanged input', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-scheme-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const review = journaledReview({
+      schemeAvailable: false,
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' })],
+        second: [],
+      },
+    });
+    const withheld = await completeReviewedSharedTagFlow({
+      review: review as unknown as ShowcaseReviewPort,
+      journal,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'],
+      keepExternalIds: new Set(['g311']),
+    });
+    expect(withheld.schemes).toEqual([
+      { requestedId: schemeId, currentId: schemeId, type: null, available: false, inScheme: [], broader: [] },
+    ]);
+    expect(withheld.concepts).toEqual([]);
+    expect(withheld.membership).toEqual([]);
+    expect(review.accepted.size).toBe(0);
+
+    review.setSchemeAvailable(true);
+    const recovered = await completeReviewedSharedTagFlow({
+      review: review as unknown as ShowcaseReviewPort,
+      journal,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'],
+      keepExternalIds: new Set(['g311']),
+    });
+    expect(recovered.schemes[0]?.available).toBe(true);
+    expect(recovered.concepts[0]?.available).toBe(true);
+    expect(recovered.accepted).toEqual([pageOneId]);
+    expect(recovered.membership).toEqual([
+      {
+        workId,
+        property: 'schema:genre',
+        currentId: workId,
+        available: true,
+        values: [conceptId],
+        weights: [{ target: conceptId, amount: '+2.6', metric: 'vndbTagsRating' }],
+      },
+    ]);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('two admitted Schemes withhold membership until child and parent share one Scheme', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-two-scheme-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const valueStatement = (content: string) => ({ value: { type: 'value', content } });
+  const parentRead = (scheme: string) =>
+    ({
+      subject: {
+        id: parentBId,
+        type: 'skos:Concept',
+        statements: { 'skos:inScheme': [valueStatement(scheme)] },
+      },
+    }) as unknown as ReviewedSubjectRead;
+  try {
+    const review = journaledReview({
+      conceptBroader: [parentBId],
+      extraSubjects: {
+        [schemeBId]: { subject: { id: schemeBId, type: 'skos:ConceptScheme', statements: {} } } as ReviewedSubjectRead,
+        [parentBId]: parentRead(schemeBId),
+      },
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' })],
+        second: [],
+      },
+    });
+    const input = {
+      review: review as unknown as ShowcaseReviewPort,
+      journal,
+      schemes: [schemeId, schemeBId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'] as const,
+      keepExternalIds: new Set(['g311']),
+    };
+    const withheld = await completeReviewedSharedTagFlow(input);
+    expect(withheld.schemes.every((row) => row.available && row.type === 'skos:ConceptScheme')).toBe(true);
+    expect(withheld.concepts[0]).toMatchObject({ requestedId: conceptId, available: true, type: 'skos:Concept' });
+    expect(withheld.membership).toEqual([]);
+    expect(review.accepted.size).toBe(0);
+
+    review.setSubject(parentBId, parentRead(schemeId));
+    const recovered = await completeReviewedSharedTagFlow(input);
+    expect(recovered.concepts[0]?.available).toBe(true);
+    expect(recovered.accepted).toEqual([pageOneId]);
+    expect(recovered.membership).toEqual([
+      {
+        workId,
+        property: 'schema:genre',
+        currentId: workId,
+        available: true,
+        values: [conceptId],
+        weights: [{ target: conceptId, amount: '+2.6', metric: 'vndbTagsRating' }],
+      },
+    ]);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -131,10 +131,15 @@ export function SourceTagWeight({
       <span title={m.subject_source_tag_weight_explanation({}, options)}>
         {m.subject_source_tag_weight_value({ value: result.amount }, options)}
       </span>
-      <a className="underline underline-offset-4" href={VNDB_DOCS}>
+      <a className="underline underline-offset-4" href={VNDB_DOCS} data-source-citation={VNDB_DOCS} rel="noreferrer">
         {m.subject_source_tag_weight_source({}, options)}
       </a>
-      <a className="underline underline-offset-4" href={result.recordUrl}>
+      <a
+        className="underline underline-offset-4"
+        href={result.recordUrl}
+        data-source-citation={result.recordUrl}
+        rel="noreferrer"
+      >
         {m.subject_source_tag_weight_record({}, options)}
       </a>
     </span>

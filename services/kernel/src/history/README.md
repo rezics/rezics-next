@@ -422,10 +422,11 @@ The ordinary independent-maintenance command branch keeps its historical control
 ### Known local declaration and composition interface
 
 `IDENTITY_HISTORY_ACCOUNTS_DECLARATION`, exported by `agent-identity-inventory-work.ts`
-and re-exported by `agent-identity-retirement.ts`, publishes per-call Accounts local
-and installed SDK dispatch prices. It is a **subdeclaration**, without a whole-parent
-`work` or nullable successful total. Semantic owns composition of
-`IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`; Library owns
+and bound on `HistoryComposition` as a getter, publishes per-call Accounts local
+and installed SDK dispatch prices plus finite reached multiplicities. Native composition
+invokes that getter; Source does not treat a found value as the declaration object.
+It is a **subdeclaration**, without a whole-parent `work` or nullable successful total.
+Semantic owns composition of `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`; Library owns
 `IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. Missing terms cannot be filled by
 zero, a configured allowance or the fully spent Accounts local allocation.
 
@@ -531,16 +532,18 @@ Library descendants use only the authentic parent's cumulative ledger.
 
 ### Missing operands and current refusal boundary
 
-The installed Source module does not export the agreed prepaid receiver or complete
-Source declaration; the installed Library module does not export its complete original
-declaration. Accordingly the actual original admission cannot supply those partitions.
-The known Accounts declaration remains independently available for owner composition.
-Its named missing terms are:
+Source exports `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` for its owned schedule
+bodies. Library exports `IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. History's
+typed getter publishes eight-axis children and reached multiplicities; Core's
+event-callback profile remains unnamed as a complete child, so original admission
+still cannot supply the whole parent. The known Accounts declaration remains
+independently available for owner composition.
+Its named remaining terms are:
 
-- `SourceHistoryNativeAllReachedCalls`: original/accepted recovery reads, Source
-  staging/custody/handoff and final native verification, including nested native SQL.
-- `LibraryAllReachedCalls`: successful page/current/locked-plan/seal/fence and cleanup,
-  through the exact original ledger. An unavailable page is not successful free work.
+- `SourceHistoryNativeAllReachedCalls`: installed on Source; History still composes nested
+  native SQL inside its own guard, inventory and SDK bodies.
+- `LibraryAllReachedCalls`: installed Library page/current/locked-plan/seal on the exact
+  original ledger. An unavailable page is not successful free work.
 - `SourceHistoryNativeGuard`: nested Source work reached by the History native guard.
 - `RecoveryFinalReceiving`: disjoint local/Source composition of the two serializer
   current receiving verifiers; its legacy five-field bound does not classify eight axes.

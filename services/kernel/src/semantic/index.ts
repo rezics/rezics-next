@@ -115,7 +115,7 @@ export type {
   SubjectSourceKeyPages,
 } from './subject-source-key-pages.ts';
 export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
-export type { SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
+export type { RelatedSubjectSummary, SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
 
 export type * from './identity-scope-types.ts';
 export {

@@ -25,6 +25,7 @@ import type {
   AgentIdentitySDKWriterObservation,
   AgentIdentitySourceHandoff,
   AgentIdentityWorkAdmission,
+  IdentityHistoryAccountsDeclaration,
   IdentityHistoryAccountsLocalWork,
   NativeStepWork,
 } from './identity-types.ts';
@@ -349,6 +350,7 @@ export interface HistoryComposition {
   ): Promise<T>;
   unpricedIdentityHistoryWork(term: string, amount: NativeStepWork): NativeStepWork;
   identityHistoryAccountsLocalWork(): IdentityHistoryAccountsLocalWork;
+  IDENTITY_HISTORY_ACCOUNTS_DECLARATION(): IdentityHistoryAccountsDeclaration;
   resolveAgentIdentitySDKWork(tx: HistoryTransaction, custodyId: string): Promise<HistoryHandle | null>;
   assertAgentIdentityHistoryUnit(
     pool: HistoryPool,

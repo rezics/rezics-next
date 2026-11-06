@@ -38,6 +38,7 @@ function check() {
   return memoizedValue(check, () => Compile(CollectionHitSchema()));
 }
 
+/** Collection hits close against native cards. Omitted-source HTTP stays the existing owner contract. */
 export function admitCollectionHit(value: unknown): asserts value is CollectionHit {
   const admitted = evidenceOrDefault(value);
   if (!check().Check(admitted)) unavailable();

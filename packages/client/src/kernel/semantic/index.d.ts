@@ -24,7 +24,7 @@ export type { NativePublicSource, NativePublicFilterPublication, NativePublicFil
 export { createSubjectSourceKeyPages } from './subject-source-key-pages.ts';
 export type { SubjectSourceKeyCursor, SubjectSourceKeyPage, SubjectSourceKeyPages, } from './subject-source-key-pages.ts';
 export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
-export type { SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
+export type { RelatedSubjectSummary, SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
 export type * from './identity-scope-types.ts';
 export { createPublicIdentitySourceCapture, verifyPublicIdentitySourceCapture, } from './identity-scoped-public-source.ts';
 export type { PublicIdentitySourceCapture, PublicIdentitySourceCapturePage, PublicIdentitySourceCaptureProducer, } from './identity-scoped-public-source.ts';

@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,9 +22,7 @@ import {
   readShowcaseVndbPublicTagVocabulary,
 } from '../../../importer/src/showcase-tags.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { identitySupport } from './identity-fixture.ts';
-import { openApiObserver } from './api-observer.ts';
-import { openApiRuntime } from './api-runtime.ts';
+import { openReviewedTagRuntime } from './reviewed-tag-runtime.ts';
 import { importShowcaseTags } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
@@ -75,7 +72,7 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -83,22 +80,7 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
   })();
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-native-'));
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
     const authored = {
       source: 'authored-showcase-tags',
       record_revision: 'unversioned',
@@ -253,30 +235,8 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
       return page.body as { candidates: Candidate[]; adoption: { head: number } | null };
     }
     async function acceptAdopt(subjectId: string, property: string) {
-      const seen = new Set<string>();
-      for (;;) {
-        const listing = await candidates(subjectId, property);
-        const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
-        if (!next) {
-          const live = listing.candidates.filter((item) => !item.retracted);
-          if (!live.length) return listing;
-          const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-            context: globalContext,
-            property,
-            mode: 'replace',
-            expected_head: listing.adoption?.head ?? null,
-            selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-          });
-          expect(adopted.status).toBe(200);
-          return listing;
-        }
-        const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-          context: globalContext,
-          expected_head: next.head,
-        });
-        expect(accepted.status).toBe(200);
-        seen.add(next.id);
-      }
+      await runtime.acceptAndAdopt(subjectId, property);
+      return candidates(subjectId, property);
     }
     for (const [id, property] of [
       [contScheme, 'schema:url'],
@@ -444,35 +404,12 @@ function guessedTagCreate(input: {
   };
 }
 
-async function acceptAdopted(editor: Awaited<ReturnType<typeof openApiObserver>>, subjectId: string, property: string) {
-  const seen = new Set<string>();
-  for (;;) {
-    const page = await editor.http(
-      `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
-    );
-    expect(page.status).toBe(200);
-    const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
-    const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
-    if (!next) {
-      const live = listing.candidates.filter((item) => !item.retracted);
-      if (!live.length) return;
-      const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-        context: globalContext,
-        property,
-        mode: 'replace',
-        expected_head: listing.adoption?.head ?? null,
-        selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-      });
-      expect(adopted.status).toBe(200);
-      return;
-    }
-    const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-      context: globalContext,
-      expected_head: next.head,
-    });
-    expect(accepted.status).toBe(200);
-    seen.add(next.id);
-  }
+async function acceptAdopted(
+  runtime: { acceptAndAdopt(subjectId: string, property: string): Promise<void> },
+  subjectId: string,
+  property: string,
+) {
+  await runtime.acceptAndAdopt(subjectId, property);
 }
 
 test('default selected VN tag publication keeps language-less names as und through native create, review and public read', async () => {
@@ -480,7 +417,7 @@ test('default selected VN tag publication keeps language-less names as und throu
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -489,22 +426,7 @@ test('default selected VN tag publication keeps language-less names as und throu
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-und-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const tables = dictionaryTables();
     const plan = await planShowcaseTags({ tables, selectedVids: ['v410'] });
@@ -554,7 +476,7 @@ test('default selected VN tag publication keeps language-less names as und throu
       [kanaId, 'skos:inScheme'],
       [latinId, 'skos:inScheme'],
     ] as const)
-      await acceptAdopted(editor, id, property);
+      await acceptAdopted(runtime, id, property);
     const current = await readShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal });
     expect(current.concepts.find((item) => item.code === 'g311')?.id).toBe(hanId);
     const imported = await importShowcaseTags({
@@ -569,7 +491,7 @@ test('default selected VN tag publication keeps language-less names as und throu
       (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
       (imported.readings[0]?.subject as { id?: string }).id;
     expect(workId).toBeTruthy();
-    await acceptAdopted(editor, workId!, 'schema:genre');
+    await acceptAdopted(runtime, workId!, 'schema:genre');
     expect(await labelsOf(hanId)).toEqual({ und: '学園' });
     expect(await labelsOf(kanaId)).toEqual({ und: '親タグ' });
     expect(await labelsOf(latinId)).toEqual({ und: 'Authored erotic tag' });
@@ -604,7 +526,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -614,22 +536,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
     const kana = guessedTagCreate({
       sourceKey: 'vndb.tag.cont:g12',
       uri: vndbPublicTagConceptUri('cont', 'g12'),
@@ -719,7 +626,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
       [sealedKanaId, 'skos:inScheme'],
       [latinId, 'skos:inScheme'],
     ] as const)
-      await acceptAdopted(editor, id, property);
+      await acceptAdopted(runtime, id, property);
     const current = await readShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal });
     expect(current.concepts.find((item) => item.code === 'g12')?.id).toBe(sealedKanaId);
     const imported = await importShowcaseTags({
@@ -734,7 +641,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
       (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
       (imported.readings[0]?.subject as { id?: string }).id;
     expect(workId).toBeTruthy();
-    await acceptAdopted(editor, workId!, 'schema:genre');
+    await acceptAdopted(runtime, workId!, 'schema:genre');
     const read = await editor.http(`/v1/subjects/${workId}?context=${globalContext}`);
     expect(read.status).toBe(200);
     const genres = (

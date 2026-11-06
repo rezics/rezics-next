@@ -1,16 +1,23 @@
 import type { Pool } from 'pg';
 import { shareAccount } from '../access/account-share.ts';
-import { noEffect, runCommand } from '../command/command.ts';
+import { currentCommand, noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import type { IdentityEpochStep, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import {
+  bindSemanticProducerRoles,
   identityEpochStore,
+  identityErasureRoles,
   identityJobPartition,
   IdentityEpochStoreError,
+  recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
-import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-adapters/index.ts';
+import {
+  activeIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
+} from '../semantic/identity-source-consumer-maintenance.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 import {
   lookupIdentityReceivingEffect,
   prepareIdentityReceivingEffect,
@@ -55,6 +62,8 @@ import {
 import { CANONICAL_SOURCE_REPAIR_STEP, canonicalSourceCallAllowance } from './canonical-source-bounds.ts';
 import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import invalidate from './identity-epoch-participant-invalidate.sql';
+import scanSql from './identity-epoch-participant-scan.sql';
+import completeSql from './identity-epoch-participant-complete.sql';
 
 const step = 'library-private-follow-counts';
 const stale = (detail: string) => new IdentityEpochStoreError('identity_effect_stale', detail);
@@ -1192,8 +1201,14 @@ export async function stepLibraryIdentityEpochWithSource(
   };
 }
 
-/** Fixed ALL-Library entry point. Owned effects execute independently of final composition.
- * Missing full Source/owner/follow coverage never becomes an empty observation or completion receipt.
+const sixDriverPending =
+  'ALL-Library identity remains pending: complete six-driver Source rebuild/OLD/NEW manifests, ' +
+  'owner candidate/winner and first-apply coverage, follow pair/support/total/outgoing/negative/fences, ' +
+  'cross-home owner custody and public/frozen output authority are not bound';
+
+/** Fixed ALL-Library entry point. Empty-home coverage seals after a committed 16-route original scan
+ * with no building plans and no members of this job's originals. Homes with collections still require
+ * Source manifests through the live frame; empty registration is not an ACK.
  */
 export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
   bounded(async (deadline) => {
@@ -1218,7 +1233,8 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
       return identityEpochStore().reconcileStepReceipt(pool, receipt);
     }
     if (saved.state !== 'pending') throw stale('Published identity job is missing its ALL-Library receipt');
-    const pending = await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {
+    const home = identityJobPartition(job);
+    const pending = await runCommand(pool, { partition: home, deadline }, async (tx) => {
       const result = await tx.query<QueuedEffect>(
         `SELECT original,effect_key,role,receiving_partition,receiving_epoch,
               receiving_position::text,receiving_transaction_id::text,source_route,source_id::text,
@@ -1226,7 +1242,7 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
        FROM library.identity_epoch_participant_work
        WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT custodied AND NOT handed_off
        ORDER BY effect_key LIMIT 1`,
-        [identityJobPartition(job), job.jobId, job.epoch.toString()],
+        [home, job.jobId, job.epoch.toString()],
       );
       return noEffect(result.rows[0] ?? null);
     });
@@ -1235,11 +1251,67 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
         throw unavailable("Native six-driver Library effects require Semantic's live prepaid Source receiver");
       await applySourceInvalidation(pool, job, pending.value, deadline, runCommand);
     }
-    // No complete step/native ACK. Invalidation is only part of the ALL-role contract.
-    // Empty registration cannot prove current birth/first-apply/late-writer closure.
-    throw unavailable(
-      'ALL-Library identity remains pending: complete six-driver Source rebuild/OLD/NEW manifests, ' +
-        'owner candidate/winner and first-apply coverage, follow pair/support/total/outgoing/negative/fences, ' +
-        'cross-home owner custody and public/frozen output authority are not bound',
+    const funded = activeIdentitySourceConsumerMaintenance(pool);
+    if (funded) {
+      const source = resolveLiveLibrarySource({ libraryWork: identitySourceConsumerLibraryWork }, pool, funded);
+      const advanced = await stepLibraryIdentityEpochWithSource(pool, job, source);
+      if (advanced.state !== 'closed') throw unavailable(`${sixDriverPending} (${advanced.state})`);
+    }
+    const coverage = await withReadTransaction(
+      pool,
+      async (tx) =>
+        (await tx.query<{ building: boolean; affected: boolean }>(scanSql.sql, [home, job.jobId, job.epoch.toString()]))
+          .rows[0],
+      deadline,
     );
+    if (!coverage || coverage.building || coverage.affected) throw unavailable(sixDriverPending);
+    const scope = await withReadTransaction(
+      pool,
+      async (tx) =>
+        (
+          await tx.query<{ scope_digest: string }>(
+            `SELECT scope_digest FROM semantic.identity_epoch_job WHERE partition_no=$1 AND job_id=$2 AND epoch=$3`,
+            [home, job.jobId, job.epoch.toString()],
+          )
+        ).rows[0]?.scope_digest,
+      deadline,
+    );
+    if (!scope) throw unavailable('ALL-Library completion lost the admitted job scope');
+    const roles = await identityErasureRoles(pool, job.jobId);
+    const frontier = { after: ['directory', 16], segment: 0 };
+    const work = { rows: 16, points: 16, statements: 3, bytes: 4096, engineRequests: 0 };
+    const sealed = await runCommand(pool, { partition: home, deadline }, async (tx) => {
+      bindSemanticProducerRoles(tx, roles);
+      recordIdentityEpochNativeCommit(tx, step);
+      registerCommandCallback(tx, async (id) => {
+        const inserted = await tx.query(completeSql.sql, [
+          currentCommand(tx).partition,
+          id,
+          job.jobId,
+          job.epoch.toString(),
+          scope,
+          json(frontier),
+          json(work),
+        ]);
+        if (inserted.rowCount !== 1) throw unavailable('ALL-Library completion lost its native step');
+      });
+      return { value: null, events: [wake(job)] };
+    });
+    return {
+      job,
+      frontier,
+      state: 'complete' as const,
+      receipt: {
+        job,
+        step,
+        version: 1 as const,
+        native: {
+          partition: sealed.partition,
+          transactionId: sealed.transactionId,
+          epoch: sealed.epoch,
+          position: sealed.position,
+        },
+      },
+      work,
+    };
   });

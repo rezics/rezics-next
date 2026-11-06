@@ -6,13 +6,11 @@ import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import {
-  collectionDirectoryOrder,
   collectionDirectoryQuery,
-  collectionDirectoryRows,
-  pageCollectionDirectory,
+  executeCollectionDirectory,
+  hasCollectionDirectoryCapability,
   parseCollectionDirectoryAfter,
-  projectCollectionDirectoryHit,
-  sortCollectionDirectory,
+  projectCollectionDirectoryPage,
 } from './collection-directory.ts';
 import type { DiscoveryOwnerMetadataSummary } from './discovery.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
@@ -324,13 +322,12 @@ function executeDiscoverySearch(
 ): DiscoverySearch {
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
+    // Directory capability is advertised on a ready Collection adapter. An omitted producer must not
+    // reach filter admission or enumeration: missing Commerce listing operands are readiness.
+    if (request.collectionDirectory !== undefined && !hasCollectionDirectoryCapability(registry)) throw ready();
     const admitted = admitDiscoveryRequest(request, registry, release);
     context = { ...context, ...(admitted.text === undefined ? {} : { textQuery: admitted.text }) };
-    // The visible Collection directory is accepted only when its native owner has registered the
-    // current listing predicates and ordering. Missing Commerce operands mean preparation, never an
-    // unfiltered or index-hint-only response.
-    if (admitted.collectionDirectory && !registry.domains?.('collection').includes('collectionDirectory'))
-      throw ready();
+    if (admitted.collectionDirectory && !hasCollectionDirectoryCapability(registry)) throw ready();
     const matchEvidencePlan = admitted.text
       ? compileMatchEvidence(compileText(admitted.text, { field: 'search_text', prefix: 't' }))
       : undefined;
@@ -536,35 +533,32 @@ function executeDiscoverySearch(
           if (!last || !exhausted) throw ready();
           const adapter = registry.getOwnerAdapter?.('collection');
           if (!adapter || adapter.kind !== 'collection' || !registry.getOwnerAdapter) throw ready();
-          const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
-          for (let offset = 0; offset < identities.length; offset += 100) {
-            const batch = identities.slice(offset, offset + 100);
-            const summaries = await adapter.readCurrent(batch, currentContext);
-            for (const [id, summary] of summaries) current.set(id, summary);
-          }
-          const revalidated = await revalidateOwnerCurrentSummaries(
-            registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
-            [...current].map(([id, value]) => ({ candidate: id, kind: 'collection' as const, id, value })),
-            currentContext,
-          );
-          current.clear();
-          for (const entry of revalidated) {
-            if (entry) current.set(entry.id, entry.value as DiscoveryOwnerMetadataSummary<'collection'>);
-          }
-          const order = collectionDirectoryOrder(admitted.collectionDirectory);
-          const paged = pageCollectionDirectory(
-            sortCollectionDirectory(collectionDirectoryRows(current), order),
-            order,
-            directoryAfter,
-            admitted.limit,
-          );
-          for (const row of paged.items) {
-            const hit = projectCollectionDirectoryHit(row);
+          const paged = await executeCollectionDirectory({
+            identities,
+            readCurrent: adapter.readCurrent,
+            async revalidate(summaries, context) {
+              const revalidated = await revalidateOwnerCurrentSummaries(
+                registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+                [...summaries].map(([id, value]) => ({ candidate: id, kind: 'collection' as const, id, value })),
+                context,
+              );
+              const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
+              for (const entry of revalidated) {
+                if (entry) current.set(entry.id, entry.value as DiscoveryOwnerMetadataSummary<'collection'>);
+              }
+              return current;
+            },
+            selection: admitted.collectionDirectory,
+            context: currentContext,
+            after: directoryAfter,
+            limit: admitted.limit,
+          });
+          for (const hit of projectCollectionDirectoryPage(paged)) {
             hits.push(hit);
             witnesses.set(hit.key.kind, (witnesses.get(hit.key.kind) ?? 0) + 1);
           }
           directoryNextAfter = paged.nextAfter;
-          exhausted = paged.nextAfter === null;
+          exhausted = paged.exhausted;
         }
         for (let round = 0; !admitted.collectionDirectory && round < 3; round++) {
           const batch = await coverage.queryDiscovery(queried, refill);

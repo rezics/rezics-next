@@ -1,8 +1,11 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { loadAccountIdentitySource } from '../../../src/access/agent-verification-identity.ts';
 import { runCommand } from '../../../src/command/command.ts';
 import { withConnection } from '../../../src/database/pool.ts';
+import { accountAgentId } from '../../../src/semantic/agents.ts';
+import { ensureAccountAgent } from '../../../src/semantic/account-agents.ts';
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
@@ -14,6 +17,7 @@ import type {
 } from '../../../src/semantic/identity-epoch-contract.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { digest, epochFixture, identityEpochDatabase, nativeMappingStep, release } from './identity-epoch.ts';
+import { approvedVerification } from './identity-epoch-cutover.ts';
 
 /** All production operations share the guarded native pool; admin only observes source rows. */
 export async function createIdentityMappingFixture(options: { poolMax: number; pool?: Pool; url?: string }) {
@@ -84,6 +88,31 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
         const job = await admit({ kind: 'merge', redirected, survivor, release: release.digest });
         return { job, survivor, redirectedOriginals: [redirected] };
       },
+      async admitAccountAgentVerify() {
+        const catalogue = (await f.create('Accounts mapping catalogue', 0x9d10)).subject.id;
+        const approved = await approvedVerification(f, catalogue);
+        const agent = await ensureAccountAgent(f.pool, {
+          account: approved.account,
+          kind: 'person',
+          name: 'Accounts mapping agent',
+        });
+        await this.bootstrapHomes([catalogue, agent.subject.id, accountAgentId(approved.account)]);
+        const receipt = {
+          kind: 'account-agent.verify' as const,
+          account: approved.account,
+          receipt: approved.workflow.receiptId,
+        };
+        const source = await loadAccountIdentitySource(f.pool, receipt);
+        const job = await identityEpochStore().prepareAdmission(f.pool, {}, source.input);
+        for (let attempt = 0; attempt < 16; attempt++) {
+          const progress = await stepIdentityEpochAdmission(f.pool, job);
+          if (progress.state === 'pending')
+            return { job, catalogue, account: approved.account, agent: agent.subject.id, receipt, source };
+          expect(progress.state).toBe('preparing');
+        }
+        throw new Error('Native Accounts admission did not finish within sixteen bounded steps');
+      },
+
       async drainMapping(job: IdentityJobRef, bound: number) {
         const step = await nativeMappingStep();
         const progress: IdentityStepProgress[] = [];

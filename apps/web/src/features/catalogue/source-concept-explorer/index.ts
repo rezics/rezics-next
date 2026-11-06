@@ -7,6 +7,15 @@ import { personEvidenceFits } from '../person-reader/model';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 import { conditionMetadata, type ConditionMetadata } from '../../../search/condition-editor-model';
+import {
+  emptyMembership,
+  readConceptMembership,
+  type ConceptHierarchyState,
+  type ConceptMembership,
+} from './membership';
+
+export type { ConceptHierarchyState, ConceptMembership, ConceptMembershipRow } from './membership';
+export { emptyMembership, readConceptMembership, membershipProperties } from './membership';
 
 export const conceptContinuationLimit = 4096;
 export function validConceptCursor(cursor: string | undefined): boolean {
@@ -36,7 +45,6 @@ export type ConceptHierarchyRow = {
   direction: 'broader' | 'narrower';
   conceptPage: boolean;
 };
-export type ConceptHierarchyState = 'available' | 'lagging' | 'preparing' | 'unavailable' | 'unsupported';
 export type ConceptViewerActions =
   | { state: 'available'; account: { id: string } | null; actions: { action: string; operations: string[] }[] }
   | { state: 'unavailable' };
@@ -69,6 +77,7 @@ export type ConceptRead =
         exactEmpty: boolean;
       };
       works?: ConceptWorksAdmission;
+      membership: ConceptMembership;
       viewerActions: ConceptViewerActions;
       spoiler: boolean;
       session?: string | undefined;
@@ -257,6 +266,7 @@ export async function readSourceConcept(
           ...(input.cursor ? { cursor: input.cursor } : {}),
         },
         works: { state: 'unsupported', types: [], properties: [], metadata: null },
+        membership: emptyMembership('unsupported'),
         viewerActions,
         spoiler: false,
         ...(session ? { session } : {}),
@@ -400,6 +410,10 @@ export async function readSourceConcept(
     const spoiler = Object.values(current.data.subject.statements).some((statements) =>
       statements.some((statement) => spoilerLevel(statement) > 0),
     );
+    const membershipRead = await readConceptMembership(client, authorization, release, id, locale, { session });
+    if (membershipRead.failure) return candidateFailure(membershipRead.failure);
+    if (membershipRead.oversized) return { ok: false, reason: 'unavailable', oversized: true };
+    session = membershipRead.session ?? session;
     return {
       ok: true,
       public: current.data,
@@ -413,6 +427,7 @@ export async function readSourceConcept(
       broader: { rows: broaderRows, withheld: broaderWithheld },
       narrower,
       works: conceptWorksAdmission(release, retired === false),
+      membership: membershipRead.membership,
       viewerActions,
       spoiler,
       ...(session ? { session } : {}),
