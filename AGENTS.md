@@ -41,6 +41,13 @@ The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only
 - Keep instructions and documents within their layers, owners and budgets:
   [instructions and documentation](docs/development/documentation.md).
 
+## Communication
+
+The hierarchy exists because it is faster, not to stop peers talking. Every agent may, and must, raise a problem or a
+rule that gives bad results with its manager or the peer concerned as soon as it sees it.
+
+Rules, lessons and decisions go in this repository, never in agent memory.
+
 ## Failure discipline
 
 - A failure seen twice is fixed as a class, in the control plane or its owner module, not by another script or a
