@@ -556,3 +556,9 @@ export {
   bangumiGameEnvironmentSourceHost,
   type BangumiGameEnvironmentProperty,
 } from './bangumi-game-environment.ts';
+export { selectBangumiBookProfile, type BangumiBookGrain } from './bangumi-book-profile.ts';
+export {
+  bangumiGameSourceGenreReference,
+  bangumiGameSourceGenreScheme,
+  bangumiGameSourceGenres,
+} from './bangumi-game-source-genres.ts';

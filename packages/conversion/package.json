@@ -3,6 +3,7 @@
   "license": "AGPL-3.0-only",
   "exports": {
     ".": "./src/index.ts",
+    "./support": "./src/support.ts",
     "./bangumi": "./src/bangumi.ts",
     "./bangumi-vocabulary": "./src/bangumi-vocabulary.ts",
     "./vndb": "./src/vndb.ts",

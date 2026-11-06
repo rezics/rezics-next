@@ -1,5 +1,4 @@
 import { selectBangumiBookProfile } from './bangumi-book-profile.ts';
-import { liveActionWorkType } from './cross-media-entities.ts';
 
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 export const bangumiTVAnimeTemplateHead = '{{Infobox animanga/TVAnime';
@@ -46,6 +45,44 @@ export const bangumiLaunchTypes = {
   2: 'schema:TVSeries',
   4: 'schema:VideoGame',
 } as const;
+
+/** Pinned subject_platforms.yml / platform.go.json ids, type, type_cn and alias. */
+const TV_PLATFORMS = new Set([
+  '0',
+  '1',
+  '2',
+  '3',
+  '6001',
+  '6003',
+  '6004',
+  'other',
+  'misc',
+  'jp',
+  'en',
+  'cn',
+  'tv',
+  'TV',
+  'live',
+  'show',
+  '其他',
+  '日剧',
+  '欧美剧',
+  '华语剧',
+  '电视剧',
+  '演出',
+  '综艺',
+]);
+const FILM_PLATFORMS = new Set(['6002', 'movie', 'Movie', '电影']);
+
+/** Live-action Bangumi type 6 grain. Film and TV platform ids stay exact source literals. */
+export function liveActionWorkType(platform: unknown): 'schema:Movie' | 'schema:TVSeries' | undefined {
+  if (platform === undefined || platform === null) return undefined;
+  const value = String(platform).trim();
+  if (!value) return undefined;
+  if (FILM_PLATFORMS.has(value)) return 'schema:Movie';
+  if (TV_PLATFORMS.has(value)) return 'schema:TVSeries';
+  return undefined;
+}
 
 export function isAdmittedBangumiType(type: unknown): type is 1 | 2 | 3 | 4 | 6 {
   return type === 1 || type === 2 || type === 3 || type === 4 || type === 6;
