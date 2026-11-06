@@ -58,7 +58,7 @@ import { createSessionCommands } from '../library/sessions.ts';
 import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
-import { currentRealmDisclosureScope } from '../content/reads.ts';
+import { currentRealmDisclosureScope, type DisclosureBarrier } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
 import { noticeRoutes } from '../content/notice-routes.ts';
@@ -157,6 +157,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
       readConsent?: CurrentConsentReader;
       /** Complete-input title observations; absent until Content installs its native producer. */
       shelfTitleInputs?: ContentShelfTitleInputs;
+      /** Composed-test timing seam between a read's initial and final disclosure; absent in production. */
+      disclosureBarrier?: DisclosureBarrier;
     };
   search?: SearchRuntime;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
@@ -634,6 +636,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
+    ...(dependencies.content?.disclosureBarrier === undefined
+      ? {}
+      : { disclosureBarrier: dependencies.content.disclosureBarrier }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
     viewerActionRuntime,
     realmParticipation: checkRealmParticipation,

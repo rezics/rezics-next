@@ -161,7 +161,16 @@ export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 's
 export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUntil?: string }) | WithheldPostEntry;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
-export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+/** Timing seam for composed tests. It runs after a read's initial Board and Access checks and before its final
+ * disclosure; it never changes what the read returns. Production leaves it absent. */
+export type DisclosureBarrier = (target: Readonly<{ threadId: string; postId?: string }>) => Promise<void>;
+export type ContentReadDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock?: () => Date;
+  disclosureBarrier?: DisclosureBarrier;
+}>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same
  * source snapshot; it must not prepare authority or open a foreign checkout.
@@ -1490,6 +1499,7 @@ async function disclose(
       firstPost: item,
     };
   };
+  await dependencies.disclosureBarrier?.({ threadId, ...(postId === undefined ? {} : { postId }) });
   let disclosed = await snapshot(dependencies, threadId, context, discloseCurrent);
   // Admission may consult independent anchors only after ordinary disclosure has
   // succeeded and released its connections. Keep the original rows/checks as the
@@ -2080,6 +2090,7 @@ async function list(
   context: ReadContext,
   cursor: string | undefined,
   limit: number,
+  beforeFinal?: (entries: readonly PostEntry[]) => Promise<void>,
 ): Promise<Page<PostEntry>> {
   const clock = dependencies.clock ?? (() => new Date());
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
@@ -2141,7 +2152,9 @@ async function list(
     }
     if (!more) break;
   }
-  // Recheck the root after hydration; concealed and missing roots share absence.
+  // Later reads (reaction totals) run before the root's final disclosure, so a Board takedown or revoked
+  // read grant committed in that window is still observed by the last check. Concealed and missing roots share absence.
+  await beforeFinal?.(entries);
   const final = await readThread(dependencies, threadId, context);
   if (!final.value) throw new ContentNotFoundError();
   const page: Page<PostEntry> = {
@@ -2164,14 +2177,16 @@ async function list(
   return page;
 }
 
+/** `beforeFinal` receives the disclosed entries and runs once, before the thread's final disclosure. */
 export async function listThreadPosts(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
   context: ReadContext,
   cursor?: string,
   limit = 100,
+  beforeFinal?: (entries: readonly PostEntry[]) => Promise<void>,
 ): Promise<Page<PostEntry>> {
-  return (await list(dependencies, threadId, context, cursor, limit)) as Page<PostEntry>;
+  return (await list(dependencies, threadId, context, cursor, limit, beforeFinal)) as Page<PostEntry>;
 }
 export async function listPostRevisions(
   dependencies: ContentReadDependencies,

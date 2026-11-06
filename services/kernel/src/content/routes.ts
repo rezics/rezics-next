@@ -1016,6 +1016,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const counted = await withReactionCounts(dependencies, [thread], job.deadline);
             const shown = counted.items[0];
             if (!shown) throw new ProblemError('not_found');
+            // Totals were read after the thread's disclosure; disclose it again before the response can leave.
+            if (!(await readThread(dependencies, id, context)).value) throw new ProblemError('not_found');
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
             return { thread: shown, reactionsAsOf: counted.reactionsAsOf, ...(authorErasure ? { authorErasure } : {}) };
           }),
@@ -1086,16 +1088,21 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         existingId(id);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
+            // Totals are read between the entries' disclosure and the thread's final disclosure.
+            let counted: Awaited<ReturnType<typeof withReactionCounts<PostEntry>>> | undefined;
             const page = await listThreadPosts(
               dependencies,
               id,
               { actor, deadline: job.deadline },
               query.cursor,
               query.limit ?? 20,
+              async (entries) => {
+                const posts = await withViewerReactions(dependencies, actor, entries, job.deadline);
+                counted = await withReactionCounts(dependencies, posts, job.deadline);
+              },
             );
+            if (!counted) throw new Error('Thread post totals did not complete');
             session.record(sessionComponent(page.anchor));
-            const posts = await withViewerReactions(dependencies, actor, page.entries, job.deadline);
-            const counted = await withReactionCounts(dependencies, posts, job.deadline);
             return { posts: [...counted.items], next: page.nextCursor, reactionsAsOf: counted.reactionsAsOf };
           }),
         );
@@ -1147,7 +1154,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
-            const post = await exactPost(await containingThread(id, context), id, context);
+            const threadId = await containingThread(id, context);
+            const post = await exactPost(threadId, id, context);
             session.record(sessionComponent(post.anchor));
             if (!isErasedPlaceholder(post.value)) set.headers.etag = JSON.stringify(post.value.revisionId);
             const [personal] = await withViewerReactions(dependencies, actor, [post.value], job.deadline);
@@ -1155,6 +1163,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const counted = await withReactionCounts(dependencies, [personal], job.deadline);
             const shown = counted.items[0];
             if (!shown) throw new ProblemError('not_found');
+            // Totals were read after the post's disclosure; disclose it again before the response can leave.
+            await exactPost(threadId, id, context);
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
             return { post: shown };
           }),
