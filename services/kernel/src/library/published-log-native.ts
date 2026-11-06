@@ -243,7 +243,12 @@ export function publishedLogReachedNestedUnits(input: {
     });
     total = plan.total;
     aborted = plan.components.abortedOrSuccessfulAttempts ?? empty;
-  } else if (input.kind === 'published-log.restore' && input.logId && input.deletionId && input.revision !== undefined) {
+  } else if (
+    input.kind === 'published-log.restore' &&
+    input.logId &&
+    input.deletionId &&
+    input.revision !== undefined
+  ) {
     const plan = publishedLogRestoreOperationPlan({
       accountId: input.accountId,
       logId: input.logId,
@@ -289,10 +294,14 @@ export function publishedLogReachedNestedUnits(input: {
 
 function logLeaf(sql: string, operands: readonly unknown[]): Bound | undefined {
   try {
-    if (sql === read.sql) return publishedLogReadPlan(inputOf(read, operands) as Parameters<typeof publishedLogReadPlan>[0]).total;
-    if (sql === lock.sql) return publishedLogLockPlan(inputOf(lock, operands) as Parameters<typeof publishedLogLockPlan>[0]).total;
-    if (sql === page.sql) return publishedLogPagePlan(inputOf(page, operands) as Parameters<typeof publishedLogPagePlan>[0]).total;
-    if (sql === due.sql) return publishedLogDuePlan(inputOf(due, operands) as Parameters<typeof publishedLogDuePlan>[0]).total;
+    if (sql === read.sql)
+      return publishedLogReadPlan(inputOf(read, operands) as Parameters<typeof publishedLogReadPlan>[0]).total;
+    if (sql === lock.sql)
+      return publishedLogLockPlan(inputOf(lock, operands) as Parameters<typeof publishedLogLockPlan>[0]).total;
+    if (sql === page.sql)
+      return publishedLogPagePlan(inputOf(page, operands) as Parameters<typeof publishedLogPagePlan>[0]).total;
+    if (sql === due.sql)
+      return publishedLogDuePlan(inputOf(due, operands) as Parameters<typeof publishedLogDuePlan>[0]).total;
     if (sql === insert.sql)
       return publishedLogInsertPlan(inputOf(insert, operands) as Parameters<typeof publishedLogInsertPlan>[0]).total;
     if (sql === remove.sql)

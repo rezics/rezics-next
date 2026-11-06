@@ -359,34 +359,34 @@ export function createPublishedLogCommands(config: Dependencies) {
     return withRequestDeadline(deadline, () =>
       runLibraryBoundedOperation(operation.kind, operation.total, () =>
         withPublishedLogNativeWork(deadline, async () => {
-        // Release the owner checkout before native original and terminal subject checkouts.
-        const result = await withConnection(pool, async (client) => {
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
-            const row = await readStoredLog(client, route, logId);
-            if (!row) throw new LibraryNotFoundError();
-            const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
-            await client.query('COMMIT');
-            return { row, owner };
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
+          // Release the owner checkout before native original and terminal subject checkouts.
+          const result = await withConnection(pool, async (client) => {
+            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+            try {
+              const row = await readStoredLog(client, route, logId);
+              if (!row) throw new LibraryNotFoundError();
+              const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
+              await client.query('COMMIT');
+              return { row, owner };
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
+            }
+          });
+          const { row, owner } = result;
+          if (row.deleted || !owner || owner.state !== 'active' || owner.fenced) {
+            const tombstone = { publishedLog: { id: logId, deleted: true as const } };
+            return options.present ? options.present(tombstone) : tombstone;
           }
-        });
-        const { row, owner } = result;
-        if (row.deleted || !owner || owner.state !== 'active' || owner.fenced) {
-          const tombstone = { publishedLog: { id: logId, deleted: true as const } };
-          return options.present ? options.present(tombstone) : tombstone;
-        }
-        const value = view(row);
-        await source(viewer, value.subjectId, undefined, deadline);
-        const body = {
-          publishedLog: value,
-          ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
-        };
-        if (!options.present) return body;
-        const presented = await options.present({ publishedLog: value });
-        return { ...body, publishedLog: presented.publishedLog };
+          const value = view(row);
+          await source(viewer, value.subjectId, undefined, deadline);
+          const body = {
+            publishedLog: value,
+            ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
+          };
+          if (!options.present) return body;
+          const presented = await options.present({ publishedLog: value });
+          return { ...body, publishedLog: presented.publishedLog };
         }),
       ),
     );
@@ -416,60 +416,60 @@ export function createPublishedLogCommands(config: Dependencies) {
     return withRequestDeadline(deadline, () =>
       runLibraryBoundedOperation(operation.kind, operation.total, () =>
         withPublishedLogNativeWork(deadline, async () => {
-        const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
-        const result = await withConnection(pool, async (client) => {
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
-            const partition = await readPartition(client, partitionOf(route));
-            const owner = await readAccountCommandState(client, route, page.accountId);
-            let after: { publishedAt: string; logId: string } | null = null;
-            if (page.cursor !== undefined) {
-              const cursor = decodeCursor(tokens, binding, page.cursor);
-              const publishedAt = cursor.ok ? cursor.after[0] : undefined,
-                logId = cursor.ok ? cursor.after[1] : undefined;
-              if (
-                !cursor.ok ||
-                cursor.after.length !== 2 ||
-                typeof publishedAt !== 'string' ||
-                !Number.isFinite(Date.parse(publishedAt)) ||
-                typeof logId !== 'string' ||
-                routeOf(logId) !== route
-              )
-                throw new ProblemError('invalid_cursor');
-              if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-              after = { publishedAt, logId };
+          const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
+          const result = await withConnection(pool, async (client) => {
+            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+            try {
+              const partition = await readPartition(client, partitionOf(route));
+              const owner = await readAccountCommandState(client, route, page.accountId);
+              let after: { publishedAt: string; logId: string } | null = null;
+              if (page.cursor !== undefined) {
+                const cursor = decodeCursor(tokens, binding, page.cursor);
+                const publishedAt = cursor.ok ? cursor.after[0] : undefined,
+                  logId = cursor.ok ? cursor.after[1] : undefined;
+                if (
+                  !cursor.ok ||
+                  cursor.after.length !== 2 ||
+                  typeof publishedAt !== 'string' ||
+                  !Number.isFinite(Date.parse(publishedAt)) ||
+                  typeof logId !== 'string' ||
+                  routeOf(logId) !== route
+                )
+                  throw new ProblemError('invalid_cursor');
+                if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+                after = { publishedAt, logId };
+              }
+              const rows =
+                owner?.state === 'active' && !owner.fenced
+                  ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
+                  : [];
+              await client.query('COMMIT');
+              return { partition, rows };
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
             }
-            const rows =
-              owner?.state === 'active' && !owner.fenced
-                ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
-                : [];
-            await client.query('COMMIT');
-            return { partition, rows };
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
+          });
+          const shown = result.rows.slice(0, size),
+            publishedLogs: PublishedLog[] = [];
+          for (const row of shown) {
+            try {
+              const value = view(row);
+              await source(viewer, value.subjectId, undefined, deadline);
+              publishedLogs.push(value);
+            } catch (error) {
+              if (!(error instanceof LibraryNotFoundError)) throw error;
+            }
           }
-        });
-        const shown = result.rows.slice(0, size),
-          publishedLogs: PublishedLog[] = [];
-        for (const row of shown) {
-          try {
-            const value = view(row);
-            await source(viewer, value.subjectId, undefined, deadline);
-            publishedLogs.push(value);
-          } catch (error) {
-            if (!(error instanceof LibraryNotFoundError)) throw error;
-          }
-        }
-        const last = shown.at(-1);
-        const pageResult = {
-          publishedLogs,
-          next:
-            result.rows.length > size && last && result.partition
-              ? encodeCursor(tokens, binding, { epoch: result.partition.epoch, after: [last.publishedAt!, last.id] })
-              : null,
-        };
-        return options.present ? options.present(pageResult) : pageResult;
+          const last = shown.at(-1);
+          const pageResult = {
+            publishedLogs,
+            next:
+              result.rows.length > size && last && result.partition
+                ? encodeCursor(tokens, binding, { epoch: result.partition.epoch, after: [last.publishedAt!, last.id] })
+                : null,
+          };
+          return options.present ? options.present(pageResult) : pageResult;
         }),
       ),
     );

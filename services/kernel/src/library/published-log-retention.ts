@@ -82,44 +82,48 @@ export async function purgeExpiredPublishedLog(
   const operation = publishedLogRetentionPurgeOperationPlan(key, receiptKeysFor(pool).keys.size + 1, durationMs);
   return runLibraryBoundedOperation(operation.kind, operation.total, () =>
     withPublishedLogNativeWork(deadline, () =>
-    runCommand(
-      pool,
-      {
-        partition: partitionOf(key.route),
-        deadline,
-        clock,
-        authorization,
-        receipt: {
-          actorAccountId: key.accountId,
-          kind,
-          key: normalizeCommandKey({ kind: 'account', id: key.accountId }, key.deletionId),
-          digest: createHash('sha256')
-            .update(JSON.stringify([kind, key]))
-            .digest(),
+      runCommand(
+        pool,
+        {
+          partition: partitionOf(key.route),
+          deadline,
+          clock,
+          authorization,
+          receipt: {
+            actorAccountId: key.accountId,
+            kind,
+            key: normalizeCommandKey({ kind: 'account', id: key.accountId }, key.deletionId),
+            digest: createHash('sha256')
+              .update(JSON.stringify([kind, key]))
+              .digest(),
+          },
         },
-      },
-      async (tx, command) => {
-        if (!matches) return noEffect({ purged: false });
-        const result = await executePublishedLogPurge(
-          tx,
-          publishedLogPurgePlan({
-            route: key.route,
-            log_id: key.logId,
-            deletion_id: key.deletionId,
-            revision: key.revision,
-            restore_until: key.restoreUntil,
-            time: authoritativeTimeValue(command.time),
-          }),
-        );
-        if (!result?.purged) throw new Error('Locked published log deletion failed its exact native CAS');
-        return {
-          value: { purged: true },
-          events: [
-            { type: 'com.rezics.library.published_log.purged.v1', subject: key.accountId, data: { logId: key.logId } },
-          ],
-        };
-      },
-    ),
+        async (tx, command) => {
+          if (!matches) return noEffect({ purged: false });
+          const result = await executePublishedLogPurge(
+            tx,
+            publishedLogPurgePlan({
+              route: key.route,
+              log_id: key.logId,
+              deletion_id: key.deletionId,
+              revision: key.revision,
+              restore_until: key.restoreUntil,
+              time: authoritativeTimeValue(command.time),
+            }),
+          );
+          if (!result?.purged) throw new Error('Locked published log deletion failed its exact native CAS');
+          return {
+            value: { purged: true },
+            events: [
+              {
+                type: 'com.rezics.library.published_log.purged.v1',
+                subject: key.accountId,
+                data: { logId: key.logId },
+              },
+            ],
+          };
+        },
+      ),
     ),
   );
 }
@@ -172,64 +176,64 @@ export async function registerLibraryPublishedLogRetentionWork({ pool, client, c
       });
       return runLibraryBoundedOperation(operation.kind, operation.total, () =>
         withPublishedLogNativeWork(deadline, async () => {
-        const result: Page = { cursor: { ...start }, examined: 0, purged: 0, pending: 0, probes: 0 };
-        let loaded: number | undefined;
-        let seeks = 0;
-        while (result.cursor.partition < PARTITIONS && seeks < PUBLISHED_LOG_RETENTION_PAGE_BOUND) {
-          // Leave room for checkpointing. A failed in-flight command retries this entire honest frontier.
-          if (Date.now() >= deadline - 100) break;
-          const partition = result.cursor.partition;
-          const read = await withConnection(pool, async (connection) => {
-            await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
-              await connection.query(`SET LOCAL statement_timeout = '${Math.max(1, deadline - Date.now())}ms'`);
-              if (loaded !== partition) {
-                if (result.probes === PUBLISHED_LOG_RETENTION_PAGE_BOUND) {
-                  await connection.query('COMMIT');
-                  return { kind: 'bound' } as const;
+          const result: Page = { cursor: { ...start }, examined: 0, purged: 0, pending: 0, probes: 0 };
+          let loaded: number | undefined;
+          let seeks = 0;
+          while (result.cursor.partition < PARTITIONS && seeks < PUBLISHED_LOG_RETENTION_PAGE_BOUND) {
+            // Leave room for checkpointing. A failed in-flight command retries this entire honest frontier.
+            if (Date.now() >= deadline - 100) break;
+            const partition = result.cursor.partition;
+            const read = await withConnection(pool, async (connection) => {
+              await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+              try {
+                await connection.query(`SET LOCAL statement_timeout = '${Math.max(1, deadline - Date.now())}ms'`);
+                if (loaded !== partition) {
+                  if (result.probes === PUBLISHED_LOG_RETENTION_PAGE_BOUND) {
+                    await connection.query('COMMIT');
+                    return { kind: 'bound' } as const;
+                  }
+                  result.probes++;
+                  const metadata = await readPartition(connection, partition);
+                  if (!metadata || metadata.writeState !== 'active') {
+                    await connection.query('COMMIT');
+                    return { kind: 'pending' } as const;
+                  }
+                  loaded = partition;
                 }
-                result.probes++;
-                const metadata = await readPartition(connection, partition);
-                if (!metadata || metadata.writeState !== 'active') {
-                  await connection.query('COMMIT');
-                  return { kind: 'pending' } as const;
-                }
-                loaded = partition;
+                seeks++;
+                const keys = await pageDuePublishedLogs(connection, {
+                  partition,
+                  cutoff,
+                  ...('after' in result.cursor ? { after: result.cursor.after } : {}),
+                  limit: 1,
+                });
+                await connection.query('COMMIT');
+                return { kind: 'key', key: keys[0] } as const;
+              } catch (error) {
+                await connection.query('ROLLBACK');
+                throw error;
               }
-              seeks++;
-              const keys = await pageDuePublishedLogs(connection, {
-                partition,
-                cutoff,
-                ...('after' in result.cursor ? { after: result.cursor.after } : {}),
-                limit: 1,
-              });
-              await connection.query('COMMIT');
-              return { kind: 'key', key: keys[0] } as const;
-            } catch (error) {
-              await connection.query('ROLLBACK');
-              throw error;
+            });
+            if (read.kind === 'bound') break;
+            if (read.kind === 'pending' || !read.key) {
+              if (read.kind === 'pending') result.pending++;
+              result.cursor = { partition: partition + 1 };
+              continue;
             }
-          });
-          if (read.kind === 'bound') break;
-          if (read.kind === 'pending' || !read.key) {
-            if (read.kind === 'pending') result.pending++;
-            result.cursor = { partition: partition + 1 };
-            continue;
+            result.examined++;
+            // The source checkout has been released before entering the core command fence.
+            try {
+              const outcome = await purgeExpiredPublishedLog({ pool, clock, deadline }, read.key);
+              if (outcome.value.purged) result.purged++;
+            } catch (error) {
+              // A backwards domain clock leaves this key for a later fresh sweep, without a receipt or busy loop.
+              if (!(error instanceof PublishedLogNotDueError)) throw error;
+              result.pending++;
+            }
+            result.cursor = { partition, after: read.key };
           }
-          result.examined++;
-          // The source checkout has been released before entering the core command fence.
-          try {
-            const outcome = await purgeExpiredPublishedLog({ pool, clock, deadline }, read.key);
-            if (outcome.value.purged) result.purged++;
-          } catch (error) {
-            // A backwards domain clock leaves this key for a later fresh sweep, without a receipt or busy loop.
-            if (!(error instanceof PublishedLogNotDueError)) throw error;
-            result.pending++;
-          }
-          result.cursor = { partition, after: read.key };
-        }
-        // No published log payload or full command outcome crosses the durable step boundary.
-        return result;
+          // No published log payload or full command outcome crosses the durable step boundary.
+          return result;
         }),
       );
     },
@@ -258,11 +262,11 @@ export async function registerLibraryPublishedLogRetentionWork({ pool, client, c
     });
     return runLibraryBoundedOperation(operation.kind, operation.total, () =>
       withPublishedLogNativeWork(workStepDeadline(), async () => {
-      let cursor = input.cursor;
-      for (let n = 0; n < PUBLISHED_LOG_RETENTION_SEGMENT_BOUND && cursor.partition < PARTITIONS; n++) {
-        cursor = (await page(input.cutoff, cursor)).cursor;
-      }
-      if (cursor.partition < PARTITIONS) await continueSweep({ ...input, sequence: input.sequence + 1, cursor });
+        let cursor = input.cursor;
+        for (let n = 0; n < PUBLISHED_LOG_RETENTION_SEGMENT_BOUND && cursor.partition < PARTITIONS; n++) {
+          cursor = (await page(input.cutoff, cursor)).cursor;
+        }
+        if (cursor.partition < PARTITIONS) await continueSweep({ ...input, sequence: input.sequence + 1, cursor });
       }),
     );
   };

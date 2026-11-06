@@ -37,7 +37,11 @@ export function logsReturnLocationState(frontier: LogsReturnFrontier) {
   return { [LOGS_RETURN_STATE]: frontier };
 }
 
-export function logsReturnFrontierFromState(value: unknown, locale: string, subject: string): LogsReturnFrontier | null {
+export function logsReturnFrontierFromState(
+  value: unknown,
+  locale: string,
+  subject: string,
+): LogsReturnFrontier | null {
   const raw = record(record(value)?.[LOGS_RETURN_STATE]);
   if (!raw || raw.locale !== locale || raw.subject !== subject) return null;
   if (typeof raw.logId !== 'string' || !uuid.test(raw.logId)) return null;
