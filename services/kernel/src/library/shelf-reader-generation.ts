@@ -16,10 +16,10 @@ export const shelfNeedsInitialization = async (
   return !gate || (!gate.initialized && gate.mode === 'open');
 };
 
-/** The very RR client used for entries/counts supplies the producer's committed completeness and epoch. */
+/** Last-complete generation serves while a counter-only rebuild is in flight. Field backfill clears `ready`. */
 export const readShelfGeneration: ShelfReadGenerationReader = async (client, owner) => {
   const gate = await gateRead().run(client, { route: owner.route, account_id: owner.accountId });
-  if (!gate?.initialized || gate.mode !== 'open' || !gate.ready || gate.activeGeneration === null || gate.epoch < 0n)
+  if (!gate?.initialized || !gate.ready || gate.activeGeneration === null || gate.epoch < 0n)
     throw new (ShelfReadUnavailableError())('native RR gate/current-generation reader: owner generation is not ready');
   return { readiness: 'ready', epoch: gate.epoch, activeGeneration: gate.activeGeneration };
 };

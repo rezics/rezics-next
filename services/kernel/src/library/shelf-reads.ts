@@ -7,7 +7,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, AuthenticationError, type AccountActor, type Actor } from '../request/access.ts';
+import { AuthenticationError, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -119,11 +119,9 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
     return withRequestDeadline(deadline, async () => {
       if (progress) await admitShelfRead(deps, actor, deadline);
       const resource = { route, id: account.accountId };
-      // Actual installed Access evidence is prepared before checkout; a caller-constructed Actor cannot pass it.
-      const check = await accessCheck(deps.access, actor, 'library_entry:list', resource, {
-        pool: deps.pool,
-        deadline,
-      });
+      // HTTP already required own-account library_entry:list and the open personal_library
+      // group. Native Access is not a second grant on the account resource; admit standing
+      // as listEntries does so a served owner token reaches last-complete generation.
       async function admitted(client: Parameters<typeof readAccount>[0]) {
         const current = await readAccount(client, route, account.accountId);
         if (
@@ -133,8 +131,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
           current.fenced ||
           !Number.isSafeInteger(account.authnEpoch) ||
           account.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(account.authnEpoch) ||
-          !(await check(client))
+          current.minimumAuthnEpoch > BigInt(account.authnEpoch)
         )
           throw new ProblemError('forbidden');
         const partitionNo = partitionOf(route);

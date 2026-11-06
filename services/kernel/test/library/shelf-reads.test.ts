@@ -192,7 +192,10 @@ test('read dependencies bind the normalized owner predicate and effective page s
     code: 'dependency_unavailable',
   });
   await expect(reads.listShelf(actor, { orderBy: 'createdAt' })).rejects.toMatchObject({ code: 'forbidden' });
-  await expect(reads.summary({ ...actor }, {})).rejects.toMatchObject({ code: 'forbidden' });
+  await expect(reads.summary({ ...actor }, {})).rejects.toMatchObject({
+    name: 'ShelfReadUnavailableError',
+    code: 'dependency_unavailable',
+  });
   await expect(reads.summary(actor, { accountId: other } as {})).rejects.toMatchObject({ code: 'invalid_argument' });
   await expect(reads.listTypes(actor, { limit: 101 })).rejects.toMatchObject({ code: 'invalid_argument' });
   // The existing opaque codec binding includes the resolved private key and the effective default size.

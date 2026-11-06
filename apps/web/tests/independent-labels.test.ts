@@ -2,8 +2,8 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createLibraryLabelsFake } from '../src/kernel/fake/library-labels';
 import { handleLabelForm, loadLabelsPage, submitLabel } from '../src/library/labels-read';
-import { applySubjectLabelMutation, searchSubjectLabels } from '../src/library/subject-labels.ts';
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { applySubjectLabelMutation, searchSubjectLabels } = await import('../src/library/subject-labels.ts');
 const { loadLabelShelfPage } = await import('../src/library/label-shelf-read');
 
 const owner = '0192f3a0-6c1e-7b2a-9d4e-000000000111';
@@ -210,10 +210,10 @@ test('literal prefix continuation preserves the signed cursor and an empty page 
 });
 
 test('catalogue and FULL shelf keep denied, preparation and unavailable responses separate from empty', async () => {
-  for (const [status, code, state] of [
-    [403, 'forbidden', 'denied'],
-    [503, 'index_not_ready', 'preparing'],
-    [503, 'dependency_unavailable', 'unavailable'],
+  for (const [status, code, catalogue, shelf] of [
+    [403, 'forbidden', 'denied', 'denied'],
+    [503, 'index_not_ready', 'preparing', 'preparing'],
+    [503, 'dependency_unavailable', 'unavailable', 'preparing'],
   ] as const) {
     const client = createKernelClient('https://kernel.example.test', {
       fetch: async (input) =>
@@ -221,8 +221,10 @@ test('catalogue and FULL shelf keep denied, preparation and unavailable response
           ? Response.json({ admitted: operations })
           : Response.json({ code }, { status }),
     });
-    expect(await loadLabelsPage(client, request(), env)).toMatchObject({ state });
-    expect(await loadLabelShelfPage(client, request(), env, { labelId: subjectId, limit: 100 })).toEqual({ state });
+    expect(await loadLabelsPage(client, request(), env)).toMatchObject({ state: catalogue });
+    expect(await loadLabelShelfPage(client, request(), env, { labelId: subjectId, limit: 100 })).toEqual({
+      state: shelf,
+    });
   }
 });
 

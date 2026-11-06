@@ -57,7 +57,7 @@ Required amendments before consumers ship:
 | Maintenance schema/types                                                 | Keep ready/active pointer distinct; add native pending backfill intent, run kind distinguishing field backfill from counter-only work, and bounded run-scoped session/head scratch state. The runnable index must include pending initialization work. Schema `kind=rebuild` may encode the subtype in native run metadata, never infer it from workflow JSON. Epoch/sequence/offset are bigint.                                    |
 | `enterShelfWrite`, gate init/share SQL                                   | Replace unconditional readyfalse initialization with serialized three-probe initialization plus atomic work intent. Return readiness with epoch/generation (or expose a same-tx checked equivalent). Open/unready admits input writes and defers counters; rebuilding still refuses ordinary writers. Frozen tests owned elsewhere that assert empty always unready require manager reconciliation before changing those consumers. |
 | `createShelfCounters().transition/collection`, both delta SQL statements | Read gate readiness in the same guarded transaction. Return without counter effects when unready. When ready, use only active generation, including nil for a proven empty initial owner. Missing/negative rows in a complete generation remain invariant failures. No nil fallback after rebuild.                                                                                                                                  |
-| Summary/facets/date reader service                                       | Check field-readiness and pointer in the same authoritative RR snapshot as rows/counters. Do not trust the request's cached readiness. Counter-only work may retain old complete reads; field backfill may not.                                                                                                                                                                                                                     |
+| Summary/facets/date reader service                                       | Check field-readiness and pointer in the same authoritative RR snapshot as rows/counters. Do not trust the request's cached readiness. Counter-only work may retain old complete reads; field backfill may not. FULL by-label assignment pages use this same generation reader.                                                                                                                                                      |
 
 These amend pending interfaces, not their unfinished runtime files. Normal hook callers are entry create/state/delete,
 Collection create/delete, session/progress/head/activity, type projection and dictionary reserve/continue. First-use
@@ -127,7 +127,9 @@ fields and counts. Readers already holding an RR snapshot see one complete versi
 break that snapshot. New writers after publication use only the newly active pointer, never a cached generation.
 Post-publication cleanup accepts open mode only for the matching current run/epoch and cannot rewrite fields or active
 counts. Keep that run identity until terminal cleanup; a new rebuild request retries until it completes. Ordinary
-personal writers remain admitted after publication. Purge may supersede cleanup immediately.
+personal writers remain admitted after publication. FULL by-label assignment pages reuse the summary generation
+reader, so last-complete tiles remain readable during counter-only rebuild and field backfill withholds them until
+this publication. Purge may supersede cleanup immediately.
 
 Page effects, sequence/cursor, phase transitions and successor enqueue intent commit atomically with a deterministic
 core receipt. Keys encode owner/run/epoch/sequence, not a timestamp; workflow ID additionally includes segment.

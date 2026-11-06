@@ -258,6 +258,14 @@ it through owner callbacks. Only that request releases admission; replacement an
 failure retries the same query/cursor, while explicit stale-cursor recovery restarts the same query without a cursor.
 Owning currentness and page provenance remain authoritative.
 
+Decision: served Shelf viewers keep last-complete native rows and summaries during a counter-only rebuild. Field
+backfill `503 dependency_unavailable` is `preparing`, never an empty success. Named-label FULL shelves use the same
+native generation reader and map that code to `preparing`; the Labels catalogue still treats it as unavailable.
+Publication, not a pending 503, is the completed Label/Shelf result. Fewest tests: one native maintenance journey
+covers last-complete, field-backfill preparing, and the original Label/Shelf action after publication. Served HTTP
+uses own-account library admission and bundled Definition resource types; Shelf reads admit that owner as listEntries
+does, without a second Access grant on the account resource. The independent Labels unit file mocks `cloudflare:workers` before any module that loads the Worker client.
+
 Presentation decision: the Library shows the source of its effective layout and sort, and flags saved sorts or table columns that current native reads cannot honor; navigation keeps inherited choices out of the URL.
 
 Collection action vocabulary is derived from the installed root `KernelClient.viewerActions.post` callable used
