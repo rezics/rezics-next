@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Window } from 'happy-dom';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { BoardWatchControl, type BoardWatchControlProps } from '../src/threads/board-watch/control';
@@ -12,6 +12,9 @@ import type {
   BoardWatchReadRequest,
 } from '../src/threads/board-watch/contract';
 
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const browser = new Window({ url: 'https://site.test/en/boards/board-a?sort=new' });
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>();
 for (const [key, value] of Object.entries({

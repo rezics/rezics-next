@@ -315,8 +315,9 @@ negative and unsafe counts remain unavailable, and prepared fixtures do not esta
 ## Post reading rhythm
 
 `PostReadingFrame` owns the byline-to-body hierarchy and the visible permalink/focus surface; its action and reply
-context slots consume the existing controls unchanged. The header uses the installed `FeedActionBar` detail port;
-licence, history and provenance retain their positions after the body. `ThreadPostReadingBody` passes the complete snapshot to the
+context slots consume the existing controls unchanged. The header uses the installed `FeedActionBar` detail port
+for share and reply; licence, history and provenance retain their positions after the body. Share and reply are not
+repeated in that footer. `ThreadPostReadingBody` passes the complete snapshot to the
 existing `DocumentBody` and `NativeDocumentImage`, with a single exact-document media index. The current document's
 post, thread, revision, digest and declared media must all match the supplied disclosure. A replacement revision
 starts a fresh spoiler visit. Erased/withheld placeholders, keyed editing and current-reader retirement retain their

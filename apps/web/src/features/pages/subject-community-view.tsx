@@ -21,6 +21,7 @@ import { CommunityCardPresentation } from './subject-community-card-view';
 import { CommunityNativeByline, CommunityNativePresentation } from './subject-community-card-view';
 import type { VerificationConfig } from '../../report/turnstile';
 import { SubjectCommunityInteractions } from './subject-community-interactions';
+import { BoardStartThread } from '../../threads/board-community-actions';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 export const SubjectCommunityVerificationContext = createContext<VerificationConfig | undefined>(undefined);
@@ -91,6 +92,7 @@ export function SubjectCommunityRegion({
             actions,
           ])
         : null,
+      region.state === 'ready' ? region.entry : null,
     ]),
   });
   if (!reading.available) region = { state: 'unavailable' };
@@ -121,6 +123,7 @@ export function SubjectCommunityRegion({
       ? m.prq_global({}, options)
       : `${m.space_realm_heading({}, options)} · ${currentContext.place.title}`
     : undefined;
+  const entry = region.state === 'ready' ? (region.entry ?? { state: 'not_selected' as const }) : undefined;
   const returnTo = currentHref
     ? communityRegionReturnTo({
         currentHref,
@@ -326,7 +329,16 @@ export function SubjectCommunityRegion({
           })}
         </ul>
       )}
-      {region.state === 'ready' && (!empty || !next) && (
+      {region.state === 'ready' && (!empty || !next) && entry?.state === 'current' ? (
+        <div data-slot="community-entry" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <BoardStartThread
+            board={entry.board}
+            advice={entry.createThread}
+            returnTo={returnTo ?? href}
+            {...(returnTo ? { preparedReturnTo: returnTo } : {})}
+          />
+        </div>
+      ) : region.state === 'ready' && (!empty || !next) ? (
         <div
           data-slot="community-entry-unavailable"
           className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground"
@@ -336,7 +348,7 @@ export function SubjectCommunityRegion({
             {m.subject_section_retry({}, options)}
           </a>
         </div>
-      )}
+      ) : null}
       {next && (
         <a data-slot="community-next" className={actionClass} href={nextHref}>
           {m.subject_community_more({}, options)}

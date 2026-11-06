@@ -1,9 +1,14 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
-import { readSubjectCommunity, withSubjectCommunity } from '../src/features/pages/subject-community';
+import {
+  composedCommunityRegion,
+  readSubjectCommunity,
+  withSubjectCommunity,
+} from '../src/features/pages/subject-community';
 import { SubjectCommunityRegion } from '../src/features/pages/subject-community-view';
 import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
 import { subjectTabs } from '../src/features/pages/views';
@@ -12,6 +17,7 @@ import { GLOBAL } from '../src/features/pages/subject-ratings';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import {
   communityAuthor,
+  communityCurrentEntry,
   communitySubject,
   communityThread,
   communityThreadPage,
@@ -39,7 +45,11 @@ const isCommunity = (request: Request) =>
   new URL(request.url).pathname === `/v1/subjects/${communitySubject.id}/threads`;
 function pageHtml(page: SubjectPageData) {
   return renderToStaticMarkup(
-    createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+      createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+    ),
   );
 }
 
@@ -268,4 +278,78 @@ test('ordinary discussion creation keeps the chosen subject and review conflicts
   );
   bodies.push(await discussion.requests[0]!.json());
   expect(bodies[0]).toMatchObject({ subjectIds: [communitySubject.id] });
+});
+
+const reviewRequest = {
+  kind: 'subjectThreads' as const,
+  id: communitySubject.id,
+  place: GLOBAL,
+  threadKind: 'review' as const,
+  limit: 20,
+};
+
+test('create-thread binds only native entry.current Board advice, never a readable card boardId', () => {
+  const thread = communityThread('review');
+  const entry = communityCurrentEntry('review', communitySubject);
+  expect(entry.board.id).not.toBe(thread.boardId);
+  const ready = composedCommunityRegion(
+    { status: 200, body: communityThreadPage('review', communitySubject, [thread], null, GLOBAL, entry) },
+    reviewRequest,
+  );
+  expect(ready).toMatchObject({
+    state: 'ready',
+    entry: { state: 'current', board: { id: entry.board.id }, createThread: 'allowed' },
+    threads: [{ id: thread.id, boardId: thread.boardId }],
+  });
+  const unselected = composedCommunityRegion(
+    { status: 200, body: communityThreadPage('review', communitySubject, [thread], null) },
+    reviewRequest,
+  );
+  expect(unselected).toMatchObject({ state: 'ready', entry: { state: 'not_selected' } });
+  expect(
+    composedCommunityRegion(
+      {
+        status: 200,
+        body: communityThreadPage('review', communitySubject, [thread], null, GLOBAL, {
+          state: 'current',
+          request: {
+            subjectId: communitySubject.id,
+            placeId: GLOBAL,
+            kind: 'review',
+            selectedBoardId: thread.boardId,
+          },
+        }),
+      },
+      reviewRequest,
+    ).state,
+  ).toBe('unavailable');
+  const html = renderToStaticMarkup(
+    createElement(SubjectCommunityRegion, {
+      id: 'reviews',
+      kind: 'review',
+      region: ready,
+      authors: {},
+      now: '2026-10-24T00:00:00.000Z',
+      subject: communitySubject,
+      locale: 'en',
+      href: '/en/subjects/subject/reviews',
+    }),
+  );
+  expect(html).toContain('data-slot="community-entry"');
+  expect(html).not.toContain('data-slot="community-entry-unavailable"');
+  expect(html).not.toContain('data-slot="create-thread"');
+  const withheld = renderToStaticMarkup(
+    createElement(SubjectCommunityRegion, {
+      id: 'reviews',
+      kind: 'review',
+      region: unselected,
+      authors: {},
+      now: '2026-10-24T00:00:00.000Z',
+      subject: communitySubject,
+      locale: 'en',
+      href: '/en/subjects/subject/reviews',
+    }),
+  );
+  expect(withheld).toContain('data-slot="community-entry-unavailable"');
+  expect(withheld).not.toContain('data-slot="create-thread"');
 });

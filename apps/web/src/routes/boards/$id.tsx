@@ -109,6 +109,7 @@ function BoardPage() {
               <BoardStartThread
                 board={page.board}
                 advice={page.actions.createThread}
+                viewer={page.viewer}
                 returnTo={returnTo}
                 {...(search.returnTo ? { preparedReturnTo: search.returnTo } : {})}
               />

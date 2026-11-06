@@ -39,7 +39,7 @@ function sameVisit(left: BoardWatchVisitBinding, right: BoardWatchVisitBinding):
 export class BoardWatchVisit {
   private view: BoardWatchView = Object.freeze({ phase: 'checking', command: 'none' });
   private readonly listeners = new Set<() => void>();
-  private owner: BoardWatchReadRequest | undefined;
+  private owner: (BoardWatchReadRequest & { isCurrent: () => boolean }) | undefined;
   private readonly original: BoardWatchVisitBinding;
   private readonly latest: () => LiveBinding;
   private started = false;
@@ -231,7 +231,7 @@ export class BoardWatchVisit {
   }
 
   private acceptCommand(result: BoardWatchCommandResult): boolean {
-    if (result.kind === 'acknowledged' && this.command) {
+    if (result.kind === 'acknowledged') {
       const acknowledgement = Object.freeze({ watching: result.watching, revision: result.revision });
       this.publish({ phase: 'checking', command: 'acknowledged', acknowledgement });
       return true;

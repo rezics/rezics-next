@@ -38,6 +38,7 @@ import { AuthorErasureEntry } from './author-erasure-entry';
 import { authorErasureSessionSource } from './author-erasure-lifetime';
 import { ThreadActivity } from './thread-activity/view';
 import type { SlowModeVisitOwner } from './slow-mode/contract';
+import { mentionsForThreadPost } from './thread-page-context';
 
 export type ThreadReadingPage = LoadedThreadPage & {
   authors: PageAuthors;
@@ -144,6 +145,7 @@ function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
     documentMediaProjection: _documentMediaProjection,
     mentionProjection: _mentionProjection,
     reviewContext: _reviewContext,
+    documentMentions: _documentMentions,
     composed: _composed,
     conversationActivity: _activity,
     ...safePage
@@ -155,6 +157,7 @@ function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
     _documentMediaProjection,
     _mentionProjection,
     _reviewContext,
+    _documentMentions,
     _composed,
     _activity,
   ];
@@ -511,7 +514,9 @@ export function ThreadReading({
                         !page.composed || ('reactions' in reactionSource && reactionSource.reactions !== undefined)
                       }
                       reactionViewerAvailable={reactionViewerAvailable}
-                      mentions={currentMentions}
+                      mentions={
+                        page.documentMentions ? mentionsForThreadPost(page.documentMentions, post) : currentMentions
+                      }
                       documentMedia={documentMedia}
                       now={now}
                       viewerId={commandViewerId ?? undefined}

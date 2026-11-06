@@ -6,11 +6,12 @@ import type {
   BoardPinProducer,
   BoardPinReadResult,
 } from './contract';
-import type { BoardPinAdviceQuery } from './advice';
+import type { BoardPinAdviceQuery, BoardPinAdviceResult } from './advice';
 
 /** Production caller. Selected advice uses the installed private server function and native callable. */
 export const productionBoardPinProducer: BoardPinProducer = Object.freeze({
-  async inspectSelected(query: BoardPinAdviceQuery) {
+  async inspectSelected(query: BoardPinAdviceQuery): Promise<BoardPinAdviceResult> {
+    if (query.signal.aborted) return { state: 'unavailable' };
     const { readBoardPinAdvice } = await import('./server');
     return readBoardPinAdvice({
       data: {

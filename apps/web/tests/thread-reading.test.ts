@@ -227,9 +227,10 @@ test('Default thread reading renders the conversation before secondary history a
     for (const text of documentText(post.body).split('\n').filter(Boolean)) expect(item).toContain(text);
     expect(item).toContain(`href="/en/posts/${post.id}/revisions/${post.revisionId}"`);
     const controls = item.slice(footer);
-    expect(controls).toContain(`${m.thread_history_licence()}: ${post.licence}`);
     expect(item).toContain(m.thread_reading_share());
+    expect(item).toContain(m.thread_reply_to_post());
     expect(item).toContain(m.feed_action_reply());
+    expect(controls).toContain(`${m.thread_history_licence()}: ${post.licence}`);
     expect(controls).toContain(m.thread_history_show());
     expect(controls).toContain(`aria-controls="revision-details-${post.id}"`);
     expect(controls).toMatch(/<div(?=[^>]*data-slot="collapsible-content")(?=[^>]*hidden="")[^>]*>/);
