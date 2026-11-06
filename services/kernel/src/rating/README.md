@@ -1652,13 +1652,14 @@ Semantic's `createIdentityRatingRepairProducer` implements `RatingIdentityProduc
 including rollback and repoint and at most 64 competing originals, then atomically hand a retained Rating repair obligation to the native page receipt.
 The receipt retains the obligation ID and exact mapping digest. That obligation covers later identity changes and concurrent vote creation beyond the captured upper key; it
 must remain held until Rating's effects and checkpoint commit, including the empty terminal page. Home state reads
-and released observations cannot implement this contract. Same-home voter commands lock the partition owner through COMMIT. Foreign source or control homes return pending with
-`semantic-cross-home-repair-hold-required` until a one-partition prepare/handoff extends the port. Tests that omit the producer still see
+and released observations cannot implement this contract. Same-home voter commands lock the partition owner through COMMIT. Foreign source or control homes persist a preparing
+obligation and continue through one-partition prepare/handoff and bounded drain; tests that omit the producer still see
 `semantic-exact-currentness-and-held-repair-obligation-unavailable`. Pending or unavailable producer observations
 never advance work. The port is service configuration, not caller input, and supplies no authorization. A failed
 obligation handoff rolls back the entire page. Withdrawal uses local counted identities and requires no mapping
 observation. Repair has finite page, selection-byte, membership and event bounds, with no runtime funding, prepaid
-quotes, no-refill rule or foreign-price availability gate. Production `createRatingModule` installs the Semantic producer.
+quotes, no-refill rule or foreign-price availability gate. Production composition binds the Semantic producer onto
+Rating's port; `createRatingModule` does not import that factory.
 
 ## Voter Realm membership
 

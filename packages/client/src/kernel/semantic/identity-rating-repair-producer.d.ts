@@ -1,4 +1,7 @@
-import { type CommandTransaction } from '../command/command.ts';
+import { type Pool } from 'pg';
+import { type CommandEvent, type CommandTransaction } from '../command/command.ts';
+export const IDENTITY_RATING_REPAIR_MAX_CONTINUATION = 8;
+export const IDENTITY_RATING_REPAIR_CONTINUATION = 'com.rezics.semantic.identity-rating-repair.continuation.v1';
 export type IdentityRatingRepairVoteKey = Readonly<{
     questionId: string;
     targetId: string;
@@ -31,10 +34,13 @@ export type IdentityRatingRepairMapping = Readonly<{
 export type IdentityRatingRepairAuthority = Readonly<{
     status: 'pending';
     reason: string;
+    obligationId?: string;
+    events?: readonly CommandEvent[];
 }> | Readonly<{
     status: 'current';
     obligationId: string;
     mappings: readonly IdentityRatingRepairMapping[];
+    extraHomes?: readonly number[];
 }>;
 export type IdentityRatingRepairProducer = Readonly<{
     hold(tx: CommandTransaction, page: IdentityRatingRepairPage): Promise<IdentityRatingRepairAuthority>;
@@ -44,6 +50,31 @@ export type IdentityRatingRepairProducer = Readonly<{
         mappingDigest: string;
         transactionId: string;
     }>): Promise<boolean>;
+    prepare(tx: CommandTransaction, input: Readonly<{
+        obligationId: string;
+        voterPartition: number;
+        originals: readonly string[];
+    }>): Promise<IdentityRatingRepairAuthority>;
+    handoff(tx: CommandTransaction, input: Readonly<{
+        obligationId: string;
+        home: number;
+        originals: readonly string[];
+        mappings: readonly IdentityRatingRepairMapping[];
+        extraHomes?: readonly number[];
+    }>): Promise<IdentityRatingRepairAuthority>;
+    drain(tx: CommandTransaction): Promise<IdentityRatingRepairDrain>;
+}>;
+export type IdentityRatingRepairDrain = Readonly<{
+    drained: number;
+    continuing: boolean;
+    events: readonly CommandEvent[];
 }>;
 export declare function createIdentityRatingRepairProducer(): IdentityRatingRepairProducer;
+export declare function continueIdentityRatingRepair(pool: Pool, data: Readonly<{
+    partition: number;
+    voterPartition: number;
+    obligationId: string;
+    kind: 'prepare' | 'drain';
+    originals: readonly string[];
+}>): Promise<void>;
 export declare function identityRatingRepairMappingDigest(mappings: readonly IdentityRatingRepairMapping[]): string;

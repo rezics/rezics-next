@@ -7058,11 +7058,14 @@ CREATE TABLE semantic.identity_rating_repair_obligation (
     originals jsonb NOT NULL,
     through_question_id uuid,
     through_target_id uuid,
+    prepare_homes jsonb DEFAULT '[]'::jsonb NOT NULL,
     owner_node text NOT NULL,
     owner_epoch integer NOT NULL,
     state text NOT NULL,
     later_change boolean DEFAULT false NOT NULL,
+    later_vote boolean DEFAULT false NOT NULL,
     receipt_transaction_id uuid,
+    drain_receipt_id uuid,
     CONSTRAINT identity_rating_repair_obligation_generation_check CHECK ((generation ~ '^[1-9][0-9]{0,17}$'::text)),
     CONSTRAINT identity_rating_repair_obligation_mapping_digest_check CHECK ((mapping_digest ~ '^[a-f0-9]{64}$'::text)),
     CONSTRAINT identity_rating_repair_obligation_mappings_check CHECK ((octet_length((mappings)::text) <= 65536)),
@@ -7071,9 +7074,67 @@ CREATE TABLE semantic.identity_rating_repair_obligation (
     CONSTRAINT identity_rating_repair_obligation_owner_node_check CHECK (((octet_length(owner_node) >= 1) AND (octet_length(owner_node) <= 256))),
     CONSTRAINT identity_rating_repair_obligation_page_digest_check CHECK ((page_digest ~ '^[a-f0-9]{64}$'::text)),
     CONSTRAINT identity_rating_repair_obligation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_rating_repair_obligation_state_check CHECK ((state = ANY (ARRAY['held'::text, 'bound'::text]))),
-    CONSTRAINT identity_rating_repair_obligation_held_receipt_check CHECK (((state = 'held'::text) = (receipt_transaction_id IS NULL))),
+    CONSTRAINT identity_rating_repair_obligation_prepare_homes_check CHECK (((jsonb_typeof(prepare_homes) = 'array'::text) AND (jsonb_array_length(prepare_homes) <= 64))),
+    CONSTRAINT identity_rating_repair_obligation_state_check CHECK ((state = ANY (ARRAY['preparing'::text, 'held'::text, 'bound'::text]))),
+    CONSTRAINT identity_rating_repair_obligation_held_receipt_check CHECK (((state = 'bound'::text) = (receipt_transaction_id IS NOT NULL))),
     CONSTRAINT identity_rating_repair_obligation_through_check CHECK (((through_question_id IS NULL) = (through_target_id IS NULL)))
+);
+
+
+--
+-- Name: identity_rating_repair_prepare; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_rating_repair_prepare (
+    partition_no integer NOT NULL,
+    prepare_id uuid NOT NULL,
+    voter_partition integer NOT NULL,
+    obligation_id uuid NOT NULL,
+    originals jsonb NOT NULL,
+    mappings jsonb NOT NULL,
+    extra_homes jsonb DEFAULT '[]'::jsonb NOT NULL,
+    owner_node text NOT NULL,
+    owner_epoch integer NOT NULL,
+    later_change boolean DEFAULT false NOT NULL,
+    receipt_transaction_id uuid NOT NULL,
+    CONSTRAINT identity_rating_repair_prepare_extra_homes_check CHECK (((jsonb_typeof(extra_homes) = 'array'::text) AND (jsonb_array_length(extra_homes) <= 64))),
+    CONSTRAINT identity_rating_repair_prepare_mappings_check CHECK ((octet_length((mappings)::text) <= 65536)),
+    CONSTRAINT identity_rating_repair_prepare_originals_check CHECK ((octet_length((originals)::text) <= 16384)),
+    CONSTRAINT identity_rating_repair_prepare_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_rating_repair_prepare_owner_node_check CHECK (((octet_length(owner_node) >= 1) AND (octet_length(owner_node) <= 256))),
+    CONSTRAINT identity_rating_repair_prepare_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_rating_repair_prepare_voter_partition_check CHECK (((voter_partition >= 0) AND (voter_partition <= 4095)))
+);
+
+
+--
+-- Name: identity_rating_repair_handoff; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_rating_repair_handoff (
+    partition_no integer NOT NULL,
+    obligation_id uuid NOT NULL,
+    home integer NOT NULL,
+    originals jsonb NOT NULL,
+    mappings jsonb NOT NULL,
+    later_change boolean DEFAULT false NOT NULL,
+    receipt_transaction_id uuid NOT NULL,
+    CONSTRAINT identity_rating_repair_handoff_home_check CHECK (((home >= 0) AND (home <= 4095))),
+    CONSTRAINT identity_rating_repair_handoff_mappings_check CHECK ((octet_length((mappings)::text) <= 65536)),
+    CONSTRAINT identity_rating_repair_handoff_originals_check CHECK ((octet_length((originals)::text) <= 16384)),
+    CONSTRAINT identity_rating_repair_handoff_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_rating_repair_drain_head; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_rating_repair_drain_head (
+    partition_no integer NOT NULL,
+    overflow boolean DEFAULT false NOT NULL,
+    overflow_original uuid,
+    CONSTRAINT identity_rating_repair_drain_head_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
 );
 
 
@@ -10240,6 +10301,38 @@ ALTER TABLE ONLY semantic.identity_rating_repair_obligation
 
 
 --
+-- Name: identity_rating_repair_prepare identity_rating_repair_prepare_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_prepare
+    ADD CONSTRAINT identity_rating_repair_prepare_pkey PRIMARY KEY (partition_no, prepare_id);
+
+
+--
+-- Name: identity_rating_repair_prepare identity_rating_repair_prepare_partition_no_obligation_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_prepare
+    ADD CONSTRAINT identity_rating_repair_prepare_partition_no_obligation_id_key UNIQUE (partition_no, obligation_id);
+
+
+--
+-- Name: identity_rating_repair_handoff identity_rating_repair_handoff_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_handoff
+    ADD CONSTRAINT identity_rating_repair_handoff_pkey PRIMARY KEY (partition_no, obligation_id, home);
+
+
+--
+-- Name: identity_rating_repair_drain_head identity_rating_repair_drain_head_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_drain_head
+    ADD CONSTRAINT identity_rating_repair_drain_head_pkey PRIMARY KEY (partition_no);
+
+
+--
 -- Name: identity_receiving_capture_pending identity_receiving_capture_pending_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11843,6 +11936,20 @@ CREATE INDEX identity_rating_repair_obligation_originals ON semantic.identity_ra
 
 
 --
+-- Name: identity_rating_repair_obligation_drain; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_rating_repair_obligation_drain ON semantic.identity_rating_repair_obligation USING btree (partition_no, obligation_id) WHERE (later_change OR later_vote OR (state = 'preparing'::text));
+
+
+--
+-- Name: identity_rating_repair_prepare_originals; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_rating_repair_prepare_originals ON semantic.identity_rating_repair_prepare USING gin (originals);
+
+
+--
 -- Name: identity_receipt_claim_native_command; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -13421,13 +13528,85 @@ CREATE FUNCTION semantic.touch_identity_rating_repair_obligation() RETURNS trigg
     AS $$
 DECLARE
   home integer := (NEW.route / 16);
+  marked integer;
 BEGIN
-  UPDATE semantic.identity_rating_repair_obligation
+  WITH picked AS (
+    SELECT obligation_id
+      FROM semantic.identity_rating_repair_obligation
+     WHERE partition_no = home
+       AND later_change = false
+       AND state IN ('preparing', 'held', 'bound')
+       AND originals ? NEW.original::text
+     ORDER BY obligation_id
+     LIMIT 64
+  )
+  UPDATE semantic.identity_rating_repair_obligation o
      SET later_change = true
-   WHERE partition_no = home
-     AND state IN ('held', 'bound')
-     AND originals ? NEW.original::text;
+    FROM picked
+   WHERE o.partition_no = home
+     AND o.obligation_id = picked.obligation_id;
+  GET DIAGNOSTICS marked = ROW_COUNT;
+  WITH prepared AS (
+    SELECT prepare_id
+      FROM semantic.identity_rating_repair_prepare
+     WHERE partition_no = home
+       AND later_change = false
+       AND originals ? NEW.original::text
+     ORDER BY prepare_id
+     LIMIT 64
+  )
+  UPDATE semantic.identity_rating_repair_prepare p
+     SET later_change = true
+    FROM prepared
+   WHERE p.partition_no = home
+     AND p.prepare_id = prepared.prepare_id;
+  IF marked = 64 THEN
+    INSERT INTO semantic.identity_rating_repair_drain_head(partition_no, overflow, overflow_original)
+    VALUES (home, true, NEW.original)
+    ON CONFLICT (partition_no) DO UPDATE
+      SET overflow = true, overflow_original = EXCLUDED.overflow_original;
+  END IF;
   RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION semantic.mark_identity_rating_repair_later_vote(
+  home integer,
+  voter uuid,
+  question uuid,
+  target uuid
+) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  marked integer := 0;
+BEGIN
+  WITH picked AS (
+    SELECT obligation_id
+      FROM semantic.identity_rating_repair_obligation
+     WHERE partition_no = home
+       AND voter_id = voter
+       AND later_vote = false
+       AND state IN ('preparing', 'held', 'bound')
+       AND (
+         through_question_id IS NULL
+         OR (question, target) > (through_question_id, through_target_id)
+       )
+     ORDER BY obligation_id
+     LIMIT 64
+  )
+  UPDATE semantic.identity_rating_repair_obligation o
+     SET later_vote = true
+    FROM picked
+   WHERE o.partition_no = home
+     AND o.obligation_id = picked.obligation_id;
+  GET DIAGNOSTICS marked = ROW_COUNT;
+  IF marked = 64 THEN
+    INSERT INTO semantic.identity_rating_repair_drain_head(partition_no, overflow)
+    VALUES (home, true)
+    ON CONFLICT (partition_no) DO UPDATE SET overflow = true;
+  END IF;
+  RETURN marked;
 END;
 $$;
 

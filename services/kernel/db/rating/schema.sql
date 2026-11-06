@@ -1504,6 +1504,27 @@ CREATE TRIGGER vote_initialize_counting BEFORE INSERT ON rating.vote FOR EACH RO
 
 
 --
+-- Name: touch_identity_rating_repair_later_vote(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.touch_identity_rating_repair_later_vote() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM semantic.mark_identity_rating_repair_later_vote(NEW.route / 16, NEW.voter_id, NEW.question_id, NEW.target_id);
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: vote identity_rating_repair_later_vote; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER identity_rating_repair_later_vote AFTER INSERT OR UPDATE OF question_id, target_id ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.touch_identity_rating_repair_later_vote();
+
+
+--
 -- Name: aggregate_component aggregate_component_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
 --
 

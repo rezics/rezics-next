@@ -12,12 +12,14 @@ import {
   IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
   IDENTITY_EPOCH_ADMITTED,
   IDENTITY_EPOCH_HOME_AVAILABLE,
+  IDENTITY_RATING_REPAIR_CONTINUATION,
   SUBJECT_MERGED,
   SUBJECT_REVISED,
   LINKS_MOVING,
 } from './events.ts';
 import { wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
 import { registerIdentityEpochCoordinator, resumeIdentityEpochJob } from './identity-epoch-coordinator.ts';
+import { continueIdentityRatingRepair } from './identity-rating-repair-producer.ts';
 import { runCommand } from '../command/command.ts';
 import { createAccess } from '../access/index.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
@@ -109,6 +111,20 @@ export function createSemanticWorkModule(composeParticipants: SemanticDomainComp
           async run(event) {
             const accountId = (event.data as { accountId: string }).accountId;
             await scheduleErasure(accountId);
+          },
+        },
+        {
+          name: 'identity_rating_repair_continuation',
+          types: [IDENTITY_RATING_REPAIR_CONTINUATION],
+          run: async (event) => {
+            const data = event.data as {
+              partition: number;
+              voterPartition: number;
+              obligationId: string;
+              kind: 'prepare' | 'drain';
+              originals: string[];
+            };
+            await continueIdentityRatingRepair(context.pool, data);
           },
         },
         {

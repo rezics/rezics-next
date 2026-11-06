@@ -321,43 +321,60 @@ export async function readIdentityRatingEvidenceInTransaction(
 
 export const IDENTITY_RATING_REPAIR_MAX_ORIGINALS = 64;
 
-/** Same-home repair evidence on the caller's locked command connection. Up to 64 originals. */
+export type IdentityRepairEvidence =
+  | Readonly<{ state: 'empty' }>
+  | Readonly<{ state: 'ready'; requests: IdentityMappingRequest[]; evidence: IdentityMappingEvidence }>
+  | Readonly<{
+      state: 'split';
+      foreignHomes: readonly number[];
+      local: Readonly<{ requests: IdentityMappingRequest[]; evidence: IdentityMappingEvidence }> | null;
+    }>;
+
+/** Repair evidence on the caller's locked command connection. Up to 64 originals. */
 export async function readIdentityRepairEvidenceInTransaction(
   client: Queryable,
   input: Readonly<{ originals: readonly string[]; commandHome: number }>,
-): Promise<
-  | Readonly<{ state: 'empty' }>
-  | Readonly<{ state: 'foreign-home' }>
-  | Readonly<{ state: 'ready'; requests: IdentityMappingRequest[]; evidence: IdentityMappingEvidence }>
-> {
+): Promise<IdentityRepairEvidence> {
   const originals = [...input.originals];
   if (originals.length > IDENTITY_RATING_REPAIR_MAX_ORIGINALS)
     throw new RangeError('Identity rating repair page must contain at most 64 originals');
   if (!originals.length) return { state: 'empty' };
-  const routes: number[] = [];
+  const localOriginals: string[] = [];
+  const localRoutes: number[] = [];
+  const foreignHomes: number[] = [];
   for (const original of originals) {
     const route = routeOf(original);
     if (route === null) throw new TypeError('Identity rating repair requires native routed identities');
-    if (partitionOf(route) !== input.commandHome) return { state: 'foreign-home' };
-    routes.push(route);
+    const home = partitionOf(route);
+    if (home !== input.commandHome) foreignHomes.push(home);
+    else {
+      localOriginals.push(original);
+      localRoutes.push(route);
+    }
   }
+  const uniqueForeign = [...new Set(foreignHomes)].sort((left, right) => left - right);
+  if (!localOriginals.length)
+    return uniqueForeign.length ? { state: 'split', foreignHomes: uniqueForeign, local: null } : { state: 'empty' };
   const ownerResult = await client.query(owners.sql, [[input.commandHome]]);
-  const sourceRows = (await client.query(sources.sql, [originals, routes])).rows.map(selectedSourceEvidence);
+  const sourceRows = (await client.query(sources.sql, [localOriginals, localRoutes])).rows.map(selectedSourceEvidence);
   const locators = controlLocatorsOf(sourceRows);
-  if (locators.some((locator) => locator.partition !== input.commandHome)) return { state: 'foreign-home' };
-  const control = await controlPhase(client, locators, sourceRows);
-  if (control.owners.some((owner) => owner.partition_no !== input.commandHome)) return { state: 'foreign-home' };
-  return {
-    state: 'ready',
-    requests: originals.map((original) => ({ original, sourceHome: input.commandHome })),
-    evidence: sortedEvidence({
-      sourceOwners: ownerResult.rows as unknown as IdentityOwnerEvidence[],
-      sourceRows,
-      controlOwners: control.owners,
-      pendingRows: control.pending,
-      currentRows: control.current,
-    }),
-  };
+  const foreignControls = locators
+    .filter((locator) => locator.partition !== input.commandHome)
+    .map((row) => row.partition);
+  const localLocators = locators.filter((locator) => locator.partition === input.commandHome);
+  const control = await controlPhase(client, localLocators, sourceRows);
+  const evidence = sortedEvidence({
+    sourceOwners: ownerResult.rows as unknown as IdentityOwnerEvidence[],
+    sourceRows,
+    controlOwners: control.owners,
+    pendingRows: control.pending,
+    currentRows: control.current,
+  });
+  const requests = localOriginals.map((original) => ({ original, sourceHome: input.commandHome }));
+  const homes = [...new Set([...uniqueForeign, ...foreignControls])].sort((left, right) => left - right);
+  if (!homes.length && control.owners.every((owner) => owner.partition_no === input.commandHome))
+    return { state: 'ready', requests, evidence };
+  return { state: 'split', foreignHomes: homes, local: { requests, evidence } };
 }
 
 /** Pure classifier reused by the transaction participant after it has acquired the native owner fence. */

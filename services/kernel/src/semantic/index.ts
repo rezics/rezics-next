@@ -40,11 +40,15 @@ export type {
   IdentityRatingCommitPreparation,
 } from './identity-rating-commit-participant.ts';
 export {
+  continueIdentityRatingRepair,
   createIdentityRatingRepairProducer,
   identityRatingRepairMappingDigest,
+  IDENTITY_RATING_REPAIR_CONTINUATION,
+  IDENTITY_RATING_REPAIR_MAX_CONTINUATION,
 } from './identity-rating-repair-producer.ts';
 export type {
   IdentityRatingRepairAuthority,
+  IdentityRatingRepairDrain,
   IdentityRatingRepairMapping,
   IdentityRatingRepairPage,
   IdentityRatingRepairProducer,
