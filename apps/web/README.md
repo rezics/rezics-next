@@ -86,7 +86,7 @@ Source read for this surface: the native edition model, routes, reads and fixed-
 edition publication route/controls and shell-integrated stories; and the existing creator-offer list transport/view.
 No external reference-project source applies to this metadata list.
 Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `.dev.vars` from `.dev.vars.example` only when absent. Normal checks and isolated test startup leave it untouched.
-Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. A focused check compiles the message catalogues once: the Vite config reuses Paraglide output that is current instead of compiling again.
+Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. A focused check compiles the message catalogues once: the Vite config reuses Paraglide output that is current instead of compiling again. The Cloudflare plugin denies the dependencies of `cloudflare.config.ts` to browsers; the dev server lets only the Worker environment load the denied file the Worker imports (`src/session/website-scopes.ts`), and the browser read stays denied. A cold dev Worker start takes minutes because the plugin loads the whole Worker graph before the port listens.
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 

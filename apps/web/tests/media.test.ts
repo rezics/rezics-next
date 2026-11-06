@@ -446,3 +446,18 @@ test(
   },
   timeout,
 );
+
+test(
+  'the dev server denies a browser read of the config dependency that the Worker imports and still loads it',
+  async () => {
+    // The Worker imports session routes, which import website-scopes. The Cloudflare plugin denies that file to browsers.
+    const origin = await site();
+    const browser = await fetch(`${origin}/src/session/website-scopes.ts`, { redirect: 'manual' });
+    expect(browser.status).toBeGreaterThanOrEqual(400);
+    expect(await browser.text()).not.toContain('commerce_sale:list');
+    const worker = await fetch(`${origin}/media/${randomUUID()}/original`, { redirect: 'manual' });
+    expect(worker.status).toBe(404);
+    expect(worker.headers.get('content-type')).toStartWith('application/problem+json');
+  },
+  timeout,
+);
