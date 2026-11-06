@@ -113,7 +113,10 @@ database leases, Docker, a database or remote dispatch. A `bun test` command sta
 invocation; test files acquire it through `tests/support/dev-server.ts` and keep their own browser, context and Worker
 fixture overlay. Decision: compose the Worker explicit dependency set with a host-local `optimizeDeps` cache keyed by
 `bun.lock`; `vite optimize --force` publishes that cache once per lock, then the focused run starts one shared Vite
-server. Source modules stay worktree-current; only the dependency output is shared until the lock changes. The runner
+server. The shared Vite process fills missing Worker bindings from `.dev.vars.example` without writing `.dev.vars`,
+forces local Cloudflare bindings, and pins the Worker `optimizeDeps` after plugin merge so an isolated network never
+crawls the Worker graph. Per-file overlays still replace those bindings on each request. Source modules stay
+worktree-current; only the dependency output is shared until the lock changes. The runner
 stops that Vite process tree, including descendants that left the process group, when the invocation ends or is
 interrupted. Lifecycle, fixture-lock and lock-hash cache tests pin that composed-run behaviour; existing browser page
 assertions stay unchanged. An explicit `bun test tests/*.host.test.ts` through this runner uses the same

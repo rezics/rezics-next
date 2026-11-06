@@ -2,10 +2,26 @@ import { join, resolve } from 'node:path';
 import { startDevServer, type DevServerOptions } from '../tests/support/dev-server.ts';
 import { sharedDevServerEnvName, writeSharedDevServer } from '../tests/support/dev-server-fixture.ts';
 import { prepareViteDepCache } from '../tests/support/vite-dep-cache.ts';
+import { readExampleWorkerVars } from './dev-vars.ts';
 
 const app = resolve(import.meta.dir, '..');
 const workspace = resolve(app, '../..');
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+
+/** Vite-process bindings for a shared test server. Per-file overlays still replace these on each request. */
+export function sharedViteChildEnvironment(
+  env: NodeJS.ProcessEnv,
+  extras: { cacheDirectory?: string } = {},
+): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {
+    ...readExampleWorkerVars(),
+    ...env,
+    REZICS_TEST_RUNTIME: '1',
+    CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+  };
+  if (extras.cacheDirectory) child.WEB_VITE_CACHE_DIR = extras.cacheDirectory;
+  return child;
+}
 
 export function commandNeedsSharedDevServer(command: string[]): boolean {
   return command[0] === 'bun' && command[1] === 'test';
@@ -36,17 +52,13 @@ export async function startSharedWebDevServer(
   const cache = await prepareViteDepCache({
     workspaceRoot,
     appRoot: appDirectory,
-    env,
+    env: sharedViteChildEnvironment(env),
   });
   let firstEnMs = 0;
   const start: DevServerOptions = {
     exclusive: true,
     cwd: appDirectory,
-    env: {
-      ...env,
-      WEB_VITE_CACHE_DIR: cache.directory,
-      REZICS_TEST_RUNTIME: '1',
-    },
+    env: sharedViteChildEnvironment(env, { cacheDirectory: cache.directory }),
     warmUpPaths: [],
     firstPath: '/en',
     now: () => performance.now(),

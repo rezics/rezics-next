@@ -44,10 +44,13 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
       return typeof handler === 'function' ? handler.call(undefined, name) : undefined;
     };
     const environment = environmentFor('ssr') as
-      | { optimizeDeps?: { noDiscovery?: boolean; holdUntilCrawlEnd?: boolean; include?: string[] } }
+      | {
+          optimizeDeps?: { noDiscovery?: boolean; holdUntilCrawlEnd?: boolean; include?: string[]; entries?: string[] };
+        }
       | undefined;
     expect(environment?.optimizeDeps?.noDiscovery).toBe(true);
     expect(environment?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
+    expect(environment?.optimizeDeps?.entries).toEqual([]);
     expect(environment?.optimizeDeps?.include).toEqual([
       'react',
       'react/jsx-runtime',
@@ -58,6 +61,18 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
       '@inlang/paraglide-js/urlpattern-polyfill',
     ]);
     expect(environmentFor('client')).toBeUndefined();
+    const resolved = worker && 'configResolved' in worker ? worker.configResolved : undefined;
+    const pin =
+      typeof resolved === 'function' ? resolved : resolved && 'handler' in resolved ? resolved.handler : undefined;
+    const environments = {
+      ssr: {
+        optimizeDeps: { noDiscovery: false, entries: ['src/server.ts'], include: ['cloudflare-discovered'] },
+      },
+    };
+    if (typeof pin === 'function') pin.call(undefined, { environments });
+    expect(environments.ssr.optimizeDeps.noDiscovery).toBe(true);
+    expect(environments.ssr.optimizeDeps.entries).toEqual([]);
+    expect(environments.ssr.optimizeDeps.include).toEqual(environment?.optimizeDeps?.include);
   } finally {
     if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
     else process.env.WEB_VITE_CACHE_DIR = previous;

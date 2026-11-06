@@ -60,7 +60,12 @@ export function viteDepCacheOptimizeCommand(appRoot: string): string[] {
 async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, appRoot: string): Promise<void> {
   const child = Bun.spawn(viteDepCacheOptimizeCommand(appRoot), {
     cwd: appRoot,
-    env: { ...env, WEB_VITE_CACHE_DIR: stagingDirectory, REZICS_TEST_RUNTIME: '1' },
+    env: {
+      ...env,
+      WEB_VITE_CACHE_DIR: stagingDirectory,
+      REZICS_TEST_RUNTIME: '1',
+      CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+    },
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',

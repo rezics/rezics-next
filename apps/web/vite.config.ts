@@ -54,6 +54,31 @@ function resolvedInstallRoots(): string[] {
 }
 
 const dependencyRoots = resolvedInstallRoots();
+const workerSsrOptimizeDeps = {
+  noDiscovery: true,
+  holdUntilCrawlEnd: true,
+  entries: [] as string[],
+  include: [
+    'react',
+    'react/jsx-runtime',
+    'react/jsx-dev-runtime',
+    'react-dom',
+    'react-dom/server',
+    '@tanstack/react-router > @tanstack/react-store',
+    '@inlang/paraglide-js/urlpattern-polyfill',
+  ],
+};
+
+function pinWorkerSsrOptimizeDeps(environment?: { optimizeDeps?: Record<string, unknown> }): void {
+  if (!environment) return;
+  environment.optimizeDeps = {
+    ...environment.optimizeDeps,
+    ...workerSsrOptimizeDeps,
+    include: [...workerSsrOptimizeDeps.include],
+    entries: [],
+  };
+}
+
 let inspectorPort: number | false = false;
 if (configuredInspectorPort !== undefined) {
   const parsedInspectorPort = Number(configuredInspectorPort);
@@ -152,32 +177,24 @@ export default defineConfig((context) => {
       ...cloudflare({
         viteEnvironment: { name: 'ssr' },
         inspectorPort,
+        remoteBindings: false,
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
       {
-        // Runs after the Cloudflare and TanStack plugins, which enable discovery for the Worker environment. Discovery
-        // scanned every module reachable from the Worker entry and bundled all of it before the first Worker request
-        // could finish. The Worker now pre-bundles only the listed packages; other packages load directly.
+        // Cloudflare's config hook enables discovery from the Worker entry. mergeConfig concatenates `entries`, so a
+        // later configEnvironment cannot remove that crawl. Pin the resolved Worker optimizer after plugin merge.
         name: 'web-worker-explicit-dependencies',
         enforce: 'post' as const,
+        config() {
+          return { environments: { ssr: { optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] } } } };
+        },
         configEnvironment(name: string) {
           if (name !== 'ssr') return;
-          return {
-            optimizeDeps: {
-              noDiscovery: true,
-              holdUntilCrawlEnd: true,
-              include: [
-                'react',
-                'react/jsx-runtime',
-                'react/jsx-dev-runtime',
-                'react-dom',
-                'react-dom/server',
-                '@tanstack/react-router > @tanstack/react-store',
-                '@inlang/paraglide-js/urlpattern-polyfill',
-              ],
-            },
-          };
+          return { optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] } };
+        },
+        configResolved(config: { environments?: { ssr?: { optimizeDeps?: Record<string, unknown> } } }) {
+          pinWorkerSsrOptimizeDeps(config.environments?.ssr);
         },
       },
     ],
