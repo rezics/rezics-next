@@ -4,7 +4,7 @@ import { Field } from '@base-ui/react/field';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { changeQuestionBoundRating, type QuestionBoundRatingInput } from './rating-actions';
+import type { QuestionBoundRatingInput } from './rating-actions';
 import { sessionQueryKey, type BrowserSession } from '../../session';
 import {
   personalScoreWriteCommand,
@@ -531,7 +531,10 @@ export function SubjectRatingControl({
         request,
         write:
           write ??
-          (() => changeQuestionBoundRating({ data: boundCommand.current ?? request })),
+          (async () => {
+            const { changeQuestionBoundRating } = await import('./rating-actions');
+            return changeQuestionBoundRating({ data: boundCommand.current ?? request });
+          }),
         onFailure: (result) => {
           if (!isCurrentBinding()) return;
           const notice = personalScoreWriteNotice(result.stale ? 'stale' : result.uncertain ? 'uncertain' : 'rejected');

@@ -6,21 +6,14 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  QUESTION,
-  preparedRatingReader,
-  readOwnRating,
-  type RatingQuestion,
-  type SubjectOwnRating,
-} from '../src/features/pages/subject-ratings';
+import type { RatingQuestion, SubjectOwnRating } from '../src/features/pages/subject-ratings';
 import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
-import {
-  applyOptimisticRatingChange,
-  RatingControlView,
-  type RatingControlState,
-} from '../src/features/pages/rating-control';
-import { subjectOwnRatingQuery, subjectRatingQuery } from '../src/features/pages/subject-queries';
-import { m } from '../src/paraglide/messages.js';
+import type { RatingControlState } from '../src/features/pages/rating-control';
+
+const { QUESTION, preparedRatingReader, readOwnRating } = await import('../src/features/pages/subject-ratings');
+const { applyOptimisticRatingChange, RatingControlView } = await import('../src/features/pages/rating-control');
+const { subjectOwnRatingQuery, subjectRatingQuery } = await import('../src/features/pages/subject-queries');
+const { m } = await import('../src/paraglide/messages.js');
 
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const returnTo = `/en/subjects/${subjectId}/kokoro`;
