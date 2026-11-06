@@ -177,3 +177,11 @@ Remainder, owned elsewhere:
 3. Check-host tooling: `go-task` on the check hosts for `services/auth/test/dev-stack.test.ts`.
 4. Base typecheck failures listed above.
 5. Remove the diagnostic `DEBUG: 'vite:deps'` environment from the dev-server spawn in `apps/web/tests/media.test.ts` once cold starts are routine.
+
+## Owner decisions 53729 and 44110 (2026-11-06)
+
+The focused Media check `74162f6d-c110-413a-ba0e-2a1c1ae0580b` is kept as the input for this branch. Its command is the landing focused command with `scripts/messages-ready.test.ts`, `tests/media-configuration.test.ts` and `tests/media.test.ts`, and it exited 0.
+
+The dev-stack landing command failed in two runs, `bcb20064-4231-4c73-86b0-b0c4887927de` and `f748071c-ec04-4bc0-97d4-3a157dd84351`, on different check hosts, with `error: Executable not found in $PATH: "go-task"` at the fresh-checkout Auth test in `services/auth/test/dev-stack.test.ts`. That file is identical to base. Infrastructure (bed745 / Performance) owns the supported check-preparation provisioning repair for `go-task`. Per decision 53729, this check is not repeated here. `services/auth/scripts/dev-stack.test.ts` passes.
+
+Native Media parent receiving still consumes Threads' canonical `row.live` projection repair (decision 43585). It remains inside the original whole walk: the seeded and browser journey, the persona walk and the screenshots. No native success is inferred from the Worker transport pass.
