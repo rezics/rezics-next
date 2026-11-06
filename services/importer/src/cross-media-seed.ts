@@ -132,7 +132,7 @@ import { createShowcaseBangumiGenreLookup, prepareShowcaseBangumiGenres } from '
 import type { BangumiGenrePublication } from './showcase-bangumi-genres.ts';
 import {
   createShowcaseBangumiGameEnvironmentLookup,
-  parseBangumiGameEnvironmentBindings,
+  readBangumiGameEnvironmentBindingsFile,
   mergeIdentifierResolutions,
   type BangumiGameEnvironmentBinding,
 } from './showcase-bangumi-game-environment.ts';
@@ -3445,11 +3445,8 @@ export async function runCrossMediaSeedCli(
     characterBindings = JSON.parse(bytes.toString('utf8')) as SourceVocabularyBindings;
   }
   let gameEnvironmentBindings: readonly BangumiGameEnvironmentBinding[] | undefined;
-  if (gameEnvironmentBindingsPath) {
-    const bytes = await readFile(gameEnvironmentBindingsPath);
-    ensure(bytes.byteLength <= 64 * 1024, 'Bangumi Game environment bindings exceed the configuration limit');
-    gameEnvironmentBindings = parseBangumiGameEnvironmentBindings(JSON.parse(bytes.toString('utf8')) as unknown);
-  }
+  if (gameEnvironmentBindingsPath)
+    gameEnvironmentBindings = await readBangumiGameEnvironmentBindingsFile(gameEnvironmentBindingsPath);
   let gameGenreBindings: BangumiGameGenreBindings | undefined;
   if (gameGenreBindingsPath) {
     const bytes = await readFile(gameGenreBindingsPath);
