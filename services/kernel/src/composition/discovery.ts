@@ -50,8 +50,7 @@ export function createDiscoveryProducerEntry(input: {
   });
   return Object.freeze({
     subjects:
-      input.subjects ??
-      createRatedSubjectSource(pool, routeKey, createKernelCreditSearchSource(pool, routeKey)).source,
+      input.subjects ?? createRatedSubjectSource(pool, routeKey, createKernelCreditSearchSource(pool, routeKey)).source,
     accounts: accountDiscoverySource(pool),
     ...(reviewSource ? { reviewSource } : {}),
     ownerAdapters,

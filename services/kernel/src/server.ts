@@ -172,8 +172,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     void workClient.catch(() => {});
     const client = workClient;
     await client;
-    const creditSearch =
-      searchConfig === undefined ? undefined : createKernelCreditSearchSource(pool, config.routeKey);
+    const creditSearch = searchConfig === undefined ? undefined : createKernelCreditSearchSource(pool, config.routeKey);
     const rated =
       searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey, creditSearch);
     const search =

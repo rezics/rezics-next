@@ -194,7 +194,9 @@ function admitReleasedCreditQualifiers(value: unknown, release: FilterRelease): 
       invalid(`${pointer}/property`, 'invalid_format');
     const definition = release.properties[property] as FilterRelease['properties'][string] | undefined;
     if (!definition)
-      throw new ProblemError('unsupported_query', { errors: [{ pointer: `${pointer}/property`, code: 'unsupported' }] });
+      throw new ProblemError('unsupported_query', {
+        errors: [{ pointer: `${pointer}/property`, code: 'unsupported' }],
+      });
     if (typeof operand !== 'string' || operand.length === 0 || operand.length > 256 || !operand.isWellFormed())
       invalid(`${pointer}/value`, 'invalid_format');
     if (definition.datatype === 'wikibase-item' && !WIKIBASE_ITEM_UUID.test(operand))
