@@ -1,7 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderSubject } from './helpers/subject-render';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import platform from '@rezics/composition/profiles/platform.json';
 import type { SubjectPageData } from '../src/features/pages/subject.tsx';
@@ -236,7 +235,7 @@ test('aggregateRating is present only for the shown Global native average and us
   expect(JSON.parse(head(page, 'en', { ratings: noMean }).scripts[0]!.children!).aggregateRating).toBeUndefined();
 });
 
-test('thin subjects and later relations pages are noindex, while the page cover is the only high-priority image', () => {
+test('thin subjects and later relations pages are noindex, while the page cover is the only high-priority image', async () => {
   const thin = makePage({ labels: { en: 'The Lamp' } });
   expect(meta(head(thin), 'robots')).toBe('noindex, follow');
   expect(meta(head(thin, 'en', { view: 'relations', page: 1 }), 'robots')).toBe('noindex, follow');
@@ -270,17 +269,9 @@ test('thin subjects and later relations pages are noindex, while the page cover 
       },
     },
   });
-  const rendered = renderToString(
-    createElement(QueryClientProvider, {
-      client: new QueryClient(),
-      children: createElement(SubjectPage, {
-        page,
-        locale: 'en',
-        messages,
-        renderJsonLd: false,
-        typeLabel: 'Book',
-      } as never),
-    }),
+  const rendered = await renderSubject(
+    createElement(SubjectPage, { page, locale: 'en', messages, renderJsonLd: false, typeLabel: 'Book' } as never),
+    paths.en,
   );
   const cover = rendered.match(/<img[^>]*fetch[Pp]riority="high"[^>]*>/g) ?? [];
   expect(cover).toHaveLength(1);
