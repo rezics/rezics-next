@@ -186,6 +186,11 @@ export function candidateFixture(
         }),
       });
     }
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}` && url.searchParams.has('selectedSynopsis'))
+      return json({
+        ...publicRead,
+        selectedSynopsis: fakeSelectedSynopsis(publicRead.subject, url.searchParams.get('selectedSynopsis')),
+      });
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}`) return json(publicRead);
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}/candidates`) {
       if (scenario === 'loading') return new Promise<Response>(() => {});
@@ -295,6 +300,59 @@ export function candidateFixture(
   };
   return { id, property, candidate, candidates, client, publicRead, transport, calls, fetcher };
 }
+
+/** Released selectedSynopsis answer for a Global slot: the statement must match its exact document operands. */
+function fakeSelectedSynopsis(subject: unknown, query: string | null): unknown {
+  const current = subject as { context: string; release: string; statements: Record<string, FakeSnakRow[]> };
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(query ?? '') as Record<string, unknown>;
+  } catch {
+    return { kind: 'unsupported' };
+  }
+  if (input.context !== current.context) return { kind: 'unsupported' };
+  if (input.release !== current.release) return { kind: 'changed' };
+  const rows = current.statements['schema:abstract'] ?? [];
+  const rank = rows.some((row) => row.rank === 'preferred') ? 'preferred' : 'normal';
+  const found = rows.find((row) => {
+    const content = row.value.content as Record<string, unknown> | undefined;
+    return (
+      row.id === input.statement &&
+      row.rank === rank &&
+      row.property.data_type === 'document' &&
+      row.value.type === 'value' &&
+      content?.document === input.document &&
+      content?.digest === input.digest &&
+      content?.language === input.language
+    );
+  });
+  if (!found) return { kind: 'changed' };
+  const { rezics: _revision, ...plain } = found;
+  const redact = (snak: FakeSnakRow) =>
+    snak.property.data_type === 'document' || snak.property.data_type === 'media'
+      ? { ...snak, value: { type: 'somevalue' } }
+      : snak;
+  return {
+    kind: 'matched',
+    fact: {
+      ...redact(plain),
+      qualifiers: plain.qualifiers.map(redact),
+      references: plain.references.map((reference) => ({ ...reference, parts: reference.parts.map(redact) })),
+    },
+    context: current.context,
+    release: current.release,
+  };
+}
+
+type FakeSnakRow = {
+  id: string;
+  rank: string;
+  property: { id: string; data_type: string };
+  value: { type: string; content?: unknown };
+  qualifiers: FakeSnakRow[];
+  references: { hash: string; parts: FakeSnakRow[] }[];
+  rezics?: unknown;
+};
 
 // Component and page stories use isolated instances; this module adds no global route override.
 export const routes: FakeRoute[] = [];
