@@ -165,14 +165,18 @@ function site(): Promise<string> {
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
+    const missingMedia = `${origin}/media/${randomUUID()}/original`;
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
+        // The fixture implements media APIs, so readiness must not depend on home-page discovery or rendering.
+        const response = await fetch(missingMedia, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
+        const ready = response.status === 404 && response.headers.get('content-type')?.includes('application/problem+json');
+        await response.body?.cancel();
+        if (ready) return origin;
       } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+      if (Date.now() > deadline) throw new Error(`dev server did not serve the media route in time:\n${output}`);
       await Bun.sleep(500);
     }
   })();

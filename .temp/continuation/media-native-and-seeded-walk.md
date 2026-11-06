@@ -104,3 +104,8 @@ Worker configuration discarded the native local media bindings and always select
 and credential now replace that binding together. Configuration acceptance pins both storage selections and
 keeps the local credential a Worker secret. This changes `apps/web/cloudflare.config.ts` outside the expected
 path list, plus the existing owner descriptions. It adds no upload writer or authorization bypass.
+
+The next focused web check passed both storage selections and the 20 upload/download control cases;
+three Worker cases still timed out waiting for `/en`, with only Vite's dependency scan in the launch log.
+The fixture now probes the actual media route's native not-found response instead: its fake kernel implements
+media APIs and cannot establish home-page Discovery readiness. All transport assertions are retained.
