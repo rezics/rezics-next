@@ -202,6 +202,47 @@ if (process.argv.includes('--schedule-child')) {
       await pool.end();
     }
   });
+
+  test('one admitted Unix socket names the same Auth database for the product, DBOS and system pools', async () => {
+    const socket = `/tmp/auth-identity-${randomBytes(6).toString('hex')}`;
+    const admitted = `postgres://user:secret@127.0.0.1/auth?host=${encodeURIComponent(socket)}`;
+    const other = `postgres://user:secret@127.0.0.1/auth?host=${encodeURIComponent(`${socket}-other`)}`;
+    const database = new Pool({ connectionString: admitted });
+    const system = new Pool({ connectionString: admitted, max: 8 });
+    const elsewhere = new Pool({ connectionString: other });
+    const base = {
+      database,
+      issuer: 'https://auth.test',
+      audience: 'https://api.test',
+      secret: 'unused',
+      signing: { activeKid: 'unused', privateKeys: [] },
+      trustedAccess,
+      access,
+      stagingKey: randomBytes(32),
+    };
+    try {
+      // The socket is absent: an admitted identity passes configuration and fails later at the database.
+      const admission = await createAuthHost({ ...base, systemDatabasePool: system, systemDatabaseUrl: admitted }).then(
+        async (host) => {
+          await host.stop();
+          return undefined;
+        },
+        (error: unknown) => error,
+      );
+      expect(admission instanceof AuthHostConfigurationError && admission.code === 'database').toBe(false);
+      for (const extra of [{ systemDatabaseUrl: other }, { systemDatabasePool: elsewhere }]) {
+        const refused = await createAuthHost({ ...base, ...extra }).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(refused).toBeInstanceOf(AuthHostConfigurationError);
+        expect((refused as AuthHostConfigurationError).code).toBe('database');
+      }
+      expect(DBOS.isInitialized()).toBe(false);
+    } finally {
+      await Promise.allSettled([database.end(), system.end(), elsewhere.end()]);
+    }
+  });
 }
 
 async function eventually(check: () => Promise<boolean>) {
