@@ -3,7 +3,6 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
-import { converter_revision as entityRevision } from '../../../../packages/conversion/src/cross-media-entities.ts';
 import { crossMediaBangumiRevision } from '../../../importer/src/source-registry.ts';
 import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
@@ -53,7 +52,7 @@ function selectedPlan(releaseDate: string) {
 }
 
 test('selected Bangumi Game date is independently adopted, read at source precision, refreshed on the same UUID and fenced', async () => {
-  expect(converter_revision).toBe('bangumi@15');
+  expect(converter_revision).toBe('bangumi@17');
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-game-publication-native-'));
   const importPath = join(directory, 'import.sqlite');
@@ -61,6 +60,16 @@ test('selected Bangumi Game date is independently adopted, read at source precis
   let journal = new ShowcaseJournal(journalPath);
   try {
     const editor = await openApiObserver(runtime);
+    expect(
+      (
+        await editor.http('/v1/grants', {
+          resource: { route: 0, id: GLOBAL_CONTEXT },
+          subject: { kind: 'account', id: runtime.identity.governance.accountId },
+          actions: ['context:accept', 'context:adopt'],
+          valid: '(,)',
+        })
+      ).status,
+    ).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
       fetch: (async (input) => {
@@ -70,15 +79,62 @@ test('selected Bangumi Game date is independently adopted, read at source precis
     });
     const importSelected = async (releaseDate: string) => {
       const plan = selectedPlan(releaseDate);
-      const result = await seedCrossMedia(
+      let result = await seedCrossMedia(
         plan,
         importPath,
         captureShowcaseCommands(runtime.importTransport, journal),
         { origin: runtime.origin },
         { providers: ['bangumi'] },
       );
-      const id = result.readings.find((reading) => reading.externalId === String(gameId))?.subject.subject?.id;
+      const created = journal
+        .acknowledgedCommands()
+        .find((entry) => entry.command.op === 'create' && entry.command.source.external_id === String(gameId));
+      const id = created?.subjectId;
       if (!id) throw new Error('Selected Bangumi Game has no acknowledged native identity');
+      if (!result.readings.some((reading) => reading.externalId === String(gameId))) {
+        // A source claim locates the proposal; only a separately adopted provider
+        // identifier admits its independently read public Game identity.
+        const identity = await runtime.importTransport.reviewedCandidates(id, {
+          property: 'wdt:P5732',
+          context: GLOBAL_CONTEXT,
+          limit: 100,
+        });
+        const candidate = identity.candidates.find(
+          (item) =>
+            'statement' in item &&
+            item.statement.value.type === 'value' &&
+            item.statement.value.content === String(gameId),
+        );
+        if (!candidate || !('statement' in candidate))
+          throw new Error('Selected Bangumi Game identity proposal is missing');
+        expect(
+          (
+            await editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, {
+              context: GLOBAL_CONTEXT,
+              expected_head: candidate.head,
+            })
+          ).status,
+        ).toBe(200);
+        expect(
+          (
+            await editor.http(`/v1/subjects/${id}:adopt`, {
+              context: GLOBAL_CONTEXT,
+              property: 'wdt:P5732',
+              mode: 'replace',
+              expected_head: identity.adoption?.head ?? null,
+              selection: [{ candidate: candidate.id, rank: 'normal' }],
+            })
+          ).status,
+        ).toBe(200);
+        result = await seedCrossMedia(
+          plan,
+          importPath,
+          captureShowcaseCommands(runtime.importTransport, journal),
+          { origin: runtime.origin },
+          { providers: ['bangumi'] },
+        );
+      }
+      expect(result.readings.find((reading) => reading.externalId === String(gameId))?.subject.subject?.id).toBe(id);
       return { plan, result, id };
     };
     const candidatePage = (id: string) =>

@@ -149,6 +149,8 @@ export async function openApiRuntime(
   const evidenceRoot = resolve(import.meta.dir, '../../../../.temp');
   mkdirSync(evidenceRoot, { recursive: true });
   function recordPhase(phase: string, started: number) {
+    if (process.env.IMPORT_VNDB_STATISTICS_DRIVER)
+      console.error(`VNDB native ${fixture}: ${phase} completed in ${Date.now() - started} ms`);
     appendFileSync(
       `${evidenceRoot}/import-api-timings.jsonl`,
       `${JSON.stringify({ fixture, processId: process.pid, phase, atMs: Date.now(), elapsedMs: Date.now() - started })}\n`,
@@ -156,6 +158,7 @@ export async function openApiRuntime(
   }
   async function time<T>(phase: string, action: () => Promise<T>): Promise<T> {
     const started = Date.now();
+    if (process.env.IMPORT_VNDB_STATISTICS_DRIVER) console.error(`VNDB native ${fixture}: ${phase} started`);
     try {
       return await action();
     } finally {
@@ -275,7 +278,7 @@ export async function openApiRuntime(
     const mediaBoundary = boundary!;
     await mediaBoundary.source('https://lain.bgm.tv/cover.jpg');
     await mediaBoundary.source('https://lain.bgm.tv/replacement.jpg');
-    work = await time('work client', () => createWorkClient(database.url, database.openPool()));
+    work = await time('work client', () => createWorkClient(database.url, database.pool));
     const secret = randomUUID();
     let overrides: string | undefined = growthWriteRate
       ? JSON.stringify({ service: { write: growthWriteRate } })
@@ -307,6 +310,58 @@ export async function openApiRuntime(
       });
     }
     let app = timeSync('kernel composition', kernel);
+    // Report the reached boundary on failures, without bearer, body, SQL, or
+    // private exception text. The cap also bounds diagnostics during retries.
+    let reportedRequests = 0;
+    async function dispatchNative(req: Request): Promise<Response> {
+      const startedAtMs = Date.now();
+      let phase = 'kernel dispatch';
+      let requestId = req.headers.get('x-request-id') ?? randomUUID();
+      let status: number | undefined;
+      let problemCode: string | undefined;
+      let reported = false;
+      const report = (outcome: 'cancelled' | 'thrown' | 'problem') => {
+        if (reported || reportedRequests >= 32) return;
+        reported = true;
+        reportedRequests++;
+        console.error(
+          `Native request failure ${JSON.stringify({
+            method: req.method,
+            url: req.url.slice(0, 2048),
+            elapsedMs: Date.now() - startedAtMs,
+            phase,
+            requestId: requestId.slice(0, 160),
+            status,
+            problemCode,
+            outcome,
+            cancellation: req.signal.aborted ? 'request signal' : 'none',
+            cancellationName:
+              req.signal.aborted && req.signal.reason instanceof Error ? req.signal.reason.name : undefined,
+          })}`,
+        );
+      };
+      const aborted = () => report('cancelled');
+      req.signal.addEventListener('abort', aborted, { once: true });
+      try {
+        req.signal.throwIfAborted();
+        const response = await app.handle(req);
+        phase = 'kernel response';
+        status = response.status;
+        requestId = response.headers.get('x-request-id') ?? requestId;
+        if (status >= 400) {
+          phase = 'public problem response';
+          const problem = (await response.clone().json()) as { code?: string };
+          problemCode = problem.code?.slice(0, 160);
+          report('problem');
+        }
+        return response;
+      } catch (error) {
+        report('thrown');
+        throw error;
+      } finally {
+        req.signal.removeEventListener('abort', aborted);
+      }
+    }
     // Observer fan-out shares one native pool; admit reads before HTTP deadlines start.
     let observerRequests = 0;
     const observerWaiting: (() => void)[] = [];
@@ -314,7 +369,7 @@ export async function openApiRuntime(
       if (observerRequests === 1) await new Promise<void>((resolve) => observerWaiting.push(resolve));
       else observerRequests++;
       const send = () =>
-        app.handle(
+        dispatchNative(
           new Request(`${origin}${path}`, {
             method: body === undefined ? 'GET' : 'POST',
             headers: {
@@ -334,6 +389,8 @@ export async function openApiRuntime(
           response = await send();
         }
         return response;
+      } catch (error) {
+        throw new Error(`Native API ${body === undefined ? 'GET' : 'POST'} ${path} failed`, { cause: error });
       } finally {
         const next = observerWaiting.shift();
         if (next) next();
@@ -520,7 +577,7 @@ export async function openApiRuntime(
             budget((JSON.parse(bytes) as BatchWriteRequest).commands.length);
             await current?.controls.beforeWrite?.();
           }
-          const response = await time(`HTTP: ${req.method} ${new URL(req.url).pathname}`, () => app.handle(req));
+          const response = await time(`HTTP: ${req.method} ${new URL(req.url).pathname}`, () => dispatchNative(req));
           // Detach the actual response bytes before a simulated transport loss
           // aborts the request and its connected response streams.
           const captured = new Response(response.status === 204 ? null : await response.clone().arrayBuffer(), {
@@ -574,6 +631,8 @@ export async function openApiRuntime(
           return response;
         } catch (error) {
           if (event) event.error = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          if (!current)
+            throw new Error(`Native importer HTTP ${req.method} ${new URL(req.url).pathname} failed`, { cause: error });
           throw error;
         } finally {
           if (event) httpEvents.push(event);
@@ -798,7 +857,7 @@ export async function openApiRuntime(
       await time('fence query warm-up', async () => {
         const source = 'warm-spare';
         const query = new URLSearchParams({ source, externalId: randomUUID(), fieldGroup: 'facts' });
-        const response = await app.handle(
+        const response = await dispatchNative(
           new Request(`${origin}/v1/sourceFences:check?${query}`, {
             headers: { authorization: `Bearer ${await bulkBearer()}` },
           }),
@@ -855,7 +914,13 @@ export async function openApiRuntime(
         await importer!.close();
         importer = openImporter();
       },
-      replay: (req: Request) => app.handle(req),
+      replay: async (req: Request) => {
+        try {
+          return await dispatchNative(req);
+        } catch (error) {
+          throw new Error(`Native replay HTTP ${req.method} ${new URL(req.url).pathname} failed`, { cause: error });
+        }
+      },
     };
   } catch (error) {
     await close();

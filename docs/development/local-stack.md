@@ -247,8 +247,9 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
    answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
-4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
-   inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
+4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Inside that command, run
+   `bun services/auth/scripts/dev-stack.ts persona`, load its private `seed.env`, then run
+   `bun scripts/datasets/cross-media-seed.ts --dev`, as described in [Seeded journey walks](#seeded-journey-walks).
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
    attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
    starts.
@@ -318,4 +319,6 @@ The general `fetchVndbDump` helper, when called without a pin, first tries the i
 machine-local reuse. This mode does not establish the development seed's pinned acceptance generation.
 
 The seed's `REZICS_DEV_PERSONA_*`, `AUTH_ORIGIN` and `KERNEL_ORIGIN` environment seam also works with a manually
-configured local account. Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).
+configured local account. Optional `REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS` names the reviewed Game
+platform/engine JSON used by `--bangumi-game-environment-bindings`; missing input omits those proposals only.
+Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).

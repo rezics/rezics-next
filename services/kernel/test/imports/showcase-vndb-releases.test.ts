@@ -86,7 +86,10 @@ async function writeCrossMediaDump(directory: string, platform: string): Promise
   ]) {
     await writeFile(join(bangumi, `${table}.jsonlines`), '');
   }
-  await writeFile(join(bangumi, 'subject.jsonlines'), `${JSON.stringify({ id: 1, type: 2, name: 'Selected Work' })}\n`);
+  await writeFile(
+    join(bangumi, 'subject.jsonlines'),
+    `${JSON.stringify({ id: 1, type: 4, name: 'Selected Work', infobox: '{{Infobox Game\n|平台=PC\n}}' })}\n`,
+  );
 
   const tables: Record<string, { columns: string[]; rows?: Record<string, string | number | null>[] }> = {
     vn_titles: {
@@ -454,6 +457,12 @@ test('cross-media CLI retains selected release classifications through later voc
   const authOrigin = 'https://auth.cross-media.test';
   const originalFetch = globalThis.fetch;
   try {
+    const tier = await runtime.request(
+      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
+      { key: randomUUID(), tier: 'trusted' },
+      identitySupport(runtime.identity).managementBearer,
+    );
+    expect(tier.status).toBe(200);
     const support = identitySupport(runtime.identity);
     const scopes = [...VNDB_IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt', 'access:grant'];
     const clientId = `cross-media-${randomUUID()}`;
@@ -497,6 +506,77 @@ test('cross-media CLI retains selected release classifications through later voc
       bearer,
     );
     expect(grant.status).toBe(201);
+
+    // Reviewed source-owned environment identity is published independently of the seed.
+    const source = {
+      source: 'authored-bangumi-game-environment',
+      external_id: 'platform:PC',
+      record_revision: 'unversioned',
+      digest: 'e'.repeat(64),
+      converter_revision: 'authored@1',
+      field_group: 'facts' as const,
+    };
+    const created = await runtime.importTransport.batch({
+      commands: [
+        {
+          op: 'create',
+          key: randomUUID(),
+          source,
+          subject: { type: 'skos:Concept', labels: { en: 'PC' } },
+        },
+      ],
+    });
+    expect(created.results[0]?.status).toBe(201);
+    const environmentId = (created.results[0] as { value: { id: string } }).value.id;
+    const environmentUri = 'https://bgm.tv/info/platform/PC';
+    const proposed = await runtime.importTransport.batch({
+      commands: [
+        {
+          op: 'propose',
+          key: randomUUID(),
+          source,
+          subject: environmentId,
+          statement: {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: environmentUri },
+            references: [],
+          },
+        },
+      ],
+    });
+    expect(proposed.results[0]?.status).toBe(201);
+    const environmentCandidate = (proposed.results[0] as { value: { candidate: string } }).value.candidate;
+    expect(
+      (
+        await runtime.request(
+          `/v1/subjects/${environmentId}/candidates/${environmentCandidate}:accept`,
+          {
+            context: globalContext,
+            expected_head: null,
+          },
+          bearer,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await runtime.request(
+          `/v1/subjects/${environmentId}:adopt`,
+          {
+            context: globalContext,
+            property: 'schema:url',
+            mode: 'replace',
+            expected_head: null,
+            selection: [{ candidate: environmentCandidate, rank: 'normal' }],
+          },
+          bearer,
+        )
+      ).status,
+    ).toBe(200);
+    await writeFile(
+      join(directory, 'game-environment.json'),
+      JSON.stringify([{ kind: 'platform', item: 'PC', conceptId: environmentId, sourceUri: environmentUri }]),
+    );
 
     const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
     const keyPath = join(directory, 'account.jwk');
@@ -545,6 +625,8 @@ test('cross-media CLI retains selected release classifications through later voc
           showcase,
           '--vndb-release-state-bindings',
           join(directory, 'release-bindings.json'),
+          '--bangumi-game-environment-bindings',
+          join(directory, 'game-environment.json'),
         ],
         { selection: { bangumi: [1], vndb: ['v1'], peoplePerProvider: 1 } },
       );
@@ -552,7 +634,7 @@ test('cross-media CLI retains selected release classifications through later voc
 
     const result = JSON.parse(await readFile(resultPath, 'utf8')) as {
       identities: { key: string; kind: string; subjectId: string }[];
-      showcase: { manifest: { records: { sourceKey: string; subjectId: string | null }[] } };
+      showcase: { manifest: { records: { provider: string; sourceKey: string; subjectId: string | null }[] } };
     };
     const workId = result.identities.find((row) => row.key === 'v1' && row.kind === 'work')?.subjectId;
     const releaseId = result.identities.find((row) => row.key === 'r1' && row.kind === 'release')?.subjectId;
@@ -578,6 +660,13 @@ test('cross-media CLI retains selected release classifications through later voc
         }
       ).subject;
     };
+    const gameId = result.showcase.manifest.records.find(
+      (row) => row.provider === 'bangumi' && row.sourceKey === '1',
+    )?.subjectId;
+    expect(gameId).toBeTruthy();
+    const game = await readCurrent(gameId!);
+    expect(game.type).toBe('schema:VideoGame');
+    expect(game.statements['schema:gamePlatform']?.map((row) => row.value.content)).toEqual([environmentId]);
     const release = await readCurrent(releaseId!);
     const work = await readCurrent(workId!);
     const values = (subject: typeof release, property: string) =>
@@ -617,6 +706,9 @@ test('cross-media CLI retains selected release classifications through later voc
     expect(refreshed.identities.find((row) => row.key === 'v1' && row.kind === 'work')?.subjectId).toBe(workId);
     expect(refreshed.identities.find((row) => row.key === 'r1' && row.kind === 'release')?.subjectId).toBe(releaseId);
     expect(refreshed.showcase.manifest.records.find((record) => record.sourceKey === 'r1')?.subjectId).toBe(releaseId);
+    expect((await readCurrent(gameId!)).statements['schema:gamePlatform']?.map((row) => row.value.content)).toEqual([
+      environmentId,
+    ]);
     const refreshedRelease = await readCurrent(releaseId!);
     expect(values(refreshedRelease, 'schema:exampleOfWork')).toEqual([workId]);
     expect(values(refreshedRelease, 'schema:inLanguage')).toEqual(['ja']);
