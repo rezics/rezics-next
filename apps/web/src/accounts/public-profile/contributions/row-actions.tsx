@@ -41,7 +41,6 @@ export function ContributionRowActions({
 }) {
   const host = useContributionActionsHost();
   const scope = useContributionActionsPageScope();
-  const returnTo = useRouterState({ select: (state) => state.location.href });
   if (!host?.input || !host.advice || !href) return null;
   const reference = originalContributionReference(host.input, item);
   if (!reference) return null;
@@ -64,7 +63,6 @@ export function ContributionRowActions({
       advice={host.advice}
       reference={reference}
       href={href}
-      returnTo={returnTo}
       verification={scope?.verification}
       refreshAdvice={host.retry}
     />
@@ -76,7 +74,6 @@ function ContributionRowActionOwners({
   advice,
   reference,
   href,
-  returnTo,
   verification,
   refreshAdvice,
 }: {
@@ -84,10 +81,10 @@ function ContributionRowActionOwners({
   advice: Advice;
   reference: ContributionReference;
   href: string;
-  returnTo: string;
   verification: VerificationConfig | undefined;
   refreshAdvice: () => Promise<void>;
 }) {
+  const returnTo = useRouterState({ select: (state) => state.location.href });
   const watch = contributionWatchSection(advice, contributionCommandTarget(reference, 'watch').id);
   const reactions = contributionReactionSection(advice, reference);
   // Retain only this occurrence's last admitted projection. A withheld refresh disables new commands,

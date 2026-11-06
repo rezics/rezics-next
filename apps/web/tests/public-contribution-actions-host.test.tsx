@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
@@ -7,6 +7,14 @@ import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const realReport = { ...(await import('../src/report/content-actions')) };
+const realComposer = { ...(await import('../src/threads/composer')) };
+const realActions = { ...(await import('../src/threads/actions')) };
+afterAll(() => {
+  mock.module('../src/report/content-actions', () => realReport);
+  mock.module('../src/threads/composer', () => realComposer);
+  mock.module('../src/threads/actions', () => realActions);
+});
 
 type MockPostActionsProps = {
   target: { kind: string; id: string };
