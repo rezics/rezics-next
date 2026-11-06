@@ -2,7 +2,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { normalizeSessionObservation } from '../../session/browser-state';
-import { browserObservation } from '../../session';
+import { browserObservation, type BrowserObservationSnapshot } from '../../session';
 import { SignInPrompt } from '../../threads/write-prompts';
 import { ThreadReactions, type ThreadReactionsProps } from '../../threads/thread-reactions';
 import { ThreadWatch, type ThreadWatchProps } from '../../threads/thread-watch';
@@ -13,6 +13,11 @@ import type { VerificationConfig } from '../../report/turnstile';
 
 const actionClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+// Standalone lists have no QueryClient. React requires the same snapshot until the store changes.
+const UNKNOWN_OBSERVATION: BrowserObservationSnapshot = { state: 'unknown' };
+const unknownObservation = () => UNKNOWN_OBSERVATION;
+const noSubscribe = () => () => {};
 
 /** Only exact controls admitted by the selected native card are mounted here. */
 export function SubjectCommunityInteractions({
@@ -45,9 +50,9 @@ export function SubjectCommunityInteractions({
   const client = useContext(QueryClientContext);
   const observationStore = client ? browserObservation(client) : undefined;
   const observation = useSyncExternalStore(
-    observationStore?.subscribe ?? (() => () => {}),
-    observationStore?.getSnapshot ?? (() => ({ state: 'unknown' as const })),
-    observationStore?.getServerSnapshot ?? (() => ({ state: 'unknown' as const })),
+    observationStore?.subscribe ?? noSubscribe,
+    observationStore?.getSnapshot ?? unknownObservation,
+    observationStore?.getServerSnapshot ?? unknownObservation,
   );
   const sessionState = client?.getQueryState(['session']);
   const session = normalizeSessionObservation(client?.getQueryData(['session']));
