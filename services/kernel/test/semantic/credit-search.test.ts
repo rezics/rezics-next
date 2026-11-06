@@ -238,6 +238,7 @@ test('credit, name, concealment, merge and release changes invalidate the origin
   expect(afterAdd.names.some((name) => name.targetId === extra.id)).toBe(true);
 
   await renamePerson(author.id, 'Renamed Author');
+  expect(await adapter.unchanged(work.id, afterAdd.observation)).toBe(false);
   const afterRename = await receiveCreditSearch(adapter, work.id);
   expect(afterRename.state).toBe('complete');
   if (afterRename.state !== 'complete') throw new Error('complete after rename');
@@ -366,7 +367,76 @@ test('fourth-page and name-coverage cases stay incomplete without dropping readi
   if (page.state !== 'current') throw new Error('current first page');
   expect(page.next, `entries=${page.entries.length} mimic=${mimic.rows[0]!.n}`).toBeString();
   expect(page.entries).toHaveLength(CREDIT_SEARCH_LIMITS.creditsPerPage);
+  // Each cursor resumes strictly after the last credit returned, so no credit is skipped at a page boundary.
+  let cursor = page.next;
+  for (let index = 1; index < CREDIT_SEARCH_LIMITS.pages; index++) {
+    const later = await source.creditSearch!.page({
+      workId: paged.id,
+      after: cursor,
+      observation: page.observation,
+      limits: CREDIT_SEARCH_LIMITS,
+    });
+    expect(later.state, JSON.stringify(later)).toBe('current');
+    if (later.state !== 'current') throw new Error('current later page');
+    expect(later.entries).toHaveLength(CREDIT_SEARCH_LIMITS.creditsPerPage);
+    cursor = later.next;
+  }
+  expect(cursor, 'the fourth page leaves one credit unread').toBeString();
   const projection = await receiveCreditSearch(source.creditSearch!, paged.id);
   expect(projection.state).toBe('incomplete');
   expect(await ready(paged.id)).toBe(true);
 }, 180_000);
+
+test('qualifier and release changes after a page read invalidate the selected witness', async () => {
+  const writer = await person('Revised writer');
+  const work = (
+    await ok(
+      '/v1/subjects',
+      {
+        type: 'wd:Q689445',
+        labels: { en: 'Revised credit' },
+        statements: {
+          'schema:author': [
+            statement('schema:author', writer.id, [
+              { property: { id: 'wdt:P1932' }, value: value('Old romanisation') },
+            ]),
+          ],
+        },
+      },
+      201,
+    )
+  ).subject as Record<string, any>;
+  const adapter = source.creditSearch!;
+  const first = await receiveCreditSearch(adapter, work.id);
+  expect(first.state).toBe('complete');
+  if (first.state !== 'complete') throw new Error('complete first projection');
+  const matched = first.names[0]!;
+  expect(matched.qualifiers).toEqual([{ property: 'wdt:P1932', value: 'Old romanisation' }]);
+  expect(await receiveCreditSearchMatch(adapter, first, matched)).toBe('current');
+
+  // A native revision rewrites the selected qualifier and re-stamps the statement under another release digest.
+  const revisedRelease = `sha256:${'1'.repeat(64)}`;
+  await admin.query(
+    `UPDATE semantic.search_selected
+     SET release = $2,
+         body = jsonb_set(body, '{qualifiers}', (
+           SELECT jsonb_agg(CASE WHEN q->>'property' = 'wdt:P1932'
+                                 THEN jsonb_set(q, '{value,content}', to_jsonb('New romanisation'::text))
+                                 ELSE q END)
+           FROM jsonb_array_elements(body->'qualifiers') q))
+     WHERE subject_id = $1 AND active AND property = 'schema:author'`,
+    [work.id, revisedRelease],
+  );
+  expect(await receiveCreditSearchMatch(adapter, first, matched)).toBe('changed');
+
+  const fresh = await receiveCreditSearch(adapter, work.id);
+  expect(fresh.state).toBe('complete');
+  if (fresh.state !== 'complete') throw new Error('complete fresh projection');
+  const revised = fresh.names.find((name) => name.targetId === writer.id)!;
+  expect(revised.release).toBe(revisedRelease);
+  expect(revised.qualifiers).toEqual([{ property: 'wdt:P1932', value: 'New romanisation' }]);
+  expect(await adapter.current(matched, fresh.observation)).toBe(false);
+  expect(await adapter.current({ ...revised, qualifiers: matched.qualifiers }, fresh.observation)).toBe(false);
+  expect(await adapter.current({ ...revised, release: matched.release }, fresh.observation)).toBe(false);
+  expect(await adapter.current(revised, fresh.observation)).toBe(true);
+});

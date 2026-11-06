@@ -641,32 +641,49 @@ without a native work receipt refuses before IO rather than manufacturing an Act
 
 ### Credited-name adapter
 
-Decision: credit-search observation is the work header plus `search_canonical_generation`, so paging stays
-stable without expanding omitted creators; `nameRevision` hashes public labels/aliases and identity/security;
-pages admit 32 selected credits before nested name and identity reads; an incomplete fourth page or name
-coverage keeps selection ready. Identity `absent` uses the public redirect chain; pending identity is
-preparing; a moved identity home is unavailable.
+Decision: credited-name observation is the work header plus `search_canonical_generation`, so paging stays stable
+without expanding omitted creators; creator names and identity are bound by `nameRevision`, exact `current` witness
+checks and whole-dependency `unchanged`, and an incomplete fourth page or name coverage keeps selection ready.
 
-`createCreditSearchSource` in `credit-search.ts` is the native `CreditSearchSource` for Search's credited-name
-consumer. Production attaches it on `subjectSource`, preserves it through rated composition, and exposes
-`createKernelCreditSearchSource` from runtime defaults. It uses released `listWorkPlan` / `workCreditProperties`
-outgoing credit properties, never a role roster or the three-entry work-context preview.
+The installed port is `createCreditSearchSource`: `subjectSource` attaches it as `creditSearch`, and runtime
+defaults expose `createKernelCreditSearchSource`. It uses released `listWorkPlan` / `workCreditProperties` outgoing
+credit properties, never a role roster or the three-entry work-context preview. `receiveCreditSearch` and
+`receiveCreditSearchMatch` are the receiving entries; restart maps onto `changed`, so the existing pipeline publishes
+preparing, incomplete, changed or complete. Hidden or concealed credits and creators are omitted, not counted as
+incomplete. Identity `absent` follows the public redirect chain; pending identity is preparing; a moved identity
+home is unavailable.
 
-`page` seeks at most 32 selected credits plus one lookahead on `search_selected_page`, then expands at most
-16 public labels/aliases (256 bytes each) and identity mappings for those targets. Qualifier overflow is
-admitted as `namesComplete: false` without nested expansion. Unready selection resumes through
-`search_rebuild_one`. `receiveCreditSearch` maps the Search consumer's restart onto `changed` so the existing
-pipeline can publish preparing, incomplete, changed or complete. `current` re-reads the exact statement,
-directed target, qualifiers, release, name and both disclosures. `unchanged` re-reads the whole-dependency
-cut, including omitted creators inside the four-page window.
+Modules: `credit-search-cut.ts` holds the installed ceilings, observation, cursor and digests;
+`credit-search-selection.ts` holds the work cut, selected-credit seeks, release plan, parsing and native disclosure;
+`credit-search-creators.ts` holds public labels/aliases and identity terminals.
+
+The page cursor is the last selected row returned, so the next strict seek resumes after it. The lookahead row only
+proves another page exists; a cursor on it would skip that credit.
 
 #### Cost: credited-name page
 
-- Touches: one work home, one indexed credit seek of at most 33 selected rows, then nested creator subject,
-  name and identity reads for at most 32 targets.
-- Bound: 32 credits and 16 names per creator before expansion; page 64 KiB; four pages; unfinished fourth page
-  is incomplete. Unrelated catalogue growth does not add examined rows to the anchored seeks.
-- Growth check: `test/semantic/growth-credit-search.test.ts` measures page, current and unchanged at 256/1024/4096.
+- Touches: one work cut, one selected-credit seek of at most 33 rows on `search_selected`, native fences for the 32
+  returned rows, then for at most 32 targets one creator subject read, one name read of at most 33 rows and identity
+  mappings in batches of 100.
+- Bound: 32 credits and 16 names per creator before expansion; 256 bytes per name; 64 KiB per page; 128 KiB per
+  document; four pages. An unfinished fourth page returns incomplete without a fifth read.
+- Growth check: `test/semantic/growth-credit-search.test.ts` measures page, current and unchanged at 256/1024/4096 while
+  unrelated subjects grow in another partition.
+
+#### Cost: credited-name current
+
+- Touches: one work cut, one exact statement seek of at most two rows, one fence check, then one creator with its
+  names and identity mapping.
+- Bound: constant per witness; a stale observation or missing statement returns before any name read.
+- Growth check: the growth test validates the matched witness at each scale.
+
+#### Cost: credited-name unchanged
+
+- Touches: two work cuts, one selected-credit seek of at most 129 rows, fences for the four-page window, and creator
+  names and identity for at most 128 creators.
+- Bound: at most 128 creators with 33 name rows each, independent of catalogue size; the observation is checked
+  before and after the reads.
+- Growth check: the growth test checks unchanged at each scale.
 
 Selection coverage requires the complete selected slot in this observation. Partial selections and witness
 revalidation do not prove negatives. Empty-pair coverage requires both complete canonical possible-witness ranges

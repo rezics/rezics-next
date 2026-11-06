@@ -121,7 +121,10 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
         return { state: 'current', workId, observation, entries: [], next: null };
       const seek = await selectedCredits(pool, cut.work, plan.properties, after, limits.creditsPerPage + 1);
       const pageRows = seek.slice(0, limits.creditsPerPage);
-      const next = seek.length > limits.creditsPerPage ? selectedCursorOf(seek[limits.creditsPerPage]!) : null;
+      // The lookahead row only proves another page exists. The cursor is the last row returned, because the next
+      // seek is strictly after it; a cursor on the lookahead row would skip that credit.
+      const next =
+        seek.length > limits.creditsPerPage ? selectedCursorOf(pageRows[pageRows.length - 1]!) : null;
       const visible = await discloseCredits(pool, routeKey, pageRows);
       const parsed = await parsePage(pool, cut.work, visible, plan, limits);
       const creators = await expandCreators(pool, parsed, limits);
