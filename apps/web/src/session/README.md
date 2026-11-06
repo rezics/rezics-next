@@ -56,3 +56,8 @@ registry owns response epochs and rating write arbitration, and releases its lis
 its last page observer leaves. Session incarnation comparison and session cache observation belong exclusively
 to `browserObservation`. Equal successful replacement retires a personal query even when its account and token
 are unchanged. Ratings inventory, Library naming adapters and catalogue readers use this public entry.
+
+Decision: public catalogue inspect and credit inspection read the prepared session cache through
+`cachedBrowserSession`, which never starts a session fetch. An absent cache is unknown, a replaced successful entry
+is the next read, and malformed or signed-out data never admits a subject. `tests/session-browser-cache.test.ts`
+pins those states; the credit-inspection test covers the same cache through the mounted page.
