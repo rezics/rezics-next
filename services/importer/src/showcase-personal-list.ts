@@ -196,8 +196,6 @@ export function readShowcasePersonalLibrary(input: { client: KernelClient; curso
       query: {
         view: 'FULL',
         limit: 8,
-        orderBy: 'lastActivity',
-        direction: 'desc',
         ...(input.cursor ? { cursor: input.cursor } : {}),
       },
       fetch: { cache: 'no-store', redirect: 'manual' },

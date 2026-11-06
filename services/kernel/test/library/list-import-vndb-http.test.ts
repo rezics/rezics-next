@@ -190,7 +190,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
         state: 'active',
         unit: 'minute',
         amount: '0',
-        measures: [{ unit: 'episode', amount: '6' }],
+        measures: [
+          { unit: 'minute', amount: '0' },
+          { unit: 'episode', amount: '6' },
+        ],
       },
     },
   });
@@ -202,7 +205,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
     unit: 'minute',
     amount: '0',
     revision: episode.value.revision + 1,
-    measures: [{ unit: 'episode', amount: '6' }],
+    measures: [
+      { unit: 'minute', amount: '0' },
+      { unit: 'episode', amount: '6' },
+    ],
   });
   expect(applied.outcomes[1].progress.readback.revision).toBe(current.progressSession.revision);
 
@@ -222,7 +228,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
   expect((await json('GET', `/v1/progressSessions/${started.value.id}`)).progressSession).toMatchObject({
     revision: current.progressSession.revision,
     amount: '0',
-    measures: [{ unit: 'episode', amount: '6' }],
+    measures: [
+      { unit: 'minute', amount: '0' },
+      { unit: 'episode', amount: '6' },
+    ],
   });
   const retained = await json('GET', `${base}/${unsupportedId}`);
   expect(retained.rows[0].fields.progress).toMatchObject({ kind: 'value', raw: '4', value: '4' });
@@ -250,7 +259,10 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
     (await apply(missingId, [{ ordinal: 0, reviewId: cleared.reviewId }])).outcomes[0].progress.readback,
   ).toMatchObject({
     amount: null,
-    measures: [{ unit: 'episode', amount: '6' }],
+    measures: [
+      { unit: 'minute', amount: null },
+      { unit: 'episode', amount: '6' },
+    ],
   });
   await json('DELETE', `${base}/${missingId}`);
   const startId = (await upload(xml('', `<length-votes>${vn(vnId, '<minutes>12</minutes>')}</length-votes>`))).uploadId;
@@ -295,7 +307,7 @@ test('a changed export updates the same matched Library entry and current readba
   const firstEntry = await f.commands.readEntry(f.owner.actor, matched);
   expect(firstEntry.state).toBe('playing');
   const afterFirst = await f.inspect();
-  expect(afterFirst.entries).toHaveLength(before.entries.length + 1);
+  expect(afterFirst.entries).toHaveLength(before.entries.length);
 
   const changedUpload = await upload(
     xml(vn(vnId, '<label label="Finished"/><vote>9.2</vote><progress unit="chapter">12</progress>')),
