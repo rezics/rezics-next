@@ -104,9 +104,7 @@ test('an implementation worker is told the applicable AGENTS.md is already loade
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('AGENTS.md is loaded.');
   expect(prompt).not.toContain('Read and follow its AGENTS.md');
-  expect(prompt).toContain(
-    'Search freely inside the worktree; outside it, only the directories named here.',
-  );
+  expect(prompt).toContain('Search freely inside the worktree; outside it, only the directories named here.');
 });
 
 test('a research worker is told the applicable AGENTS.md is already loaded and to keep recursive searches in scope', () => {
@@ -288,9 +286,7 @@ test('minimal verification parks check-host commands on the wrapper and keeps sh
     mkdirSync(join(directory.path, 'scripts'), { recursive: true });
     writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
     const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
-    expect(prompt).toContain(
-      'through the check wrapper (`bun scripts/worker-check.ts -- <command...>`',
-    );
+    expect(prompt).toContain('through the check wrapper (`bun scripts/worker-check.ts -- <command...>`');
     expect(prompt).toContain('services/kernel check and typecheck');
     expect(prompt).toContain('services/auth');
     expect(prompt).toContain('apps/web focused runs');
@@ -884,8 +880,7 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
     ]);
     expect(store.attempts(task.id)).toHaveLength(1);
 
-    if (prepared.delivery)
-      store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery);
+    if (prepared.delivery) store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery);
     expect(store.task(task.id).currentAttempt).toBe(1);
   } finally {
     db.close();
