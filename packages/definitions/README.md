@@ -18,6 +18,8 @@ Portable publication workspace helpers (`classifyImportedDocument`, `compareRele
 browser entries. Imported-document inspection uses that pure contract plus publication limits; it
 does not import the release barrel. Source compilation admits inspected documents from that module
 and keeps compiler values off the inspection graph. Extension validation stays native.
+Decision: fewest tests pin user-visible publication behaviour and named-state stories only;
+`compile.test.ts` covers imported-document inspection off the release barrel.
 
 ## Semantic language selection
 
