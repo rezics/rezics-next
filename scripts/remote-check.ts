@@ -3644,7 +3644,7 @@ report_run_memory_kill() {
   : > ${reported}
 }
 reclaim_run_inactive_file() {
-  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null || true)
   case "$slice_cgroup" in /*)
     inactive=$(awk '$1 == "inactive_file" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
     case "$inactive" in ''|0|*[!0-9]*) ;; *)
