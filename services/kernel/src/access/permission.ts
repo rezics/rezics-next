@@ -332,7 +332,47 @@ export async function checkPermission(
   return (await checkPreparedPermission(client, actor, action, resource, evidence, time, clock)).allowed;
 }
 
+// DIAG-TEMP: deny-reason probe; remove after the grant and Collection read denials are explained.
+let diagDenies = 0;
 async function checkPreparedPermission(
+  client: AccessClient,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence?: unknown,
+  time?: AuthoritativeTime,
+  clock?: () => Date,
+  page?: ResourcePage,
+  includeExplicit = false,
+): Promise<AccessDecision & { decisions?: Readonly<Record<string, boolean>> }> {
+  const decision = await checkPreparedPermissionCore(client, actor, action, resource, evidence, time, clock, page, includeExplicit);
+  if (!decision.allowed && diagDenies++ < 300) {
+    const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
+    console.error(
+      'DIAG-TEMP permission deny',
+      JSON.stringify({
+        action,
+        resource: resource.id,
+        actor: actor.kind,
+        hasFacts: facts !== undefined,
+        scope: facts?.scope,
+        anonymous: facts?.anonymous,
+        admitsAnonymous: facts?.admitsAnonymous,
+        bindingOk: facts ? facts.binding === bind(actor, action, resource, page) : null,
+        capabilityOk: facts ? facts.capability === (resource.eligibility ?? resource.anonymousEligibility) : null,
+        workTimeOk: facts ? facts.work === undefined || facts.time === time : null,
+        hasTime: time !== undefined,
+        grantRoles: facts?.grantRoles,
+        principalId: facts?.principalId ?? null,
+        ownAccount: facts?.ownAccount,
+        policyTypes: facts ? (facts.policyCatalogue.actionByName[action]?.resourceTypes ?? null) : null,
+      }),
+    );
+  }
+  return decision;
+}
+
+async function checkPreparedPermissionCore(
   client: AccessClient,
   actor: Actor,
   action: string,
