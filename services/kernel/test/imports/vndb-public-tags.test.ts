@@ -83,10 +83,12 @@ async function openPublicTagWorld() {
   })();
   const directory = await mkdtemp(join(tmpdir(), 'vndb-public-tags-native-'));
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);

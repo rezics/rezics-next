@@ -68,10 +68,12 @@ async function acceptAndAdopt(
 test('exact VNDB parent assertions need separate native acceptance and adoption before a public broader read', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);

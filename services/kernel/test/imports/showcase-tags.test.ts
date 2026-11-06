@@ -83,10 +83,12 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
   })();
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-native-'));
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
@@ -484,10 +486,12 @@ test('default selected VN tag publication keeps language-less names as und throu
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-und-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
@@ -607,10 +611,12 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
