@@ -19,6 +19,7 @@ export async function grantFixture(
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
+  configureTestReceiptKeys(pool);
   pool.options.max = 1;
   configureTestReceiptKeys(pool);
   const reader = new Pool({ connectionString: url, max: 1 });
