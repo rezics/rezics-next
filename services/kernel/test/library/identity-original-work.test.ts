@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { EventEmitter } from 'node:events';
+composeLibraryDomain();
 import type { Pool } from 'pg';
 import { BOUND_AXES } from '@rezics/bounds';
 import {

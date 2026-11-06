@@ -1,7 +1,9 @@
 # Kernel performance contract
 
 This owner defines shared finite bounds and native growth measurement. Product operation costs remain in the owning
-module's Cost section. [Performance acceptance](../../docs/goals/performance.capabilities.md) owns scenarios; the
+module's Cost section. Library domain composition (contract, core, application, adapters and
+`composition/library.ts`) is recorded in [Library](src/library/README.md#module-layers-and-measured-boundary) and
+[Library performance](src/library/performance-contract.md). [Performance acceptance](../../docs/goals/performance.capabilities.md) owns scenarios; the
 [Performance Goal](../../docs/goals/performance.md) owns the outcome.
 
 ## Finite bounds

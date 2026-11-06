@@ -1,0 +1,170 @@
+/** Library-owned ports. Foreign Access, Search, Semantic and Content implement these; Library never imports them. */
+
+import type { LibraryActor } from './actors.ts';
+import type { CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
+import type { NestedAdmissionAccount } from './membership.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
+
+export type IdentityWorkHandle = Readonly<{
+  resultByteBound(key: string): number | undefined;
+}>;
+
+export type QueryText = Readonly<{ sql: string; params?: readonly string[] }>;
+
+export type AuthorizationDecision = Readonly<{ authorized: boolean }>;
+
+/** Live account/group/action admission. Access implements this at composition. */
+export interface AuthorizationCapability {
+  admitCollectionRead(input: {
+    actor: LibraryActor;
+    at: unknown;
+    deadline: number;
+    route: number;
+    collectionId: string;
+    curatorAccountId: string | null;
+    visibility: 'private' | 'unlisted' | 'public';
+    membershipKind: 'curated' | 'dynamic';
+    privateOwner: boolean;
+  }): Promise<AuthorizationDecision>;
+  fenceAccount(tx: unknown, accountId: string): Promise<void>;
+  isLifecycleDenied(error: unknown): boolean;
+  commandAuthorization(...args: readonly unknown[]): Promise<unknown>;
+  deadlineClient<T extends object>(client: T, deadline: number): T;
+  within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
+}
+
+/** Original and terminal identity/disclosure. Semantic implements this at composition. */
+export interface IdentityDisclosureCapability {
+  readRelease(source: unknown, digest: string, options?: Readonly<{ composed?: boolean }>): Promise<unknown>;
+  readOriginalTerminal(input: {
+    actor: LibraryActor;
+    subjectId: string;
+    deadline: number;
+    at: unknown;
+  }): Promise<Readonly<{ original: string | null; terminal: string | null }>>;
+  initiatorCommitment(original: unknown): string;
+}
+
+export type PreparedSearchScope = Readonly<{
+  prepared: unknown;
+  work: WorkReceipt;
+  scope: {
+    sourcePrefix?(prepared: unknown, input: unknown): Promise<unknown>;
+    evaluate?(prepared: unknown, subjects: readonly string[], input: unknown): Promise<unknown>;
+    work(prepared: unknown): WorkReceipt;
+  };
+}>;
+
+/** Search scope preparation. Search implements this at composition through the existing service object. */
+export interface SearchPreparationCapability {
+  prepareScope(input: {
+    search: unknown;
+    access: unknown;
+    actor: LibraryActor;
+    routeKey: Uint8Array;
+    nativeT: unknown;
+    deadline: number;
+    filter: unknown;
+    releaseDigest: string;
+    identity: unknown;
+    allowance: WorkAllowance;
+  }): Promise<PreparedSearchScope>;
+  ownerFilterHasOwnerLeaf(filter: unknown): boolean;
+}
+
+/** Content publication side effects remain Content-owned; Library admits the Source hold. */
+export interface ContentPublicationCapability {
+  admitActivatedOutput(input: {
+    observation: CollectionSourceObservation;
+    privateWorking: boolean;
+  }): Readonly<{ admitted: boolean; reason: 'private_working' | 'activated_public' | 'unavailable' }>;
+}
+
+export type IdentityNativeCatalog = Readonly<{
+  libraryIdentitySQL: Readonly<Record<string, string>>;
+  selected: Readonly<
+    Record<
+      string,
+      Readonly<{
+        sql: string;
+        values: readonly unknown[];
+        rows: number;
+        points: number;
+        metadata: number;
+        output: number;
+        seeks?: number;
+        candidates?: number;
+      }>
+    >
+  >;
+  basisQueries: readonly QueryText[];
+  basisWork: readonly Readonly<{
+    sql: string;
+    nativeRows: number;
+    nativePoints: number;
+    identityMetadataRows: number;
+    emptySeeks: number;
+    resultBytes: number;
+  }>[];
+  plan: QueryText;
+  job: QueryText;
+  time: QueryText;
+  fence: QueryText;
+  noEffectFence: QueryText;
+  partition: QueryText;
+  account: QueryText;
+  commit: QueryText;
+  savedJob: QueryText;
+  libraryTransform: QueryText;
+  identityEpochLibraryInputsSQL: string;
+  inputs: QueryText;
+  originals: QueryText;
+  owners: QueryText;
+  sources: QueryText;
+  pending: QueryText;
+  mapping: QueryText;
+  facts: QueryText;
+  labels: QueryText;
+  libraryIdentityJobSizeSQL: string;
+  libraryIdentityBoundedPlanSQL: string;
+  planResultBytes: number;
+  selectedBindCeiling: (sql: string, values: readonly unknown[]) => boolean;
+}>;
+
+export interface IdentityNativeCapability {
+  bound(sql: string, values: readonly unknown[], work?: IdentityWorkHandle): unknown;
+  footprint(sql: string, values: readonly unknown[], work?: IdentityWorkHandle): WorkDimensions | undefined;
+  selectedFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined;
+  isFullPartitionSQL(sql: string): boolean;
+  isSourceBasisSQL(sql: string): boolean;
+  sourceBasisFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined;
+  sourceBasisBound(sql: string, values: readonly unknown[]): unknown;
+  selectedBound(sql: string, values: readonly unknown[]): unknown;
+  basisStatements(): readonly Readonly<{
+    sql: string;
+    values: readonly unknown[];
+    work: WorkDimensions & { engineRequests: 0 };
+  }>[];
+  jobSizeSQL: string;
+}
+
+export interface SourceCaptureCapability {
+  prepare(input: {
+    actor: LibraryActor;
+    collectionId: string;
+    deadline: number;
+    at: unknown;
+    allowance: WorkAllowance;
+    logical?: boolean;
+  }): Promise<{ source: PreparedCollectionSource; work: WorkReceipt }>;
+}
+
+export type LibraryCapabilities = Readonly<{
+  authorization: AuthorizationCapability;
+  identityDisclosure: IdentityDisclosureCapability;
+  searchPreparation: SearchPreparationCapability;
+  contentPublication: ContentPublicationCapability;
+  identityNative: IdentityNativeCapability;
+  sourceCapture: SourceCaptureCapability;
+  accountAdmission: NestedAdmissionAccount;
+}>;

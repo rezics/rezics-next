@@ -36,7 +36,10 @@ authority. Do not enlarge production exposure or native/browser admission.
 ## Ownership
 
 Performance owns `services/kernel/test/support/growth*`, growth suites under module test directories, shared bounds
-and cross-owner receiving. [Kernel performance](../../services/kernel/performance-contract.md) owns shared harness
+and cross-owner receiving. Kernel Library domain composition (contract, core, application, native/foreign adapters
+and `composition/library.ts`) is the Collection Source/member/publication and Entry/progress admission unit; layer
+ownership and counters live in [Library](../../services/kernel/src/library/README.md#module-layers-and-measured-boundary).
+[Kernel performance](../../services/kernel/performance-contract.md) owns shared harness
 and native evidence rules; [Library performance](../../services/kernel/src/library/performance-contract.md) owns
 Collection derivations and custody. [Work](../../services/kernel/src/work/README.md#selected-execution-producer)
 and [History](../../services/kernel/src/history/README.md#selected-native-executor-binding) own their execution
