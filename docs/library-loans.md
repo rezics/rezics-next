@@ -77,6 +77,10 @@ context bytes. It reports `available`, `scope`, `withheld`, `missing`, `unsuppor
 withholding the private loan. Person presentation is capped at 100 IDs. Empty language preferences are omitted from
 the Semantic facts request, which otherwise rejects an empty language array.
 
+Decision: each copy context's `facts` is the closed union the generated client declares (`item`, `time`, `quantity`,
+`code`), so a loan page serializes through the Web server function without casts. Loans read and refresh under the
+`copy.list` gate, the personal-library operation Copies already uses; the exposure table has no loan-specific operation.
+
 Returned history is private to the owner for the owner's lifetime and survives copy deletion or disposal. Terminal
 owner erasure removes loan rows and the generation row through the existing owned-graph receiver, in batches of at
 most 100 keys per work step. No separate cleanup scheduler or retention timer was added.

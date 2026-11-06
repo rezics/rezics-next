@@ -110,6 +110,11 @@ needs the normal loopback-only browser namespace. An explicit `bun test tests/*.
 the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does
 not hide a named file.
 
+Decision: explicit test files run one per fresh runtime, because Bun module mocks otherwise survive across file
+boundaries. A command that needs the shared dev server is wrapped per runtime by `scripts/with-dev-server.ts`, which
+reuses the warmed dependency cache; `--private-network` applies inside that wrapper, not outside it. Each focused
+invocation runs one Worker graph at a time (`--max-concurrency=1`).
+
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
