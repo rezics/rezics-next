@@ -29,12 +29,12 @@ Priority and delay use the SDK's normal admission, execution-owner and recovery 
 Decision: keep installed queue-wide deduplication with rejection on collision; partition keys do not scope a
 deduplication ID, and a caller does not silently receive another partition's workflow.
 
-The production retention workflow records its starting time and retention configuration in one durable step. Each
-subsequent batch is a separate durable step using the registered `DBOSClient`; replay skips committed batch results.
-A batch that fails before its checkpoint reselects work and repeats the supported SDK deletion without descendants.
-There are at most 60 batch steps per scheduled invocation, each with at most three attempts, plus the starting step.
-Each batch returns at most 1,000 workflow IDs. The scheduled path uses the repository indexed selector, not
-`listWorkflows`.
+The production retention workflow records its starting time, retention days and application name in one durable step.
+Each subsequent batch is a separate durable step using the registered `DBOSClient`; replay skips committed batch
+results. A batch that fails before its checkpoint reselects work and repeats the supported SDK deletion without
+descendants. There are at most 60 batch steps per scheduled invocation, each with at most three attempts, plus the
+starting step. Each batch returns at most 1,000 workflow IDs. The scheduled path uses the repository indexed selector,
+not `listWorkflows`.
 
 Decision: scheduled retention selects `client.applicationName ?? rezics-kernel` through
 `createWorkflowRetentionSelector` on WorkContext's existing pool, so recovery can isolate an application without a
@@ -60,20 +60,25 @@ CREATE INDEX workflow_retention_selector
 The seek is on `(application_name, completed_at)` and stops after `LIMIT 1000` or exhaustion, so examined keys are
 the returned batch plus logarithmic index descent. Unrelated applications, nonterminal rows (absent from the partial
 index), recent completions and long-lived terminals completed after the cutoff are outside that range. Eligible
-backlog beyond 1,000 stays unvisited. SDK `deleteWorkflows(ids, false)` is charged separately: six transaction
-statements (BEGIN, four exact-ID DELETEs, COMMIT) plus owned payload rows and FK cascades, which grow with those
-payloads rather than with unrelated history. Permanent writer fences stay. MVCC visibility work is excluded.
+backlog beyond 1,000 stays unvisited. SDK `deleteWorkflows(ids, false)` is six transaction statements (BEGIN, four
+exact-ID DELETEs of input/output/operations/status, COMMIT) plus owned payload rows and FK cascades into events,
+event history, notifications and streams. Those cascade and payload rows grow with the selected neighbourhood's
+owned copies, not with unrelated history or with the selected workflow count. Permanent writer fences stay. MVCC
+visibility work is excluded. Empty batches are the selector only (one statement, zero deletion rows). A nonempty
+batch is seven statements. A two-batch sweep of 1,000 then 10 is fourteen.
 
 `test/work/growth-retention.test.ts` measures empty, short (10) and full (1,000) batches at scales 64, 512 and 4,096
-history units (16 rows each) with selected work fixed, and a fourth series that grows selected-application eligible
-backlog with the returned batch fixed at 1,000. Plans must use `workflow_retention_selector` with no sequential scan.
-The full-batch series bound retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`.
-Measured rows/statements/blocks are logged from that native check.
+history units (16 rows each) with selected work and unit payload fixed; eligible-application backlog with the
+returned batch fixed at 1,000; independent payload fanout 1/8/64 on a short batch; and a 1,010-row two-batch sweep.
+Plans must use `workflow_retention_selector` with no sequential scan. The full-batch series bound retires the former
+`GROWTH_BASELINE` step exemption for `workflow retention batch`. Native recovery
+`test/work/retention.test.ts` interrupts before and after the durable batch checkpoint, resumes the same workflow
+identity on the frozen cutoff/application, and finishes on repeated empty. Measured SQL, binds, plans, rows, blocks,
+statements, payload fanout and background attribution are logged from those native checks.
 
-Remaining limits: deletion still follows owned payload/cascade rows, so a batch with large per-workflow payloads is
-not bounded by workflow count; interrupted recovery still uses the production selector and frozen cutoff. The
-installed SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler
-or cancelled reporting producer is introduced.
+A selected workflow count cannot bound deletion: owned payload/cascade rows are the deletion operand. The installed
+SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler or
+cancelled reporting producer is introduced.
 
 Sources inspected: the indexed `native-scheduler-funded-design/dbos-transact-ts` reference at
 `627990fc59619d3584ce88511ab546bc7483f4b9`, `src/enqueue_options.ts`, `src/client.ts`, the outcome/cancellation/deletion
