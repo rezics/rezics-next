@@ -4,17 +4,15 @@ import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
 import { bindExecutionContract } from './command/execution-contract.ts';
-import { historyExecutionPort } from './history/application/index.ts';
+import { historyExecutionPort } from './history/operational-work.ts';
 import { workExecutionPort } from './work/selected-runtime.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
-import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
-import { composeLibraryDomain } from './composition/library.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
@@ -69,8 +67,8 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   };
 }
 
-/** Default worker registrations. Isolated tests may pass a substitute list; the Search
- * outcome child decorates this live list instead of importing a second composition. */
+/** Default worker registrations. Isolated tests may pass a substitute list; Library and Search
+ * outcome children decorate this live list instead of importing a second composition. */
 export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
 
 export async function startWorker(
@@ -80,7 +78,6 @@ export async function startWorker(
 ) {
   composeAccessApplication();
   composeWorkApplication();
-  installNativeHistory();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
     createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults, composeSemanticDomain, {
@@ -103,7 +100,6 @@ export async function startWorker(
   }
   if (receiptKeys) configureReceiptKeys(pool, receiptKeys);
   pool.on('error', () => {});
-  composeLibraryDomain({ pool });
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {
     client = await createWorkClient(config.databaseUrl, pool);

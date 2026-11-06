@@ -25,7 +25,9 @@ is the joined question, frame and standing identity. Pending or unavailable resu
 page or a treated-as-success `atomic_guard_unavailable`. Installation status from
 `POST /v1/libraryShelfScorePreparation` describes the access path only. Web requests the native score order, maps 503
 preparation versus currentness separately, and shows own units from `personalScore` plus `scoreQuestion` or the
-independent viewer-facts overlay. Content remains the sole guarded vote writer.
+independent viewer-facts overlay. Content remains the sole guarded vote writer. Web own-vote writes bind the current standard-question observation;
+an uncertain result keeps the optimistic units and original idempotency key so Save retries that same command, while a
+stale review rolls back and requires an explicit fresh save.
 
 ## Stable keysets and currentness
 
@@ -118,5 +120,51 @@ Research inspected: `legacy-final:apps/web/features/library/state.ts`; pinned Bo
 `internal/collections/infra/mysql_repo.go` (owner-specific collection rating). Preserve server ordering and the
 highest-score initial direction; do not import those architectures or their public/default privacy assumptions.
 
+Decision: native personal-score walks grant editor actions through the mounted `POST /v1/grants`
+`createGrantCommands` path on Global Context with the bootstrapped governor bearer. Kernel Access verifies JWKS
+through the Auth service handler captured before page wrapping; `/signin` and `/token` stay on that handler so the
+first governor grant returns 201. The governor token carries the mounted `platform.governance` actions, `access:grant`
+and `gate:any`, not the full catalogue, so delegated actions remain in the JWT. The native kernel request budget is
+the 30s test deadline with the same write-rate fixture ceiling as Library outcomes. Native host Worker
+startup uses the same 720-second probe as the measured Vite/Cloudflare Worker graph load, and still
+requires the real unknown-subject 404.
+
+Decision: host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines cover the native
+order, own-vote currentness and public aggregate. Fewer test lines than product lines. The walk issues that first
+HTTP Global grant through the Library fixture before catalogue writes. Uncertain Save retries the original
+question-bound command and idempotency key; a stale review rolls back for a fresh save.
+
+Decision: native Library grants keep compiled `platform.governance` plus `access:grant` and `gate:any` on the governor
+token, not grant-routes' complete catalogue plus `gate:any`. The fixture posts the unique typed Global grant
+(`PLATFORM_RESOURCE`, `{kind:'account',id}`, open interval) on `POST /v1/grants`. Access still types and checks the
+permission row's `live` column; `permission-check.sql` aliases `deadline_live` once as `deadlineLive` so Reylo can
+type the row. policy-core maps `PolicyFacts.deadlineLive` from that unique alias. Those Access operands stay with Accounts.
+Host-walk tests pin the seeded voter, second-account and anonymous score journey; product lines cover the native
+order, own-vote currentness and public aggregate.
+
 Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
 Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.
+Global distribution reads admit the native aggregate shape; focused `--private-network` walks reach disposable
+PostgreSQL through a bind-mounted unix socket when the namespace is loopback-only, differs from PID 1, or cannot
+read PID 1's netns. Docker cannot join that netns, and a host-published port never appears on the unshared loopback.
+The server also listens on `/var/run/postgresql` so the image entrypoint's init `psql` (which clears `PGHOST`) can
+finish. Auth host identity uses that absolute `host` socket directory as the database identity; a TCP `host` or
+`hostaddr` override remains refused. Reylo SQL analysis cannot use that libpq `host` query: postgres.js dials the URL
+hostname, so isolated walks proxy analysis over loopback TCP onto the same unix socket. The proxy runs in its own
+process because Reylo's `sqlModuleSync` blocks the stack host in `Atomics.wait` while a worker describes statements.
+Acceptance remains the existing native host walk; unit tests pin socket isolation, the dual listen path, the Reylo
+loopback proxy and a blocked-host analysis probe.
+
+Decision: the composed landing runs Kernel/Auth unit files, then Web unit files, then the native host walk in
+separate processes. One bun heap must not keep unit-test modules while Vite, Kernel, Auth and PostgreSQL share the
+6 GiB slot; that mix was killed at the Worker probe. Changed-workspace typecheck runs those compilers one after
+another in isolated children for the same reason. Access deadlineLive mapping stays with Accounts.
+
+Decision: Progress window history identity uses the installed router history key with href fallback; absent optional
+window fields are omitted. Host-walk tests pin the seeded voter/second-account/anonymous score journey; product lines
+cover native order, own-vote currentness and public aggregate. Fewer test lines than product lines.
+
+Decision: Library score and progress native children decorate `startWorker`'s live `createKernelWorkModules` list so
+Content ambient and the Semantic domain reach registrations once. `KERNEL_WORK_MODULES` remains a registration-name
+pin and is not executed as the child composition. Host-walk tests keep pinning the seeded voter, second-account and
+anonymous score journey; no extra suite for the decorator.

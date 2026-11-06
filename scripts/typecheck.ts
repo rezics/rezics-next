@@ -450,18 +450,17 @@ async function runWorkspaces(
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
   const results: WorkspaceResult[] = [];
-  await Promise.all(
-    workspaces.map(async (workspace) => {
-      const workspaceEnv =
-        state && relative(root, workspace.directory) === 'services/kernel'
-          ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
-          : childEnv;
-      const result = await runWorkspace(root, workspace, workspaceEnv);
-      if (result.code === 0) write(result.block);
-      else failures.push(result.block);
-      results.push(result);
-    }),
-  );
+  // One compiler heap at a time: Kernel SQL typing, Auth and Web together exceeded a 6 GiB slot.
+  for (const workspace of workspaces) {
+    const workspaceEnv =
+      state && relative(root, workspace.directory) === 'services/kernel'
+        ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
+        : childEnv;
+    const result = await runWorkspace(root, workspace, workspaceEnv);
+    if (result.code === 0) write(result.block);
+    else failures.push(result.block);
+    results.push(result);
+  }
   for (const block of failures) write(block);
   if (failures.length === 0) return 0;
   return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;
@@ -592,6 +591,7 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   };
   if (workspaces.length < all.length)
     write(`Checking ${workspaces.length} of ${all.length} workspaces the change can affect.\n`);
+  if (workspaces.length > 1) write('Checking one workspace at a time so compiler heaps do not share a memory slot.\n');
   if (workspaces.length === 0) {
     return finish(Promise.resolve(0));
   }

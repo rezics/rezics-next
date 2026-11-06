@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { hostname } from 'node:os';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -550,7 +551,7 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return String(result.stdout).trim();
+  return result.stdout.toString().trim();
 }
 
 export function capture(
@@ -582,7 +583,7 @@ export function docker(args: string[]): string {
   const result = spawnSync('docker', args, dockerSpawnSyncOptions(args, { cwd: directory, env: process.env }));
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return String(result.stdout ?? '').trim();
+  return String(result.stdout).trim();
 }
 
 type DockerCommand = (args: string[]) => string;
@@ -768,18 +769,31 @@ export function formatConnectionRunSummary(
 }
 
 export type PostgresContainerOptions = {
-  /** Host directory bind-mounted so callers in a private network namespace can use the Unix socket. */
   socketDirectory?: string;
 };
+
+function postgresSocketMount(socketDirectory: string): string[] {
+  if (!isAbsolute(socketDirectory) || /[,\s]/.test(socketDirectory))
+    throw new Error('Disposable PostgreSQL socket directory must be an absolute path');
+  chmodSync(socketDirectory, 0o1777);
+  return [
+    '-v',
+    `${socketDirectory}:/rezics-pg-socket:z`,
+    '-e',
+    'PGHOST=/rezics-pg-socket',
+  ];
+}
+
+/** Official image `docker_process_sql` clears PGHOST and talks to `/var/run/postgresql`. */
+export const isolatedPostgresUnixSockets = '/rezics-pg-socket,/var/run/postgresql';
 
 export function startPostgresContainer(
   dockerCommand: DockerCommand = docker,
   options: PostgresContainerOptions = {},
 ): string {
-  const network = dockerNetworkArgs();
-  const socketDirectory = options.socketDirectory;
-  if (socketDirectory !== undefined && (!isAbsolute(socketDirectory) || /[:\n\r,]/.test(socketDirectory)))
-    throw new Error('PostgreSQL socket directory must be an absolute path without delimiters');
+  const network = options.socketDirectory ? postgresSocketMount(options.socketDirectory) : dockerNetworkArgs();
+  const publish = options.socketDirectory ? [] : postgresPublishArgs(Number(pid), network);
+  const socketListen = options.socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : [];
   return dockerCommand([
     'run',
     '-d',
@@ -790,11 +804,10 @@ export function startPostgresContainer(
     ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
-    ...postgresPublishArgs(Number(pid), network),
+    ...publish,
     // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
-    ...(socketDirectory ? ['-v', `${socketDirectory}:/rezics-pg-socket`] : []),
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -815,9 +828,7 @@ export function startPostgresContainer(
     `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
-    // Keep /var/run/postgresql so the image entrypoint can finish init; the bind
-    // mount is the extra host-visible socket for private-network callers.
-    ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket,/var/run/postgresql'] : []),
+    ...socketListen,
   ]);
 }
 

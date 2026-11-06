@@ -1,6 +1,6 @@
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { erasureWorkModule } from '../access/erasure.ts';
-import { sharedHistoryWorkModule } from '../history/application/index.ts';
+import { sharedHistoryWorkModule } from '../history/work.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
@@ -58,10 +58,10 @@ function contentWorkAmbient(supplied?: ContentWorkAmbient): ContentWorkAmbient {
   };
 }
 
-/** Callable default-worker composition. `startWorker` invokes this with Content ambient; Search
- * outcome children decorate that live list. Add each module's registration here, in dependency
- * order, once. Content's worker is the declared factory over explicit network, clock and identity
- * operands supplied by this composition root. */
+/** Callable default-worker composition. `startWorker` invokes this with Content ambient; Library
+ * and Search outcome children decorate that live list. Add each module's registration here, in
+ * dependency order, once. Content's worker is the declared factory over explicit network, clock
+ * and identity operands supplied by this composition root. */
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],

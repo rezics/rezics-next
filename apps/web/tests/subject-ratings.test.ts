@@ -1,28 +1,28 @@
 import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Figure, Statistic } from '../src/features/pages/subject-ratings';
 
-// The view and the rating state reach the Kernel client, which imports Cloudflare's Workers module at load time.
-mock.module('cloudflare:workers', () => ({ env: {} }));
 const { RatingsView, RatingsRecoveryContext } = await import('../src/features/pages/subject-ratings-view');
 const { GLOBAL, QUESTION, readRatings, readOwnRating, writeRatingVote } =
   await import('../src/features/pages/subject-ratings');
-// Subject ids are UUIDs; the aggregate reader admits a response only when its subject is the requested one.
-const subjectId = '00000000-0000-7000-8000-000000000010';
 
+const subjectId = '00000000-0000-4000-8000-0000000000aa';
 const realms = [
   { id: '00000000-0000-7000-8000-000000000002', name: 'Quiet Realm' },
   { id: '00000000-0000-7000-8000-000000000003', name: 'Popular Realm' },
   { id: '00000000-0000-7000-8000-000000000004', name: 'Another Realm' },
   { id: '00000000-0000-7000-8000-000000000005', name: 'Ignored Realm' },
 ];
-// Aggregate figures carry their freshness; the reader admits no figure without it.
 const figure = (population: string, count: number, extra: Partial<Figure> = {}): Figure => ({
   population,
   count,
-  freshness: { asOf: null, updating: false },
+  freshness: { asOf: '2026-10-31T00:00:00Z', updating: false },
   ...extra,
 });
 const histogram = Array.from({ length: 21 }, (_, index) => (index === 17 ? 1203 : 0));
@@ -112,7 +112,6 @@ test('a signed-out reader sees the Global score with its count and population an
   expect(fake.calls.aggregate).toHaveLength(1);
   expect(fake.calls.source).toHaveLength(1);
   expect(fake.calls.vote).toHaveLength(0);
-  // The installed client sends its JSON content type; a signed-out read carries no credentials.
   expect(fake.calls.aggregate[0]).toEqual({
     query: { question: QUESTION, population: [GLOBAL] },
     headers: { 'content-type': 'application/json' },
@@ -469,12 +468,12 @@ test('a vote write quotes its command key and treats 503 atomic_guard_unavailabl
     }),
   ).toBe('uncertain');
   expect(
-    await writeRatingVote(voteClient(409, { code: 'conflict', retryable: false }), {
+    await writeRatingVote(voteClient(409, { code: 'vote_review_stale', retryable: false }), {
       subjectId,
       questionId: QUESTION,
       authorization: 'Bearer reader',
       units: null,
       idempotencyKey: key,
     }),
-  ).toBe('rejected');
+  ).toBe('stale');
 });
