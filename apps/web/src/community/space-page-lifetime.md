@@ -90,8 +90,10 @@ setup or claim reads cannot manufacture that observation. Missing publication su
 not fall back to per-publication Subject hydration, another DTO or an endpoint assembled by Web. The legacy fixture
 helpers retain their original reads until the generated replacement is installed.
 
-Decision: a fresh native response starts both shelves again, while replacing or mutating the original heads,
-selected presentation or viewer observation permanently retires the complete visit.
+Decision: a same-source admitted Home refresh remounts both shelves and keeps the outer membership host.
+Acknowledgement lives on the existing command store so a remounted controller can complete once after the admitted
+membership result. Replacing or mutating the original page's heads, selected presentation or viewer observation still
+retires that visit; a different source, account, credential, route or operations object cannot adopt it.
 
 The prepared consumer checks the carrying Space and Realm heads, active lifecycle and selected media and rules
 revision before presenting them. Native concealment may retain an empty optional presentation even when a selected
@@ -101,8 +103,9 @@ The original heads and selected references survive route serialization alongside
 The route lifetime captures the exact page, container, native source, lifecycle, presentation and observation
 references before mounting. Value snapshots also reject in-place changes. An outer page copy, equal nested
 replacement or removed observation cannot transfer a response into that lifetime. The injectable rendering boundary
-uses the same source comparison and retires old pages permanently; a fresh response remounts both shelves and their
-controllers. Credential, locale, route and operation replacement also require a fresh response. Existing route
+uses the same source comparison and retires old pages permanently. A fresh same-source response remounts both
+shelves and keeps the outer membership and publication completion hosts. Credential, locale, route and operation
+replacement also require a fresh response. Existing route
 admission remains required for session-cache generations, pending continuation tickets, lifecycle retirement and
 hydration; this local boundary supplies neither native viewer currentness nor private first-paint proof.
 
@@ -122,7 +125,7 @@ existing server login return consumes these addresses; its short-lived recovery 
 A recovered consumed login callback can therefore restart at the carrying page instead of restoring a cursor.
 No browser storage, private command operands or automatic participation are added.
 
-A fresh page object remounts the outer visit even when values compare equal. Changed shelf source, account,
+A fresh same-source page remounts both shelves and keeps the outer membership host. Changed shelf source, account,
 credential, route or frozen state retires its pending return effects before replacement render. A late read may
 not navigate or move focus after retirement. Missing, denied and stale windows keep the native shelf's explicit
 retry/restart controls; focus restoration never takes focus from an intervening user action.
