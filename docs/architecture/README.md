@@ -18,6 +18,9 @@ adapters that remain in `kernel-platform`. Contract, core and application have n
 Native Work ports are bound at the Kernel composition root; product module assembly lives in `composition/work-modules.ts`.
 Facades keep the previous import paths. Compact fake-port tests pin enqueue, registration and retirement; landing
 worker tests carry receipt keys through `workerTestEnv`. Existing native Work fixtures remain the causal set.
+After wiring, kernel-platform baseline rule 2/3 counts are 180/155 (from 190/155), kernel-composition rule 2 is 18
+(from 24), total baseline 9,411 (from 9,427). Current Kernel files in value cycles 398; largest value SCC 381;
+Work adapter outward behaviour edges 22.
 
 Decision: The client declaration closure depends on the public Access, Bounds, Money, Operations, Progress and
 Search Text packages used by mounted contracts. Register those dependencies alongside the client's existing package

@@ -1,4 +1,10 @@
-import type { WorkApplicationPorts, WorkEnqueueCapture, WorkIntent, WorkQueryClient, WorkSdkClient } from '../contract/index.ts';
+import type {
+  WorkApplicationPorts,
+  WorkEnqueueCapture,
+  WorkIntent,
+  WorkQueryClient,
+  WorkSdkClient,
+} from '../contract/index.ts';
 import { assertWorkIntent } from '../core/index.ts';
 
 export function createEnqueue(ports: Pick<WorkApplicationPorts, 'sdkEnqueue' | 'sql'>) {

@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import {
   type WorkApplicationPorts,
   type WorkIntent,
@@ -287,6 +289,37 @@ test('Work application registers selected admission against fake ports', () => {
   );
   application.composeSelectedRuntime({}, {}).registerMembersStep(async () => 'ok');
   expect(registered).toBe(true);
+});
+
+test('Work contract, core and application load no native adapters or foreign modules', () => {
+  const transpiler = new Bun.Transpiler({ loader: 'ts', target: 'bun' });
+  const work = resolve(import.meta.dir, '../../src/work');
+  const forbidden = [
+    resolve(work, 'adapters/native.ts'),
+    resolve(work, 'adapters/history-store.ts'),
+    resolve(work, 'authorization.ts'),
+  ];
+  const foreign = /\/(access|history|command|events|semantic|library|search)\//;
+  for (const entry of ['contract/index.ts', 'core/index.ts', 'application/index.ts']) {
+    const start = resolve(work, entry);
+    const seen = new Set<string>([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+      const file = queue.shift()!;
+      for (const { path } of transpiler.scanImports(readFileSync(file, 'utf8'))) {
+        if (!path.startsWith('.') || !path.endsWith('.ts')) continue;
+        const next = resolve(dirname(file), path);
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    for (const file of forbidden) expect(seen.has(file), `${entry} loaded ${file}`).toBe(false);
+    expect(
+      [...seen].filter((file) => foreign.test(file)),
+      `${entry} loaded foreign modules`,
+    ).toEqual([]);
+  }
 });
 
 test('ordinary composition installs native Work ports', async () => {

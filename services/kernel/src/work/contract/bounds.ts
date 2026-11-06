@@ -14,12 +14,7 @@ export const WORKFLOW_RETENTION_WORKFLOW = 'kernel.workflowRetention';
 export const WORKFLOW_RETENTION_SCHEDULE = 'kernel.workflowRetention.every-10-minutes';
 export const WORKFLOW_RETENTION_SCHEDULE_EXPRESSION = '*/10 * * * *';
 
-export const TERMINAL_WORKFLOW_STATUSES = [
-  'SUCCESS',
-  'ERROR',
-  'CANCELLED',
-  'MAX_RECOVERY_ATTEMPTS_EXCEEDED',
-] as const;
+export const TERMINAL_WORKFLOW_STATUSES = ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'] as const;
 
 export const WORKFLOW_RETENTION_SELECTOR_INDEX = 'workflow_retention_selector';
 

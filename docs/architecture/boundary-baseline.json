@@ -7104,36 +7104,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/server.ts",
           "edge": "value import \"./semantic/setup.ts\" #1 => services/kernel/src/semantic/setup.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/server.ts",
-          "edge": "value import \"./work/client.ts\" #1 => services/kernel/src/work/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/worker.ts",
-          "edge": "value import \"./events/effects.ts\" #1 => services/kernel/src/events/effects.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/worker.ts",
-          "edge": "value import \"./events/relays.ts\" #1 => services/kernel/src/events/relays.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/worker.ts",
-          "edge": "value import \"./work/client.ts\" #1 => services/kernel/src/work/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/worker.ts",
-          "edge": "value import \"./work/modules.ts\" #1 => services/kernel/src/work/modules.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/worker.ts",
-          "edge": "value import \"./work/registry.ts\" #1 => services/kernel/src/work/registry.ts"
         }
       ]
     },

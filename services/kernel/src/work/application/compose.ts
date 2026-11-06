@@ -1,14 +1,13 @@
-import {
-  DBOS_SCHEMA,
-  WORK_APPLICATION,
-  type WorkApplicationPorts,
-  type WorkComposedRuntime,
-  type WorkComposeOptions,
-  type WorkEffect,
-  type WorkModule,
-  type WorkRegistrationContext,
-  type WorkSelectedRuntime,
-  type WorkService,
+import { DBOS_SCHEMA, WORK_APPLICATION } from '../contract/vocabulary.ts';
+import type {
+  WorkApplicationPorts,
+  WorkComposedRuntime,
+  WorkComposeOptions,
+  WorkEffect,
+  WorkModule,
+  WorkRegistrationContext,
+  WorkSelectedRuntime,
+  WorkService,
 } from '../contract/index.ts';
 import { WORK_QUEUES } from '../core/index.ts';
 
@@ -21,7 +20,10 @@ export class WorkCompositionError extends Error {
 
 export function createComposer(
   ports: WorkApplicationPorts,
-  composeSelectedRuntime: (pool: WorkComposeOptions['pool'], client: WorkComposeOptions['client']) => WorkSelectedRuntime,
+  composeSelectedRuntime: (
+    pool: WorkComposeOptions['pool'],
+    client: WorkComposeOptions['client'],
+  ) => WorkSelectedRuntime,
 ) {
   let composed = false;
 

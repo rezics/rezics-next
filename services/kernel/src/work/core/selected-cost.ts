@@ -1,5 +1,5 @@
 import { BOUND_AXES, declareBound, sumBounds, type Bound } from '@rezics/bounds';
-import { WORK_COST_AXES, type WorkCost } from '../contract/index.ts';
+import { WORK_COST_AXES, type WorkCost } from '../contract/cost.ts';
 
 export function SELECTED_AXES() {
   return BOUND_AXES;
@@ -75,7 +75,14 @@ export function SELECTED_LOCAL_DECLARATION() {
     times(4, table.continuation),
     times(
       3,
-      sumBounds(table.transaction, times(2, table.hold), table.original, times(2, table.tuple), table.association, table.result),
+      sumBounds(
+        table.transaction,
+        times(2, table.hold),
+        table.original,
+        times(2, table.tuple),
+        table.association,
+        table.result,
+      ),
     ),
     SELECTED_CLEANUP_DECLARATION(),
   ));

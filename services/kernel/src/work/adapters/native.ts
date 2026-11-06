@@ -227,17 +227,14 @@ export function createNativeWorkPorts(): WorkApplicationPorts {
       },
     },
     get history() {
-      return (history ??= load<typeof import('./history-store.ts')>(
-        './history-store.ts',
-      ).createNativeHistoryAssociation());
+      return (history ??=
+        load<typeof import('./history-store.ts')>('./history-store.ts').createNativeHistoryAssociation());
     },
     operational: {
       runTransaction(pool, options, body) {
         const operational = load<typeof import('../../command/operational.ts')>('../../command/operational.ts');
-        return operational.runOperationalTransaction(
-          asPool(pool),
-          options as OperationalOptions,
-          (tx) => body(tx as WorkQueryClient),
+        return operational.runOperationalTransaction(asPool(pool), options as OperationalOptions, (tx) =>
+          body(tx as WorkQueryClient),
         );
       },
       currentResources(tx) {
@@ -314,17 +311,15 @@ export function createNativeWorkPorts(): WorkApplicationPorts {
         return readAuthConsentConfig(env);
       },
       createParticipant(config, deadline) {
-        const { createKindConsentParticipantTransport } = load<typeof import('../kind-consent-transport.ts')>(
-          '../kind-consent-transport.ts',
-        );
+        const { createKindConsentParticipantTransport } =
+          load<typeof import('../kind-consent-transport.ts')>('../kind-consent-transport.ts');
         return createKindConsentParticipantTransport(config as never, deadline);
       },
     },
     retentionSelector: {
       create(pool) {
-        const { createWorkflowRetentionSelector } = load<typeof import('../retention-selector.ts')>(
-          '../retention-selector.ts',
-        );
+        const { createWorkflowRetentionSelector } =
+          load<typeof import('../retention-selector.ts')>('../retention-selector.ts');
         return createWorkflowRetentionSelector(asPool(pool));
       },
     },

@@ -1,16 +1,13 @@
 import {
   TERMINAL_WORKFLOW_STATUSES,
-  WORK_APPLICATION,
   WORKFLOW_RETENTION_BATCH_SIZE,
   WORKFLOW_RETENTION_MAX_BATCHES,
   WORKFLOW_RETENTION_SCHEDULE,
   WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
   WORKFLOW_RETENTION_WORKFLOW,
-  type WorkApplicationPorts,
-  type WorkPool,
-  type WorkQueueOptions,
-  type WorkSdkClient,
-} from '../contract/index.ts';
+} from '../contract/bounds.ts';
+import { WORK_APPLICATION } from '../contract/vocabulary.ts';
+import type { WorkApplicationPorts, WorkPool, WorkQueueOptions, WorkSdkClient } from '../contract/index.ts';
 import {
   assertRetentionDays,
   clampRetentionBatch,
@@ -18,12 +15,14 @@ import {
   retentionCutoff,
 } from '../core/index.ts';
 
-type Selector = (input: Readonly<{
-  applicationName: string;
-  statuses: readonly ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'];
-  completedBefore: number;
-  limit: number;
-}>) => Promise<readonly string[]>;
+type Selector = (
+  input: Readonly<{
+    applicationName: string;
+    statuses: readonly ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'];
+    completedBefore: number;
+    limit: number;
+  }>,
+) => Promise<readonly string[]>;
 
 type Deleter = (ids: readonly string[], descendants: false) => Promise<void>;
 
@@ -78,8 +77,7 @@ export function createRetention(ports: Pick<WorkApplicationPorts, 'sdkRuntime' |
         throw new Error('Workflow retention requires the maintenance queue');
       const { retentionDays } = readWorkflowRetentionConfig(context.env);
       const select = ports.retentionSelector.create(context.pool);
-      const applicationName =
-        (context.client as { applicationName?: string }).applicationName ?? WORK_APPLICATION;
+      const applicationName = (context.client as { applicationName?: string }).applicationName ?? WORK_APPLICATION;
       const deleter: Deleter = (ids, descendants) =>
         (context.client as { deleteWorkflows: Deleter }).deleteWorkflows(ids, descendants);
       ports.sdkRuntime.registerWorkflow(

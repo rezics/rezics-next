@@ -1,9 +1,9 @@
-import type { WorkUnavailabilityReason } from '../contract/index.ts';
+import type { WorkUnavailabilityReason } from '../contract/vocabulary.ts';
 import {
   WORK_STEP_RETRY_BACKOFF_RATE,
   WORK_STEP_RETRY_INTERVAL_SECONDS,
   WORK_STEP_RETRY_MAX_ATTEMPTS,
-} from '../contract/index.ts';
+} from '../contract/bounds.ts';
 
 const REASONS = new Set<WorkUnavailabilityReason>(['deadline', 'overloaded', 'contention', 'fenced', 'moved']);
 

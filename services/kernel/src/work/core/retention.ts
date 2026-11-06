@@ -4,7 +4,7 @@ import {
   MIN_WORKFLOW_RETENTION_DAYS,
   WORKFLOW_RETENTION_BATCH_SIZE,
   WORKFLOW_RETENTION_MAX_BATCHES,
-} from '../contract/index.ts';
+} from '../contract/bounds.ts';
 
 export type WorkflowRetentionConfig = Readonly<{ retentionDays: number }>;
 

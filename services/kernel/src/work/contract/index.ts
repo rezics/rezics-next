@@ -1,9 +1,4 @@
-export {
-  DBOS_SCHEMA,
-  LOCATOR_EFFECTS_QUEUE,
-  WORK_APPLICATION,
-  WORK_QUEUE_NAMES,
-} from './vocabulary.ts';
+export { DBOS_SCHEMA, LOCATOR_EFFECTS_QUEUE, WORK_APPLICATION, WORK_QUEUE_NAMES } from './vocabulary.ts';
 export type {
   WorkAccountReference,
   WorkAuthorization,

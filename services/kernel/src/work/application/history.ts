@@ -94,7 +94,14 @@ export function createHistoryWork(ports: Pick<WorkApplicationPorts, 'history' | 
             return 'retired';
           }
           await ports.history.guardAccounts(tx, 0, request.scope.accounts);
-          const stored = await ports.history.persist(tx, 0, sourcePartition, source.source_transaction, request, digest);
+          const stored = await ports.history.persist(
+            tx,
+            0,
+            sourcePartition,
+            source.source_transaction,
+            request,
+            digest,
+          );
           await ports.history.insertRecordCopies(tx, source.recordCopies, source.recordLocator);
           await ports.history.insertRecordSets(tx, source.recordSets, source.recordLocator);
           if (!stored.retired && !stored.admitted) {

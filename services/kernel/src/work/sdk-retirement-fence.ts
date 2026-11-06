@@ -2,15 +2,13 @@ import { DBOS, DBOSClient, type WorkflowWriterFence, type WorkflowWriterState } 
 import type { CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
-import { SDK_MAINTENANCE_DISPATCH as MAINTENANCE, SDK_TRANSACTION_FENCE_COST as FENCE } from './contract/index.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
 
 export type SdkRetirementFence = WorkflowWriterFence;
 export type SdkRetirementClient = Pick<DBOSClient, 'retireWorkflow' | 'getWorkflowWriterFence'>;
 export type SdkWriterState = WorkflowWriterState;
 
-export const SDK_MAINTENANCE_DISPATCH = MAINTENANCE;
-export const SDK_TRANSACTION_FENCE_COST = FENCE;
+export { SDK_MAINTENANCE_DISPATCH, SDK_TRANSACTION_FENCE_COST } from './contract/bounds.ts';
 
 type BoundedSdk = DBOSClient & {
   maintainWorkflowOnce(

@@ -7,12 +7,7 @@ import { guardHistoryAccounts } from '../../history/gates.ts';
 import { encodeLocator, validateLocator, validateScope, type HistoryScope } from '../../history/locator.ts';
 import record from '../../history/record.sql';
 import type { Pool } from 'pg';
-import type {
-  HistoryAssociationPort,
-  WorkPool,
-  WorkQueryClient,
-  WorkScopedRequest,
-} from '../contract/index.ts';
+import type { HistoryAssociationPort, WorkPool, WorkQueryClient, WorkScopedRequest } from '../contract/index.ts';
 
 function asTx(tx: WorkQueryClient): CommandTransaction {
   return tx as CommandTransaction;
@@ -151,13 +146,7 @@ export function createNativeHistoryAssociation(): HistoryAssociationPort {
           `INSERT INTO core.record_history_locator
            (source_key,partition_no,artifact_type,locator,original_transaction,original_position,producer_version)
            VALUES($1,0,'durable-work/v1',$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-          [
-            copy.source_key,
-            locator,
-            copy.original_transaction,
-            copy.original_position,
-            copy.producer_version,
-          ],
+          [copy.source_key, locator, copy.original_transaction, copy.original_position, copy.producer_version],
         );
     },
     async insertRecordSets(tx, sets, locator) {
@@ -197,10 +186,9 @@ export function createNativeHistoryAssociation(): HistoryAssociationPort {
       }
     },
     markAdmitted(tx, partition, workId) {
-      return tx.query('UPDATE core.history_work SET admitted=true WHERE partition_no=$1 AND work_id=$2', [
-        partition,
-        workId,
-      ]).then(() => undefined);
+      return tx
+        .query('UPDATE core.history_work SET admitted=true WHERE partition_no=$1 AND work_id=$2', [partition, workId])
+        .then(() => undefined);
     },
     async settleOwner(tx, input) {
       const result = await tx.query(

@@ -7,7 +7,7 @@ export const LOCATOR_EFFECTS_QUEUE = 'locator-effects';
 export const WORK_QUEUE_NAMES = [
   'governance',
   'effects',
-  LOCATOR_EFFECTS_QUEUE,
+  'locator-effects',
   'workflows',
   'delivery',
   'import',

@@ -1,4 +1,4 @@
-export { WORK_EXECUTION_ATTEMPT_BOUND } from './contract/index.ts';
+export { WORK_EXECUTION_ATTEMPT_BOUND } from './contract/bounds.ts';
 export {
   SELECTED_AXES,
   SELECTED_CLEANUP_DECLARATION,

@@ -1,4 +1,4 @@
-import { WORK_EXECUTION_ATTEMPT_BOUND } from '../contract/index.ts';
+import { WORK_EXECUTION_ATTEMPT_BOUND } from '../contract/bounds.ts';
 
 export type WorkExecutionSnapshot = Readonly<{
   deadline: number;

@@ -6,7 +6,7 @@ import type {
   WorkSdkClient,
   WorkWriterState,
 } from '../contract/index.ts';
-import { SDK_MAINTENANCE_DISPATCH, type SdkMaintenanceDispatch } from '../contract/index.ts';
+import { SDK_MAINTENANCE_DISPATCH, type SdkMaintenanceDispatch } from '../contract/bounds.ts';
 
 export function createRetirement(ports: Pick<WorkApplicationPorts, 'sdkRetirement' | 'history'>) {
   return {

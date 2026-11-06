@@ -1,4 +1,4 @@
-import { LOCATOR_EFFECTS_QUEUE, type WorkQueueName, type WorkQueueOptions } from '../contract/index.ts';
+import { LOCATOR_EFFECTS_QUEUE, type WorkQueueName, type WorkQueueOptions } from '../contract/vocabulary.ts';
 
 /** ADR-0033: governance has its own capacity; import enqueues must name their source partition. */
 export const WORK_QUEUES = Object.freeze({

@@ -12,13 +12,8 @@ import {
   WORKFLOW_RETENTION_SCHEDULE,
   WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
   WORKFLOW_RETENTION_WORKFLOW,
-} from './contract/index.ts';
-import {
-  assertRetentionDays,
-  clampRetentionBatch,
-  parseWorkflowRetentionDays,
-  retentionCutoff,
-} from './core/index.ts';
+} from './contract/bounds.ts';
+import { assertRetentionDays, clampRetentionBatch, parseWorkflowRetentionDays, retentionCutoff } from './core/index.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
 
 export {

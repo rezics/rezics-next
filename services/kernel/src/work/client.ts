@@ -1,7 +1,7 @@
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import { Pool, type PoolClient } from 'pg';
 import type { KernelExecutionContract } from '../command/execution-contract.ts';
-import { DBOS_SCHEMA, WORK_APPLICATION, type WorkIntent as ContractIntent } from './contract/index.ts';
+import { DBOS_SCHEMA, WORK_APPLICATION, type WorkIntent as ContractIntent } from './contract/vocabulary.ts';
 import {
   assertSelectedWorkClient as assertBoundSelectedWorkClient,
   bindSelectedWorkClient,

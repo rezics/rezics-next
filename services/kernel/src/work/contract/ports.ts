@@ -52,7 +52,10 @@ export type SdkRuntimePort = {
   launch(): Promise<void>;
   shutdown(options: { workflowCompletionTimeoutMS: number }): Promise<void>;
   registerWorkflow(body: () => Promise<unknown>, config: { name: string }): void;
-  runStep<T>(body: () => Promise<T>, config: { name: string; retriesAllowed?: boolean; maxAttempts?: number }): Promise<T>;
+  runStep<T>(
+    body: () => Promise<T>,
+    config: { name: string; retriesAllowed?: boolean; maxAttempts?: number },
+  ): Promise<T>;
   applySchedules(
     client: WorkSdkClient,
     schedules: readonly Readonly<{
@@ -238,10 +241,7 @@ export type AuthorizationPort = {
 
 export type EffectsPort = {
   identityFxName: string;
-  bindIdentityOriginal(
-    effect: WorkEffect,
-    deps: { pool: WorkPool; client: WorkSdkClient },
-  ): WorkEffect;
+  bindIdentityOriginal(effect: WorkEffect, deps: { pool: WorkPool; client: WorkSdkClient }): WorkEffect;
   register(effects: readonly WorkEffect[], pool: WorkPool): WorkRegisteredEffects;
 };
 
@@ -255,14 +255,14 @@ export type KindConsentPort = {
 };
 
 export type RetentionSelectorPort = {
-  create(
-    pool: WorkPool,
-  ): (input: Readonly<{
-    applicationName: string;
-    statuses: readonly ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'];
-    completedBefore: number;
-    limit: number;
-  }>) => Promise<readonly string[]>;
+  create(pool: WorkPool): (
+    input: Readonly<{
+      applicationName: string;
+      statuses: readonly ['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'];
+      completedBefore: number;
+      limit: number;
+    }>,
+  ) => Promise<readonly string[]>;
 };
 
 export type CostPort = {
@@ -407,11 +407,7 @@ export type WorkApplication = {
   retireWriters(actualWorkflowId: string): Promise<WorkRetirementFence>;
   readRetirement(actualWorkflowId: string): Promise<WorkRetirementFence | null>;
   readWriterState(actualWorkflowId: string, client: WorkSdkClient): Promise<WorkWriterState | null>;
-  lockWriterState(
-    tx: WorkQueryClient,
-    expected: WorkWriterState,
-    client: WorkSdkClient,
-  ): Promise<WorkWriterState>;
+  lockWriterState(tx: WorkQueryClient, expected: WorkWriterState, client: WorkSdkClient): Promise<WorkWriterState>;
   maintainOnce(
     pool: WorkPool,
     client: WorkSdkClient,

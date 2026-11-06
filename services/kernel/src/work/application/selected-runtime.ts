@@ -14,7 +14,7 @@ import type {
   WorkSelectedOutcome,
   WorkSelectedRuntime,
 } from '../contract/index.ts';
-import { SELECTED_CONTINUATION_PAYLOAD_MAX_BYTES, SELECTED_ISSUE_DEADLINE_MS } from '../contract/index.ts';
+import { SELECTED_CONTINUATION_PAYLOAD_MAX_BYTES, SELECTED_ISSUE_DEADLINE_MS } from '../contract/bounds.ts';
 import { assertSelectedNativeDeclarations, isSelectedCost, selectedContinuationInput } from '../core/index.ts';
 
 export class SelectedRuntimeUnavailable extends Error {
@@ -77,7 +77,10 @@ export function createSelectedRuntime(ports: WorkApplicationPorts) {
     state.locator ??= Object.freeze({ ...locator });
   }
 
-  function selectedOperationalEnqueue(tx: WorkQueryClient, intent: WorkIntent): ((created: boolean) => void) | undefined {
+  function selectedOperationalEnqueue(
+    tx: WorkQueryClient,
+    intent: WorkIntent,
+  ): ((created: boolean) => void) | undefined {
     const state = transactionSelections.get(tx);
     if (!state) return;
     identity(state);

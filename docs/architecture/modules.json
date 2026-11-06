@@ -647,7 +647,12 @@
       "kind": "contract",
       "owner": "performance",
       "paths": ["services/kernel/src/work/contract/**"],
-      "publicEntries": ["services/kernel/src/work/contract/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/work/contract/index.ts",
+        "services/kernel/src/work/contract/bounds.ts",
+        "services/kernel/src/work/contract/vocabulary.ts",
+        "services/kernel/src/work/contract/cost.ts"
+      ],
       "allowedDependencies": [],
       "capabilities": ["work-vocabulary"]
     },

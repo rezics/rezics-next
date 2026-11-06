@@ -13,9 +13,7 @@ export function assertScopedWorkIdentity(request: WorkScopedRequest, custodyId =
   if (!UUID.test(custodyId) || !OWNER.test(request.owner)) throw new TypeError('Invalid scoped work identity');
 }
 
-export function assertSelectedNativeDeclarations(
-  native: readonly Readonly<{ sql: string; limit: number }>[],
-): void {
+export function assertSelectedNativeDeclarations(native: readonly Readonly<{ sql: string; limit: number }>[]): void {
   if (
     native.length > 64 ||
     new Set(native.map((item) => item.sql)).size !== native.length ||
