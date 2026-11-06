@@ -4391,3 +4391,7 @@ includes its complete ancestry, Board/Realm/Subject/Access and transaction work.
 new runner or cost ledger. Native point response coverage reuses the account-erasure authored-post suite; the compact
 projection tests preserve exact bytes and unknown/deleted/parent distinctions. Threads owns broader page/history
 assembly and its native growth and current-reader acceptance; source publication does not close that acceptance.
+
+Decision: reuse the native erasure suite for the exact point response and its shared disclosure worker's dedicated
+receipt-key fixture, matching the native HTTP fixture. Existing projection tests cover unknown/deleted identities;
+workspace declaration publication covers compiler-only query annotations without adding a mirrored runtime test.

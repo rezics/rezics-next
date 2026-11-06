@@ -17,6 +17,7 @@ import subject from '../src/kernel/recorded/subject.json';
 import thread from '../src/kernel/recorded/thread.json';
 import posts from '../src/kernel/recorded/thread-posts.json';
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
+import { threadLocation } from '../src/threads/thread-href';
 import { loadThreadPageWithAuthors } from '../src/identity/page-loaders';
 import { subjectHref } from '../src/subject/subject-href';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
@@ -161,7 +162,8 @@ test('discussion readers keep human context primary and exact source data reacha
   expect(exactHtml.slice(0, exactHtml.indexOf('<details'))).not.toContain(questionId);
   expect(exactHtml.split(selected.licence).length - 1).toBe(1);
   expect(exactHtml).toContain(completeDocumentText);
-  expect(exactHtml).toContain(exactRevisionHref(identity, 'en'));
+  expect(exactHtml).toContain(`href="${threadLocation('en', exactPage.thread, undefined, identity.postId)}"`);
+  expect(exactHtml).toContain(`<bdi dir="ltr">${identity.revisionId}</bdi>`);
 
   expect(historyHtml).toContain(`<a href="${exactRevisionHref(identity, 'en')}"`);
   expect(historyHtml).toContain(

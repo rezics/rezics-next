@@ -22,6 +22,10 @@
 
 Client emit stays before the workspace compiler so tests see source-checked declarations. Client emit, `tsc` and construct share the same migrated database; they do not start a second compiler database. `--emit-client` still runs a declaration compiler and then `tsc --noEmit`; that is the accepted client-publication order, not duplicate preparation.
 
+Declaration entry points name recursive query results through their owning compiler's return type, so publication
+does not expand an inferred cyclic structure. Publisher failure leaves dependent workspace typing pending; missing
+generated declarations are repaired through this publisher rather than handwritten consumer contracts.
+
 Decision: `CLIENT_RUNTIME_ENTRIES` copies the Realm question-management and caption-history schema closure as
 installed package source, byte for byte, beside the generated declarations. Only `elysia` may be imported from
 outside that closure. Web receiving uses those published schemas and the mounted callable response types.

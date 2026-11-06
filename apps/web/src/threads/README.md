@@ -341,6 +341,8 @@ Long links and table cells wrap; native media keeps its supplied alt text, credi
 Spoiler and image-recovery controls retain phone targets and keyboard focus. Detail documents stay selectable and
 complete. The exact-revision page uses the same body composition and its existing localized return-to-post link;
 opening provenance/history never substitutes a current head for the selected immutable revision.
+The provenance interface test checks that return link and the selected revision identity; history entries retain
+their exact-revision URLs. The immutable page does not need a redundant link to itself.
 
 Rendering adds no loader, observer or network read. One media index, one bounded outline projection and the renderer give O(B+V) work
 within the existing native document/media limits. Prepared multilingual stories cover the post/revision/return
