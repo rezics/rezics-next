@@ -62,7 +62,7 @@ type Progress = {
   retentionExpiresAt: string | null;
 };
 type Advance = 'none' | 'more' | 'pending' | 'retained' | 'resolve';
-type PolicyRow = { fields: SqlTextList; purpose: string; expiresAt: string };
+type PolicyRow = { fields: SqlTextList; purpose: string; expiresAt: string | null };
 type OwnerRow = { buyerAccountId: string };
 type AccountRow = { state: string };
 type ObligationRow = { version: number; at: string };
@@ -112,6 +112,11 @@ function textFields(value: SqlTextList): string[] | null {
 
 function instantMs(value: string | Date): number {
   return new Date(value).getTime();
+}
+
+function requiredInstant(value: string | null | undefined): string {
+  if (value == null) throw new Error('Commerce retention expiry is missing');
+  return value;
 }
 
 function routeForAccount(accountId: string): number {
@@ -199,7 +204,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
       if (
         prior &&
         (prior.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
-          instantMs(prior.expiresAt) !== instantMs(expiresAt) ||
+          instantMs(requiredInstant(prior.expiresAt)) !== instantMs(expiresAt) ||
           fieldKey(prior.fields) !== fields.join('\0'))
       )
         throw new Error('A buyer account has one exact Commerce order-retention policy');
@@ -222,7 +227,7 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
       if (
         !retained ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
-        instantMs(retained.expiresAt) !== instantMs(expiresAt) ||
+        instantMs(requiredInstant(retained.expiresAt)) !== instantMs(expiresAt) ||
         fieldKey(retained.fields) !== fields.join('\0')
       )
         throw new Error('Commerce order retention configuration did not commit exactly');

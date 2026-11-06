@@ -205,7 +205,9 @@ Content's native identities already install `subject:create`, `space:create` and
 targets are real subjects created through the native API from released metadata on that public Realm board. One
 native journey plus unused-actor operator history pins paid minimization, expiry purge, restricted readback and late
 paid/refund; the independent terminal-benefit cases remain unchanged. Neither topology correction nor local pure
-settlement tests prove the missing custody outcome.
+settlement tests prove the missing custody outcome. The composed kernel uses the 30-second native test request
+deadline so Access parent-creation evidence stays live through sale-capture prepare; the production two-second default
+is not this fixture's admission budget.
 
 ## Cost
 

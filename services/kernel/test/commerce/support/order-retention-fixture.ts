@@ -42,12 +42,12 @@ export async function inspectNativeRetainedOrder(pool: Pool, orderId: string): P
   return withConnection(pool, async (connection) => {
     const row = await inspectRetained.run(connection, { route, order_id: orderId });
     const record = Array.isArray(row) ? row[0] : row;
-    if (!record) return null;
+    if (!record?.orderId || !record.buyerAccountId || !record.checkoutUrl || !record.expiresAt) return null;
     return {
       orderId: record.orderId,
       buyerAccountId: record.buyerAccountId,
       checkoutUrl: record.checkoutUrl,
-      expiresAt: new Date(record.expiresAt).toISOString(),
+      expiresAt: record.expiresAt,
     };
   });
 }

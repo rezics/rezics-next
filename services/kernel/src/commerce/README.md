@@ -998,7 +998,7 @@ minimization, deadline purge and separate Access resolution; it distinguishes th
 production financial retention and remaining shared custody.
 Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
-Decision: one native purchase/retention/expiry journey uses two quantity-one editions so refund and late paid stay on distinct genuine orders; unused-actor operator history stays the second case. Reylo page and locator statements are normalized to a list so a single entitlement or order is purged. Board and offer
+Decision: one native purchase/retention/expiry journey uses two quantity-one editions so refund and late paid stay on distinct genuine orders; unused-actor operator history stays the second case. The composed kernel uses the 30-second native test request deadline; the production two-second default is not this fixture's Access admission budget. Reylo page and locator statements are normalized to a list so a single entitlement or order is purged. Board and offer
 grants, edition publication and Commerce HTTP share one composed kernel. That kernel reuses Content's native Access,
 which is already compiled from the full mounted catalogue (including Commerce) and Score `nativeAuth.handler`; Auth
 tokens use the ordinary client and omit `media:complete`. A second Access on the same pool disagrees at the board

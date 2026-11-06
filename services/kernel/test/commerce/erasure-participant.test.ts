@@ -28,7 +28,13 @@ import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas } from '../support/personas.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
-import { testKernel, testRouteKey, testTokens, type TestKernel } from '../support/test-kernel.ts';
+import {
+  TEST_REQUEST_DEADLINE_MS,
+  testKernel,
+  testRouteKey,
+  testTokens,
+  type TestKernel,
+} from '../support/test-kernel.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { drainTombstone, startCommerceErasureWorker } from './support/erasure-worker.ts';
 import { createNativeEditionFixture, type NativeContentEdition } from './support/native-edition-fixture.ts';
@@ -257,6 +263,7 @@ describe('native genuine-order retention', () => {
       routeKey: native.routeKey,
       tokens: native.tokenKeys,
       receiptKeys: testReceiptKeys(),
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       access: native.access,
       writeRate: createWriteRateLimiter({
         secret: 'commerce-erasure-native-secret-32-bytes',
