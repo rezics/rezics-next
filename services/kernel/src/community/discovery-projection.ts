@@ -198,7 +198,7 @@ export async function projectRealmDiscovery(
   const frontier = await discoverySnapshot(
     pool,
     DISCOVERY_PARTITION,
-    deadline,
+    { deadline, now: options.deadlineNow },
     async (client) =>
       (
         await client.query<DiscoveryState>(

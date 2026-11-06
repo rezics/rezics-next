@@ -31,6 +31,7 @@ import append from './space-revision.sql';
 import moveHead from './space-head.sql';
 import eligibilityRead from './space-eligibility-read.sql';
 import { viewerActionEligibilityWork, spaceEligibilityAccessWork } from './eligibility-access-work.ts';
+import type { CommunityAmbient } from './ambient.ts';
 
 export type SpaceDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
 export type SpaceContext = Readonly<{ idempotencyKey: string; deadline: number }>;
@@ -132,7 +133,7 @@ export async function readSpace(
  * the derived Realm id always uses the ordinary Realm reader and its own authorization.
  */
 export async function readSpaceForViewer(
-  deps: Pick<SpaceDependencies, 'pool' | 'access'>,
+  deps: Pick<SpaceDependencies, 'pool' | 'access'> & CommunityAmbient,
   actor: Actor,
   spaceId: string,
   time: string,

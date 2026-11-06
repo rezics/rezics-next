@@ -70,7 +70,7 @@ async function qualifiesForSuccession(
 }
 
 export async function eraseAccountMembershipsPage(
-  deps: { pool: Pool; access?: Access; clock?: () => Date; deadline?: number },
+  deps: { pool: Pool; access?: Access; clock?: () => Date; deadlineNow: () => number; deadline?: number },
   accountId: string,
   after: MembershipErasureCursor | null,
 ): Promise<{ next: MembershipErasureCursor | null; found: number; pending: number }> {
@@ -90,7 +90,7 @@ export async function eraseAccountMembershipsPage(
   let pendingOwners = 0;
   // One fixed wall deadline bounds the whole raw page. Command timestamps use
   // the installed trusted clock; the durable root determines the orphan instant.
-  const deadline = deps.deadline ?? Date.now() + 60_000;
+  const deadline = deps.deadline ?? deps.deadlineNow() + 60_000;
   if (!Number.isFinite(deadline)) throw new TypeError('Invalid membership erasure deadline');
   for (const key of keys) {
     if (!access) throw new Error('Membership erasure requires installed worker Access');

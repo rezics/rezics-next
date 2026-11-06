@@ -84,8 +84,15 @@ import {
   RatingVoteResponseSchema,
 } from './schemas.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
-type ReadDependencies = Pick<Dependencies, 'pool'> & { access: Access };
+type Dependencies = {
+  pool: Pool;
+  access: () => Access;
+  tokens: KeyRing;
+  routeKey: Uint8Array;
+  clock?: KernelClock;
+  deadlineNow: () => number;
+};
+type ReadDependencies = Pick<Dependencies, 'pool' | 'deadlineNow'> & { access: Access };
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 import { parseVoteObservation } from './vote-observation.ts';

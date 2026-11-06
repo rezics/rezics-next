@@ -256,6 +256,7 @@ export async function listRealmClaimRequests(
         {
           pool: deps.pool,
           access: deps.access,
+          deadlineNow: deps.deadlineNow,
           ...(deps.clock === undefined ? {} : { clock: deps.clock }),
         },
         realmId,

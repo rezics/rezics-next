@@ -21,13 +21,17 @@ export type DiscoveryState = {
 export const stateColumns = `realm_id,realm_epoch,applied_generation::text,settled,cutoff::text,popular::text,trending::text`;
 
 /** One released native home snapshot. Deadline/move failures never turn into missing rows. */
+/** Deadline budget for one snapshot. `now` is the supplied real-time clock, never a global. */
+export type DiscoveryBudget = { deadline: number; now: () => number };
+
 export async function discoverySnapshot<T>(
   pool: Pool,
   partition: number,
-  deadline: number,
+  budget: DiscoveryBudget,
   read: (client: Pick<PoolClient, 'query'>, epoch: number) => Promise<T>,
 ): Promise<T> {
-  if (!Number.isFinite(deadline) || Date.now() >= deadline) throw new AccessUnavailableError('deadline');
+  const { deadline } = budget;
+  if (!Number.isFinite(deadline) || budget.now() >= deadline) throw new AccessUnavailableError('deadline');
   return withConnection(pool, async (connection) => {
     const client = deadlineClient(connection, deadline);
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');

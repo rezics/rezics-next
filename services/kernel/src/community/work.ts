@@ -162,7 +162,7 @@ export function createCommunityWorkModule(ambient: CommunityAmbient): WorkModule
           automaticBackfill: false,
         },
       ]);
-      registerCommunityAccountErasureWork(context);
+      registerCommunityAccountErasureWork(context, ambient);
       await registerDiscoveryWork(context, ambient);
       context.addEffects([createPartyLocatorEffect(context.pool), createCommunityAccountErasureEffect(context)]);
     },

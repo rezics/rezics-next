@@ -7,7 +7,7 @@ import { mountContentEditionConsent } from '../content/edition-sale.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
-import { createCommunityHttpDeclaration } from '../community/http-declaration.ts';
+import { createCommunityHttpDeclaration, type CommunityHttpDeclaration } from '../community/http-declaration.ts';
 import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
@@ -645,6 +645,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     cursorNow,
     tokens,
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
@@ -673,6 +674,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     routeKey: dependencies.routeKey,
     realmParticipation: checkRealmParticipation,
     get access() {
@@ -712,6 +714,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     tokens,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
   });
   const shelfTitleSource = dependencies.content?.shelfTitleInputs
@@ -858,6 +861,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     tokens,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     access: () =>
       resolveAccess({
         actions: actionCatalogue(sourceStatistics),
@@ -994,7 +998,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof libraryArchiveMergeRoutes> &
   ReturnType<typeof copyArchiveRoutes> &
   ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> &
-  ReturnType<typeof communityRoutes> &
+  ReturnType<CommunityHttpDeclaration['routes']> &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &
   ReturnType<typeof bulkRoutes> &

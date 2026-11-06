@@ -34,6 +34,7 @@ import { ensureRealmMemberGrant } from './participation.ts';
 import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import { emptyRealmPresentation, realmPresentation, type RealmPresentation } from './presentation.ts';
 import { claimRealmPresentationMedia } from '../content/realm-media.ts';
 import { prepareRealmRulesSelection } from '../content/community-presentation-rules.ts';
@@ -199,13 +200,13 @@ export async function readRealmSettingsHead(
  * and no current ban required for protected Realms. Missing and denied resources both return null.
  */
 export async function readRealm(
-  deps: Pick<RealmDependencies, 'pool' | 'access'>,
+  deps: Pick<RealmDependencies, 'pool' | 'access'> & CommunityAmbient,
   actor: Actor,
   realmId: string,
   context: { deadline: number },
 ): Promise<RealmView | null> {
   const route = routeOf(realmId);
-  if (route === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline) return null;
+  if (route === null || !Number.isFinite(context.deadline) || deps.deadlineNow() >= context.deadline) return null;
   let current: RealmRow | null = null;
   const resource = { route, id: realmId };
   const eligibility = readEligibility(resource, (row) => {
@@ -292,6 +293,7 @@ type Requirement = { action: string; resource: Resource };
 function requirements(
   access: Access,
   extra: readonly Requirement[],
+  deadlineNow: () => number,
   validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
 ) {
   const deadlines = new WeakMap<AuthoritativeTime, number>();
@@ -307,7 +309,7 @@ function requirements(
         deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
         checks.push({ ...requirement, evidence });
       }
-      if (Date.now() >= deadline) throw new GrantDeniedError();
+      if (deadlineNow() >= deadline) throw new GrantDeniedError();
       await within(deadline, () =>
         withConnection(context.pool, async (client) => {
           const bounded = deadlineClient(client, deadline);
@@ -329,7 +331,7 @@ function requirements(
       return {
         ...authorization,
         async authorize(tx, attempt, proof) {
-          if (Date.now() >= (deadlines.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+          if (deadlineNow() >= (deadlines.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
           return authorization.authorize(tx, attempt, proof);
         },
       };
@@ -343,7 +345,12 @@ function contextRequirement(id: string): Requirement {
   return { action: 'context:read', resource: { ...resource, eligibility: publicContextEligibility(resource) } };
 }
 
-export async function createRealm(deps: RealmDependencies, actor: Actor, input: RealmInput, context: RealmContext) {
+export async function createRealm(
+  deps: RealmDependencies & CommunityAmbient,
+  actor: Actor,
+  input: RealmInput,
+  context: RealmContext,
+) {
   const creator = account(actor).accountId;
   const votes = input.votes === undefined ? undefined : voteMap(input.votes, RealmInputError);
   const body = {
@@ -363,6 +370,7 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
   const combined = requirements(
     deps.access,
     [{ action: 'space:manage', resource: { route, id: body.spaceId } }, contextRequirement(body.contextId)],
+    deps.deadlineNow,
     async (client, time) => {
       const row = await host.run(client, { route, space: body.spaceId, at: authoritativeTimeValue(time) });
       available.set(time, !!row && row.realm_id === null);
@@ -447,7 +455,12 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
   );
 }
 
-export async function updateRealm(deps: RealmDependencies, actor: Actor, input: RealmUpdate, context: RealmContext) {
+export async function updateRealm(
+  deps: RealmDependencies & CommunityAmbient,
+  actor: Actor,
+  input: RealmUpdate,
+  context: RealmContext,
+) {
   const author = account(actor).accountId;
   let presentation: RealmPresentation | undefined;
   try {
@@ -469,7 +482,11 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
   const route = routeOf(body.realmId);
   if (route === null) throw new RealmInputError();
   const current = new WeakMap<AuthoritativeTime, RealmView>();
-  const combined = requirements(deps.access, body.contextId === undefined ? [] : [contextRequirement(body.contextId)]);
+  const combined = requirements(
+    deps.access,
+    body.contextId === undefined ? [] : [contextRequirement(body.contextId)],
+    deps.deadlineNow,
+  );
   const authorization = resourceAuthorization({
     access: combined.access,
     actor,

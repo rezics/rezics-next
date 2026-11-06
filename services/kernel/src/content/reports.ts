@@ -99,6 +99,7 @@ export type ReportDependencies = Readonly<{
   access: Access;
   routeKey: Uint8Array;
   clock?: () => Date;
+  deadlineNow: () => number;
   anonymousVerifier?: TurnstileVerifier;
 }>;
 /** Ephemeral admission credential. Implementations must verify it once and never persist it. */

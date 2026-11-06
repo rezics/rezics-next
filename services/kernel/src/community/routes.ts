@@ -961,10 +961,11 @@ function memberActionAdvice(input: {
 }
 
 export function communityRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: CommunityRouteDependencies) {
-  const spaceDependencies = (): SpaceDependencies => ({
+  const spaceDependencies = (): SpaceDependencies & CommunityAmbient & { clock: () => Date } => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
+    deadlineNow: dependencies.deadlineNow,
     access: dependencies.access(),
   });
   const realmDependencies = (): RealmDependencies & CommunityAmbient & { clock: () => Date } => ({
@@ -1260,6 +1261,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               access: dependencies.access(),
               tokens: dependencies.tokens,
               clock: dependencies.clock,
+              deadlineNow: dependencies.deadlineNow,
             },
             job.deadline,
             query,
@@ -1445,6 +1447,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               await readCommunityPresentations(
                 {
                   pool: dependencies.pool,
+                  deadlineNow: dependencies.deadlineNow,
                   access: dependencies.access(),
                   ...(dependencies.clock ? { clock: dependencies.clock } : {}),
                 },

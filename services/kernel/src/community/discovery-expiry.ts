@@ -27,7 +27,7 @@ export async function expireRealmDiscovery(
   const due = await discoverySnapshot(
     pool,
     DISCOVERY_PARTITION,
-    options.deadlineNow() + 30_000,
+    { deadline: options.deadlineNow() + 30_000, now: options.deadlineNow },
     async (client) =>
       (
         await client.query<Due>(

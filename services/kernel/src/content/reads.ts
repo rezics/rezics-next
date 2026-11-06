@@ -161,7 +161,14 @@ export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 's
 export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUntil?: string }) | WithheldPostEntry;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
-export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+export type ContentReadDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock?: () => Date;
+  /** Real wall time for realm read deadlines, supplied by composition. */
+  deadlineNow: () => number;
+}>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same
  * source snapshot; it must not prepare authority or open a foreign checkout.
