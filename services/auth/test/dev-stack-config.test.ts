@@ -328,6 +328,11 @@ test('walk and start parents keep Kernel, Postgres and dump modules off the wait
   expect(source).toContain("await import('pg')");
   expect(source).toContain('walkFrontendEnvironmentPath');
   expect(source).toContain('--max-old-space-size=512');
+  expect(source).toContain('persistDevelopmentWebsiteBindings');
+  expect(source).toContain("REZICS_WALK_DEFER_FRONTENDS === '1'");
+  expect(source.indexOf("['services/auth/scripts/dev-stack.ts', 'setup']")).toBeLessThan(
+    source.indexOf("['services/kernel/scripts/search.ts', 'up']"),
+  );
 });
 
 test('setup-written frontend bindings keep JWK JSON literal for the Vite parent', () => {

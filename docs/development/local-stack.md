@@ -248,8 +248,11 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance. Remote placement forwards the original launcher `GOAL_TASK_ID`,
 `GOAL_ATTEMPT` and `GOAL_ACCEPTANCE_REQUIRES` into the walk command without rewriting recorded argv. Walk search
-nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker memory ceilings (search 256m, database
-256m) so seeded volume file cache cannot fill the 6 GiB run slice. Kernel starts with bun --smol against
+nodes use a 128m heap without mmap, Postgres 32MB shared_buffers, and docker memory ceilings (search 768m, database
+256m) so seeded volume file cache cannot fill the 6 GiB run slice. OpenSearch cannot start in 256m; that container OOM
+is recorded on the run slice as a 6 GiB kill. Reclaim writes only `inactive_file` bytes, never a 4 GiB request against
+a smaller slice. Walk setup skips Kernel catalogue composition; the Auth host writes frontend bindings after assemble.
+Kernel starts with bun --smol against
 `src/server.ts` (no `--watch`); the worker pool is 1. Web, Auth pages and the worker start after seed.
 Walk admission is host-wide at `/tmp/rezics-walk-stacks` so concurrent remote-check checkouts share slots and ports;
 this task's leftover containers are removed before admission, and a Docker bind that still reports the port allocated
@@ -259,8 +262,8 @@ composition in the 6 GiB slice. Issuer JWKS and seed `POST /signin/key` are forw
 request, including POST bodies, until Auth pages bind. Launch the walk with `bun --smol` so the parent module graph shares that heap; database, search and setup use that
 same bun; leftover Docker teardown never throws; a restored dump extraction that matches the pin timestamp skips
 archive hashing even without a marker; sequential dump reads drop-behind; walk/start waiters keep Kernel off their
-graphs; Vite reads setup-written frontend bindings; and each walk/seed/browser phase asks the slice to reclaim
-inactive file cache. The walk `start` waiter itself runs under bun --smol.
+graphs; Vite reads host-written frontend bindings; and each walk/seed/browser phase asks the slice to reclaim
+only its inactive file pages. The walk `start` waiter itself runs under bun --smol.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

@@ -108,6 +108,26 @@ export function developmentWebsiteBindings(
   };
 }
 
+export type DevelopmentWebsiteBindings = {
+  scopes: string[];
+  WEBSITE_SCOPES: string;
+  WEBSITE_CONFIGURATION_FILE?: string;
+  AUTH_SECURITY_SCOPE_CONFIGURATION: string;
+};
+
+/** Persist Web and Auth-page launch bindings after Kernel catalogue composition. */
+export async function persistDevelopmentWebsiteBindings(
+  keys: Pick<DevelopmentKeys, 'website'>,
+  website: DevelopmentWebsiteBindings,
+): Promise<void> {
+  const websiteBindings = developmentWebsiteBindings(keys, website);
+  await privateFile(resolve(root, 'apps/web/.dev.vars'), developmentBindings(websiteBindings));
+  await privateFile(
+    walkFrontendEnvironmentPath(),
+    developmentBindings({ ...websiteBindings, ...developmentAuthPageBindings(website) }),
+  );
+}
+
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   await import('reylo/register');
@@ -427,13 +447,8 @@ async function setup() {
     }),
   );
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
-  const website = await developmentWebsiteConfiguration(env);
-  const websiteBindings = developmentWebsiteBindings(keys, website);
-  await privateFile(resolve(root, 'apps/web/.dev.vars'), developmentBindings(websiteBindings));
-  await privateFile(
-    walkFrontendEnvironmentPath(),
-    developmentBindings({ ...websiteBindings, ...developmentAuthPageBindings(website) }),
-  );
+  if (process.env.REZICS_WALK_DEFER_FRONTENDS === '1') return;
+  await persistDevelopmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env));
 }
 
 export async function assemble(options?: {
@@ -476,8 +491,12 @@ export async function assemble(options?: {
     routeKey: config.routeKey,
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
   });
-  const actions = accessActionCatalogue(actionCatalogue(kernel));
-  const website = developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(actionCatalogue(kernel)));
+  const catalogue = actionCatalogue(kernel);
+  const actions = accessActionCatalogue(catalogue);
+  const website: DevelopmentWebsiteBindings = {
+    ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
+    AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(actions.keys()),
+  };
   let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,
@@ -712,6 +731,8 @@ export function issuerRequest(request: Request): Request {
 async function serveHost() {
   const composition = await assemble();
   try {
+    if (process.env.REZICS_WALK_DEFER_FRONTENDS === '1')
+      await persistDevelopmentWebsiteBindings(composition.keys, composition.website);
     const person = await provisionPersona(composition);
     printPersona(composition.keys, person.accountId);
   } catch (error) {
@@ -997,13 +1018,14 @@ async function walk(command: string[]): Promise<number> {
       try {
         for (const script of [
           ['services/kernel/scripts/database.ts', 'up'],
-          ['services/kernel/scripts/search.ts', 'up'],
           ['services/auth/scripts/dev-stack.ts', 'setup'],
+          ['services/kernel/scripts/search.ts', 'up'],
         ]) {
           try {
             await runWalkSetup(script, env, (child) => {
               current = child;
             });
+            reclaimInactiveFileCache();
           } catch (error) {
             if (
               error instanceof Error &&
@@ -1024,6 +1046,7 @@ async function walk(command: string[]): Promise<number> {
           stderr: Bun.file(log),
         });
         await untilReady(walkReadyUrls(ports, env), starting);
+        reclaimInactiveFileCache();
         current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
         code = await current.exited;
       } catch (error) {

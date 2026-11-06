@@ -68,7 +68,7 @@ independently, and records the exact profile occurrence return. The walk owns it
 
 Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and
 `GOAL_ACCEPTANCE_REQUIRES` into that walk command without rewriting recorded argv. Walk stacks cap OpenSearch at
-128m without mmap, give Postgres and OpenSearch 256m docker ceilings so volume file cache cannot fill the 6 GiB
+128m without mmap, give Postgres 256m and OpenSearch 768m docker ceilings so volume file cache cannot fill the 6 GiB
 run slice, and start Kernel with bun --smol and no `--watch`. Native Auth and Kernel stay up for persona/seed;
 Web, Auth pages, Playwright and the one-worker pool start after seed, with issuer JWKS forwarded through native Auth
 until the pages bind. Anonymous locale/viewport captures share one Chromium and own one context each; the signed-in
@@ -77,9 +77,9 @@ Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-pu
 The walk restores the launcher's pinned dump cache onto `/srv/rezics-check/datasets/dumps` before the run slice so
 seed neither downloads a rotated VNDB file nor extracts archives inside the 6 GiB memory cap.
 A restored extraction that matches the pin timestamp is reused without hashing the archive, and the pin marker is
-written when missing. Sequential dump-table reads drop-behind and reclaim inactive file cache. Walk and start
-parents keep Kernel, Postgres and dump modules off their waiter graphs; Vite reads setup-written frontend bindings
-instead of assembling Kernel again. The walk parent sets `REZICS_WALK_SMOL` so database/search/setup use bun --smol,
+written when missing. Sequential dump-table reads drop-behind and reclaim only inactive file pages. Walk and start
+parents keep Kernel, Postgres and dump modules off their waiter graphs; walk setup skips Kernel catalogue composition
+and the Auth host writes frontend bindings after assemble. The walk parent sets `REZICS_WALK_SMOL` so database/search/setup use bun --smol,
 leftover Docker teardown never throws, and each walk/seed/browser phase asks the slice to reclaim inactive file cache.
 Launch the walk itself with `bun --smol` so the parent module graph shares that heap.
 `persona` reuses the host-written `seed.env` rather than assembling a second Auth+Kernel composition; issuer forwarding

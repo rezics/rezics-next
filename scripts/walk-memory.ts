@@ -1,10 +1,11 @@
 /**
  * Walk-slice file-cache release. Sequential dump reads otherwise stay in the 6 GiB cgroup until reclaim.
  */
-import { closeSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, lstatSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { dlopen, FFIType, suffix } from 'bun:ffi';
 
-/** Four GiB is enough to drop bun-install and dump-archive pages without waiting on admission reclaim. */
+/** Cap one reclaim so a huge inactive_file write cannot stall the walk. */
 export const WALK_RECLAIM_BYTES = 4 * 1024 * 1024 * 1024;
 const POSIX_FADV_DONTNEED = 4;
 
@@ -32,21 +33,57 @@ function libcAdvise(): Advise | undefined {
   return undefined;
 }
 
-/** Asks this run's cgroup to drop inactive file pages; missing or unwritable memory.reclaim is ignored. */
-export function reclaimInactiveFileCache(bytes = WALK_RECLAIM_BYTES): void {
+/** Prefer the run slice so Docker volume pages are included; otherwise this process's cgroup. */
+export function walkCgroupPath(procCgroup: string, checkSlice?: string): string | undefined {
+  const current = /^0::(.*)$/m.exec(procCgroup)?.[1];
+  if (!current) return undefined;
+  if (checkSlice) {
+    const at = current.indexOf(checkSlice);
+    if (at >= 0) return current.slice(0, at + checkSlice.length);
+  }
+  return current;
+}
+
+/** Reclaim only currently inactive file pages. A 4 GiB write against a smaller slice OOMs anonymous memory. */
+export function reclaimBytesFromStat(stat: string, limit = WALK_RECLAIM_BYTES): number {
+  const match = /^inactive_file (\d+)$/m.exec(stat);
+  if (!match) return 0;
+  const inactive = Number(match[1]);
+  if (!Number.isSafeInteger(inactive) || inactive < 1) return 0;
+  return Math.min(inactive, limit);
+}
+
+function cgroupRoot(): string | undefined {
   try {
-    const path = /^0::(.*)$/m.exec(readFileSync('/proc/self/cgroup', 'utf8'))?.[1];
+    return walkCgroupPath(readFileSync('/proc/self/cgroup', 'utf8'), process.env.REZICS_CHECK_SLICE);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Asks this run's cgroup to drop inactive file pages; missing or unwritable memory.reclaim is ignored. */
+export function reclaimInactiveFileCache(bytes?: number): void {
+  try {
+    const path = cgroupRoot();
     if (!path) return;
-    writeFileSync(`/sys/fs/cgroup${path}/memory.reclaim`, `${bytes}\n`);
+    const amount = bytes ?? reclaimBytesFromStat(readFileSync(`/sys/fs/cgroup${path}/memory.stat`, 'utf8'));
+    if (amount < 1) return;
+    writeFileSync(`/sys/fs/cgroup${path}/memory.reclaim`, `${amount}\n`);
   } catch {
     /* The walk continues when the slice cannot reclaim file cache. */
   }
 }
 
-/** Drop-behind one sequential dump table so its pages leave the 6 GiB slice. */
+/** Drop-behind one sequential dump table or extracted dump tree so its pages leave the 6 GiB slice. */
 export function dropFileCache(path: string): void {
   let fd = -1;
   try {
+    const info = lstatSync(path);
+    if (info.isDirectory()) {
+      for (const entry of readdirSync(path)) dropFileCache(join(path, entry));
+      return;
+    }
+    if (!info.isFile()) return;
     fd = openSync(path, 'r');
     libcAdvise()?.(fd, 0n, 0n, POSIX_FADV_DONTNEED);
   } catch {

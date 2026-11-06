@@ -135,6 +135,7 @@ function generatedHostRun(): string {
 test('a trusted driver without a Bun pin binds a candidate runtime through remote entry points', () => {
   const driver = mkdtempSync(join(root, 'no-pin-driver-'));
   mkdirSync(join(driver, 'scripts/check-host'), { recursive: true });
+  mkdirSync(join(driver, 'scripts/datasets'), { recursive: true });
   copyFileSync(remoteCheck, join(driver, 'scripts/remote-check.ts'));
   for (const file of [
     'check-artifacts.ts',
@@ -142,6 +143,9 @@ test('a trusted driver without a Bun pin binds a candidate runtime through remot
     'check-placement.ts',
     'check-custody.ts',
     'check-lifecycle-child.ts',
+    'cross-media-dump-cache.ts',
+    'walk-memory.ts',
+    'datasets/fetch-dumps.ts',
   ])
     copyFileSync(join(repository, 'scripts', file), join(driver, 'scripts', file));
   copyFileSync(join(repository, 'scripts/check-host/docker'), join(driver, 'scripts/check-host/docker'));
@@ -2051,11 +2055,10 @@ test('compile cache: each remote run keeps Node compile cache inside its own run
   for (const [index, script] of scripts.entries()) {
     const cachePath = script.match(/(?:^|\s)BUN_RUNTIME_TRANSPILER_CACHE_PATH=([^\s]+)/)?.[1];
     expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
-    expect(script).toContain(`export NODE_COMPILE_CACHE=${runDirectories[index]}/.temp/node-compile-cache`);
+    expect(script).toContain('export NODE_DISABLE_COMPILE_CACHE=1');
+    expect(script).toContain('unset NODE_COMPILE_CACHE');
     expect(script).not.toContain('/tmp/node-compile-cache');
-    expect(script.indexOf('export NODE_COMPILE_CACHE')).toBeLessThan(
-      script.indexOf('"$bun" install --frozen-lockfile'),
-    );
+    expect(script.indexOf('unset NODE_COMPILE_CACHE')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
   }
 });
 
@@ -3244,6 +3247,7 @@ test("the remote run's output streams back and its exit code becomes the local e
   const files = (seen.find((event) => event.kind === 'rsync')!.files as string[]).sort();
   expect(files.filter((file) => !file.startsWith('.temp/remote-check-git-'))).toEqual([
     '.gitignore',
+    'package.json',
     'src/tracked.ts',
     'src/untracked.ts',
   ]);
@@ -5159,6 +5163,24 @@ test('each run and every container it starts share one run slice', async () => {
     expect(container.args).toContain(`--cgroup-parent=${scope.slice}`);
     expect(container.args).toContain(`rezics.check.run=${scope.run}`);
   }
+});
+
+test('a run drops bun-install inactive file cache before the command starts', () => {
+  const script = runScript(
+    'install-reclaim',
+    '/srv/rezics-check/runs/install-reclaim',
+    '.',
+    ['true'],
+    'a',
+    hostRuntime(),
+  );
+  expect(script).toContain('reclaim_run_inactive_file');
+  const install = script.indexOf('remote-check: bun install');
+  const reclaim = script.indexOf('reclaim_run_inactive_file', install);
+  const command = script.indexOf('command_started', install);
+  expect(install).toBeGreaterThan(-1);
+  expect(reclaim).toBeGreaterThan(install);
+  expect(command).toBeGreaterThan(reclaim);
 });
 
 test('each check run executes in its own cgroup with MemoryMax 6 GiB and MemorySwapMax 0', () => {

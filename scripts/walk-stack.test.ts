@@ -6,8 +6,10 @@ import { acquireStackSlot } from './stack-lease.ts';
 import {
   dropFileCache,
   publishedHostPorts,
+  reclaimBytesFromStat,
   reclaimInactiveFileCache,
   releaseWalkFileCache,
+  walkCgroupPath,
   walkDockerOutput,
   walkIssuerForward,
   walkParentInvocation,
@@ -25,7 +27,7 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(env).toMatchObject({
     OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
-    KERNEL_SEARCH_MEMORY: '256m',
+    KERNEL_SEARCH_MEMORY: '768m',
     KERNEL_DATABASE_MEMORY: '256m',
     KERNEL_DATABASE_BOUNDED: '1',
     KERNEL_WORKER_POOL_SIZE: '1',
@@ -43,8 +45,8 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(environment).toContain('OPENSEARCH_JAVA_OPTS=-Xms128m -Xmx128m');
   expect(environment).toContain('node.store.allow_mmap=false');
   expect(search).toContain('--memory');
-  expect(search[search.indexOf('--memory') + 1]).toBe('256m');
-  expect(search[search.indexOf('--memory-swap') + 1]).toBe('256m');
+  expect(search[search.indexOf('--memory') + 1]).toBe('768m');
+  expect(search[search.indexOf('--memory-swap') + 1]).toBe('768m');
   const database = databaseRunArgs(env);
   expect(database[database.indexOf('--memory') + 1]).toBe('256m');
   expect(database[database.indexOf('--memory-swap') + 1]).toBe('256m');
@@ -75,6 +77,14 @@ test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {
   expect(() => reclaimInactiveFileCache(1024)).not.toThrow();
   expect(() => dropFileCache('/tmp/rezics-walk-missing-dump')).not.toThrow();
   expect(() => releaseWalkFileCache()).not.toThrow();
+  expect(reclaimBytesFromStat('anon 100\ninactive_file 2147483648\nactive_file 10\n')).toBe(2147483648);
+  expect(reclaimBytesFromStat('inactive_file 0\n')).toBe(0);
+  expect(reclaimBytesFromStat('anon 99\n')).toBe(0);
+  expect(reclaimBytesFromStat('inactive_file 8589934592\n', 4096)).toBe(4096);
+  expect(walkCgroupPath('0::/user.slice/rezics-check-run_1.slice/job.scope', 'rezics-check-run_1.slice')).toBe(
+    '/user.slice/rezics-check-run_1.slice',
+  );
+  expect(walkCgroupPath('0::/user.slice/job.scope')).toBe('/user.slice/job.scope');
 });
 
 test('the seeded walk loads Playwright, the worker and the Kernel client only after dump import', async () => {

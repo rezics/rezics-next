@@ -441,7 +441,9 @@ counts as available. Anon memory is never treated as free. Held reservations and
 When a reservation still does not fit on any answering host, admission writes `min(shortfall, inactive_file)` to
 the slice's `memory.reclaim` once and re-probes before waiting or reporting no slot. A missing or unwritable
 `memory.reclaim` is ignored and does not fail the run. The slot-wait line reports the reclaimable file-cache amount.
-When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
+When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run disables Node's compile
+cache and keeps Bun's transpiler cache inside its run directory so those pages cannot fill the 6 GiB slice; cleanup
+removes the run directory. After `bun install`, the run reclaims only that slice's `inactive_file` pages.
 Slots and per-run MemoryMax together reserve admission capacity. Each run's nested slice and scope have `MemoryMax`
 (`memoryPerRunGiB`, default 6 GiB) and `MemorySwapMax` 0, covering the command and its containers. A kernel OOM kill
 exits 137 and reports `check exceeded its memory limit (<n> GiB)` with the test file that was running (from command

@@ -9,7 +9,13 @@ import { createServer } from 'node:net';
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
 import { walkStackDirectory } from './stack-run.ts';
 
-export { dropFileCache, reclaimInactiveFileCache, releaseWalkFileCache } from './walk-memory.ts';
+export {
+  dropFileCache,
+  reclaimBytesFromStat,
+  reclaimInactiveFileCache,
+  releaseWalkFileCache,
+  walkCgroupPath,
+} from './walk-memory.ts';
 
 export const WALK_STACKS_DEFAULT = 6;
 const WALK_STACKS_MAXIMUM = 1000;
@@ -118,7 +124,7 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     // Seeded indexes stay on niofs; docker memory ceilings stop volume file cache filling the 6 GiB run slice.
     OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
-    KERNEL_SEARCH_MEMORY: '256m',
+    KERNEL_SEARCH_MEMORY: '768m',
     KERNEL_DATABASE_MEMORY: '256m',
     KERNEL_DATABASE_BOUNDED: '1',
     KERNEL_WORKER_POOL_SIZE: '1',
