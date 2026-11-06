@@ -178,7 +178,7 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
             search,
             prefix: config.prefix,
             routeKey,
-            receiving,
+            ...(receiving ? { receiving } : {}),
           }),
           'library-private-follow-counts': stepLibraryIdentityEpoch,
         })

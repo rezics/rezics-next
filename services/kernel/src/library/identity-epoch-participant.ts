@@ -328,7 +328,7 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
     });
     if (pending.value) {
       await applySourceInvalidation(pool, job, pending.value, deadline);
-      return writeLibraryStep(pool, job, deadline, { after: [pending.value.effectKey], segment: 0 }, 'more', {
+      return writeLibraryStep(pool, job, deadline, { after: [pending.value.effect_key], segment: 0 }, 'more', {
         rows: 1,
         points: 1,
         statements: 1,
