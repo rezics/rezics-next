@@ -287,4 +287,6 @@ an undelivered specification are not shared-history proof. The global participan
 set and Search's undelivered cleanup remain unchanged.
 
 Decision: platform inverse removal records erasure_source_commit and identity_epoch_native_commit in the
-same home/T; capture_erasure_source_removal accepts those besides editorial write_basis. No fabricated basis.
+same home/T; capture_erasure_source_removal and validate_erasure_source_commit accept those besides
+editorial write_basis. No fabricated basis. Native kernel journeys and two web mapping tests pin Zone
+lifecycle; no Storybook stories or expanded served walks on this landing.

@@ -3903,12 +3903,17 @@ CREATE FUNCTION semantic.validate_erasure_source_commit() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
- IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b
+ IF EXISTS(SELECT 1 FROM editorial.write_basis b
    WHERE b.partition_no=NEW.partition_no AND b.transaction_id=NEW.transaction_id
      AND b.epoch=NEW.epoch AND b.position=NEW.position AND b.xmin::text=pg_current_xact_id()::text) THEN
-  RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
+  RETURN NEW;
  END IF;
- RETURN NEW;
+ IF EXISTS(SELECT 1 FROM semantic.identity_epoch_native_commit n
+   WHERE n.partition_no=NEW.partition_no AND n.transaction_id=NEW.transaction_id
+     AND n.epoch=NEW.epoch AND n.position=NEW.position AND n.xmin::text=pg_current_xact_id()::text) THEN
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
 END; $$;
 
 

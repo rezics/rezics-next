@@ -1732,9 +1732,9 @@ real native release receipt. An admitted inverse is deleted in that same control
 `removePlatformNativeInverse`: it records `erasure_source_commit` immediately (position+1 before the fence)
 and deletes `identity_epoch_prearm_inverse` and `identity_scope_inverse` keyed to the cut. A retired boolean
 alone is insufficient: the installed pre-arm export still includes such inverses. The producer does not
-fabricate editorial write-basis. `capture_erasure_source_removal` accepts current-position
-`editorial.write_basis`, `identity_epoch_native_commit`, or `erasure_source_commit` whose xmin is this
-command. Cut release still records purpose `identity-scope-directory-release`. Charged eight-axis cost is
+fabricate editorial write-basis. `capture_erasure_source_removal` and `validate_erasure_source_commit`
+accept current-position `editorial.write_basis`, `identity_epoch_native_commit`, or `erasure_source_commit`
+whose xmin is this command. Cut release still records purpose `identity-scope-directory-release`. Charged eight-axis cost is
 the instrumented delete/commit statements. Any ordinary consumer intent also refuses disposition until its
 actual copy/writer closure is installed. Ordinary output closure and identity-job Search closure are
 separate authorities. Scoped finish/retire refuse this output branch while that foreign identity-job

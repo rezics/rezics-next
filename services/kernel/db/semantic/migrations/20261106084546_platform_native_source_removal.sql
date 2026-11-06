@@ -1,7 +1,8 @@
 -- migrate:up
 -- Platform capture commands have no editorial write_basis. Native inverse removal records
 -- identity_epoch_native_commit and erasure_source_commit at the current core.partition
--- position in this xmin; capture_erasure_source_removal accepts those as custody.
+-- position in this xmin; capture_erasure_source_removal and validate_erasure_source_commit
+-- accept those as custody.
 DO $$ DECLARE allowed text; BEGIN
  SELECT pg_get_expr(conbin,conrelid) INTO STRICT allowed FROM pg_constraint
  WHERE conrelid='semantic.identity_epoch_native_commit'::regclass
@@ -41,6 +42,23 @@ BEGIN
  VALUES(native_home,TG_TABLE_NAME,OLD.erasure_key,'removed',native_tx)
  ON CONFLICT(partition_no,store,record_key) DO UPDATE SET disposition=EXCLUDED.disposition,transaction_id=EXCLUDED.transaction_id,native_xmin=NULL;
  RETURN OLD;
+END; $$;
+
+CREATE OR REPLACE FUNCTION semantic.validate_erasure_source_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM editorial.write_basis b
+   WHERE b.partition_no=NEW.partition_no AND b.transaction_id=NEW.transaction_id
+     AND b.epoch=NEW.epoch AND b.position=NEW.position AND b.xmin::text=pg_current_xact_id()::text) THEN
+  RETURN NEW;
+ END IF;
+ IF EXISTS(SELECT 1 FROM semantic.identity_epoch_native_commit n
+   WHERE n.partition_no=NEW.partition_no AND n.transaction_id=NEW.transaction_id
+     AND n.epoch=NEW.epoch AND n.position=NEW.position AND n.xmin::text=pg_current_xact_id()::text) THEN
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
 END; $$;
 
 -- migrate:down
