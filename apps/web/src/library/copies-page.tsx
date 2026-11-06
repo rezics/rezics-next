@@ -38,6 +38,14 @@ import {
   invalidCopyFields,
   type CopyDraft as Draft,
 } from './copy-fields';
+import {
+  copyConditionDraftOf,
+  copyConditionDisplayText,
+  copyConditionOperand,
+  copyConditionWritten,
+  kindAdmitsCondition,
+} from './copy-condition';
+import { CopyLoanPanel } from './copy-loan-panel';
 import { CopyTextReader, dateText } from './copy-inventory-review/text-reader';
 import { CopyInventoryReview } from './copy-inventory-review/view';
 import { useCopyInventoryReview } from './copy-inventory-review/selection';
@@ -59,6 +67,8 @@ const draftOf = (copy?: CopyItem): Draft => ({
   acquiredOn: copy?.acquiredOn ?? '',
   disposedOn: copy?.disposedOn ?? '',
   note: copy?.note ?? '',
+  mediaCondition: copyConditionDraftOf(copy?.mediaCondition),
+  packagingCondition: copyConditionDraftOf(copy?.packagingCondition),
 });
 
 /** Optional for pure stories; the actual route always supplies the originating private lifetime. */
@@ -324,12 +334,16 @@ export function CopyForm({
     if (!intent.current) {
       if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
       if (!copy && !selected?.statuses.some((status) => status.id === draft.status)) return;
+      const mediaCondition = copyConditionOperand(draft.mediaCondition);
+      const packagingCondition = copyConditionOperand(draft.packagingCondition);
       const fields = {
         location: blank(draft.location),
         source: blank(draft.source),
         acquiredOn: blank(draft.acquiredOn),
         disposedOn: blank(draft.disposedOn),
         note: blank(draft.note),
+        ...(mediaCondition === undefined ? {} : { mediaCondition }),
+        ...(packagingCondition === undefined ? {} : { packagingCondition }),
       };
       const status = copy ? copyStatusChange(copy, draft.status) : undefined;
       if (copy && !status) {
@@ -358,7 +372,6 @@ export function CopyForm({
     }
     const captured = intent.current;
     if (!current(operation)) return;
-    captured.headers = new Headers(credentialHeaders);
     const lease = { current: () => current(operation) };
     flight.current = lease;
     busy.current = true;
@@ -383,6 +396,13 @@ export function CopyForm({
         );
         return;
       }
+      const written = (field: 'mediaCondition' | 'packagingCondition') =>
+        Object.hasOwn(captured.data, field)
+          ? copyConditionWritten(
+              copy?.[field],
+              captured.data[field] as Parameters<typeof copyConditionWritten>[1],
+            )
+          : copy?.[field];
       if (copy) {
         if (result.copy.id !== copy.id) {
           setFailure(m.library_copy_failure());
@@ -406,6 +426,8 @@ export function CopyForm({
           acquiredOn: result.copy.acquiredOn,
           disposedOn: result.copy.disposedOn,
           note: result.copy.note,
+          mediaCondition: written('mediaCondition'),
+          packagingCondition: written('packagingCondition'),
           idempotencyKey: crypto.randomUUID(),
         });
       } else {
@@ -413,6 +435,8 @@ export function CopyForm({
         onCreated({
           ...result.copy,
           kind: result.copy.kind ?? null,
+          mediaCondition: written('mediaCondition'),
+          packagingCondition: written('packagingCondition'),
           subject:
             editionBinding && edition
               ? {
@@ -460,8 +484,6 @@ export function CopyForm({
       send: deleteCopy,
       data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey },
     };
-    const captured = intent.current;
-    captured.headers = new Headers(credentialHeaders);
     const lease = { current: () => current('copy.delete') };
     flight.current = lease;
     busy.current = true;
@@ -469,6 +491,7 @@ export function CopyForm({
     setFailure(null);
     try {
       deleteStarted.current ??= Date.now();
+      const captured = intent.current;
       if (captured.operation !== 'delete') return;
       const result = await captured.send({ data: captured.data, headers: captured.headers });
       if (!current('copy.delete')) return;
@@ -531,6 +554,7 @@ export function CopyForm({
       </button>
     </div>
   ) : (
+    <>
     <form
       ref={formRef}
       method="post"
@@ -711,6 +735,25 @@ export function CopyForm({
           showErrors={showFieldErrors}
           onExpandedChange={(expanded) => current() && setMore(expanded)}
           onChange={change}
+          condition={
+            copy
+              ? copy.conditionEditing || copy.mediaCondition || copy.packagingCondition
+                ? {
+                    editing: copy.conditionEditing,
+                    media: copy.mediaCondition,
+                    packaging: copy.packagingCondition,
+                    disabled: pending || !!intent.current,
+                  }
+                : undefined
+              : kindAdmitsCondition(selected?.condition)
+                ? {
+                    editing: { state: 'supported', currentness: 'current', choices: [] },
+                    media: { state: 'not_recorded' },
+                    packaging: { state: 'not_recorded' },
+                    disabled: pending || !!intent.current,
+                  }
+                : undefined
+          }
         />
       ) : null}
       {pending ? (
@@ -801,6 +844,10 @@ export function CopyForm({
         </button>
       </div>
     </form>
+    {copy && originating ? (
+      <CopyLoanPanel copy={copy} originating={originating} disabled={pending || !!intent.current || conflicted} />
+    ) : null}
+    </>
   );
 
   const navigation = (
@@ -888,8 +935,8 @@ export function CopyRow({
           <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
         </div>
       }
-      metadata={
-        <div className="w-full min-w-0">
+      preview={
+        <div className="w-full min-w-0 text-muted-foreground">
           <p className="text-sm text-muted-foreground">
             <MetaLine
               items={[
@@ -935,6 +982,16 @@ export function CopyRow({
               expandLabel={m.library_copy_note_reader_expand_note()}
               collapseLabel={m.library_copy_note_reader_collapse_note()}
             />
+          ) : null}
+          {copy.mediaCondition && copy.mediaCondition.state !== 'not_recorded' ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_copy_condition_media()}: {copyConditionDisplayText(copy.mediaCondition)}
+            </p>
+          ) : null}
+          {copy.packagingCondition && copy.packagingCondition.state !== 'not_recorded' ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_copy_condition_packaging()}: {copyConditionDisplayText(copy.packagingCondition)}
+            </p>
           ) : null}
           <CopyInventoryHistory copy={copy} />
         </div>
@@ -1034,7 +1091,7 @@ function LoadedCopiesPage({
   const restoreIntent = useRef<{
     removal: typeof removed;
     data: { id: string; deletionId: string; revision: number; idempotencyKey: string };
-    headers: HeadersInit;
+    headers: Headers;
     send: typeof undoCopy;
   } | null>(null);
   const [editorKey, setEditorKey] = useState(0);
@@ -1144,16 +1201,26 @@ function LoadedCopiesPage({
   };
   const firstPageEmpty = !page.requestedCursor && !page.next && !page.copies.length && !changed;
   const recoverable = Boolean(page.requestedCursor) || (!copies.length && !firstPageEmpty);
-  const emptiedHere = changed && copies.length === 0;
-  const firstAvailable = windows?.current !== undefined ? windows.current !== null || emptiedHere : recoverable;
+  const firstAvailable = windows?.current !== undefined ? windows.current !== null : recoverable;
   const previousAvailable = windows?.previous !== undefined;
-  const recoveryLocked = editing !== undefined;
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading id="copies-inventory-heading" tabIndex={-1}>
           {m.library_copy_heading()}
         </PageHeading>
+        <div className="flex flex-wrap items-center gap-3">
+          <Exposure operation="copy.list">
+            <Link
+              to="/library/loans"
+              className={quiet}
+              onClick={(event) => {
+                if (!currentPage('copy.list')) event.preventDefault();
+              }}
+            >
+              {m.library_copy_loans()}
+            </Link>
+          </Exposure>
         {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
           <button
             type="button"
@@ -1169,6 +1236,7 @@ function LoadedCopiesPage({
             {m.library_copy_add()}
           </button>
         ) : null}
+        </div>
       </header>
       {page.cursorRestarted ? <p role="status">{m.library_copies_address_cursor_restarted()}</p> : null}
       {failure ? (
@@ -1182,15 +1250,17 @@ function LoadedCopiesPage({
       <noscript>
         {page.inventoryState === 'forbidden' ? null : <CopiesFallback page={page} csrfToken={page.csrfToken} />}
       </noscript>
-      <Exposure operation="copy.list">
-        <CopyInventoryFilters
-          subjectId={page.subjectId}
-          kind={page.kind ?? null}
-          status={page.status ?? null}
-          filterOptions={page.filterOptions}
-          current={() => currentPage('copy.list')}
-        />
-      </Exposure>
+      {page.filterOptions || page.kind || page.status ? (
+        <Exposure operation="copy.list">
+          <CopyInventoryFilters
+            subjectId={page.subjectId}
+            kind={page.kind ?? null}
+            status={page.status ?? null}
+            filterOptions={page.filterOptions}
+            current={() => currentPage('copy.list')}
+          />
+        </Exposure>
+      ) : null}
       {page.subjectId ? (
         <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span>{m.library_copy_filtered_heading({ title: filteredTitle ?? m.library_copy_this_edition() })}</span>
@@ -1310,9 +1380,8 @@ function LoadedCopiesPage({
                     ? {}
                     : { cursor: windows.previous }),
                 }}
-                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (recoveryLocked || !currentPage('copy.list')) {
+                  if (!currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1328,9 +1397,8 @@ function LoadedCopiesPage({
               <Link
                 to="/library/copies"
                 search={firstPageSearch}
-                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (recoveryLocked || !currentPage('copy.list')) {
+                  if (!currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1344,9 +1412,8 @@ function LoadedCopiesPage({
             {page.next ? (
               <Link
                 to="/library/copies"
-                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (recoveryLocked || !currentPage('copy.list')) {
+                  if (!currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1388,7 +1455,6 @@ function LoadedCopiesPage({
                   send: undoCopy,
                 };
               const captured = restoreIntent.current;
-              captured.headers = new Headers(headers);
               const result = await captured.send({ data: captured.data, headers: captured.headers });
               if (!result.ok && result.reason !== 'unavailable' && restoreIntent.current === captured)
                 restoreIntent.current = null;
