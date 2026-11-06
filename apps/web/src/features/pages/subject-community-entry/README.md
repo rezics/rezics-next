@@ -58,3 +58,8 @@ An explicit Global Board read prepares the current viewer just like a Realm read
 remain anonymous. Navigation carries the supplied preset and regional request, while native Subject/Realm/Board/Access
 observations remain in their readings and the composer obtains its own current admission. No authority is serialized
 into sign-in or return addresses.
+
+The seeded participation walk runs with
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/vndb-seeded-journey.ts`.
+It consumes the wrapper's published Subject/Board pair, follows actual author links, reads durable native effects
+independently, and records the exact profile occurrence return. The walk owns its stack through the existing runner.
