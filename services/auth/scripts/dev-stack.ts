@@ -734,19 +734,23 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
+/**
+ * Starts the local stack in two bounded groups. Identity and kernel start first and must answer before the Pages,
+ * Web and worker processes, whose compilation is the heaviest startup work, begin beside them. Peak startup memory
+ * therefore never covers every compiler at once.
+ */
 async function start() {
   const env = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
-  const children = [
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'dev'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
-  ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
+  const children: ReturnType<typeof Bun.spawn>[] = [];
+  const launch = (command: string[]) => {
+    const child = Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+    children.push(child);
+    return child;
+  };
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -755,11 +759,25 @@ async function start() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
+    const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
+    const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
+    await untilReady(
+      [`${origins.issuer}/.well-known/openid-configuration`, `${origins.kernel}/v1/definitions`],
+      [identity, kernel],
+    );
+    launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+    const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
+    await untilReady([`${origins.web}/`], [web]);
+    launch(['bun', 'run', '--cwd', 'services/kernel', 'worker']);
     const first = await Promise.race(children.map(async (child) => await child.exited));
     const interrupted = stopping;
     stop();
     await Promise.all(children.map((child) => child.exited));
     process.exitCode = interrupted ? 0 : first || 1;
+  } catch (error) {
+    stop();
+    await Promise.all(children.map((child) => child.exited));
+    throw error;
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
@@ -781,8 +799,12 @@ function removeWalkStack(names: WalkNames): void {
     if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
 }
 
-/** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
-async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
+/** Resolves when every URL answers; fails when any starting process exits first or takes longer than ten minutes. */
+async function untilReady(
+  urls: string[],
+  starting: ReturnType<typeof Bun.spawn> | readonly ReturnType<typeof Bun.spawn>[],
+): Promise<void> {
+  const processes = Array.isArray(starting) ? starting : [starting as ReturnType<typeof Bun.spawn>];
   const answers = (url: string) =>
     fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
       (response) => response.status < 500,
@@ -790,8 +812,9 @@ async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>
     );
   const deadline = Date.now() + 600_000;
   while (!(await Promise.all(urls.map(answers))).every(Boolean)) {
-    if (starting.exitCode !== null || starting.signalCode !== null)
-      throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
+    const exited = processes.find((child) => child.exitCode !== null || child.signalCode !== null);
+    if (exited)
+      throw new Error(`walk: the local stack exited (${exited.exitCode ?? exited.signalCode}) before it was ready`);
     if (Date.now() > deadline) throw new Error('walk: the local stack was not ready after ten minutes');
     await Bun.sleep(500);
   }

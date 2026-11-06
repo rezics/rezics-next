@@ -1,6 +1,7 @@
 /** Opt-in real Auth/API/media-worker/Web journey. Run through scripts/worker-check.ts. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -53,18 +54,39 @@ const env = {
   REZICS_LOCAL_STACK_NATIVE_ORIGIN: origins.native,
   REZICS_LOCAL_STACK_KERNEL_ORIGIN: origins.kernel,
 };
+/** Per-stage memory samples, so a bound failure names the stage that grew. */
+const memory: { stage: string; rss: number; cgroup: number | null }[] = [];
+/** The journey's cgroup current usage where the host exposes it; the process RSS is recorded everywhere. */
+function cgroupMemory(): number | null {
+  const path = readFileSync('/proc/self/cgroup', 'utf8')
+    .split('\n')
+    .find((line) => line.startsWith('0::'))
+    ?.slice(3);
+  if (!path) return null;
+  const file = resolve('/sys/fs/cgroup', `.${path}`, 'memory.current');
+  return existsSync(file) ? Number(readFileSync(file, 'utf8').trim()) : null;
+}
+function sample(stage: string) {
+  memory.push({ stage, rss: process.memoryUsage().rss, cgroup: cgroupMemory() });
+}
+/** Stage output streams to its log files; a failed stage reports only the final 4 KiB of its error stream. */
 async function command(args: string[], log: string) {
-  const child = Bun.spawn(args, { cwd: root, env, stdout: Bun.file(resolve(directory, log)), stderr: 'pipe' });
-  const error = await new Response(child.stderr).text();
+  const file = resolve(directory, log);
+  const errors = `${file}.err`;
+  const child = Bun.spawn(args, { cwd: root, env, stdout: Bun.file(file), stderr: Bun.file(errors) });
   const code = await child.exited;
-  assert.equal(code, 0, `${args.join(' ')} exited ${code}: ${error}`);
+  sample(log);
+  assert.equal(code, 0, `${args.join(' ')} exited ${code}: ${await Bun.file(errors).slice(-4096).text()}`);
 }
 async function ready(url: string, child: Bun.Subprocess) {
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + 600_000;
   while (Date.now() < deadline) {
     assert.equal(child.exitCode, null, 'Local stack exited before readiness');
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) }).catch(() => undefined);
-    if (response?.ok) return;
+    if (response?.ok) {
+      sample(`ready ${url}`);
+      return;
+    }
     await Bun.sleep(1000);
   }
   throw new Error(`Local stack did not become ready: ${url}`);
@@ -91,6 +113,8 @@ let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 let journal: ShowcaseJournal | undefined;
 try {
   console.log('books journey: starting isolated infrastructure', handle);
+  evidence.memory = memory;
+  sample('start');
   // The Taskfile's dev:infra and dev:persona steps, without Go Task: check hosts need only Bun and Docker.
   await command(['bun', 'run', '--cwd', 'services/kernel', 'db', 'up'], 'database.log');
   await command(['bun', 'run', '--cwd', 'services/kernel', 'search', 'up'], 'search.log');
