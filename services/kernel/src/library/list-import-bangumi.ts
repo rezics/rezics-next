@@ -161,7 +161,7 @@ function scoreQuestion(question: Awaited<ReturnType<NativeVotes['readRatingQuest
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning,
+    meaning: question.meaning ?? question.label,
     label: question.label,
     grain: question.grain,
     lifecycleState: question.lifecycleState,
@@ -473,7 +473,7 @@ export function createBangumiImport(deps: Dependencies) {
           {
             type: 'com.rezics.library.bangumi.changed.v1',
             subject: owner(actor).accountId,
-            data: { operation: kind.slice(0, 16) },
+            data: { operation: kind },
           },
         ],
       }),
@@ -644,7 +644,7 @@ export function createBangumiImport(deps: Dependencies) {
           id: native.question.id,
           revision: native.question.revision,
           grain: native.question.grain,
-          meaning: native.question.meaning!,
+          meaning: native.question.meaning ?? native.question.label,
           scale: {
             min: native.question.minimumUnits,
             max: native.question.maximumUnits,
@@ -1373,8 +1373,8 @@ export function createBangumiImport(deps: Dependencies) {
                   questionId: r.review!.score!.native.questionId,
                   targetId: scorePlan.target.subjectId,
                   units: scorePlan.units,
-                  guard: r.review!.scoreNativeGuard,
                   observation: r.review!.scoreObservation,
+                  ...(r.review!.scoreNativeGuard ? { guard: r.review!.scoreNativeGuard } : {}),
                 },
                 `bangumi:${id}:${ordinal}:${choice.reviewToken}:rating`,
                 scoreAdmission(commandActor, id, ordinal, choice.reviewToken, scorePlan),

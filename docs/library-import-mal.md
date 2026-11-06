@@ -89,7 +89,9 @@ Confirmation calls `preparePutVote(actor, input, key, admission?)` once with the
 source-document admission, persists `score.started` with that command, then `putVoteOutcome` with those operands; an
 uncertain retry first uses `reconcilePutVote(actor, receipt)`.
 Decision: retain each reviewed vote guard as an opaque JSON string keyed by review version so document canonicalize
-cannot reorder identity operands; apply parses that encoding into preparePutVote and putVoteOutcome. A Rating redirect of the Library-selected Subject stores
+cannot reorder identity operands. Apply prefers the stored review guard (the same jsonb-roundtripped object Content's
+vote-review producer admits), parses the opaque encoding only when that object is absent, and calls putVoteOutcome with
+the prepared input rather than overlaying a second parse. A Rating redirect of the Library-selected Subject stores
 no vote guard and requires an explicit new target review. Native stale/unavailable errors are definitive typed
 outcomes. Unexpected delivery/readback errors throw and retain that checkpoint for exact command retry; current reads
 cannot settle uncertain delivery. A review refresh cannot replace a started unresolved score, including when labels are
@@ -129,6 +131,8 @@ native matching.
 
 Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
 the explicit UUID submitted to `review.target` is identity.
+
+Decision: native redirect checks reuse the fixture steward on a token and Global grant that both carry `subject:merge` and `gate:subject_identity`; a reduced sibling token is denied even when the role row exists.
 
 Integration decision: MAL and Bangumi retain their separate native review guards, routes and erasure phases.
 

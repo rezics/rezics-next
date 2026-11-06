@@ -239,7 +239,7 @@ function nativeQuestion(question: RatingQuestion): AniListNativeQuestion {
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning,
+    meaning: question.meaning ?? question.label,
     label: question.label,
     grain: question.grain,
     minimumUnits: question.minimumUnits,

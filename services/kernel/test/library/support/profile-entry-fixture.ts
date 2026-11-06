@@ -446,9 +446,14 @@ export async function createProfileEntryFixture(
     async function admitSubjectMerge(canonical: string, selected: string) {
       const opened = await send('steward', 'POST', '/v1/platform/exposure/subject_identity:open');
       expect(opened.status).toBe(200);
-      await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, ['subject:merge']);
+      const mergeActions = ['subject:merge', 'gate:subject_identity'] as const;
+      await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, mergeActions);
+      const mergeBearer = await accountToken({
+        ...steward.actor,
+        scopes: [...new Set([...steward.actor.scopes, ...mergeActions])],
+      });
       const response = await sendWithHeaders(
-        steward.bearer,
+        mergeBearer,
         'POST',
         '/v1/subjects:merge',
         { subjects: [canonical, selected] },

@@ -74,7 +74,7 @@ Decision: receipt-only score recovery denies a current actor without `rating:vot
 read, and reads back only the receipt's question and target. Kernel source-admission retries keep the first captured
 credential envelope, key and body.
 
-Decision: native score, merge and receipt-recovery checks reuse the fixture steward and extra-scoped identities on the same Global bootstrap; a second operator bootstrap is unavailable. Closed Bangumi change events carry `operation` at most 16 characters; writers slice the command kind to that bound. Expired source scrub pages skip already-empty evidence so remaining ordinals advance.
+Decision: native score, merge and receipt-recovery checks reuse the fixture steward and extra-scoped identities on the same Global bootstrap; a second operator bootstrap is unavailable. Subject merge authenticates that steward onto a token that also carries `subject:merge` and `gate:subject_identity`, grants those actions on Global, then posts the mounted merge. Closed Bangumi change events carry the intact command kind, at most 32 characters, including `metadata-progress`; writers do not slice it. Frozen vote observations use Content's meaning, or the question label when meaning is absent. Expired source scrub pages skip already-empty evidence so remaining ordinals advance.
 
 ## Web HTTP contract
 

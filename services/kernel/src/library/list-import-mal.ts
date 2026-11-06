@@ -818,6 +818,20 @@ export function createMalImport(deps: Dependencies) {
       },
     };
   }
+  function malStoredScoreGuard(doc: Document, version: string, fallback: VoteReviewGuard | undefined) {
+    if (fallback) return fallback;
+    const raw = doc.scoreGuards?.[version];
+    if (typeof raw === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as VoteReviewGuard;
+      } catch {
+        return fallback;
+      }
+    }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as VoteReviewGuard;
+    return fallback;
+  }
   function scoreAdmission(
     actor: AccountActor,
     id: string,
@@ -1516,10 +1530,8 @@ export function createMalImport(deps: Dependencies) {
             const checkpoint = intent.score!;
             const observation = malVoteObservation(scoreReview);
             const retry = checkpoint.started === true && !!checkpoint.command && !!checkpoint.commandActor;
-            const storedGuard = doc.scoreGuards?.[r.version]
-              ? (JSON.parse(doc.scoreGuards[r.version]!) as VoteReviewGuard)
-              : scoreReview.guard;
-            if (!observation || !scoreReview.guard) {
+            const storedGuard = malStoredScoreGuard(doc, r.version, scoreReview.guard);
+            if (!observation || !storedGuard) {
               outcome.score = {
                 action: scoreReview.action,
                 status: 'unavailable',
@@ -1536,8 +1548,8 @@ export function createMalImport(deps: Dependencies) {
                   questionId: scoreReview.question.id,
                   targetId: r.target!,
                   units: scoreReview.units,
-                  guard: storedGuard,
                   observation,
+                  guard: storedGuard,
                 },
                 checkpoint.key,
                 scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
@@ -1545,7 +1557,7 @@ export function createMalImport(deps: Dependencies) {
               checkpoint.commandActor = commandActor;
               checkpoint.command = command;
             }
-            if (observation && scoreReview.guard && checkpoint.command && checkpoint.commandActor) {
+            if (observation && storedGuard && checkpoint.command && checkpoint.commandActor) {
               const commandActor = checkpoint.commandActor;
               const command = checkpoint.command;
               await mutate(actor, id, `${checkpoint.key}:started`, 'score-started', selected, (doc) => {
@@ -1561,7 +1573,7 @@ export function createMalImport(deps: Dependencies) {
                   reconciled ??
                   (await votes.putVoteOutcome(
                     commandActor,
-                    { ...command.input, ...(storedGuard ? { guard: storedGuard } : {}) },
+                    command.input,
                     command.receipt.requestKey,
                     scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
                   ));
