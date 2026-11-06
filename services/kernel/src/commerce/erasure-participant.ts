@@ -61,6 +61,17 @@ type Progress = {
   retentionExpiresAt: string | null;
 };
 type Advance = 'none' | 'more' | 'pending' | 'retained' | 'resolve';
+type PolicyRow = { fields: string[]; purpose: string; expiresAt: string };
+type OwnerRow = { buyerAccountId: string };
+
+function listed<T>(value: T | T[] | null | undefined): T[] {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function row<T>(value: T | T[] | null | undefined): T | null {
+  return listed(value)[0] ?? null;
+}
 
 function routeForAccount(accountId: string): number {
   const route = routeOf(accountId);
@@ -141,9 +152,9 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
     async (tx, { time }) => {
       if (Date.parse(expiresAt) <= Date.parse(authoritativeTimeValue(time)))
         throw new Error('Native Commerce retention expiry must be after configuration');
-      const owner = (await readRetentionOwner.run(tx, ownerKey))[0];
+      const owner = row<OwnerRow>(await readRetentionOwner.run(tx, ownerKey));
       if (!owner) throw new Error('Order retention configuration requires a genuine active native order');
-      const prior = await listRetentionPolicy.run(tx, { route, account_id: owner.buyerAccountId });
+      const prior = row<PolicyRow>(await listRetentionPolicy.run(tx, { route, account_id: owner.buyerAccountId }));
       if (
         prior &&
         (prior.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
@@ -151,18 +162,22 @@ export async function prepareCommerceOrderRetention(pool: Pool, input: { orderId
           prior.fields.join('\0') !== fields.join('\0'))
       )
         throw new Error('A buyer account has one exact Commerce order-retention policy');
-      const inserted = await insertRetentionPolicy.run(tx, {
-        route,
-        order_id: input.orderId,
-        fields,
-        purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
-        expires_at: expiresAt,
-      });
-      const retained = await readRetentionPolicy.run(tx, {
-        route,
-        order_id: input.orderId,
-        account_id: owner.buyerAccountId,
-      });
+      const inserted = listed(
+        await insertRetentionPolicy.run(tx, {
+          route,
+          order_id: input.orderId,
+          fields,
+          purpose: NATIVE_TEST_ORDER_RETENTION_PURPOSE,
+          expires_at: expiresAt,
+        }),
+      );
+      const retained = row<PolicyRow>(
+        await readRetentionPolicy.run(tx, {
+          route,
+          order_id: input.orderId,
+          account_id: owner.buyerAccountId,
+        }),
+      );
       if (
         !retained ||
         retained.purpose !== NATIVE_TEST_ORDER_RETENTION_PURPOSE ||
