@@ -489,8 +489,19 @@ test("a Realm's publication list is a keyset page whose every item passes final 
     await publication.listPublications(deps(), realmId, readContext({ kind: 'anonymous' }), { limit: 10 }),
   ).toBeNull();
   expect(await publication.readPublication(deps(), realmId, subjects[2]!, readContext(f.other))).toBeNull();
-  await admin.query('DELETE FROM semantic.search_selection_state WHERE subject_id=$1', [subjects[1]]);
-  await admin.query('DELETE FROM semantic.subject WHERE subject_id=$1', [subjects[1]]);
+  const cleanup = await admin.connect();
+  try {
+    await cleanup.query('BEGIN');
+    await cleanup.query("SELECT set_config('semantic.erasure_cleanup','on',true)");
+    await cleanup.query('DELETE FROM semantic.search_selection_state WHERE subject_id=$1', [subjects[1]]);
+    await cleanup.query('DELETE FROM semantic.subject WHERE subject_id=$1', [subjects[1]]);
+    await cleanup.query('COMMIT');
+  } catch (error) {
+    await cleanup.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    cleanup.release();
+  }
   const disclosed = await publication.listPublications(deps(), realmId, owner, { limit: 10 });
   expect(disclosed!.items.map((item) => item.subjectId)).not.toContain(subjects[1]);
   expect(new Set(disclosed!.items.map((item) => item.subjectId))).toEqual(

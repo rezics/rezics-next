@@ -269,9 +269,21 @@ export async function allowRealmRead(
   }
 }
 
+type BindingRow = Awaited<ReturnType<typeof bindingRead.run>>;
+/** Identity and lifecycle only. Heads change on metadata revisions; visibility is rechecked from the current row. */
+function containerChain(binding: NonNullable<BindingRow>) {
+  return {
+    realm_id: binding.realm_id,
+    space_id: binding.space_id,
+    context_id: binding.context_id,
+    realm_version: binding.realm_version,
+    space_version: binding.space_version,
+  };
+}
+
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
-  const native = realmEligibilityAccessWork<{ binding: Awaited<ReturnType<typeof bindingRead.run>> }>(resource);
+  const native = realmEligibilityAccessWork<{ binding: BindingRow }>(resource);
   return createResourcePublicEligibility({
     resource,
     action: 'realm:read',
@@ -296,8 +308,14 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
         const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
         const binding = { ...resource, at, subject: null };
         const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
-        if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding)) throw realmReadDeniedError();
-        if (row?.visibility === 'protected' && actor.kind === 'account') {
+        if (
+          !row ||
+          !current ||
+          !evidence.binding ||
+          canonicalize(containerChain(current)) !== canonicalize(containerChain(evidence.binding))
+        )
+          throw realmReadDeniedError();
+        if (row.visibility === 'protected' && actor.kind === 'account') {
           // Auth/Access validates the assignment reference. Its principal is a
           // second fixed identity, never an expansion of grants or memberships.
           const accountIds = realmReadBanAccounts(actor);
@@ -307,7 +325,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
             throw realmReadDeniedError();
         }
         observe?.(row);
-        return row?.visibility === 'public';
+        return row.visibility === 'public';
       });
     },
   });

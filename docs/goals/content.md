@@ -97,7 +97,9 @@ keys as text so `jsonb_to_recordset` never sees a non-array. Composition tests c
 and `prepare` for Space/Context extras; sequential fixtures unfence and re-issue tokens at the current
 authentication floor after suspension and never decrease `minimum_authn_epoch`.
 Boolean Realm-read and publication disclosure checks conceal eligibility `not_found` as a closed miss;
-the publication list fixture deletes `search_selection_state` before the subject.
+a metadata revision rechecks current visibility. The publication list fixture deletes
+`search_selection_state` then the subject under Semantic erasure cleanup. Existing realm visibility
+and publication disclosure tests pin those states; no extra stories.
 
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
 changing behavior. Community domain clocks stay required on holders that already have one; deadlineNow is a
