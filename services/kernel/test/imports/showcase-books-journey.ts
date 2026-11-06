@@ -91,8 +91,11 @@ let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 let journal: ShowcaseJournal | undefined;
 try {
   console.log('books journey: starting isolated infrastructure', handle);
-  await command(['go-task', 'dev:infra'], 'infra.log');
-  await command(['go-task', 'dev:persona'], 'persona.log');
+  // The Taskfile's dev:infra and dev:persona steps, without Go Task: check hosts need only Bun and Docker.
+  await command(['bun', 'run', '--cwd', 'services/kernel', 'db', 'up'], 'database.log');
+  await command(['bun', 'run', '--cwd', 'services/kernel', 'search', 'up'], 'search.log');
+  await command(['bun', 'services/auth/scripts/dev-stack.ts', 'setup'], 'setup.log');
+  await command(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona.log');
   stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
     cwd: root,
     env,
