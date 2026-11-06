@@ -244,7 +244,9 @@ states; definition/Subject labels retain their native fallback language.
 ## Work relation region returns
 
 Decision: retain the supported same-work Subject address and a single-hop opener, with stream/node and separate
-browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart.
+browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart. A new graph hop carries only
+its own current opener, never the previous visit chain. An incoming (inverse) assertion keeps the opener of the stream
+it was reached through and does not flip that stream.
 
 Decision: finite work-region returns preserve Realm, node, property, direction and cursor; admit them only when the
 fragment matches that selected native relation, then consume focus on the reading where it arrived.

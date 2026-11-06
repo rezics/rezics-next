@@ -85,28 +85,13 @@ Bounds below describe importer-owned logical work, not PostgreSQL physical visib
 
 ### Source-feature costs
 
-Decision: personal-list explicit matching consumes current native Entry and import-page reads before replacement or
-score consent. Selecting a different target adds one authenticated Entry point read and saving its review adds one
-existing page read (at most eight retained rows). These reads do not write native votes or renew source retention.
-Result-to-work navigation keeps the public-safe Library return landmark, without carrying the private upload address.
-Graph receiving fixtures use the installed release digest, an eligible released work type and the route's actual
-current address. A fresh visit is separate from an exact return whose reading changed and requires a restart.
-Graph hops retain one immediate public opener. An inverse assertion returns to its original incoming stream;
-it does not flip the originating stream or accumulate the previous opener in a nested URL.
-The independent current Library read now renders the FULL page's counted native vote facts beside status and
-Progress, preserving zero, absence and unavailable in occurrence order. It costs the same one eight-row page, with
-no per-row inspection query. The original sealed review/apply commands, changed-export Entry identity and typed franchise publisher remain the
-owners.
-
-#### Personal-list target review and current Library return
-
-- Touches: the selected owner's current Entry, one retained import page and one independent FULL Library page.
-- Bound: target selection adds one authenticated point read; changed-target review adds one native page of at most
-  eight rows. The current Library page also has at most eight rows and supplies status, Progress and counted votes
-  without per-row requests. Reopen reuses the original upload and sealed review/apply commands.
-- Growth check: focused Web transport/reopen/Library-return cases cover bounded receiving; native VNDB HTTP,
-  retained metadata and import-growth cases cover current Entry reuse, authorization and physical work.
-
+- Personal-list explicit match and current Library return: selecting a different target adds one authenticated Entry
+  point read, and saving its review adds one retained-page read of at most eight rows. The independent current Library
+  page is one FULL read of at most eight rows; it supplies status, Progress and counted votes with no per-row request.
+  Reopen reuses the original upload and sealed review/apply commands. These reads write no votes and renew no source
+  retention. `apps/web/src/library/personal-list-import/transport.test.ts`, `reopen.test.ts` and
+  `apps/web/tests/m1-vndb-library-return.test.tsx` cover bounded receiving; `services/kernel/test/library/list-import-vndb-http.test.ts`
+  covers the native score choice and changed-export readback.
 - VNDB tag seed: ≤96 selected works, 512 dictionary tags, 256 associations, 1,024 parent edges, 8 closure steps, 512 vocabulary records and 64 KiB per selected-work record. Kana reads ≤512 bound tags, each ≤64 KiB, 6 MiB total, 3.5 seconds/request and 120 seconds/run; pending replay adds no request. Growth/native evidence: `tests/showcase-tags.test.ts`, `tests/showcase-cross-provider-tags.test.ts`, `tests/showcase-publication.test.ts`, `services/kernel/test/imports/m1-cross-provider-tags.test.ts`, `services/kernel/test/imports/vndb-public-tags.test.ts`.
 - VNDB work links/franchise relations: at most three families, 256 works/family and 32 links/owner (`W≤768`, `L≤32`); selected joins/candidates are O(W×L), dictionary work O(selected keys). No extra per-field permission queries. `tests/showcase-work-links.test.ts`, `tests/showcase-vndb-work-relations.test.ts`, `tests/showcase-franchise.test.ts` and `services/kernel/test/imports/showcase-work-links.test.ts` cover exact joins, typed reciprocal provenance, limits, adoption, reopen and facts fences.
 - Selected VNDB release dates/states: ≤64 releases, 64 vocabulary rows, 300 candidates; one date/state per Release and one status per Work; supersession depth 8 and ≤128 relation rows. `tests/showcase-vndb-releases.test.ts` and `services/kernel/test/imports/showcase-vndb-releases.test.ts` cover changed classification, retraction, reopen and reads.
