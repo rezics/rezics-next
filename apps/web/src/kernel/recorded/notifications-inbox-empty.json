@@ -1,5 +1,8 @@
 {
   "status": 200,
   "items": [],
-  "next": null
+  "next": null,
+  "viewer": { "accountId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0" },
+  "selection": "all",
+  "actions": { "markSeen": null }
 }

@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import {
   emptyInboxPagination,
   inboxPaginationFor,
+  inboxPaginationWork,
   inboxTransportFailure,
   nextInboxPage,
   previousInboxPage,
@@ -235,4 +236,19 @@ test('Previous re-admits exact paired addresses, caps history at eight, and clea
   expect(readableInboxPage(receiveInboxPage(sparsePrevious, ready([item('fresh-first')], null)))?.items).toEqual([
     item('fresh-first'),
   ]);
+});
+
+test('retained pagination work names Content disclosure evidence and stays inside composed ceilings', () => {
+  const episode = 4;
+  let current = receiveInboxPage(inboxPaginationFor('all', episode), ready([item('page-0')], 'cursor-1'));
+  for (let index = 1; index <= 8; index += 1)
+    current = receiveInboxPage(
+      nextInboxPage(current),
+      ready([item(`page-${index}`)], index === 8 ? null : `cursor-${index + 1}`),
+    );
+  const work = inboxPaginationWork(current, { listRequests: 9, countRequests: 1, visits: 2 });
+  expect(work.retainedRows).toBe(1);
+  expect(work.priorAddresses).toBe(8);
+  expect(work.hydrationRequests).toBe(0);
+  expect(work.content.cost).toContain('cost-current-inbox-disclosure');
 });

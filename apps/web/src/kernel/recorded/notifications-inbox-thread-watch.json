@@ -1,0 +1,130 @@
+{
+  "status": 200,
+  "items": [
+    {
+      "id": "01a17a3b-0884-721b-91ef-d7ffd7bb5811",
+      "kind": "thread_watch",
+      "createdAt": "2026-11-04T10:00:00.000Z",
+      "actorId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+      "threadId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f1",
+      "postId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f2",
+      "decisionId": null,
+      "reportId": null,
+      "actor": {
+        "state": "available",
+        "accountId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+        "displayName": "Momo",
+        "handle": "momo",
+        "avatar": null,
+        "avatarUrl": null,
+        "automated": false
+      },
+      "target": {
+        "state": "available",
+        "threadId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f1",
+        "postId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f2",
+        "boardId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f7",
+        "threadTitle": "Reading together",
+        "boardTitle": "Books"
+      },
+      "summary": "A new post on a thread you watch",
+      "actions": {
+        "open": {
+          "kind": "thread_post",
+          "threadId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f1",
+          "postId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f2"
+        },
+        "markSeen": {
+          "method": "POST",
+          "path": "/v1/accounts/01a17a3b-0884-721b-91ef-d7ffd7bb58f0/notifications/01a17a3b-0884-721b-91ef-d7ffd7bb5811:markSeen"
+        }
+      },
+      "unread": true
+    },
+    {
+      "id": "01a17a3b-0884-721b-91ef-d7ffd7bb5812",
+      "kind": "mention",
+      "createdAt": "2026-11-04T09:00:00.000Z",
+      "actorId": null,
+      "threadId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f1",
+      "postId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f2",
+      "decisionId": null,
+      "reportId": null,
+      "actor": {
+        "state": "withheld",
+        "displayName": "Former or unavailable account",
+        "handle": null,
+        "avatar": null,
+        "avatarUrl": null
+      },
+      "target": {
+        "state": "available",
+        "threadId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f1",
+        "postId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f2",
+        "boardId": null,
+        "threadTitle": "Reading together",
+        "boardTitle": null
+      },
+      "summary": "You were mentioned in a discussion",
+      "actions": {
+        "open": {
+          "kind": "thread_post",
+          "threadId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f1",
+          "postId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f2"
+        },
+        "markSeen": {
+          "method": "POST",
+          "path": "/v1/accounts/01a17a3b-0884-721b-91ef-d7ffd7bb58f0/notifications/01a17a3b-0884-721b-91ef-d7ffd7bb5812:markSeen"
+        }
+      },
+      "unread": true
+    },
+    {
+      "id": "01a17a3b-0884-721b-91ef-d7ffd7bb5813",
+      "kind": "moderation_decision",
+      "createdAt": "2026-11-04T08:00:00.000Z",
+      "actorId": null,
+      "threadId": null,
+      "postId": null,
+      "decisionId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f4",
+      "reportId": null,
+      "actor": {
+        "state": "system",
+        "displayName": "Moderation team",
+        "handle": null,
+        "avatar": null,
+        "avatarUrl": null
+      },
+      "target": {
+        "state": "withheld",
+        "threadId": null,
+        "postId": null,
+        "boardId": null,
+        "threadTitle": null,
+        "boardTitle": null
+      },
+      "summary": "a moderation outcome was recorded",
+      "actions": {
+        "open": {
+          "kind": "moderation_decision",
+          "decisionId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f4"
+        },
+        "markSeen": {
+          "method": "POST",
+          "path": "/v1/accounts/01a17a3b-0884-721b-91ef-d7ffd7bb58f0/notifications/01a17a3b-0884-721b-91ef-d7ffd7bb5813:markSeen"
+        }
+      },
+      "unread": false
+    }
+  ],
+  "next": null,
+  "viewer": { "accountId": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0" },
+  "selection": "all",
+  "actions": {
+    "markSeen": {
+      "method": "POST",
+      "path": "/v1/accounts/01a17a3b-0884-721b-91ef-d7ffd7bb58f0/notifications:markSeen",
+      "through": "01a17a3b-0884-721b-91ef-d7ffd7bb5811"
+    }
+  }
+}

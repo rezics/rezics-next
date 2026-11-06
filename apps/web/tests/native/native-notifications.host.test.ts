@@ -3,6 +3,8 @@ import { expect as browserExpect } from 'playwright/test';
 import type { Page } from 'playwright';
 import { startNativeNotificationFixture, type NativeNotificationFixture } from './native-notifications-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { threadLocation } from '../../src/threads/thread-href';
+import { composeInboxWork } from '../../src/inbox/inbox-work';
 
 const lifecycle = new NativeTestLifecycle('native notifications suite');
 let fixture: NativeNotificationFixture;
@@ -17,12 +19,14 @@ nativeAfterAll(lifecycle, 180_000);
 
 type NativeNotice = {
   id: string;
-  kind: 'reply' | 'mention' | 'moderation_decision';
+  kind: 'reply' | 'mention' | 'moderation_decision' | 'thread_watch' | 'board_activity';
   actorId: string | null;
   threadId: string | null;
   postId: string | null;
   decisionId: string | null;
   unread: boolean;
+  threadTitle: string | null;
+  actor?: { state: 'available' | 'withheld' | 'system'; displayName?: string; avatarUrl?: null; avatar?: unknown };
 };
 type NativeNoticePage = { items: NativeNotice[]; next: string | null };
 
@@ -35,7 +39,15 @@ async function inbox(accountId: string, actor: 'alice' | 'bob' = 'alice', limit 
   expect(response.status).toBe(200);
   const page = (await response.json()) as NativeNoticePage & {
     items: Array<
-      NativeNotice & { target?: { threadId?: string | null; postId?: string | null; decisionId?: string | null } }
+      NativeNotice & {
+        target?: {
+          threadId?: string | null;
+          postId?: string | null;
+          decisionId?: string | null;
+          threadTitle?: string | null;
+        };
+        actor?: NativeNotice['actor'];
+      }
     >;
   };
   return {
@@ -45,6 +57,8 @@ async function inbox(accountId: string, actor: 'alice' | 'bob' = 'alice', limit 
       threadId: item.threadId ?? item.target?.threadId ?? null,
       postId: item.postId ?? item.target?.postId ?? null,
       decisionId: item.decisionId ?? item.target?.decisionId ?? null,
+      threadTitle: item.threadTitle ?? item.target?.threadTitle ?? null,
+      actor: item.actor,
     })),
   };
 }
@@ -188,7 +202,7 @@ nativeTest(
     await browserExpect(replyRow.locator('[data-notice-byline]')).toContainText(bobByline ?? 'Community member');
     await browserExpect(replyRow.locator('a')).toHaveAttribute(
       'href',
-      `/threads/${replyNotice.threadId}#${replyNotice.postId}`,
+      threadLocation('en', { id: replyNotice.threadId!, title: replyNotice.threadTitle }, undefined, replyNotice.postId!),
     );
     const initialMentionRow = alicePage.locator(`[data-notice-id="${initialMentionNotice.id}"]`);
     await browserExpect(initialMentionRow).toHaveAttribute('data-kind', 'mention');
@@ -196,7 +210,12 @@ nativeTest(
     await browserExpect(initialMentionRow.locator('[data-notice-byline]')).toContainText('Mention');
     await browserExpect(initialMentionRow.locator('a')).toHaveAttribute(
       'href',
-      `/threads/${initialMention.threadId}#${initialMention.id}`,
+      threadLocation(
+        'en',
+        { id: initialMention.threadId, title: initialMentionNotice.threadTitle },
+        undefined,
+        initialMention.id,
+      ),
     );
     await alicePage.getByRole('button', { name: 'Load more', exact: true }).click();
     await browserExpect(alicePage.locator('ol[aria-label="Inbox"] > li')).toHaveCount(21);
@@ -249,6 +268,41 @@ nativeTest(
     expect(enabledMentionNotice.kind).toBe('mention');
     expect(enabledMentionNotice.actorId).toBe(fixture.bobId);
 
+    const watched = await fixture.createThread('bob', 'Watched discussion');
+    await fixture.watchThread('alice', watched);
+    const watchedPost = await fixture.createPost('bob', watched, {
+      parentId: watched.firstPostId,
+      text: 'Watch update for Alice',
+    });
+    const watchNotice = await waitForNotice(
+      aliceId,
+      (item) => item.kind === 'thread_watch' && item.postId === watchedPost.id,
+      'alice',
+    );
+    expect(watchNotice.actorId).toBe(fixture.bobId);
+    expect(watchNotice.actor?.state === 'available' || watchNotice.actor === undefined).toBe(true);
+    await alicePage.goto(`${stack.web}/en/inbox`, { waitUntil: 'domcontentloaded' });
+    const watchRow = alicePage.locator(`[data-notice-id="${watchNotice.id}"]`);
+    await watchRow.waitFor();
+    await browserExpect(watchRow).toHaveAttribute('data-kind', 'thread_watch');
+    await browserExpect(watchRow.locator('a')).toHaveAttribute(
+      'href',
+      threadLocation('en', { id: watched.id, title: 'Watched discussion' }, undefined, watchedPost.id),
+    );
+    await watchRow.locator('a').click();
+    await alicePage.waitForURL((url) => url.pathname.includes(`/threads/${watched.id}`));
+    await alicePage.goBack({ waitUntil: 'domcontentloaded' });
+    await alicePage.locator(`[data-notice-id="${watchNotice.id}"]`).waitFor();
+    await alicePage
+      .locator(`[data-notice-id="${watchNotice.id}"]`)
+      .getByRole('button', { name: 'Mark this notification as read' })
+      .click();
+    await browserExpect(alicePage.locator(`[data-notice-id="${watchNotice.id}"]`)).toContainText(
+      'This notification was marked as read.',
+    );
+    nativeAlice = await inbox(aliceId);
+    expect(nativeAlice.items.find(({ id }) => id === watchNotice.id)?.unread).toBe(false);
+
     const bobMention = await fixture.createPost('alice', editorThread, {
       parentId: editorThread.firstPostId,
       mentionIds: [bobId],
@@ -279,7 +333,7 @@ nativeTest(
     await browserExpect(decisionRow.locator('[data-notice-byline]')).toContainText('Moderation outcome');
     await browserExpect(decisionRow.locator('a')).toHaveAttribute(
       'href',
-      `/moderation/decisions/${decisionNotice.decisionId}`,
+      `/en/moderation/decisions/${decisionNotice.decisionId}`,
     );
     await decisionRow.locator('a').click();
     await alicePage.waitForURL((url) => url.pathname.endsWith(`/moderation/decisions/${decisionNotice.decisionId}`));
@@ -366,25 +420,22 @@ nativeTest(
       seenWrites: number;
     }[] = [];
     let unrelatedResources = 0;
-    for (const scale of [1, 8, 64]) {
+    for (const [scale, visits] of [
+      [1, 1],
+      [8, 2],
+      [64, 3],
+    ] as const) {
       while (unrelatedResources < scale) {
         unrelatedResources += 1;
         await fixture.createBoard('published', `Unrelated inbox fixture ${unrelatedResources}`);
       }
       const before = stack.kernelRequests().length;
-      const sample = await bobJourney.context.newPage();
-      const seenResponse = sample
-        .waitForResponse(
-          (response) =>
-            new URL(response.url()).pathname.includes('_serverFn') && response.request().method() === 'POST',
-          { timeout: 30_000 },
-        )
-        .catch(() => null);
-      await sample.goto(`${stack.web}/en/inbox`, { waitUntil: 'domcontentloaded' });
-      await browserExpect(sample.locator('ol[aria-label="Inbox"] > li')).toHaveCount(2);
-      await seenResponse;
-      await sample.waitForLoadState('networkidle');
-      await sample.close();
+      for (let visit = 0; visit < visits; visit += 1) {
+        const sample = await bobJourney.context.newPage();
+        await sample.goto(`${stack.web}/en/inbox`, { waitUntil: 'domcontentloaded' });
+        await browserExpect(sample.locator('ol[aria-label="Inbox"] > li')).toHaveCount(2);
+        await sample.close();
+      }
       const measured = stack.kernelRequests().slice(before);
       const path = (url: string) => new URL(url, stack.kernelOrigin).pathname;
       const notifications = measured.filter(
@@ -399,21 +450,42 @@ nativeTest(
       const count = measured.filter(
         ({ url, method }) => method === 'GET' && path(url) === `/v1/accounts/${bobId}/notifications/count`,
       ).length;
-      const seenWrites = measured.filter(
-        ({ url, method }) => method === 'POST' && path(url) === `/v1/accounts/${bobId}/notifications:markSeen`,
-      ).length;
+      const seenWrites = measured.filter(({ url, method }) => {
+        if (method !== 'POST') return false;
+        const nativePath = path(url);
+        return (
+          nativePath === `/v1/accounts/${bobId}/notifications:markSeen` ||
+          nativePath.startsWith(`/v1/accounts/${bobId}/notifications/`) &&
+            (nativePath.endsWith(':markSeen') || nativePath.endsWith('$markSeen'))
+        );
+      }).length;
       growth.push({
         unrelatedResources: scale,
         reads: { page: notifications, identities, targets, count },
         seenWrites,
       });
+      console.info(
+        'Inbox composed work',
+        JSON.stringify(
+          composeInboxWork({
+            listRequests: notifications,
+            countRequests: count,
+            commandRequests: seenWrites,
+            hydrationRequests: identities + targets,
+            retainedRows: 2,
+            priorAddresses: 0,
+            cursors: [],
+            visits,
+          }),
+        ),
+      );
     }
     expect(growth.map(({ reads, seenWrites }) => ({ reads, seenWrites }))).toEqual([
-      { reads: { page: 1, identities: 1, targets: 2, count: 1 }, seenWrites: 1 },
-      { reads: { page: 1, identities: 1, targets: 2, count: 1 }, seenWrites: 1 },
-      { reads: { page: 1, identities: 1, targets: 2, count: 1 }, seenWrites: 1 },
+      { reads: { page: 1, identities: 0, targets: 0, count: 1 }, seenWrites: 0 },
+      { reads: { page: 2, identities: 0, targets: 0, count: 2 }, seenWrites: 0 },
+      { reads: { page: 3, identities: 0, targets: 0, count: 3 }, seenWrites: 0 },
     ]);
-    console.info('Inbox request counts at 1/8/64 unrelated resources:', JSON.stringify(growth));
+    console.info('Inbox request counts at 1/8/64 unrelated resources with 1/2/3 visits:', JSON.stringify(growth));
 
     expect(auth.origin).toContain('127.0.0.1');
   },

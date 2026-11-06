@@ -691,3 +691,37 @@ test('a missing returned notice names the changed result, focuses the heading, a
     await view.unmount();
   }
 });
+
+test('a validated receipt followed by failed page and count observations offers a current read, not another command', async () => {
+  const noticeAttempts: InboxNoticeSeenAttempt[] = [];
+  spyOn(reads, 'markInboxItemSeen').mockImplementation(async ({ data }) => {
+    noticeAttempts.push(data);
+    return { signedIn: true } satisfies InboxSeenResult;
+  });
+  let pages = 0;
+  let counts = 0;
+  countSpy.mockImplementation(async () => {
+    counts += 1;
+    return counts === 1
+      ? nativeCount(2)
+      : { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
+  });
+  const view = await mount(async () => {
+    pages += 1;
+    if (pages > 1)
+      return { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
+    return readyInboxPage([notice('chosen')], null, 'alice');
+  });
+  try {
+    await view.click(m.inbox_notice_mark_seen());
+    await tick();
+    expect(noticeAttempts).toHaveLength(1);
+    expect(view.host.textContent).toContain(m.inbox_notice_marked_seen());
+    expect(view.host.textContent).toContain(m.inbox_acknowledged_observation_unavailable());
+    expect(view.host.textContent).toContain(m.inbox_acknowledged_observation_stale());
+    expect(view.host.textContent).not.toContain(m.inbox_notice_seen_retry());
+    expect(view.host.textContent).toContain(m.inbox_retry());
+  } finally {
+    await view.unmount();
+  }
+});

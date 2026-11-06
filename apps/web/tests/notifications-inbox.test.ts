@@ -93,6 +93,30 @@ function notice(overrides: Partial<InboxNotice> = {}, accountId = 'reporter-1'):
   };
 }
 
+test('the recorded thread_watch envelope decodes installed actors and a safe thread destination', async () => {
+  const recorded = JSON.parse(
+    await readFile(new URL('../src/kernel/recorded/notifications-inbox-thread-watch.json', import.meta.url), 'utf8'),
+  ) as { status: number; viewer: { accountId: string }; items: InboxNotice[] };
+  const { status: _status, ...envelope } = recorded;
+  const page = decodeInboxPage(envelope, recorded.viewer.accountId);
+  expect(page.items.map(({ kind, actor }) => [kind, actor?.state])).toEqual([
+    ['thread_watch', 'available'],
+    ['mention', 'withheld'],
+    ['moderation_decision', 'system'],
+  ]);
+  expect(page.items[0]).toMatchObject({
+    actor: { avatar: null, avatarUrl: null },
+    href: undefined,
+  });
+  const resolved = await resolveInboxItems(page);
+  expect(resolved.items[0]?.href).toBe(
+    `/${getLocale()}/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1/reading-together?post=01a17a3b-0884-721b-91ef-d7ffd7bb58f2#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2`,
+  );
+  expect(resolved.items[0]?.context).toBe('Reading together · Books');
+  expect(resolved.items[1]?.actorName).toBeUndefined();
+  expect(resolved.items[2]).toMatchObject({ actor: { state: 'system' }, unavailable: true });
+});
+
 test('the composed notice supplies current summaries and exact localized destinations without hydration IO', async () => {
   const page = await resolveInboxItems(
     nativeInboxEnvelope(
