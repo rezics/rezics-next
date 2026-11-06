@@ -463,7 +463,7 @@ export function createSearchScopeSource({
     const resolved = await createPublicFilterSourceBinding(pool, reader.routeKey, reader.access).resolve(
       {
         source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
-        meaning,
+        meaning: compiled.meaning,
         capture: compiled.capture,
       },
       { deadline: reader.deadline },

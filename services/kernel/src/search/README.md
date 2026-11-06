@@ -22,8 +22,9 @@ substitute for the Source binding, capture and dependency keys.
 Decision: public Search-scope capture compiles through `compilePublicFilterConsumerCapture` before Source binding,
 admitting with the binder's `{ inverse: true }` options and resolving the original accepted meaning. Compiled capture
 keeps the admitted tree; engine DSL stays optional equality evidence and is not a second retained copy. Initial kind
-chips reuse at most two unique current hits as an inexact sample; page disclosure still reads each current hit
-partition once. Members fixtures evaluate current grants plus collection eligibility on a repeatable-read snapshot the
+chips reuse every distinct current admitted-page identity as an inexact witness, with no extra Source read beyond
+page disclosure of those identities. Continuations stay unavailable; aggregate proof remains a separate exact path.
+Members fixtures evaluate current grants plus collection eligibility on a repeatable-read snapshot the
 same way GET members `loadCollection` authorizes, using the kernel request deadline and without a second minted T that
 prepare did not capture. Extra kernel HTTP probes mount
 through `createKernel.modules` before compile. Native Search and HTTP fixtures release source-database sessions

@@ -596,15 +596,15 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
     }
   }, 600_000);
   const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
-  test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {
+  test('initial counts reuse every current admitted-page identity, once, without count reads or extra engine execution', async () => {
     const before = queries;
     const beforeReads = reads;
     const initial = await service.search('anonymous', request);
     expect(initial.subjects).toHaveLength(4);
-    expect(initial.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
-    expect(initial.kinds!.values.filter((v) => v.count).reduce((n, v) => n + v.count!.value, 0)).toBe(2);
+    expect(initial.kinds!.values[0]!.count).toEqual({ value: 3, exact: false });
+    expect(initial.kinds!.values.filter((v) => v.count).reduce((n, v) => n + v.count!.value, 0)).toBe(4);
     expect(queries - before).toBe(1);
-    expect(reads - beforeReads).toBe(new Set(initial.subjects.map((subject) => subjectPartition(subject.id))).size);
+    expect(reads - beforeReads).toBe(new Set(subjects.map((subject) => subjectPartition(subject.id))).size);
     expect(countReads).toBe(0);
     expect(new TextEncoder().encode(JSON.stringify(initial)).length).toBeLessThan(16_384);
     const next = await service.search('anonymous', { ...request, cursor: initial.next! });
@@ -616,7 +616,7 @@ describe('bounded native kind metadata and checked-hit witnesses', () => {
       filter: { and: [{ type: { in: ['schema:Book'] } }, { not: { type: { in: ['kind:Kind1'] } } }] },
     });
     expect(result.subjects).toHaveLength(3);
-    expect(result.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
+    expect(result.kinds!.values[0]!.count).toEqual({ value: 3, exact: false });
     expect(result.kinds!.values[1]!.count).toBeUndefined();
   });
   test('opaque metadata continuation returns normal hits, no count recomputation, and rejects tamper/query/viewer changes and release restart', async () => {

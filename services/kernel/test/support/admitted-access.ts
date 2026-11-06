@@ -81,14 +81,14 @@ export async function authenticateAccount(
 /** Current GET members floor: private collections are not public; owner grants remain the read path. */
 export function collectionReadEligibility(resource: Pick<Resource, 'route' | 'id'>) {
   const identity = Object.freeze({ route: resource.route, id: resource.id });
-  const declared = collectionDirectoryRowPlan(identity).total;
+  const plan = collectionDirectoryRowPlan(identity);
   const native = Object.freeze({
-    keys: declared.candidateKeys,
-    points: declared.nativePoints,
-    rows: declared.nativeRows,
-    witnesses: declared.witnessKeys,
-    emptySeeks: declared.emptySeeks,
-    bytes: declared.bytes - statementBytes(collectionRead),
+    keys: plan.total.candidateKeys,
+    points: plan.total.nativePoints,
+    rows: plan.total.nativeRows,
+    witnesses: plan.total.witnessKeys,
+    emptySeeks: plan.total.emptySeeks,
+    bytes: plan.total.bytes - statementBytes(collectionRead),
   });
   return createResourcePublicEligibility({
     work: {
@@ -101,7 +101,8 @@ export function collectionReadEligibility(resource: Pick<Resource, 'route' | 'id
       return { ready: true as const };
     },
     async verify({ client }) {
-      const row = await collectionRead.run(client, identity);
+      // GET members `readCollectionRow` binds only `query`; a wrapped client is not a PoolClient.
+      const row = await plan.run({ query: client.query.bind(client) });
       return row != null && row.state === 'active' && row.visibility !== 'private';
     },
   });
@@ -119,7 +120,7 @@ export async function authorizeMintedRead(
   return withConnection(pool, async (connection) => {
     await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
-      const allowed = await check(deadlineClient(connection, deadline));
+      const allowed = await check(deadlineClient(connection, deadline), undefined);
       await connection.query('COMMIT');
       return allowed;
     } catch (error) {
