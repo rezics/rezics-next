@@ -102,6 +102,7 @@ mock.module('../src/community/space-actions', () => ({
     calls.selections.push(structuredClone(data));
     return operations.select(data);
   },
+  readRealmRulesAuthoring: async () => ({ kind: 'unavailable' as const }),
 }));
 const uploadModule = await import('../src/threads/upload');
 mock.module('../src/threads/upload', () => ({

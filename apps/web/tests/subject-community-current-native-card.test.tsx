@@ -162,11 +162,13 @@ test('installed native cards render through the generated reader and original ac
     threads: [
       {
         postRevisionId: post.revisionId,
-        card: undefined,
         nativeCard: { author: null, comments: { count: { value: 0 } } },
       },
     ],
   });
+  expect(
+    data.regions.review && data.regions.review.state === 'ready' ? data.regions.review.threads[0] : undefined,
+  ).not.toHaveProperty('card');
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
   const host = window.document.createElement('main');
