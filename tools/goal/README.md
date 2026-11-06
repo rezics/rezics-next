@@ -1874,8 +1874,11 @@ such as reading the task list, still fails the sweep; store contention is only l
 Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
 leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
 signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
-descendants is still followed and its identified members are reaped during terminal cleanup. Unreadable process state
-or denied group inspection is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
+descendants is still followed and its identified members are reaped during terminal cleanup. A just-exited incarnation
+whose only remaining members are zombies of that group is already gone: signal zero can still succeed while `/proc`
+lists no live members, and settlement classifies the worker's real exit instead of holding the attempt as unconfirmed
+custody. Unreadable process state or denied group inspection, including a kernel-visible group that `/proc` omits
+entirely, is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
 notifies the manager once and retains the running attempt and its slot. A later sweep can settle it after visibility
 returns. Stop and cancellation publish terminal records only after cleanup succeeds. Each termination signal uses a
 pidfd and rechecks birth and group identity after opening it, so PID reuse between inspection and signalling cannot
@@ -1885,8 +1888,6 @@ Disposable Goal fixtures record each wrapper and pidfd waiter in an append-only 
 Cleanup uses those identities, including wrappers no longer present in attempt rows; it does not select processes by
 working directory. Tests that can leave children running must `await h.disposeAsync()`. It reaps the owned groups,
 awaits tracked exit/follow continuations and waiter cleanup, then closes SQLite and removes the fixture directory.
-A just-exited group whose leader is gone and that has no live members is treated as already gone, including a brief
-zombie linger after a transport worker exits.
 Disposal seals the fixture against new workers before taking its child inventory; waiter registration remains available
 until existing work finishes. Ownership and pending work are checked again immediately before removal.
 Synchronous `h.dispose()` refuses live children or unfinished waits. A changed owner marker, unreadable state or failed

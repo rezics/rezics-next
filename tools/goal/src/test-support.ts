@@ -21,6 +21,7 @@ import { parseBrief, readRiskOwnership } from './briefs.ts';
 import {
   checkedProcessGroup,
   inspectProcessIdentity,
+  isEmptyProcessGroupUnconfirmed,
   sameProcess,
   signalProcessIdentity,
   waitForWorkerExit,
@@ -63,10 +64,7 @@ function boundedFixtureWorkerScript(script: string): string {
 }
 
 function isVanishedFixtureGroup(identity: ProcessIdentity, error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message === `process group visibility unknown for group ${identity.group}: no live members visible`
-  );
+  return isEmptyProcessGroupUnconfirmed(error, identity.group);
 }
 
 /**

@@ -1,5 +1,6 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { spawn } from 'node:child_process';
+import * as fs from 'node:fs';
 import { mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
@@ -160,7 +161,6 @@ test('a failing pidfd waiter falls back to the identity and resolves only once t
   }
 });
 
-import { spyOn } from 'bun:test';
 test('a reused leader PID with an empty recorded group permits recovery without signalling the unrelated process', async () => {
   const child = spawn(process.execPath, ['-e', "console.log('ready'); setInterval(() => {}, 1000)"], {
     stdio: ['ignore', 'pipe', 'ignore'],
@@ -224,5 +224,33 @@ test('a reused leader with an ambiguous group inspection is fenced without signa
     killSpy.mockRestore();
     child.kill('SIGKILL');
     await waitForProcess(unrelated);
+  }
+});
+test('a just-exited group that lingers as zombies of that incarnation is already gone', async () => {
+  const child = spawn(process.execPath, ['-e', "console.log('ready'); setInterval(() => {}, 1000)"], {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.stdout!.once('data', () => resolve());
+    child.once('error', reject);
+  });
+  const identity = processIdentity(child.pid!)!;
+  const read = fs.readFileSync;
+  const zombie = spyOn(fs, 'readFileSync').mockImplementation(((path: unknown, ...args: unknown[]) => {
+    const value = (read as (...args: unknown[]) => unknown)(path, ...args);
+    if (String(path) === `/proc/${identity.pid}/stat` && typeof value === 'string')
+      return value.slice(0, value.lastIndexOf(')') + 2) + 'Z' + value.slice(value.lastIndexOf(')') + 3);
+    return value;
+  }) as typeof fs.readFileSync);
+  try {
+    await expect(terminateProcessGroup(identity, 10)).resolves.toBeUndefined();
+  } finally {
+    zombie.mockRestore();
+  }
+  try {
+    expect(sameProcess(identity)).toBe(true);
+  } finally {
+    await terminateProcessGroup(identity, 20);
   }
 });

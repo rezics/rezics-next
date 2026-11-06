@@ -14,7 +14,7 @@ import {
   transportRetryBackoffMs,
 } from './agents/shared.ts';
 import { evidenceBundle } from './evidence.ts';
-import { terminateProcessGroup } from './process.ts';
+import { isEmptyProcessGroupUnconfirmed, terminateProcessGroup } from './process.ts';
 import { releaseWorkerTemporaryDirectory, type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { reapAttemptResources } from './attempt-resources.ts';
@@ -143,11 +143,17 @@ export async function settle(
       });
     }
     store.assertCurrent(ref);
-    await terminateProcessGroup(
-      store.attempt(ref).process,
-      tasks.settings.terminationGraceMs,
-      tasks.settings.policy?.process,
-    );
+    try {
+      await terminateProcessGroup(
+        store.attempt(ref).process,
+        tasks.settings.terminationGraceMs,
+        tasks.settings.policy?.process,
+      );
+    } catch (error) {
+      // The wrapper already exited; a zombie linger must not hide the worker's real stderr as unconfirmed custody.
+      const identity = store.attempt(ref).process;
+      if (!identity || !isEmptyProcessGroupUnconfirmed(error, identity.group)) throw error;
+    }
     if (!proofTask && !pendingChecks?.length) {
       if (!store.task(ref.taskId).workspace)
         await reapAttemptResources({

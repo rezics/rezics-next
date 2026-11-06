@@ -196,12 +196,38 @@ function processGroupIsAbsent(group: number): boolean {
     throw new Error(`process group visibility unknown for group ${group}`, { cause: error });
   }
 }
+function emptyGroupUnconfirmedMessage(group: number): string {
+  return `process group visibility unknown for group ${group}: no live members visible`;
+}
+/** kill(-pgid, 0) succeeded and /proc listed no live members of this group. */
+export function isEmptyProcessGroupUnconfirmed(error: unknown, group: number): boolean {
+  return error instanceof Error && error.message === emptyGroupUnconfirmedMessage(group);
+}
+/** Zombies keep the group visible to signal zero after every live member has exited. */
+function incarnationHasZombies(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+  for (const name of readdirSync(procRoot)) {
+    if (!/^\d+$/.test(name)) continue;
+    let snapshot: ReturnType<typeof inspectProcessSnapshot>;
+    try {
+      snapshot = inspectProcessSnapshot(Number(name), procRoot);
+    } catch {
+      continue;
+    }
+    if (!snapshot?.dead) continue;
+    const member = snapshot.identity;
+    if (member.group !== identity.group || member.boot !== identity.boot) continue;
+    if (BigInt(member.start) < BigInt(identity.start)) continue;
+    return true;
+  }
+  return false;
+}
 /** Verify custody before either signalling a group or declaring it terminal. */
 export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[] {
   if (identity.group !== identity.pid || identity.group === inspectProcessIdentity(process.pid)?.group)
     throw new Error('worker must own a detached process group');
   // Dead leaders still carry a birth identity: a reused zombie must never authorize killing its children.
-  const current = inspectProcessSnapshot(identity.pid, '/proc')?.identity ?? null;
+  const leader = inspectProcessSnapshot(identity.pid, '/proc');
+  const current = leader?.identity ?? null;
   const members = groupMembers(identity.group);
   if (current && !matches(current, identity)) {
     const reused = current.start !== identity.start || current.boot !== identity.boot;
@@ -210,8 +236,10 @@ export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[
   }
   if (members.some((member) => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)))
     throw new Error('process group identity changed');
-  if (!members.length && !processGroupIsAbsent(identity.group))
-    throw new Error(`process group visibility unknown for group ${identity.group}: no live members visible`);
+  if (!members.length && !processGroupIsAbsent(identity.group)) {
+    if ((leader?.dead && current && matches(current, identity)) || incarnationHasZombies(identity)) return [];
+    throw new Error(emptyGroupUnconfirmedMessage(identity.group));
+  }
   return members;
 }
 /** Process groups with a live member, from one scan of /proc. */
