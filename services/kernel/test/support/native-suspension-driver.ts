@@ -4,6 +4,7 @@ import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createReinstatementCommands } from '../../src/access/reinstatement.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from './admitted-access.ts';
+import { configureTestReceiptKeys } from './receipt-keys.ts';
 
 /** Component fixtures provision staff authority, then use the production suspension command.
  * The subject's bearer must be obtained before calling this: suspension raises its floor and fence.
@@ -13,6 +14,7 @@ async function staffCommand(
   accountId: string,
   action: 'account:suspend' | 'account:reinstate',
 ): Promise<void> {
+  configureTestReceiptKeys(pool);
   const staff = newId(0xfffe);
   await pool.query(
     "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
