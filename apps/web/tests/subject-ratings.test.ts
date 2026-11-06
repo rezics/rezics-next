@@ -1,16 +1,15 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { RatingsView, RatingsRecoveryContext } from '../src/features/pages/subject-ratings-view';
-import {
-  GLOBAL,
-  QUESTION,
-  readRatings,
-  readOwnRating,
-  type Figure,
-  type Statistic,
-} from '../src/features/pages/subject-ratings';
+import type { Figure, Statistic } from '../src/features/pages/subject-ratings';
+
+// The view and the rating state reach the Kernel client, which imports Cloudflare's Workers module at load time.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { RatingsView, RatingsRecoveryContext } = await import('../src/features/pages/subject-ratings-view');
+const { GLOBAL, QUESTION, readRatings, readOwnRating } = await import('../src/features/pages/subject-ratings');
+// Subject ids are UUIDs; the aggregate reader admits a response only when its subject is the requested one.
+const subjectId = '00000000-0000-7000-8000-000000000010';
 
 const realms = [
   { id: '00000000-0000-7000-8000-000000000002', name: 'Quiet Realm' },
@@ -18,9 +17,11 @@ const realms = [
   { id: '00000000-0000-7000-8000-000000000004', name: 'Another Realm' },
   { id: '00000000-0000-7000-8000-000000000005', name: 'Ignored Realm' },
 ];
+// Aggregate figures carry their freshness; the reader admits no figure without it.
 const figure = (population: string, count: number, extra: Partial<Figure> = {}): Figure => ({
   population,
   count,
+  freshness: { asOf: null, updating: false },
   ...extra,
 });
 const histogram = Array.from({ length: 21 }, (_, index) => (index === 17 ? 1203 : 0));
@@ -83,7 +84,7 @@ function client(
           query: { question: url.searchParams.get('question'), population: url.searchParams.getAll('population') },
           headers: Object.fromEntries(request.headers),
         });
-        return Response.json({ question: QUESTION, subject: 'subject', figures }, { status: aggregateStatus });
+        return Response.json({ question: QUESTION, subject: subjectId, figures }, { status: aggregateStatus });
       }
       if (url.pathname.endsWith('/source-statistics')) {
         calls.source.push(request);
@@ -101,7 +102,7 @@ const render = (
 
 test('a signed-out reader sees the Global score with its count and population and its distribution', async () => {
   const fake = client([figure(GLOBAL, 1203, { mean: 16.8, histogram })]);
-  const html = render(await readRatings(fake.client, 'subject'));
+  const html = render(await readRatings(fake.client, subjectId));
 
   expect(html).toContain('8.4');
   expect(html).toContain('1,203');
@@ -110,15 +111,16 @@ test('a signed-out reader sees the Global score with its count and population an
   expect(fake.calls.aggregate).toHaveLength(1);
   expect(fake.calls.source).toHaveLength(1);
   expect(fake.calls.vote).toHaveLength(0);
+  // The installed client sends its JSON content type; a signed-out read carries no credentials.
   expect(fake.calls.aggregate[0]).toEqual({
     query: { question: QUESTION, population: [GLOBAL] },
-    headers: {},
+    headers: { 'content-type': 'application/json' },
   });
 });
 
 test('imported scores show after the native figures with their source, own scale, count and date, and are never blended', async () => {
   const fake = client([figure(GLOBAL, 5, { mean: 16, histogram })], [imported]);
-  const html = render(await readRatings(fake.client, 'subject'));
+  const html = render(await readRatings(fake.client, subjectId));
 
   expect(html.indexOf('public-rating-figure')).toBeLessThan(html.indexOf('Example'));
   expect(html).toContain('8');
@@ -134,7 +136,7 @@ test('public rating acquisition never consumes membership choices or an own vote
     status: 200,
     data: { units: 17 },
   });
-  const data = await readRatings(fake.client, 'subject');
+  const data = await readRatings(fake.client, subjectId);
   const html = render(data);
   expect(fake.calls.aggregate[0]).toMatchObject({ query: { question: QUESTION, population: [GLOBAL] } });
   expect(fake.calls.vote).toHaveLength(0);
@@ -145,7 +147,7 @@ test('public rating acquisition never consumes membership choices or an own vote
     fake.client,
     new Request('https://site.test', { headers: { authorization: 'Bearer token' } }),
     {},
-    'subject',
+    subjectId,
   );
   expect(own).toMatchObject({ kind: 'ready', units: 17 });
   expect(fake.calls.vote).toHaveLength(1);
@@ -153,7 +155,7 @@ test('public rating acquisition never consumes membership choices or an own vote
 
 test('a population below the threshold shows its count and how many more ratings it needs, never a score or histogram', async () => {
   const fake = client([figure(GLOBAL, 3, { remaining: 2 })]);
-  const html = render(await readRatings(fake.client, 'subject'));
+  const html = render(await readRatings(fake.client, subjectId));
 
   expect(html).toContain('3');
   expect(html).toContain('2 more ratings to show a score');
@@ -163,7 +165,7 @@ test('a population below the threshold shows its count and how many more ratings
 
 test('with no votes the section says there are no ratings yet and draws no zero and no empty histogram', async () => {
   const fake = client([figure(GLOBAL, 0)]);
-  const html = render(await readRatings(fake.client, 'subject'));
+  const html = render(await readRatings(fake.client, subjectId));
 
   expect(html).toContain('No ratings yet');
   expect(html).not.toContain('data-slot="histogram"');
@@ -172,7 +174,7 @@ test('with no votes the section says there are no ratings yet and draws no zero 
 
 test("a failed rating read shows the section's retry state and the rest of the page renders", async () => {
   const fake = client([], [], { status: 404 }, 503);
-  const data = await readRatings(fake.client, 'subject');
+  const data = await readRatings(fake.client, subjectId);
   const html = renderToStaticMarkup(
     createElement(
       'main',
@@ -199,7 +201,7 @@ test("a failed rating read shows the section's retry state and the rest of the p
 
 test('an inaccessible own vote leaves the public figures visible without a rating control', async () => {
   const fake = client([figure(GLOBAL, 0)], [], { status: 403 });
-  const html = render(await readRatings(fake.client, 'subject'));
+  const html = render(await readRatings(fake.client, subjectId));
 
   expect(html).toContain('No ratings yet');
   expect(html).not.toContain('Your rating');
@@ -207,7 +209,7 @@ test('an inaccessible own vote leaves the public figures visible without a ratin
     fake.client,
     new Request('https://site.test', { headers: { authorization: 'Bearer token' } }),
     {},
-    'subject',
+    subjectId,
   );
   expect(own.kind).toBe('unavailable');
   expect(fake.calls.vote).toHaveLength(1);
@@ -216,13 +218,13 @@ test('an inaccessible own vote leaves the public figures visible without a ratin
 test('rating request counts stay constant for empty and populated subjects', async () => {
   for (const count of [0, 1203]) {
     const signedOut = client([figure(GLOBAL, count, count ? { mean: 16.8, histogram } : {})]);
-    await readRatings(signedOut.client, 'subject');
+    await readRatings(signedOut.client, subjectId);
     expect(signedOut.calls.aggregate).toHaveLength(1);
     expect(signedOut.calls.source).toHaveLength(1);
     expect(signedOut.calls.vote).toHaveLength(0);
 
     const signedIn = client([figure(GLOBAL, count, count ? { mean: 16.8, histogram } : {})]);
-    await readRatings(signedIn.client, 'subject');
+    await readRatings(signedIn.client, subjectId);
     expect(signedIn.calls.aggregate).toHaveLength(1);
     expect(signedIn.calls.source).toHaveLength(1);
     expect(signedIn.calls.vote).toHaveLength(0);
