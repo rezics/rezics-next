@@ -35,7 +35,7 @@ import {
   showcaseMediaContext,
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
-import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
+import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
 import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import {
   bangumiRecordUrl,
@@ -2984,6 +2984,35 @@ export async function publishShowcase(input: {
       !!imageAssertion &&
       visible.some((assertion) => assertion.candidateId === imageAssertion.candidateId);
     const reportable = visible.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
+    let selectedSynopsisCurrent = true;
+    for (const assertion of reportable.filter((item) => item.property === 'schema:abstract')) {
+      const readback = readbacksByCandidate.get(assertion.candidateId);
+      const statementId =
+        readback &&
+        typeof readback === 'object' &&
+        !Array.isArray(readback) &&
+        typeof (readback as { id?: unknown }).id === 'string'
+          ? (readback as { id: string }).id
+          : assertion.candidateId;
+      const operands = selectedSynopsisQueryFromPublic(read, statementId);
+      if (!operands) continue;
+      try {
+        const supportRead = await input.publicClient.readSelectedSynopsis(record.subjectId, operands.query);
+        if (admitSelectedSynopsisSupport(supportRead, statementId, operands.document).kind !== 'matched')
+          selectedSynopsisCurrent = false;
+      } catch {
+        selectedSynopsisCurrent = false;
+      }
+      if (!selectedSynopsisCurrent) break;
+    }
+    if (!selectedSynopsisCurrent) {
+      omissions.push({
+        provider: record.provider,
+        sourceKey: record.sourceKey,
+        code: 'selected-synopsis-not-current',
+      });
+      continue;
+    }
     const required = record.assertions.filter(
       (assertion) =>
         !withheldGraphCandidates.has(assertion.candidateId) &&

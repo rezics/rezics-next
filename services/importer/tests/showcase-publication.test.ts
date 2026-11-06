@@ -669,7 +669,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       aliases: crossMediaAliases,
       journal,
       review: { ...review, readReviewedSubject: async (id) => canonicalRead(await review.readReviewedSubject(id)) },
-      publicClient: { readSubject: async (id) => canonicalRead(await publicClient.readSubject(id)) },
+      publicClient: {
+        readSubject: async (id) => canonicalRead(await publicClient.readSubject(id)),
+        readSelectedSynopsis: async (id, query, signal) =>
+          canonicalRead(await publicClient.readSelectedSynopsis(id, query, signal)),
+      },
       ...tagOptions,
     });
     const canonicalWork = canonical.published.find((record) => record.subjectId === workId);
