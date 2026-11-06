@@ -42,18 +42,19 @@ export function draftFromRow(row: MalPreviewRow): RowDraft {
   const review = row.review;
   const score = review?.score;
   const standard = score ? standardMalQuestion(score.question) : null;
-  const selection: RowDraft['score'] = score && standard
-    ? score.action === 'adopt'
-      ? {
-          action: 'adopt',
-          ...standard,
-          ...(score.units !== null ? { units: score.units } : {}),
-          ...(score.replaceCurrent ? { replaceCurrent: true } : {}),
-        }
-      : score.action === 'clear'
-        ? { action: 'clear', ...standard }
-        : undefined
-    : undefined;
+  const selection: RowDraft['score'] =
+    score && standard
+      ? score.action === 'adopt'
+        ? {
+            action: 'adopt',
+            ...standard,
+            ...(score.units !== null ? { units: score.units } : {}),
+            ...(score.replaceCurrent ? { replaceCurrent: true } : {}),
+          }
+        : score.action === 'clear'
+          ? { action: 'clear', ...standard }
+          : undefined
+      : undefined;
   return {
     row: row.index,
     target: review?.target ?? row.target,
