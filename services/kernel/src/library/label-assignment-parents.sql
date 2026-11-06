@@ -7,5 +7,6 @@ CROSS JOIN LATERAL (
   SELECT label_id AS "labelId", revision, deleted_at::text AS "deletedAt", purge_after::text AS "purgeAfter"
   FROM library.personal_label
   WHERE route = :route AND account_id = :account_id AND label_id = keys.label_id
+  LIMIT 1
   FOR SHARE
 ) AS parent;

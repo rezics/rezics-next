@@ -6,7 +6,9 @@ import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { ReviewedSubjectRead } from './import-client.ts';
+import { Type, type Static } from 'typebox';
+import { Check } from 'typebox/schema';
+import { ImportTransportError, type MediaVariantDecision, type ReviewedSubjectRead } from './import-client.ts';
 import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
   showcaseDigest,
@@ -75,6 +77,18 @@ type JournalActionRow = {
   state: 'prepared' | 'acknowledged' | 'refused';
   error_code: string | null;
   result_id: string | null;
+};
+export type ShowcaseActionDecision = Readonly<{
+  decision: 'explicit-422-key' | 'changed-body';
+  refusal: string;
+  priorIdempotencyKey: string;
+  idempotencyKey: string;
+}>;
+type ShowcaseActionDecisionRow = {
+  decision: ShowcaseActionDecision['decision'];
+  refusal: string;
+  prior_idempotency_key: string;
+  idempotency_key: string;
 };
 
 function json(value: unknown): string {
@@ -148,6 +162,16 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         state TEXT NOT NULL CHECK (state IN ('prepared','acknowledged','refused')),
         error_code TEXT
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_action_decision (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action_key TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('explicit-422-key','changed-body')),
+        refusal TEXT NOT NULL,
+        prior_idempotency_key TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS showcase_action_decision_action
+        ON showcase_action_decision(action_key,id);
     `);
     // Native fixture creates need their acknowledged UUID alongside the sealed action.
     const actionColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_action)').all();
@@ -274,11 +298,24 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         (prior.body_digest !== bodyDigest ||
           (prior.error_code === 'review-http-422' && prior.idempotency_key !== idempotencyKey))
       ) {
-        this.#db
-          .query(
-            "UPDATE showcase_action SET body_digest=?,body_json=?,idempotency_key=?,state='prepared',error_code=NULL WHERE action_key=?",
-          )
-          .run(bodyDigest, bodyJson, idempotencyKey, actionKey);
+        // Replacing a refused action is a separate decision: it names the refusal it supersedes and
+        // is written with the state change, so the original refusal stays inspectable after replay.
+        const decision =
+          prior.error_code === 'review-http-422' && prior.idempotency_key !== idempotencyKey
+            ? 'explicit-422-key'
+            : 'changed-body';
+        this.#db.transaction(() => {
+          this.#db
+            .query(
+              'INSERT INTO showcase_action_decision(action_key,decision,refusal,prior_idempotency_key,idempotency_key) VALUES(?,?,?,?,?)',
+            )
+            .run(actionKey, decision, prior.error_code!, prior.idempotency_key, idempotencyKey);
+          this.#db
+            .query(
+              "UPDATE showcase_action SET body_digest=?,body_json=?,idempotency_key=?,state='prepared',error_code=NULL WHERE action_key=?",
+            )
+            .run(bodyDigest, bodyJson, idempotencyKey, actionKey);
+        })();
         return body;
       }
       // A timed-out action is retried with the original sealed body and key even if
@@ -300,6 +337,21 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       this.#db.query<JournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?').get(actionKey) ??
       null
     );
+  }
+
+  /** Recorded replacements of refused actions, oldest first; each names the refusal it superseded. */
+  actionDecisions(actionKey: string): ShowcaseActionDecision[] {
+    return this.#db
+      .query<ShowcaseActionDecisionRow, [string]>(
+        'SELECT decision,refusal,prior_idempotency_key,idempotency_key FROM showcase_action_decision WHERE action_key=? ORDER BY id',
+      )
+      .all(actionKey)
+      .map((row) => ({
+        decision: row.decision,
+        refusal: row.refusal,
+        priorIdempotencyKey: row.prior_idempotency_key,
+        idempotencyKey: row.idempotency_key,
+      }));
   }
 
   acknowledgeAction(actionKey: string, resultId?: string): void {
@@ -958,6 +1010,59 @@ async function currentFactsFence(
   return current.securityRevision === null ? 'open' : 'unavailable';
 }
 
+/** The served-variant fields of the cover summary a public Subject read carries; Content owns the full shape. */
+const ServedCoverSummary = Type.Object({
+  media: Type.String({ format: 'uuid' }),
+  variants: Type.Array(
+    Type.Object({
+      format: Type.Union([Type.Literal('avif'), Type.Literal('webp')]),
+      width: Type.Integer({ minimum: 1, maximum: 2560 }),
+    }),
+    { minItems: 1 },
+  ),
+});
+export type CoverVariant = Static<typeof ServedCoverSummary>['variants'][number];
+type ServedVariantReview = {
+  authorizeMediaVariant?: (mediaId: string, variant: string) => Promise<MediaVariantDecision>;
+};
+
+/** The derivatives the public Subject summary names for this exact media, in width then format order. */
+export function servedCoverVariants(read: ReviewedSubjectRead, mediaId: string): readonly CoverVariant[] | undefined {
+  const summary: unknown = Reflect.get(read, 'summary');
+  const cover: unknown = typeof summary === 'object' && summary !== null ? Reflect.get(summary, 'cover') : undefined;
+  if (!Check(ServedCoverSummary, cover) || cover.media !== mediaId) return undefined;
+  return [...cover.variants].sort((left, right) => left.width - right.width || left.format.localeCompare(right.format));
+}
+
+/** A Kernel decision is current for a derivative when it names that derivative's own image type and bytes. */
+export function servedVariantDecisionCurrent(decision: MediaVariantDecision, variant: CoverVariant): boolean {
+  return decision.allowed && decision.mediaType === `image/${variant.format}` && decision.byteCount >= 1;
+}
+
+/** Independent served-variant read: one decision per admitted format at its smallest width, so two requests at most. */
+async function servedCoverCurrent(
+  review: ServedVariantReview,
+  read: ReviewedSubjectRead,
+  mediaId: string,
+): Promise<boolean> {
+  const variants = servedCoverVariants(read, mediaId);
+  const authorize = review.authorizeMediaVariant;
+  if (!variants || !authorize) return false;
+  const smallest = new Map<CoverVariant['format'], CoverVariant>();
+  for (const variant of variants) if (!smallest.has(variant.format)) smallest.set(variant.format, variant);
+  try {
+    for (const variant of smallest.values()) {
+      const decision = await authorize(mediaId, `${variant.format}-${variant.width}`);
+      if (!servedVariantDecisionCurrent(decision, variant)) return false;
+    }
+    return true;
+  } catch (error) {
+    // A refused or unavailable served read withholds only the image; other failures are programming errors.
+    if (error instanceof ImportTransportError) return false;
+    throw error;
+  }
+}
+
 async function currentCoverOutcomes(
   result: CrossMediaSeedResult,
   review: ShowcaseReviewPort,
@@ -1487,7 +1592,7 @@ export async function publishShowcase(input: {
   result: CrossMediaSeedResult;
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   journal: ShowcaseJournal;
-  review: ShowcaseReviewPort;
+  review: ShowcaseReviewPort & ServedVariantReview;
   publicClient: PublicBulkClient;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
   tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
@@ -2907,8 +3012,12 @@ export async function publishShowcase(input: {
     if (imageAssertion) {
       cover = admittedCoverMedia(input.plan, finalMediaOutcomes, record, imageAssertion);
       const state = cover ? await currentCoverFence(input.review, cover) : 'unavailable';
-      if (state === 'open') imagePublishable = true;
-      else {
+      if (state === 'open' && cover) {
+        // Served derivatives are read independently; without them only the image is withheld, not the record.
+        if (await servedCoverCurrent(input.review, read, cover.mediaId ?? '')) imagePublishable = true;
+        else
+          omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-variant-unavailable' });
+      } else {
         const index = finalMediaOutcomes.findIndex(
           (outcome) => outcome.sourceAlias === record.sourceAlias && outcome.externalId === record.sourceKey,
         );

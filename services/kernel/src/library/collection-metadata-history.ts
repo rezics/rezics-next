@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { Collection, CollectionDraft, CollectionVisibility } from './collection-model.ts';
-import type { CoverSummary } from '../semantic/summaries.ts';
+import type { LibraryCoverSummary } from './contract/index.ts';
 import { runLibraryBoundedStep } from './command-support.ts';
 import {
   COLLECTION_METADATA_HISTORY_LIMIT,
@@ -72,7 +72,7 @@ export type CollectionMetadataHistoryPage = {
 export type CollectionMetadataHistoryCover =
   | { state: 'none' }
   | { state: 'unavailable' }
-  | { state: 'available'; mediaId: string; summary: CoverSummary };
+  | { state: 'available'; mediaId: string; summary: LibraryCoverSummary };
 export type CollectionMetadataHistorySnapshot = Omit<CollectionMetadataSnapshot, 'coverMediaId'> & {
   cover: CollectionMetadataHistoryCover;
 };

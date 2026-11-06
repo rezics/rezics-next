@@ -21,6 +21,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
+  admitComposedEntryProgress,
   createLibraryCommandRunner,
   LibraryNotFoundError,
   requireRoute,
@@ -418,6 +419,7 @@ export function createEntryCommands(config: Dependencies) {
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     requireRoute(owner.accountId);
     requireRoute(subjectId);
+    await admitComposedEntryProgress({ actor: owner, subjectId, deadline });
     const existing = await snapshot(actor, 'library_entry:update', (client, accountOwner, route) =>
       store.readEntry(client, route, accountOwner.accountId, subjectId),
     );
@@ -1091,6 +1093,11 @@ export function createEntryCommands(config: Dependencies) {
   async function readEntry(actor: Actor, subjectId: string): Promise<Entry> {
     const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
+    await admitComposedEntryProgress({
+      actor: owner,
+      subjectId,
+      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+    });
     const operationPlan = entryOperationPlan('library.entry.read', { subjectId });
     return withEntryOperation(operationPlan, async () => {
       const existing = await snapshot(actor, 'library_entry:read', (client, owner, route) =>

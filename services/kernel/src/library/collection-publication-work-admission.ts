@@ -4,8 +4,6 @@ import { admitFilter, parseFilter } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { fenceOperationalAccount } from '../access/account-share.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { authoritativeTimeValue, commandTime } from '../command/command.ts';
 import {
   currentOperationalResources,
@@ -13,8 +11,7 @@ import {
   type OperationalTransaction,
 } from '../command/operational.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
-import { readRelease } from '../semantic/definitions.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 import {
   readCollectionPublicationEpisode,
   readCollectionPublicationInitiator,
@@ -32,6 +29,10 @@ import type {
 } from './collection-publication-episode-contract.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { NativeSourceCustody, NativeSourceIdentity } from './native-source-custody.ts';
+
+function libraryCapabilities() {
+  return peekLibraryDomain();
+}
 
 /** Exact native lookup fields only. Possession grants neither admission nor final command authority. */
 export type CollectionPublicationLocator = Readonly<{
@@ -161,9 +162,11 @@ async function currentPublicationInput(tx: OperationalTransaction, locator: Coll
     Date.now() < resources.deadline;
 
   try {
-    await fenceOperationalAccount(tx, locator.ownerAccountId);
+    const capabilities = libraryCapabilities();
+    if (!capabilities) return null;
+    await capabilities.authorization.fenceAccount(tx, locator.ownerAccountId);
   } catch (error) {
-    if (error instanceof LifecycleDeniedError) return null;
+    if (libraryCapabilities()?.authorization.isLifecycleDenied(error)) return null;
     throw error;
   }
   if (!current()) return null;
@@ -200,7 +203,7 @@ async function currentPublicationInput(tx: OperationalTransaction, locator: Coll
     original.actor.kind !== 'account' ||
     original.actor.accountId !== locator.ownerAccountId ||
     original.sourceDigest !== digest(episode.source) ||
-    episode.durableInitiator !== durableInitiatorCommitment(original)
+    episode.durableInitiator !== libraryCapabilities()?.identityDisclosure.initiatorCommitment(original)
   )
     return null;
   if (!current()) return null;
@@ -217,11 +220,13 @@ async function currentPublicationInput(tx: OperationalTransaction, locator: Coll
   )
     return null;
 
-  const release = await readRelease(tx, rule.releaseDigest);
+  const capabilities = libraryCapabilities();
+  if (!capabilities) return null;
+  const release = await capabilities.identityDisclosure.readRelease(tx, rule.releaseDigest);
   if (!release || !current()) return null;
   let expanded: FilterDocument;
   try {
-    expanded = admitFilter(parseFilter(rule.filter), release, { owner: true });
+    expanded = admitFilter(parseFilter(rule.filter), release as FilterRelease, { owner: true });
   } catch {
     return null;
   }
@@ -260,6 +265,16 @@ async function currentPublicationWork(
     rule,
   });
   if (!native || !livePublicationNamespace(tx, locator)) return null;
+  const capabilities = libraryCapabilities();
+  if (!capabilities) return null;
+  const admitted = capabilities.publicationAdmission.admit({
+    locator,
+    privateWorking: episode.source.input.kind === 'private_working_source',
+    observation: native.observation,
+    episodePresent: true,
+    initiator: episode.initiator,
+  });
+  if (!admitted.admitted) return null;
   const ruleRef = episode.source.rule;
   return {
     locator: Object.freeze({ ...locator }),

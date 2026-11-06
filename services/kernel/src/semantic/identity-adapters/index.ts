@@ -80,6 +80,7 @@ import {
 import { withConnection } from '../../database/pool.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { readIdentityMappings, readIdentityRatingReview } from './read.ts';
+import { identityEpochLibraryInputsSQL } from '../identity-epoch-library-inputs.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { GLOBAL_CONTEXT } from '../definitions.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../events.ts';
@@ -272,9 +273,7 @@ export function identityEpochRemainderTerminal(
 export { identityEpochChangeTerminal, type IdentityEpochLibraryTransform } from '../identity-core/index.ts';
 import { identityEpochChangeTerminal, type IdentityEpochLibraryTransform } from '../identity-core/index.ts';
 
-// The third row is a paid rejection sentinel, never a silently truncated input generation.
-export const identityEpochLibraryInputsSQL =
-  'SELECT generation,terminal,control_partition FROM semantic.identity_epoch_input WHERE partition_no=$1 AND job_id=$2 ORDER BY terminal LIMIT 3';
+export { identityEpochLibraryInputsSQL } from '../identity-epoch-library-inputs.ts';
 
 /** Library-only bounded projection of the ordinary pageChanges algorithm, on the caller's RR snapshot.
  * This neither admits a job nor changes the ordinary store API. Every output ID is native UUID width.

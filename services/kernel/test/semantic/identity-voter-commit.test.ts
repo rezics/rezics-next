@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { noEffect, runCommand, withSingleCommandAttempt } from '../../src/command/command.ts';
 import type { Pool, PoolClient } from 'pg';
 import lockOwner from '../../src/semantic/identity-rating-commit-participant-lock-owner.sql';
@@ -22,7 +23,9 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
 import { createIdentityRatingCommitParticipant } from '../../src/semantic/identity-rating-commit-participant.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
-import { digest, release } from './support/identity-epoch.ts';
+import { digest, identityEpochDatabase, release } from './support/identity-epoch.ts';
+
+composeLibraryDomain();
 
 async function reviewedSelf(f: Awaited<ReturnType<typeof createIdentityMappingFixture>>, route: number) {
   const subjectId = (await f.create('Rating reviewed identity', route)).subject.id;
@@ -188,8 +191,51 @@ async function drainMapping(pool: Pool, job: IdentityJobRef, bound = 512) {
   throw new Error(`Native mapping did not finish within ${bound} bounded steps`);
 }
 
+async function profileRatingFixture() {
+  const db = await identityEpochDatabase();
+  try {
+    const f = await createProfileEntryFixture({
+      ownerScopes: ['rating:vote'],
+      pool: db.pool,
+      databaseUrl: db.url,
+    });
+    return {
+      ...f,
+      async close() {
+        await f.close();
+        await db.close();
+      },
+    };
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
+}
+
+async function injectControlReplacement(
+  admin: Pool,
+  table: string,
+  column: string,
+  where: string,
+  keys: readonly unknown[],
+  replacement: unknown,
+) {
+  const client = await admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    await client.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, replacement]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
-  const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  const f = await profileRatingFixture();
   try {
     await installIdentityEpochBootstrap(f.pool);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
@@ -378,7 +424,7 @@ test('persisted control replacement invalidates the exact review without changin
       const previous = (await f.admin.query(`SELECT ${column} AS value FROM ${table} WHERE ${where}`, [...keys]))
         .rows[0]!.value;
       const replacement = column === 'epoch' ? Number(previous) + 2 : randomUUID();
-      await f.admin.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, replacement]);
+      await injectControlReplacement(f.admin, table, column, where, keys, replacement);
       try {
         await expect(
           runCommand(f.pool, { partition: selected.home }, async (tx) =>
@@ -386,7 +432,7 @@ test('persisted control replacement invalidates the exact review without changin
           ),
         ).rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
       } finally {
-        await f.admin.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, previous]);
+        await injectControlReplacement(f.admin, table, column, where, keys, previous);
       }
     }
     expect(
@@ -537,7 +583,7 @@ test('preparation rejects extra, duplicated and oversized reviewed evidence', as
 }, 180_000);
 
 test('the authorized vote transaction excludes native control writes through commit and rollback and replays after a changed review', async () => {
-  const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  const f = await profileRatingFixture();
   try {
     await installIdentityEpochBootstrap(f.pool);
     const { requested, sourceHome } = await localRatingSubject(f, 'Authorized guarded vote');

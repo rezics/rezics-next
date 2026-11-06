@@ -1,6 +1,7 @@
 /** Development composition uses the importer-owned shared-journal component. */
 export {
   createDevelopmentShowcaseRequest,
+  developmentCollectionFailure,
   developmentCollectionScopes,
   seedDevelopmentShowcase,
   type DevelopmentShowcaseContext,

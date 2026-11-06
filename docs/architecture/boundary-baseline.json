@@ -328,83 +328,13 @@
       "violations": [
         {
           "rule": "rule 2",
-          "file": "services/importer/src/accepted-checks.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/cross-media-bindings.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/import-contract.ts",
-          "edge": "type import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/importer.ts",
-          "edge": "type import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/reviewed-catalogue.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/importer/src/reviewed-catalogue.ts",
           "edge": "value import \"../../../packages/definitions/src/reviewed-vocabulary.json\" #1 => packages/definitions/src/reviewed-vocabulary.json"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-bangumi-credits.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-bangumi-genres.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-manifest.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-media.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-publication.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-tags.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-vndb-credits.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/importer/src/showcase-vndb-releases.ts",
           "edge": "value import \"../../../packages/definitions/src/reviewed-vocabulary.json\" #1 => packages/definitions/src/reviewed-vocabulary.json"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/showcase-work-links.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
         },
         {
           "rule": "rule 2",
@@ -417,36 +347,6 @@
           "edge": "value import \"../../kernel/src/rating/source-provider.ts\" #1 => services/kernel/src/rating/source-provider.ts"
         },
         {
-          "rule": "rule 2",
-          "file": "services/importer/src/source-registry.ts",
-          "edge": "type import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/vndb-public-tags.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/vndb-release-fidelity.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/vndb-release-platforms.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/importer/src/vndb-staff-credits.ts",
-          "edge": "value import \"../../../packages/conversion/src/support.ts\" #1 => packages/conversion/src/support.ts"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/bangumi-episode-fidelity.ts",
-          "edge": "value import \"./cross-media-seed.ts\" #1 => services/importer/src/cross-media-seed.ts (value-import cycle)"
-        },
-        {
           "rule": "rule 3",
           "file": "services/importer/src/batch-cli.ts",
           "edge": "value import \"./cli.ts\" #1 => services/importer/src/cli.ts (value-import cycle)"
@@ -455,86 +355,6 @@
           "rule": "rule 3",
           "file": "services/importer/src/cli.ts",
           "edge": "value import \"./batch-cli.ts\" #1 => services/importer/src/batch-cli.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"./showcase-bangumi-episodes.ts\" #1 => services/importer/src/showcase-bangumi-episodes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"./showcase-character-vocabulary.ts\" #1 => services/importer/src/showcase-character-vocabulary.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"./showcase-tags.ts\" #1 => services/importer/src/showcase-tags.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"./showcase-vndb-credits.ts\" #1 => services/importer/src/showcase-vndb-credits.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"./showcase-vndb-releases.ts\" #1 => services/importer/src/showcase-vndb-releases.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cross-media-seed.ts",
-          "edge": "value import \"./vndb-character-traits.ts\" #1 => services/importer/src/vndb-character-traits.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/showcase-bangumi-episodes.ts",
-          "edge": "value import \"./bangumi-episode-fidelity.ts\" #1 => services/importer/src/bangumi-episode-fidelity.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/showcase-character-vocabulary.ts",
-          "edge": "value import \"./vndb-character-traits.ts\" #1 => services/importer/src/vndb-character-traits.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/showcase-tags.ts",
-          "edge": "value import \"./vndb-public-tags.ts\" #1 => services/importer/src/vndb-public-tags.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/showcase-vndb-credits.ts",
-          "edge": "value import \"./vndb-staff-credits.ts\" #1 => services/importer/src/vndb-staff-credits.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/showcase-vndb-releases.ts",
-          "edge": "value import \"./cross-media-seed.ts\" #1 => services/importer/src/cross-media-seed.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/showcase-vndb-releases.ts",
-          "edge": "value import \"./vndb-release-fidelity.ts\" #1 => services/importer/src/vndb-release-fidelity.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/vndb-character-traits.ts",
-          "edge": "value import \"./cross-media-seed.ts\" #1 => services/importer/src/cross-media-seed.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/vndb-public-tags.ts",
-          "edge": "value import \"./cross-media-seed.ts\" #1 => services/importer/src/cross-media-seed.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/vndb-release-fidelity.ts",
-          "edge": "value import \"./cross-media-seed.ts\" #1 => services/importer/src/cross-media-seed.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/vndb-staff-credits.ts",
-          "edge": "value import \"./cross-media-seed.ts\" #1 => services/importer/src/cross-media-seed.ts (value-import cycle)"
         }
       ]
     },
@@ -741,11 +561,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification.ts",
           "edge": "value import \"../semantic/agents.ts\" #1 => services/kernel/src/semantic/agents.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -2486,11 +2301,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/commands.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/commands.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -2557,11 +2367,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/creator-offers.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/creator-sales-work.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -2666,11 +2471,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/payout-routes.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/payout-routes.ts",
           "edge": "value import \"../semantic/read-context.sql\" #1 => services/kernel/src/semantic/read-context.sql"
         },
         {
@@ -2686,11 +2486,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/payouts.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/payouts.ts",
           "edge": "value import \"../access/lifecycle-20261025094010-command.ts\" #1 => services/kernel/src/access/lifecycle-20261025094010-command.ts"
         },
         {
@@ -2702,11 +2497,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/payouts.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/payouts.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -2982,11 +2772,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/board-scheme.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/board-scheme.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -3028,11 +2813,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/container-lifecycle.ts",
           "edge": "value import \"../access/command-admission.ts\" #1 => services/kernel/src/access/command-admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/container-lifecycle.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
         },
         {
           "rule": "rule 2",
@@ -3152,11 +2932,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/join.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/join.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -3238,11 +3013,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/membership.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/membership.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
         },
         {
           "rule": "rule 2",
@@ -3402,11 +3172,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/publication.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/publication.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -3493,11 +3258,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm-continuity.ts",
           "edge": "value import \"../access/command-admission.ts\" #1 => services/kernel/src/access/command-admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm-continuity.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
         },
         {
           "rule": "rule 2",
@@ -3592,11 +3352,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -3682,11 +3437,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/routes.ts",
-          "edge": "value import \"../content/media.ts\" #1 => services/kernel/src/content/media.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/routes.ts",
           "edge": "value import \"../content/reads.ts\" #1 => services/kernel/src/content/reads.ts"
         },
         {
@@ -3738,11 +3488,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/rules-authoring.ts",
           "edge": "value import \"../content/reads.ts\" #1 => services/kernel/src/content/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/schemas.ts",
-          "edge": "value import \"../content/realm-media.ts\" #1 => services/kernel/src/content/realm-media.ts"
         },
         {
           "rule": "rule 2",
@@ -4519,11 +4264,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/board-create.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/board-create.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -4678,11 +4418,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/collection-job.ts",
-          "edge": "value import \"../command/time.sql\" #1 => services/kernel/src/command/time.sql"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/commands.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
@@ -4733,11 +4468,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/commands.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/community-presentation.ts",
           "edge": "value import \"../community/member-count.ts\" #1 => services/kernel/src/community/member-count.ts"
         },
@@ -4770,11 +4500,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/cover-prepared-access-work.ts",
           "edge": "value import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/cover-reference.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -4868,11 +4593,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/edition-commands.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/edition-index.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
         },
@@ -4880,11 +4600,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/edition-index.ts",
           "edge": "value import \"../tokens/list-cursor.ts\" #1 => services/kernel/src/tokens/list-cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/edition-initiator.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
         },
         {
           "rule": "rule 2",
@@ -4995,11 +4710,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/erase-post.ts",
           "edge": "value import \"../access/resource-authorization.ts\" #1 => services/kernel/src/access/resource-authorization.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/erasure-initiator.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
         },
         {
           "rule": "rule 2",
@@ -5134,11 +4844,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/feed-subject-reactions.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/feed-subject-reactions.ts",
           "edge": "value import \"../semantic/eligibility.ts\" #1 => services/kernel/src/semantic/eligibility.ts"
         },
         {
@@ -5195,16 +4900,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/feed.ts",
           "edge": "type import \"../library/viewer-personal-actions.ts\" #1 => services/kernel/src/library/viewer-personal-actions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/feed.ts",
-          "edge": "type import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/feed.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -5274,22 +4969,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/history-page-context.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/history-page-context.ts",
           "edge": "value import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/history-page.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/imported-fields.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -5558,11 +5243,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/moderation-directory-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/moderation-directory.ts",
           "edge": "value import \"../tokens/list-cursor.ts\" #1 => services/kernel/src/tokens/list-cursor.ts"
         },
@@ -5664,16 +5344,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/operations.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/operations.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/operations.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -5748,11 +5418,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/reaction-projection.ts",
-          "edge": "value import \"../partition/read.sql\" #1 => services/kernel/src/partition/read.sql"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/reactions.ts",
           "edge": "value import \"../access/command-admission.ts\" #1 => services/kernel/src/access/command-admission.ts"
         },
@@ -5775,11 +5440,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/reactions.ts",
           "edge": "value import \"../community/participation.ts\" #1 => services/kernel/src/community/participation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/reactions.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -5874,11 +5534,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/reads.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/reads.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
         },
         {
@@ -5940,11 +5595,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/realm-subject-disclosure-work.ts",
           "edge": "type import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/realm-subject-disclosure-work.ts",
-          "edge": "value import \"../partition/read.sql\" #1 => services/kernel/src/partition/read.sql"
         },
         {
           "rule": "rule 2",
@@ -6093,11 +5743,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/report-effect.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/report-locator-installation.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
         },
@@ -6163,11 +5808,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/report-routes.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/reporter-history-targets.ts",
           "edge": "value import \"../community/realm.ts\" #1 => services/kernel/src/community/realm.ts"
         },
@@ -6185,11 +5825,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/reporter-history-targets.ts",
           "edge": "value import \"../semantic/current-subject-summaries.ts\" #1 => services/kernel/src/semantic/current-subject-summaries.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/reporter-history.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -6240,11 +5875,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/reports.ts",
           "edge": "value import \"../semantic/context.ts\" #1 => services/kernel/src/semantic/context.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/reports.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -6320,11 +5950,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/review-discovery.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/review-discovery.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -6405,11 +6030,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/schemas.ts",
           "edge": "value import \"../rating/question-scale.ts\" #1 => services/kernel/src/rating/question-scale.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/setup.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -6499,11 +6119,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/source-fence-routes.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/source-fence-routes.ts",
           "edge": "value import \"../semantic/read-context.sql\" #1 => services/kernel/src/semantic/read-context.sql"
         },
         {
@@ -6550,11 +6165,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/subject-threads-context.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/subject-threads-context.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -7188,21 +6798,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/content/realm-subject-source.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/realm-subject-source.ts",
-          "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/realm-subject-source.ts",
-          "edge": "value import \"./realm-subject-candidates.ts\" #1 => services/kernel/src/content/realm-subject-candidates.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/content/review-census.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
         },
@@ -7275,16 +6870,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/builtin-materialization.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/builtin-materialization.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/builtin-materialization.ts",
           "edge": "value import \"../access/parent-creation.ts\" #1 => services/kernel/src/access/parent-creation.ts"
         },
         {
@@ -7304,23 +6889,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/builtin-materialization.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/builtin-runtime-query.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/builtin-runtime-query.ts",
-          "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/builtin-runtime-query.ts",
-          "edge": "value import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
         },
         {
           "rule": "rule 2",
@@ -7336,11 +6906,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/canonical-source-store.ts",
           "edge": "type import \"../semantic/identity-scope-types.ts\" #1 => services/kernel/src/semantic/identity-scope-types.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -7375,11 +6940,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-add.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-add.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -7401,16 +6961,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-library-removal.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-library-removal.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-library-removal.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -7460,16 +7010,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-operation.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-operation.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-operation.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -7481,11 +7021,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-operation.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-remove.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -7540,27 +7075,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-status.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-status.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-status.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-bulk-work.ts",
           "edge": "type import \"../access/auth-consent.ts\" #1 => services/kernel/src/access/auth-consent.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-bulk-work.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -7600,17 +7120,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-kind-consent.ts",
-          "edge": "value import \"../access/account-share.sql\" #1 => services/kernel/src/access/account-share.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-kind-consent.ts",
           "edge": "value import \"../command/operational-fence.sql\" #1 => services/kernel/src/command/operational-fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-kind-consent.ts",
-          "edge": "value import \"../command/time.sql\" #1 => services/kernel/src/command/time.sql"
         },
         {
           "rule": "rule 2",
@@ -7689,18 +7199,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-metadata-history.ts",
-          "edge": "type import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/collection-order-placement.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-order-work.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -7715,22 +7215,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "type import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../content/media.ts\" #1 => services/kernel/src/content/media.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-presentation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -7754,23 +7239,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-episode-contract.ts",
-          "edge": "type import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-episodes.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/collection-publication-episodes.ts",
           "edge": "value import \"../access/command-admission.ts\" #1 => services/kernel/src/access/command-admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-episodes.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
         },
         {
           "rule": "rule 2",
@@ -7796,16 +7266,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-publication-final.ts",
           "edge": "value import \"../access/command-admission.ts\" #1 => services/kernel/src/access/command-admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-final.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-final.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -7865,11 +7325,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-publication-staging.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-staging.ts",
           "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts"
         },
         {
@@ -7889,33 +7344,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-work-admission.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-work-admission.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-work-admission.ts",
-          "edge": "value import \"../access/lifecycle-20261025094010-command.ts\" #1 => services/kernel/src/access/lifecycle-20261025094010-command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication-work-admission.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/collection-publication-work.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-publication.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -7951,11 +7381,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-reads.ts",
           "edge": "type import \"../access/viewer-actions.ts\" #1 => services/kernel/src/access/viewer-actions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-reads.ts",
-          "edge": "type import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
         },
         {
           "rule": "rule 2",
@@ -8000,17 +7425,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-retention.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-retention.ts",
           "edge": "value import \"../access/lifecycle-20261025094010-command.ts\" #1 => services/kernel/src/access/lifecycle-20261025094010-command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-routes.ts",
-          "edge": "type import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
         },
         {
           "rule": "rule 2",
@@ -8075,37 +7490,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-rules.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-rules.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-rules.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-rules.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-rules.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-source-native.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-source-native.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -8151,16 +7541,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-source-native.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-source-native.ts",
-          "edge": "value import \"../partition/read.sql\" #1 => services/kernel/src/partition/read.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-source-output.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -8210,16 +7590,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collections.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collections.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collections.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -8261,11 +7631,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/command-support.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/command-support.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -8340,17 +7705,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "type import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/continue-routes.ts",
           "edge": "type import \"../semantic/http/definitions.ts\" #1 => services/kernel/src/semantic/http/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -8366,11 +7721,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/continue-source.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/continue-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -8391,11 +7741,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/copies.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/copies.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -8450,17 +7795,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/copy-archive.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/copy-archive.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/copy-inventory.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -8485,11 +7820,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/copy-list-context.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/copy-list-context.ts",
           "edge": "value import \"../semantic/list-presentation.ts\" #1 => services/kernel/src/semantic/list-presentation.ts"
         },
         {
@@ -8505,22 +7835,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/copy-presentation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/copy-presentation.ts",
           "edge": "value import \"../semantic/language.ts\" #1 => services/kernel/src/semantic/language.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/diary-reads.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/diary-reads.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -8590,11 +7910,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/entry-annotation-correction.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/entry-annotation-correction.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -8630,11 +7945,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/entry-lifecycle.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/entry-lifecycle.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -8661,11 +7971,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/entry-restore-preparation.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/entry-restore-preparation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -8690,22 +7995,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/episode-progress.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/episode-progress.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/episode-source.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/episode-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -8850,11 +8145,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/identity-epoch-participant.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/identity-epoch-participant.ts",
           "edge": "value import \"../semantic/events.ts\" #1 => services/kernel/src/semantic/events.ts"
         },
         {
@@ -8880,11 +8170,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/identity-native-planner.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/identity-native-planner.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
         },
         {
@@ -8965,11 +8250,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/label-consolidation-review.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/label-consolidation-review.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -8995,16 +8275,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/label-consolidation.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/label-consolidation.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/label-consolidation.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -9016,11 +8286,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/label-consolidation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/label-retention.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -9080,17 +8345,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/library-archive-collection-recovery.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/library-archive-collection-recovery.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/library-archive-collection-recovery.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -9130,11 +8385,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/library-archive-merge.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/library-archive-merge.ts",
           "edge": "value import \"../access/lifecycle-20261025094010-command.ts\" #1 => services/kernel/src/access/lifecycle-20261025094010-command.ts"
         },
         {
@@ -9166,11 +8416,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/library-export.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/library-export.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -9236,11 +8481,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/list-import-anilist.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/list-import-anilist.ts",
-          "edge": "value import \"../access/account-share.sql\" #1 => services/kernel/src/access/account-share.sql"
         },
         {
           "rule": "rule 2",
@@ -9695,16 +8935,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/members-preparation.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/members-preparation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/members-preparation.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
         },
         {
@@ -9765,11 +8995,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-filter-native-binding.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter-native-binding.ts",
           "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts"
         },
         {
@@ -9785,27 +9010,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-filter-native-binding.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter-native-binding.ts",
           "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-filter-native-closure.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter-native-closure.ts",
           "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter-native-closure.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -9845,11 +9055,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-filter-plan.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter-plan.ts",
           "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts"
         },
         {
@@ -9885,11 +9090,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-filter.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
         },
         {
@@ -9905,22 +9105,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-filter.ts",
-          "edge": "value import \"../search/current-filter-plan.ts\" #1 => services/kernel/src/search/current-filter-plan.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter.ts",
           "edge": "value import \"../search/current-leaf.ts\" #1 => services/kernel/src/search/current-leaf.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-filter.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-identity.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -9946,11 +9131,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-index-metadata.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-index-metadata.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -10045,11 +9225,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/pins.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/pins.ts",
           "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts"
         },
         {
@@ -10094,16 +9269,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/profile-migration-page.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/profile-migration-page.ts",
-          "edge": "value import \"../access/account-share.ts\" #2 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/profile-migration-runtime.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
         },
@@ -10111,11 +9276,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/profile-migration-runtime.ts",
           "edge": "value import \"../access/lifecycle-20261025094010-command.ts\" #1 => services/kernel/src/access/lifecycle-20261025094010-command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/profile-migration-runtime.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -10131,11 +9291,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/profile-source.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/profile-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -10161,11 +9316,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/progress-presentation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/progress-presentation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -10315,17 +9465,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/sessions.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/sessions.ts",
           "edge": "value import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/shelf-admission.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -10346,11 +9486,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/shelf-contract.ts",
           "edge": "type import \"../tokens/cursor.ts\" #1 => services/kernel/src/tokens/cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/shelf-maintenance-runtime.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -10376,11 +9511,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/shelf-reads.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/shelf-reads.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -10471,11 +9601,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/sitemap-position.ts",
           "edge": "value import \"../tokens/list-cursor.ts\" #1 => services/kernel/src/tokens/list-cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/sitemap.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -10731,16 +9856,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/library/builtin-runtime-query.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/builtin-runtime-query.ts",
-          "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/builtin-runtime-query.ts",
-          "edge": "value import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -11005,27 +10120,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../content/cover-reference.ts\" #1 => services/kernel/src/content/cover-reference.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../content/media.ts\" #1 => services/kernel/src/content/media.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-presentation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-presentation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -11116,16 +10211,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/library/collection-publication-native-source.ts",
           "edge": "value import \"./native-source-custody.ts\" #1 => services/kernel/src/library/native-source-custody.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-publication-work-admission.ts",
-          "edge": "value import \"../access/durable-initiator-capture.ts\" #1 => services/kernel/src/access/durable-initiator-capture.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/collection-publication-work-admission.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -11725,22 +10810,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/members-preparation.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/members-preparation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/members-preparation.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/members-preparation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -12170,11 +11240,6 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/sessions.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/sessions.ts",
           "edge": "value import \"./command-support.ts\" #1 => services/kernel/src/library/command-support.ts (value-import cycle)"
         },
         {
@@ -12526,11 +11591,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/command/operational.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/command/operational.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
         },
         {
@@ -12601,16 +11661,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/app.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/app.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/app.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
         },
         {
@@ -12656,17 +11706,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "type import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../access/account-viewer-actions.ts\" #1 => services/kernel/src/access/account-viewer-actions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
         },
         {
           "rule": "rule 2",
@@ -13021,11 +12061,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/request/access.ts",
-          "edge": "value import \"../access/derived-access.ts\" #1 => services/kernel/src/access/derived-access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/request/access.ts",
           "edge": "value import \"../access/permission.ts\" #1 => services/kernel/src/access/permission.ts"
         },
         {
@@ -13166,11 +12201,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-own-page-schemas.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/rating/classification-ballot-own-page.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
         },
@@ -13203,11 +12233,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/classification-ballot-own-page.ts",
           "edge": "value import \"../semantic/classification-association.ts\" #1 => services/kernel/src/semantic/classification-association.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/classification-ballot-own-page.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -13363,11 +12388,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/own-votes-page.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/own-votes-page.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -13751,11 +12771,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification-routes.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification-semantic.ts",
           "edge": "value import \"../database/read-snapshot.ts\" #1 => services/kernel/src/database/read-snapshot.ts"
         },
@@ -13773,11 +12788,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification-semantic.ts",
           "edge": "value import \"../semantic/current-relations.ts\" #1 => services/kernel/src/semantic/current-relations.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification-semantic.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -13906,11 +12916,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-statistics.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/rating/voter-realms.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts"
         },
@@ -13998,41 +13003,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/rating/personal-score.ts",
           "edge": "value import \"../library/shelf-reader-unavailable.ts\" #1 => services/kernel/src/library/shelf-reader-unavailable.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/population-total.ts",
-          "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/population-total.ts",
-          "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "value import \"./population-total.ts\" #1 => services/kernel/src/rating/population-total.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-figure.ts",
-          "edge": "value import \"./question-directory.ts\" #1 => services/kernel/src/rating/question-directory.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-rating-source.ts",
-          "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/rating/public-rating-source.ts",
-          "edge": "value import \"./public-figure.ts\" #1 => services/kernel/src/rating/public-figure.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -14158,11 +13128,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/presentation/http/pages.ts",
-          "edge": "value import \"../../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/presentation/http/pages.ts",
           "edge": "value import \"../../semantic/eligibility.ts\" #1 => services/kernel/src/semantic/eligibility.ts"
         },
         {
@@ -14203,17 +13168,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/presentation/http/profiles.ts",
-          "edge": "value import \"../../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/presentation/http/profiles.ts",
           "edge": "value import \"../../semantic/eligibility.ts\" #1 => services/kernel/src/semantic/eligibility.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/presentation/profiles.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -14277,11 +13232,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/presentation/selected-page.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/presentation/semantic-page.ts",
           "edge": "type import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
         },
@@ -14294,11 +13244,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/presentation/semantic-page.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/presentation/semantic-page.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -14344,11 +13289,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/account-discovery.ts",
           "edge": "value import \"../access/account-discovery-work.ts\" #1 => services/kernel/src/access/account-discovery-work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/account-discovery.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -14419,11 +13359,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/default-discovery.ts",
           "edge": "value import \"../rating/votes.ts\" #1 => services/kernel/src/rating/votes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/default-discovery.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -14638,11 +13573,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/http/catalogue.ts",
-          "edge": "value import \"../../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/http/catalogue.ts",
           "edge": "value import \"../../semantic/eligibility.ts\" #1 => services/kernel/src/semantic/eligibility.ts"
         },
         {
@@ -14707,18 +13637,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/search/http/releases.ts",
-          "edge": "value import \"../../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/search/http/routes.ts",
           "edge": "type import \"../../http/app.ts\" #1 => services/kernel/src/http/app.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/http/routes.ts",
-          "edge": "value import \"../../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -14739,16 +13659,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/http/routes.ts",
           "edge": "value import \"../../rating/public-figure-http.ts\" #1 => services/kernel/src/rating/public-figure-http.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/http/routes.ts",
-          "edge": "value import \"../../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/http/routes.ts",
-          "edge": "value import \"../../semantic/definitions.ts\" #2 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -14942,11 +13852,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/search/public-preparation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/search/public-runtime.ts",
           "edge": "type import \"../semantic/public-filter-source-contract.ts\" #1 => services/kernel/src/semantic/public-filter-source-contract.ts"
         },
@@ -14959,11 +13864,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/public-runtime.ts",
           "edge": "value import \"../library/listing-counts.ts\" #1 => services/kernel/src/library/listing-counts.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/public-runtime.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -15104,11 +14004,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/recent-searches.ts",
           "edge": "type import \"../http/app.ts\" #1 => services/kernel/src/http/app.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/recent-searches.ts",
-          "edge": "value import \"../access/account-share.ts\" #1 => services/kernel/src/access/account-share.ts"
         },
         {
           "rule": "rule 2",
@@ -15338,11 +14233,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/scope-members-work.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-members-work.ts",
           "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts"
         },
         {
@@ -15443,11 +14333,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-preparation.ts",
           "edge": "value import \"../semantic/facet-population.ts\" #1 => services/kernel/src/semantic/facet-population.ts"
         },
         {
@@ -15464,11 +14349,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/scope-preparation.ts",
           "edge": "value import \"../semantic/search-relations.ts\" #1 => services/kernel/src/semantic/search-relations.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-release.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -15544,11 +14424,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/scope-source.ts",
           "edge": "value import \"../library/owner-filter.ts\" #1 => services/kernel/src/library/owner-filter.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -15677,11 +14552,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/search/service.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/search/space-entry.ts",
           "edge": "type import \"../library/follow-discovery.ts\" #1 => services/kernel/src/library/follow-discovery.ts"
         },
@@ -15699,11 +14569,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/suggestion-context-native.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/suggestion-context-native.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -15877,18 +14742,8 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/search/character-person.ts",
-          "edge": "value import \"./hits.ts\" #1 => services/kernel/src/search/hits.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/search/collection-discovery.ts",
           "edge": "value import \"../library/collection-discovery-summaries.ts\" #1 => services/kernel/src/library/collection-discovery-summaries.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/disclosure/check.ts",
-          "edge": "value import \"../character-person.ts\" #1 => services/kernel/src/search/character-person.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -15909,11 +14764,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/search/discovery-hydration.ts",
           "edge": "value import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/discovery-query.ts",
-          "edge": "value import \"./discovery-documents.ts\" #1 => services/kernel/src/search/discovery-documents.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -16102,106 +14952,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"../semantic/public-filter-source-binding.ts\" #1 => services/kernel/src/semantic/public-filter-source-binding.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"../semantic/public-filter-source-binding.ts\" #2 => services/kernel/src/semantic/public-filter-source-binding.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"../semantic/public-filter-source.ts\" #1 => services/kernel/src/semantic/public-filter-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./account-discovery.ts\" #1 => services/kernel/src/search/account-discovery.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./bounded-sort-keys.ts\" #1 => services/kernel/src/search/bounded-sort-keys.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./discovery-documents.ts\" #1 => services/kernel/src/search/discovery-documents.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./discovery-query.ts\" #1 => services/kernel/src/search/discovery-query.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./document.ts\" #1 => services/kernel/src/search/document.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./generations.ts\" #1 => services/kernel/src/search/generations.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./indices.ts\" #1 => services/kernel/src/search/indices.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./public-filter-custody-source.ts\" #1 => services/kernel/src/search/public-filter-custody-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./public-filter-custody.ts\" #1 => services/kernel/src/search/public-filter-custody.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./query-payload.ts\" #1 => services/kernel/src/search/query-payload.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./query-payload.ts\" #2 => services/kernel/src/search/query-payload.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./query.ts\" #1 => services/kernel/src/search/query.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./rated-source.ts\" #1 => services/kernel/src/search/rated-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./runner.ts\" #1 => services/kernel/src/search/runner.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./scope-ordered.ts\" #1 => services/kernel/src/search/scope-ordered.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./write-actions.ts\" #1 => services/kernel/src/search/write-actions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/public-filter-consumer.ts",
-          "edge": "value import \"./writer-guard.ts\" #1 => services/kernel/src/search/writer-guard.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/search/public-filter-custody-source.ts",
           "edge": "value import \"../semantic/public-filter-source-binding.ts\" #1 => services/kernel/src/semantic/public-filter-source-binding.ts (value-import cycle)"
         },
@@ -16228,57 +14978,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/query.ts",
-          "edge": "value import \"./indices.ts\" #1 => services/kernel/src/search/indices.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/query.ts",
-          "edge": "value import \"./query-payload.ts\" #1 => services/kernel/src/search/query-payload.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/query.ts",
           "edge": "value import \"./rating-query.ts\" #1 => services/kernel/src/search/rating-query.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rated-source.ts",
-          "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rated-source.ts",
-          "edge": "value import \"../rating/public-rating-source.ts\" #1 => services/kernel/src/rating/public-rating-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rated-source.ts",
-          "edge": "value import \"../rating/votes.ts\" #1 => services/kernel/src/rating/votes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rated-source.ts",
-          "edge": "value import \"../semantic/search-source.ts\" #1 => services/kernel/src/semantic/search-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rated-source.ts",
-          "edge": "value import \"./rating-subject-source.ts\" #1 => services/kernel/src/search/rating-subject-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rating-query.ts",
-          "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rating-query.ts",
-          "edge": "value import \"../rating/votes.ts\" #1 => services/kernel/src/rating/votes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rating-query.ts",
-          "edge": "value import \"./indices.ts\" #1 => services/kernel/src/search/indices.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -16289,31 +14989,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/search/rating-source.ts",
           "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rating-subject-source.ts",
-          "edge": "value import \"../access/gates/catalogue.ts\" #1 => services/kernel/src/access/gates/catalogue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/rating-subject-source.ts",
-          "edge": "value import \"./rating-source.ts\" #1 => services/kernel/src/search/rating-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/realm-scope.ts",
-          "edge": "value import \"../content/realm-subject-source.ts\" #1 => services/kernel/src/content/realm-subject-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/realm-scope.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/realm-scope.ts",
-          "edge": "value import \"./scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -16477,256 +15152,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"./indices.ts\" #1 => services/kernel/src/search/indices.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"./public-filter-consumer.ts\" #1 => services/kernel/src/search/public-filter-consumer.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"./public-filter-custody.ts\" #1 => services/kernel/src/search/public-filter-custody.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"./query-payload.ts\" #1 => services/kernel/src/search/query-payload.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"./scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered-native.ts",
-          "edge": "value import \"./scope-ordered.ts\" #1 => services/kernel/src/search/scope-ordered.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered.ts",
-          "edge": "value import \"./document.ts\" #1 => services/kernel/src/search/document.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-ordered.ts",
-          "edge": "value import \"./scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation-ordered.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation-ordered.ts",
-          "edge": "value import \"../semantic/public-filter-source-binding.ts\" #1 => services/kernel/src/semantic/public-filter-source-binding.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation-ordered.ts",
-          "edge": "value import \"../semantic/public-filter-source.ts\" #1 => services/kernel/src/semantic/public-filter-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation-ordered.ts",
-          "edge": "value import \"./scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation-ordered.ts",
-          "edge": "value import \"./scope-ordered-native.ts\" #1 => services/kernel/src/search/scope-ordered-native.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation-ordered.ts",
-          "edge": "value import \"./scope-ordered.ts\" #1 => services/kernel/src/search/scope-ordered.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../library/native-source-custody.ts\" #1 => services/kernel/src/library/native-source-custody.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../semantic/facet-population.ts\" #1 => services/kernel/src/semantic/facet-population.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../semantic/identity-scoped-public-source.ts\" #1 => services/kernel/src/semantic/identity-scoped-public-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"../semantic/search-relations.ts\" #1 => services/kernel/src/semantic/search-relations.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"./scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"./scope-preparation-ordered.ts\" #1 => services/kernel/src/search/scope-preparation-ordered.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-preparation.ts",
-          "edge": "value import \"./service-scope-order.ts\" #1 => services/kernel/src/search/service-scope-order.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-release.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../library/collection-source-work.ts\" #1 => services/kernel/src/library/collection-source-work.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../library/owner-filter-native-binding.ts\" #1 => services/kernel/src/library/owner-filter-native-binding.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../library/owner-filter-plan.ts\" #1 => services/kernel/src/library/owner-filter-plan.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../library/owner-filter.ts\" #1 => services/kernel/src/library/owner-filter.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/public-filter-source-binding.ts\" #1 => services/kernel/src/semantic/public-filter-source-binding.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/public-filter-source.ts\" #1 => services/kernel/src/semantic/public-filter-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./disclosure/check.ts\" #1 => services/kernel/src/search/disclosure/check.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./indices.ts\" #1 => services/kernel/src/search/indices.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./query.ts\" #1 => services/kernel/src/search/query.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./realm-scope.ts\" #1 => services/kernel/src/search/realm-scope.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-members-work-cost.ts\" #1 => services/kernel/src/search/scope-members-work-cost.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-members-work.ts\" #1 => services/kernel/src/search/scope-members-work.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-ordered-native.ts\" #1 => services/kernel/src/search/scope-ordered-native.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-ordered.ts\" #1 => services/kernel/src/search/scope-ordered.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-preparation-ordered.ts\" #1 => services/kernel/src/search/scope-preparation-ordered.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-preparation.ts\" #1 => services/kernel/src/search/scope-preparation.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-release.ts\" #1 => services/kernel/src/search/scope-release.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./scope-work-context.ts\" #1 => services/kernel/src/search/scope-work-context.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"./service-scope-order.ts\" #1 => services/kernel/src/search/service-scope-order.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/search/scope-work-context.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
         },
@@ -16749,31 +15174,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/search/scope-work-context.ts",
           "edge": "value import \"./scope-members-work-cost.ts\" #1 => services/kernel/src/search/scope-members-work-cost.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/service-scope-order.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/service-scope-order.ts",
-          "edge": "value import \"../library/collection-source.ts\" #1 => services/kernel/src/library/collection-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/service-scope-order.ts",
-          "edge": "value import \"./scope-work-context.ts\" #1 => services/kernel/src/search/scope-work-context.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/service-scope.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/search/service-scope.ts",
-          "edge": "value import \"./scope-source.ts\" #1 => services/kernel/src/search/scope-source.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -16875,11 +15275,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/bulk.ts",
           "edge": "value import \"../content/imported-fields.ts\" #1 => services/kernel/src/content/imported-fields.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/bulk.ts",
-          "edge": "value import \"../content/media.ts\" #1 => services/kernel/src/content/media.ts"
         },
         {
           "rule": "rule 2",
@@ -17423,16 +15818,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-public-output-work.ts",
-          "edge": "value import \"../command/fence.sql\" #1 => services/kernel/src/command/fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-public-output-work.ts",
-          "edge": "value import \"../command/time.sql\" #1 => services/kernel/src/command/time.sql"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-rating-admission.ts",
           "edge": "value import \"../database/read-snapshot.ts\" #1 => services/kernel/src/database/read-snapshot.ts"
         },
@@ -17504,16 +15889,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-scope-native-association.ts",
-          "edge": "value import \"../command/fence.sql\" #1 => services/kernel/src/command/fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-scope-native-association.ts",
-          "edge": "value import \"../command/time.sql\" #1 => services/kernel/src/command/time.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-scope-native-association.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
         },
         {
@@ -17530,16 +15905,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-scoped-observations.ts",
           "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-scoped-observations.ts",
-          "edge": "value import \"../command/no-effect-fence.sql\" #1 => services/kernel/src/command/no-effect-fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-scoped-observations.ts",
-          "edge": "value import \"../command/time.sql\" #1 => services/kernel/src/command/time.sql"
         },
         {
           "rule": "rule 2",
@@ -17568,11 +15933,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-scoped-observations.ts",
-          "edge": "value import \"../partition/read.sql\" #1 => services/kernel/src/partition/read.sql"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-scoped-public-source.ts",
           "edge": "type import \"../library/native-public-output-contract.ts\" #1 => services/kernel/src/library/native-public-output-contract.ts"
         },
@@ -17585,26 +15945,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/semantic/identity-scoped-public-source.ts",
           "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-          "edge": "value import \"../command/fence.sql\" #1 => services/kernel/src/command/fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-          "edge": "value import \"../command/no-effect-fence.sql\" #1 => services/kernel/src/command/no-effect-fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-          "edge": "value import \"../command/time.sql\" #1 => services/kernel/src/command/time.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-          "edge": "value import \"../partition/read.sql\" #1 => services/kernel/src/partition/read.sql"
         },
         {
           "rule": "rule 2",
@@ -19865,11 +18205,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/zones/http.ts",
-          "edge": "type import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/zones/http.ts",
           "edge": "type import \"../semantic/http/definitions.ts\" #1 => services/kernel/src/semantic/http/definitions.ts"
         },
         {
@@ -19929,18 +18264,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/zones/membership.ts",
-          "edge": "value import \"../search/service-scope.ts\" #1 => services/kernel/src/search/service-scope.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/zones/page-continuation.ts",
           "edge": "value import \"../tokens/list-cursor.ts\" #1 => services/kernel/src/tokens/list-cursor.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/zones/page-runtime.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts"
         },
         {
           "rule": "rule 2",
@@ -19976,11 +18301,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/zones/page-runtime.ts",
           "edge": "value import \"../search/hits.ts\" #1 => services/kernel/src/search/hits.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/zones/page-runtime.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -20041,11 +18361,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/zones/resource-commands.ts",
           "edge": "value import \"../semantic/context.ts\" #1 => services/kernel/src/semantic/context.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/zones/resource-commands.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
         },
         {
           "rule": "rule 2",
@@ -21746,11 +20061,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/access/$resourceId.tsx",
           "edge": "value import \"../../shell/head\" #1 => apps/web/src/shell/head.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/access/$resourceId.tsx",
-          "edge": "value import \"../../threads/composer\" #1 => apps/web/src/threads/composer.tsx"
         },
         {
           "rule": "rule 2",
@@ -26095,32 +24405,12 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/zones/$id_.$.tsx",
-          "edge": "value import \"../../features/pages/route-support\" #1 => apps/web/src/features/pages/route-support.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/zones/$id_.$.tsx",
-          "edge": "value import \"../../features/pages/route\" #1 => apps/web/src/features/pages/route.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/zones/$id_.$.tsx",
           "edge": "value import \"../../zones/zone-read\" #1 => apps/web/src/zones/zone-read.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/zones/$id_.$.tsx",
           "edge": "value import \"../../zones/zone-shell\" #1 => apps/web/src/zones/zone-shell.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/zones/$id.tsx",
-          "edge": "value import \"../../features/pages/route-support\" #1 => apps/web/src/features/pages/route-support.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/zones/$id.tsx",
-          "edge": "value import \"../../features/pages/route\" #1 => apps/web/src/features/pages/route.tsx"
         },
         {
           "rule": "rule 2",
@@ -26805,16 +25095,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/ratings/own-votes/types.ts",
-          "edge": "type import \"../../../../../services/kernel/src/rating/own-votes-schemas.ts\" #1 => services/kernel/src/rating/own-votes-schemas.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/ratings/own-votes/types.ts",
-          "edge": "type import \"../../../../../services/kernel/src/rating/own-votes-schemas.ts\" #2 => services/kernel/src/rating/own-votes-schemas.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/ratings/question-management/actions.ts",
           "edge": "type import \"../../session/client\" #1 => apps/web/src/session/client.ts"
         },
@@ -26822,11 +25102,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/ratings/question-management/actions.ts",
           "edge": "value import \"../../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/ratings/question-management/native.ts",
-          "edge": "value import \"../../../../../services/kernel/src/rating/schemas.ts\" #1 => services/kernel/src/rating/schemas.ts"
         },
         {
           "rule": "rule 2",
@@ -36705,11 +34980,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/features/zones/editor/model.ts",
-          "edge": "type import \"../../../../../../services/kernel/src/zones/contract\" #1 => services/kernel/src/zones/contract.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/features/zones/editor/owner-lifetime.tsx",
           "edge": "value import \"../../../session/query\" #1 => apps/web/src/session/query.ts"
         },
@@ -36835,26 +35105,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/zones/appearance.ts",
-          "edge": "type import \"../../../../services/kernel/src/zones/contract.ts\" #1 => services/kernel/src/zones/contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/zones/static-fakes.ts",
-          "edge": "type import \"../../../../services/kernel/src/zones/contract.ts\" #1 => services/kernel/src/zones/contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/zones/zone-read.ts",
-          "edge": "type import \"../../../../services/kernel/src/zones/contract.ts\" #1 => services/kernel/src/zones/contract.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/zones/zone-read.ts",
-          "edge": "type import \"../../../../services/kernel/src/zones/page-continuation.ts\" #1 => services/kernel/src/zones/page-continuation.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/zones/zone-read.ts",
           "edge": "type import \"../features/pages/subject-frame\" #1 => apps/web/src/features/pages/subject-frame.tsx"
         },
@@ -36902,16 +35152,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/zones/zone-read.ts",
           "edge": "value import \"../features/pages/views\" #1 => apps/web/src/features/pages/views.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/zones/zone-read.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/zones/zone-shell.tsx",
-          "edge": "type import \"../../../../services/kernel/src/zones/contract.ts\" #1 => services/kernel/src/zones/contract.ts"
         },
         {
           "rule": "rule 2",

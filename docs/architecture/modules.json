@@ -222,7 +222,12 @@
         "services/kernel/src/access/identity-original-admission.ts",
         "services/kernel/src/access/shared-history-context.ts",
         "services/kernel/src/access/shared-history-work.ts",
-        "services/kernel/src/access/shared-history.ts"
+        "services/kernel/src/access/shared-history.ts",
+        "services/kernel/src/access/derived-access.ts",
+        "services/kernel/src/access/gates/admission.ts",
+        "services/kernel/src/access/account-share.sql",
+        "services/kernel/src/access/account-share.ts",
+        "services/kernel/src/access/durable-initiator-capture.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -320,7 +325,8 @@
         "services/kernel/src/content/adapters/bind.ts",
         "services/kernel/src/content/adapters/ambient.ts",
         "services/kernel/src/content/cover-reference.ts",
-        "services/kernel/src/content/imported-contract.ts"
+        "services/kernel/src/content/imported-contract.ts",
+        "services/kernel/src/content/media.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -443,23 +449,50 @@
       "kind": "contract",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/contract/**"],
-      "publicEntries": ["services/kernel/src/library/contract/work-dimensions.ts"],
+      "publicEntries": [
+        "services/kernel/src/library/contract/work-dimensions.ts",
+        "services/kernel/src/library/contract/index.ts"
+      ],
       "allowedDependencies": [],
       "capabilities": []
+    },
+    {
+      "id": "kernel-library-core",
+      "kind": "core",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/library/core/**"],
+      "publicEntries": ["services/kernel/src/library/core/index.ts"],
+      "allowedDependencies": ["bounds", "kernel-library-contract"],
+      "capabilities": ["library-rules"]
+    },
+    {
+      "id": "kernel-library-application",
+      "kind": "application",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/library/application/**"],
+      "publicEntries": ["services/kernel/src/library/application/index.ts"],
+      "allowedDependencies": ["kernel-library-contract", "kernel-library-core"],
+      "capabilities": ["library-use-cases"]
     },
     {
       "id": "kernel-library",
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
-      "excludes": ["services/kernel/src/library/contract/**"],
+      "excludes": [
+        "services/kernel/src/library/contract/**",
+        "services/kernel/src/library/core/**",
+        "services/kernel/src/library/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
         "services/kernel/src/library/collection-discovery-summaries.ts",
         "services/kernel/src/library/identity-epoch-participant.ts",
         "services/kernel/src/library/access-capabilities.ts",
-        "services/kernel/src/library/work-module.ts"
+        "services/kernel/src/library/work-module.ts",
+        "services/kernel/src/library/adapters/index.ts",
+        "services/kernel/src/library/domain-binding.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -480,7 +513,8 @@
         "kernel-search",
         "kernel-semantic",
         "operations",
-        "progress"
+        "progress",
+        "kernel-library-core"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]
@@ -518,7 +552,9 @@
         "services/kernel/src/search/opensearch.ts",
         "services/kernel/src/search/access-capabilities.ts",
         "services/kernel/src/search/credit-search.ts",
-        "services/kernel/src/search/account-erasure-source.ts"
+        "services/kernel/src/search/account-erasure-source.ts",
+        "services/kernel/src/search/service-scope.ts",
+        "services/kernel/src/search/current-filter-plan.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -565,7 +601,18 @@
         "services/kernel/src/semantic/identity-source-consumer-maintenance.ts",
         "services/kernel/src/semantic/record-purge-authority.ts",
         "services/kernel/src/semantic/record-purge-custody.ts",
-        "services/kernel/src/semantic/record-source-set.ts"
+        "services/kernel/src/semantic/record-source-set.ts",
+        "services/kernel/src/semantic/identity-epoch-library-inputs.ts",
+        "services/kernel/src/semantic/identity-epoch-store-insert-native-commit.sql",
+        "services/kernel/src/semantic/identity-epoch-store-select-job-4.sql",
+        "services/kernel/src/semantic/identity-epoch-store-library-transform.sql",
+        "services/kernel/src/semantic/identity-epoch-store-select-input.sql",
+        "services/kernel/src/semantic/identity-epoch-store-select-original.sql",
+        "services/kernel/src/semantic/identity-epoch-read-owners.sql",
+        "services/kernel/src/semantic/identity-epoch-read-sources.sql",
+        "services/kernel/src/semantic/identity-epoch-read-pending.sql",
+        "services/kernel/src/semantic/identity-epoch-read-current.sql",
+        "services/kernel/src/semantic/definitions.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -673,7 +720,11 @@
         "services/kernel/src/command/dispatch-lifetime.ts",
         "services/kernel/src/command/execution-contract.ts",
         "services/kernel/src/command/operational.ts",
-        "services/kernel/src/database/pool.ts"
+        "services/kernel/src/database/pool.ts",
+        "services/kernel/src/command/time.sql",
+        "services/kernel/src/command/fence.sql",
+        "services/kernel/src/command/no-effect-fence.sql",
+        "services/kernel/src/partition/read.sql"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -721,6 +772,7 @@
       "publicEntries": [],
       "allowedDependencies": [
         "definitions",
+        "filter",
         "kernel-access",
         "kernel-access-application",
         "kernel-access-contract",
@@ -743,7 +795,10 @@
         "kernel-semantic-contract",
         "kernel-work-application",
         "kernel-work-contract",
-        "kernel-work-core"
+        "kernel-work-core",
+        "kernel-library-application",
+        "kernel-library-contract",
+        "kernel-library-core"
       ],
       "capabilities": []
     },

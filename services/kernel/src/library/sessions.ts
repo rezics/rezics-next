@@ -1,3 +1,4 @@
+import type { Release } from '@rezics/definitions';
 import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
@@ -17,7 +18,13 @@ import { type Access, type AccountActor, type Actor } from '../request/access.ts
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute, sameAccountRoute } from './command-support.ts';
+import {
+  admitComposedEntryProgress,
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  requireRoute,
+  sameAccountRoute,
+} from './command-support.ts';
 import {
   changeIntent,
   correctOccurrence,
@@ -44,7 +51,7 @@ import {
   resolveLibraryProfilePin,
   type LibraryProfileDescriptor,
 } from './profile.ts';
-import { readRelease } from '../semantic/definitions.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
@@ -253,6 +260,7 @@ export function createSessionCommands(config: Dependencies) {
     // Syntax normalization is the existing receipt input; trusted metadata never enters its digest.
     const parsed = valid(parseSessionCreate(retainSessionOperands(input), 'syntax'));
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    await admitComposedEntryProgress({ actor: owner, subjectId: parsed.subjectId, deadline });
     return runner.ownAccountPrepared(
       actor,
       {
@@ -382,11 +390,14 @@ export function createSessionCommands(config: Dependencies) {
             );
             if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
             if (fact.pin === null) throw new ProblemError('unsupported_library_profile');
-            const release = await consumeSessionWork(
+            const release = (await consumeSessionWork(
               'original-release',
               sessionReleaseWork(fact.pin.releaseDigest),
-              () => readRelease(pool, fact.pin!.releaseDigest, { composed: false }),
-            );
+              () =>
+                peekLibraryDomain()?.identityDisclosure.readRelease(pool, fact.pin!.releaseDigest, {
+                  composed: false,
+                }) ?? Promise.resolve(null),
+            )) as Release | null;
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');
             const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },

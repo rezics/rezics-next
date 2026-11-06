@@ -39,6 +39,7 @@ import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } fro
 import { createPublicPreparationStore } from './search/public-preparation-store.ts';
 import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
+import { composeLibraryDomain } from './composition/library.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 import { installNativeHistory } from './composition/history.ts';
 
@@ -172,6 +173,45 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     const client = workClient;
     await client;
     const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
+    const search =
+      openSearch === undefined || searchConfig === undefined || rated === undefined
+        ? undefined
+        : createSearchService({
+            pool,
+            client: openSearch,
+            prefix: searchConfig.prefix,
+            source: rated.source,
+            ratings: rated.ratings,
+            realmRatings: createRealmRatingNativeSource({
+              pool,
+              search: openSearch,
+              prefix: searchConfig.prefix,
+              tokens: config.tokens,
+            }),
+            realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
+            cursors: config.tokens,
+            clock: defaults.clock,
+            publicFilters: () => {
+              if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
+              return publicFilters;
+            },
+            async preparePublic(job) {
+              await createPublicPreparationStore(pool, await client, searchConfig.prefix).retain(
+                {
+                  kind: 'repair',
+                  key: JSON.stringify(job),
+                  job,
+                },
+                Date.now() + 24 * 60 * 60 * 1000,
+              );
+            },
+          });
+    composeLibraryDomain({
+      pool,
+      routeKey: config.routeKey,
+      clock: defaults.clock,
+      ...(search === undefined ? {} : { search }),
+    });
     app = createKernel({
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
@@ -184,6 +224,13 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       clock: defaults.clock,
       access: defaults.access,
       onAccessReady(access, viewerActions) {
+        composeLibraryDomain({
+          pool,
+          access,
+          routeKey: config.routeKey,
+          clock: defaults.clock,
+          ...(search === undefined ? {} : { search }),
+        });
         if (openSearch && searchConfig) {
           if (!rated) throw new Error('Discovery Subject source composition is incomplete');
           publicFilters = createDefaultPublicFilterRuntime({
@@ -219,43 +266,14 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       },
       content: { ...config.content, workflows: operationWorkflows },
       ratePeer: (request) => peers.get(request),
-      ...(openSearch === undefined || searchConfig === undefined || rated === undefined
+      ...(search === undefined
         ? {}
         : {
             discovery: (principal, request, context) => {
               if (!discovery) throw new Error('Discovery Access composition is incomplete');
               return discovery.search(principal, request, context);
             },
-            search: createSearchService({
-              pool,
-              client: openSearch,
-              prefix: searchConfig.prefix,
-              source: rated.source,
-              ratings: rated.ratings,
-              realmRatings: createRealmRatingNativeSource({
-                pool,
-                search: openSearch,
-                prefix: searchConfig.prefix,
-                tokens: config.tokens,
-              }),
-              realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
-              cursors: config.tokens,
-              clock: defaults.clock,
-              publicFilters: () => {
-                if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
-                return publicFilters;
-              },
-              async preparePublic(job) {
-                await createPublicPreparationStore(pool, await client, searchConfig.prefix).retain(
-                  {
-                    kind: 'repair',
-                    key: JSON.stringify(job),
-                    job,
-                  },
-                  Date.now() + 24 * 60 * 60 * 1000,
-                );
-              },
-            }),
+            search,
           }),
       ...(commerce === null
         ? {}

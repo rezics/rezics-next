@@ -25,6 +25,7 @@ import {
 } from '@rezics/definitions/media-import';
 import { isDeepStrictEqual, types } from 'node:util';
 import { Check } from 'typebox/schema';
+import { Type, type Static } from 'typebox';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
 import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
 import {
@@ -64,6 +65,23 @@ export interface FenceTuple {
   externalId: string;
   fieldGroup: FieldGroup;
 }
+/**
+ * Kernel's served-variant decision (`GET /v1/media/{id}/$authorizeDownload`). Only the admitted
+ * image types, a bounded byte count and a SHA-256 digest are retained; the bytes are not read here.
+ */
+const MediaVariantDecisionSchema = Type.Object(
+  {
+    allowed: Type.Literal(true),
+    key: Type.String({ minLength: 1, maxLength: 512 }),
+    sha256: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+    mediaType: Type.Union([Type.Literal('image/avif'), Type.Literal('image/webp')]),
+    byteCount: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+    publicCache: Type.Literal(false),
+    cacheControl: Type.Union([Type.Literal('private, no-cache'), Type.Literal('private, no-store')]),
+  },
+  { additionalProperties: false },
+);
+export type MediaVariantDecision = Static<typeof MediaVariantDecisionSchema>;
 export type MediaOutcome =
   | { outcome: 'available'; id: string; status: MediaImportStatus }
   | { outcome: 'pending'; status: MediaImportStatus }
@@ -674,6 +692,22 @@ export function createImportTransport(options: ImportTransportOptions) {
   async function importStatus(id: string, signal?: AbortSignal): Promise<MediaImportStatus> {
     return (await mediaStatus(id, signal)).body;
   }
+  /** Served-variant read for one admitted derivative; a refusal or missing variant is an ImportTransportError. */
+  async function authorizeMediaVariant(
+    id: string,
+    variant: string,
+    signal?: AbortSignal,
+  ): Promise<MediaVariantDecision> {
+    mediaId(id);
+    ensure(/^(?:avif|webp)-[1-9][0-9]{0,4}$/u.test(variant));
+    const reply = await response(
+      () => client.media({ id }).$authorizeDownload.get({ query: { variant }, ...fetchOptions(signal) }),
+      200,
+      signal,
+    );
+    ensure(Check(MediaVariantDecisionSchema, reply.body));
+    return reply.body as MediaVariantDecision;
+  }
   async function media(input: MediaImportRequest, key: string, signal?: AbortSignal): Promise<MediaOutcome> {
     const body = mediaBody(input, bodyLimit);
     const accepted = await postMedia(body, key, signal);
@@ -1047,5 +1081,6 @@ export function createImportTransport(options: ImportTransportOptions) {
     importStatus,
     requestMedia,
     mediaStatus,
+    authorizeMediaVariant,
   };
 }

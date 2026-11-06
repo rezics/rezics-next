@@ -11,7 +11,6 @@ import {
 } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import {
   observeCataloguePublication,
   readCataloguePublicationPage,
@@ -31,6 +30,8 @@ import {
 import type { CollectionOutputRef } from './collection-source-output.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
+import { classifyPublicationFilter } from './core/index.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 import { readCollectionSourceWorkState } from './collection-source-work-native.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity } from './native-source-custody.ts';
@@ -339,14 +340,12 @@ export async function stageCollectionPublicationStep(
     )
       throw unavailable();
     if (source.metadata.factFence === null) throw unavailable();
-    const plan = compileCurrentOwnerFilter(native.definition.filter);
-    const catalogueOnly = plan.leaves.length > 0 && plan.leaves.every((leaf) => leaf.kind === 'catalogue');
+    const searchPreparation = peekLibraryDomain()?.searchPreparation;
+    if (!searchPreparation) throw unavailable();
+    const filterKind = classifyPublicationFilter(searchPreparation.filterLeaves(native.definition.filter));
+    if (filterKind === 'unavailable') throw unavailable();
     // Owner publication keeps the private capture. Catalogue publication uses Search's public population.
-    if (
-      !catalogueOnly &&
-      (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner'))
-    )
-      throw unavailable();
+    const catalogueOnly = filterKind === 'catalogue';
     const scope = catalogueOnly ? null : createSearchScopeSource(options);
     const ownerPrepared: PreparedSearchScope | null = catalogueOnly
       ? null

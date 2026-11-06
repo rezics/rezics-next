@@ -1,4 +1,3 @@
-import { memoizedValue } from '../memoized.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -7,34 +6,54 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
-import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
 import { createCollectionSource, createOrdinaryCollectionPageSource } from './collection-source.ts';
-import { type WorkAllowance, type WorkReceipt, type WorkDimensions } from './contract/work-dimensions.ts';
+import { type WorkAllowance, type WorkDimensions, type WorkReceipt } from './contract/work-dimensions.ts';
+import { libraryActorOf, type SearchPreparationCapability } from './contract/index.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
 import {
+  CollectionWorkLedger,
   ordinaryCollectionPagePlan,
   ordinaryPageWorkDimensions,
   type OrdinaryCollectionPagePlan,
-} from './ordinary-read-bounds.ts';
+} from './core/index.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
 
 export type OwnerQueryDependencies = {
   pool: Pool;
   access: Access;
   clock?: KernelClock;
   routeKey?: Uint8Array;
-  search?: SearchService;
+  search?: unknown;
+  searchPreparation?: SearchPreparationCapability;
 };
 
-class OwnerQueryWorkLedger extends ScopeWork {
-  constructor(readonly plan: OrdinaryCollectionPagePlan) {
-    super(scopeAllowance(plan.candidateLimit, crypto.randomUUID(), ordinaryPageWorkDimensions(plan.total)));
+class OwnerQueryWorkLedger {
+  readonly plan: OrdinaryCollectionPagePlan;
+  private readonly ledger: CollectionWorkLedger;
+
+  constructor(plan: OrdinaryCollectionPagePlan) {
+    this.plan = plan;
+    this.ledger = new CollectionWorkLedger(
+      {
+        reservationId: crypto.randomUUID(),
+        remaining: ordinaryPageWorkDimensions(plan.total),
+      },
+      plan,
+    );
   }
 
-  override consume(used: WorkDimensions): void {
+  remaining() {
+    return this.ledger.remaining();
+  }
+
+  receipt() {
+    return this.ledger.receipt();
+  }
+
+  private settle(work: () => void): void {
     try {
-      super.consume(used);
+      work();
     } catch (error) {
       if (error instanceof RangeError)
         throw new ProblemError('dependency_unavailable', {
@@ -43,16 +62,19 @@ class OwnerQueryWorkLedger extends ScopeWork {
       throw error;
     }
   }
-}
 
-function OwnerQueryWork() {
-  return memoizedValue(OwnerQueryWork, () => OwnerQueryWorkLedger);
+  consume(used: WorkDimensions): void {
+    this.settle(() => this.ledger.consume(used));
+  }
+
+  native(receipt: WorkReceipt): void {
+    this.settle(() => this.ledger.native(receipt));
+  }
 }
-type OwnerQueryWork = InstanceType<ReturnType<typeof OwnerQueryWork>>;
 
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
 export function ownerQueryWork(limit: number, view: 'BASIC' | 'FULL' = 'BASIC') {
-  return new (OwnerQueryWork())(ordinaryCollectionPagePlan(limit, view));
+  return new OwnerQueryWorkLedger(ordinaryCollectionPagePlan(limit, view));
 }
 
 function canonicalAllowance(allowance: WorkAllowance) {
@@ -85,6 +107,25 @@ function canonicalReceipt(work: CanonicalWork): WorkReceipt {
   };
 }
 
+function searchPreparationOf(deps: OwnerQueryDependencies): SearchPreparationCapability {
+  return (
+    deps.searchPreparation ??
+    peekLibraryDomain()?.searchPreparation ?? {
+      async prepareScope() {
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'The registered Search service is not configured.',
+        });
+      },
+      ownerFilterHasOwnerLeaf() {
+        return false;
+      },
+      filterLeaves() {
+        return [];
+      },
+    }
+  );
+}
+
 /** One current native Source and the registered Search service. No owner/client impersonation or GET work. */
 export async function openOwnerQuery(
   deps: OwnerQueryDependencies,
@@ -92,7 +133,7 @@ export async function openOwnerQuery(
     actor: Actor;
     collectionId: string;
     deadline: number;
-    work: ScopeWork;
+    work: Pick<CollectionWorkLedger, 'remaining' | 'receipt' | 'native'>;
     logical?: boolean;
     at?: AuthoritativeTime;
   },
@@ -102,7 +143,7 @@ export async function openOwnerQuery(
   const close = () => {
     if (input.at === undefined) releaseOperationalTime(at);
   };
-  const planned = input.work instanceof OwnerQueryWork() ? input.work.plan : undefined;
+  const planned = input.work instanceof OwnerQueryWorkLedger ? input.work.plan : undefined;
   const native = planned ? createOrdinaryCollectionPageSource(deps) : createCollectionSource(deps);
   const context = { actor: input.actor, at, deadline: input.deadline };
   const sourceAllowance = (): WorkAllowance => ({
@@ -112,13 +153,23 @@ export async function openOwnerQuery(
   try {
     let prepared;
     try {
-      prepared = await native.prepare({
-        ...context,
-        collectionId: input.collectionId,
-        allowance: sourceAllowance(),
-      });
+      const domain = peekLibraryDomain();
+      prepared = domain
+        ? await domain.sourceCapture.prepare({
+            actor: libraryActorOf(input.actor),
+            collectionId: input.collectionId,
+            deadline: input.deadline,
+            at,
+            allowance: sourceAllowance(),
+            ...(input.logical !== undefined ? { logical: input.logical } : {}),
+            ordinaryPage: Boolean(planned),
+          })
+        : await native.prepare({
+            ...context,
+            collectionId: input.collectionId,
+            allowance: sourceAllowance(),
+          });
     } catch (error) {
-      // The logical descriptor was admitted independently. A missing native producer is not a missing Collection.
       if (input.logical && error instanceof ProblemError && error.code === 'not_found')
         throw new ProblemError('dependency_unavailable', {
           detail: 'The native Collection Source has no current logical built-in binding.',
@@ -134,7 +185,6 @@ export async function openOwnerQuery(
       close() {
         close();
       },
-      /** Complete native group, never a point mapping used as alias/population coverage. */
       async originals(subjectId: string) {
         const route = routeOf(input.collectionId)!;
         const state = await readCanonicalSourceState(deps.pool, {
@@ -177,21 +227,20 @@ export async function openOwnerQuery(
         input.work.native(identity.work);
         if (!identity.identity || identity.identity.incarnation !== source.observation.incarnation)
           throw new ProblemError('semantic_not_ready');
-        const scope = createSearchScopeForService(deps.search, {
+        const preparedScope = await searchPreparationOf(deps).prepareScope({
+          search: deps.search,
           access: deps.access,
           actor: input.actor,
           routeKey: deps.routeKey,
           nativeT: at,
           deadline: input.deadline,
-        });
-        const prepared = await scope.prepare(filter, {
+          filter,
           releaseDigest,
-          order: { kind: 'id', source: identity.identity },
+          identity: identity.identity,
           allowance: sourceAllowance(),
-          readOnly: true,
         });
-        input.work.native(scope.work(prepared));
-        return { scope, prepared };
+        input.work.native(preparedScope.work);
+        return { scope: preparedScope.scope, prepared: preparedScope.prepared };
       },
     };
   } catch (error) {

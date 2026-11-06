@@ -88,9 +88,19 @@ type Failure = {
 };
 type Outcome<T> = { status: 'current'; value: T } | Failure;
 type View = 'ranked' | 'grid' | 'mixed';
+/** The collection step that stopped, named so an unavailable seed reports where it reached. */
+export type CollectionPhase =
+  | 'select-sources'
+  | 'create-collection'
+  | 'add-member'
+  | 'read-creator'
+  | 'read-public'
+  | 'read-members'
+  | 'read-public-members'
+  | 'verify-current';
 export type DevelopmentShowcaseResult = {
   status: 'current' | 'incomplete';
-  collections: ({ view: View; sources: Source[]; id?: string; kind?: string | null } & (
+  collections: ({ view: View; sources: Source[]; id?: string; kind?: string | null; phase?: CollectionPhase } & (
     | Failure
     | { status: 'current'; creator: Collection; public: Collection; members: Static<typeof memberSchema>[] }
   ))[];
@@ -238,7 +248,13 @@ export async function seedDevelopmentShowcase(
     const current = relevant.flatMap((row) => (row.status === 'current' ? [row.value] : []));
     // No replacement roots: a partial source inventory cannot silently shrink the fixture.
     if (!relevant.length || current.length !== relevant.length) {
-      collections.push({ view, sources: current, status: 'missing-source', code: 'selected-source-incomplete' });
+      collections.push({
+        view,
+        sources: current,
+        phase: 'select-sources',
+        status: 'missing-source',
+        code: 'selected-source-incomplete',
+      });
       continue;
     }
     const kind = view === 'mixed' || !current.every((row) => row.type === current[0]!.type) ? null : current[0]!.type;
@@ -251,7 +267,7 @@ export async function seedDevelopmentShowcase(
       body: { title: `Showcase ${view}`, visibility: 'public', presentationKind: kind },
     });
     if (made.status !== 'current') {
-      collections.push({ view, sources: current, ...made });
+      collections.push({ view, sources: current, phase: 'create-collection', ...made });
       continue;
     }
     const id = made.value;
@@ -271,7 +287,7 @@ export async function seedDevelopmentShowcase(
       }
     }
     if (failure) {
-      collections.push({ view, sources: current, id, ...failure });
+      collections.push({ view, sources: current, id, phase: 'add-member', ...failure });
       continue;
     }
     const creator = await receive(input.request, { path, audience: 'creator' }, collectionReply);
@@ -287,19 +303,19 @@ export async function seedDevelopmentShowcase(
       membersReply,
     );
     if (creator.status !== 'current') {
-      collections.push({ view, sources: current, id, ...creator });
+      collections.push({ view, sources: current, id, phase: 'read-creator', ...creator });
       continue;
     }
     if (publicRead.status !== 'current') {
-      collections.push({ view, sources: current, id, ...publicRead });
+      collections.push({ view, sources: current, id, phase: 'read-public', ...publicRead });
       continue;
     }
     if (members.status !== 'current') {
-      collections.push({ view, sources: current, id, ...members });
+      collections.push({ view, sources: current, id, phase: 'read-members', ...members });
       continue;
     }
     if (publicMembers.status !== 'current') {
-      collections.push({ view, sources: current, id, ...publicMembers });
+      collections.push({ view, sources: current, id, phase: 'read-public-members', ...publicMembers });
       continue;
     }
     const expectedMembers = current.map((source) => ({
@@ -322,7 +338,14 @@ export async function seedDevelopmentShowcase(
       !currentMembers(members.value) ||
       !currentMembers(publicMembers.value)
     ) {
-      collections.push({ view, sources: current, id, status: 'changed', code: 'current-collection-mismatch' });
+      collections.push({
+        view,
+        sources: current,
+        id,
+        phase: 'verify-current',
+        status: 'changed',
+        code: 'current-collection-mismatch',
+      });
       continue;
     }
     collections.push({
@@ -342,4 +365,23 @@ export async function seedDevelopmentShowcase(
     sources,
     workLinks: input.result.workLinks,
   };
+}
+
+/** The first collection that did not reach current, with the state, phase and code that stopped it. */
+export function developmentCollectionFailure(
+  collections: DevelopmentShowcaseResult['collections'],
+):
+  | { state: 'missing_source' | 'refused' | 'unknown_delivery' | 'unavailable'; operation: string; code: string }
+  | undefined {
+  const row = collections.find((item) => item.status !== 'current');
+  if (!row) return undefined;
+  const state =
+    row.status === 'missing-source'
+      ? 'missing_source'
+      : row.status === 'unknown-delivery'
+        ? 'unknown_delivery'
+        : row.status === 'refused'
+          ? 'refused'
+          : 'unavailable';
+  return { state, operation: `collections.${row.view}.${row.phase ?? 'unknown'}`, code: row.code };
 }

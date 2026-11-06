@@ -13,6 +13,7 @@ import type { ContentBoardDependencies } from '../../src/content/boards.ts';
 import type { Access, AccessRealmRoleReader, ActionCatalogue } from '../../src/request/access.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import type { WorkClient } from '../../src/work/client.ts';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { createKernelRuntimeDefaults, type KernelRuntimeOverrides } from '../../src/server.ts';
 import { createApp } from '../../src/http/app.ts';
 import {
@@ -167,10 +168,17 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     access: accessFactory,
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
+  const routeKey = testRouteKey();
+  composeLibraryDomain({
+    pool: options.pool,
+    routeKey,
+    clock: defaults.clock,
+    ...(options.search === undefined ? {} : { search: options.search }),
+  });
   const kernel = createKernel({
     requestDeadlineMs: options.requestDeadlineMs ?? TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
-    routeKey: testRouteKey(),
+    routeKey,
     receiptKeys: defaults.receiptKeys,
     tokens: defaults.tokens,
     clock: defaults.clock,
@@ -184,6 +192,15 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.reports === undefined ? {} : { reports: options.reports }),
     ...(options.viewerActionResources === undefined ? {} : { viewerActionResources: options.viewerActionResources }),
     access: accessComposition.resolveAccess,
+    onAccessReady(access) {
+      composeLibraryDomain({
+        pool: options.pool,
+        access,
+        routeKey,
+        clock: defaults.clock,
+        ...(options.search === undefined ? {} : { search: options.search }),
+      });
+    },
   });
   const composed = kernel as TestKernel;
   let composedAccess: Access | undefined;

@@ -47,6 +47,7 @@ type DevelopmentPublicationReport =
     }>;
 import {
   createDevelopmentShowcaseRequest,
+  developmentCollectionFailure,
   developmentCollectionScopes,
   seedDevelopmentShowcase,
   type DevelopmentShowcaseResult,
@@ -268,17 +269,9 @@ export async function runDevelopmentSeed(
     journal.close();
   }
   const collections = importedResult.persona!;
-  const collectionFailure = collections.collections.find((row) => row.status !== 'current');
-  if (report.state === 'complete' && collections.status !== 'current') {
-    report = {
-      ...report,
-      state: 'incomplete',
-      failure: {
-        state: 'unavailable',
-        operation: `collections.${collectionFailure!.view}`,
-        code: collectionFailure!.status,
-      },
-    };
+  const collectionFailure = developmentCollectionFailure(collections.collections);
+  if (report.state === 'complete' && collectionFailure) {
+    report = { ...report, state: 'incomplete', failure: collectionFailure };
   }
   if (report.state === 'complete' && personalList.state !== 'uploaded') {
     report = {

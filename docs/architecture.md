@@ -107,6 +107,13 @@ The production Kernel has one `createKernel` composition for module, route, even
 registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event
 commit checks use their owner manifests; governance stays closed, including `read_reports`.
 
+Library's contract, core and application modules are registered separately from the Source adapter. Contract
+entries own work dimensions, Source, membership, ordering, capability ports and application results. Core owns
+pure grant, page, ledger, identity-matching, publication-admission and catalogue/owner filter-leaf arithmetic.
+Applications run against Library-owned ports; `composition/library.ts` binds native SQL catalogs and Access/Search/Semantic/Content
+adapters during ordinary `createKernelRuntimeDefaults`, server and worker construction. Search filter-leaf
+classification is a composition port, so the Search preparation adapter does not value-import Search.
+
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;
 `realm-board-home.ts` is the registered effectful Realm Board entry. DB reads, source selection/confirmation,

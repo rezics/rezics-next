@@ -3,9 +3,12 @@ WITH input AS (
          :revision::integer AS revision, :time::timestamptz AS time, :restore::boolean AS restore,
          :transaction_id::uuid AS operation_transaction_id
 ), current AS MATERIALIZED (
-  SELECT label.* FROM library.personal_label AS label, input
-  WHERE label.route = input.route AND label.account_id = input.account_id AND label.label_id = input.label_id
-  FOR UPDATE
+  SELECT label.* FROM input CROSS JOIN LATERAL (
+    SELECT label.* FROM library.personal_label AS label
+    WHERE label.route = input.route AND label.account_id = input.account_id AND label.label_id = input.label_id
+    LIMIT 1
+    FOR UPDATE
+  ) AS label
 ), eligible AS MATERIALIZED (
   SELECT current.*, input.time, input.restore, input.operation_transaction_id FROM current, input
   WHERE current.revision = input.revision
@@ -17,8 +20,8 @@ WITH input AS (
       deleted_at = CASE WHEN eligible.restore THEN NULL ELSE eligible.time END,
       purge_after = CASE WHEN eligible.restore THEN NULL ELSE eligible.time + interval '720 hours' END
   FROM eligible
-  WHERE label.route = eligible.route AND label.account_id = eligible.account_id AND label.label_id = eligible.label_id
-    AND label.revision = eligible.revision
+  WHERE label.route = eligible.route AND label.account_id = eligible.account_id
+    AND label.label_id = eligible.label_id AND label.revision = eligible.revision
   RETURNING label.label_id AS id, label.normalized_name AS name, label.revision,
             label.created_at::text AS "createdAt", label.updated_at::text AS "updatedAt",
             label.deleted_at::text AS "deletedAt", label.purge_after::text AS "purgeAfter"

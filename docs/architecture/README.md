@@ -2,7 +2,31 @@
 
 Decision: Keep the current workspace and capability boundaries, assign each module to its documented Goal owner, and snapshot existing imports as explicit dependencies while grandfathering their violations for gradual removal.
 
-Decision: Library work-dimension vocabulary is the contract module `kernel-library-contract` with one public entry, `services/kernel/src/library/contract/work-dimensions.ts`. Access, Platform, Search, Semantic, Content and Zones import those shapes from it, never from the Source runtime.
+Decision: Library work-dimension vocabulary is the contract module `kernel-library-contract` with public entries under `services/kernel/src/library/contract/`. Access, Platform, Search, Semantic, Content and Zones import those shapes from it, never from the Source runtime. `kernel-library-core` and `kernel-library-application` own the pure rules and use cases; native SQL and foreign Access/Search/Semantic/Content adapters bind at `composition/library.ts`.
+
+Decision: Library Source, member, owner-query, publication and Entry/progress seams are typed application capabilities bound by the ordinary `composeLibraryDomain` process composition; contract, core and application modules load without foreign implementations. Search filter-leaf classification is bound at composition, so `adapters/search-scope.ts` has no Search value imports; publication-staging admits catalogue-only versus owner-only through that capability. Content cover download is a Content public entry (`content/media.ts`); Collection presentation and session/Entry native paths call the composed identity and Content capabilities rather than importing those implementations.
+
+Measured with `scripts/architecture.ts` against the integrated base `a0c2a25650` and the same value-import graph. The
+changed-base check `--changed a0c2a25650` passes with no new violations; the full audit keeps errors that also occur on
+that base, where `boundary-baseline.json` already lagged `main`.
+
+| Measure                                                      |                Base |              Branch |
+| ------------------------------------------------------------ | ------------------: | ------------------: |
+| Full audit errors, rule 2 / rule 3 / rule 9                  | 853 (690 / 161 / 2) | 780 (631 / 148 / 1) |
+| Boundary baseline entries                                    |               7,437 |               7,085 |
+| `kernel-library` baseline rule 2 / rule 3                    |           676 / 373 |           582 / 361 |
+| `kernel-library` current rule 2 / rule 3                     |           814 / 416 |           662 / 394 |
+| `kernel-library-core` / `-application` current rule 2/3      |                   — |       0 / 0 · 0 / 0 |
+| Kernel value-cycle files                                     |                 345 |                 323 |
+| Library value-cycle files                                    |                  93 |                  90 |
+| Largest Kernel value SCC                                     |                 326 |                 302 |
+| Outgoing value edges: `kernel-library`                       |               1,593 |               1,586 |
+| Outgoing value edges: `kernel-library-core` / `-application` |                   — |               3 / 5 |
+| Outgoing value edges: `kernel-composition`                   |                  86 |                 107 |
+
+Core and application value edges go only to `bounds`, the Library contract and each other; the composition root gains
+the native Library adapter bindings. Against base the branch removes 352 baseline entries, 73 audit errors and 22 Kernel
+value-cycle files, and the baseline only shrinks.
 
 Decision: Register Access, Bounds, and Operations as pure core modules with only their exported package entries; grant dependencies to the concrete Kernel adapter modules that actually import them, and keep native implementation choice in composition roots.
 
@@ -22,6 +46,15 @@ After wiring, kernel-platform baseline rule 2/3 counts are 180/155 (from 190/155
 (from 24), total baseline 9,411 (from 9,427). Current Kernel files in value cycles 398; largest value SCC 381;
 Work adapter outward behaviour edges 22.
 
+Decision: History is registered as contract, core, application and adapter modules. Foreign modules use its declared application and contract entries; `composition/history.ts` binds native Postgres, command, Access, Semantic, Search, Zones and Work adapters. Server, worker, the shared runtime defaults and the explicit `composition/preload.ts` hook install that composition before use. Application facades remain implementation-free, native adapters import owner facade leaves rather than the application barrel, and no History file participates in a value-import cycle.
+
+Measured with `scripts/architecture.ts` against base `a311990286`: the changed-base check passes with no new violations.
+Kernel files in value cycles are 345 and the largest value component is 326 files; History files in value cycles are
+zero. Violations that touch History source fell from 312 to zero. History source files have 109 outgoing value edges to
+other modules at final; the increase is the native owner bindings in adapters, while contract, core and application
+import no implementation. Baseline entries fell from 8,496 to 7,437. The full-graph check reports inherited unbaselined
+errors outside this change at final.
+
 Decision: The client declaration closure depends on the public Access, Bounds, Money, Operations, Progress and
 Search Text packages used by mounted contracts. Register those dependencies alongside the client's existing package
 dependencies; generated declarations retain the native package identities and the boundary baseline does not grow.
@@ -31,14 +64,6 @@ Decision: Semantic is registered as contract, core, application and adapter modu
 Decision: Routed Zone composition consumes Search page, visit-return and slot-admission helpers through existing public entries (`showcase-work`, `search/index.ts`, `kernel/client.ts`) and already-imported Zone reader files; it does not add manifest public entries.
 
 Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
-Decision: History is registered as contract, core, application and adapter modules. Foreign modules use its declared application and contract entries; `composition/history.ts` binds native Postgres, command, Access, Semantic, Search, Zones and Work adapters. Server, worker, the shared runtime defaults and the explicit `composition/preload.ts` hook install that composition before use. Application facades remain implementation-free, native adapters import owner facade leaves rather than the application barrel, and no History file participates in a value-import cycle.
-
-Measured with `scripts/architecture.ts` against base `a311990286`: the changed-base check passes with no new violations.
-Kernel files in value cycles are 345 and the largest value component is 326 files; History files in value cycles are
-zero. Violations that touch History source fell from 312 to zero. History source files have 109 outgoing value edges to
-other modules at final; the increase is the native owner bindings in adapters, while contract, core and application
-import no implementation. Baseline entries fell from 8,496 to 7,437. The full-graph check reports inherited unbaselined
-errors outside this change at final.
 
 `modules.json` assigns the production sources in Kernel, Auth, Importer, Web, and the runtime packages to one module each. Tests, stories, fixtures, and workspace configuration are not production source roots. Each module records its kind, owner Goal, registered capabilities, public entries, and current allowed module dependencies. Kernel foundation code with no product owner is assigned to `platform`.
 

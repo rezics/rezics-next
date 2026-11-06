@@ -102,6 +102,7 @@ import {
   type ImportRunResult,
 } from './importer.ts';
 import { createMediaResolver } from './media-resolver.ts';
+import { resumeSelectedCover } from './cross-media-covers.ts';
 import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from './showcase-bangumi-careers.ts';
@@ -3195,16 +3196,53 @@ export async function seedCrossMedia(
             lookupDiagnostics: gameGenreAdapter.diagnostics(),
           })
         : undefined;
+    type MediaResolveInput = Parameters<NonNullable<ImporterOptions['mediaResolver']>['resolve']>[0];
+    /** Resume a selected cover whose sealed media journal is not final; see resumeSelectedCover. */
+    const resumeSelectedMedia = async (
+      source: { sourceAlias: string; externalId: string; sourceStatus: string },
+      containerId: string,
+    ): Promise<void> => {
+      const resolver = importerOptions.mediaResolver;
+      const row = [...plan.records.bangumi, ...plan.entities.bangumi].find(
+        (candidate) => candidate.key === source.externalId,
+      );
+      if (!resolver || !row) return;
+      const converted = bindSourceRegistration(selectedFamilyAdmission('bangumi'), {
+        source: source.sourceAlias,
+        converterRevision: crossMediaBangumiRevision,
+      }).convert(
+        { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
+        { source: source.sourceAlias, subjectId: containerId },
+      ) as { mediaImportIntents?: MediaResolveInput['mediaImportIntents'] };
+      const intent = converted.mediaImportIntents?.[0];
+      if (!intent) return;
+      try {
+        await resumeSelectedCover(
+          { bindings: importer.session.bindings, resolver },
+          {
+            owner: { source: source.sourceAlias, external_id: source.externalId },
+            containerId,
+            intent,
+            signal: AbortSignal.timeout(30_000),
+          },
+        );
+      } catch (error) {
+        // The resolver wrapper records refusals and unknown deliveries before they surface; other errors throw.
+        if (!(error instanceof ImportTransportError)) throw error;
+      }
+    };
     const mediaOutcomes: CrossMediaMediaOutcome[] = [];
     for (const source of [...(plan.coverSources ?? []), ...(plan.creatorImageSources ?? [])]) {
       const owner = { source: source.sourceAlias, external_id: source.externalId };
-      const prior = mediaAttempts.get(`${source.sourceAlias}\0${source.externalId}`);
+      const recordKey = `${source.sourceAlias}\0${source.externalId}`;
       const claim = importer.session.bindings.claim(owner);
       const containerId = claim?.state === 'bound' ? claim.subject : null;
       if (source.sourceStatus !== 'available') {
         mediaOutcomes.push({ ...source, status: source.sourceStatus, containerId });
         continue;
       }
+      if (containerId && !mediaAttempts.has(recordKey)) await resumeSelectedMedia(source, containerId);
+      const prior = mediaAttempts.get(recordKey);
       if (containerId) {
         try {
           const fence = await port.fence({
