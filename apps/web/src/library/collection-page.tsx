@@ -18,7 +18,8 @@ import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-m
 import { readCollectionDestination } from './collection-read';
 import { readCollectionMovePlacements } from './collection-move-read';
 import {
-  collectionTransferReadback,
+  collectionTransferDestinationRead,
+  collectionTransferMatchedSource,
   collectionTransferReceipt,
   collectionTransferReceiptUpdate,
   type CollectionTransferReceipt,
@@ -300,6 +301,17 @@ function writeMessage(result: Extract<CollectionWriteResult, { ok: false }>): st
 
 function collectionHref(id: string) {
   return `/${getLocale()}/collections/${encodeURIComponent(id)}`;
+}
+
+function readTransferDestination(destinationId: string) {
+  return collectionTransferDestinationRead(
+    destinationId,
+    readCollectionDestination({ data: destinationId }),
+    (destination) =>
+      readCollectionMovePlacements({
+        data: { collectionId: destination.id, revision: destination.revision },
+      }),
+  );
 }
 
 function collectionViewAddress(
@@ -1352,24 +1364,14 @@ function CollectionPageLifetime({
         setTransferReceipt(receipt);
         const [sourceRead, destinationRead] = await Promise.allSettled([
           reloadCollection(true),
-          readCollectionMovePlacements({
-            data: { collectionId: capturedTransfer.destination.id, revision: run.transferRevisions.destination },
-          }),
+          readTransferDestination(capturedTransfer.destination.id),
         ]);
         if (!isCurrent()) return;
         const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-        const destinationPage = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
-        const sourceReady = sourcePage?.id === capturedTransfer.sourceId;
-        resetEditor(sourceReady ? sourcePage : run.page, true);
-        setTransferReceipt({
-          ...receipt,
-          state: collectionTransferReadback(
-            capturedTransfer.sourceId,
-            capturedTransfer.destination.id,
-            sourcePage,
-            destinationPage ? { id: capturedTransfer.destination.id } : undefined,
-          ),
-        });
+        const destination = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
+        const sourceReady = collectionTransferMatchedSource(capturedTransfer.sourceId, sourcePage);
+        resetEditor(sourceReady ?? run.page, true);
+        setTransferReceipt(collectionTransferReceiptUpdate(receipt, sourceReady, destination));
         return;
       }
       const refreshed = await reloadCollection(true);
@@ -1424,19 +1426,12 @@ function CollectionPageLifetime({
     try {
       const [sourceRead, destinationRead] = await Promise.allSettled([
         refreshPage(),
-        readCollectionDestination({ data: previousReceipt.destinationId }).then(async (target) => {
-          if (!target || target.id !== previousReceipt.destinationId) return undefined;
-          await readCollectionMovePlacements({ data: { collectionId: target.id, revision: target.revision } });
-          return target;
-        }),
+        readTransferDestination(previousReceipt.destinationId),
       ]);
       if (!isCurrent()) return;
       const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
       const destination = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
-      const sourceReady =
-        sourcePage?.id === previousReceipt.sourceId && (sourcePage.memberState ?? 'ready') === 'ready'
-          ? sourcePage
-          : undefined;
+      const sourceReady = collectionTransferMatchedSource(previousReceipt.sourceId, sourcePage);
       if (sourceReady) {
         queryClient.setQueryData(queryKey, sourceReady);
         await router.invalidate();

@@ -38,6 +38,26 @@ export function collectionTransferReadback(
   return source?.id === sourceId && destination?.id === destinationId ? 'ready' : 'unavailable';
 }
 
+/** A source page counts only when its identity matches and members are currently readable. */
+export function collectionTransferMatchedSource<T extends { id: string; memberState?: string | null }>(
+  sourceId: string,
+  source: T | undefined,
+): T | undefined {
+  return source?.id === sourceId && (source.memberState ?? 'ready') === 'ready' ? source : undefined;
+}
+
+/** Destination identity comes from the header; a member page alone never invents a match. */
+export async function collectionTransferDestinationRead<T extends { id: string; revision: number }>(
+  destinationId: string,
+  header: Promise<T | null | undefined>,
+  placements: (destination: T) => Promise<unknown>,
+): Promise<T | undefined> {
+  const target = await header;
+  if (!target || target.id !== destinationId) return undefined;
+  await placements(target);
+  return target;
+}
+
 export function collectionTransferReceipt(
   review: CollectionTransferReview,
   sourceRevision: number,
