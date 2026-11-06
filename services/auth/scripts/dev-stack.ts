@@ -827,7 +827,7 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
  * Deferred walks serve Kernel HTTP from the Auth host and skip Pages, Web, OpenSearch and a second Kernel process.
  */
 async function start() {
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
