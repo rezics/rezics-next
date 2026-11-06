@@ -209,7 +209,13 @@ export function clientDeclarations(
     for (const specifier of declarationSpecifiers(content).filter((value) => /^\.{1,2}\//.test(value))) {
       const target = declarationPath(sourcePath, specifier);
       const targetKey = relative(sourceRoot, target).split(sep).join('/');
-      if (!targetKey.startsWith('../') && !declarations.has(targetKey)) pending.push(targetKey);
+      if (!targetKey.startsWith('../') && !declarations.has(targetKey)) {
+        if (!existsSync(target)) {
+          const line = content.split('\n').find((line) => line.includes(specifier));
+          throw new Error(`Client declaration ${key} imports ${specifier}, but ${targetKey} was not emitted.\n${line}`);
+        }
+        pending.push(targetKey);
+      }
     }
   }
   assertNoServiceImports(declarations, repositoryRoot);
