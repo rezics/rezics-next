@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
@@ -15,7 +16,7 @@ import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSyst
 import type { ContentCredential } from './support/system.ts';
 
 const hour = 3_600_000;
-const at = Date.parse('2030-01-08T12:00:00.000Z');
+const at = Date.now();
 const setupAt = at - 11 * 24 * hour;
 const sorts = ['hot', 'active', 'newest'] as const;
 type Sort = (typeof sorts)[number];
@@ -88,7 +89,7 @@ beforeAll(async () => {
   const issuer = 'https://ranking.auth.test';
   const audience = 'https://content.test';
   bearer = async ({ actor }) => {
-    const iat = Math.floor(instant / 1000) - 2;
+    const iat = Math.floor(Date.now() / 1000) - 2;
     return new SignJWT({
       client_id: actor.clientId,
       scope: actor.scopes.join(' '),
@@ -105,6 +106,7 @@ beforeAll(async () => {
       .sign(pair.privateKey);
   };
   kernel = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: system.database.pool,
     routeKey: system.routeKey,
     tokens: system.tokenKeys,

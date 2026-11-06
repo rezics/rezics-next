@@ -132,3 +132,17 @@ test('exact registered Global reach is the only alternate path, and unavailable 
   );
   expect(unknown.decision).toBe('unavailable');
 });
+
+test('declared resources without role templates still compile and require explicit authority', () => {
+  const declared = compileNativePolicyCatalogue(
+    new Map([['subject:read', { anonymous: false, 'x-resource-types': ['semantic.subject'] }]]),
+    { roles: new Map(), types: new Map() },
+  );
+  expect(
+    decideNativePermission(
+      declared,
+      { ...collection, action: 'subject:read', resourceType: 'semantic.subject', hasPrincipal: false },
+      projection(),
+    ).decision,
+  ).toBe('deny');
+});

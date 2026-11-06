@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
@@ -367,7 +368,7 @@ test('the already-read actor state and epoch fail closed without an actor reread
     expect(await check(pool)).toBe(true);
   });
   expect(await access.authorize(pool, actor, action, resource)).toBe(false);
-  const missing = createAccess({ actions, accountEvidence: () => null });
+  const missing = createAccess({ actions, resourceRoles: { roles: {}, types: {} }, accountEvidence: () => null });
   expect(await (await accessCheck(missing, actor, action, resource, ctx))(pool)).toBe(false);
 });
 
@@ -376,6 +377,7 @@ test('unresolved account, grant, assignment and membership reads deny at the pro
   await unavailable('account', async () => {
     const missing = createAccess({
       actions,
+      resourceRoles: { roles: {}, types: {} },
       accountEvidence: () => {
         throw new Error('unresolved account');
       },

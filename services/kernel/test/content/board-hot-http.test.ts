@@ -8,7 +8,9 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type Population } from '../support/growth.ts';
+import { seedBulkRows } from '../support/growth-seed-batches.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
@@ -16,7 +18,7 @@ afterAll(() => db.close());
 
 const routeKey = new Uint8Array(32).fill(11);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(13)]]) };
-const kernel = createKernel({ pool: db.pool, routeKey, tokens });
+const kernel = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys() });
 const sourceRoute = 0x1248;
 const boardRoute = 0x2468;
 const createdType = 'com.rezics.content.thread.created.v1';
@@ -547,10 +549,17 @@ test.serial(
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,
       grow: async (growthDb, scale, previous) => {
-        await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
-          from: 500 * previous,
-          to: 500 * scale,
-        });
+        // Fourteen related rows per ordinal must commit together: a 500-row split can separate a
+        // deferred Space head FK from its revision. Keep each seed batch below that boundary.
+        for (let from = 500 * previous; from < 500 * scale; from += 32) {
+          await seedBulkRows(
+            growthDb.admin,
+            from,
+            Math.min(from + 32, 500 * scale),
+            (ordinal) => ({ ordinal, route: sourceRoute, partition: partitionOf(sourceRoute), hot: true }),
+            (placement) => population.rows!(placement),
+          );
+        }
       },
       operation: async () => {
         const page = await get(listing(boardId, { sort: 'hot', limit: '1' }));
