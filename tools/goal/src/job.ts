@@ -1060,6 +1060,8 @@ export class WorkerJob implements GateOutcomeSink {
    */
   /** Recovery failures already reported by this process, by task, step and first error line. */
   private readonly recoveryFailures = new Set<string>();
+  /** Stray worktrees kept because a live process cwd is inside them, reported once per path. */
+  private readonly strayKeptNotices = new Set<string>();
   /**
    * One task's failure in a recovery sweep is that task's problem, not the sweep's: it is logged, reported once to the
    * supermanager, and the sweep continues with the other tasks. Store contention affects every task and is only logged.
@@ -1226,17 +1228,38 @@ export class WorkerJob implements GateOutcomeSink {
       }
     if (adoptRunning)
       this.track(
-        removeFinishedWorktree(this.tasks.settings, store, this.worktreeLifetimeRuntime, (task, disposition) => {
-          const owner = disposition.owner ? `${disposition.owner.uid}:${disposition.owner.gid}` : 'unknown';
-          this.inbox.deliver({
-            managerId: task.brief.manager,
-            kind: 'environment',
-            taskId: task.id,
-            summary:
-              `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
-                .replace(/[\r\n]+/g, ' ')
-                .slice(0, this.policy.worker.summaryCharacters),
-          });
+        removeFinishedWorktree(this.tasks.settings, store, this.worktreeLifetimeRuntime, {
+          blocked: (task, disposition) => {
+            const owner = disposition.owner ? `${disposition.owner.uid}:${disposition.owner.gid}` : 'unknown';
+            this.inbox.deliver({
+              managerId: task.brief.manager,
+              kind: 'environment',
+              taskId: task.id,
+              summary:
+                `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
+                  .replace(/[\r\n]+/g, ' ')
+                  .slice(0, this.policy.worker.summaryCharacters),
+            });
+          },
+          failed: (task, error, path) => {
+            this.recoveryFailed(task?.id ?? path, 'worktree cleanup', error);
+          },
+          strayKept: (path, task) => {
+            if (this.strayKeptNotices.has(path)) return;
+            this.strayKeptNotices.add(path);
+            try {
+              this.inbox.deliver({
+                managerId: task?.brief.manager ?? this.tasks.settings.integration.supermanager,
+                kind: 'environment',
+                ...(task ? { taskId: task.id } : {}),
+                summary: `environment: stray worktree ${path} kept; a live process cwd is inside it.`
+                  .replace(/[\r\n]+/g, ' ')
+                  .slice(0, this.policy.worker.summaryCharacters),
+              });
+            } catch {
+              this.strayKeptNotices.delete(path);
+            }
+          },
         }).then(() => {}),
       );
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts

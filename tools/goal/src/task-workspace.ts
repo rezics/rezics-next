@@ -1,5 +1,19 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { controlPlaneReleaseBrief } from './briefs.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
@@ -322,4 +336,75 @@ export function prepareProofWorktree(settings: Settings, store: WorkerStore, tas
     });
   }
   return task;
+}
+
+const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+
+function descriptorPath(fd: number): string {
+  return `/proc/self/fd/${fd}`;
+}
+
+function sameInode(
+  left: { dev: number | bigint; ino: number | bigint },
+  right: { dev: number | bigint; ino: number | bigint },
+): boolean {
+  return BigInt(left.dev) === BigInt(right.dev) && BigInt(left.ino) === BigInt(right.ino);
+}
+
+/**
+ * Add owner-write on directories so a tree can be deleted. Files stay untouched (they may be hardlinks); symlinks
+ * are not followed. `scripts/check-git.ts` publishes remote-check caches at 0555/0444, which plain `rm -rf` cannot
+ * unlink until the directories are writable.
+ */
+export function makeOwnedTreeWritable(path: string): number {
+  const root = resolve(path);
+  const rootIdentity = lstatSync(root);
+  if (rootIdentity.isSymbolicLink() || !rootIdentity.isDirectory())
+    throw new Error(`refusing to rewrite a non-directory worktree path: ${path}`);
+  let bytes = 0;
+  const walk = (fd: number) => {
+    const stat = fstatSync(fd);
+    if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
+    for (const name of readdirSync(descriptorPath(fd))) {
+      const child = join(descriptorPath(fd), name);
+      const before = lstatSync(child);
+      if (!before.isDirectory() || before.isSymbolicLink()) {
+        bytes += Number(before.size);
+        continue;
+      }
+      const childFd = openSync(child, directoryFlags);
+      try {
+        if (!sameInode(before, fstatSync(childFd)))
+          throw new Error(`refusing cleanup of replaced worktree directory: ${path}`);
+        walk(childFd);
+      } finally {
+        closeSync(childFd);
+      }
+    }
+  };
+  const fd = openSync(root, directoryFlags);
+  try {
+    walk(fd);
+  } finally {
+    closeSync(fd);
+  }
+  return bytes;
+}
+
+/** Make owned directories writable, then remove the tree. Returns the file/symlink bytes counted on the walk. */
+export function removeOwnedTree(path: string): number {
+  const bytes = makeOwnedTreeWritable(path);
+  rmSync(path, { recursive: true, force: true });
+  if (existsSync(path)) throw new Error(`worktree path remains after writable cleanup: ${path}`);
+  return bytes;
+}
+
+export function gitListsWorktree(mainCheckout: string, worktree: string, policy = defaultPolicy.merge): boolean {
+  const target = resolve(worktree);
+  return git(mainCheckout, ['worktree', 'list', '--porcelain'], policy)
+    .split('\n')
+    .some((line) => {
+      if (!line.startsWith('worktree ')) return false;
+      return resolve(line.slice('worktree '.length)) === target;
+    });
 }

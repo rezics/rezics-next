@@ -137,6 +137,8 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
     { lane: 'dev', state: 'missing' },
   ]);
   expect(status.reapedLastHour).toEqual({ processes: 0, containers: 0, volumes: 0, bytes: 0 });
+  expect(status.strayDirectories).toBe(0);
+  expect(status.strayBytesReclaimedLastHour).toBe(0);
   expect(JSON.parse(output[1]!).trains).toEqual(status.trains);
   expect(status.tasks.map(({ id }: Task) => id)).toEqual(all.map(({ id }) => id));
   for (const malformed of status.tasks.slice(2))

@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { WorkerStore } from './store.ts';
-import type { Settings, Task, WorktreeCleanupDisposition } from './types.ts';
+import type { Settings, Task, TaskState, WorktreeCleanupDisposition } from './types.ts';
 import { acquireDirectoryLease, LeaseHeldError, type DirectoryLease } from './lease.ts';
+import { hasLiveProcessUnder } from './process.ts';
+import { makeOwnedTreeWritable, removeOwnedTree } from './task-workspace.ts';
 
 export const IO_PRESSURE_LIMIT = 20;
 export const IO_PRESSURE_WAIT_ATTEMPTS = 30;
@@ -15,7 +17,26 @@ export type LifetimeRuntime = {
   pressure: () => number | null;
   sleep: (ms: number) => Promise<void>;
   command: (command: string, args: string[], cwd: string) => void | Promise<void>;
+  /** Override leftover-directory removal after Git unregister; tests inject foreign-owner EACCES here. */
+  removeTree?: (path: string) => number;
 };
+
+export type WorktreeCleanupHooks = {
+  blocked?: (task: Task, disposition: WorktreeCleanupDisposition) => void;
+  failed?: (task: Task | undefined, error: unknown, path: string) => void;
+  strayKept?: (path: string, task: Task | undefined) => void;
+};
+
+export type StrayWorktreeStatus = {
+  strayDirectories: number;
+  strayBytesReclaimedLastHour: number;
+};
+
+export const STRAY_RECLAIM_LOG = 'stray-worktrees.jsonl';
+const HOUR_MS = 3_600_000;
+const KEEP_STATES = new Set<TaskState>(['running', 'landing', 'ready', 'held']);
+const SWEEP_STATES = new Set<TaskState>(['integrated', 'merged', 'cancelled', 'stopped']);
+const INDEX_STATES = [...KEEP_STATES, ...SWEEP_STATES, 'verified'] as const;
 
 class CommandStartError extends Error {
   constructor(
@@ -58,6 +79,7 @@ const protectedStates = new Set(['running', 'landing', 'ready', 'held', 'stopped
 type CleanupReporter = (task: Task, disposition: WorktreeCleanupDisposition) => void;
 type Owner = { uid: number; gid: number } | null;
 type WorktreeStat = NonNullable<ReturnType<typeof lstatSync>>;
+type StrayReclaimRecord = { at: number; path: string; bytes: number; taskId?: string };
 
 function statIfPresent(path: string): ReturnType<typeof lstatSync> | undefined {
   try {
@@ -197,6 +219,90 @@ function notify(reporter: CleanupReporter | undefined, task: Task, disposition: 
   if (reporter) reporter(task, disposition);
 }
 
+function resolveHooks(reporter?: CleanupReporter | WorktreeCleanupHooks): WorktreeCleanupHooks {
+  if (!reporter) return {};
+  return typeof reporter === 'function' ? { blocked: reporter } : reporter;
+}
+
+function worktreeRoots(settings: Settings): string[] {
+  const roots: string[] = [];
+  if (settings.worktreeRoot) roots.push(resolve(settings.worktreeRoot));
+  if (settings.mainCheckout && settings.worktreeRoot)
+    roots.push(resolve(join(settings.mainCheckout, '.temp/worktrees')));
+  return [...new Set(roots)];
+}
+
+function hasGitEntry(directory: string): boolean {
+  return statIfPresent(join(directory, '.git')) !== undefined;
+}
+
+function childDirectories(root: string): string[] {
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const dirs: string[] = [];
+  for (const entry of entries) {
+    if (entry.name === 'modules') {
+      dirs.push(...childDirectories(join(root, entry.name)));
+      continue;
+    }
+    if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
+    dirs.push(join(root, entry.name));
+  }
+  return dirs;
+}
+
+function listWorktreeDirectories(settings: Settings): string[] {
+  return worktreeRoots(settings).flatMap(childDirectories);
+}
+
+function strayReclaimPath(stateDirectory: string): string {
+  return join(stateDirectory, STRAY_RECLAIM_LOG);
+}
+
+function recordStrayReclaim(stateDirectory: string, record: StrayReclaimRecord): void {
+  appendFileSync(strayReclaimPath(stateDirectory), `${JSON.stringify(record)}\n`);
+}
+
+function readStrayReclaims(stateDirectory: string): StrayReclaimRecord[] {
+  const path = strayReclaimPath(stateDirectory);
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8')
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .flatMap((line) => {
+      const value = JSON.parse(line) as StrayReclaimRecord;
+      return value && typeof value === 'object' && typeof value.at === 'number' ? [value] : [];
+    });
+}
+
+export function strayWorktreeStatus(settings: Settings, now = Date.now()): StrayWorktreeStatus {
+  let strayDirectories = 0;
+  if (settings.worktreeRoot)
+    for (const directory of listWorktreeDirectories(settings)) if (!hasGitEntry(directory)) strayDirectories++;
+  let strayBytesReclaimedLastHour = 0;
+  if (settings.stateDirectory)
+    for (const record of readStrayReclaims(settings.stateDirectory)) {
+      if (now - record.at > HOUR_MS) continue;
+      strayBytesReclaimedLastHour += record.bytes;
+    }
+  return { strayDirectories, strayBytesReclaimedLastHour };
+}
+
+function taskByWorktree(store: WorkerStore): Map<string, Task> {
+  const index = new Map<string, Task>();
+  for (const task of store.tasksInStates([...INDEX_STATES])) index.set(resolve(task.worktree), task);
+  return index;
+}
+
+function deleteTree(path: string, io: LifetimeRuntime): number {
+  return io.removeTree ? io.removeTree(path) : removeOwnedTree(path);
+}
+
 function recordPermissionFailure(
   task: Task,
   worktreeStat: WorktreeStat,
@@ -221,12 +327,40 @@ function recordPermissionFailure(
   if (store.recordWorktreeCleanup(disposition)) notify(reporter, task, disposition);
 }
 
+async function waitForIdleIo(
+  io: LifetimeRuntime,
+  pressureWaits: { value: number },
+): Promise<boolean> {
+  let pressure = io.pressure() ?? 0;
+  while (pressure > IO_PRESSURE_LIMIT && pressureWaits.value < IO_PRESSURE_WAIT_ATTEMPTS) {
+    await io.sleep(1000);
+    pressureWaits.value++;
+    pressure = io.pressure() ?? 0;
+  }
+  return pressure <= IO_PRESSURE_LIMIT;
+}
+
+function leftoverStillOwned(
+  remaining: ReturnType<typeof statIfPresent>,
+  expectedDev: string,
+  expectedIno: string,
+): remaining is WorktreeStat {
+  return Boolean(
+    remaining &&
+      remaining.isDirectory() &&
+      !remaining.isSymbolicLink() &&
+      String(remaining.dev) === expectedDev &&
+      String(remaining.ino) === expectedIno,
+  );
+}
+
 export async function removeFinishedWorktree(
   settings: Settings,
   store: WorkerStore,
   io: LifetimeRuntime = runtime,
-  reporter?: CleanupReporter,
+  reporter?: CleanupReporter | WorktreeCleanupHooks,
 ): Promise<string | null> {
+  const hooks = resolveHooks(reporter);
   const lease = (() => {
     try {
       return acquireDirectoryLease(
@@ -245,12 +379,13 @@ export async function removeFinishedWorktree(
       .tasksInStates([...finished] as Task['state'][])
       .filter((task) => finished.has(task.state) && !protectedStates.has(task.state))
       .sort((a, b) => a.sequence - b.sequence);
-    const roots = [...new Set([settings.worktreeRoot, join(settings.mainCheckout, '.temp/worktrees')])];
+    const roots = worktreeRoots(settings);
     // Git may partially remove a worktree before reporting EACCES. Pruning while its directory still exists can
     // discard the registration needed to retry after remediation, so preserve all such registrations this sweep.
     let unresolvedCleanup = hasUnresolvedCleanup(candidates, roots, store);
     // Share the wait budget across candidates whose state or directory changes while waiting.
-    let pressureWaits = 0;
+    const pressureWaits = { value: 0 };
+    let removedId: string | null = null;
     for (const task of candidates) {
       if (!eligibleDirectory(task, roots)) continue;
       let taskLease: DirectoryLease;
@@ -266,6 +401,7 @@ export async function removeFinishedWorktree(
           continue;
         const worktreeStat = statIfPresent(current.worktree);
         if (!worktreeStat || !worktreeStat.isDirectory() || worktreeStat.isSymbolicLink()) continue;
+        if (!hasGitEntry(current.worktree)) continue;
 
         const oldDisposition = store.worktreeCleanup(current.id);
         if (
@@ -274,13 +410,7 @@ export async function removeFinishedWorktree(
         )
           continue;
 
-        let pressure = io.pressure() ?? 0;
-        while (pressure > IO_PRESSURE_LIMIT && pressureWaits < IO_PRESSURE_WAIT_ATTEMPTS) {
-          await io.sleep(1000);
-          pressureWaits++;
-          pressure = io.pressure() ?? 0;
-        }
-        if (pressure > IO_PRESSURE_LIMIT) return null;
+        if (!(await waitForIdleIo(io, pressureWaits))) return removedId;
 
         // Recheck task state and directory identity after waiting; the task may have changed while pressure persisted.
         const afterPressure = store.task(current.id);
@@ -302,66 +432,131 @@ export async function removeFinishedWorktree(
           continue;
 
         let removed = false;
+        let reclaimed = 0;
         try {
+          // Remote-check caches and similar owned 0555 trees must be writable before Git unregisters the worktree.
+          reclaimed = makeOwnedTreeWritable(afterPressure.worktree);
           await io.command(
             'ionice',
             ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', afterPressure.worktree],
             settings.mainCheckout,
           );
           removed = statIfPresent(afterPressure.worktree) === undefined;
-          if (!removed) throw new Error(`git worktree remove left the task path in place: ${afterPressure.worktree}`);
+          if (!removed) {
+            reclaimed = deleteTree(afterPressure.worktree, io);
+            removed = statIfPresent(afterPressure.worktree) === undefined;
+            if (!removed) throw new Error(`git worktree remove left the task path in place: ${afterPressure.worktree}`);
+          }
         } catch (error) {
           if (statIfPresent(afterPressure.worktree) === undefined) {
             removed = true;
-          } else if (isPermissionFailure(error)) {
-            recordPermissionFailure(afterPressure, worktreeStat, error, store, reporter, settings.mainCheckout);
-            unresolvedCleanup = true;
-            continue;
-          } else if (oldDisposition && isNotWorkingTree(error)) {
-            // A failed Git removal can detach .git before it reaches the permission-denied entry. Once the
-            // filesystem generation changes, remove only the same task directory inode that was recorded.
+          } else if (isPermissionFailure(error) || isNotWorkingTree(error)) {
             const remaining = statIfPresent(afterPressure.worktree);
-            if (
-              !remaining ||
-              !remaining.isDirectory() ||
-              remaining.isSymbolicLink() ||
-              String(remaining.dev) !== oldDisposition.worktreeIdentity.dev ||
-              String(remaining.ino) !== oldDisposition.worktreeIdentity.ino
-            )
-              throw error;
+            const expectedDev = oldDisposition?.worktreeIdentity.dev ?? String(worktreeStat.dev);
+            const expectedIno = oldDisposition?.worktreeIdentity.ino ?? String(worktreeStat.ino);
+            if (!leftoverStillOwned(remaining, expectedDev, expectedIno)) {
+              hooks.failed?.(afterPressure, error, afterPressure.worktree);
+              continue;
+            }
             try {
-              rmSync(afterPressure.worktree, { recursive: true, force: false });
+              reclaimed = deleteTree(afterPressure.worktree, io);
               removed = statIfPresent(afterPressure.worktree) === undefined;
-              if (!removed) throw new Error(`worktree path remains after bounded cleanup: ${afterPressure.worktree}`);
+              if (!removed) throw new Error(`worktree path remains after writable cleanup: ${afterPressure.worktree}`);
             } catch (cleanupError) {
-              if (!isPermissionFailure(cleanupError)) throw cleanupError;
-              recordPermissionFailure(afterPressure, remaining, cleanupError, store, reporter, settings.mainCheckout);
-              unresolvedCleanup = true;
+              if (isPermissionFailure(cleanupError) || isPermissionFailure(error)) {
+                recordPermissionFailure(
+                  afterPressure,
+                  remaining,
+                  cleanupError,
+                  store,
+                  hooks.blocked,
+                  settings.mainCheckout,
+                );
+                unresolvedCleanup = true;
+                continue;
+              }
+              hooks.failed?.(afterPressure, cleanupError, afterPressure.worktree);
               continue;
             }
           } else {
-            throw error;
+            hooks.failed?.(afterPressure, error, afterPressure.worktree);
+            continue;
           }
         }
         if (!removed) continue;
         store.clearWorktreeCleanup(afterPressure.id);
+        if (reclaimed)
+          recordStrayReclaim(settings.stateDirectory, {
+            at: Date.now(),
+            path: afterPressure.worktree,
+            bytes: reclaimed,
+            taskId: afterPressure.id,
+          });
         if (!unresolvedCleanup)
           await io.command(
             'ionice',
             ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'],
             settings.mainCheckout,
           );
-        return afterPressure.id;
+        removedId = afterPressure.id;
+        break;
+      } catch (error) {
+        hooks.failed?.(task, error, task.worktree);
       } finally {
         taskLease.release();
       }
     }
 
+    const swept = await sweepStrayWorktrees(settings, store, io, hooks, pressureWaits);
+    if (!removedId) removedId = swept;
+
     // Pruning stale registrations is safe after candidate work has been attempted; it does not traverse task paths.
     if (!unresolvedCleanup)
       await io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
-    return null;
+    return removedId;
   } finally {
     lease.release();
   }
+}
+
+async function sweepStrayWorktrees(
+  settings: Settings,
+  store: WorkerStore,
+  io: LifetimeRuntime,
+  hooks: WorktreeCleanupHooks,
+  pressureWaits: { value: number },
+): Promise<string | null> {
+  const index = taskByWorktree(store);
+  let removedId: string | null = null;
+  for (const directory of listWorktreeDirectories(settings)) {
+    if (hasGitEntry(directory)) continue;
+    const task = index.get(resolve(directory));
+    if (task && KEEP_STATES.has(task.state)) continue;
+    if (task && !SWEEP_STATES.has(task.state)) continue;
+    const live = hasLiveProcessUnder(directory);
+    if (live !== false) {
+      if (live === true) hooks.strayKept?.(directory, task);
+      continue;
+    }
+    if (!(await waitForIdleIo(io, pressureWaits))) return removedId;
+    try {
+      const bytes = deleteTree(directory, io);
+      recordStrayReclaim(settings.stateDirectory, {
+        at: Date.now(),
+        path: directory,
+        bytes,
+        ...(task ? { taskId: task.id } : {}),
+      });
+      if (task) store.clearWorktreeCleanup(task.id);
+      removedId = task?.id ?? directory;
+    } catch (error) {
+      if (isPermissionFailure(error) && task) {
+        const remaining = statIfPresent(directory);
+        if (remaining) recordPermissionFailure(task, remaining, error, store, hooks.blocked, settings.mainCheckout);
+        continue;
+      }
+      hooks.failed?.(task, error, directory);
+    }
+  }
+  return removedId;
 }

@@ -19,6 +19,7 @@ import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { harness } from './test-support.ts';
 import { git } from './tasks.ts';
+import { removeOwnedTree } from './task-workspace.ts';
 import {
   removeFinishedWorktree,
   IO_PRESSURE_LIMIT,
@@ -68,6 +69,14 @@ function failingRemoval(
         if (fail()) throw new Error(`fatal: could not remove '${blocker}': Permission denied`);
       }
       real.command(command, args, cwd);
+    },
+    removeTree: (path) => {
+      if (path === taskWorktree && fail()) {
+        const error = new Error(`EACCES: permission denied, unlink '${blocker}'`) as NodeJS.ErrnoException;
+        error.code = 'EACCES';
+        throw error;
+      }
+      return removeOwnedTree(path);
     },
   });
 }
@@ -203,19 +212,16 @@ test('a finished worktree EACCES records its actual owner once across sweeps and
   writeFileSync(blocker, 'owned by the filesystem fixture');
   chmodSync(task.worktree, 0o555);
   const count = { value: 0 };
-  const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
-  // Root can bypass this DAC boundary, so only that runner injects the same Git EACCES result.
-  const io = failingRemoval(task.worktree, blocker, count, () => runningAsRoot);
+  const io = failingRemoval(task.worktree, blocker, count, () => true);
   const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
-  let originalDbClosed = false;
+  let restarted: WorkerStore | undefined;
   try {
     await removeFinishedWorktree(h.settings, h.store, io, deliverCleanupNotice(inbox));
     const disposition = h.store.worktreeCleanup(task.id)!;
     const owner = lstatSync(disposition.path);
     expect(disposition.path === task.worktree || disposition.path.startsWith(`${task.worktree}/`)).toBe(true);
     expect(disposition.owner).toEqual({ uid: owner.uid, gid: owner.gid });
-    if (runningAsRoot) expect(disposition.owner?.uid).toBe(0);
-    expect(disposition.detail).toContain('Permission denied');
+    expect(disposition.detail.toLowerCase()).toContain('permission denied');
     expect(inbox.pending(task.brief.manager)).toHaveLength(1);
     expect(count.value).toBe(1);
 
@@ -225,24 +231,16 @@ test('a finished worktree EACCES records its actual owner once across sweeps and
 
     const databasePath = join(h.settings.stateDirectory, 'goal.sqlite');
     h.store.db.close();
-    originalDbClosed = true;
-    const restarted = new WorkerStore(openDb(databasePath));
-    try {
-      const restartedInbox = new SqliteManagerInbox(restarted.db, h.settings.integration.inboxDirectory);
-      await removeFinishedWorktree(h.settings, restarted, io, deliverCleanupNotice(restartedInbox));
-      expect(restarted.worktreeCleanup(task.id)).toEqual(disposition);
-      expect(count.value).toBe(1);
-      expect(restartedInbox.pending(task.brief.manager)).toHaveLength(1);
-    } finally {
-      if (existsSync(task.worktree)) chmodSync(task.worktree, 0o755);
-      restarted.db.close();
-      rmSync(h.root, { recursive: true, force: true });
-    }
-  } catch (error) {
+    restarted = new WorkerStore(openDb(databasePath));
+    const restartedInbox = new SqliteManagerInbox(restarted.db, h.settings.integration.inboxDirectory);
+    await removeFinishedWorktree(h.settings, restarted, io, deliverCleanupNotice(restartedInbox));
+    expect(restarted.worktreeCleanup(task.id)).toEqual(disposition);
+    expect(count.value).toBe(1);
+    expect(restartedInbox.pending(task.brief.manager)).toHaveLength(1);
+  } finally {
     if (existsSync(task.worktree)) chmodSync(task.worktree, 0o755);
-    if (originalDbClosed) rmSync(h.root, { recursive: true, force: true });
-    else h.dispose();
-    throw error;
+    restarted?.db.close();
+    h.dispose();
   }
 });
 
@@ -278,7 +276,7 @@ test('a changed offending path generation permits one bounded retry after operat
   writeFileSync(blocker, 'permission failure fixture');
   chmodSync(task.worktree, 0o555);
   const count = { value: 0 };
-  let denied = typeof process.getuid === 'function' && process.getuid() === 0;
+  let denied = true;
   const io = failingRemoval(task.worktree, task.worktree, count, () => denied);
   try {
     await removeFinishedWorktree(h.settings, h.store, io);
@@ -288,7 +286,7 @@ test('a changed offending path generation permits one bounded retry after operat
     expect(count.value).toBe(1);
 
     const oldMode = lstatSync(task.worktree).mode;
-    chmodSync(task.worktree, 0o755);
+    chmodSync(task.worktree, 0o775);
     expect(lstatSync(task.worktree).mode).not.toBe(oldMode);
     denied = false;
     expect(await removeFinishedWorktree(h.settings, h.store, io)).toBe(task.id);
@@ -301,7 +299,7 @@ test('a changed offending path generation permits one bounded retry after operat
   }
 });
 
-test('cleanup leaves active worktrees, shared dependency stores, external symlink targets and unrelated paths intact', async () => {
+test('cleanup leaves active worktrees, shared dependency stores and external symlink targets intact, and sweeps no-.git leftovers', async () => {
   const { h, task } = setup('integrated');
   const active = h.tasks.dispatch(h.briefFile);
   h.store.updateTask({ taskId: active.id, attempt: 0 }, (row) => {
@@ -332,7 +330,7 @@ test('cleanup leaves active worktrees, shared dependency stores, external symlin
   try {
     expect(await removeFinishedWorktree(h.settings, h.store, fake())).toBe(task.id);
     expect(existsSync(active.worktree)).toBe(true);
-    expect(existsSync(unrelated)).toBe(true);
+    expect(existsSync(unrelated)).toBe(false);
     expect(readFileSync(outside, 'utf8')).toBe('external data');
     const remainingStore = lstatSync(linkedStore);
     expect(remainingStore.dev).toBe(linkedStoreIdentity.dev);

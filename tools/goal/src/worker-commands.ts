@@ -26,6 +26,7 @@ import { defaultPolicy } from './policy.ts';
 import { readRetainedPoolReadings } from './pacing.ts';
 import { admissionProfiles, readRouting } from './routing.ts';
 import { reapedCountsLastHour } from './attempt-resources.ts';
+import { strayWorktreeStatus } from './worktree-lifetime.ts';
 import {
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
@@ -211,6 +212,7 @@ export async function runWorkerCommand(
       };
       const selectedTasks = cohort.map(show);
       const reapedLastHour = reapedCountsLastHour(settings.stateDirectory);
+      const stray = strayWorktreeStatus(settings);
       const trains = trainLaneStatus(settings.stateDirectory);
       const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
       const now = Date.now();
@@ -252,6 +254,8 @@ export async function runWorkerCommand(
                 trains,
                 pools,
                 reapedLastHour,
+                strayDirectories: stray.strayDirectories,
+                strayBytesReclaimedLastHour: stray.strayBytesReclaimedLastHour,
               }
             : {
                 devVerification: devVerificationState(
@@ -264,6 +268,8 @@ export async function runWorkerCommand(
                 trains,
                 pools,
                 reapedLastHour,
+                strayDirectories: stray.strayDirectories,
+                strayBytesReclaimedLastHour: stray.strayBytesReclaimedLastHour,
                 tasks: selectedTasks,
               },
           null,
