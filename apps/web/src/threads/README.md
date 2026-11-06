@@ -3,6 +3,8 @@
 Decision: composed reader regressions use the existing per-file Web check lanes so server-module mocks cannot
 replace later files’ native client exports. Mounted route replacements update React state; privacy and return
 assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance.
+Post-editing browser checks fetch `/en` only to learn Vite is up; they do not Playwright-hydrate Home during
+startup, because that compiled the Home client graph until Vite died at its 2 GiB heap.
 
 ## New-thread destination and community rules
 

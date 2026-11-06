@@ -474,8 +474,11 @@ function site(): Promise<string> {
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
+        NODE_OPTIONS: '--max-old-space-size=4096',
       },
-      warmUpPaths: ['/en'],
+      // Fetch `/en` only to learn Vite is up. Playwright-hydrating Home compiles its client graph
+      // until the default 2 GiB heap dies, so the authoring journey never starts.
+      warmUpPaths: [],
     });
     return server.origin;
   })();
