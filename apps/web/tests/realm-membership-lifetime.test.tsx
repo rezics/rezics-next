@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, createElement, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -99,8 +99,16 @@ mock.module('../src/session/query', () => ({
     return (
       useSyncExternalStore(
         (notify) =>
-          client.getQueryCache().subscribe(({ query }) => {
-            if (query.queryKey[0] === 'session') notify();
+          client.getQueryCache().subscribe((event) => {
+            if (event.query.queryKey[0] !== 'session') return;
+            const action = 'action' in event ? event.action : undefined;
+            if (
+              event.type === 'removed' ||
+              (event.type === 'updated' &&
+                action &&
+                (action.type === 'success' || action.type === 'error' || action.type === 'setState'))
+            )
+              notify();
           }),
         () => client.getQueryData(sessionModule.sessionQuery.queryKey),
       ) ?? {
@@ -114,8 +122,36 @@ mock.module('../src/session/query', () => ({
 const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
 const { RealmMembership } = await import('../src/community/realm-membership');
 const { m } = await import('../src/paraglide/messages.js');
-if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
-else Reflect.deleteProperty(globalThis, 'window');
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.example.test/en/spaces/atlas' });
+const { createRoot } = await import('react-dom/client');
+const surfaceGlobals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  Node: window.Node,
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previousSurfaceGlobals = new Map(
+  Object.keys(surfaceGlobals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(surfaceGlobals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+afterAll(async () => {
+  await window.happyDOM.close();
+  for (const [key, descriptor] of previousSurfaceGlobals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  else Reflect.deleteProperty(globalThis, 'window');
+});
 
 const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const nextRealmId = '0192f3a0-6c1e-7b2a-9d4e-000000000202';
@@ -195,24 +231,7 @@ async function makeSurface(
   suppliedClient?: QueryClient,
   options: { transitionWhileImportIsQueued?: boolean } = {},
 ) {
-  const client = suppliedClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
-  const window = new Window({ url: 'https://site.example.test/en/spaces/atlas' });
-  const globals = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    Node: window.Node,
-    scrollTo: () => {},
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-
+  const client = suppliedClient ?? new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   client.setQueryData(sessionModule.sessionQuery.queryKey, signedIn());
   const configRef = { current: config };
   let publishConfig: (next: SurfaceConfig) => void = () => {};
@@ -234,7 +253,6 @@ async function makeSurface(
   await router.load();
   const host = window.document.createElement('div');
   window.document.body.append(host);
-  const { createRoot } = await import('react-dom/client');
   const root = createRoot(host as unknown as HTMLElement);
   let disposed = false;
   await act(async () => {
@@ -293,12 +311,9 @@ async function makeSurface(
     if (disposed) return;
     disposed = true;
     await act(async () => root.unmount());
+    client.cancelQueries();
     client.clear();
-    await window.happyDOM.close();
-    for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
+    host.remove();
   }
 
   return { client, host, router, settle, until, updateConfig, setSessions, button, hasText, dispose };

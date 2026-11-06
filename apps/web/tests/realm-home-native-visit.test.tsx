@@ -25,6 +25,9 @@ const globals = {
       .map((key) => [key, window[key as keyof typeof window]]),
   ),
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  matchMedia: window.matchMedia.bind(window),
   scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
@@ -51,8 +54,16 @@ mock.module('../src/session/query', () => ({
     return (
       useSyncExternalStore(
         (notify) =>
-          client.getQueryCache().subscribe(({ query }) => {
-            if (query.queryKey[0] === 'session') notify();
+          client.getQueryCache().subscribe((event) => {
+            if (event.query.queryKey[0] !== 'session') return;
+            const action = 'action' in event ? event.action : undefined;
+            if (
+              event.type === 'removed' ||
+              (event.type === 'updated' &&
+                action &&
+                (action.type === 'success' || action.type === 'error' || action.type === 'setState'))
+            )
+              notify();
           }),
         () => client.getQueryData(sessionModule.sessionQuery.queryKey) ?? session,
       )
@@ -123,7 +134,12 @@ type FixtureViewer = 'anonymous' | 'none' | 'member';
 function fixture(
   count = 1,
   viewer: FixtureViewer = 'none',
-  options: { participation?: 'allowed' | 'denied'; manage?: boolean; orphaned?: boolean } = {},
+  options: {
+    participation?: 'allowed' | 'denied';
+    manage?: boolean;
+    orphaned?: boolean;
+    visibility?: NativeRealmHomePage['realm']['visibility'];
+  } = {},
 ): NativeRealmHomePage {
   const metadata = {
     state: 'active' as const,
@@ -141,7 +157,7 @@ function fixture(
     spaceId: id(2),
     contextId: id(3),
     boardSchemeId: null,
-    visibility: 'public',
+    visibility: options.visibility ?? 'public',
     title: 'Native Realm',
     summary: '',
     ownershipState: orphaned ? 'orphaned' : 'owned',
@@ -401,7 +417,7 @@ test('Realm join advice needs both the exact action and mounted operation', asyn
   );
 });
 const Frame = createContext<ReactNode>(null);
-const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 const host = document.createElement('main');
 document.body.append(host);
 let root = createRoot(host);
@@ -468,11 +484,12 @@ beforeEach(() => {
   session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
   client.setQueryData(sessionModule.sessionQuery.queryKey, session);
 });
-afterEach(() => {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  root.unmount();
+afterEach(async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  await settle(() => root.unmount());
   host.replaceChildren();
   root = createRoot(host);
+  client.cancelQueries();
   client.clear();
   session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
   client.setQueryData(sessionModule.sessionQuery.queryKey, session);
@@ -488,7 +505,10 @@ afterEach(() => {
 afterAll(async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   await settle(() => root.unmount());
+  client.cancelQueries();
+  client.clear();
   host.remove();
+  await window.happyDOM.close();
   overwriteGetLocale(originalGetLocale);
   mock.restore();
   for (const [key, value] of previous) {
@@ -654,6 +674,12 @@ test('member actions use current native advice while denied participation and or
   expect(host.textContent).toContain(m.realm_native_access_denied());
   expect(controls()).not.toContain(m.realm_join());
   expect(controls()).not.toContain(m.realm_leave());
+
+  native = fixture(0, 'none', { visibility: 'protected' });
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.textContent).toContain(m.realm_protected_admission());
+  expect(controls()).not.toContain(m.realm_join());
+  expect(host.querySelector('a[href*="auth/sign-in"]')).toBeNull();
 
   native = fixture(0, 'none', { orphaned: true });
   const orphaned = await readNativeRealmHome(operations, input);
@@ -969,6 +995,8 @@ test('acknowledged native membership refresh keeps the selected Board visit curr
   expect(host.querySelector('[data-slot="community-members"]')?.textContent).toBe(m.board_community_members({ count: 7 }));
   expect(host.textContent).not.toContain(m.realm_membership_command_uncertain());
   expect(document.activeElement?.id).toBe('realm-boards-heading');
+  await settle(() => {});
+  await settle(() => {});
   expect(shelfCursorReads).toEqual(['selected-window', 'selected-window']);
   const section = host.querySelector('[data-slot="realm-community-boards"]')!;
   const boardLink = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;

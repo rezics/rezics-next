@@ -96,6 +96,11 @@ and resets both shelf windows. One accepted command stores one acknowledgement; 
 route once and does not refetch, poll or renew the command. An equal page envelope, in-place mutation, or changed
 heads, account, credential, route or operations still retires that visit.
 
+Decision: the page lifetime notifies connected hosts only for session replacement and for the owned query's committed
+success, error, setState or removal; observer add/remove and fetch-status chatter do not increment the visit or
+recreate membership/publication drafts. Visit and lifetime tests dispose their Happy-DOM window, router, root and
+QueryClient per case so fixture, response and subscription lifetimes stay inside the check wrapper's 6 GiB cap.
+
 The prepared consumer checks the carrying Space and Realm heads, active lifecycle and selected media and rules
 revision before presenting them. Native concealment may retain an empty optional presentation even when a selected
 reference is set. Orphan identity remains readable when the native read permits it; its governance stays read-only.

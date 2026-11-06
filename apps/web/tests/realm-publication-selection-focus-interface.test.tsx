@@ -96,6 +96,7 @@ test('keyboard selection reviews the subject, clear returns to the picker, and c
 afterAll(async () => {
   await act(async () => root?.unmount());
   host.remove();
+  await window.happyDOM.close();
   for (const [key, value] of previous) {
     if (value) Object.defineProperty(globalThis, key, value);
     else Reflect.deleteProperty(globalThis, key);

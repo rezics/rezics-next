@@ -30,6 +30,6 @@ same-source admitted refresh may complete once when that membership result follo
 before the replacement lifetime connects, or a same-identity Home that has not yet admitted the result, waits instead
 of retiring. The original host invalidates sibling lists and the route once and does not refetch advice or renew the
 command. An intervening source replacement retires the acknowledgement and keeps the uncertain command for exact retry
-or discard.
+or discard. Session-cache notifications advance caller revision; other query chatter only releases settled reads.
 
 An explicit keyboard membership operation hands focus to the named membership summary only after its current caller settles into admitted standing and its control disappears; a surviving control keeps focus, and pointer use, focus movement or caller retirement cancels the handoff.

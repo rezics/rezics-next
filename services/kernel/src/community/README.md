@@ -357,7 +357,7 @@ reads retain an uncertain command for exact retry or discard.
 
 Decision: the initial Home and continued Board shelf map `recent` and Board visibility directly from their installed root methods; complete-empty and unavailable discussion states and all reply-count states stay distinct, while the existing current-source completion host returns eligible focus to the selected supplying shelf.
 
-Decision: a same-source admitted Home refresh is a new page under the original admission; Web admits it by source identity when nested observation changed, resets both shelves, and keeps the outer membership and publication hosts. One accepted command stores one acknowledgement; the original host invalidates once and does not refetch or renew the command. Equal envelopes, in-place mutation and intervening source replacement still retire that completion.
+Decision: a same-source admitted Home refresh is a new page under the original admission; Web admits it by source identity when nested observation changed, resets both shelves, and keeps the outer membership and publication hosts. One accepted command stores one acknowledgement; the original host invalidates once and does not refetch or renew the command. Equal envelopes, in-place mutation and intervening source replacement still retire that completion. The Web visit notifies only for session replacement and the owned query's committed success, error, setState or removal; visit tests dispose window, router and QueryClient per case.
 
 ### Cost
 
