@@ -220,6 +220,7 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(environment?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
     expect(environment?.optimizeDeps?.entries).toEqual([]);
     expect(environment?.optimizeDeps?.include).toEqual(workerInclude);
+    expect(environment?.optimizeDeps?.include).toContain('use-sync-external-store/shim/with-selector.js');
     expect(environmentFor('client')).toBeUndefined();
     const resolved = worker && 'configResolved' in worker ? worker.configResolved : undefined;
     const pin =

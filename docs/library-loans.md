@@ -129,6 +129,9 @@ Copies journey. The remaining closed-controls browser cases stay out of this sel
 loader resolves `/src/...` and realpath aliases before its browser guard; the served-startup case must still load the
 Worker while browser reads of those files remain denied. The generated Semantic contract currently omits the mounted
 `definitions.import` operation, so parity must expose that producer gap until the supported OpenAPI command emits it.
+Worker SSR also prebundles `use-sync-external-store/shim/with-selector.js`, whose package entry is CommonJS and
+otherwise reaches Workerd with a runtime `require` call. Focused checks regenerate Paraglide when the generated
+message index refers to a module missing from disk, even if the top-level output timestamp is fresh.
 
 The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
 concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases
