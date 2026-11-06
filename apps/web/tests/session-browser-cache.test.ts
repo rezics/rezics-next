@@ -19,13 +19,25 @@ test('an empty session cache is unknown and never starts a session fetch', () =>
   expect(cache.getQueryState(sessionQueryKey)).toBeUndefined();
 });
 
-test('a successful cached session is the same owner credential every inspection reads', () => {
+test('a same-cache replacement is the next read and issues no session fetch', () => {
   const cache = client();
-  cache.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-a' });
-  expect(cachedBrowserSession(cache)).toEqual({ state: 'signed-in', subject: 'alice', csrfToken: 'csrf-a' });
-  // A replacement in the same cache is visible to the next read, with no retained copy of the previous subject.
-  cache.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-b' });
-  expect(cachedBrowserSession(cache)).toEqual({ state: 'signed-in', subject: 'bob', csrfToken: 'csrf-b' });
+  const original = globalThis.fetch;
+  const fetched: string[] = [];
+  globalThis.fetch = (async (input: Request | URL | string) => {
+    fetched.push(String(input));
+    throw new Error('the prepared session cache must not fetch');
+  }) as typeof fetch;
+  try {
+    cache.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-a' });
+    expect(cachedBrowserSession(cache)).toEqual({ state: 'signed-in', subject: 'alice', csrfToken: 'csrf-a' });
+    // A replacement in the same cache is visible to the next read, with no retained copy of the previous subject.
+    cache.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-b' });
+    expect(cachedBrowserSession(cache)).toEqual({ state: 'signed-in', subject: 'bob', csrfToken: 'csrf-b' });
+    expect(cache.isFetching()).toBe(0);
+  } finally {
+    globalThis.fetch = original;
+  }
+  expect(fetched).toEqual([]);
 });
 
 test('malformed and signed-out cached data never admits a subject', () => {
