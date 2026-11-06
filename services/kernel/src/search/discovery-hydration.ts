@@ -191,7 +191,9 @@ export async function hydrateOwnerDiscoveryHits(
   const current = new Map<string, DiscoveryOwnerMetadataSummary>();
   for (const [kind, ids] of idsByKind) {
     const adapter = registry.getOwnerAdapter(kind);
-    const summaries = await readBatches([...new Set(ids)], (batch) => adapter.readCurrent(batch, context));
+    const summaries = await readBatches<DiscoveryOwnerMetadataSummary>([...new Set(ids)], (batch) =>
+      adapter.readCurrent(batch, context),
+    );
     if (!summaries || typeof summaries.get !== 'function' || typeof summaries[Symbol.iterator] !== 'function')
       throw new TypeError('Owner discovery adapter returned an invalid current summary set');
     const requested = new Set(ids);
