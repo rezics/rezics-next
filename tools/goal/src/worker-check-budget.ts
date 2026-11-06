@@ -87,8 +87,7 @@ function nextWorkerCheckHostStamp(directory: string): string {
 
 function git(worktree: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): string {
   const result = spawnSync('git', args, { cwd: worktree, encoding: 'utf8', env });
-  if (result.status !== 0)
-    throw new Error((result.stderr || result.stdout || `git ${args.join(' ')} failed`).trim());
+  if (result.status !== 0) throw new Error((result.stderr || result.stdout || `git ${args.join(' ')} failed`).trim());
   return result.stdout;
 }
 
@@ -170,10 +169,7 @@ function budgetRefused(
   };
 }
 
-function admitsFinalVerification(
-  last: WorkerCheckHostStampRecord | undefined,
-  worktree: string | undefined,
-): boolean {
+function admitsFinalVerification(last: WorkerCheckHostStampRecord | undefined, worktree: string | undefined): boolean {
   if (!last || last.final === true) return false;
   if (typeof last.exitCode !== 'number' || last.exitCode === 0) return false;
   if (!last.content || !worktree) return false;
@@ -194,8 +190,7 @@ export function admitWorkerCheckHostRun(input: WorkerCheckHostAdmit): WorkerChec
     const used = workerCheckHostRunsUsed(directory);
     const last = used > 0 ? lastStamp(directory) : undefined;
     const final = !exempt && used >= WORKER_CHECK_HOST_RUN_LIMIT;
-    if (final && !admitsFinalVerification(last?.record, input.worktree))
-      return budgetRefused(last?.record, used);
+    if (final && !admitsFinalVerification(last?.record, input.worktree)) return budgetRefused(last?.record, used);
     const stamp = nextWorkerCheckHostStamp(directory);
     const record: WorkerCheckHostStampRecord = {
       ...(input.worktree ? { content: workerCheckHostContentTree(input.worktree) } : {}),
@@ -274,9 +269,7 @@ export function settleWorkerCheckHostBudget(
   });
 }
 
-export type WorkerCheckHostTypingSettlement =
-  | { ok: true }
-  | { ok: false; result: string };
+export type WorkerCheckHostTypingSettlement = { ok: true } | { ok: false; result: string };
 
 /**
  * Product outcomes land when they type-check. A success report after a failed last host typecheck, or after the

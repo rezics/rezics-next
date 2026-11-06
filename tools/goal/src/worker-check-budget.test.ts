@@ -269,13 +269,9 @@ test('runs that reached the check command keep counting, whatever their exit cod
   }
 });
 
-const combinedArgv = [
-  'sh',
-  '-c',
-  'bun run --cwd tools/goal typecheck; s=$?; bun test a.test.ts || s=1; exit $s',
-];
+const combinedArgv = ['sh', '-c', 'bun run --cwd tools/goal typecheck; s=$?; bun test a.test.ts || s=1; exit $s'];
 const typecheckLog =
-  'src.ts(1,1): error TS2322: Type \'string\' is not assignable to type \'number\'.\nerror: script "typecheck" exited with code 1\n';
+  "src.ts(1,1): error TS2322: Type 'string' is not assignable to type 'number'.\nerror: script \"typecheck\" exited with code 1\n";
 const testsOnlyLog = '$ bun run --cwd tools/goal typecheck\n$ bun test a.test.ts\n(fail) a\nerror: bun test failed\n';
 
 function git(path: string, args: string[]): void {
@@ -293,12 +289,7 @@ function gitWorktree(path: string): void {
   git(path, ['commit', '-m', 'init']);
 }
 
-function countedFailure(
-  env: NodeJS.ProcessEnv,
-  logPath: string,
-  log: string,
-  exitCode = 1,
-): void {
+function countedFailure(env: NodeJS.ProcessEnv, logPath: string, log: string, exitCode = 1): void {
   writeFileSync(logPath, log);
   settleWorkerCheckHostBudget(env, exitCode, true, { log: logPath, argv: combinedArgv });
 }
@@ -447,9 +438,9 @@ test('settlement records a typing failure after a failed or stale host typecheck
     });
     testsEnv.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
     countedFailure(testsEnv, join(controller.path, 'tests.log'), testsOnlyLog);
-    expect(
-      workerCheckHostTypingSettlement({ directory: testsBudget, worktree: tests.path, limit: 2 }),
-    ).toEqual({ ok: true });
+    expect(workerCheckHostTypingSettlement({ directory: testsBudget, worktree: tests.path, limit: 2 })).toEqual({
+      ok: true,
+    });
 
     const passed = temporaryDirectory();
     gitWorktree(passed.path);
@@ -470,9 +461,9 @@ test('settlement records a typing failure after a failed or stale host typecheck
     git(passed.path, ['add', 'extra.ts']);
     git(passed.path, ['commit', '-m', 'same tree']);
     expect(workerCheckHostContentTree(passed.path)).toBe(beforeCommit);
-    expect(
-      workerCheckHostTypingSettlement({ directory: passedBudget, worktree: passed.path, limit: 2 }),
-    ).toEqual({ ok: true });
+    expect(workerCheckHostTypingSettlement({ directory: passedBudget, worktree: passed.path, limit: 2 })).toEqual({
+      ok: true,
+    });
     writeFileSync(join(passed.path, 'extra.ts'), 'export const extra = 2;\n');
     const stale = workerCheckHostTypingSettlement({
       directory: passedBudget,
