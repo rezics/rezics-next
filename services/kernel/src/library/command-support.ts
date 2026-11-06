@@ -46,7 +46,6 @@ import {
   withFollowCommandWork,
 } from './follow-operation-bounds.ts';
 import { consumeLabelCommandAttempt, withLabelCommandAttempt } from './label-operation-bounds.ts';
-import { withPublishedLogNativeWork } from './published-log-native.ts';
 
 export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
@@ -76,12 +75,13 @@ export async function admitComposedEntryProgress(input: {
   at?: unknown;
 }): Promise<void> {
   const domain = peekLibraryDomain();
-  if (!domain) return;
+  // putEntry/readEntry call this before a command time exists; native admission follows.
+  if (!domain || input.at === undefined) return;
   const result = await domain.entryProgress.admit({
     actor: libraryActorOf(input.actor),
     subjectId: input.subjectId,
     deadline: input.deadline,
-    ...(input.at === undefined ? {} : { at: input.at }),
+    at: input.at,
   });
   if (result.admitted) return;
   const reason = result.admission.terms[0]?.name;
@@ -181,7 +181,10 @@ function publishedLogCommandExecution(
 ): LibraryCommandExecutionBinding | undefined {
   if (bind) return bind;
   if (!kind.startsWith('published_log.')) return;
-  return (dispatch) => withPublishedLogNativeWork(deadline, dispatch);
+  return async (dispatch) => {
+    const { withPublishedLogNativeWork } = await import('./published-log-native.ts');
+    return withPublishedLogNativeWork(deadline, dispatch);
+  };
 }
 
 export function runLibraryCommand<T>(

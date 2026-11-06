@@ -527,7 +527,12 @@ export function websiteRoutes(input: {
           if (request.method !== 'GET' || url.search) deny('invalid_request');
           const response = await input.native().handler(request);
           if (!response.ok) return response;
-          const metadata = protocolRecord(await response.json());
+          let metadata: Record<string, unknown> | undefined;
+          try {
+            metadata = protocolRecord(await response.clone().json());
+          } catch {
+            return response;
+          }
           if (!metadata) return response;
           return Response.json(
             {
