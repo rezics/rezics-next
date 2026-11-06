@@ -1,15 +1,16 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ContentItem } from '@rezics/ui/content-item';
-import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
-import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
-import { discoveryCollectionCard } from '../src/kernel/fake/discovery-collection-card';
-import { exactRevisionHref } from '../src/threads/exact-revision-href';
-import { threadLocation } from '../src/threads/thread-href';
-import { locales, setLocale } from '../src/paraglide/runtime.js';
-import { m } from '../src/paraglide/messages.js';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
+const { homeFeedDestination } = await import('../src/features/pages/home-feed-destination');
+const { discoveryCollectionCard } = await import('../src/kernel/fake/discovery-collection-card');
+const { exactRevisionHref } = await import('../src/threads/exact-revision-href');
+const { threadLocation } = await import('../src/threads/thread-href');
+const { locales, setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
 
 function row(kind: 'thread' | 'post', identity = true): FeedItem {
   const id = '12345678-1234-1234-1234-123456789abc';
