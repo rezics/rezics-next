@@ -431,7 +431,7 @@ test('createKernel payout markPaid and offer delist spend once before effect wit
   expect(await paid.json()).toMatchObject({
     statement: { id: statement, state: 'paid', paidReference: 'wire', revision: 2 },
   });
-  const delisted = await send(`/v1/offers/${offer}:delist`, {});
+  const delisted = await send(`/v1/offers/${offer}:delist`, { expectedRevision: 1 });
   expect(delisted.status).toBe(200);
   expect(await delisted.json()).toMatchObject({ offer: { id: offer, state: 'delisted' } });
   const before = await states();

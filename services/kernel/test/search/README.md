@@ -73,6 +73,8 @@ The final proof must include Search-only pause/resume, replacement-runner stop, 
 
 Until these suites and lifecycle/convergence checks run against the integrated worker, keep real-source and composition verification explicitly pending. A passing specification, controlled fixture, starter construction, send acknowledgment or process signal is not a passing end-to-end outcome.
 
+Default-worker erasure inventory is the live OpenSearch subject generations; empty settings are no-data, and discovery Account copies stay on their own purge. Native wrappers still wait for Semantic's all-home source proof before Search ACK.
+
 `coverage-default-worker.test.ts` requests the ordinary native rebuild without waiting for publication,
 retains its job and physical UUID, drains and restarts the owned worker against the same databases and
 prefix, and loses one real alias response after OpenSearch has applied it. Each child launches the complete

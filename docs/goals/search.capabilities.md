@@ -392,7 +392,7 @@ that throw index_not_ready do not bind the replacement. Reuse real-source compos
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | specification validated red             | Native assertions present; measured red not recorded; complete pruning/reconciliation matrix not frozen/bound. |
 | native driver registered                | Real default-worker source chain registered; missing scenarios require binding to it.                          |
-| implementation exposed                  | Worker and operator CLI exist; complete producer/generation guarantees unproven.                               |
+| implementation exposed                  | Default worker decorates live createKernelWorkModules; rebuild/alias recovery and physical generation inventory are on that process. Complete producer guarantees remain unproven. |
 | user-case native pass at named revision | None recorded for this capability.                                                                             |
 | promoted                                | No main closure evidence.                                                                                      |
 
@@ -641,7 +641,7 @@ dispatch/response, native pruning and immutable real-effect replay retain their 
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | specification validated red             | Not measured. All three frozen cases ran but failed in shared definition bootstrap before executing their participant assertions.                      |
 | native driver registered                | Source-bound to the canonical helper and actual default composition; runtime registration is unmeasured. No synthetic tombstone, event or erasure row. |
-| implementation exposed                  | Source inspection finds no default Search tombstone effect; only the indexing service exists.                                                          |
+| implementation exposed                  | Default Search registers both tombstone effects. Copy inventory is live OpenSearch subject generations; empty settings attest no-data after the Semantic source proof. Discovery Account copies stay on their own purge. |
 | user-case native pass at named revision | None. Neither effects checkpoint nor pending status proves cleanup.                                                                                    |
 | promoted                                | No main launch-gate closure evidence.                                                                                                                  |
 
