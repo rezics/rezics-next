@@ -59,7 +59,7 @@ export function walkReadyUrls(ports: WalkPorts): string[] {
 export const WALK_READY_DEADLINE_MS = 1_200_000;
 export const WALK_READY_FETCH_MS = 120_000;
 export const WALK_READY_POLL_MS = 2_000;
-export const WALK_DOCKER_REMOVE_MS = 60_000;
+export const WALK_DOCKER_REMOVE_MS = 120_000;
 export const WALK_PROCESS_STOP_MS = 8_000;
 
 /** True when something already accepts TCP on the origin; connection refused is not a hung compile. */

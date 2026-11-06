@@ -11,6 +11,7 @@ import {
   WALK_READY_FETCH_MS,
   WALK_READY_POLL_MS,
   WALK_PROCESS_STOP_MS,
+  WALK_DOCKER_REMOVE_MS,
 } from './walk-stack.ts';
 import { cgroupArgs } from '../services/kernel/scripts/search.ts';
 
@@ -24,6 +25,7 @@ test('walk readiness waits on web, issuer and kernel without aborting a first co
   expect(WALK_READY_FETCH_MS).toBeGreaterThan(WALK_READY_POLL_MS);
   expect(WALK_READY_FETCH_MS).toBeGreaterThanOrEqual(120_000);
   expect(WALK_PROCESS_STOP_MS).toBeGreaterThan(WALK_READY_POLL_MS);
+  expect(WALK_DOCKER_REMOVE_MS).toBeGreaterThanOrEqual(120_000);
 });
 
 test('readiness does not treat a closed port as a hung first compile', async () => {

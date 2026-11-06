@@ -741,40 +741,35 @@ async function start() {
   const spawnChild = (command: string[]) =>
     Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
   const children = commands.map(spawnChild);
-  const webIndex = 2;
-  const webRestarts = 3;
   let stopping = false;
-  let webAttempts = 0;
-  const stopAll = async () => {
-    stopping = true;
-    await Promise.all(children.map((child) => stopSpawned(child)));
+  const supervise = (index: number) => {
+    void (async () => {
+      for (;;) {
+        await children[index]!.exited;
+        if (stopping) return;
+        await Bun.sleep(1_000);
+        if (stopping) return;
+        console.error(`walk: ${commands[index]!.slice(-2).join(' ')} exited; restarting`);
+        const child = spawnChild(commands[index]!);
+        children[index] = child;
+        if (stopping) {
+          await stopSpawned(child);
+          return;
+        }
+      }
+    })();
   };
-  const onSignal = () => {
-    void stopAll();
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
-  const superviseWeb = (async () => {
-    for (;;) {
-      const code = await children[webIndex]!.exited;
-      if (stopping || webAttempts >= webRestarts) return code;
-      webAttempts += 1;
-      console.error(`walk: web exited ${code}; restart ${webAttempts}/${webRestarts}`);
-      children[webIndex] = spawnChild(commands[webIndex]!);
-    }
-  })();
-  try {
-    const first = await Promise.race([
-      superviseWeb,
-      ...children.filter((_, index) => index !== webIndex).map((child) => child.exited),
-    ]);
-    const interrupted = stopping;
-    await stopAll();
-    process.exitCode = interrupted ? 0 : first || 1;
-  } finally {
-    process.off('SIGINT', onSignal);
-    process.off('SIGTERM', onSignal);
-  }
+  for (const index of commands.keys()) supervise(index);
+  await new Promise<void>((resolve) => {
+    const onStop = () => {
+      stopping = true;
+      resolve();
+    };
+    process.once('SIGINT', onStop);
+    process.once('SIGTERM', onStop);
+  });
+  process.exitCode = 0;
+  await Promise.all(children.map((child) => stopSpawned(child)));
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
@@ -794,7 +789,12 @@ function removeWalkStack(names: WalkNames): void {
   for (const container of [names.database, names.search]) {
     if (!dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) continue;
     try {
-      dockerOutput(['rm', '-f', container], WALK_DOCKER_REMOVE_MS);
+      dockerOutput(['kill', container], 15_000);
+    } catch {
+      // Already stopped, Created, or removing.
+    }
+    try {
+      dockerOutput(['rm', '-f', '-v', container], WALK_DOCKER_REMOVE_MS);
     } catch (error) {
       console.error(`walk: docker rm ${container} failed: ${error instanceof Error ? error.message : String(error)}`);
     }

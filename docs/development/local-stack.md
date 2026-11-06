@@ -237,8 +237,10 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web, the Auth pages and
    Kernel answer, for at most twenty minutes. Readiness first checks that the port accepts TCP, then allows two minutes
    for Web's first compile; aborting that request too early prevents Vite from ever listening. `db up` and `search up`
-   retry once. Teardown SIGKILLs a stack process that ignores SIGTERM, then removes this task's containers with a
-   bounded `docker rm`. Its output goes to `.temp/walk/<task>/stack.log`.
+   retry once. The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that exits, so a native
+   host registration timeout or worker database blip does not tear down a ready Web. Teardown SIGKILLs a stack process
+   that ignores SIGTERM, then docker-kills and `docker rm -f -v` this task's containers with a bounded wait. Its output
+   goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
    inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
 5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
@@ -257,8 +259,8 @@ when no slot has free ports; port collisions do not authorize stopping another t
 Walk stacks do not inherit check-host cgroup placement; OpenSearch and database run on the host's ordinary container
 slice. Worker checks still run on hosts a and b.
 Decision: walk readiness keeps a TCP listen check, a two-minute first-compile fetch, SIGKILL after ignored SIGTERM,
-and bounded docker removal so a Vite SSR abort loop, a stuck worker, or a Dead OpenSearch container cannot replace a
-seeded product walk.
+and bounded docker kill then removal so a Vite SSR abort loop, a stuck worker, or a Dead OpenSearch container cannot
+replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 
 ## Cross-media dump cache
 
