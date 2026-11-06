@@ -6,7 +6,8 @@ is unconfigured. The effect durably enqueues `commerce.eraseAccount` with identi
 The native version 1 obligation and current deleted account are required for every page.
 
 A child phase reads and removes at most 100 raw keys (at most 1,600 UUID key bytes) from one account-leading index
-per page, including entitlements and acquisition slots. Physical deletion, sticky evidence that data applied, and
+per page, including entitlements and acquisition slots. Reylo locator and page statements yield one row or a list;
+the participant normalizes both before paging or purging. Physical deletion, sticky evidence that data applied, and
 the next cursor/phase commit in the same platform command. Progress contains only account/barrier identity,
 cursor, phase, a fixed blocker and explicit retention metadata; it never copies a source payload. It survives
 DBOS history expiry and is not a second coordinator. Replay cannot reopen a terminal phase or coordinator outcome.

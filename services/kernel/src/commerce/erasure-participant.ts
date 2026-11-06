@@ -63,6 +63,25 @@ type Progress = {
 type Advance = 'none' | 'more' | 'pending' | 'retained' | 'resolve';
 type PolicyRow = { fields: string[]; purpose: string; expiresAt: string };
 type OwnerRow = { buyerAccountId: string };
+type AccountRow = { state: string };
+type ObligationRow = { version: number; at: string };
+type ProofRow = { hasData: boolean };
+type UnsupportedRow = { unsupportedData: boolean };
+type KeyRow = { id: string };
+type RetentionRow = {
+  store: string | null;
+  fields: string[] | null;
+  purpose: string | null;
+  expiresAt: string | null;
+};
+type OrderPageRow = {
+  id: string;
+  hasCheckoutUrl: boolean;
+  minimized: boolean;
+  fields: string[] | null;
+  purpose: string | null;
+  expiresAt: string | null;
+};
 
 function listed<T>(value: T | T[] | null | undefined): T[] {
   if (value == null) return [];
@@ -113,11 +132,11 @@ async function changeProgress(pool: Pool, accountId: string, phase: string, bloc
       },
     },
     async (tx) => {
-      const current = await account.run(tx, key);
-      const barrier = await obligation.run(tx, key);
+      const current = row<AccountRow>(await account.run(tx, key));
+      const barrier = row<ObligationRow>(await obligation.run(tx, key));
       if (current?.state !== 'deleted' || barrier?.version !== 1)
         throw new Error('Commerce erasure requires the committed native version 1 tombstone');
-      const progress = (await read.run(tx, key)) as Progress | null;
+      const progress = row<Progress>(await read.run(tx, key));
       if (!progress) throw new Error('Commerce erasure progress unavailable');
       if (progress.phase === phase && progress.blocker === blocker) return noEffect(null);
       await checkpoint.run(tx, checkpointInput(key, progress, progress.cursor, phase, blocker));
@@ -223,14 +242,14 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       },
     },
     async (tx, { time }) => {
-      const current = await account.run(tx, key);
-      const barrier = await obligation.run(tx, key);
+      const current = row<AccountRow>(await account.run(tx, key));
+      const barrier = row<ObligationRow>(await obligation.run(tx, key));
       if (current?.state !== 'deleted' || barrier?.version !== 1)
         throw new Error('Commerce erasure requires the committed native version 1 tombstone');
-      const found = await proof.run(tx, key);
+      const found = row<ProofRow>(await proof.run(tx, key));
       if (!found) throw new Error('Commerce native ownership proof unavailable');
       await initialize.run(tx, { ...key, had_data: found.hasData });
-      const progress = (await read.run(tx, key)) as Progress | null;
+      const progress = row<Progress>(await read.run(tx, key));
       if (!progress) throw new Error('Commerce erasure progress unavailable');
 
       if (progress.phase === 'none') return noEffect('none' as const);
@@ -238,17 +257,21 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       if (progress.phase === 'retained') {
         const now = authoritativeTimeValue(time);
         if (progress.retentionExpiresAt !== null && Date.parse(progress.retentionExpiresAt) <= Date.parse(now)) {
-          const retained = await pageRetained.run(tx, {
-            ...key,
-            after: progress.cursor,
-            now,
-          });
-          if (retained.length) {
-            const removed = await purgeRetained.run(tx, {
+          const retained = listed<KeyRow>(
+            await pageRetained.run(tx, {
               ...key,
-              ids: retained.map((row) => row.id),
+              after: progress.cursor,
               now,
-            });
+            }),
+          );
+          if (retained.length) {
+            const removed = listed<KeyRow>(
+              await purgeRetained.run(tx, {
+                ...key,
+                ids: retained.map((item) => item.id),
+                now,
+              }),
+            );
             if (removed.length !== retained.length) throw new Error('Commerce retained-order purge was incomplete');
           }
           const nextPhase =
@@ -271,7 +294,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       if (progress.phase === 'resolve') return noEffect('resolve' as const);
 
       // Projection cleanup also runs for already-pending financial accounts.
-      const removedSales = await purgeSales.run(tx, key);
+      const removedSales = listed<KeyRow>(await purgeSales.run(tx, key));
       if (removedSales.length)
         return {
           value: 'more' as const,
@@ -279,8 +302,13 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
         };
 
       if (progress.phase === 'entitlements') {
-        const keys = await pageEntitlements.run(tx, { ...key, after: progress.cursor });
-        if (keys.length) await purgeEntitlements.run(tx, { ...key, ids: keys.map((row) => row.id) });
+        const keys = listed<KeyRow>(await pageEntitlements.run(tx, { ...key, after: progress.cursor }));
+        if (keys.length) {
+          const removed = listed<KeyRow>(
+            await purgeEntitlements.run(tx, { ...key, ids: keys.map((item) => item.id) }),
+          );
+          if (removed.length !== keys.length) throw new Error('Commerce entitlement purge was incomplete');
+        }
         const full = keys.length === 100;
         await checkpoint.run(
           tx,
@@ -293,8 +321,13 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       }
 
       if (progress.phase === 'acquisitions') {
-        const keys = await pageAcquisitions.run(tx, { ...key, after: progress.cursor });
-        if (keys.length) await purgeAcquisitions.run(tx, { ...key, ids: keys.map((row) => row.id) });
+        const keys = listed<KeyRow>(await pageAcquisitions.run(tx, { ...key, after: progress.cursor }));
+        if (keys.length) {
+          const removed = listed<KeyRow>(
+            await purgeAcquisitions.run(tx, { ...key, ids: keys.map((item) => item.id) }),
+          );
+          if (removed.length !== keys.length) throw new Error('Commerce acquisition-slot purge was incomplete');
+        }
         const full = keys.length === 100;
         await checkpoint.run(
           tx,
@@ -313,7 +346,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       }
 
       if (progress.phase === 'money-observations') {
-        const removed = await deleteMoneyObservations.run(tx, { route, buyer: accountId });
+        const removed = listed(await deleteMoneyObservations.run(tx, { route, buyer: accountId }));
         const full = removed.length === 100;
         await checkpoint.run(tx, checkpointInput(key, progress, ZERO, full ? 'money-observations' : 'orders', ''));
         return {
@@ -323,9 +356,9 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       }
 
       if (progress.phase === 'orders') {
-        const unsupported = await unsupportedProof.run(tx, key);
+        const unsupported = row<UnsupportedRow>(await unsupportedProof.run(tx, key));
         let blocker = unsupported?.unsupportedData ? FINANCIAL_ERASURE_BLOCKER : progress.blocker;
-        const orders = await pageOrders.run(tx, { ...key, after: progress.cursor });
+        const orders = listed<OrderPageRow>(await pageOrders.run(tx, { ...key, after: progress.cursor }));
         if (orders.length === 0) {
           if (!progress.hadData) {
             await checkpoint.run(tx, checkpointInput(key, progress, ZERO, 'pending', COMMERCE_CUSTODY_BLOCKER));
@@ -390,11 +423,13 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
           retainedOrderIds.push(order.id);
         }
         if (retainedOrderIds.length) {
-          const minimized = await minimizeOrders.run(tx, {
-            ...key,
-            ids: retainedOrderIds,
-            at: barrier.at,
-          });
+          const minimized = listed<KeyRow>(
+            await minimizeOrders.run(tx, {
+              ...key,
+              ids: retainedOrderIds,
+              at: barrier.at,
+            }),
+          );
           if (minimized.length !== retainedOrderIds.length)
             throw new Error('Commerce exact-order retention minimization was incomplete');
         }
@@ -427,10 +462,10 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
   );
 
   if (result.value === 'retained') {
-    const current = (await withConnection(pool, (client) => read.run(client, key))) as Progress | null;
+    const current = row<Progress>(await withConnection(pool, (client) => read.run(client, key)));
     if (!current) throw new Error('Commerce erasure progress unavailable');
     if (current.blocker !== COMMERCE_CUSTODY_BLOCKER) return 'retained';
-    const retained = await withConnection(pool, (client) => readRetention.run(client, key));
+    const retained = row<RetentionRow>(await withConnection(pool, (client) => readRetention.run(client, key)));
     if (!retained) throw new Error('Commerce retained-order progress unavailable');
     const exceptions: RetentionException[] = [];
     if (retained.store !== null) {
@@ -456,10 +491,10 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
   }
 
   if (result.value === 'pending') {
-    const progress = (await withConnection(pool, (client) => read.run(client, key))) as Progress | null;
+    const progress = row<Progress>(await withConnection(pool, (client) => read.run(client, key)));
     if (!progress) throw new Error('Commerce erasure progress unavailable');
     if (!progress.hadData) {
-      const barrier = await withConnection(pool, (client) => obligation.run(client, key));
+      const barrier = row<ObligationRow>(await withConnection(pool, (client) => obligation.run(client, key)));
       if (!barrier || barrier.version !== 1)
         throw new Error('Commerce erasure requires the committed native version 1 tombstone');
       const coverage = await readHistoryOwnerCoverage(
@@ -490,11 +525,13 @@ export function registerCommerceErasure({ pool, client, addEffects }: WorkContex
   const retentionDeadline = DBOS.registerStep(
     async (accountId: string) => {
       const route = routeForAccount(accountId);
-      const progress = await withConnection(pool, (connection) =>
-        readRetention.run(connection, {
-          route,
-          account_id: accountId,
-        }),
+      const progress = row<RetentionRow>(
+        await withConnection(pool, (connection) =>
+          readRetention.run(connection, {
+            route,
+            account_id: accountId,
+          }),
+        ),
       );
       if (!progress?.expiresAt) throw new Error('Commerce retained-order deadline unavailable');
       return Math.max(0, Date.parse(progress.expiresAt) - Date.now());
@@ -505,7 +542,9 @@ export function registerCommerceErasure({ pool, client, addEffects }: WorkContex
     async (accountId: string) => {
       const route = routeForAccount(accountId);
       const key = { route, account_id: accountId };
-      const progress = await withConnection(pool, (connection) => readRetention.run(connection, key));
+      const progress = row<RetentionRow>(
+        await withConnection(pool, (connection) => readRetention.run(connection, key)),
+      );
       if (!progress?.store) throw new Error('Commerce retained-order store unavailable');
       await resolveRetention({ pool }, { accountId, participant: 'commerce', store: progress.store });
       await changeProgress(pool, accountId, 'pending', COMMERCE_CUSTODY_BLOCKER);
