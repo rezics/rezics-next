@@ -121,7 +121,20 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     KERNEL_DATABASE_BOUNDED: '1',
     KERNEL_WORKER_POOL_SIZE: '4',
     REZICS_WALK_SMOL: '1',
+    // Vite/workerd for Web and Auth pages stay down through persona/seed; the journey starts them for browsers.
+    REZICS_WALK_DEFER_FRONTENDS: '1',
+    MALLOC_ARENA_MAX: '2',
   };
+}
+
+/** Walks wait for Kernel and native Auth. Web and Auth pages start after seed, before browser visits. */
+export function walkReadyUrls(ports: WalkPorts, env: Record<string, string | undefined> = {}): string[] {
+  if (env.REZICS_WALK_DEFER_FRONTENDS === '1')
+    return [
+      `http://127.0.0.1:${ports.native}/.well-known/jwks.json`,
+      `http://127.0.0.1:${ports.kernel}/health`,
+    ];
+  return [`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`];
 }
 
 /**

@@ -69,9 +69,10 @@ independently, and records the exact profile occurrence return. The walk owns it
 Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and
 `GOAL_ACCEPTANCE_REQUIRES` into that walk command without rewriting recorded argv. Walk stacks cap OpenSearch at
 128m without mmap, give Postgres and OpenSearch docker memory ceilings so volume file cache cannot fill the 6 GiB
-run slice, and start Kernel/worker with bun --smol. Each anonymous locale/viewport capture owns one Chromium with a
-single renderer and no media; the signed-in session is a second browser. Concurrent remote-check walks share
-`/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
+run slice, and start Kernel/worker with bun --smol and no `--watch`. Native Auth and Kernel stay up for persona/seed;
+Web and Auth pages start after seed, with issuer JWKS forwarded through native Auth until the pages bind. Anonymous
+locale/viewport captures share one Chromium and own one context each; the signed-in session is a second browser.
+Concurrent remote-check walks share `/tmp/rezics-walk-stacks` and skip Docker-published or already-allocated slot ports.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.

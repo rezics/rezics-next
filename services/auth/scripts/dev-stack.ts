@@ -17,6 +17,7 @@ import { walkStackRequired } from '../../../scripts/stack-run.ts';
 import {
   admitWalkStack,
   walkPortAllocated,
+  walkReadyUrls,
   walkStackEnvironment,
   walkStackLimit,
   walkStackNames,
@@ -697,7 +698,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   const keys = await developmentKeys();
   const child = Bun.spawn(
     [
-      'bun',
+      ...walkBun(process.env),
       'run',
       '--cwd',
       pages ? 'apps/auth' : 'apps/web',
@@ -736,8 +737,28 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
-function bunProcess(args: string[]): string[] {
-  return process.env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol', ...args] : ['bun', ...args];
+export function walkBun(env: NodeJS.ProcessEnv = process.env): string[] {
+  return env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
+}
+
+/** Kernel, worker and native Auth. Web and Auth pages stay down through persona/seed when deferred. */
+export function walkStartProcesses(
+  env: NodeJS.ProcessEnv = process.env,
+): ReadonlyArray<{ command: string[]; cwd: string }> {
+  const bun = walkBun(env);
+  const kernel = join(root, 'services/kernel');
+  const host = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'host'], cwd: root };
+  const pages = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'pages'], cwd: root };
+  const web = { command: [...bun, 'services/auth/scripts/dev-stack.ts', 'web'], cwd: root };
+  const server =
+    env.REZICS_WALK_SMOL === '1'
+      ? { command: [...bun, 'src/server.ts'], cwd: kernel }
+      : { command: [...bun, 'run', '--cwd', 'services/kernel', 'dev'], cwd: root };
+  const worker =
+    env.REZICS_WALK_SMOL === '1'
+      ? { command: [...bun, 'src/worker.ts'], cwd: kernel }
+      : { command: [...bun, 'run', '--cwd', 'services/kernel', 'worker'], cwd: root };
+  return env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [host, server, worker] : [host, pages, web, server, worker];
 }
 
 async function start() {
@@ -746,13 +767,9 @@ async function start() {
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
-  const children = [
-    bunProcess(['services/auth/scripts/dev-stack.ts', 'host']),
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
-    bunProcess(['run', '--cwd', 'services/kernel', 'dev']),
-    bunProcess(['run', '--cwd', 'services/kernel', 'worker']),
-  ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
+  const children = walkStartProcesses(env).map(({ command, cwd }) =>
+    Bun.spawn(command, { cwd, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }),
+  );
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -897,7 +914,7 @@ async function walk(command: string[]): Promise<number> {
           stdout: Bun.file(log),
           stderr: Bun.file(log),
         });
-        await untilReady([`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`], starting);
+        await untilReady(walkReadyUrls(ports, env), starting);
         current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
         code = await current.exited;
       } catch (error) {

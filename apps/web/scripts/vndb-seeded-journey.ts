@@ -15,8 +15,10 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es'] as co
 const stack = {
   web: requiredOrigin('REZICS_LOCAL_STACK_WEB_ORIGIN'),
   issuer: requiredOrigin('REZICS_LOCAL_STACK_ISSUER_ORIGIN'),
+  native: requiredOrigin('REZICS_LOCAL_STACK_NATIVE_ORIGIN'),
   kernel: requiredOrigin('REZICS_LOCAL_STACK_KERNEL_ORIGIN'),
 };
+const bun = process.env.REZICS_WALK_SMOL === '1' ? [process.execPath, '--smol'] : ['bun'];
 const report: {
   revision: string;
   browser: string;
@@ -53,6 +55,62 @@ async function envFile(path: string): Promise<Record<string, string>> {
 async function run(command: string[], env = process.env): Promise<void> {
   const child = Bun.spawn(command, { cwd: root, env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
   assert.equal(await child.exited, 0, `${command.join(' ')} failed`);
+}
+
+async function untilOrigin(origin: string, starting?: ReturnType<typeof Bun.spawn>): Promise<void> {
+  const deadline = Date.now() + 600_000;
+  while (true) {
+    const ready = await fetch(`${origin}/`, { signal: AbortSignal.timeout(2_000) }).then(
+      (response) => response.status < 500,
+      () => false,
+    );
+    if (ready) return;
+    if (starting && (starting.exitCode !== null || starting.signalCode !== null))
+      throw new Error(`walk frontend exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
+    if (Date.now() > deadline) throw new Error(`walk frontend ${origin} was not ready after ten minutes`);
+    await Bun.sleep(500);
+  }
+}
+
+/** Kernel fetches JWKS at the public issuer origin; native Auth already serves it. */
+function issuerProxy(): ReturnType<typeof Bun.serve> {
+  const native = new URL(stack.native);
+  return Bun.serve({
+    hostname: '127.0.0.1',
+    port: Number(new URL(stack.issuer).port),
+    fetch(request) {
+      const url = new URL(request.url);
+      url.protocol = native.protocol;
+      url.host = native.host;
+      return fetch(url, { method: request.method, headers: request.headers });
+    },
+  });
+}
+
+async function withFrontends<T>(run: () => Promise<T>): Promise<T> {
+  const spawn = (action: 'pages' | 'web') =>
+    Bun.spawn([...bun, 'services/auth/scripts/dev-stack.ts', action], {
+      cwd: root,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+  const pages = spawn('pages');
+  try {
+    await untilOrigin(stack.issuer, pages);
+    const web = spawn('web');
+    try {
+      await untilOrigin(stack.web, web);
+      return await run();
+    } finally {
+      web.kill('SIGTERM');
+      await web.exited;
+    }
+  } finally {
+    pages.kill('SIGTERM');
+    await pages.exited;
+  }
 }
 
 function data<T>(response: { data: T | null; error: unknown; status: number }, label: string): T {
@@ -169,13 +227,18 @@ assert(
 );
 await mkdir(evidence, { recursive: true });
 try {
-  await run(['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
-  await run(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], {
-    ...process.env,
-    ...(await envFile(resolve(root, '.temp/local-stack/seed.env'))),
-    AUTH_ORIGIN: stack.issuer,
-    KERNEL_ORIGIN: stack.kernel,
-  });
+  await run([...bun, 'services/auth/scripts/dev-stack.ts', 'persona']);
+  const proxy = issuerProxy();
+  try {
+    await run([...bun, 'scripts/datasets/cross-media-seed.ts', '--dev'], {
+      ...process.env,
+      ...(await envFile(resolve(root, '.temp/local-stack/seed.env'))),
+      AUTH_ORIGIN: stack.issuer,
+      KERNEL_ORIGIN: stack.kernel,
+    });
+  } finally {
+    await proxy.stop(true);
+  }
   const seed = JSON.parse(
     await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'),
   ) as CrossMediaSeedResult & { developmentShowcase: DevelopmentShowcaseReport };
@@ -209,13 +272,14 @@ try {
   assert.equal(unselected.entry.state, 'not_selected');
   report.phases.push('actual-publication-and-native-entry');
 
-  for (const locale of locales) {
-    for (const [width, theme] of [
-      [390, 'light'],
-      [1440, 'dark'],
-    ] as const) {
-      await withBrowser((browser) =>
-        withPage(browser, { width, theme, blockMedia: true }, async (page) => {
+  await withFrontends(async () => {
+  await withBrowser(async (browser) => {
+    for (const locale of locales) {
+      for (const [width, theme] of [
+        [390, 'light'],
+        [1440, 'dark'],
+      ] as const) {
+        await withPage(browser, { width, theme, blockMedia: true }, async (page) => {
           const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
             waitUntil: 'domcontentloaded',
           });
@@ -223,10 +287,10 @@ try {
           await expect(page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
           await capture(page, `anonymous-${locale}-${width}-${theme}`);
           report.visits.push({ url: page.url(), locale, width, theme });
-        }),
-      );
+        });
+      }
     }
-  }
+  });
 
   await withBrowser(async (browser) =>
     withPage(browser, { width: 1440, theme: 'light', blockMedia: true }, async (page) => {
@@ -358,6 +422,7 @@ try {
       report.phases.push('profile-watch-reaction-set-clear-report-reply-durable-readbacks-and-return');
     }),
   );
+  });
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
   throw error;

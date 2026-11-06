@@ -6,7 +6,9 @@ import { acquireStackSlot } from './stack-lease.ts';
 import {
   publishedHostPorts,
   walkPortAllocated,
+  walkReadyUrls,
   walkStackEnvironment,
+  walkStackPorts,
   walkStackPortsAvailable,
 } from './walk-stack.ts';
 import { databaseRunArgs } from '../services/kernel/scripts/database.ts';
@@ -22,7 +24,14 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
     KERNEL_DATABASE_BOUNDED: '1',
     KERNEL_WORKER_POOL_SIZE: '4',
     REZICS_WALK_SMOL: '1',
+    REZICS_WALK_DEFER_FRONTENDS: '1',
+    MALLOC_ARENA_MAX: '2',
   });
+  expect(walkReadyUrls(walkStackPorts(1), env)).toEqual([
+    'http://127.0.0.1:20012/.well-known/jwks.json',
+    'http://127.0.0.1:20013/health',
+  ]);
+  expect(walkReadyUrls(walkStackPorts(1), {})).toEqual(['http://127.0.0.1:20010/', 'http://127.0.0.1:20011/']);
   const search = searchRunArgs('native-policy-test-image', env);
   const environment = search.flatMap((arg, i) => (arg === '-e' ? [search[i + 1]] : []));
   expect(environment).toContain('OPENSEARCH_JAVA_OPTS=-Xms128m -Xmx128m');

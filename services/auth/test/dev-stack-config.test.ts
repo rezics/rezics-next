@@ -22,6 +22,8 @@ import {
   resetLocalContentMedia,
   localShowcaseClientRegistration,
   importerScopes,
+  walkBun,
+  walkStartProcesses,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -294,6 +296,22 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('a walk start keeps Vite down through seed and runs Kernel without watch', () => {
+  const ordinary = walkStartProcesses({});
+  expect(ordinary.map((row) => row.command.join(' '))).toEqual([
+    'bun services/auth/scripts/dev-stack.ts host',
+    'bun services/auth/scripts/dev-stack.ts pages',
+    'bun services/auth/scripts/dev-stack.ts web',
+    'bun run --cwd services/kernel dev',
+    'bun run --cwd services/kernel worker',
+  ]);
+  const walk = walkStartProcesses({ REZICS_WALK_SMOL: '1', REZICS_WALK_DEFER_FRONTENDS: '1' });
+  expect(walkBun({ REZICS_WALK_SMOL: '1' })).toEqual([process.execPath, '--smol']);
+  expect(walk.map((row) => row.command.slice(-1)[0])).toEqual(['host', 'src/server.ts', 'src/worker.ts']);
+  expect(walk.some((row) => row.command.includes('pages') || row.command.includes('web'))).toBe(false);
+  expect(walk.some((row) => row.command.includes('dev'))).toBe(false);
 });
 
 test('an authorized password rotation retains the original registration input', async () => {
