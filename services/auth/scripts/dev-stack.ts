@@ -1144,9 +1144,7 @@ async function walk(command: string[]): Promise<number> {
       await untilReady(
         [
           ...plan.nativeReady,
-          ...(env.REZICS_WALK_DEFER_FRONTENDS === '1'
-            ? [`http://127.0.0.1:${ports.kernel}/health`]
-            : plan.kernelReady),
+          ...(env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [`http://127.0.0.1:${ports.kernel}/health`] : plan.kernelReady),
         ],
         starting,
       );

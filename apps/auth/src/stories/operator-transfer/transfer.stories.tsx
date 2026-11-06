@@ -114,7 +114,10 @@ function Fixture({
                   : 'opaque-source-approval',
               expiresAt: '2030-01-01T00:00:00.000Z',
             })
-          : Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: mode === 'conflict' ? 409 : 403 });
+          : Response.json(
+              { error: 'account_operation_denied', effect_status: 'not_applied' },
+              { status: mode === 'conflict' ? 409 : 403 },
+            );
       if (path === '/account-operations/execute') {
         if (mode === 'uncertain') throw new TypeError('Story: response lost');
         if (mode === 'ready') {
