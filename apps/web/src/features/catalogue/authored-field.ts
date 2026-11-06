@@ -21,12 +21,15 @@ import {
 import { originalLanguage } from '../../subject/language';
 import { bestRank, isRecord } from '../pages/shared';
 import { readCorrectionActions, type ProposalResult, type StatementInput } from './statement-editor';
+import { authoredProperties } from './authored-properties';
 import {
   authoredInspectionKind,
   inspectSelectedSynopsisVisit,
   inspectSelectedSynopsisRead,
   selectedSynopsisStatement,
-} from './selected-synopsis-source';
+} from './subject-editor';
+
+export { authoredProperties } from './authored-properties';
 
 // The native proposal schema accepts a generic statement; reuse the shared definition input for its parts.
 export type AuthoredStatement = StatementInput;
@@ -67,10 +70,6 @@ export type AuthoredTransport = {
     work?: CandidateWork,
   ) => Promise<AuthoredReview>;
 };
-
-export function authoredProperties(release: Release, type: string): string[] {
-  return (release.types[type]?.properties ?? []).filter((id) => release.properties[id]?.datatype === 'document');
-}
 
 /** A new authored work has its own licence and evidence; the current work is never used as an editable draft. */
 export function authoredStatement(

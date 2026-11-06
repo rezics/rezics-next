@@ -1,21 +1,28 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
-import { synopsisVisit } from '../pages/subject-summary-reading/visit';
 import {
-  inspectSelectedSynopsisRead,
-  inspectSelectedSynopsisVisit,
-  type SelectedSynopsisEditorInspection,
+  SELECTED_SYNOPSIS_PROPERTY,
+  selectedSynopsisQuery,
+  selectedSynopsisResponse,
+  type SelectedSynopsisSelection,
 } from './selected-synopsis-source';
+import { synopsisVisit } from './subject-sources';
 import { selectedEditorAttempt, type SelectedEditorLive } from './subject-editor-lifetime';
 
-export {
-  authoredInspectionKind,
-  inspectSelectedSynopsisRead,
-  inspectSelectedSynopsisVisit,
-  selectedSynopsisStatement,
-  type SelectedSynopsisEditorInspection,
-  type SelectedSynopsisEditorVisit,
-} from './selected-synopsis-source';
+export type SelectedSynopsisEditorVisit =
+  | { kind: 'ordinary' }
+  | { kind: 'invalid' }
+  | { kind: 'unsupported' }
+  | { kind: 'selected'; selection: SelectedSynopsisSelection; query: string; returnTo: string };
+
+export type SelectedSynopsisEditorInspection =
+  | { kind: 'ordinary' }
+  | { kind: 'invalid' }
+  | { kind: 'unsupported' }
+  | { kind: 'changed' }
+  | { kind: 'missing' }
+  | { kind: 'unavailable' }
+  | { kind: 'matched'; statement: string; context: string; release: string };
 
 export type SelectedSynopsisEditorRead = {
   visit: ReturnType<typeof synopsisVisit>;
@@ -24,6 +31,47 @@ export type SelectedSynopsisEditorRead = {
   status?: number;
   data?: SubjectRead;
 };
+
+/** Admit via as return intent only. Non-Global Context or Realm stops before any editor or Global label read. */
+export function inspectSelectedSynopsisVisit(
+  via: string | undefined,
+  id: string,
+  locale: string,
+  property?: string,
+): SelectedSynopsisEditorVisit {
+  const visit = synopsisVisit(via, id, locale);
+  if (visit.kind === 'invalid') return { kind: 'invalid' };
+  if (visit.kind !== 'selected') return { kind: 'ordinary' };
+  if (visit.selection.realm || visit.selection.context !== PAGE_GLOBAL_CONTEXT) return { kind: 'unsupported' };
+  if (property !== undefined && property !== SELECTED_SYNOPSIS_PROPERTY) return { kind: 'invalid' };
+  const query = selectedSynopsisQuery(visit.selection);
+  if (!query) return { kind: 'invalid' };
+  return { kind: 'selected', selection: visit.selection, query, returnTo: visit.returnTo };
+}
+
+/** Closed native selected-slot result. Document operands never re-enter the inspection. */
+export function inspectSelectedSynopsisRead(
+  selection: SelectedSynopsisSelection,
+  value: unknown,
+): SelectedSynopsisEditorInspection {
+  if (!selectedSynopsisResponse(value)) return { kind: 'unavailable' };
+  if (value.kind !== 'matched') return { kind: value.kind };
+  if (
+    value.fact.id !== selection.candidateId ||
+    value.context !== selection.context ||
+    value.release !== selection.subjectRelease
+  )
+    return { kind: 'unavailable' };
+  return { kind: 'matched', statement: value.fact.id, context: value.context, release: value.release };
+}
+
+export function authoredInspectionKind(
+  inspection: SelectedSynopsisEditorInspection,
+): 'changed' | 'unsupported' | 'invalid' | undefined {
+  if (inspection.kind === 'ordinary' || inspection.kind === 'matched') return;
+  if (inspection.kind === 'unsupported' || inspection.kind === 'invalid') return inspection.kind;
+  return 'changed';
+}
 
 /**
  * One Subject operation per attempt. A replaced visit, including A/B/A, cannot revive an earlier
@@ -70,4 +118,13 @@ export async function readSelectedSynopsisEditor(
   } catch {
     return { visit, inspection: { kind: 'unavailable' }, query: admitted.query };
   }
+}
+
+/** Current Global statement for a matched selected-slot fact. Sibling preferred language never substitutes. */
+export function selectedSynopsisStatement(
+  read: Pick<SubjectRead, 'subject'>,
+  inspection: SelectedSynopsisEditorInspection,
+): SubjectRead['subject']['statements'][string][number] | undefined {
+  if (inspection.kind !== 'matched') return;
+  return read.subject.statements[SELECTED_SYNOPSIS_PROPERTY]?.find((statement) => statement.id === inspection.statement);
 }
