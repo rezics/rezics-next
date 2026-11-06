@@ -1,3 +1,4 @@
+import { SubjectStreamDirectory } from './subject-streams';
 import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
@@ -45,12 +46,11 @@ import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { originalLanguage, originalTitle } from '../../subject/language';
-import { defaultReader, type Reader } from '../../subject/reader';
+import { defaultReader, timePresentation, type Reader } from '../../subject/reader';
 import type { Subject } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
 import { pageText } from './data';
-import { dateText } from './overview';
-import { linkClass, linkColor, bestRank, isRecord, PlainLink, type PageLink, type Stmt } from './shared';
+import { linkClass, linkColor, bestRank, spoilerLevel, isRecord, PlainLink, type PageLink, type Stmt } from './shared';
 import { loadSubjectPage, pageContext, PageReadError, SubjectPage, type SubjectPageData } from './subject';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
@@ -62,8 +62,6 @@ import { useLocation } from '@tanstack/react-router';
 export { ViewHeading, ViewHeadingActions } from './view-heading';
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
-/** The Wikidata time precisions that name a year, a month and a day. */
-const PRECISION_ISO = { 9: 4, 10: 7, 11: 10 } as const;
 
 /** What the compact header of a view page shows of its subject: a constant number of fields, however large the subject. */
 export type SubjectFrameData = {
@@ -93,14 +91,11 @@ function subjectRead(page: SubjectPageData): { subject: Subject; summary: Subjec
 function dateOf(subject: Subject, locale: string): string | undefined {
   const statements = subject.statements as unknown as Record<string, Stmt[]>;
   for (const property of DATE_PROPERTIES) {
-    for (const statement of Object.hasOwn(statements, property) ? bestRank(statements[property] ?? []) : []) {
-      const content = statement.value.type === 'value' ? statement.value.content : undefined;
-      if (!isRecord(content) || typeof content.time !== 'string') continue;
-      const length = PRECISION_ISO[content.precision as keyof typeof PRECISION_ISO];
-      // Kernel dates use 00 for the month or day omitted at year or month precision.
-      const iso = length === undefined ? undefined : content.time.replace(/^\+/, '').slice(0, length);
-      const text = dateText(iso, locale);
-      if (text) return text;
+    const eligible = Object.hasOwn(statements, property) ? (statements[property] ?? []) : [];
+    for (const statement of bestRank(eligible.filter((value) => spoilerLevel(value) === 0))) {
+      if (statement.property.data_type !== 'time') continue;
+      const presented = timePresentation(statement.value, locale);
+      if (presented.state === 'supported' && presented.structuredDate) return presented.text;
     }
   }
 }
@@ -147,15 +142,17 @@ export async function loadViewPages(
   // Resolve a node from the current template; the continued request independently resolves and guards it again.
   const first = await loadSubjectPage(client, id, view, locale, {
     ...options,
+    ...(options.node ? { stream: options.node } : {}),
     ...(cursor !== undefined && options.node ? { continuation: { node: options.node, cursor } } : {}),
   });
   assertSubjectPageReadActive(options.signal);
   if (first.kind !== 'page') return first;
   const plan = planReads(platformRegistry, first.page.document as CompositionDocument, pageContext(first.page));
+  const selectedNode = options.node ?? first.page.streams?.selected;
   const primary = Object.entries(plan.nodes).find(([node, key]) => {
     const read = plan.reads[key];
     return (
-      (!options.node || options.node === node) &&
+      (!selectedNode || selectedNode === node) &&
       (read?.kind === 'links' ||
         read?.kind === 'relations' ||
         read?.kind === 'subjectThreads' ||
@@ -365,8 +362,15 @@ export function SubjectFrame({
               {(frame.type === 'schema:Person' || frame.type === 'schema:Organization') && (
                 <PeopleProfileEntry id={frame.id} label={title} locale={locale} />
               )}
-              {frame.type === 'schema:Organization' && (
-                <ProducerHistoryEntry id={frame.id} label={title} locale={locale} />
+              {frame.type === 'schema:Organization' && observedContext && (
+                <ProducerHistoryEntry
+                  id={frame.id}
+                  label={title}
+                  locale={locale}
+                  context={observedContext}
+                  realm={realm}
+                  currentHref={location.publicHref}
+                />
               )}
               {view === 'credits' && <PeopleProfileEntry work={frame.id} locale={locale} />}
               <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
@@ -515,11 +519,20 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
     }
   }
   visit(page.page.document.content);
-  const ownHeading = streams.length === 1;
+  const visibleStreams = page.page.streams?.selected
+    ? streams.filter(({ props }) => props.id === page.page.streams?.selected)
+    : streams;
+  const ownHeading = visibleStreams.length === 1;
   const ownContinuation = streams.length > 0;
   return (
     <div className="flex w-full min-w-0 flex-col gap-8">
       {frame}
+      <SubjectStreamDirectory
+        streams={page.page.streams}
+        document={page.page.document}
+        locale={page.locale}
+        relations={page.relations}
+      />
       {ownHeading ? (
         actions ? (
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere">
@@ -529,7 +542,7 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
       ) : (
         <ViewHeadingActions label={label} actions={actions} />
       )}
-      <PageStreamHeadingContext value={ownHeading ? String(streams[0]!.props.id) : undefined}>
+      <PageStreamHeadingContext value={ownHeading ? String(visibleStreams[0]!.props.id) : undefined}>
         <SubjectPage {...page} framed />
       </PageStreamHeadingContext>
       {nextHref && !ownContinuation ? (

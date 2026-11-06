@@ -63,6 +63,24 @@
             }
           },
           {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-side-stories",
+              "title": {
+                "de": "Nebengeschichte zu",
+                "en": "Side story of",
+                "es": "Historia paralela de",
+                "fr": "Histoire annexe de",
+                "ja": "外伝の本編",
+                "ko": "외전의 본편",
+                "zh-Hans": "番外篇的本篇",
+                "zh-Hant": "番外篇的本篇"
+              },
+              "property": "rezics:sideStoryOf",
+              "limit": 4
+            }
+          },
+          {
             "type": "RelationGroups",
             "props": {
               "id": "adaptations",
@@ -78,6 +96,24 @@
               },
               "property": "wdt:P144",
               "limit": 12
+            }
+          },
+          {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-adaptations",
+              "title": {
+                "de": "basiert auf",
+                "en": "based on",
+                "es": "basado en",
+                "fr": "basé sur",
+                "ja": "派生元",
+                "ko": "다음에 기반을 두었음",
+                "zh-Hans": "改编自",
+                "zh-Hant": "改編自"
+              },
+              "property": "wdt:P144",
+              "limit": 4
             }
           },
           {
@@ -99,6 +135,24 @@
             }
           },
           {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-versions",
+              "title": {
+                "de": "Andere Erzählfassung",
+                "en": "Alternative telling",
+                "es": "Versión narrativa alternativa",
+                "fr": "Autre interprétation",
+                "ja": "異なる描き方",
+                "ko": "다르게 풀어낸 이야기",
+                "zh-Hans": "不同演绎",
+                "zh-Hant": "不同演繹"
+              },
+              "property": "rezics:alternativeVersion",
+              "limit": 4
+            }
+          },
+          {
             "type": "RelationGroups",
             "props": {
               "id": "related",
@@ -114,6 +168,24 @@
               },
               "property": "rezics:bangumiRelatedTo",
               "limit": 12
+            }
+          },
+          {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-related",
+              "title": {
+                "de": "Verknüpft (Bangumi)",
+                "en": "Related (Bangumi)",
+                "es": "Relacionado (Bangumi)",
+                "fr": "Associé (Bangumi)",
+                "ja": "関連（Bangumi）",
+                "ko": "관련 작품 (Bangumi)",
+                "zh-Hans": "关联（Bangumi）",
+                "zh-Hant": "關聯（Bangumi）"
+              },
+              "property": "rezics:bangumiRelatedTo",
+              "limit": 4
             }
           },
           {
@@ -181,6 +253,25 @@
             }
           },
           {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-side-stories",
+              "title": {
+                "de": "Nebengeschichte zu",
+                "en": "Side story of",
+                "es": "Historia paralela de",
+                "fr": "Histoire annexe de",
+                "ja": "外伝の本編",
+                "ko": "외전의 본편",
+                "zh-Hans": "番外篇的本篇",
+                "zh-Hant": "番外篇的本篇"
+              },
+              "property": "rezics:sideStoryOf",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
             "type": "RelationGroups",
             "props": {
               "id": "adaptations",
@@ -193,6 +284,25 @@
                 "de": "Adaptionen",
                 "fr": "Adaptations",
                 "es": "Adaptaciones"
+              },
+              "property": "wdt:P144",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-adaptations",
+              "title": {
+                "de": "basiert auf",
+                "en": "based on",
+                "es": "basado en",
+                "fr": "basé sur",
+                "ja": "派生元",
+                "ko": "다음에 기반을 두었음",
+                "zh-Hans": "改编自",
+                "zh-Hant": "改編自"
               },
               "property": "wdt:P144",
               "limit": 24,
@@ -219,6 +329,25 @@
             }
           },
           {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-versions",
+              "title": {
+                "de": "Andere Erzählfassung",
+                "en": "Alternative telling",
+                "es": "Versión narrativa alternativa",
+                "fr": "Autre interprétation",
+                "ja": "異なる描き方",
+                "ko": "다르게 풀어낸 이야기",
+                "zh-Hans": "不同演绎",
+                "zh-Hant": "不同演繹"
+              },
+              "property": "rezics:alternativeVersion",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
             "type": "RelationGroups",
             "props": {
               "id": "related",
@@ -231,6 +360,25 @@
                 "de": "Verwandtes",
                 "fr": "Œuvres liées",
                 "es": "Obras relacionadas"
+              },
+              "property": "rezics:bangumiRelatedTo",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "out-related",
+              "title": {
+                "de": "Verknüpft (Bangumi)",
+                "en": "Related (Bangumi)",
+                "es": "Relacionado (Bangumi)",
+                "fr": "Associé (Bangumi)",
+                "ja": "関連（Bangumi）",
+                "ko": "관련 작품 (Bangumi)",
+                "zh-Hans": "关联（Bangumi）",
+                "zh-Hant": "關聯（Bangumi）"
               },
               "property": "rezics:bangumiRelatedTo",
               "limit": 24,
@@ -398,6 +546,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -413,6 +579,24 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
               }
             },
             {
@@ -434,6 +618,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -452,6 +654,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
+              }
+            },
+            {
               "type": "Appearances",
               "props": {
                 "id": "characters",
@@ -461,12 +681,324 @@
               }
             },
             {
+              "type": "SubjectList",
+              "props": {
+                "id": "parts",
+                "title": {
+                  "en": "Contents",
+                  "zh-Hant": "內容",
+                  "zh-Hans": "内容",
+                  "ja": "内容",
+                  "ko": "내용",
+                  "de": "Inhalt",
+                  "fr": "Contenu",
+                  "es": "Contenido"
+                },
+                "property": "wdt:P361",
+                "limit": 6
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "episodes",
+                "title": {
+                  "de": "Episoden",
+                  "en": "Episodes",
+                  "es": "Episodios",
+                  "fr": "Épisodes",
+                  "ja": "エピソード",
+                  "ko": "에피소드",
+                  "zh-Hans": "集数",
+                  "zh-Hant": "集數"
+                },
+                "property": "schema:isPartOf",
+                "limit": 6
+              }
+            },
+            {
               "type": "Credits",
               "props": {
-                "id": "credits",
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitarbeiter des Kreativwerks",
+                  "en": "contributor to the creative work or subject",
+                  "es": "colaborador",
+                  "fr": "collaborateur ou collaboratrice au travail de création",
+                  "ja": "作品あるいは主題の貢献者",
+                  "ko": "공저자",
+                  "zh-Hans": "创作作品或主题贡献者",
+                  "zh-Hant": "創作作品或主題貢獻者"
+                },
                 "direction": "forward",
                 "property": "schema:contributor",
-                "limit": 12
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-marcrel-fds",
+                "title": {
+                  "de": "Filmverleih",
+                  "en": "film distributor",
+                  "es": "distribuidor cinematográfico",
+                  "fr": "distributeur de films",
+                  "ja": "映画配給者",
+                  "ko": "영화 배급자",
+                  "zh-Hans": "影片发行方",
+                  "zh-Hant": "影片發行方"
+                },
+                "direction": "forward",
+                "property": "marcrel:fds",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-publisher",
+                "title": {
+                  "de": "Verlag",
+                  "en": "publisher",
+                  "es": "editorial",
+                  "fr": "publié par",
+                  "ja": "出版社",
+                  "ko": "발행 주체",
+                  "zh-Hans": "出版者",
+                  "zh-Hant": "出版者"
+                },
+                "direction": "forward",
+                "property": "schema:publisher",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzer",
+                  "en": "translator",
+                  "es": "traductor",
+                  "fr": "traducteur ou traductrice",
+                  "ja": "翻訳者",
+                  "ko": "번역가",
+                  "zh-Hans": "译者",
+                  "zh-Hant": "譯者"
+                },
+                "direction": "forward",
+                "property": "schema:translator",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Autor",
+                  "en": "author",
+                  "es": "autor",
+                  "fr": "auteur ou autrice",
+                  "ja": "著者",
+                  "ko": "저자",
+                  "zh-Hans": "作者",
+                  "zh-Hant": "作者"
+                },
+                "direction": "forward",
+                "property": "schema:author",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickler",
+                  "en": "developer",
+                  "es": "desarrollador",
+                  "fr": "développé par",
+                  "ja": "開発元",
+                  "ko": "개발 주체",
+                  "zh-Hans": "开发者",
+                  "zh-Hant": "開發者"
+                },
+                "direction": "forward",
+                "property": "wdt:P178",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regisseur",
+                  "en": "director",
+                  "es": "director",
+                  "fr": "réalisé(e) ou mis(e) en scène par",
+                  "ja": "監督",
+                  "ko": "감독",
+                  "zh-Hans": "导演",
+                  "zh-Hant": "導演"
+                },
+                "direction": "forward",
+                "property": "schema:director",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrator",
+                  "en": "illustrator",
+                  "es": "ilustrador",
+                  "fr": "illustrateur ou illustratrice",
+                  "ja": "挿絵画家",
+                  "ko": "삽화가",
+                  "zh-Hans": "插画家",
+                  "zh-Hant": "插畫家"
+                },
+                "direction": "forward",
+                "property": "schema:illustrator",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Komponist",
+                  "en": "composer",
+                  "es": "compositor",
+                  "fr": "compositeur ou compositrice",
+                  "ja": "作曲者",
+                  "ko": "작곡가",
+                  "zh-Hans": "作曲",
+                  "zh-Hant": "作曲者"
+                },
+                "direction": "forward",
+                "property": "schema:musicBy",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzent",
+                  "en": "producer",
+                  "es": "productor",
+                  "fr": "producteur ou productrice",
+                  "ja": "プロデューサー",
+                  "ko": "제작자",
+                  "zh-Hans": "制作人",
+                  "zh-Hant": "製作人"
+                },
+                "direction": "forward",
+                "property": "schema:producer",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionsgesellschaft",
+                  "en": "production company",
+                  "es": "empresa productora",
+                  "fr": "société de production",
+                  "ja": "制作会社",
+                  "ko": "제작사",
+                  "zh-Hans": "制作商",
+                  "zh-Hant": "製作商"
+                },
+                "direction": "forward",
+                "property": "schema:productionCompany",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbuchautor",
+                  "en": "screenwriter",
+                  "es": "guionista",
+                  "fr": "scénariste",
+                  "ja": "脚本",
+                  "ko": "각본가",
+                  "zh-Hans": "编剧",
+                  "zh-Hant": "編劇"
+                },
+                "direction": "forward",
+                "property": "wdt:P58",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprecher",
+                  "en": "voice actor",
+                  "es": "actor de voz",
+                  "fr": "comédien ou comédienne de doublage",
+                  "ja": "声優",
+                  "ko": "담당 성우",
+                  "zh-Hans": "配音演员",
+                  "zh-Hant": "配音員"
+                },
+                "direction": "forward",
+                "property": "wdt:P725",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "forward",
+                "property": "schema:performer",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Interpret",
+                  "en": "artist",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "アーティスト",
+                  "ko": "아티스트",
+                  "zh-Hans": "艺人",
+                  "zh-Hant": "藝人"
+                },
+                "direction": "forward",
+                "property": "schema:byArtist",
+                "limit": 4
               }
             },
             {
@@ -537,10 +1069,300 @@
             {
               "type": "Credits",
               "props": {
-                "id": "credits",
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitarbeiter des Kreativwerks",
+                  "en": "contributor to the creative work or subject",
+                  "es": "colaborador",
+                  "fr": "collaborateur ou collaboratrice au travail de création",
+                  "ja": "作品あるいは主題の貢献者",
+                  "ko": "공저자",
+                  "zh-Hans": "创作作品或主题贡献者",
+                  "zh-Hant": "創作作品或主題貢獻者"
+                },
                 "direction": "forward",
                 "property": "schema:contributor",
-                "limit": 24,
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-marcrel-fds",
+                "title": {
+                  "de": "Filmverleih",
+                  "en": "film distributor",
+                  "es": "distribuidor cinematográfico",
+                  "fr": "distributeur de films",
+                  "ja": "映画配給者",
+                  "ko": "영화 배급자",
+                  "zh-Hans": "影片发行方",
+                  "zh-Hant": "影片發行方"
+                },
+                "direction": "forward",
+                "property": "marcrel:fds",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-publisher",
+                "title": {
+                  "de": "Verlag",
+                  "en": "publisher",
+                  "es": "editorial",
+                  "fr": "publié par",
+                  "ja": "出版社",
+                  "ko": "발행 주체",
+                  "zh-Hans": "出版者",
+                  "zh-Hant": "出版者"
+                },
+                "direction": "forward",
+                "property": "schema:publisher",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzer",
+                  "en": "translator",
+                  "es": "traductor",
+                  "fr": "traducteur ou traductrice",
+                  "ja": "翻訳者",
+                  "ko": "번역가",
+                  "zh-Hans": "译者",
+                  "zh-Hant": "譯者"
+                },
+                "direction": "forward",
+                "property": "schema:translator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Autor",
+                  "en": "author",
+                  "es": "autor",
+                  "fr": "auteur ou autrice",
+                  "ja": "著者",
+                  "ko": "저자",
+                  "zh-Hans": "作者",
+                  "zh-Hant": "作者"
+                },
+                "direction": "forward",
+                "property": "schema:author",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickler",
+                  "en": "developer",
+                  "es": "desarrollador",
+                  "fr": "développé par",
+                  "ja": "開発元",
+                  "ko": "개발 주체",
+                  "zh-Hans": "开发者",
+                  "zh-Hant": "開發者"
+                },
+                "direction": "forward",
+                "property": "wdt:P178",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regisseur",
+                  "en": "director",
+                  "es": "director",
+                  "fr": "réalisé(e) ou mis(e) en scène par",
+                  "ja": "監督",
+                  "ko": "감독",
+                  "zh-Hans": "导演",
+                  "zh-Hant": "導演"
+                },
+                "direction": "forward",
+                "property": "schema:director",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrator",
+                  "en": "illustrator",
+                  "es": "ilustrador",
+                  "fr": "illustrateur ou illustratrice",
+                  "ja": "挿絵画家",
+                  "ko": "삽화가",
+                  "zh-Hans": "插画家",
+                  "zh-Hant": "插畫家"
+                },
+                "direction": "forward",
+                "property": "schema:illustrator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Komponist",
+                  "en": "composer",
+                  "es": "compositor",
+                  "fr": "compositeur ou compositrice",
+                  "ja": "作曲者",
+                  "ko": "작곡가",
+                  "zh-Hans": "作曲",
+                  "zh-Hant": "作曲者"
+                },
+                "direction": "forward",
+                "property": "schema:musicBy",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzent",
+                  "en": "producer",
+                  "es": "productor",
+                  "fr": "producteur ou productrice",
+                  "ja": "プロデューサー",
+                  "ko": "제작자",
+                  "zh-Hans": "制作人",
+                  "zh-Hant": "製作人"
+                },
+                "direction": "forward",
+                "property": "schema:producer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionsgesellschaft",
+                  "en": "production company",
+                  "es": "empresa productora",
+                  "fr": "société de production",
+                  "ja": "制作会社",
+                  "ko": "제작사",
+                  "zh-Hans": "制作商",
+                  "zh-Hant": "製作商"
+                },
+                "direction": "forward",
+                "property": "schema:productionCompany",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbuchautor",
+                  "en": "screenwriter",
+                  "es": "guionista",
+                  "fr": "scénariste",
+                  "ja": "脚本",
+                  "ko": "각본가",
+                  "zh-Hans": "编剧",
+                  "zh-Hant": "編劇"
+                },
+                "direction": "forward",
+                "property": "wdt:P58",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprecher",
+                  "en": "voice actor",
+                  "es": "actor de voz",
+                  "fr": "comédien ou comédienne de doublage",
+                  "ja": "声優",
+                  "ko": "담당 성우",
+                  "zh-Hans": "配音演员",
+                  "zh-Hant": "配音員"
+                },
+                "direction": "forward",
+                "property": "wdt:P725",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "forward",
+                "property": "schema:performer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Interpret",
+                  "en": "artist",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "アーティスト",
+                  "ko": "아티스트",
+                  "zh-Hans": "艺人",
+                  "zh-Hant": "藝人"
+                },
+                "direction": "forward",
+                "property": "schema:byArtist",
+                "limit": 8,
                 "paged": true
               }
             }
@@ -571,6 +1393,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -583,6 +1424,25 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -609,6 +1469,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -621,6 +1500,25 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -757,6 +1655,51 @@
               }
             }
           ]
+        },
+        "contents": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "parts",
+                "title": {
+                  "en": "Contents",
+                  "zh-Hant": "內容",
+                  "zh-Hans": "内容",
+                  "ja": "内容",
+                  "ko": "내용",
+                  "de": "Inhalt",
+                  "fr": "Contenu",
+                  "es": "Contenido"
+                },
+                "property": "wdt:P361",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "episodes",
+                "title": {
+                  "de": "Episoden",
+                  "en": "Episodes",
+                  "es": "Episodios",
+                  "fr": "Épisodes",
+                  "ja": "エピソード",
+                  "ko": "에피소드",
+                  "zh-Hans": "集数",
+                  "zh-Hant": "集數"
+                },
+                "property": "schema:isPartOf",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
         }
       }
     },
@@ -868,6 +1811,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -883,6 +1844,24 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
               }
             },
             {
@@ -904,6 +1883,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -922,6 +1919,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
+              }
+            },
+            {
               "type": "Appearances",
               "props": {
                 "id": "characters",
@@ -933,10 +1948,286 @@
             {
               "type": "Credits",
               "props": {
-                "id": "credits",
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitarbeiter des Kreativwerks",
+                  "en": "contributor to the creative work or subject",
+                  "es": "colaborador",
+                  "fr": "collaborateur ou collaboratrice au travail de création",
+                  "ja": "作品あるいは主題の貢献者",
+                  "ko": "공저자",
+                  "zh-Hans": "创作作品或主题贡献者",
+                  "zh-Hant": "創作作品或主題貢獻者"
+                },
                 "direction": "forward",
                 "property": "schema:contributor",
-                "limit": 12
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-marcrel-fds",
+                "title": {
+                  "de": "Filmverleih",
+                  "en": "film distributor",
+                  "es": "distribuidor cinematográfico",
+                  "fr": "distributeur de films",
+                  "ja": "映画配給者",
+                  "ko": "영화 배급자",
+                  "zh-Hans": "影片发行方",
+                  "zh-Hant": "影片發行方"
+                },
+                "direction": "forward",
+                "property": "marcrel:fds",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-publisher",
+                "title": {
+                  "de": "Verlag",
+                  "en": "publisher",
+                  "es": "editorial",
+                  "fr": "publié par",
+                  "ja": "出版社",
+                  "ko": "발행 주체",
+                  "zh-Hans": "出版者",
+                  "zh-Hant": "出版者"
+                },
+                "direction": "forward",
+                "property": "schema:publisher",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzer",
+                  "en": "translator",
+                  "es": "traductor",
+                  "fr": "traducteur ou traductrice",
+                  "ja": "翻訳者",
+                  "ko": "번역가",
+                  "zh-Hans": "译者",
+                  "zh-Hant": "譯者"
+                },
+                "direction": "forward",
+                "property": "schema:translator",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Autor",
+                  "en": "author",
+                  "es": "autor",
+                  "fr": "auteur ou autrice",
+                  "ja": "著者",
+                  "ko": "저자",
+                  "zh-Hans": "作者",
+                  "zh-Hant": "作者"
+                },
+                "direction": "forward",
+                "property": "schema:author",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickler",
+                  "en": "developer",
+                  "es": "desarrollador",
+                  "fr": "développé par",
+                  "ja": "開発元",
+                  "ko": "개발 주체",
+                  "zh-Hans": "开发者",
+                  "zh-Hant": "開發者"
+                },
+                "direction": "forward",
+                "property": "wdt:P178",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regisseur",
+                  "en": "director",
+                  "es": "director",
+                  "fr": "réalisé(e) ou mis(e) en scène par",
+                  "ja": "監督",
+                  "ko": "감독",
+                  "zh-Hans": "导演",
+                  "zh-Hant": "導演"
+                },
+                "direction": "forward",
+                "property": "schema:director",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrator",
+                  "en": "illustrator",
+                  "es": "ilustrador",
+                  "fr": "illustrateur ou illustratrice",
+                  "ja": "挿絵画家",
+                  "ko": "삽화가",
+                  "zh-Hans": "插画家",
+                  "zh-Hant": "插畫家"
+                },
+                "direction": "forward",
+                "property": "schema:illustrator",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Komponist",
+                  "en": "composer",
+                  "es": "compositor",
+                  "fr": "compositeur ou compositrice",
+                  "ja": "作曲者",
+                  "ko": "작곡가",
+                  "zh-Hans": "作曲",
+                  "zh-Hant": "作曲者"
+                },
+                "direction": "forward",
+                "property": "schema:musicBy",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzent",
+                  "en": "producer",
+                  "es": "productor",
+                  "fr": "producteur ou productrice",
+                  "ja": "プロデューサー",
+                  "ko": "제작자",
+                  "zh-Hans": "制作人",
+                  "zh-Hant": "製作人"
+                },
+                "direction": "forward",
+                "property": "schema:producer",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionsgesellschaft",
+                  "en": "production company",
+                  "es": "empresa productora",
+                  "fr": "société de production",
+                  "ja": "制作会社",
+                  "ko": "제작사",
+                  "zh-Hans": "制作商",
+                  "zh-Hant": "製作商"
+                },
+                "direction": "forward",
+                "property": "schema:productionCompany",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbuchautor",
+                  "en": "screenwriter",
+                  "es": "guionista",
+                  "fr": "scénariste",
+                  "ja": "脚本",
+                  "ko": "각본가",
+                  "zh-Hans": "编剧",
+                  "zh-Hant": "編劇"
+                },
+                "direction": "forward",
+                "property": "wdt:P58",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprecher",
+                  "en": "voice actor",
+                  "es": "actor de voz",
+                  "fr": "comédien ou comédienne de doublage",
+                  "ja": "声優",
+                  "ko": "담당 성우",
+                  "zh-Hans": "配音演员",
+                  "zh-Hant": "配音員"
+                },
+                "direction": "forward",
+                "property": "wdt:P725",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "forward",
+                "property": "schema:performer",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Interpret",
+                  "en": "artist",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "アーティスト",
+                  "ko": "아티스트",
+                  "zh-Hans": "艺人",
+                  "zh-Hant": "藝人"
+                },
+                "direction": "forward",
+                "property": "schema:byArtist",
+                "limit": 4
               }
             },
             {
@@ -1007,10 +2298,300 @@
             {
               "type": "Credits",
               "props": {
-                "id": "credits",
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitarbeiter des Kreativwerks",
+                  "en": "contributor to the creative work or subject",
+                  "es": "colaborador",
+                  "fr": "collaborateur ou collaboratrice au travail de création",
+                  "ja": "作品あるいは主題の貢献者",
+                  "ko": "공저자",
+                  "zh-Hans": "创作作品或主题贡献者",
+                  "zh-Hant": "創作作品或主題貢獻者"
+                },
                 "direction": "forward",
                 "property": "schema:contributor",
-                "limit": 24,
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-marcrel-fds",
+                "title": {
+                  "de": "Filmverleih",
+                  "en": "film distributor",
+                  "es": "distribuidor cinematográfico",
+                  "fr": "distributeur de films",
+                  "ja": "映画配給者",
+                  "ko": "영화 배급자",
+                  "zh-Hans": "影片发行方",
+                  "zh-Hant": "影片發行方"
+                },
+                "direction": "forward",
+                "property": "marcrel:fds",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-publisher",
+                "title": {
+                  "de": "Verlag",
+                  "en": "publisher",
+                  "es": "editorial",
+                  "fr": "publié par",
+                  "ja": "出版社",
+                  "ko": "발행 주체",
+                  "zh-Hans": "出版者",
+                  "zh-Hant": "出版者"
+                },
+                "direction": "forward",
+                "property": "schema:publisher",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzer",
+                  "en": "translator",
+                  "es": "traductor",
+                  "fr": "traducteur ou traductrice",
+                  "ja": "翻訳者",
+                  "ko": "번역가",
+                  "zh-Hans": "译者",
+                  "zh-Hant": "譯者"
+                },
+                "direction": "forward",
+                "property": "schema:translator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Autor",
+                  "en": "author",
+                  "es": "autor",
+                  "fr": "auteur ou autrice",
+                  "ja": "著者",
+                  "ko": "저자",
+                  "zh-Hans": "作者",
+                  "zh-Hant": "作者"
+                },
+                "direction": "forward",
+                "property": "schema:author",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickler",
+                  "en": "developer",
+                  "es": "desarrollador",
+                  "fr": "développé par",
+                  "ja": "開発元",
+                  "ko": "개발 주체",
+                  "zh-Hans": "开发者",
+                  "zh-Hant": "開發者"
+                },
+                "direction": "forward",
+                "property": "wdt:P178",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regisseur",
+                  "en": "director",
+                  "es": "director",
+                  "fr": "réalisé(e) ou mis(e) en scène par",
+                  "ja": "監督",
+                  "ko": "감독",
+                  "zh-Hans": "导演",
+                  "zh-Hant": "導演"
+                },
+                "direction": "forward",
+                "property": "schema:director",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrator",
+                  "en": "illustrator",
+                  "es": "ilustrador",
+                  "fr": "illustrateur ou illustratrice",
+                  "ja": "挿絵画家",
+                  "ko": "삽화가",
+                  "zh-Hans": "插画家",
+                  "zh-Hant": "插畫家"
+                },
+                "direction": "forward",
+                "property": "schema:illustrator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Komponist",
+                  "en": "composer",
+                  "es": "compositor",
+                  "fr": "compositeur ou compositrice",
+                  "ja": "作曲者",
+                  "ko": "작곡가",
+                  "zh-Hans": "作曲",
+                  "zh-Hant": "作曲者"
+                },
+                "direction": "forward",
+                "property": "schema:musicBy",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzent",
+                  "en": "producer",
+                  "es": "productor",
+                  "fr": "producteur ou productrice",
+                  "ja": "プロデューサー",
+                  "ko": "제작자",
+                  "zh-Hans": "制作人",
+                  "zh-Hant": "製作人"
+                },
+                "direction": "forward",
+                "property": "schema:producer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionsgesellschaft",
+                  "en": "production company",
+                  "es": "empresa productora",
+                  "fr": "société de production",
+                  "ja": "制作会社",
+                  "ko": "제작사",
+                  "zh-Hans": "制作商",
+                  "zh-Hant": "製作商"
+                },
+                "direction": "forward",
+                "property": "schema:productionCompany",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbuchautor",
+                  "en": "screenwriter",
+                  "es": "guionista",
+                  "fr": "scénariste",
+                  "ja": "脚本",
+                  "ko": "각본가",
+                  "zh-Hans": "编剧",
+                  "zh-Hant": "編劇"
+                },
+                "direction": "forward",
+                "property": "wdt:P58",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprecher",
+                  "en": "voice actor",
+                  "es": "actor de voz",
+                  "fr": "comédien ou comédienne de doublage",
+                  "ja": "声優",
+                  "ko": "담당 성우",
+                  "zh-Hans": "配音演员",
+                  "zh-Hant": "配音員"
+                },
+                "direction": "forward",
+                "property": "wdt:P725",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "forward",
+                "property": "schema:performer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Interpret",
+                  "en": "artist",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "アーティスト",
+                  "ko": "아티스트",
+                  "zh-Hans": "艺人",
+                  "zh-Hant": "藝人"
+                },
+                "direction": "forward",
+                "property": "schema:byArtist",
+                "limit": 8,
                 "paged": true
               }
             }
@@ -1041,6 +2622,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -1053,6 +2653,25 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -1079,6 +2698,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -1091,6 +2729,25 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -1358,6 +3015,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -1373,6 +3048,24 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
               }
             },
             {
@@ -1394,6 +3087,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -1409,6 +3120,24 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
               }
             },
             {
@@ -1470,59 +3199,302 @@
           },
           "content": [
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "publisher",
+                "id": "credit-schema-publisher",
                 "title": {
-                  "en": "Published works",
-                  "zh-Hant": "出版作品",
+                  "de": "Veröffentlichte Werke",
+                  "en": "Publisher of",
+                  "es": "Obras publicadas",
+                  "fr": "Œuvres publiées",
+                  "ja": "出版作品",
+                  "ko": "출판한 작품",
                   "zh-Hans": "出版作品",
-                  "ja": "出版した作品",
-                  "ko": "발행한 작품",
-                  "de": "Verlegte Werke",
-                  "fr": "Publications",
-                  "es": "Obras publicadas"
+                  "zh-Hant": "出版作品"
                 },
+                "direction": "inverse",
                 "property": "schema:publisher",
-                "limit": 24,
+                "limit": 8,
                 "paged": true
               }
             },
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "production-company",
+                "id": "credit-marcrel-fds",
                 "title": {
-                  "en": "Productions",
-                  "zh-Hant": "製作作品",
-                  "zh-Hans": "制作作品",
-                  "ja": "制作作品",
-                  "ko": "제작한 작품",
-                  "de": "Produktionen",
-                  "fr": "Productions",
-                  "es": "Producciones"
+                  "de": "Filmveröffentlichungen",
+                  "en": "Film distributions",
+                  "es": "Distribuciones cinematográficas",
+                  "fr": "Distributions de films",
+                  "ja": "配給した刊行版",
+                  "ko": "배급한 발행판",
+                  "zh-Hans": "发行的影片版本",
+                  "zh-Hant": "發行的影片版本"
                 },
-                "property": "schema:productionCompany",
-                "limit": 24,
+                "direction": "inverse",
+                "property": "marcrel:fds",
+                "limit": 8,
                 "paged": true
               }
             },
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "developer",
+                "id": "credit-schema-translator",
                 "title": {
-                  "en": "Developed works",
-                  "zh-Hant": "開發作品",
-                  "zh-Hans": "开发作品",
-                  "ja": "開発した作品",
-                  "ko": "개발한 작품",
+                  "de": "Übersetzte Werke",
+                  "en": "Translator of",
+                  "es": "Obras traducidas",
+                  "fr": "Œuvres traduites",
+                  "ja": "翻訳作品",
+                  "ko": "번역한 작품",
+                  "zh-Hans": "翻译作品",
+                  "zh-Hant": "翻譯作品"
+                },
+                "direction": "inverse",
+                "property": "schema:translator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Verfasste Werke",
+                  "en": "Author of",
+                  "es": "Obras escritas",
+                  "fr": "Œuvres écrites",
+                  "ja": "著作",
+                  "ko": "집필한 작품",
+                  "zh-Hans": "著作",
+                  "zh-Hant": "著作"
+                },
+                "direction": "inverse",
+                "property": "schema:author",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitwirkung an",
+                  "en": "Contributed to",
+                  "es": "Contribuciones a",
+                  "fr": "Contributions à",
+                  "ja": "参加作品",
+                  "ko": "참여한 작품",
+                  "zh-Hans": "参与作品",
+                  "zh-Hant": "參與作品"
+                },
+                "direction": "inverse",
+                "property": "schema:contributor",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
                   "de": "Entwickelte Werke",
+                  "en": "Developer of",
+                  "es": "Obras desarrolladas",
                   "fr": "Œuvres développées",
-                  "es": "Obras desarrolladas"
+                  "ja": "開発作品",
+                  "ko": "개발한 작품",
+                  "zh-Hans": "开发作品",
+                  "zh-Hant": "開發作品"
                 },
+                "direction": "inverse",
                 "property": "wdt:P178",
-                "limit": 24,
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regiearbeiten",
+                  "en": "Director of",
+                  "es": "Obras dirigidas",
+                  "fr": "Œuvres réalisées",
+                  "ja": "監督作品",
+                  "ko": "연출한 작품",
+                  "zh-Hans": "执导作品",
+                  "zh-Hant": "執導作品"
+                },
+                "direction": "inverse",
+                "property": "schema:director",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrierte Werke",
+                  "en": "Illustrator of",
+                  "es": "Obras ilustradas",
+                  "fr": "Œuvres illustrées",
+                  "ja": "イラスト担当作品",
+                  "ko": "삽화를 그린 작품",
+                  "zh-Hans": "插画作品",
+                  "zh-Hant": "插畫作品"
+                },
+                "direction": "inverse",
+                "property": "schema:illustrator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Kompositionen",
+                  "en": "Composer of",
+                  "es": "Obras compuestas",
+                  "fr": "Œuvres composées",
+                  "ja": "作曲作品",
+                  "ko": "작곡한 작품",
+                  "zh-Hans": "作曲作品",
+                  "zh-Hant": "作曲作品"
+                },
+                "direction": "inverse",
+                "property": "schema:musicBy",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzierte Werke",
+                  "en": "Producer of",
+                  "es": "Obras producidas",
+                  "fr": "Œuvres produites",
+                  "ja": "プロデュース作品",
+                  "ko": "제작한 작품",
+                  "zh-Hans": "制作作品",
+                  "zh-Hant": "製作作品"
+                },
+                "direction": "inverse",
+                "property": "schema:producer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionen",
+                  "en": "Productions",
+                  "es": "Producciones",
+                  "fr": "Productions",
+                  "ja": "制作作品",
+                  "ko": "제작에 참여한 작품",
+                  "zh-Hans": "参与制作的作品",
+                  "zh-Hant": "參與製作的作品"
+                },
+                "direction": "inverse",
+                "property": "schema:productionCompany",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbucharbeiten",
+                  "en": "Screenwriter of",
+                  "es": "Guiones escritos",
+                  "fr": "Scénarios écrits",
+                  "ja": "脚本担当作品",
+                  "ko": "각본을 쓴 작품",
+                  "zh-Hans": "编剧作品",
+                  "zh-Hant": "編劇作品"
+                },
+                "direction": "inverse",
+                "property": "wdt:P58",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprechrollen in",
+                  "en": "Voice roles in",
+                  "es": "Papeles de voz en",
+                  "fr": "Rôles vocaux dans",
+                  "ja": "声の出演作品",
+                  "ko": "목소리로 출연한 작품",
+                  "zh-Hans": "配音作品",
+                  "zh-Hant": "配音作品"
+                },
+                "direction": "inverse",
+                "property": "wdt:P725",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "inverse",
+                "property": "schema:performer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Aufnahmen dieses Interpreten",
+                  "en": "Recordings by this artist",
+                  "es": "Grabaciones de este intérprete",
+                  "fr": "Enregistrements de cet interprète",
+                  "ja": "このアーティストの録音",
+                  "ko": "이 아티스트의 녹음",
+                  "zh-Hans": "该艺人的录音",
+                  "zh-Hant": "該藝人的錄音"
+                },
+                "direction": "inverse",
+                "property": "schema:byArtist",
+                "limit": 8,
                 "paged": true
               }
             }
@@ -1553,6 +3525,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -1565,6 +3556,25 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -1591,6 +3601,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -1603,6 +3632,25 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -1869,6 +3917,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -1884,6 +3950,24 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
               }
             },
             {
@@ -1905,6 +3989,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -1920,6 +4022,24 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
               }
             },
             {
@@ -1981,78 +4101,302 @@
           },
           "content": [
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "author",
+                "id": "credit-schema-author",
                 "title": {
-                  "en": "Written works",
-                  "zh-Hant": "著作",
-                  "zh-Hans": "著作",
-                  "ja": "著作",
-                  "ko": "저술한 작품",
-                  "de": "Geschriebene Werke",
+                  "de": "Verfasste Werke",
+                  "en": "Author of",
+                  "es": "Obras escritas",
                   "fr": "Œuvres écrites",
-                  "es": "Obras escritas"
+                  "ja": "著作",
+                  "ko": "집필한 작품",
+                  "zh-Hans": "著作",
+                  "zh-Hant": "著作"
                 },
+                "direction": "inverse",
                 "property": "schema:author",
-                "limit": 24,
+                "limit": 8,
                 "paged": true
               }
             },
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "illustrator",
+                "id": "credit-marcrel-fds",
                 "title": {
-                  "en": "Illustrated works",
-                  "zh-Hant": "插畫作品",
-                  "zh-Hans": "插画作品",
-                  "ja": "挿絵を担当した作品",
-                  "ko": "삽화를 맡은 작품",
-                  "de": "Illustrierte Werke",
-                  "fr": "Œuvres illustrées",
-                  "es": "Obras ilustradas"
+                  "de": "Filmveröffentlichungen",
+                  "en": "Film distributions",
+                  "es": "Distribuciones cinematográficas",
+                  "fr": "Distributions de films",
+                  "ja": "配給した刊行版",
+                  "ko": "배급한 발행판",
+                  "zh-Hans": "发行的影片版本",
+                  "zh-Hant": "發行的影片版本"
                 },
-                "property": "schema:illustrator",
-                "limit": 24,
+                "direction": "inverse",
+                "property": "marcrel:fds",
+                "limit": 8,
                 "paged": true
               }
             },
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "director",
+                "id": "credit-schema-publisher",
                 "title": {
-                  "en": "Directed works",
-                  "zh-Hant": "執導作品",
-                  "zh-Hans": "执导作品",
+                  "de": "Veröffentlichte Werke",
+                  "en": "Publisher of",
+                  "es": "Obras publicadas",
+                  "fr": "Œuvres publiées",
+                  "ja": "出版作品",
+                  "ko": "출판한 작품",
+                  "zh-Hans": "出版作品",
+                  "zh-Hant": "出版作品"
+                },
+                "direction": "inverse",
+                "property": "schema:publisher",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzte Werke",
+                  "en": "Translator of",
+                  "es": "Obras traducidas",
+                  "fr": "Œuvres traduites",
+                  "ja": "翻訳作品",
+                  "ko": "번역한 작품",
+                  "zh-Hans": "翻译作品",
+                  "zh-Hant": "翻譯作品"
+                },
+                "direction": "inverse",
+                "property": "schema:translator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitwirkung an",
+                  "en": "Contributed to",
+                  "es": "Contribuciones a",
+                  "fr": "Contributions à",
+                  "ja": "参加作品",
+                  "ko": "참여한 작품",
+                  "zh-Hans": "参与作品",
+                  "zh-Hant": "參與作品"
+                },
+                "direction": "inverse",
+                "property": "schema:contributor",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickelte Werke",
+                  "en": "Developer of",
+                  "es": "Obras desarrolladas",
+                  "fr": "Œuvres développées",
+                  "ja": "開発作品",
+                  "ko": "개발한 작품",
+                  "zh-Hans": "开发作品",
+                  "zh-Hant": "開發作品"
+                },
+                "direction": "inverse",
+                "property": "wdt:P178",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regiearbeiten",
+                  "en": "Director of",
+                  "es": "Obras dirigidas",
+                  "fr": "Œuvres réalisées",
                   "ja": "監督作品",
                   "ko": "연출한 작품",
-                  "de": "Werke als Regisseur",
-                  "fr": "Réalisations",
-                  "es": "Obras dirigidas"
+                  "zh-Hans": "执导作品",
+                  "zh-Hant": "執導作品"
                 },
+                "direction": "inverse",
                 "property": "schema:director",
-                "limit": 24,
+                "limit": 8,
                 "paged": true
               }
             },
             {
-              "type": "SubjectList",
+              "type": "Credits",
               "props": {
-                "id": "music",
+                "id": "credit-schema-illustrator",
                 "title": {
-                  "en": "Music",
-                  "zh-Hant": "音樂作品",
-                  "zh-Hans": "音乐作品",
-                  "ja": "音楽を担当した作品",
-                  "ko": "음악을 맡은 작품",
-                  "de": "Werke als Komponist",
-                  "fr": "Musique",
-                  "es": "Música"
+                  "de": "Illustrierte Werke",
+                  "en": "Illustrator of",
+                  "es": "Obras ilustradas",
+                  "fr": "Œuvres illustrées",
+                  "ja": "イラスト担当作品",
+                  "ko": "삽화를 그린 작품",
+                  "zh-Hans": "插画作品",
+                  "zh-Hant": "插畫作品"
                 },
+                "direction": "inverse",
+                "property": "schema:illustrator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Kompositionen",
+                  "en": "Composer of",
+                  "es": "Obras compuestas",
+                  "fr": "Œuvres composées",
+                  "ja": "作曲作品",
+                  "ko": "작곡한 작품",
+                  "zh-Hans": "作曲作品",
+                  "zh-Hant": "作曲作品"
+                },
+                "direction": "inverse",
                 "property": "schema:musicBy",
-                "limit": 24,
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzierte Werke",
+                  "en": "Producer of",
+                  "es": "Obras producidas",
+                  "fr": "Œuvres produites",
+                  "ja": "プロデュース作品",
+                  "ko": "제작한 작품",
+                  "zh-Hans": "制作作品",
+                  "zh-Hant": "製作作品"
+                },
+                "direction": "inverse",
+                "property": "schema:producer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionen",
+                  "en": "Productions",
+                  "es": "Producciones",
+                  "fr": "Productions",
+                  "ja": "制作作品",
+                  "ko": "제작에 참여한 작품",
+                  "zh-Hans": "参与制作的作品",
+                  "zh-Hant": "參與製作的作品"
+                },
+                "direction": "inverse",
+                "property": "schema:productionCompany",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbucharbeiten",
+                  "en": "Screenwriter of",
+                  "es": "Guiones escritos",
+                  "fr": "Scénarios écrits",
+                  "ja": "脚本担当作品",
+                  "ko": "각본을 쓴 작품",
+                  "zh-Hans": "编剧作品",
+                  "zh-Hant": "編劇作品"
+                },
+                "direction": "inverse",
+                "property": "wdt:P58",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprechrollen in",
+                  "en": "Voice roles in",
+                  "es": "Papeles de voz en",
+                  "fr": "Rôles vocaux dans",
+                  "ja": "声の出演作品",
+                  "ko": "목소리로 출연한 작품",
+                  "zh-Hans": "配音作品",
+                  "zh-Hant": "配音作品"
+                },
+                "direction": "inverse",
+                "property": "wdt:P725",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "inverse",
+                "property": "schema:performer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Aufnahmen dieses Interpreten",
+                  "en": "Recordings by this artist",
+                  "es": "Grabaciones de este intérprete",
+                  "fr": "Enregistrements de cet interprète",
+                  "ja": "このアーティストの録音",
+                  "ko": "이 아티스트의 녹음",
+                  "zh-Hans": "该艺人的录音",
+                  "zh-Hant": "該藝人的錄音"
+                },
+                "direction": "inverse",
+                "property": "schema:byArtist",
+                "limit": 8,
                 "paged": true
               }
             }
@@ -2083,6 +4427,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -2095,6 +4458,25 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -2121,6 +4503,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -2133,6 +4534,25 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -2274,6 +4694,480 @@
       }
     },
     {
+      "type": "schema:Recipe",
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Statements",
+              "props": {
+                "id": "recipe-facts",
+                "properties": [
+                  "schema:recipeIngredient",
+                  "schema:recipeInstructions",
+                  "schema:suitableForDiet",
+                  "schema:cookTime",
+                  "schema:recipeYield"
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Statements",
+              "props": {
+                "id": "recipe-facts",
+                "properties": [
+                  "schema:recipeIngredient",
+                  "schema:recipeInstructions",
+                  "schema:suitableForDiet",
+                  "schema:cookTime",
+                  "schema:recipeYield"
+                ]
+              }
+            },
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
       "type": "skos:Concept",
       "views": {
         "overview": {
@@ -2347,6 +5241,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -2362,6 +5274,24 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
               }
             },
             {
@@ -2383,6 +5313,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -2398,6 +5346,24 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
               }
             },
             {
@@ -2482,6 +5448,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -2494,6 +5479,25 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -2520,6 +5524,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -2532,6 +5555,25 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
@@ -2594,6 +5636,1255 @@
               "type": "Sources",
               "props": {
                 "id": "sources"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "wd:Q20631656",
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12
+              }
+            },
+            {
+              "type": "Statements",
+              "props": {
+                "id": "statements",
+                "properties": [
+                  "schema:exampleOfWork",
+                  "schema:gamePlatform",
+                  "schema:datePublished",
+                  "schema:inLanguage",
+                  "schema:publisher"
+                ]
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "editions",
+                "title": {
+                  "en": "Editions",
+                  "zh-Hant": "版本",
+                  "zh-Hans": "版本",
+                  "ja": "版",
+                  "ko": "판",
+                  "de": "Ausgaben",
+                  "fr": "Éditions",
+                  "es": "Ediciones"
+                },
+                "property": "schema:exampleOfWork",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Appearances",
+              "props": {
+                "id": "characters",
+                "direction": "forward",
+                "property": "schema:character",
+                "limit": 12
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "parts",
+                "title": {
+                  "en": "Contents",
+                  "zh-Hant": "內容",
+                  "zh-Hans": "内容",
+                  "ja": "内容",
+                  "ko": "내용",
+                  "de": "Inhalt",
+                  "fr": "Contenu",
+                  "es": "Contenido"
+                },
+                "property": "wdt:P361",
+                "limit": 6
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "episodes",
+                "title": {
+                  "de": "Episoden",
+                  "en": "Episodes",
+                  "es": "Episodios",
+                  "fr": "Épisodes",
+                  "ja": "エピソード",
+                  "ko": "에피소드",
+                  "zh-Hans": "集数",
+                  "zh-Hant": "集數"
+                },
+                "property": "schema:isPartOf",
+                "limit": 6
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitarbeiter des Kreativwerks",
+                  "en": "contributor to the creative work or subject",
+                  "es": "colaborador",
+                  "fr": "collaborateur ou collaboratrice au travail de création",
+                  "ja": "作品あるいは主題の貢献者",
+                  "ko": "공저자",
+                  "zh-Hans": "创作作品或主题贡献者",
+                  "zh-Hant": "創作作品或主題貢獻者"
+                },
+                "direction": "forward",
+                "property": "schema:contributor",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-marcrel-fds",
+                "title": {
+                  "de": "Filmverleih",
+                  "en": "film distributor",
+                  "es": "distribuidor cinematográfico",
+                  "fr": "distributeur de films",
+                  "ja": "映画配給者",
+                  "ko": "영화 배급자",
+                  "zh-Hans": "影片发行方",
+                  "zh-Hant": "影片發行方"
+                },
+                "direction": "forward",
+                "property": "marcrel:fds",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-publisher",
+                "title": {
+                  "de": "Verlag",
+                  "en": "publisher",
+                  "es": "editorial",
+                  "fr": "publié par",
+                  "ja": "出版社",
+                  "ko": "발행 주체",
+                  "zh-Hans": "出版者",
+                  "zh-Hant": "出版者"
+                },
+                "direction": "forward",
+                "property": "schema:publisher",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzer",
+                  "en": "translator",
+                  "es": "traductor",
+                  "fr": "traducteur ou traductrice",
+                  "ja": "翻訳者",
+                  "ko": "번역가",
+                  "zh-Hans": "译者",
+                  "zh-Hant": "譯者"
+                },
+                "direction": "forward",
+                "property": "schema:translator",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Autor",
+                  "en": "author",
+                  "es": "autor",
+                  "fr": "auteur ou autrice",
+                  "ja": "著者",
+                  "ko": "저자",
+                  "zh-Hans": "作者",
+                  "zh-Hant": "作者"
+                },
+                "direction": "forward",
+                "property": "schema:author",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickler",
+                  "en": "developer",
+                  "es": "desarrollador",
+                  "fr": "développé par",
+                  "ja": "開発元",
+                  "ko": "개발 주체",
+                  "zh-Hans": "开发者",
+                  "zh-Hant": "開發者"
+                },
+                "direction": "forward",
+                "property": "wdt:P178",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regisseur",
+                  "en": "director",
+                  "es": "director",
+                  "fr": "réalisé(e) ou mis(e) en scène par",
+                  "ja": "監督",
+                  "ko": "감독",
+                  "zh-Hans": "导演",
+                  "zh-Hant": "導演"
+                },
+                "direction": "forward",
+                "property": "schema:director",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrator",
+                  "en": "illustrator",
+                  "es": "ilustrador",
+                  "fr": "illustrateur ou illustratrice",
+                  "ja": "挿絵画家",
+                  "ko": "삽화가",
+                  "zh-Hans": "插画家",
+                  "zh-Hant": "插畫家"
+                },
+                "direction": "forward",
+                "property": "schema:illustrator",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Komponist",
+                  "en": "composer",
+                  "es": "compositor",
+                  "fr": "compositeur ou compositrice",
+                  "ja": "作曲者",
+                  "ko": "작곡가",
+                  "zh-Hans": "作曲",
+                  "zh-Hant": "作曲者"
+                },
+                "direction": "forward",
+                "property": "schema:musicBy",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzent",
+                  "en": "producer",
+                  "es": "productor",
+                  "fr": "producteur ou productrice",
+                  "ja": "プロデューサー",
+                  "ko": "제작자",
+                  "zh-Hans": "制作人",
+                  "zh-Hant": "製作人"
+                },
+                "direction": "forward",
+                "property": "schema:producer",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionsgesellschaft",
+                  "en": "production company",
+                  "es": "empresa productora",
+                  "fr": "société de production",
+                  "ja": "制作会社",
+                  "ko": "제작사",
+                  "zh-Hans": "制作商",
+                  "zh-Hant": "製作商"
+                },
+                "direction": "forward",
+                "property": "schema:productionCompany",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbuchautor",
+                  "en": "screenwriter",
+                  "es": "guionista",
+                  "fr": "scénariste",
+                  "ja": "脚本",
+                  "ko": "각본가",
+                  "zh-Hans": "编剧",
+                  "zh-Hant": "編劇"
+                },
+                "direction": "forward",
+                "property": "wdt:P58",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprecher",
+                  "en": "voice actor",
+                  "es": "actor de voz",
+                  "fr": "comédien ou comédienne de doublage",
+                  "ja": "声優",
+                  "ko": "담당 성우",
+                  "zh-Hans": "配音演员",
+                  "zh-Hant": "配音員"
+                },
+                "direction": "forward",
+                "property": "wdt:P725",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "forward",
+                "property": "schema:performer",
+                "limit": 4
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Interpret",
+                  "en": "artist",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "アーティスト",
+                  "ko": "아티스트",
+                  "zh-Hans": "艺人",
+                  "zh-Hant": "藝人"
+                },
+                "direction": "forward",
+                "property": "schema:byArtist",
+                "limit": 4
+              }
+            },
+            {
+              "type": "RatingSummary",
+              "props": {
+                "id": "ratings"
+              }
+            },
+            {
+              "type": "ReviewList",
+              "props": {
+                "id": "reviews"
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "characters": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Appearances",
+              "props": {
+                "id": "characters",
+                "direction": "forward",
+                "property": "schema:character",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "credits": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-contributor",
+                "title": {
+                  "de": "Mitarbeiter des Kreativwerks",
+                  "en": "contributor to the creative work or subject",
+                  "es": "colaborador",
+                  "fr": "collaborateur ou collaboratrice au travail de création",
+                  "ja": "作品あるいは主題の貢献者",
+                  "ko": "공저자",
+                  "zh-Hans": "创作作品或主题贡献者",
+                  "zh-Hant": "創作作品或主題貢獻者"
+                },
+                "direction": "forward",
+                "property": "schema:contributor",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-marcrel-fds",
+                "title": {
+                  "de": "Filmverleih",
+                  "en": "film distributor",
+                  "es": "distribuidor cinematográfico",
+                  "fr": "distributeur de films",
+                  "ja": "映画配給者",
+                  "ko": "영화 배급자",
+                  "zh-Hans": "影片发行方",
+                  "zh-Hant": "影片發行方"
+                },
+                "direction": "forward",
+                "property": "marcrel:fds",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-publisher",
+                "title": {
+                  "de": "Verlag",
+                  "en": "publisher",
+                  "es": "editorial",
+                  "fr": "publié par",
+                  "ja": "出版社",
+                  "ko": "발행 주체",
+                  "zh-Hans": "出版者",
+                  "zh-Hant": "出版者"
+                },
+                "direction": "forward",
+                "property": "schema:publisher",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-translator",
+                "title": {
+                  "de": "Übersetzer",
+                  "en": "translator",
+                  "es": "traductor",
+                  "fr": "traducteur ou traductrice",
+                  "ja": "翻訳者",
+                  "ko": "번역가",
+                  "zh-Hans": "译者",
+                  "zh-Hant": "譯者"
+                },
+                "direction": "forward",
+                "property": "schema:translator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-author",
+                "title": {
+                  "de": "Autor",
+                  "en": "author",
+                  "es": "autor",
+                  "fr": "auteur ou autrice",
+                  "ja": "著者",
+                  "ko": "저자",
+                  "zh-Hans": "作者",
+                  "zh-Hant": "作者"
+                },
+                "direction": "forward",
+                "property": "schema:author",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P178",
+                "title": {
+                  "de": "Entwickler",
+                  "en": "developer",
+                  "es": "desarrollador",
+                  "fr": "développé par",
+                  "ja": "開発元",
+                  "ko": "개발 주체",
+                  "zh-Hans": "开发者",
+                  "zh-Hant": "開發者"
+                },
+                "direction": "forward",
+                "property": "wdt:P178",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-director",
+                "title": {
+                  "de": "Regisseur",
+                  "en": "director",
+                  "es": "director",
+                  "fr": "réalisé(e) ou mis(e) en scène par",
+                  "ja": "監督",
+                  "ko": "감독",
+                  "zh-Hans": "导演",
+                  "zh-Hant": "導演"
+                },
+                "direction": "forward",
+                "property": "schema:director",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-illustrator",
+                "title": {
+                  "de": "Illustrator",
+                  "en": "illustrator",
+                  "es": "ilustrador",
+                  "fr": "illustrateur ou illustratrice",
+                  "ja": "挿絵画家",
+                  "ko": "삽화가",
+                  "zh-Hans": "插画家",
+                  "zh-Hant": "插畫家"
+                },
+                "direction": "forward",
+                "property": "schema:illustrator",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-musicBy",
+                "title": {
+                  "de": "Komponist",
+                  "en": "composer",
+                  "es": "compositor",
+                  "fr": "compositeur ou compositrice",
+                  "ja": "作曲者",
+                  "ko": "작곡가",
+                  "zh-Hans": "作曲",
+                  "zh-Hant": "作曲者"
+                },
+                "direction": "forward",
+                "property": "schema:musicBy",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-producer",
+                "title": {
+                  "de": "Produzent",
+                  "en": "producer",
+                  "es": "productor",
+                  "fr": "producteur ou productrice",
+                  "ja": "プロデューサー",
+                  "ko": "제작자",
+                  "zh-Hans": "制作人",
+                  "zh-Hant": "製作人"
+                },
+                "direction": "forward",
+                "property": "schema:producer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-productionCompany",
+                "title": {
+                  "de": "Produktionsgesellschaft",
+                  "en": "production company",
+                  "es": "empresa productora",
+                  "fr": "société de production",
+                  "ja": "制作会社",
+                  "ko": "제작사",
+                  "zh-Hans": "制作商",
+                  "zh-Hant": "製作商"
+                },
+                "direction": "forward",
+                "property": "schema:productionCompany",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P58",
+                "title": {
+                  "de": "Drehbuchautor",
+                  "en": "screenwriter",
+                  "es": "guionista",
+                  "fr": "scénariste",
+                  "ja": "脚本",
+                  "ko": "각본가",
+                  "zh-Hans": "编剧",
+                  "zh-Hant": "編劇"
+                },
+                "direction": "forward",
+                "property": "wdt:P58",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-wdt-P725",
+                "title": {
+                  "de": "Sprecher",
+                  "en": "voice actor",
+                  "es": "actor de voz",
+                  "fr": "comédien ou comédienne de doublage",
+                  "ja": "声優",
+                  "ko": "담당 성우",
+                  "zh-Hans": "配音演员",
+                  "zh-Hant": "配音員"
+                },
+                "direction": "forward",
+                "property": "wdt:P725",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-performer",
+                "title": {
+                  "de": "Mitwirkende",
+                  "en": "performer",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "出演者",
+                  "ko": "공연자",
+                  "zh-Hans": "表演者",
+                  "zh-Hant": "表演者"
+                },
+                "direction": "forward",
+                "property": "schema:performer",
+                "limit": 8,
+                "paged": true
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credit-schema-byArtist",
+                "title": {
+                  "de": "Interpret",
+                  "en": "artist",
+                  "es": "intérprete",
+                  "fr": "interprète",
+                  "ja": "アーティスト",
+                  "ko": "아티스트",
+                  "zh-Hans": "艺人",
+                  "zh-Hant": "藝人"
+                },
+                "direction": "forward",
+                "property": "schema:byArtist",
+                "limit": 8,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RatingSummary",
+              "props": {
+                "id": "ratings"
+              }
+            },
+            {
+              "type": "ReviewList",
+              "props": {
+                "id": "reviews",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Statements",
+              "props": {
+                "id": "statements",
+                "properties": [
+                  "schema:exampleOfWork",
+                  "schema:gamePlatform",
+                  "schema:datePublished",
+                  "schema:inLanguage",
+                  "schema:publisher"
+                ]
+              }
+            },
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "editions": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "editions",
+                "title": {
+                  "en": "Editions",
+                  "zh-Hant": "版本",
+                  "zh-Hans": "版本",
+                  "ja": "版",
+                  "ko": "판",
+                  "de": "Ausgaben",
+                  "fr": "Éditions",
+                  "es": "Ediciones"
+                },
+                "property": "schema:exampleOfWork",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "contents": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "parts",
+                "title": {
+                  "en": "Contents",
+                  "zh-Hant": "內容",
+                  "zh-Hans": "内容",
+                  "ja": "内容",
+                  "ko": "내용",
+                  "de": "Inhalt",
+                  "fr": "Contenu",
+                  "es": "Contenido"
+                },
+                "property": "wdt:P361",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "episodes",
+                "title": {
+                  "de": "Episoden",
+                  "en": "Episodes",
+                  "es": "Episodios",
+                  "fr": "Épisodes",
+                  "ja": "エピソード",
+                  "ko": "에피소드",
+                  "zh-Hans": "集数",
+                  "zh-Hant": "集數"
+                },
+                "property": "schema:isPartOf",
+                "limit": 24,
+                "paged": true
               }
             }
           ]
@@ -2674,6 +6965,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -2689,6 +6998,24 @@
                 },
                 "property": "wdt:P144",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
+                },
+                "property": "wdt:P144",
+                "limit": 4
               }
             },
             {
@@ -2710,6 +7037,24 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 4
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -2725,6 +7070,24 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 4
               }
             },
             {
@@ -2809,6 +7172,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-side-stories",
+                "title": {
+                  "de": "Nebengeschichte zu",
+                  "en": "Side story of",
+                  "es": "Historia paralela de",
+                  "fr": "Histoire annexe de",
+                  "ja": "外伝の本編",
+                  "ko": "외전의 본편",
+                  "zh-Hans": "番外篇的本篇",
+                  "zh-Hant": "番外篇的本篇"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "adaptations",
@@ -2821,6 +7203,25 @@
                   "de": "Adaptionen",
                   "fr": "Adaptations",
                   "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-adaptations",
+                "title": {
+                  "de": "basiert auf",
+                  "en": "based on",
+                  "es": "basado en",
+                  "fr": "basé sur",
+                  "ja": "派生元",
+                  "ko": "다음에 기반을 두었음",
+                  "zh-Hans": "改编自",
+                  "zh-Hant": "改編自"
                 },
                 "property": "wdt:P144",
                 "limit": 24,
@@ -2847,6 +7248,25 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-versions",
+                "title": {
+                  "de": "Andere Erzählfassung",
+                  "en": "Alternative telling",
+                  "es": "Versión narrativa alternativa",
+                  "fr": "Autre interprétation",
+                  "ja": "異なる描き方",
+                  "ko": "다르게 풀어낸 이야기",
+                  "zh-Hans": "不同演绎",
+                  "zh-Hant": "不同演繹"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
               "type": "RelationGroups",
               "props": {
                 "id": "related",
@@ -2859,6 +7279,25 @@
                   "de": "Verwandtes",
                   "fr": "Œuvres liées",
                   "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "out-related",
+                "title": {
+                  "de": "Verknüpft (Bangumi)",
+                  "en": "Related (Bangumi)",
+                  "es": "Relacionado (Bangumi)",
+                  "fr": "Associé (Bangumi)",
+                  "ja": "関連（Bangumi）",
+                  "ko": "관련 작품 (Bangumi)",
+                  "zh-Hans": "关联（Bangumi）",
+                  "zh-Hant": "關聯（Bangumi）"
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
