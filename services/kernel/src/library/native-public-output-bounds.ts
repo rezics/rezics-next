@@ -6,7 +6,7 @@ import { statementBytes } from '../database/statement-bytes.ts';
  * every leaf is a SQL adapter; a nonzero value is refused rather than folded into eight-axis receipts.
  */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import header from './collection-source-native-header.sql';
 import head from './collection-source-output-head.sql';
 import page from './collection-source-output-page.sql';

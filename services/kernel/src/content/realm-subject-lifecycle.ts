@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { jsonParameter } from '../database/json.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { Value } from 'typebox/value';
 import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED, SUBJECT_REVISED } from '../semantic/events.ts';

@@ -10,7 +10,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
 import type { IdentityScopeKey } from './identity-scope-types.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';

@@ -36,8 +36,8 @@ import {
   type CollectionSourceObservation,
   type PrepareCollectionSource,
   type PreparedCollectionSource,
-  type WorkDimensions,
 } from './collection-source.ts';
+import { type WorkDimensions } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   admitCollectionMemberQuery,

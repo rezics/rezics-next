@@ -21,7 +21,7 @@ import {
   sessionShelfWork,
   sessionSourceWork,
 } from './session-operation-bounds.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import copyDelete from './entry-store-copy-delete.sql';
 import copyInsert from './entry-store-copy-insert.sql';
 import copyPage from './entry-store-copy-page.sql';

@@ -13,7 +13,7 @@ import type {
   KindAudienceWorkDeclaration,
   KindAudienceFreshRequest,
 } from './kind-audience.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { CollectionKindPreparationLocator } from '../library/collection-kind-work-admission.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { authoritativeTimeValue, commandTime, type AuthoritativeTime } from '../command/command.ts';

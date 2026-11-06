@@ -1,7 +1,7 @@
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import pg, { type PoolClient } from 'pg';
 import { currentCommandWorkAssociation, withNativeCommandAccounting } from '../command/work-context.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { MAX_FOLLOW_PAGE_SIZE } from './follow-model.ts';
 import apply from './follow-store-apply.sql';
 import read from './follow-store-read.sql';

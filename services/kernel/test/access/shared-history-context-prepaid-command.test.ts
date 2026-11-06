@@ -37,7 +37,7 @@ import {
   reserveIdentityHistoryWork,
 } from '../../src/history/agent-identity-inventory-work.ts';
 import { HistoryRegistry } from '../../src/history/registry.ts';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import { identitySourceConsumerNativeWork } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { newId, routeOf } from '../../src/route/route.ts';

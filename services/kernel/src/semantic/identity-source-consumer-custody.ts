@@ -13,7 +13,7 @@ import type {
   NativeStepWork,
 } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
-import type { WorkAllowance } from '../library/collection-source.ts';
+import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
 import type {
   LibraryScopeEffectSeal,
   LibraryScopeEffectsPage,
@@ -21,7 +21,7 @@ import type {
 } from '../library/identity-scope-effects.ts';
 import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } from '../library/identity-scope-effects.ts';
 import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effects.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-source-work.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
 import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';

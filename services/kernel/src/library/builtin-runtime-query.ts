@@ -10,13 +10,8 @@ import { routeOf } from '../route/route.ts';
 import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
 import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
-import {
-  createCollectionSource,
-  createOrdinaryCollectionPageSource,
-  type WorkAllowance,
-  type WorkReceipt,
-  type WorkDimensions,
-} from './collection-source.ts';
+import { createCollectionSource, createOrdinaryCollectionPageSource } from './collection-source.ts';
+import { type WorkAllowance, type WorkReceipt, type WorkDimensions } from './contract/work-dimensions.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
 import {
   ordinaryCollectionPagePlan,

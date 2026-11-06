@@ -13,7 +13,7 @@ auth-pages|u|-|auth-contract,auth-service,ui
 auth-service|d|@/auth:{.,current-consent,internal-consent,kind-consent,membership-workflows,website-maintenance}|auth-contract
 bounds|c|@/bounds|-
 catalogue-page-metadata|c|k/presentation/catalogue-page-metadata/index.ts|definitions,filter
-client|u|@/client|auth-contract,composition,definitions,document,filter
+client|u|@/client|access-policy,auth-contract,bounds,composition,definitions,document,filter,money,operations,progress,search-text
 composition|c|@/composition:{.,profiles/*.json,schema/*.json}|filter
 conversion|a|@/conversion:{.,bangumi,bangumi-vocabulary,cross-media-entities,open-library,source-vocabulary,vndb,vndb-vocabulary,wikidata}|definitions,document
 curation-opening-read|u|w/features/pages/curation-opening-read/index.ts|-
@@ -29,9 +29,9 @@ kcontent|d|k/content/document-public.ts,k/content/index.ts,k/content/realm-board
 kcontent-community-projection|c|k/content/community-projection/index.ts|-
 kidentity-core|c|k/semantic/identity-core/index.ts|-
 klibrary|d|k/library/collection-discovery-source.ts,k/library/collection-discovery-summaries.ts,k/library/index.ts|access-policy,auth-contract,bounds,definitions,filter,kaccess,kcommunity,kcontent,kplatform,krating,ksearch,ksemantic,operations,progress
-kplatform|d|k/clock.ts,k/command/receipt-key.ts,k/request/access.ts,k/route/route.ts,k/tokens/seal.ts|auth-contract,bounds,definitions,kaccess,kcommerce,kcommunity,kcontent,klibrary,krating,ksearch,ksemantic,kzones,operations
+kplatform|d|k/clock.ts,k/command/receipt-key.ts,k/database/json.ts,k/database/statement-bytes.ts,k/events/catalogue.ts,k/memoized.ts,k/request/access.ts,k/route/route.ts,k/tokens/seal.ts|auth-contract,bounds,definitions,kaccess,kcommerce,kcommunity,kcontent,klibrary,krating,ksearch,ksemantic,kzones,operations
 krating|d|k/rating/index.ts|kaccess,kcommunity,kcontent,kidentity-core,klibrary,kplatform,ksearch,ksemantic
-ksearch|d|k/search/composition.ts,k/search/discovery-filter.ts,k/search/index.ts,k/search/rated-source.ts,k/search/space-discovery.ts,k/search/work.ts|bounds,catalogue-page-metadata,composition,definitions,document,filter,kaccess,kcommerce,kcommunity,kcontent,klibrary,kplatform,krating,ksemantic,search-text
+ksearch|d|k/search/composition.ts,k/search/discovery-filter.ts,k/search/index.ts,k/search/query-events.ts,k/search/rated-source.ts,k/search/space-discovery.ts,k/search/work.ts|bounds,catalogue-page-metadata,composition,definitions,document,filter,kaccess,kcommerce,kcommunity,kcontent,klibrary,kplatform,krating,ksemantic,search-text
 ksemantic|d|k/semantic/identity-adapters/identity-epoch-binding.ts,k/semantic/identity-adapters/index.ts,k/semantic/identity-adapters/read.ts,k/semantic/index.ts|composition,definitions,document,filter,kaccess,kcontent,kidentity-core,klibrary,kplatform,krating,ksearch,kzones
 kzones|d|-|composition,filter,kaccess,klibrary,kplatform,ksearch,ksemantic
 money|c|@/money|-

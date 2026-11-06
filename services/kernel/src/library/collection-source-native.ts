@@ -26,8 +26,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import { nativeSourceFence } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
-import { grantCapable } from './collection-reads.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
+import { grantCapable } from './account-grant.ts';
 import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
 import {

@@ -4,7 +4,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { admitFilter, parseFilter, type FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
-import type { WorkAllowance, WorkReceipt } from '../../src/library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import type { NativeOrdinalKey } from '../../src/library/collection-source-order.ts';
 import type { PreparationDefinition, PreparationLocator } from '../../src/library/members-preparation.ts';

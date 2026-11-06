@@ -13,7 +13,7 @@ import {
 } from '../command/command.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import {
   CATALOGUE_PUBLISHER_OPERATIONS,

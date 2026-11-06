@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { Pool } from 'pg';
-import type { WorkAllowance, WorkReceipt } from '../../src/library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import type { SearchHit } from '../../src/search/query.ts';

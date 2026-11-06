@@ -1,5 +1,6 @@
 import type { CollectionMemberRow, MemberPage } from './collection-model.ts';
-import type { CollectionSourceCall, CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
+import type { CollectionSourceCall, CollectionSourceObservation } from './collection-source.ts';
+import type { WorkReceipt } from './contract/work-dimensions.ts';
 
 export type NativeOrdinalKey = Readonly<NonNullable<MemberPage['after']>>;
 export type NativeOrdinalFrontier = Readonly<{ after: NativeOrdinalKey | null }>;

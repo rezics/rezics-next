@@ -97,7 +97,11 @@ does not add a wrapper. Workers do not run the root typecheck or other regressio
 run the tests in the test files they created or changed once, with the command the landing's verification uses for
 them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
-call with a yield of at least 300 seconds. A supplied acceptance command defines the worker's check. For an ordinary
+call with a yield of at least 300 seconds, except under minimal verification: own tests and workspace typechecks that
+may place on a check host (services/kernel check and typecheck, services/auth, apps/web focused runs,
+`bun scripts/typecheck.ts`) use the wrapper parking protocol above, and the worker ends the turn with `waiting` and
+the printed check id instead of holding the live session. Commands that finish locally in under a minute still run in
+the session. A supplied acceptance command defines the worker's check. For an ordinary
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
@@ -255,9 +259,14 @@ continuation protocol above.
 
 Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking and for
 the tests of the test files the worker changed, with its real leases, results and terminal status preserved. It grants
-no acceptance, native, browser, root or worker-check permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
-invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
-live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
+no acceptance, native, browser or root permission. Those own tests and workspace typechecks that may place on a check
+host run through the worker-check wrapper; the worker ends the turn with `waiting` and the printed check id, and Goal
+parks the session until the result arrives. Commands that finish locally in under a minute stay in the session. Workers
+must not invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or
+interrupt a live wrapper. The controller forwards this policy through its existing prompt seam; it does not steer live
+sessions.
+Decision: a live worker slot holds a session that is writing code; check-host placement parks on the wrapper the way
+acceptance already does.
 
 Ordinary contracts can be amended before their first worker starts:
 
@@ -1257,8 +1266,9 @@ main/stabilize releases and verification work, and without frozen acceptance fil
 routing ceiling of 1,500 lines and 24 files. With no command, acceptance is worker-owned: the worker chooses or adds a
 focused check, runs it under the normal check protocol, and reports the exact command and observed result. The parser
 does not insert a passing command. Under minimal verification, the worker supplies outcome tests and runs them with
-the landing's command; broader acceptance stays deferred. The dev verifier keeps its affected and sibling checks and
-executes only supplied acceptance commands; omission earns no task acceptance pass. Any supplied `acceptance` fields keep their existing behavior; a supplied command
+the landing's command; host-placing landing commands go through the wrapper. Broader acceptance stays deferred. The
+dev verifier keeps its affected and sibling checks and executes only supplied acceptance commands; omission earns no
+task acceptance pass. Any supplied `acceptance` fields keep their existing behavior; a supplied command
 still requires non-empty `tests`, and an implementation with supplied acceptance keeps the existing failing-test
 requirement. Main/stabilize releases, verification, and frozen acceptance briefs continue to require an explicit
 command and tests. `acceptance.placement` requires an explicit command. Mechanical work is refused

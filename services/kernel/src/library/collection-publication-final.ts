@@ -39,7 +39,7 @@ import {
   readCollectionPublicationRule,
 } from './collection-publication-episodes.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { accessCheck, type AccessCheck } from '../request/access.ts';

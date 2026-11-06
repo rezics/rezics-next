@@ -215,6 +215,7 @@
         "kernel-community",
         "kernel-content",
         "kernel-library",
+        "kernel-library-contract",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic"
@@ -248,16 +249,17 @@
         "definitions",
         "document",
         "filter",
-        "operations",
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
         "kernel-content-community-projection",
         "kernel-library",
+        "kernel-library-contract",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "operations"
       ],
       "capabilities": ["content"],
       "postgresPaths": ["services/kernel/src/content/**"]
@@ -311,10 +313,20 @@
       "postgresPaths": ["services/kernel/src/rating/**"]
     },
     {
+      "id": "kernel-library-contract",
+      "kind": "contract",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/library/contract/**"],
+      "publicEntries": ["services/kernel/src/library/contract/work-dimensions.ts"],
+      "allowedDependencies": [],
+      "capabilities": []
+    },
+    {
       "id": "kernel-library",
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
+      "excludes": ["services/kernel/src/library/contract/**"],
       "publicEntries": [
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
@@ -329,6 +341,7 @@
         "kernel-access",
         "kernel-community",
         "kernel-content",
+        "kernel-library-contract",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
@@ -370,6 +383,7 @@
       ],
       "allowedDependencies": [
         "bounds",
+        "catalogue-page-metadata",
         "composition",
         "definitions",
         "document",
@@ -379,7 +393,7 @@
         "kernel-community",
         "kernel-content",
         "kernel-library",
-        "catalogue-page-metadata",
+        "kernel-library-contract",
         "kernel-platform",
         "kernel-rating",
         "kernel-semantic",
@@ -406,12 +420,13 @@
         "filter",
         "kernel-access",
         "kernel-content",
+        "kernel-identity-core",
         "kernel-library",
+        "kernel-library-contract",
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
-        "kernel-zones",
-        "kernel-identity-core"
+        "kernel-zones"
       ],
       "capabilities": ["semantic", "canonical-identity-native"],
       "postgresPaths": ["services/kernel/src/semantic/**"],
@@ -428,6 +443,7 @@
         "filter",
         "kernel-access",
         "kernel-library",
+        "kernel-library-contract",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic"
@@ -468,19 +484,20 @@
         "services/kernel/src/tokens/seal.ts"
       ],
       "allowedDependencies": [
-        "bounds",
         "auth-contract",
+        "bounds",
         "definitions",
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
         "kernel-content",
         "kernel-library",
+        "kernel-library-contract",
         "kernel-rating",
         "kernel-search",
         "kernel-semantic",
-        "operations",
-        "kernel-zones"
+        "kernel-zones",
+        "operations"
       ],
       "capabilities": ["kernel-runtime"],
       "postgresPaths": [

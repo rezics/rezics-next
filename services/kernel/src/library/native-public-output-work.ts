@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import type { PoolClient, QueryConfig, QueryResult } from 'pg';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   nativePublicOutputStatement,

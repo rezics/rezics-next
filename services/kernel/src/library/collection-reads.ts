@@ -64,6 +64,7 @@ import { ordinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
 import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
 import { readCollectionSourceMembers } from './owner-index-members.ts';
+import { grantCapable } from './account-grant.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
@@ -263,26 +264,6 @@ function memberView(row: MemberRow): MemberView {
 
 function actor(viewer: Actor): viewer is AccountActor {
   return viewer.kind === 'account';
-}
-
-/** Live account authority for a private Collection. A token cached before suspension is not enough. */
-export function grantCapable(
-  account: Pick<Account, 'route' | 'accountId' | 'kind' | 'state' | 'fenced' | 'minimumAuthnEpoch'>,
-  viewer: AccountActor,
-): boolean {
-  const route = routeOf(viewer.accountId);
-  return (
-    route !== null &&
-    account.route === route &&
-    account.accountId === viewer.accountId &&
-    account.kind === 'actor' &&
-    account.state === 'active' &&
-    account.fenced === false &&
-    Number.isSafeInteger(viewer.authnEpoch) &&
-    viewer.authnEpoch > 0 &&
-    BigInt(viewer.authnEpoch) >= account.minimumAuthnEpoch &&
-    viewer.scopes.includes('collection:read')
-  );
 }
 
 type ReadAccount = Pick<Account, 'route' | 'accountId' | 'kind' | 'state' | 'fenced' | 'minimumAuthnEpoch'>;

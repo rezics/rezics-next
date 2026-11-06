@@ -1,5 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import s0 from './identity-public-output-accepted.sql';
 import s1 from './identity-public-output-insert.sql';

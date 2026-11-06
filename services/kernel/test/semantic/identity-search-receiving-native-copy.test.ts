@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { currentCommand, runCommand } from '../../src/command/command.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/library/collection-source-work.ts';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
 import {

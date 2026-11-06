@@ -2,7 +2,7 @@ import type { IdentityChange, IdentityFrontier } from '../semantic/identity-epoc
 import type { LibraryScopeEffectsKey } from './identity-scope-effects.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceFrontier } from './native-source-custody.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 
 /** Native maintenance only. Neither a Source reader nor receiving application authority. */
 export type LibraryIdentityPlanInput = LibraryScopeEffectsKey &

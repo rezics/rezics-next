@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/library/collection-source-work.ts';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import {
   prepareSearchReceivingCaptures,
   searchReceivingCaptureStatements as sql,

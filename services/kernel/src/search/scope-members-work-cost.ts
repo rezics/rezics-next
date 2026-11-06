@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 
 const zero = (): { -readonly [Axis in keyof WorkDimensions]: number } => ({
   candidateKeys: 0,

@@ -14,7 +14,7 @@ import partitionRead from '../partition/read.sql';
 import commandTime from '../command/time.sql';
 import commandFence from '../command/fence.sql';
 import commandNoEffect from '../command/no-effect-fence.sql';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { SearchReceivingWorkDeclaration } from './identity-search-receiving-work.ts';
 import { searchNativeReceivingStatements } from '../search/identity-receiving-native-store.ts';
 import { searchNativeReceivingSqlCost } from '../search/identity-receiving-native-work.ts';

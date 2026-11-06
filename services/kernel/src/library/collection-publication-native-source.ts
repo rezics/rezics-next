@@ -10,7 +10,8 @@ import type { CanonicalBasis } from './canonical-source-store.ts';
 import { nativeSourceFence } from './canonical-source-store.ts';
 import type { CollectionPublicationEpisode } from './collection-publication-episode-contract.ts';
 import type { SavedCollectionRule } from './collection-rules.ts';
-import type { CollectionSourceObservation, WorkAllowance } from './collection-source.ts';
+import type { CollectionSourceObservation } from './collection-source.ts';
+import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { readNativeCollectionWorkingMetadata } from './collection-source-native.ts';
 import {
   createNativeLibrarySourceCustody,

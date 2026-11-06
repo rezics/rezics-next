@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { AccessWorkAccounting, type AccessWork, type AccessWorkSink } from '../access/work.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { ScopeWork, zeroScopeWork } from '../search/scope-execution.ts';
 import type {

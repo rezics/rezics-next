@@ -1,7 +1,7 @@
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import labelInsert from './label-store-insert.sql';
 import labelRead from './label-store-read.sql';
 import labelRename from './label-store-rename.sql';

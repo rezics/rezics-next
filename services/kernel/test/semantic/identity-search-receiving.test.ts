@@ -67,7 +67,7 @@ test('Search receiving refuses a wrong native step or missing native plan before
 });
 
 import { EventEmitter } from 'node:events';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import {
   receivingWorkDeclaration,
   searchReceivingOperations,

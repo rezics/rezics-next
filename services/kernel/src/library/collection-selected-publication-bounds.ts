@@ -10,7 +10,7 @@ import {
 } from './owner-filter-native-closure.ts';
 import { MEMBERS_PREPARATION_SOURCE_COST } from '../search/scope-members-source-declaration.ts';
 import { WORK_EXECUTION_ATTEMPT_BOUND } from '../work/selected-runtime-cost.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 
 export const COLLECTION_SELECTED_PUBLICATION_LIMIT = 100;
 export function COLLECTION_SELECTED_PUBLICATION_ATTEMPTS() {

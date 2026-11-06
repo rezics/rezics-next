@@ -31,7 +31,7 @@ import {
   identitySourceConsumerNativeWork,
 } from '../semantic/identity-source-consumer-maintenance.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { subjectAlias } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';

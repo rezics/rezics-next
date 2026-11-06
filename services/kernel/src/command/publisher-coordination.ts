@@ -21,7 +21,7 @@ import {
   CATALOGUE_MECHANICAL_REPRESENTATION,
 } from '../semantic/definition-catalogue-mechanical.ts';
 import type { CatalogueMechanicalInput, CatalogueMechanicalResult } from '../semantic/definition-catalogue-types.ts';
-import type { WorkDimensions } from '../library/collection-source.ts';
+import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 
 type Input = Extract<CatalogueMechanicalInput, { phase: 'activation-step' }>;
 type Result = Extract<CatalogueMechanicalResult, { phase: 'activation-step' }>;

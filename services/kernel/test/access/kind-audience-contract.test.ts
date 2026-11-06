@@ -7,7 +7,7 @@ import type {
   CollectionKindPreparationLocator,
   CollectionKindWorkDefinition,
 } from '../../src/library/collection-kind-work-admission.ts';
-import type { WorkDimensions, WorkReceipt } from '../../src/library/collection-source.ts';
+import type { WorkDimensions, WorkReceipt } from '../../src/library/contract/work-dimensions.ts';
 import type {
   Access,
   Actor,

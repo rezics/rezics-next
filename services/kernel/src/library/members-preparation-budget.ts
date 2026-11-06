@@ -8,7 +8,7 @@ import {
   OPERATIONAL_WORK_TRANSFER_COST,
   sumOperationalWork,
 } from '../history/operational-work-budget.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 
 /** Disjoint owner declarations, including failed prefixes and terminal controls. A missing
  * declaration is unknown, never zero. History's local declaration does not price other owners.

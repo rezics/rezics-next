@@ -78,6 +78,27 @@ operations, failed action dependencies, action catalogue changes, Entry/account/
 and response/input limits. Full frozen acceptance and independent native growth remain controller checks. No raw vote
 slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
+## Module layers and measured boundary
+
+The manifest splits Library by layer. The first contract module is the work-dimension vocabulary:
+`kernel-library-contract` owns `library/contract/**`, and its public entry `contract/work-dimensions.ts` declares
+`WorkDimensions`, `WorkAllowance` and `WorkReceipt` as pure types. Access, Platform, Search, Semantic, Content and
+Zones import these shapes from that entry, not from the Source runtime. `account-grant.ts` is a leaf: `grantCapable`
+takes the account fields structurally and imports only the route helper, so native Source no longer reads the
+Collection read module.
+
+Measured with `bun scripts/architecture.ts` against the Kernel value-import graph (base, then candidate): the largest
+value SCC has 388 then 385 files, of which Library has 90 then 88; all value-cycle files are 405 then 402, Library
+98 then 96. Architecture errors are 1020 then 1017, none new. The boundary baseline drops 178 entries (9,714 to 9,536)
+that no longer match a violation.
+
+Not yet done: application ports and composition bindings for Search preparation, identity/disclosure, authorization
+and Content publication. Porting only `builtin-runtime-query.ts`'s foreign value calls (Search scope preparation and
+the ordinary work ledger) would take the largest SCC to 362 files on the same graph. The next cut must avoid
+reintroducing `builtin-runtime-query.ts` edges from the owner-index and builtin callers, because the publication
+admission chain (`collection-publication-work-admission.ts` → `collection-publication-episodes.ts` →
+`builtin-materialization.ts` → `builtin-runtime.ts`) closes that cycle.
+
 ## Scope and implementation boundary
 
 [Library and Collections](../../../../docs/library-and-collections.md) owns the capability. This README adopts its
