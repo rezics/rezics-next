@@ -42,7 +42,11 @@ const withheldBoard = managed({
   createdAt: '2026-11-03T09:00:00.000Z',
   target: null,
 });
-const laterThread = managed({ ...thread, revision: 6, target: { title: 'Newer episode', href: '/threads/a/readable' } });
+const laterThread = managed({
+  ...thread,
+  revision: 6,
+  target: { title: 'Newer episode', href: '/threads/a/readable' },
+});
 
 function page(kind: WatchKind, watches: readonly ManagedWatch[], next: string | null = null): WatchRead {
   return { kind: 'page', page: { viewer, actions, watches: watches.filter((row) => row.kind === kind), next } };

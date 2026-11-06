@@ -68,7 +68,10 @@ export function isProfileReturnSnapshot(value: unknown): value is ProfileReturnS
   if (!record(value)) return false;
   const keys = Object.keys(value).sort().join(',');
   if (keys !== 'draft,known' && keys !== 'draft,known,lastFocus') return false;
-  if (value.lastFocus !== undefined && (typeof value.lastFocus !== 'string' || !profileFocusFields.has(value.lastFocus)))
+  if (
+    value.lastFocus !== undefined &&
+    (typeof value.lastFocus !== 'string' || !profileFocusFields.has(value.lastFocus))
+  )
     return false;
   if (!validProfileValues(value.known) || !validProfileValues(value.draft)) return false;
   if (value.known.accountId !== value.draft.accountId || value.known.kind !== value.draft.kind) return false;

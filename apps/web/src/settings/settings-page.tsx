@@ -312,9 +312,7 @@ export function SettingsWatchesOwner({
     },
     [location.pathname, navigation, profileReturn],
   );
-  return (
-    <WatchesSection io={io} initialReturn={localReturn.receipt} onVisitTarget={visitWatchTarget} />
-  );
+  return <WatchesSection io={io} initialReturn={localReturn.receipt} onVisitTarget={visitWatchTarget} />;
 }
 
 function SettingsSections({

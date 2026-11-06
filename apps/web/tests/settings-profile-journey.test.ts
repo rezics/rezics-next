@@ -716,11 +716,7 @@ test('a successful Profile save reads back only that account, then an unsaved dr
   expect(boundary.reads).toEqual([`/v1/accounts/${initial().accountId}/profile`]);
   editor.edit({ biography: 'Later unsaved notes' });
   editor.lastFocus = 'biography';
-  const snapshot = captureProfileReturn(
-    editor.snapshot().known,
-    editor.snapshot().draft,
-    editor.lastFocus,
-  );
+  const snapshot = captureProfileReturn(editor.snapshot().known, editor.snapshot().draft, editor.lastFocus);
   expect(snapshot && isProfileReturnSnapshot(snapshot)).toBe(true);
   expect(snapshot?.draft.biography).toBe('Later unsaved notes');
   const current = { ...boundary.current(), displayName: 'Native later name', biography: 'Native later notes' };

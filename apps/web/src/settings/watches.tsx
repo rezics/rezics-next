@@ -266,71 +266,71 @@ function OwnedWatches({
                   {state.rows.map((row) => {
                     const target = row.target;
                     return (
-                    <li
-                      key={row.subscriptionId}
-                      className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-4"
-                    >
-                      <div className="min-w-0 flex-1 basis-48 space-y-1 break-words">
-                        <p className="text-xs text-muted-foreground">
-                          {row.kind === 'thread' ? m.settings_watches_thread() : m.settings_watches_board()}
-                        </p>
-                        {target ? (
-                          onVisitTarget ? (
-                            <Link
-                              to={target.href as never}
-                              onClick={(event) => {
-                                if (
-                                  event.defaultPrevented ||
-                                  event.button !== 0 ||
-                                  event.metaKey ||
-                                  event.ctrlKey ||
-                                  event.altKey ||
-                                  event.shiftKey ||
-                                  (event.currentTarget.target && event.currentTarget.target !== '_self')
-                                )
-                                  return;
-                                const receipt = controller.captureReturn(
-                                  row.subscriptionId,
-                                  event.detail === 0 && document.activeElement === event.currentTarget,
-                                );
-                                if (receipt && !onVisitTarget(receipt, target.href)) event.preventDefault();
-                              }}
-                              className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
-                            >
-                              {target.title}
-                            </Link>
-                          ) : (
-                            <a
-                              href={target.href}
-                              className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
-                            >
-                              {target.title}
-                            </a>
-                          )
-                        ) : (
-                          <>
-                            <p className="font-medium">{m.settings_watches_target_unavailable()}</p>
-                            <p className="text-sm text-muted-foreground">{m.settings_watches_access_lost()}</p>
-                          </>
-                        )}
-                      </div>
-                      <Button
-                        ref={
-                          state.returnFocus?.outcome === 'restored' &&
-                          state.returnFocus.identity.subscriptionId === row.subscriptionId &&
-                          state.returnFocus.identity.kind === row.kind &&
-                          state.returnFocus.identity.revision === row.revision
-                            ? returnStop
-                            : undefined
-                        }
-                        className={controlClass}
-                        variant="outline"
-                        disabled={disabled}
-                        onClick={() => void controller.stop(row.subscriptionId)}
+                      <li
+                        key={row.subscriptionId}
+                        className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-4"
                       >
-                        {m.settings_watches_stop()}
-                      </Button>
-                    </li>
+                        <div className="min-w-0 flex-1 basis-48 space-y-1 break-words">
+                          <p className="text-xs text-muted-foreground">
+                            {row.kind === 'thread' ? m.settings_watches_thread() : m.settings_watches_board()}
+                          </p>
+                          {target ? (
+                            onVisitTarget ? (
+                              <Link
+                                to={target.href as never}
+                                onClick={(event) => {
+                                  if (
+                                    event.defaultPrevented ||
+                                    event.button !== 0 ||
+                                    event.metaKey ||
+                                    event.ctrlKey ||
+                                    event.altKey ||
+                                    event.shiftKey ||
+                                    (event.currentTarget.target && event.currentTarget.target !== '_self')
+                                  )
+                                    return;
+                                  const receipt = controller.captureReturn(
+                                    row.subscriptionId,
+                                    event.detail === 0 && document.activeElement === event.currentTarget,
+                                  );
+                                  if (receipt && !onVisitTarget(receipt, target.href)) event.preventDefault();
+                                }}
+                                className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                              >
+                                {target.title}
+                              </Link>
+                            ) : (
+                              <a
+                                href={target.href}
+                                className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                              >
+                                {target.title}
+                              </a>
+                            )
+                          ) : (
+                            <>
+                              <p className="font-medium">{m.settings_watches_target_unavailable()}</p>
+                              <p className="text-sm text-muted-foreground">{m.settings_watches_access_lost()}</p>
+                            </>
+                          )}
+                        </div>
+                        <Button
+                          ref={
+                            state.returnFocus?.outcome === 'restored' &&
+                            state.returnFocus.identity.subscriptionId === row.subscriptionId &&
+                            state.returnFocus.identity.kind === row.kind &&
+                            state.returnFocus.identity.revision === row.revision
+                              ? returnStop
+                              : undefined
+                          }
+                          className={controlClass}
+                          variant="outline"
+                          disabled={disabled}
+                          onClick={() => void controller.stop(row.subscriptionId)}
+                        >
+                          {m.settings_watches_stop()}
+                        </Button>
+                      </li>
                     );
                   })}
                 </ul>
