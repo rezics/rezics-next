@@ -25,6 +25,7 @@ import { countAllowanceWaiting, poolBurnStatus } from './allowance.ts';
 import { defaultPolicy } from './policy.ts';
 import { readRetainedPoolReadings } from './pacing.ts';
 import { admissionProfiles, readRouting } from './routing.ts';
+import { reapedCountsLastHour } from './attempt-resources.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -195,6 +196,7 @@ export async function runWorkerCommand(
         };
       };
       const selectedTasks = cohort.map(show);
+      const reapedLastHour = reapedCountsLastHour(settings.stateDirectory);
       const trains = trainLaneStatus(settings.stateDirectory);
       const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
       const now = Date.now();
@@ -230,7 +232,13 @@ export async function runWorkerCommand(
       print(
         JSON.stringify(
           arg
-            ? { ...selectedTasks[0]!, toolIncidents: incidentProjection.toolIncidents, trains, pools }
+            ? {
+                ...selectedTasks[0]!,
+                toolIncidents: incidentProjection.toolIncidents,
+                trains,
+                pools,
+                reapedLastHour,
+              }
             : {
                 devVerification: devVerificationState(
                   settings.mainCheckout,
@@ -241,6 +249,7 @@ export async function runWorkerCommand(
                 toolIncidents: incidentProjection.toolIncidents,
                 trains,
                 pools,
+                reapedLastHour,
                 tasks: selectedTasks,
               },
           null,

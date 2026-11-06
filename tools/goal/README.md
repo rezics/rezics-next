@@ -733,7 +733,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.appServer.diagnosticCharacters`               | `262144`                             | Maximum retained startup stderr characters.                                                                                                                                                 |
 | `policy.containers.commandTimeoutMs`                  | `15000`                              | Deadline for each worker container Docker operation (ms).                                                                                                                                   |
 | `policy.containers.maxAgeHours`                       | `4`                                  | Default stale-container age for opted-in hosts (hours).                                                                                                                                     |
-| `policy.containers.keep`                              | `["rezics-pagecheck-"]`              | Container name prefixes that stale-container cleanup retains.                                                                                                                               |
+| `policy.containers.keep`                              | `["rezics-dev-","rezics-doctor-","rezics-kernel-dev","rezics-pagecheck-"]` | Container name prefixes that attempt and stale-container cleanup retain.                                                                                                                    |
 | `policy.process.groupPollMs`                          | `1000`                               | Poll interval until an owned detached process group exits (ms).                                                                                                                             |
 | `policy.process.exitPollMs`                           | `50`                                 | Fallback identity poll interval after a pidfd waiter fails (ms).                                                                                                                            |
 | `policy.process.signalDiagnosticCharacters`           | `4096`                               | Maximum retained signal-helper stderr characters.                                                                                                                                           |
@@ -748,7 +748,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.host.decisionAuditTimeoutMs`                  | `500`                                | Isolated continuation decision audit delivery deadline (ms).                                                                                                                                |
 | `policy.appServer.exitPollMs`                         | `20`                                 | Identity poll interval while stopping recorded app-servers (ms).                                                                                                                            |
 | `policy.appServer.killWaitMs`                         | `5000`                               | Maximum recorded app-server wait after SIGKILL (ms).                                                                                                                                        |
-| `policy.containers.cleanupIntervalMs`                 | `600000`                             | Minimum interval between opted-in stale-container sweeps (ms).                                                                                                                              |
+| `policy.containers.cleanupIntervalMs`                 | `300000`                             | Minimum interval between attempt-resource and opted-in stale-container sweeps (ms).                                                                                                         |
 | `policy.watchdog.noWorkerMs`                          | `600000`                             | Ended-attempt idle time before reporting a missing worker (ms).                                                                                                                             |
 | `policy.watchdog.stabilizeBehindMs`                   | `1800000`                            | Time stabilize may remain absent from dev before an alert (ms).                                                                                                                             |
 | `policy.watchdog.alertEveryMs`                        | `7200000`                            | Minimum interval between repeated watchdog violation alerts (ms).                                                                                                                           |
@@ -1849,6 +1849,14 @@ cleanup retains fixture state for inspection. An unrelated child is spared even 
 At settlement, Goal removes Docker containers carrying the exact `rezics.worker.attempt=<task>/<attempt>` label.
 Removal errors are logged and do not prevent attempt settlement; containers without that label are never selected.
 
+Decision: when an attempt ends (success, failure, stop, cancel or integration) the controller reaps processes whose
+cwd is in that worktree and containers and volumes named `rezics-walk-<task>-*` or `rezics-<task>-*`, plus throwaway
+Kernel databases whose `rezics.kernel.derived.pid` owner is gone. Owner identity is pid, start time and boot, so a
+reused pid cannot keep them; throwaway volumes carry the same labels as the container. Shared stacks matching
+`rezics-dev-`, `rezics-doctor-`, `rezics-kernel-dev` or `rezics-pagecheck-` are kept. A five-minute host sweep repeats
+that for cancelled, stopped, integrated and merged tasks. Each reap is logged with its owner and size; `goal status`
+reports `reapedLastHour`. Throwaway Kernel databases start with `--rm`.
+
 ### Worker container cleanup
 
 - Decision: Measure observable Docker CLI calls and returned or removed IDs; daemon-internal examined work is unavailable and is not inferred from those observations.
@@ -2860,7 +2868,8 @@ no scheduler pass can delay a heartbeat. `KillMode=process` limits host terminat
 Decision: scheduled host steps do not run git, Docker, worktree walks or full task loads on the event loop. Each runs as
 a background command or yields between bounded batches; a removal fallback on the rare not-a-working-tree path and the
 256 KiB measurement read remain synchronous: the reaper runs Docker asynchronously and reads running attempts
-from the current-attempt index; the daily audit reads unsettled tasks and removal reads finished tasks through the
+from the current-attempt index; attempt-resource sweeps project only terminal task ids and worktrees from that index
+and run Docker asynchronously; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.

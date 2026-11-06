@@ -262,8 +262,8 @@
     "containers": {
       "commandTimeoutMs": 15000,
       "maxAgeHours": 4,
-      "cleanupIntervalMs": 600000,
-      "keep": ["rezics-pagecheck-"]
+      "cleanupIntervalMs": 300000,
+      "keep": ["rezics-dev-", "rezics-doctor-", "rezics-kernel-dev", "rezics-pagecheck-"]
     },
     "process": {
       "groupPollMs": 1000,
