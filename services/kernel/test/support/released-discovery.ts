@@ -1064,15 +1064,7 @@ export async function createReleasedDiscoveryFixture(
       close: async () => {
         closed = true;
         const errors: unknown[] = [];
-        await Promise.allSettled([
-          importedHarem,
-          statementConsent,
-          nativeStart,
-          classification,
-          diet,
-          books,
-          recipes,
-        ]);
+        await Promise.allSettled([importedHarem, statementConsent, nativeStart, classification, diet, books, recipes]);
         try {
           await driver.close();
         } catch (cleanup) {
@@ -1097,7 +1089,8 @@ export async function createReleasedDiscoveryFixture(
     } catch (cleanup) {
       errors.push(cleanup);
     }
-    if (errors.length) throw new AggregateError([error, ...errors], 'Released discovery setup and cleanup failed', { cause: error });
+    if (errors.length)
+      throw new AggregateError([error, ...errors], 'Released discovery setup and cleanup failed', { cause: error });
     throw error;
   }
 }
