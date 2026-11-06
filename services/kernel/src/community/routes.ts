@@ -102,6 +102,7 @@ import {
   selectRealmMembers,
 } from './member-page.ts';
 import { listOwnRealms } from './own-realms.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
 import { readCommunityPresentations } from '../content/community-presentation.ts';
@@ -778,10 +779,10 @@ const SITEMAP_DESCRIPTION = (kind: 'Realms' | 'Spaces') =>
   `Keyset feed of the public ${kind} for server-to-server sitemaps, evaluated as an anonymous reader. Each page ` +
   `examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.`;
 
-export type CommunityRouteDependencies = {
+export type CommunityRouteDependencies = CommunityAmbient & {
   pool: Pool;
   routeKey: Uint8Array;
-  clock?: () => Date;
+  clock: () => Date;
   access: () => Access;
   tokens: KeyRing;
   workClient: () => Promise<WorkClient>;
@@ -966,10 +967,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
     access: dependencies.access(),
   });
-  const realmDependencies = (): RealmDependencies => ({
+  const realmDependencies = (): RealmDependencies & CommunityAmbient & { clock: () => Date } => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    clock: dependencies.clock,
+    deadlineNow: dependencies.deadlineNow,
     access: dependencies.access(),
   });
   const banDependencies = () => ({
@@ -984,7 +986,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     tokens: dependencies.tokens,
     client: await dependencies.workClient(),
   });
-  const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
+  const observedAt = () => dependencies.clock().toISOString();
   const sitemapDependencies = () => ({
     pool: dependencies.pool,
     access: dependencies.access(),

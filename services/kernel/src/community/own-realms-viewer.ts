@@ -10,7 +10,7 @@ import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Actor, type AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms.ts';
+import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms-shape.ts';
 import { createRealmParticipationCheck } from './participation.ts';
 import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm.ts';
 import { spaceReadEligibility } from './space.ts';
@@ -35,7 +35,9 @@ const retry = () => new ProblemError('transaction_retry_exhausted');
  * authority and returns the final values, or null on concealment. It never reserves
  * a command and never holds a checkout across another owner's observation.
  */
-export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, 'pool' | 'access' | 'clock'>) {
+export function createRealmViewerObservation(
+  deps: Pick<OwnRealmsDependencies, 'pool' | 'access'> & Readonly<{ clock?: () => Date }>,
+) {
   const participation = createRealmParticipationCheck(deps);
   return async (input: RealmViewerInput) => {
     const { actor, realmId, deadline } = input;

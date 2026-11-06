@@ -4,6 +4,10 @@ A Space is the stable, routed identity for a future Realm (community) or Zone (s
 Its metadata is an append-only revision chain; the Space points to its current head.
 This module provides commands, point reads and HTTP routes.
 
+## Declaration and ambient operands
+
+`declaration.ts` is the one value composition consumes: `createCommunityDeclaration(ambient)` returns the work module and the viewer permissions, and constructing it runs nothing. The only ambient operand is `CommunityAmbient.deadlineNow`, the wall time that request deadlines compare against; domain time stays a `KernelClock` passed beside it. Composition roots supply `systemCommunityAmbient`, and focused tests pass a fixed one. Publication, realm claim review, realm discovery projection and expiry, and own-Realm reads take these operands from their dependencies. Realm membership deadlines still use the platform `deadlineFor` until the platform delivers a clock operand.
+
 ## Public Realm discovery
 
 Popular ranks originally qualified public discussion starts in the previous 30 complete UTC days. Trending ranks

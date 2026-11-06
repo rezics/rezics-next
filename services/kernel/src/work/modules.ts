@@ -4,7 +4,7 @@ import { sharedHistoryWorkModule } from '../history/work.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
-import { communityWorkModule } from '../community/work.ts';
+import { createCommunityDeclaration, systemCommunityAmbient, type CommunityAmbient } from '../community/declaration.ts';
 import { registerContent } from '../content/register.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
@@ -44,8 +44,10 @@ const accountsWorkModule: WorkModule = {
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
+  community: CommunityAmbient = systemCommunityAmbient,
 ): readonly WorkModule[] {
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
+  const communityWorkModule = createCommunityDeclaration(community).work;
   return [
     accountsWorkModule,
     erasureWorkModule,

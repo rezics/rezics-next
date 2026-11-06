@@ -31,8 +31,7 @@ import {
 import { contextViewerActionResource, subjectViewerActionResources } from '../semantic/viewer-actions.ts';
 import { accountViewerActionResource } from '../access/account-viewer-actions.ts';
 import { collectionViewerActionResource } from '../library/collection-reads.ts';
-import { realmViewerActionResource } from '../community/realm.ts';
-import { spaceViewerActionResource } from '../community/space.ts';
+import { createCommunityDeclaration, systemCommunityAmbient } from '../community/declaration.ts';
 import { followingSpaceTargets } from '../community/following-space-targets.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
@@ -150,6 +149,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   resourceRoles?: import('../access/resource-roles.ts').ResourceRoleCatalogue;
   /** Trusted domain time only; authentication and request budgets retain real time. */
   clock?: () => Date;
+  /** Real wall time for request deadlines; defaults to the system clock at composition. */
+  deadlineNow?: () => number;
   commerce?: CommerceDependencies;
   moneyPolicy?: CommerceMoneyPolicy;
   content?: ContentRuntime &
@@ -385,6 +386,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) throw new TypeError('Invalid command clock');
     return instant;
   };
+  const communityAmbient = {
+    deadlineNow: dependencies.deadlineNow ?? systemCommunityAmbient.deadlineNow,
+  };
+  const communityDeclaration = createCommunityDeclaration(communityAmbient);
   const tokens = dependencies.tokens ?? {
     current: 1,
     keys: new Map([[1, new Uint8Array(randomBytes(32))]]),
@@ -585,6 +590,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     operations: operationCatalogue,
     workClient,
     ...(dependencies.search ? { search: dependencies.search } : {}),
@@ -688,6 +694,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
+    deadlineNow: communityAmbient.deadlineNow,
     access: () => resolveAccess({ actions: actionCatalogue(community), realmRoleReader }),
     tokens,
     workClient,
@@ -875,8 +882,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],
-    ['community.realm', realmViewerActionResource],
-    ['community.space', spaceViewerActionResource],
+    ...communityDeclaration.viewerResources,
     ['semantic.zone', zoneViewerActionResource],
   ]);
   for (const [type, resource] of dependencies.viewerActionResources ?? []) {

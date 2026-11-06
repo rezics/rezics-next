@@ -276,7 +276,7 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
-      "publicEntries": ["services/kernel/src/community/index.ts"],
+      "publicEntries": ["services/kernel/src/community/index.ts", "services/kernel/src/community/declaration.ts"],
       "allowedDependencies": [
         "auth-contract",
         "document",

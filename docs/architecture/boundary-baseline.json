@@ -6631,11 +6631,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/community/space-discovery.ts",
-          "edge": "value import \"../events/catalogue.ts\" #1 => services/kernel/src/events/catalogue.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/community/space.ts",
           "edge": "type import \"../access/viewer-actions.ts\" #1 => services/kernel/src/access/viewer-actions.ts"
         },
@@ -6848,21 +6843,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/community/member-count.ts",
           "edge": "value import \"./party-locator.ts\" #1 => services/kernel/src/community/party-locator.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms-view.ts",
-          "edge": "value import \"./own-realms-viewer.ts\" #1 => services/kernel/src/community/own-realms-viewer.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms-viewer.ts",
-          "edge": "value import \"./own-realms.ts\" #1 => services/kernel/src/community/own-realms.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms.ts",
-          "edge": "value import \"./own-realms-view.ts\" #1 => services/kernel/src/community/own-realms-view.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -20231,17 +20211,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/realm.ts\" #2 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../community/routes.ts\" #1 => services/kernel/src/community/routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/space.ts\" #1 => services/kernel/src/community/space.ts"
         },
         {
           "rule": "rule 2",
@@ -20607,11 +20577,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/work/modules.ts",
           "edge": "value import \"../community/membership.ts\" #1 => services/kernel/src/community/membership.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../community/work.ts\" #1 => services/kernel/src/community/work.ts"
         },
         {
           "rule": "rule 2",
