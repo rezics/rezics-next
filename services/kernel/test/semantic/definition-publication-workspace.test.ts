@@ -5,7 +5,8 @@ import { compileCatalogue } from '@rezics/definitions/compile';
 import { EXTENSION_FORMAT, extensionDigest, termPrefix, type Extension } from '@rezics/definitions/extension';
 import { releaseDigest } from '@rezics/definitions';
 import { VERTICAL_LOCALES, verticalManifests } from '../support/manifests.ts';
-import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
+import { createSemanticDriver } from './outcome-binding.ts';
+import type { SemanticOutcomeDriver } from './outcome-driver.ts';
 
 let driver: SemanticOutcomeDriver;
 const key = () => ({ 'Idempotency-Key': JSON.stringify(randomUUID()) });
