@@ -662,6 +662,20 @@ export function issuerRequest(request: Request): Request {
   return new Request(url, request);
 }
 
+function loopbackServe(
+  port: number,
+  fetch: (request: Request) => Response | Promise<Response>,
+): ReturnType<typeof Bun.serve> {
+  return Bun.serve({
+    hostname: '127.0.0.1',
+    port,
+    fetch: async (request) => {
+      if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
+      return fetch(request);
+    },
+  });
+}
+
 async function serveHost() {
   const composition = await assemble();
   try {
@@ -671,18 +685,19 @@ async function serveHost() {
     await composition.stop();
     throw error;
   }
-  const server = Bun.serve({
-    hostname: '127.0.0.1',
-    port: localPort(origins.native),
-    fetch: async (request) => {
-      if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
-      if (new URL(request.url).pathname === '/local-turnstile.js')
-        return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
-      return composition.host.handler(issuerRequest(request));
-    },
+  const composeKernel = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
+  const native = loopbackServe(localPort(origins.native), async (request) => {
+    if (new URL(request.url).pathname === '/local-turnstile.js')
+      return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
+    return composition.host.handler(issuerRequest(request));
   });
+  // Account journeys do not need a second Kernel process, worker, or OpenSearch: the host already assembled Kernel.
+  const kernel = composeKernel
+    ? loopbackServe(localPort(origins.kernel), (request) => composition.kernel.fetch(request))
+    : undefined;
   const stop = async () => {
-    await server.stop(true);
+    await native.stop(true);
+    await kernel?.stop(true);
     await composition.stop();
     process.exit(0);
   };
@@ -693,6 +708,7 @@ async function serveHost() {
     void stop();
   });
   console.log(`Native Auth: ${origins.native} (issuer ${origins.issuer})`);
+  if (kernel) console.log(`Kernel: ${origins.kernel}`);
 }
 
 async function launch(action: 'pages' | 'web', args: string[]) {
@@ -744,6 +760,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
 export function stackProcessCommands(env: Record<string, string | undefined> = process.env): string[][] {
   const walk = env.REZICS_WALK_STACK_SLOT !== undefined;
   const frontends = env.REZICS_WALK_DEFER_FRONTENDS !== '1';
+  const composedKernel = env.REZICS_WALK_DEFER_FRONTENDS === '1';
   return [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
     ...(frontends
@@ -752,8 +769,21 @@ export function stackProcessCommands(env: Record<string, string | undefined> = p
           ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
         ]
       : []),
-    ['bun', 'run', '--cwd', 'services/kernel', walk ? 'start' : 'dev'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
+    ...(composedKernel
+      ? []
+      : [
+          ['bun', 'run', '--cwd', 'services/kernel', walk ? 'start' : 'dev'],
+          ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
+        ]),
+  ];
+}
+
+/** Deferred walks skip OpenSearch: account HTTP does not use catalogue search. */
+export function walkSetupScripts(env: Record<string, string | undefined> = process.env): string[][] {
+  return [
+    ['services/kernel/scripts/database.ts', 'up'],
+    ...(env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [] : [['services/kernel/scripts/search.ts', 'up']]),
+    ['services/auth/scripts/dev-stack.ts', 'setup'],
   ];
 }
 
@@ -793,11 +823,16 @@ function dockerOutput(args: string[]): string {
 }
 
 /** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
-function removeWalkStack(names: WalkNames): void {
-  for (const container of [names.database, names.search])
-    if (dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) dockerOutput(['rm', '-f', '-v', container]);
-  for (const volume of [names.database, names.search])
-    if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
+function removeWalkStack(names: WalkNames, required = true): void {
+  try {
+    for (const container of [names.database, names.search])
+      if (dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) dockerOutput(['rm', '-f', '-v', container]);
+    for (const volume of [names.database, names.search])
+      if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
+  } catch (error) {
+    if (required) throw error;
+    console.error(error);
+  }
 }
 
 /** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
@@ -843,19 +878,11 @@ async function walk(command: string[]): Promise<number> {
   try {
     slot = await admitWalkStack(task, process.env, root, controller.signal);
     const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
-    if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
-      env.OPENSEARCH_JAVA_OPTS ??= '-Xms128m -Xmx128m';
-      env.KERNEL_SEARCH_MEMORY ??= '400m';
-    }
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     try {
       removeWalkStack(names); // an interrupted attempt of this task may have left its stack behind
-      for (const script of [
-        ['services/kernel/scripts/database.ts', 'up'],
-        ['services/kernel/scripts/search.ts', 'up'],
-        ['services/auth/scripts/dev-stack.ts', 'setup'],
-      ]) {
+      for (const script of walkSetupScripts(env)) {
         current = Bun.spawn([process.execPath, ...script], {
           cwd: root,
           env,
@@ -887,7 +914,7 @@ async function walk(command: string[]): Promise<number> {
         starting.kill('SIGTERM');
         await starting.exited;
       }
-      removeWalkStack(names);
+      removeWalkStack(names, false);
     }
   } catch (error) {
     if (interrupted === undefined) throw error;

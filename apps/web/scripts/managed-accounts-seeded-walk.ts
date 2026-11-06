@@ -4,8 +4,9 @@
  * Catalogue seed is not consumed: these operations do not use catalogue identities.
  * The stack host already provisions the developer; a second persona assemble would
  * load another Kernel and Auth beside the live stack and exceed the 6 GiB check cap.
- * With REZICS_WALK_DEFER_FRONTENDS=1 the walk stack omits Vite until after native
- * HTTP, then starts issuer and Web only for the mounted-page phase.
+ * With REZICS_WALK_DEFER_FRONTENDS=1 the walk stack omits Vite, OpenSearch, the
+ * Kernel worker and a second Kernel process until after native HTTP. Kernel HTTP
+ * is served from the Auth host. Issuer starts before Auth pages; Web starts after.
  */
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -379,28 +380,29 @@ async function persistEvidence() {
   await writeFile(join(evidenceDir, 'passing.json'), `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
 }
 
-async function startFrontends() {
-  const children = (['pages', 'web'] as const).map((action) =>
-    Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
-      cwd: root,
-      env: process.env,
-      stdin: 'ignore',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    }),
-  );
-  const stop = async () => {
-    for (const child of children) child.kill('SIGTERM');
-    await Promise.all(children.map((child) => child.exited));
-  };
+async function startFrontend(action: 'pages' | 'web') {
+  const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
+    cwd: root,
+    env: process.env,
+    stdin: 'ignore',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  const url = action === 'pages' ? `${stack.issuer}/` : `${stack.web}/`;
+  const label = action === 'pages' ? 'Auth pages' : 'Web';
   try {
-    await untilAnswers(`${stack.issuer}/`, 'Auth pages');
-    await untilAnswers(`${stack.web}/`, 'Web');
+    await untilAnswers(url, label);
   } catch (error) {
-    await stop();
+    child.kill('SIGTERM');
+    await child.exited;
     throw error;
   }
-  return { stop };
+  return {
+    stop: async () => {
+      child.kill('SIGTERM');
+      await child.exited;
+    },
+  };
 }
 
 await untilAnswers(`${stack.native}/`, 'native Auth');
@@ -912,27 +914,31 @@ await persistEvidence();
 note('native-complete');
 
 const deferFrontends = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
-const frontends = deferFrontends ? await startFrontends() : undefined;
-if (frontends) note('frontends-ready');
-await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
-if (typeof Bun.gc === 'function') Bun.gc(true);
-const require = createRequire(resolve(root, 'apps/web/package.json'));
-const { chromium } = require('playwright') as typeof import('playwright');
-const browser = await chromium.launch({
-  headless: true,
-  chromiumSandbox: false,
-  env: { ...process.env, TMPDIR: '/tmp/rw' },
-  args: [
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--disable-software-rasterizer',
-    '--disable-extensions',
-    '--disable-background-networking',
-    '--mute-audio',
-    '--renderer-process-limit=1',
-  ],
-});
+const frontends: Array<{ stop: () => Promise<void> }> = [];
+let browser: import('playwright').Browser | undefined;
 try {
+  if (deferFrontends) {
+    frontends.push(await startFrontend('pages'));
+    note('auth-pages-ready');
+  }
+  await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
+  if (typeof Bun.gc === 'function') Bun.gc(true);
+  const require = createRequire(resolve(root, 'apps/web/package.json'));
+  const { chromium } = require('playwright') as typeof import('playwright');
+  browser = await chromium.launch({
+    headless: true,
+    chromiumSandbox: false,
+    env: { ...process.env, TMPDIR: '/tmp/rw' },
+    args: [
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--mute-audio',
+      '--renderer-process-limit=1',
+    ],
+  });
   const capture = async (
     page: import('playwright').Page,
     persona: string,
@@ -966,16 +972,6 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
   await page.route('**/*', loopbackOnly);
-  await signInWebsitePage(page, stack, developer.email, developerPassword);
-  await capture(page, 'organization-owner', 'en', 1280, 'light', '/accounts');
-  await capture(page, 'organization-owner', 'en', 390, 'dark', '/accounts', false);
-  for (const locale of ['zh-Hant', 'ja'] as const)
-    await capture(page, 'organization-owner', locale, 1280, 'light', '/accounts');
-  await capture(page, 'organization-owner', 'en', 1280, 'light', `/organizations/${organizationId}`);
-  const heading = await page.locator('h1, [data-slot="page-heading"]').first().textContent().catch(() => '');
-  if (heading?.includes('account:read')) evidence.defects.push('mounted management heading mentioned account:read');
-  note('owner-web-management');
-
   await signInAuthPage(page, stack, developer.email, developerPassword);
   const orgCreate = await settle(page, `${stack.issuer}/organizations/new`);
   evidence.pages.push({
@@ -1026,6 +1022,22 @@ try {
   if (await firstRow.count()) await firstRow.click().catch(() => {});
   note('owner-auth-pages');
 
+  if (deferFrontends) {
+    frontends.push(await startFrontend('web'));
+    note('web-ready');
+  }
+  await context.clearCookies();
+  await page.goto('about:blank');
+  await signInWebsitePage(page, stack, developer.email, developerPassword);
+  await capture(page, 'organization-owner', 'en', 1280, 'light', '/accounts');
+  await capture(page, 'organization-owner', 'en', 390, 'dark', '/accounts', false);
+  for (const locale of ['zh-Hant', 'ja'] as const)
+    await capture(page, 'organization-owner', locale, 1280, 'light', '/accounts');
+  await capture(page, 'organization-owner', 'en', 1280, 'light', `/organizations/${organizationId}`);
+  const heading = await page.locator('h1, [data-slot="page-heading"]').first().textContent().catch(() => '');
+  if (heading?.includes('account:read')) evidence.defects.push('mounted management heading mentioned account:read');
+  note('owner-web-management');
+
   for (const [persona, person] of [
     ['delegated-member', delegated],
     ['nondelegated-member', member],
@@ -1057,8 +1069,8 @@ try {
   }
   await context.close();
 } finally {
-  await browser.close();
-  await frontends?.stop();
+  await browser?.close();
+  for (const frontend of [...frontends].reverse()) await frontend.stop();
   await persistEvidence();
 }
 if (evidence.defects.length) throw new Error(evidence.defects.join('; '));

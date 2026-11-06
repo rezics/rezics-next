@@ -239,10 +239,10 @@ Decision: the organization and software-account journey walk uses the admitted s
 (native origin ready and `keys.json`), then creates extra named personas through public signup and membership.
 It does not launch a second in-process Kernel/Auth assemble: that duplicate sits beside the live stack and exceeds
 the 6 GiB check memory cap. Catalogue seed is not part of this journey: these account operations do not consume
-catalogue identities. Auth HTTP for the walk uses native Auth. `REZICS_WALK_DEFER_FRONTENDS=1` keeps Vite off until
-native HTTP finishes, then starts the issuer and Web only for mounted pages; walk search uses a 128 MiB heap.
-Kernel on a walk slot runs `start` rather than `--watch`. A single Chromium process covers desktop, phone, zh-Hant,
-ja, light and dark.
+catalogue identities. Auth HTTP for the walk uses native Auth. `REZICS_WALK_DEFER_FRONTENDS=1` keeps Vite, OpenSearch,
+the Kernel worker and a second Kernel process off until native HTTP finishes. Kernel HTTP is served from the Auth host
+that already assembled it. Issuer then Web start only for mounted pages. Kernel on a full walk slot runs `start` rather
+than `--watch`. A single Chromium process covers desktop, phone, zh-Hant, ja, light and dark.
 
 ## 3. Credentials, sessions and tokens
 

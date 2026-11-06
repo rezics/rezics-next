@@ -25,6 +25,7 @@ import {
   localShowcaseClientRegistration,
   importerScopes,
   stackProcessCommands,
+  walkSetupScripts,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -316,8 +317,16 @@ test('walk stacks start Kernel without a watcher and can omit Vite until mounted
     true,
   );
   const deferred = stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1', REZICS_WALK_DEFER_FRONTENDS: '1' });
-  expect(deferred.some((command) => command.includes('pages') || command.includes('web'))).toBe(false);
-  expect(deferred.some((command) => command.includes('host'))).toBe(true);
+  expect(deferred).toEqual([['bun', 'services/auth/scripts/dev-stack.ts', 'host']]);
+  expect(walkSetupScripts({ REZICS_WALK_DEFER_FRONTENDS: '1' })).toEqual([
+    ['services/kernel/scripts/database.ts', 'up'],
+    ['services/auth/scripts/dev-stack.ts', 'setup'],
+  ]);
+  expect(walkSetupScripts({})).toEqual([
+    ['services/kernel/scripts/database.ts', 'up'],
+    ['services/kernel/scripts/search.ts', 'up'],
+    ['services/auth/scripts/dev-stack.ts', 'setup'],
+  ]);
 });
 
 test('an authorized password rotation retains the original registration input', async () => {
