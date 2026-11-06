@@ -14,6 +14,7 @@ import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch
 import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import '../support/native-history-composition.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
