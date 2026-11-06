@@ -178,7 +178,7 @@ test('rating-question directory pages retain bounded native Access work across s
               await fixture.seedMeasurementIdentityRange(unrelatedPrefix[scenario], previous + 1, scale);
             else await fixture.seedClosedDenialHistory(previous + 1, scale);
           },
-          operation: async () => {
+          operation: async (_database, scale) => {
             // Selection and completion use one real HTTP request in the measured operation. Repeated
             // checkGrowth samples replay this same signed position and viewer credential.
             if (scenario === 'first') {

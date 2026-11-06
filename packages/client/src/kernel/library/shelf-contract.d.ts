@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { ShelfTitleSource } from './shelf-title-source.ts';
 import type { PersonalScoreCurrentness } from '../rating/personal-score.ts';
 import { type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
 import type { KernelClock } from '../clock.ts';
@@ -24,7 +25,7 @@ export type LegacyEntryState = (typeof ENTRY_STATES)[number];
 export declare function isLegacyEntryState(value: string): value is LegacyEntryState;
 /** Original profile vocabulary grammar; chronological reads preserve the exact state identifier. */
 export declare function isShelfEntryState(value: string): boolean;
-export declare const SHELF_ORDERS: readonly ['lastActivity', 'finishedAt', 'createdAt', 'personalScore'];
+export declare const SHELF_ORDERS: readonly ['lastActivity', 'finishedAt', 'createdAt', 'personalScore', 'priority', 'title'];
 export declare const SHELF_DIRECTIONS: readonly ['desc', 'asc'];
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
 export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
@@ -40,6 +41,8 @@ export type ShelfQuery = {
     direction: ShelfDirection;
     limit: number;
     cursor?: string;
+    /** Internal native binding, resolved only after currentness admission. */
+    titleGeneration?: string;
 };
 /**
  * The seek position after the last row of a page. `key` is the exact stored `timestamptz` text, microseconds kept,
@@ -64,6 +67,10 @@ export type ShelfEntry = {
     activeProgressSession: ShelfSession | null;
     /** Native standard-question units; present only for personalScore order. */
     personalScore?: number | null;
+    /** Explicit missing-label coverage; present only in native title order. */
+    titleCoverage?: 'labelled' | 'missing';
+    /** Owner-local annotation rank; present only for priority order. Null is explicitly unranked. */
+    priority?: number | null;
 };
 export type ShelfScoreQuestion = {
     id: string;
@@ -222,14 +229,26 @@ export declare function createShelfTypeKeys(options?: ShelfTypeKeysOptions): She
 export type ShelfRows = {
     entries: ShelfEntry[];
     more: boolean;
+    after?: ShelfSeek;
 };
 /** Date adapters return candidates before the independent active-session enrichment. */
 export type ShelfDateRows = {
     entries: Omit<ShelfEntry, 'activeProgressSession'>[];
     more: boolean;
+    after?: ShelfSeek;
 };
 export interface ShelfDateReader {
     page(client: Client, route: number, accountId: string, query: ShelfQuery, after: ShelfSeek | null): Promise<ShelfDateRows>;
+}
+/** Priority candidates join the current owner annotation in the same native statement. */
+export type ShelfPriorityRows = {
+    entries: (Omit<ShelfEntry, 'activeProgressSession' | 'priority'> & {
+        priority: number | null;
+    })[];
+    more: boolean;
+};
+export interface ShelfPriorityReader {
+    page(client: Client, route: number, accountId: string, query: ShelfQuery, after: ShelfSeek | null): Promise<ShelfPriorityRows>;
 }
 export interface ShelfActiveReader {
     sessions(client: Client, route: number, accountId: string, subjectIds: readonly string[]): Promise<Map<string, ShelfSession>>;
@@ -264,6 +283,7 @@ export type ShelfReads = {
 };
 export type ShelfReadDependencies = {
     scoreCurrentness?: PersonalScoreCurrentness;
+    titleSource?: ShelfTitleSource;
     pool: Pool;
     access: Access;
     tokens: KeyRing;

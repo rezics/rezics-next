@@ -592,7 +592,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 }
 
 /** Persist each exact body before transport, then seal only acknowledged native UUIDs. */
-export function captureShowcaseCommands(port: CrossMediaPort, journal: ShowcaseJournal): CrossMediaPort {
+export function captureShowcaseCommands<Port extends CrossMediaPort>(port: Port, journal: ShowcaseJournal): Port {
   return {
     ...port,
     async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {

@@ -34,6 +34,18 @@ export declare function lockRealmOwnership(client: AccessClient, input: Input): 
  * SERIALIZABLE retries recheck the predicates after concurrent grant changes.
  */
 export declare function assertRealmOwnerMayLeave(client: AccessClient, input: Input): Promise<void>;
+export type RealmOwnerLeaveObservation = Readonly<{
+    owner: boolean;
+    remaining: boolean;
+    source: string | null;
+}>;
+/** Read-only advice after the caller admits this exact resource read at the same T.
+ * This reuses the exact native holder predicate without acquiring a command lock or
+ * authorizing a later removal. target_source is the current explicit owner grant's
+ * transaction identity; callers retain it with the membership and authority witnesses
+ * across prepare/current/finish.
+ */
+export declare function readRealmOwnerLeaveObservation(client: AccessClient, input: Input): Promise<RealmOwnerLeaveObservation>;
 export type RealmErasureSuccessionInput = Readonly<{
     resource: Resource;
     accountId: string;

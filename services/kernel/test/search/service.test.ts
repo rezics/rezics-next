@@ -159,6 +159,7 @@ test('results come from the current subject state with as_of and no total', asyn
     id: kanata.id,
     type: 'schema:Book',
     labels: { en: 'Kokoro no Kanata', ja: 'ココロのカナタ' },
+    matchEvidence: expect.objectContaining({ state: 'current' }),
     figure: missingFigure,
   });
   expect(response).not.toHaveProperty('total');

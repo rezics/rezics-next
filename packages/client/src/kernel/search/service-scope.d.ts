@@ -1,8 +1,11 @@
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { createSearchScopeSource } from './scope-source.ts';
 import type { createSearchService } from './service.ts';
+import type { RealmSubjectSource } from '../content/index.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
-export type ScopeRuntime = Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'>;
+export type ScopeRuntime = Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'> & {
+    realmSubjectsForReader?: (reader: LeafOptions) => RealmSubjectSource | undefined;
+};
 /**
  * INTERNAL constructor handoff. Only createSearchService in search/service.ts may call this,
  * with its resolved pool, client, prefix, source and release reader. Never register an injected

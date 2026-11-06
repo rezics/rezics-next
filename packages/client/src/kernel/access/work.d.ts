@@ -1,4 +1,3 @@
-import { AccessUnavailableError } from './unavailable.ts';
 /** Neutral native dimensions, structurally compatible with the Source ledger. */
 export type AccessWork = Readonly<{
     keys: number;
@@ -37,11 +36,25 @@ export type AccessWorkResult<T> = Readonly<{
     error: unknown;
     usage: AccessWork;
 }>;
-export declare class AccessWorkUnavailableError extends AccessUnavailableError {
-    readonly dependency: string;
-    constructor(dependency: string);
-}
+export declare function AccessWorkUnavailableError(): {
+    new (dependency: string): {
+        readonly dependency: string;
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
+        readonly reason: 'deadline' | 'overloaded' | 'contention';
+    };
+    isError(error: unknown): error is Error;
+    isError(value: unknown): value is Error;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    captureStackTrace(targetObject: object, constructorOpt?: Function): void;
+    prepareStackTrace(err: Error, stackTraces: NodeJS.CallSite[]): any;
+    stackTraceLimit: number;
+};
+export type AccessWorkUnavailableError = InstanceType<ReturnType<typeof AccessWorkUnavailableError>>;
 export declare function addAccessWork(...values: readonly AccessWork[]): AccessWork;
+export declare function isAccessWorkDispatch(): boolean;
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.
  * Dispatch charges the bound immediately, so timeout/parallel/failed work cannot
  * disappear from a caller's receipt while an operation is still unwinding.
@@ -72,7 +85,7 @@ export declare function accessOwnerWork<C, R>(work: AccessWorkAccounting | undef
  * Byte reservations cover parameters and the closed projection. Only bytes and
  * the outer empty seek can settle below their bound on a completed statement.
  */
-export declare function accessNativeDeclaration(operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula' | 'account-state' | 'opening' | 'opening-partition' | 'opening-moved-target' | 'transaction', input: unknown, shape: Readonly<{
+export declare function accessNativeDeclaration(operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula' | 'account-state' | 'account-profile' | 'opening' | 'opening-partition' | 'opening-moved-target' | 'transaction', input: unknown, shape: Readonly<{
     members?: number;
     groups?: number;
     targets?: number;

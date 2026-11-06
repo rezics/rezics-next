@@ -4,7 +4,7 @@ import { VNDB_LIMITS } from './list-import-vndb-parser.ts';
 
 const object = <P extends Parameters<typeof t.Object>[0]>(properties: P) =>
   t.Object(properties, { additionalProperties: false });
-const strings = (...values: string[]) => t.Union(values.map((v) => t.Literal(v)));
+const strings = <const Values extends string[]>(...values: Values) => t.Enum(values);
 const nullable = <T extends Parameters<typeof t.Union>[0][number]>(schema: T) => t.Union([schema, t.Null()]);
 const uuid = t.String({ format: 'uuid' });
 const nullableText = nullable(t.String());

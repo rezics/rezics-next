@@ -102,7 +102,9 @@ export declare function publicImportConsumptionDateReview(review: ImportConsumpt
     actions: Readonly<Partial<Record<ImportDateField, ImportDateAction>>>;
     fields: Readonly<Record<ImportDateField, ImportDateFieldReview>>;
 };
-export declare function executeImportConsumptionDateIntent(input: {
+export declare function executeImportConsumptionDateIntent<Outcome extends {
+    value: ProgressSessionJournalWrite;
+}>(input: {
     review: ImportConsumptionDateReview;
     fields: ImportDateField[];
     existing?: ImportConsumptionDateIntent;
@@ -111,10 +113,8 @@ export declare function executeImportConsumptionDateIntent(input: {
     admission: ProgressSessionJournalAdmission;
     isCurrent: () => Promise<boolean>;
     persist: (intent: ImportConsumptionDateIntent) => Promise<boolean>;
-    patch: (sessionId: string, patch: ProgressSessionJournalPatch, requestKey: string, admission: ProgressSessionJournalAdmission) => Promise<{
-        value: ProgressSessionJournalWrite;
-    }>;
-    record?: (value: unknown) => void;
+    patch: (sessionId: string, patch: ProgressSessionJournalPatch, requestKey: string, admission: ProgressSessionJournalAdmission) => Promise<Outcome>;
+    record?: (value: Outcome) => void;
     signal?: AbortSignal;
     isStaleError: (error: unknown) => boolean;
     rethrowError?: (error: unknown) => boolean;

@@ -1,11 +1,9 @@
 import type { OperationalTransaction } from '../command/operational.ts';
 import { type CanonicalRawKey } from './canonical-source-store.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkDimensions } from './collection-source.ts';
 import type { NativeSourceIdentity, NativeSourceCustody } from './native-source-custody.ts';
 import { type CollectionKindPreparationLocator } from './collection-kind-work-admission.ts';
-export declare const COLLECTION_KIND_INPUT_RAW_LIMIT = 100;
-export declare const COLLECTION_KIND_INPUT_BYTE_LIMIT = 4096;
+export { COLLECTION_KIND_INPUT_BYTE_LIMIT, COLLECTION_KIND_INPUT_DECLARATION, COLLECTION_KIND_INPUT_QUANTUM, COLLECTION_KIND_INPUT_RAW_LIMIT, collectionKindInputWork, } from './collection-kind-input-bounds.ts';
 type Progress = Readonly<{
     driver: CanonicalRawKey['driver'] | 'done';
     after: CanonicalRawKey | null;
@@ -49,7 +47,6 @@ export type CollectionKindInputBinding = Readonly<{
     body: CollectionKindRawInputBody;
     custody: NativeSourceCustody;
 }>;
-export declare function collectionKindInputWork(): WorkDimensions;
 export type CollectionKindInputResult = Readonly<{
     status: 'committed';
     binding: CollectionKindInputBinding;
@@ -65,4 +62,3 @@ export type CollectionKindInputResult = Readonly<{
  * returns it. No foreign Type/Access call occurs before the caller releases T.
  */
 export declare function resolveCollectionKindRawInput(tx: OperationalTransaction, locator: CollectionKindPreparationLocator, originId: string, work: NativeCollectionWork): Promise<CollectionKindInputResult>;
-export {};

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { converter_revision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision } from '../../../../packages/conversion/src/cross-media-entities.ts';
 import { planCrossMediaSeed, seedCrossMedia, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';

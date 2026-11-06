@@ -6,6 +6,11 @@ import type { CollectionOutputPublication, CollectionOutputRef } from './collect
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
+/** Truthful original-command outcomes for an activated public Collection output.
+ * `ready` is current membership from a retained hold. `locked`/`bound` are retained original custody.
+ * Transfer and release are distinct native results. `changed` and `unavailable` refuse current admission
+ * without manufacturing an empty page or erasing committed custody. A JSON binding is not authority.
+ */
 export type PublicOutputWork = Readonly<{
     deadline: number;
     allowance: WorkAllowance;

@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentityNativeReceipt, IdentityIntent, IdentityJobRef, IdentityReceipt } from '../semantic/identity-epoch-contract.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
+import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 type AccountReceipt = Exclude<IdentityReceipt, {
     kind: 'subject.merge';
 }>;

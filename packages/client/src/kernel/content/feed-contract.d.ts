@@ -1,7 +1,7 @@
 import type { Static } from 'typebox';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
-import type { AccountDiscoverySummary } from '../search/discovery.ts';
+import type { AccountDiscoverySummary } from '../search/index.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
 import type { ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
@@ -22,15 +22,74 @@ export type FeedReactionTarget = Readonly<{
     targetId: ReactionTarget['targetId'];
 }>;
 export type FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>;
+export type FeedReactionAdvice = Readonly<{
+    target: FeedReactionTarget;
+    state: 'current';
+    allowed: readonly ViewerReactionKind[];
+}> | Readonly<{
+    target: FeedReactionTarget;
+    state: 'sign_in' | 'unavailable';
+}>;
+/** Feed-local only: Semantic summaries and public Search caches carry no viewer slot. */
+declare const subjectReactionKinds: readonly ['like', 'love', 'laugh', 'insightful', 'sad'];
+export type FeedSubjectReactionKind = (typeof subjectReactionKinds)[number];
+export declare const FeedSubjectReactionKindSchema: import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">;
+export declare const FeedSubjectReactionsSchema: import("typebox").TObject<{
+    target: import("typebox").TObject<{
+        targetKind: import("typebox").TLiteral<"subject">;
+        targetId: import("typebox").TString;
+    }>;
+    counts: import("typebox").TUnion<[import("typebox").TObject<{
+        state: import("typebox").TLiteral<"available">;
+        values: import("typebox").TObject<{
+            like: import("typebox").TOptional<import("typebox").TInteger>;
+            love: import("typebox").TOptional<import("typebox").TInteger>;
+            laugh: import("typebox").TOptional<import("typebox").TInteger>;
+            insightful: import("typebox").TOptional<import("typebox").TInteger>;
+            sad: import("typebox").TOptional<import("typebox").TInteger>;
+        }>;
+        asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+            epoch: number;
+            position: string;
+        }>>, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        state: import("typebox").TLiteral<"unavailable">;
+    }>]>;
+    viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        state: import("typebox").TLiteral<"available">;
+        kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+    }>, import("typebox").TObject<{
+        state: import("typebox").TLiteral<"unavailable">;
+    }>]>>;
+    action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+}>;
+export type FeedSubjectReactions = Static<typeof FeedSubjectReactionsSchema>;
 export type FeedContentSummary = {
     author?: FeedAuthor;
     excerpt?: string;
     reviewContext?: FeedReviewContext;
+    conversationActivity?: FeedConversationActivity;
     reactionTarget?: FeedReactionTarget;
     reactions?: FeedReactionCounts;
     viewerReaction?: ViewerReactionKind | null;
+    reactionAdvice?: FeedReactionAdvice;
 };
-export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
+export type FeedConversationActivity = Readonly<{
+    state: 'current';
+    cohort: 'public';
+    count: ConversationActivityReplyCount;
+    lastActivityAt: string | null;
+}> | Readonly<{
+    state: 'withheld';
+}>;
+export type ConversationActivityReplyCount = Readonly<{
+    kind: 'exact';
+    value: number;
+} | {
+    kind: 'lower-bound';
+    value: number;
+}>;
+export declare function FeedItemSchema(): import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     source: import("typebox").TLiteral<"discovery">;
@@ -75,6 +134,35 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
                 obligations: import("typebox").TArray<import("typebox").TString>;
             }>;
         }>, import("typebox").TNull]>;
+        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+            target: import("typebox").TObject<{
+                targetKind: import("typebox").TLiteral<"subject">;
+                targetId: import("typebox").TString;
+            }>;
+            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TLiteral<"available">;
+                values: import("typebox").TObject<{
+                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                }>;
+                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                    epoch: number;
+                    position: string;
+                }>>, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                state: import("typebox").TLiteral<"unavailable">;
+            }>]>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TLiteral<"available">;
+                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                state: import("typebox").TLiteral<"unavailable">;
+            }>]>>;
+            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+        }>>;
     }>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"subject">;
@@ -111,6 +199,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
         id: string;
         title: string;
         description: string | null;
+        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
     }>>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"collection">;
@@ -140,7 +229,9 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
             id: string;
             title: string | null;
         }> | null;
-    }> & Pick<FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+        source?: import("../search/review-context.ts").ReviewContextSource;
+        searchContext?: import("../search/review-context.ts").SearchReviewContext;
+    }> & Pick<FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"thread">;
         id: import("typebox").TString;
@@ -165,6 +256,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
             id: string;
             title: string | null;
         }> | null;
+        presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
     }>>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"space">;
@@ -217,6 +309,35 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
                 obligations: import("typebox").TArray<import("typebox").TString>;
             }>;
         }>, import("typebox").TNull]>;
+        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+            target: import("typebox").TObject<{
+                targetKind: import("typebox").TLiteral<"subject">;
+                targetId: import("typebox").TString;
+            }>;
+            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TLiteral<"available">;
+                values: import("typebox").TObject<{
+                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                }>;
+                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                    epoch: number;
+                    position: string;
+                }>>, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                state: import("typebox").TLiteral<"unavailable">;
+            }>]>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TLiteral<"available">;
+                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                state: import("typebox").TLiteral<"unavailable">;
+            }>]>>;
+            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+        }>>;
     }>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"subject">;
@@ -255,7 +376,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
                     structure: 'unverified';
                     recording: Readonly<{
                         state: 'supported';
-                        inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                        inputRules: import("@rezics/progress").ProgressInputRules;
                     } | {
                         state: 'unsupported' | 'unavailable';
                     }>;
@@ -344,6 +465,35 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
                 obligations: import("typebox").TArray<import("typebox").TString>;
             }>;
         }>, import("typebox").TNull]>;
+        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+            target: import("typebox").TObject<{
+                targetKind: import("typebox").TLiteral<"subject">;
+                targetId: import("typebox").TString;
+            }>;
+            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TLiteral<"available">;
+                values: import("typebox").TObject<{
+                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                }>;
+                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                    epoch: number;
+                    position: string;
+                }>>, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                state: import("typebox").TLiteral<"unavailable">;
+            }>]>;
+            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                state: import("typebox").TLiteral<"available">;
+                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                state: import("typebox").TLiteral<"unavailable">;
+            }>]>>;
+            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+        }>>;
     }>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"subject">;
@@ -404,7 +554,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
     }>;
 }>]>;
 export declare const FeedSourceStateSchema: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
-export declare const FeedPageSchema: import("typebox").TObject<{
+export declare function FeedPageSchema(): import("typebox").TObject<{
     feedItems: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
         id: import("typebox").TString;
         occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -450,6 +600,35 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                     obligations: import("typebox").TArray<import("typebox").TString>;
                 }>;
             }>, import("typebox").TNull]>;
+            subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                target: import("typebox").TObject<{
+                    targetKind: import("typebox").TLiteral<"subject">;
+                    targetId: import("typebox").TString;
+                }>;
+                counts: import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    values: import("typebox").TObject<{
+                        like: import("typebox").TOptional<import("typebox").TInteger>;
+                        love: import("typebox").TOptional<import("typebox").TInteger>;
+                        laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                        insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                        sad: import("typebox").TOptional<import("typebox").TInteger>;
+                    }>;
+                    asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                        epoch: number;
+                        position: string;
+                    }>>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"unavailable">;
+                }>]>;
+                viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"unavailable">;
+                }>]>>;
+                action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+            }>>;
         }>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"subject">;
@@ -486,6 +665,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
             id: string;
             title: string;
             description: string | null;
+            card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
         }>>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"collection">;
@@ -515,7 +695,9 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                 id: string;
                 title: string | null;
             }> | null;
-        }> & Pick<FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+            source?: import("../search/review-context.ts").ReviewContextSource;
+            searchContext?: import("../search/review-context.ts").SearchReviewContext;
+        }> & Pick<FeedContentSummary, "conversationActivity" | "reactionAdvice" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"thread">;
             id: import("typebox").TString;
@@ -540,6 +722,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                 id: string;
                 title: string | null;
             }> | null;
+            presentation?: import("../community/space-discovery-entry-contract.ts").SpaceEntryPresentation;
         }>>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"space">;
@@ -592,6 +775,35 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                     obligations: import("typebox").TArray<import("typebox").TString>;
                 }>;
             }>, import("typebox").TNull]>;
+            subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                target: import("typebox").TObject<{
+                    targetKind: import("typebox").TLiteral<"subject">;
+                    targetId: import("typebox").TString;
+                }>;
+                counts: import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    values: import("typebox").TObject<{
+                        like: import("typebox").TOptional<import("typebox").TInteger>;
+                        love: import("typebox").TOptional<import("typebox").TInteger>;
+                        laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                        insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                        sad: import("typebox").TOptional<import("typebox").TInteger>;
+                    }>;
+                    asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                        epoch: number;
+                        position: string;
+                    }>>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"unavailable">;
+                }>]>;
+                viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"unavailable">;
+                }>]>>;
+                action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+            }>>;
         }>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"subject">;
@@ -630,7 +842,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                         structure: 'unverified';
                         recording: Readonly<{
                             state: 'supported';
-                            inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                            inputRules: import("@rezics/progress").ProgressInputRules;
                         } | {
                             state: 'unsupported' | 'unavailable';
                         }>;
@@ -719,6 +931,35 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                     obligations: import("typebox").TArray<import("typebox").TString>;
                 }>;
             }>, import("typebox").TNull]>;
+            subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                target: import("typebox").TObject<{
+                    targetKind: import("typebox").TLiteral<"subject">;
+                    targetId: import("typebox").TString;
+                }>;
+                counts: import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    values: import("typebox").TObject<{
+                        like: import("typebox").TOptional<import("typebox").TInteger>;
+                        love: import("typebox").TOptional<import("typebox").TInteger>;
+                        laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                        insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                        sad: import("typebox").TOptional<import("typebox").TInteger>;
+                    }>;
+                    asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                        epoch: number;
+                        position: string;
+                    }>>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"unavailable">;
+                }>]>;
+                viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"available">;
+                    kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    state: import("typebox").TLiteral<"unavailable">;
+                }>]>>;
+                action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+            }>>;
         }>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"subject">;
@@ -778,6 +1019,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
             title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
     }>]>>;
+    viewerPersonalActions: import("typebox").TOptional<import("typebox").TUnsafe<import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     asOf: import("typebox").TString;
     reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
@@ -790,6 +1032,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
         continue: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
     }>;
 }>;
-export type FeedItem = Static<typeof FeedItemSchema>;
-export type FeedPage = Static<typeof FeedPageSchema>;
+export type FeedItem = Static<ReturnType<typeof FeedItemSchema>>;
+export type FeedPage = Static<ReturnType<typeof FeedPageSchema>>;
 export type FeedSourceState = Static<typeof FeedSourceStateSchema>;
+export {};

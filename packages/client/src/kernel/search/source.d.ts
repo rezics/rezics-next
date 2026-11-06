@@ -1,6 +1,8 @@
 import type { FilterQualifier, SpoilerThreshold } from '@rezics/filter';
 import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
+import type { CreditSearchProjection, CreditSearchSource } from './credit-search.ts';
+import type { DocumentTextProjection } from './document-text.ts';
 export type LanguageValue = {
     language: string;
     value: string;
@@ -31,6 +33,11 @@ export type NativeWorkLinkEvidence = Readonly<{
     /** An empty complete list proves no current work link. */
     values: readonly NativeWorkLinkValue[];
 }>;
+/** Internal native work charged by the complete work-link reader before it performs each bounded stage. */
+export type CompleteWorkLinkReservation = Readonly<{
+    operations: number;
+    keys: number;
+}>;
 /**
  * Filterable form of a statement value.
  * Time keeps its astronomical year and only the month/day represented by native precision.
@@ -53,13 +60,18 @@ export type IndexedStatement = {
     property: string;
     /** Stored statement value. An item value is the target subject id; a code value is the code. */
     value: string;
+    /** Original language of an admitted monolingual title or alternate name. */
+    language?: string;
     /** Present when the value's datatype can be a facet. */
     facet?: FacetValue;
-    /** Concrete adopted item (target subject id), string or canonical spoiler-level qualifiers on this statement.
+    /** Concrete adopted item, string, quantity or canonical spoiler-level qualifiers on this statement.
      * Unknown snaks are omitted; absence here is not complete negative evidence. */
     qualifiers?: {
         property: string;
         value: string;
+        facet?: Extract<FacetValue, {
+            kind: 'quantity';
+        }>;
     }[];
 };
 export type IndexedSubject = {
@@ -76,6 +88,8 @@ export type IndexedSubject = {
     labels: LanguageValue[];
     aliases: LanguageValue[];
     descriptions: LanguageValue[];
+    /** Optional bounded, current public document text projection. Each document remains independent. */
+    documentText?: DocumentTextProjection;
     /**
      * Adopted Global statement values visible at snapshot build time; an item value is the target subject id.
      * Descriptive statements are unchanged. Outgoing relations include at most MAX_RELATION_FACET_VALUES
@@ -94,6 +108,8 @@ export type SubjectSnapshot = {
     partition: number;
     position: bigint;
     subjects: IndexedSubject[];
+    /** Complete creator projections are attached only by the private index-input read. */
+    creditSearch?: ReadonlyMap<string, CreditSearchProjection>;
 };
 /** A page retains its source cuts and complete per-pool authorization until disclosure finishes. */
 export type RetainedRelationFacetPage = Readonly<{
@@ -107,6 +123,10 @@ export type RetainedRelationFacetPage = Readonly<{
 export interface SubjectSource {
     /** Unknown ids are omitted. Every id must route to `partition`. */
     read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+    /** Index-only complete input. Ordinary reader observations must not pay for creator projection. */
+    readForIndex?(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+    /** Exact current native support for one bounded credited-name projection. */
+    creditSearch?: CreditSearchSource;
     /** Visible, non-redirected subjects of the partition and its position, in one snapshot. */
     count(partition: number): Promise<{
         position: bigint;
@@ -130,7 +150,9 @@ export interface SubjectSource {
     prepareRelationFacets?(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage>;
     matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
     /** Read the complete adopted Global exampleOfWork selection for current visible releases. */
-    readCompleteWorkLinks?(partition: number, ids: readonly string[]): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
+    readCompleteWorkLinks?(partition: number, ids: readonly string[], options?: Readonly<{
+        reserve?: (reservation: CompleteWorkLinkReservation) => void;
+    }>): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
 }
 /** Active public Collection counts for subjects in one partition. Only the count is read. */
 export interface SubjectListingSource {

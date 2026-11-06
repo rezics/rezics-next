@@ -331,7 +331,7 @@ export declare const IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK: Readonly<{
 /** The Accounts subdeclaration is deliberately separate from Semantic's complete
  * original declaration. Its missing operands cannot be added as zero or as null
  * totals. Per-call terms below compose cumulatively in the ONE original ledger. */
-export declare const IDENTITY_HISTORY_ACCOUNTS_DECLARATION: Readonly<{
+export declare function IDENTITY_HISTORY_ACCOUNTS_DECLARATION(): Readonly<{
     version: 1;
     interface: "withPrepaidAgentIdentityHistoryUnit";
     sourceReceiver: "withPrepaidIdentitySourceConsumerMaintenance";

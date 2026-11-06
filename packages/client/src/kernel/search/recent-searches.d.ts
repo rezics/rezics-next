@@ -39,7 +39,7 @@ export type RecentDependencies = {
     routeKey: Uint8Array;
     clock?: () => Date;
 };
-declare const item: import("typebox").TObject<{
+declare function item(): import("typebox").TObject<{
     id: import("typebox").TString;
     lastUsed: import("typebox").TString;
     revision: import("typebox").TInteger;
@@ -101,7 +101,7 @@ declare const item: import("typebox").TObject<{
         }>, import("typebox").TNull]>;
     }>, import("typebox").TNull]>;
 }>;
-export type RecentSearch = Static<typeof item>;
+export type RecentSearch = Static<ReturnType<typeof item>>;
 export declare const RECENT_CHANGED = "com.rezics.search.recent-changed.v1";
 export declare const RECENT_DAYS = 90;
 /** No retained labels or URLs: each bounded page uses the current native owner reads. */
@@ -716,7 +716,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -730,7 +730,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -744,7 +744,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -758,7 +758,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -772,7 +772,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -786,7 +786,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         429: import("typebox").TObject<{
@@ -800,7 +800,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -814,7 +814,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         200: import("typebox").TObject<{
@@ -1082,7 +1082,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -1096,7 +1096,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             403: import("typebox").TObject<{
@@ -1110,7 +1110,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -1124,7 +1124,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             409: import("typebox").TObject<{
@@ -1138,7 +1138,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             422: import("typebox").TObject<{
@@ -1152,7 +1152,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             429: import("typebox").TObject<{
@@ -1166,7 +1166,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -1180,7 +1180,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             200: import("typebox").TObject<{
@@ -1299,7 +1299,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -1313,7 +1313,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -1327,7 +1327,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -1341,7 +1341,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -1355,7 +1355,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -1369,7 +1369,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         429: import("typebox").TObject<{
@@ -1383,7 +1383,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -1397,7 +1397,7 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         200: import("typebox").TObject<{

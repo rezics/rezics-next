@@ -107,14 +107,14 @@ export declare function lockAgentIdentityHistoryHandoff(tx: CommandTransaction, 
     state: 'guarded';
     handoff: import("../semantic/identity-source-consumer-custody.ts").IdentitySourceHistoryHandoff;
 }>>;
-export declare const AGENT_IDENTITY_HISTORY_GUARD_COST: Readonly<{
+export declare function AGENT_IDENTITY_HISTORY_GUARD_COST(): Readonly<{
     rows: number;
     points: number;
     statements: number;
     bytes: number;
     engineRequests: number;
 }>;
-export declare const AGENT_IDENTITY_HISTORY_ABSENCE_COST: Readonly<{
+export declare function AGENT_IDENTITY_HISTORY_ABSENCE_COST(): Readonly<{
     rows: number;
     points: number;
     statements: number;

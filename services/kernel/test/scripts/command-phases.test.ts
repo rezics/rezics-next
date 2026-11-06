@@ -139,7 +139,7 @@ test('admitted typecheck uses one throwaway database for compiler work and recor
   const names = readFileSync(phases, 'utf8')
     .trim()
     .split('\n')
-    .map((line) => line.split('\t')[0]);
+    .map((line) => line.split('\t')[0]!);
   expect(names).toEqual([
     'database-image',
     'database-image',

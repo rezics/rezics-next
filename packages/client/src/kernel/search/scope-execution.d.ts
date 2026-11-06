@@ -1,3 +1,5 @@
+export { ScopeWork, scopeAllowance, scopeWorkAxes, zeroScopeWork } from './scope-work.ts';
+import { ScopeWork } from './scope-work.ts';
 import type { Pool } from 'pg';
 import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
@@ -8,23 +10,7 @@ import { type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import type { ScopeEvaluationProgress, ScopeEvaluationReservation } from './scope-source.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { type MembersExecution } from './scope-members-work.ts';
-export declare const scopeWorkAxes: readonly ['candidateKeys', 'nativeRows', 'identityMetadataRows', 'emptySeeks', 'nativePoints', 'witnessKeys', 'statements', 'bytes'];
-export declare function zeroScopeWork(): WorkDimensions;
-/** Compatibility ceilings are independent of the candidate reservation. They never grow on refill. */
-export declare function scopeAllowance(keys: number, reservationId: string, remaining?: WorkDimensions): WorkAllowance;
-export declare class ScopeWork {
-    private spent;
-    private readonly root;
-    constructor(root: WorkAllowance);
-    remaining(): WorkAllowance;
-    consume(used: WorkDimensions): void;
-    receipt(): WorkReceipt;
-    native(receipt: WorkReceipt): void;
-    identity(work: IdentityScopeWork): void;
-    public(cost: PublicFilterCost): void;
-    leaf(used: LeafWork): void;
-    leafBudget(): LeafWork | null;
-}
+export type { WorkAllowance, WorkDimensions, WorkReceipt, IdentityScopeWork, PublicFilterCost, LeafWork };
 /** Retained raw native position only; it contains no cached verdict or authority. */
 export type ScopeLeafResume = Readonly<{
     progress: ScopeEvaluationProgress;

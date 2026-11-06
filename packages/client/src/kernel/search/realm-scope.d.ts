@@ -40,7 +40,7 @@ export declare function createRealmScopeSource(input: {
 }): {
     /** Bounded anchors cover every boolean branch before separate finite source frontiers. */
     realms(scope: PreparedRealmScope): readonly string[];
-    prepare(filter: DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
+    prepare(filter: DiscoveryFilterDocument, allowance: WorkAllowance, expectedReleaseDigest?: string): Promise<Readonly<{
         scope: PreparedRealmScope;
         work: WorkReceipt;
     }>>;

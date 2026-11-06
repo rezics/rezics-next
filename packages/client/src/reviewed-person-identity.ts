@@ -1,26 +1,23 @@
 import type { KernelClient, SubjectRead } from './index.ts';
 
 /** Semantic's coherent observation of an original Person, never a followed canonical read. */
-export type ReviewedPersonEndpoint = {
-  subject: string;
-  revision: number;
-  securityRevision: string;
-  source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
-  externalId: string;
-  claimTransactionId: string;
-  property: 'wdt:P6298' | 'wdt:P3180';
-  value: string;
-};
+export type ReviewedPersonEndpoint = NonNullable<SubjectRead['reviewedIdentity']>;
 export type ReviewedPersonSource = Pick<ReviewedPersonEndpoint, 'source' | 'externalId'>;
-export type ReviewedPersonRead = SubjectRead & { reviewedIdentity?: ReviewedPersonEndpoint | null };
-export type ReviewedPersonMerge = {
+export type ReviewedPersonRead = SubjectRead;
+type MountedMerge = Parameters<KernelClient['subjects']['$merge']['post']>[0];
+export type ReviewedPersonMerge = Omit<MountedMerge, 'subjects' | 'expectedIdentity'> & {
   subjects: [string, string];
-  expectedIdentity: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
+  expectedIdentity: NonNullable<MountedMerge['expectedIdentity']> & {
+    endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint];
+  };
 };
-export type ReviewedPersonAdmission = { operation: { id: string } };
-export type ReviewedPersonOperation =
-  | { id: string; done: false }
-  | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } };
+export type ReviewedPersonAdmission = NonNullable<
+  Awaited<ReturnType<KernelClient['subjects']['$merge']['post']>>['data']
+>;
+
+export type ReviewedPersonOperation = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjectIdentityOperations']>['get']>>['data']
+>['operation'];
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
@@ -88,7 +85,7 @@ export function reviewedPersonMergeInput(value: unknown): ReviewedPersonMerge {
   };
 }
 
-/** The released native routes retain their generated request and response types. */
+/** Transport derives directly from the mounted Semantic producer. */
 export function reviewedPersonRequests(client: KernelClient) {
   return {
     read(

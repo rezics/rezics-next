@@ -125,12 +125,6 @@ function declarationPath(sourcePath: string, specifier: string): string {
   return `${path}.d.ts`;
 }
 
-/** The environment the client compiler runs in: the caller's, minus its Reylo project. */
-export function clientCompilerEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const { REYLO_CONFIG: _project, ...rest } = environment;
-  return rest;
-}
-
 export function clientDeclarations(
   kernelDirectory = KERNEL,
   options: { repositoryRoot?: string; cacheDirectory?: string; compiler?: string } = {},
@@ -174,8 +168,8 @@ export function clientDeclarations(
   );
   const result = spawnSync(compiler, ['-p', compilerConfig, '--runExternalCode'], {
     cwd: kernelDirectory,
-    // The Reylo project file's directory sets each statement's file tag, so the caller's project must not leak in.
-    env: clientCompilerEnvironment(process.env),
+    // Use the same prepared SQL analysis as the complete-input compiler, including database-free cache reads.
+    env: process.env,
     encoding: 'utf8',
   });
   if (result.error) throw result.error;
@@ -220,6 +214,7 @@ export function committedDeclarations(): Map<string, string> {
 
 if (import.meta.main) {
   const declarations = clientDeclarations();
+  console.log(`Kernel client declaration closure: ${declarations.size} members`);
   rmSync(CLIENT_DECLARATIONS, { recursive: true, force: true });
   mkdirSync(CLIENT_DECLARATIONS, { recursive: true });
   for (const [key, content] of declarations) {

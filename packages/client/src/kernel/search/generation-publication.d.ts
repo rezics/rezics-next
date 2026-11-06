@@ -44,5 +44,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
     writerGuard: SearchWriterPublicationGuard;
     registry?: DiscoveryRegistry;
 }>;
+/** Preserve released projection metadata when publishing the durable activation timestamp. */
+export declare function publishSubjectActivationMetadata(search: OpenSearch, index: string, activatedAt: string): Promise<void>;
 /** A single native publication port for worker and CLI composition. It owns no supplied resources. */
 export declare function createSearchGenerationPublication(config: SearchGenerationPublicationConfig): SearchGenerationPublication;

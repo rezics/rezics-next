@@ -1,4 +1,5 @@
 import { type Pool, type PoolClient } from 'pg';
+import { type Bound } from '@rezics/bounds';
 import { type OperationalTransaction } from '../command/operational.ts';
 import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import { type Access, type Actor } from '../request/access.ts';
@@ -76,7 +77,19 @@ export type NativeCollectionProbe = ProbeEvidence & {
     work: WorkReceipt;
 };
 import type { CollectionOutputPublication } from './collection-source-output.ts';
+export type NativeCollectionOrdinalPageBound = Readonly<{
+    limit: number;
+    requestBytes: number;
+    resultBytes: number;
+    /** Complete legacy Source footprint, including request bindings and the result projection ceiling. */
+    work: WorkDimensions;
+    /** Projection-only dimensions used by the shared native SQL dispatcher. */
+    projection: Readonly<Partial<WorkDimensions>>;
+}>;
+/** The single native ordinal statement's literal and schema-width bounds. */
+export declare function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound;
 export declare const nativeCollectionPartitionMetadataSQL = "SELECT partition_no AS \"partitionNo\", write_state AS \"writeState\", epoch, position::text AS position FROM core.partition WHERE partition_no=$1";
+export declare function COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(): Bound;
 export declare function nativeCollectionFootprint(sql: string, values: readonly unknown[], work?: NativeCollectionWork): WorkDimensions | undefined;
 export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options): Promise<{
     metadata: Readonly<Ref & {
@@ -166,6 +179,14 @@ export declare function readNativeCollectionMetadataWithWork(pool: Pool, ref: Re
     }> | null;
 } & {
     work: WorkReceipt;
+}>;
+/** Selected Source adapter: exact metadata statements and multiplicity, with no allowance or work ledger. */
+export declare function readNativeCollectionMetadataForWork(pool: Pool, ref: Ref, options: Readonly<{
+    deadline: number;
+    tx: OperationalTransaction;
+    working?: boolean;
+}>): Promise<{
+    metadata: NativeCollectionMetadata | null;
 }>;
 /** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
 export declare function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options): Promise<{

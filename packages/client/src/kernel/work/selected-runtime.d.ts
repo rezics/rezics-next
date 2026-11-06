@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { type OperationalOptions, type OperationalTransaction } from '../command/operational.ts';
+import { type ExecutionTransaction, type SelectedExecutionPhase, type WorkExecutionOriginal, type WorkExecutionPort } from '../command/execution-contract.ts';
 import { type WorkClient, type WorkIntent } from './client.ts';
 import { type SelectedCost } from './selected-runtime-cost.ts';
 import { type SelectedEpisode, type SelectedLocator, type SelectedOutcome } from '../history/operational-work-selected.ts';
@@ -22,6 +23,17 @@ export declare class SelectedRuntimeUnavailable extends Error {
     readonly gap: string;
     constructor(gap: string);
 }
+export declare class WorkExecutionUnavailable extends Error {
+    readonly gap: string;
+    constructor(gap: string);
+}
+/** Work creates this opaque original once; retries retain its pool, client and absolute deadline. */
+export declare function openWorkExecutionOriginal(pool: Pool, deadline: number, client: WorkClient): WorkExecutionOriginal;
+/** Executor entry claims the exact original before authorization, checkout or BEGIN. */
+export declare function claimWorkExecutionOriginal(original: WorkExecutionOriginal, pool: Pool, client: WorkClient, deadline: number): WorkExecutionOriginal;
+export declare function debitWorkExecutionAttempt(original: WorkExecutionOriginal): void;
+/** Work owner check used by History's native transfer adapter. */
+export declare function assertWorkExecutionOriginal(tx: ExecutionTransaction, original: WorkExecutionOriginal): void;
 /** Reviewed literal native statements, each with its complete child declaration and multiplicity.
  * This is a dispatch description, never a Source or user authorization capability. */
 export type SelectedNativeDeclaration = Readonly<{
@@ -45,10 +57,7 @@ export type SelectedRuntime = Readonly<{
     /** Trusted Work registration. One invocation is ONE episode; cleanup has separate authority. */
     registerMembersStep<R>(body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>, children?: SelectedChildren): (locator: SelectedLocator) => Promise<R>;
 }>;
-declare const phase: unique symbol;
-export type SelectedOperationalPhase = {
-    readonly [phase]: true;
-};
+export type SelectedOperationalPhase = SelectedExecutionPhase;
 /** Same executor enqueue, exactly once; SDK costs are paid independently of foreign native SQL. */
 export declare function selectedOperationalEnqueue(tx: OperationalTransaction, intent: WorkIntent): ((created: boolean) => void) | undefined;
 /** History can dispatch owned SQL only with the exact private identity of this live transaction. */
@@ -66,4 +75,5 @@ export declare function openSelectedOperationalPhase(pool: Pool, options: Operat
 };
 /** Trusted composition only. The genuine client binding is installed solely by createWorkClient. */
 export declare function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRuntime;
-export {};
+/** Work-owned adapter installed on each native WorkClient by the Kernel composition roots. */
+export declare function workExecutionPort(): WorkExecutionPort;

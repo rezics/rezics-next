@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
+import type { SourceVocabularyBindings } from '../../../../packages/conversion/src/source-vocabulary.ts';
 import {
   appearanceRoleTaxonomy,
   appearanceRoleConceptUri,

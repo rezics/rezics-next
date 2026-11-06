@@ -1,3 +1,4 @@
+import type { AccessWorkAccounting } from './work.ts';
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { type Exposure } from './gates/declaration.ts';
@@ -19,7 +20,7 @@ export type ViewerActionResource = Readonly<{
     }): Promise<ViewerActionResource>;
     /** Additional native state/target constraints; missing action keys preserve the mounted catalogue. */
     actionAvailability?(client: AccessClient, ids: readonly string[], actor: Actor, time: import('../command/command.ts').AuthoritativeTime): Promise<Readonly<Record<string, Readonly<Record<string, boolean>>>>>;
-    read(client: AccessClient, ids: readonly string[], at: string, time?: AuthoritativeTime): Promise<Readonly<Record<string, boolean>>>;
+    read(client: AccessClient, ids: readonly string[], at: string, time?: AuthoritativeTime, work?: AccessWorkAccounting): Promise<Readonly<Record<string, boolean>>>;
 }>;
 export type ViewerActionResources = ReadonlyMap<string, ViewerActionResource>;
 export type ViewerActionBinding = Readonly<{
@@ -47,6 +48,7 @@ export declare function readViewerActions(deps: {
     resources: ViewerActionResources;
     bindings: ViewerActionBindings;
     clock: () => Date;
+    work?: AccessWorkAccounting;
 }, actor: Actor, refs: readonly Reference[], deadline: number): Promise<{
     resources: ({
         type: string;
@@ -194,7 +196,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -208,7 +210,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -222,7 +224,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };
@@ -418,7 +420,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -432,7 +434,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -446,7 +448,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
         };
@@ -595,7 +597,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -609,7 +611,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -623,7 +625,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
     };

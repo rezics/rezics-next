@@ -1,28 +1,12 @@
 import { MIXED_DISCOVERY_DOCUMENT_FORMAT, type DiscoveryIndexAction, type DiscoveryIndexDefinition, type DiscoveryKey, type DiscoveryUnionKey, type DiscoveryRegistry, type DiscoverySnapshot, type IndexedDiscoveryDocument } from './discovery.ts';
+import type { DiscoveryMetadataRecord, DiscoveryOwnerKey } from './discovery-api.ts';
 export type MixedDiscoveryDocumentCodec = 'mixed-public-v1' | 'mixed-calendar-v1';
 /** Bind each physical mixed mapping to exactly one writer codec. */
 export declare function mixedDiscoveryDocumentCodec(mappings: unknown): MixedDiscoveryDocumentCodec | undefined;
 /** Local codec seam until the closed DiscoveryKey/snapshot union owns these kinds. */
-export type SecondScopeDiscoveryKey = {
-    owner: 'commerce';
-    kind: 'collection';
-    route: number;
-    id: string;
-} | {
-    owner: 'content';
-    kind: 'review' | 'space';
-    route: number;
-    id: string;
-};
+export type SecondScopeDiscoveryKey = DiscoveryOwnerKey;
 export type DiscoveryDocumentKey = DiscoveryKey | SecondScopeDiscoveryKey;
-export type SecondScopeDiscoveryRecord = {
-    key: SecondScopeDiscoveryKey;
-    revision: bigint;
-    sourceVersion: string | null;
-    names: readonly string[];
-    descriptions: readonly string[];
-    nameSort: string | null;
-};
+export type SecondScopeDiscoveryRecord = DiscoveryMetadataRecord;
 export type SecondScopeDiscoveryObservation = {
     owner: 'commerce' | 'content';
     snapshot: {
