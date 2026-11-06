@@ -92,7 +92,7 @@ test('Home Collection cards show the installed curator, cover, owner presentatio
   expect(html).toContain('data-collection-cover-source="owner"');
   expect(html).toContain(`data-collection-member-id="${memberId}"`);
   expect(html).toMatch(new RegExp(`href="/en/subjects/${subjectId}/[^"]*\\?via=[^"]*${memberId}[^"]*"`));
-  expect(html).toContain('data-collection-kind="schema:Book"');
+  expect(html).toContain('data-home-collection-kind="schema:Book"');
   expect(html).toContain(m.library_collection_item_count({ count: 4 }, { locale: 'en' }));
   expect(html).toContain(m.discovery_collection_truncated({}, { locale: 'en' }));
   expect(html).not.toContain(m.home_owner_curator_unavailable({}, { locale: 'en' }));
@@ -137,7 +137,7 @@ test('an unavailable curator, an unnamed curator and a dynamic Collection keep t
   expect(withheld).toContain('data-home-curator-state="unavailable"');
   expect(withheld).toContain('data-home-curator-reason="withheld"');
   expect(withheld).toContain(m.discovery_collection_curator_unavailable({}, { locale: 'en' }));
-  expect(withheld).toContain('data-collection-kind="mixed"');
+  expect(withheld).toContain('data-home-collection-kind="mixed"');
   expect(withheld).not.toContain('href="/en/@ada"');
 
   const unnamed = render({
@@ -155,7 +155,7 @@ test('an unavailable curator, an unnamed curator and a dynamic Collection keep t
     coverSource: 'pending',
     preview: { state: 'empty' },
   } satisfies CollectionCard);
-  expect(dynamic).toContain('data-collection-presentation="dynamic"');
+  expect(dynamic).toContain('data-home-collection-presentation="dynamic"');
   expect(dynamic).toContain('data-collection-cover-source="pending"');
   expect(dynamic).not.toContain('data-collection-member-id');
 });

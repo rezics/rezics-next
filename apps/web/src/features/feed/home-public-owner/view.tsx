@@ -3,7 +3,6 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
 import { collectionComparisonHref } from '../../../library/collection-comparison/model';
-import { CollectionPresentationSummary } from '../../../library/showcase-collection/presentation';
 import { accountHref } from '../../../subject/subject-href';
 import type { FeedItem } from '../../pages/home-feed-read';
 import { homeFeedDestination, homeFeedRealmDestination, homeFeedTitle } from '../../pages/home-feed-destination';
@@ -139,10 +138,32 @@ function HomeCollectionPreview({
   );
 }
 
-/** Reuses Library's public presentation and preview vocabulary for the installed Collection card. */
-function HomeCollectionContext({ card, locale, href }: { card: CollectionCard; locale: string; href: string }) {
+/** Library's owner-presentation badge and kind, as one feed line; the Library help copy stays on Library. */
+function HomeCollectionPresentation({ card, locale }: { card: CollectionCard; locale: string }) {
   const options = { locale: locale as Locale };
   const kind = card.presentationKindSource === 'owner' ? card.presentationKind : null;
+  const dynamic = card.membershipKind === 'dynamic';
+  return (
+    <p
+      className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm"
+      data-home-collection-presentation={dynamic ? 'dynamic' : 'ordered'}
+    >
+      <span className="rounded-md bg-muted px-2 py-0.5">
+        {dynamic ? m.collection_presentation_dynamic({}, options) : m.collection_presentation_ordered({}, options)}
+      </span>
+      <span
+        className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]"
+        data-home-collection-kind={kind ?? 'mixed'}
+      >
+        {m.library_collection_kind({}, options)}: {kind ?? m.library_collection_mixed_label({}, options)}
+      </span>
+    </p>
+  );
+}
+
+/** The installed curator, owner presentation and preview states of one discovery Collection. */
+function HomeCollectionContext({ card, locale, href }: { card: CollectionCard; locale: string; href: string }) {
+  const options = { locale: locale as Locale };
   return (
     <div className="min-w-0 space-y-2">
       <HomeCollectionCurator curator={card.curator} locale={locale} />
@@ -151,7 +172,7 @@ function HomeCollectionContext({ card, locale, href }: { card: CollectionCard; l
           {m.library_collection_item_count({ count: card.memberCount }, options)}
         </p>
       ) : null}
-      <CollectionPresentationSummary kind={kind} dynamic={card.membershipKind === 'dynamic'} locale={locale} />
+      <HomeCollectionPresentation card={card} locale={locale} />
       <HomeCollectionPreview preview={card.preview} locale={locale} href={href} />
     </div>
   );

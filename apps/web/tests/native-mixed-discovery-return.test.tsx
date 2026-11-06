@@ -125,7 +125,8 @@ test('native Collection, review and Space cards keep their supplied context and 
   expect(collection).toContain('Reading shelf');
   expect(collection).toContain('Short novels.');
   expect(collection).toContain('/en/collections/01a1a000-0000-7000-8000-000000000821');
-  expect(collection).not.toContain('members');
+  expect(collection).not.toContain('data-collection-member-id');
+  expect(collection).toContain(m.discovery_collection_preview_unavailable({}, { locale: 'en' }));
   expect(review).toContain('Review');
   expect(review).toContain('A careful reread');
   expect(review).toContain('Current Reader');
@@ -137,7 +138,7 @@ test('native Collection, review and Space cards keep their supplied context and 
   expect(space).toContain('A quiet reading room.');
   expect(space).toContain('Atlas Realm');
   expect(space).toContain('/en/spaces/quiet-room');
-  expect(space).not.toContain('/realms/');
+  expect(space).toContain('/en/realms/01a1a000-0000-7000-8000-000000000826');
   const result = renderToStaticMarkup(
     <HomeFeed
       result={{
