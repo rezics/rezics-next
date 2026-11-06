@@ -12,10 +12,17 @@ const lifecycle = new NativeTestLifecycle('native private Library export restore
 const evidence = resolve(import.meta.dir, '../../../../.temp/private-library-archive-restore');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const messagesRoot = resolve(import.meta.dir, '../../messages');
-const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], {
-  cwd: resolve(import.meta.dir, '../../../..'),
-  encoding: 'utf8',
-}).stdout.trim();
+const repositoryRoot = resolve(import.meta.dir, '../../../..');
+
+function gitHead(): string {
+  const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], {
+    cwd: repositoryRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+  return result.stdout.toString().trim();
+}
 
 setDefaultTimeout(300_000);
 
@@ -511,7 +518,7 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     resolve(evidence, 'provenance.json'),
     JSON.stringify(
       {
-        sourceRevision,
+        sourceRevision: gitHead(),
         stack: { kernel: stack.kernelOrigin, web: stack.web },
         personas: { owner: 'alice', otherMember: 'bob' },
         seed: {

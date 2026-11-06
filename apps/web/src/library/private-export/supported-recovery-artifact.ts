@@ -149,7 +149,9 @@ export function projectArchiveForRecovery(bytes: Uint8Array, branch: RecoveryArc
 export function recoveryArchiveFile(file: File, branch: RecoveryArchiveBranch): Promise<File> {
   return file.arrayBuffer().then((buffer) => {
     const projected = projectArchiveForRecovery(new Uint8Array(buffer), branch);
-    return new File([projected], file.name, { type: file.type || 'application/json' });
+    const copy = new Uint8Array(projected.byteLength);
+    copy.set(projected);
+    return new File([copy.buffer as ArrayBuffer], file.name, { type: file.type || 'application/json' });
   });
 }
 

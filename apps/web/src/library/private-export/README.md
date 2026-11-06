@@ -75,8 +75,9 @@ cancellation coalesces activations; an uncertain acknowledgement retains the exa
 without a replacement capture. Only an admitted terminal result acknowledges disposition; expiry and native
 refusal remain distinct from cancellation. Restart requires an acknowledged disposition and deliberate action.
 
-Decision: pin export-to-restore with journey tests for owner-keyed completed-archive custody, original-archive
-restart, Collection readback and other-member denial; keep the existing named upload, review and result stories.
+Decision: pin export-to-restore with journey tests for owner-keyed completed-archive custody, exact original
+artifact bytes, opaque sequential cursors, original-intent retries, Collection readback and other-member denial;
+keep the existing named upload, review and result stories. Recovery destination labels are localized.
 Decision: keep downloaded V4 bytes unchanged; Collection recovery uploads the installed V1 envelope, and Entry and
 progress recovery upload the installed V3 envelope, because those native consumers refuse version 4.
 Decision: native Web fixture personas alice (owner) and bob (other member) plus actual Kernel commands prove the

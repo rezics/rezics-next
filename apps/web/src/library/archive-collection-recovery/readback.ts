@@ -36,7 +36,7 @@ export function projectReceivingCollection(
 ): ReceivingCollectionReadback | null {
   if (!record(collection) || typeof collection.id !== 'string' || typeof collection.title !== 'string') return null;
   if (!('memberCount' in collection) || typeof collection.memberCount !== 'number') return null;
-  if (!record(page) || !Array.isArray(page.members)) return null;
+  if (!record(page) || !('members' in page) || !Array.isArray(page.members)) return null;
   const members: ReceivingMemberReadback[] = [];
   for (const row of page.members) {
     if (!record(row) || typeof row.id !== 'string') return null;
@@ -59,6 +59,6 @@ export function projectReceivingCollection(
     visibility,
     memberCount: collection.memberCount,
     members,
-    next: typeof page.next === 'string' ? page.next : null,
+    next: 'next' in page && typeof page.next === 'string' ? page.next : null,
   };
 }

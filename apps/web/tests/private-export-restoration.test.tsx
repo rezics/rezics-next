@@ -46,17 +46,20 @@ test('a completed export stays with its owner and another account cannot inherit
   expect(completedArchiveFor(owner)).toBeNull();
   expect(completedArchiveFor(other)).toBeNull();
 
+  const source = new Uint8Array(bytes);
   holdCompletedArchive(
     owner,
-    { filename: 'library.json', mediaType: 'application/json', bytes },
+    { filename: 'library.json', mediaType: 'application/json', bytes: source },
     {
       exportId: '00000000-0000-4000-8000-000000000002',
       capturedAt: '2026-11-06T00:00:00.000Z',
       version: 1,
     },
   );
+  source.fill(0);
   const held = completedArchiveFor(owner)!;
-  expect(archiveTextFromCustody(held)).toContain('"records"');
+  expect([...held.bytes]).toEqual([...bytes]);
+  expect(archiveTextFromCustody(held)).toBe(new TextDecoder().decode(bytes));
   expect(archiveBase64FromCustody(held)).toBe(btoa(String.fromCharCode(...bytes)));
   expect(archiveFileFromCustody(held).name).toBe('library.json');
   bindArchiveCustodyOwner(other);
@@ -136,7 +139,17 @@ test('a completed V4 export projects to installed Collection V1 and Entry/progre
   expect(progress.manifest.coverage).toBe(restored.manifest.coverage);
   const already = projectArchiveForRecovery(bytes, 'collections');
   expect(projectArchiveForRecovery(already, 'collections')).toEqual(already);
-  expect(new TextDecoder().decode(bytes)).toContain('"version":4');
+  holdCompletedArchive(
+    owner,
+    { filename: 'library-v4.json', mediaType: 'application/json', bytes },
+    { exportId, capturedAt, version: 4 },
+  );
+  const held = completedArchiveFor(owner)!;
+  expect([...held.bytes]).toEqual([...bytes]);
+  expect(new TextDecoder().decode(held.bytes)).toContain('"version":4');
+  expect(JSON.parse(new TextDecoder().decode(projectArchiveForRecovery(held.bytes, 'collections'))).manifest.version).toBe(
+    1,
+  );
   const broken = new TextEncoder().encode('{not-json');
   expect(projectArchiveForRecovery(broken, 'collections')).toEqual(broken);
 });

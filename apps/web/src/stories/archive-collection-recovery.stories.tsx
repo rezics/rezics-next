@@ -269,8 +269,10 @@ export const UnsupportedCollectionsRemainVisible: Story = {
           ],
         }}
         busy={false}
+        canPrevious={false}
         onChoose={() => undefined}
         onFirst={() => undefined}
+        onPrevious={() => undefined}
         onNext={() => undefined}
       />
     </div>
