@@ -340,6 +340,7 @@ for (const state of ['missing', 'deleted'] as const)
       page.resource.type,
       String(page.resource.route),
       managerId,
+      managerId,
       readerId,
       page.grants[0]!.valid,
     ]);
@@ -405,6 +406,9 @@ test('actual page confirmation and uncertain retry send byte-identical original 
   const canvas = within(host);
   expect(canvas.getByRole('status').textContent).toBe(m.access_uncertain());
   expect(canvas.getByRole('status').closest('details')).toBeNull();
+  const retained = host.querySelector('pre')!;
+  expect(JSON.parse(retained.textContent!)).toEqual(commands[0]!.input);
+  expect(retained.textContent).not.toContain('Bearer original');
   expect(canvas.getByRole('heading', { level: 3 }).textContent).toBe('Aki');
   expect(read.mock.calls).toHaveLength(2);
   await details(canvas.getByRole('heading', { level: 3 }).closest('li')!, [
@@ -430,4 +434,42 @@ test('actual page confirmation and uncertain retry send byte-identical original 
   expect(effects).toBe(1);
   expect(canvas.getByRole('status').textContent).toBe(m.access_saved());
   expect(canvas.queryByRole('button', { name: m.access_retry_operation() })).toBeNull();
+});
+
+test('recoverable admission retains transfer text but retires resolved identity and confirmation', async () => {
+  const page = realm();
+  let current: AccessState = { status: 'unavailable' };
+  const io = { ...ioFor(page), read: mock(async () => structuredClone(current)) };
+  await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />);
+  await selectTransfer();
+  const canvas = within(host);
+  await act(async () => user.type(canvas.getByLabelText(m.access_handle()), 'aki'));
+  await act(async () => user.click(canvas.getByRole('button', { name: m.access_find_account() })));
+  expect(host.textContent).toContain('@aki');
+  await act(async () => user.click(canvas.getByRole('button', { name: m.access_reload() })));
+  expect(host.querySelector('#owner-transfer-handle')).toBeNull();
+  expect(host.textContent).not.toContain('@aki');
+  current = { status: 'ready', page: structuredClone(page) };
+  await act(async () => user.click(canvas.getByRole('button', { name: m.access_reload() })));
+  expect((canvas.getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('aki');
+  expect(canvas.getByRole('button', { name: m.access_transfer_owner(), exact: true }).hasAttribute('disabled')).toBe(
+    true,
+  );
+  expect(io.lookup.mock.calls).toHaveLength(1);
+  expect(io.transfer.mock.calls).toHaveLength(0);
+});
+
+test('supplied resource identity leads the page without any identity read', async () => {
+  const page = structuredClone(snapshot);
+  page.identities.push({
+    ...activeIdentity(readerId),
+    id: page.resource.id,
+    displayName: 'Shared reading',
+    handle: 'shared-reading',
+  });
+  const io = ioFor(page);
+  await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />);
+  expect(within(host).getByRole('heading', { name: 'Shared reading (@shared-reading)' })).toBeTruthy();
+  expect(io.read.mock.calls).toHaveLength(0);
+  expect(io.lookup.mock.calls).toHaveLength(0);
 });

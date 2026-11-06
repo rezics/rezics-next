@@ -71,6 +71,8 @@ export type Target =
   | { kind: 'offer'; offerId: string }
   | { kind: 'order'; orderId: string; checkoutReturn?: boolean }
   | { kind: 'security' }
+  | { kind: 'preferences' }
+  | { kind: 'deletion' }
   | { kind: 'thread'; threadId: string };
 
 /** Observations only: IDs are parsed from the actual rendered links/controls. */
@@ -133,6 +135,10 @@ export interface AuthVisit extends Visit {
   responses: Response[];
   session: { accountId: string | null; freshAuthentication: boolean; websiteConsent: boolean };
 }
+export type MediaAction =
+  | { kind: 'reserve'; containerId: string; image: PersonalFixture['image']; key: string }
+  | { kind: 'upload'; id: string; image: PersonalFixture['image'] }
+  | { kind: 'read'; id: string };
 export interface WebPersonalDriver {
   close(): Promise<void>;
   provision(data: unknown): Promise<PersonalFixture>;
@@ -149,7 +155,8 @@ export interface WebPersonalDriver {
    * consent in Auth's security settings, where the website's product session is
    * listed, and returns to the web target; step-up confirms the
    * stale session at Auth; sign-out ends both the website and Auth sessions.
-   * Preserve the exact requested web return target through the redirect chain.
+   * Preserve the requested web sign-in target. Sign-out uses the canonical Web home;
+   * security step-up resumes on the Auth-owned security page.
    * A refused sign-in still submits the correct fixture password through the served
    * Auth form. Return its /signin response in responses, the current Auth page and
    * observed session state (accountId null, freshAuthentication/websiteConsent false
@@ -177,6 +184,10 @@ export interface WebPersonalDriver {
   ban(persona: 'alice'): Promise<Response>;
   /** Download exact served media/receipt URL over HTTP with this persona's cookies. */
   download(persona: Persona, href: string): Promise<Response>;
+  /** Real shared BFF HTTP with this browser's cookies and its rendered CSRF token.
+   * PUT streams the real image and performs native completion; no synthetic /complete route.
+   * Original HTTP responses are returned, including refusals after credential retirement. */
+  media(persona: Persona, action: MediaAction): Promise<Response>;
   /** Hold native payment delivery until explicitly released; checkout redirects settle nothing. */
   payment(orderId: string, outcome: 'paid' | 'failed'): Promise<void>;
   settle(): Promise<void>;

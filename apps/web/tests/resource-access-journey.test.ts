@@ -30,7 +30,7 @@ test('generated grant transports use exact target, current authority, native com
       });
       if (request.method === 'GET') return Response.json(snapshot);
       if (++writes === 1) throw new Error('Lost response');
-      return Response.json({ grant: change });
+      return Response.json({ grant: { ...change, resource: { id: resourceId, route: 1 } } });
     }) as typeof fetch,
   });
   const recovery = new AccessRecovery(

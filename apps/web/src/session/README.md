@@ -64,3 +64,7 @@ Decision: public catalogue inspect and credit inspection read the prepared sessi
 `cachedBrowserSession`, which never starts a session fetch. An absent cache is unknown, a replaced successful entry
 is the next read, and malformed or signed-out data never admits a subject. `tests/session-browser-cache.test.ts`
 pins those states; the credit-inspection test covers the same cache through the mounted page.
+
+Decision: security and credential effects stay on the served Auth security page, entered through Web’s existing
+account menu. The personal driver follows that link and the native step-up return; it does not invent a Web security
+route. Media acceptance uses the same browser cookies and CSRF token as production BFF requests.
