@@ -655,7 +655,6 @@ export function websiteRoutes(input: {
             );
             // Native RFC 7009 cannot revoke self-contained JWTs. Our existing
             // Access floor does, after native confidential proof admission.
-            const revoked: unknown = await response.clone().json();
             if (
               invalidated &&
               response.status === 400 &&
