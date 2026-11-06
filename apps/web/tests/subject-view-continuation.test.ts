@@ -1,6 +1,5 @@
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { join } from 'node:path';
 import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -222,15 +221,13 @@ const kernel = Bun.serve({
     return Response.json(page);
   },
 });
-let server: ChildProcess | undefined;
-let originPromise: Promise<string> | undefined;
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
   started ??= startDevServer({
     env: {
-      KERNEL_ORIGIN: kernel.url.origin, PUBLIC_ORIGIN: origin,
+      KERNEL_ORIGIN: kernel.url.origin,
     },
     warmUpPaths: [],
   }).then((running) => {
@@ -239,12 +236,9 @@ function site(): Promise<string> {
   });
   return started;
 }
-afterAll(() => {
+afterAll(async () => {
   kernel.stop(true);
-  if (server?.pid)
-    try {
-      process.kill(-server.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 async function viewAddress(id: string, view: View) {
   const body = await (await documentFake(new Request(`https://kernel.invalid/v1/subjects/${id}`))).json();

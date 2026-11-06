@@ -181,7 +181,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let teardownStarted = false;
 
 // The documented command, pointed at the fake through the environment it reads in development.
@@ -192,7 +191,6 @@ function site(): Promise<string> {
   started ??= startDevServer({
     env: {
       KERNEL_ORIGIN: fake.url.origin,
-      PUBLIC_ORIGIN: origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
       WEBSITE_CLIENT_ID: clientId,
       WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),

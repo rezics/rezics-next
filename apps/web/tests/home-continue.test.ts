@@ -516,7 +516,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-
 const browsers = new Set<Browser>();
 const contexts = new Set<BrowserContext>();
 const browserClosures = new WeakMap<Browser, Promise<void>>();

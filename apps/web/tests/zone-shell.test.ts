@@ -24,7 +24,6 @@ const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const recoveringZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e07';
 const revokedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08';
 
-
 let browser: Browser | undefined;
 
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;

@@ -425,7 +425,6 @@ const fake = Bun.serve({
   },
 });
 
-
 let browser: Browser | undefined;
 
 // The documented command, pointed at the fake through the environment it reads in development.
@@ -551,12 +550,7 @@ function links(html: string) {
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await server?.stop();
 });
 
 test(

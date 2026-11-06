@@ -163,7 +163,6 @@ const kernel = Bun.serve({
   fetch: () => json({ error: 'not_found' }, 404),
 });
 
-
 type ResourceScope = 'suite' | 'test';
 type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
 type ResourceLease<T> = OwnedResource & { value: Promise<T> };
@@ -257,7 +256,6 @@ function site(): Promise<string> {
   started ??= startDevServer({
     env: {
       KERNEL_ORIGIN: kernel.url.origin,
-      PUBLIC_ORIGIN: origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
       WEBSITE_CLIENT_ID: clientId,
       WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),

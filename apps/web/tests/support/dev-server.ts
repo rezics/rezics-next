@@ -85,9 +85,7 @@ async function waitForFirstResponse(
   }
 }
 
-async function acquireSharedDevServer(
-  options: DevServerOptions,
-): Promise<DevServerHandle | undefined> {
+async function acquireSharedDevServer(options: DevServerOptions): Promise<DevServerHandle | undefined> {
   if (options.command || options.exclusive) return undefined;
   const record = readSharedDevServer();
   if (!record) return undefined;
@@ -164,12 +162,9 @@ async function acquireSharedDevServer(
       diagnostics: () => `shared ${sharedDevServerEnvName} ${record.origin} pid=${record.pid}`,
     };
   } catch (error) {
-    await withCleanup(
-      async () => {
-        throw error;
-      },
-      [{ label: 'shared dev-server fixture lease', run: stop, timeoutMs: 2000 }],
-    );
+    await withCleanup(async () => {
+      throw error;
+    }, [{ label: 'shared dev-server fixture lease', run: stop, timeoutMs: 2000 }]);
     throw error;
   }
 }

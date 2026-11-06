@@ -160,7 +160,7 @@ function cleanupSuite(): Promise<void> {
   return (cleanupPromise ??= (async () => {
     teardownStarted = true;
     serverStartupAbort?.abort();
-        const contextActions = [...ownedContexts].map((context, index) => ({
+    const contextActions = [...ownedContexts].map((context, index) => ({
       label: `browser context ${index + 1}`,
       run: () => closeContextAttempt(context),
       timeoutMs: 6000,
@@ -180,7 +180,7 @@ function cleanupSuite(): Promise<void> {
       [
         { label: 'Playwright browser', run: closeBrowser, timeoutMs: 7000 },
         { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
-        { label: 'Vite process group', run: () => viteCustody?.close(), timeoutMs: 8000 },
+        { label: 'Vite process group', run: () => server?.stop(), timeoutMs: 8000 },
       ],
     );
   })());
@@ -464,7 +464,6 @@ const fake = Bun.serve({
     return json(apiProblem(404, 'not_found'), 404, true);
   },
 });
-
 
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;

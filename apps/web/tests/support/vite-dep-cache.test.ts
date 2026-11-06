@@ -2,12 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  hashLockfile,
-  prepareViteDepCache,
-  viteDepCacheReadyName,
-  viteDepCacheRoot,
-} from './vite-dep-cache.ts';
+import { hashLockfile, prepareViteDepCache, viteDepCacheReadyName, viteDepCacheRoot } from './vite-dep-cache.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-vite-dep-cache-'));
 

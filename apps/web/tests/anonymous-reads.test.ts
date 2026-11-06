@@ -207,7 +207,6 @@ function reset() {
   credentialReads = 0;
 }
 
-
 function site(): Promise<string> {
   return (started ??= (async () => {
     try {

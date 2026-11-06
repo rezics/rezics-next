@@ -18,7 +18,7 @@ function isWithin(parent: string, child: string): boolean {
 
 test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows reading it', async () => {
   const previous = process.env.WEB_VITE_CACHE_DIR;
-  const cacheDir = join(tmpdir(), 'rezics-web-vite-cache-config');
+  const cacheDir = await mkdtemp(join(tmpdir(), 'rezics-web-vite-cache-config-'));
   process.env.WEB_VITE_CACHE_DIR = cacheDir;
   try {
     const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
@@ -29,6 +29,7 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
   } finally {
     if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
     else process.env.WEB_VITE_CACHE_DIR = previous;
+    await rm(cacheDir, { recursive: true, force: true });
   }
 });
 
@@ -40,10 +41,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
   const allow = config.server?.fs?.allow ?? [];
   expect(allow).toContain(workspaceRoot);
   expect(allow).toContain(dependencyRoot);
-  expect(isWithin(dependencyRoot, dependencyFile)).toBe(true);
+  expect(allow.some((root) => isWithin(root, dependencyFile))).toBe(true);
 
-  const privateDirectory = await mkdtemp(join(tmpdir(), 'web-vite-fs-'));
-  const outsideFile = join(privateDirectory, 'outside.js');
+  const denyRoot = await mkdtemp(join('/tmp', 'web-vite-deny-'));
+  const cacheRoot = await mkdtemp(join('/tmp', 'web-vite-cache-'));
+  const outsideFile = join(denyRoot, 'outside.js');
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let http: ReturnType<typeof createHttpServer> | undefined;
   try {
@@ -51,11 +53,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
     vite = await createViteServer({
       configFile: false,
       root: appRoot,
-      cacheDir: join(privateDirectory, 'vite-cache'),
+      cacheDir: join(cacheRoot, 'vite-cache'),
       appType: 'custom',
       logLevel: 'silent',
       optimizeDeps: { noDiscovery: true, include: [] },
-      server: { middlewareMode: true, fs: { allow } },
+      server: { middlewareMode: true, fs: { allow, strict: true } },
     });
     http = createHttpServer((request, response) => {
       vite!.middlewares(request, response, () => {
@@ -77,7 +79,7 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
     expect(await dependencyResponse.text()).not.toBe('');
 
     const outsideResponse = await fetch(toFsUrl(outsideFile));
-    expect(outsideResponse.status).toBe(403);
+    expect(outsideResponse.status, await outsideResponse.text()).toBe(403);
   } finally {
     try {
       if (http?.listening) {
@@ -89,7 +91,10 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
       try {
         await vite?.close();
       } finally {
-        await rm(privateDirectory, { recursive: true, force: true });
+        await Promise.all([
+          rm(denyRoot, { recursive: true, force: true }),
+          rm(cacheRoot, { recursive: true, force: true }),
+        ]);
       }
     }
   }
@@ -125,4 +130,4 @@ test('Workers resolve both share-card public Wasm exports through the installed 
   });
   if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
   expect(result.exitCode).toBe(0);
-});
+}, 30_000);

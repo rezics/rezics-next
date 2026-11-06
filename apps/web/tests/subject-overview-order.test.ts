@@ -1,7 +1,6 @@
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createElement } from 'react';
@@ -12,8 +11,6 @@ import recordedPage from '../src/kernel/recorded/subject-page.json';
 import recordedSubject from '../src/kernel/recorded/subject.json';
 import { platformRegistry, planReads, type CompositionDocument } from '@rezics/composition';
 import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
-import fixtures from '../src/kernel/fixtures.json';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 
 // The slot's server functions read the Worker environment, which a unit test has none of.
 mock.module('../src/library/subject-slot-actions.ts', () => ({
@@ -31,7 +28,6 @@ mock.module('../src/library/subject-ref.tsx', () => ({ SubjectRef: () => null })
 mock.module('../src/library/account-ref.tsx', () => ({ AccountRef: () => null }));
 const { SubjectLibrarySlot } = await import('../src/library/subject-slot-view.tsx');
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -262,6 +258,12 @@ function site(): Promise<string> {
   });
   return started;
 }
+
+afterAll(async () => {
+  fake.stop(true);
+  await server?.stop();
+});
+
 const cookieValue = (response: Response, name: string) =>
   response.headers
     .getSetCookie()

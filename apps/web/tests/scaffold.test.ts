@@ -14,8 +14,6 @@ async function messages(locale: string): Promise<Record<string, unknown>> {
   return entries;
 }
 
-
-
 // The documented command, run as a developer runs it, in its own process group so that Vite and workerd stop with it.
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
