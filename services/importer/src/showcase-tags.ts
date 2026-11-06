@@ -1426,6 +1426,31 @@ function reviewedTagActionKey(kind: 'accept' | 'adopt', identity: string, digest
   return `${kind}:${showcaseDigest({ identity, digest })}`;
 }
 
+const reviewedTagAdoptGenerations = 32;
+
+function reviewedTagAdoptActionKey(subjectId: string, property: string, intent: string, generation: number): string {
+  return reviewedTagActionKey('adopt', `${subjectId}:${property}`, showcaseDigest({ intent, generation }));
+}
+
+function sealedReviewedTagAdoptBody(value: unknown): {
+  context: string;
+  property: string;
+  mode: 'replace';
+  expected_head: number | null;
+  selection: { candidate: string; rank: ReviewedTagRank }[];
+} | null {
+  if (!isRecord(value) || value.mode !== 'replace' || typeof value.property !== 'string') return null;
+  if (typeof value.context !== 'string' || !Array.isArray(value.selection)) return null;
+  const expected_head =
+    typeof value.expected_head === 'number' && Number.isSafeInteger(value.expected_head) ? value.expected_head : null;
+  const selection = value.selection.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.candidate !== 'string') return [];
+    const rank = reviewedTagRank(entry.rank);
+    return rank ? [{ candidate: entry.candidate, rank }] : [];
+  });
+  return { context: value.context, property: value.property, mode: 'replace', expected_head, selection };
+}
+
 function reviewedTagActionIdempotencyKey(action: string, body: unknown): string {
   return showcaseDigest({ action, body });
 }
@@ -1485,7 +1510,9 @@ export async function loadReviewedTagCandidatePages(
   let cursor: string | undefined;
   const maxPages = Math.max(1, Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage));
   for (let index = 0; index < maxPages; index += 1) {
-    const page = readReviewedTagCandidatePage(await review.reviewedCandidates(subjectId, candidateQuery(property, cursor)));
+    const page = readReviewedTagCandidatePage(
+      await review.reviewedCandidates(subjectId, candidateQuery(property, cursor)),
+    );
     for (const candidate of page.candidates) {
       if (seen.has(candidate.id)) throw new TypeError('Reviewed-tag candidate page repeated an identity');
       seen.add(candidate.id);
@@ -1660,21 +1687,52 @@ export async function adoptAcceptedReviewedTagSelection(
     const planned = adoptSelectionBody(loaded, property, input.keepExternalIds);
     if (!planned.body.selection.length && !planned.opened.adoption && !planned.retired.length)
       return { adoption: planned.opened.adoption, retiredCandidateIds: [], complete: true };
-    const action = reviewedTagActionKey(
-      'adopt',
-      `${subjectId}:${property}`,
-      showcaseDigest({ intent: input.intent, selection: planned.body.selection }),
-    );
-    const prior = journal.action(action);
+
+    let action = '';
+    let body: typeof planned.body = planned.body;
+    let resumeOriginal = false;
+    let found = false;
+    for (let generation = 0; generation < reviewedTagAdoptGenerations; generation += 1) {
+      action = reviewedTagAdoptActionKey(subjectId, property, input.intent, generation);
+      const prior = journal.action(action);
+      if (prior?.state === 'prepared') {
+        const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
+        if (!sealed) throw new TypeError('Prepared reviewed-tag adopt body is invalid');
+        body = sealed;
+        resumeOriginal = true;
+        found = true;
+        break;
+      }
+      if (prior?.state === 'refused' && reviewedTagPermanentRefusal(prior.error_code))
+        return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+      if (prior?.state === 'refused' && reviewedTagStaleHead(prior.error_code)) {
+        body = planned.body;
+        found = true;
+        break;
+      }
+      if (prior?.state === 'acknowledged') {
+        const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
+        if (sealed && sameReviewedTagSelection(sealed.selection, planned.body.selection))
+          return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+        continue;
+      }
+      body = planned.body;
+      found = true;
+      break;
+    }
+    if (!found) throw new TypeError('Reviewed-tag adopt generation bound exceeded');
+
     const alreadyCurrent =
       planned.opened.adoption && sameReviewedTagSelection(planned.opened.adoption.selection, planned.body.selection);
+    const prior = journal.action(action);
     if (
+      !resumeOriginal &&
       alreadyCurrent &&
       prior?.state !== 'prepared' &&
       !(prior?.state === 'refused' && reviewedTagStaleHead(prior.error_code))
     )
       return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
-    const receipt = await sendReviewedTagAction(journal, action, planned.body, (sealedBody, sealedKey) =>
+    const receipt = await sendReviewedTagAction(journal, action, body, (sealedBody, sealedKey) =>
       review.adoptReviewedCandidates(
         subjectId,
         sealedBody as {
@@ -1687,8 +1745,10 @@ export async function adoptAcceptedReviewedTagSelection(
         sealedKey,
       ),
     );
-    if (receipt === 'skipped')
+    if (receipt === 'skipped') {
+      if (!sameReviewedTagSelection(body.selection, planned.body.selection)) continue;
       return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+    }
     if (receipt === 'stale') {
       if (staleOnce) throw new ImportTransportError(409);
       staleOnce = true;
@@ -1702,6 +1762,7 @@ export async function adoptAcceptedReviewedTagSelection(
             adoption: receipt.adoption,
           }).adoption
         : planned.opened.adoption;
+    if (!sameReviewedTagSelection(body.selection, planned.body.selection)) continue;
     return { adoption, retiredCandidateIds: planned.retired, complete: true };
   }
 }
@@ -1810,7 +1871,9 @@ function statementWeights(
       return [];
     const target = row.value.content;
     const qualifiers = Array.isArray(row.qualifiers) ? row.qualifiers : [];
-    const weights = qualifiers.filter((part) => isRecord(part) && isRecord(part.property) && part.property.id === 'rezics:sourceTagWeight');
+    const weights = qualifiers.filter(
+      (part) => isRecord(part) && isRecord(part.property) && part.property.id === 'rezics:sourceTagWeight',
+    );
     const metrics = qualifiers.filter(
       (part) => isRecord(part) && isRecord(part.property) && part.property.id === 'rezics:sourceTagWeightMetric',
     );
@@ -1899,10 +1962,7 @@ function allCurrent(rows: readonly ReviewedTagCurrentSubject[], requested: reado
   return rows.every((row) => row.available);
 }
 
-function reviewedTagSchemesReady(
-  rows: readonly ReviewedTagCurrentSubject[],
-  requested: readonly string[],
-): boolean {
+function reviewedTagSchemesReady(rows: readonly ReviewedTagCurrentSubject[], requested: readonly string[]): boolean {
   return allCurrent(rows, requested) && rows.every((row) => row.type === 'skos:ConceptScheme');
 }
 
@@ -1918,6 +1978,14 @@ function reviewedTagParentById(
   return byId;
 }
 
+function reviewedTagSharedSchemes(
+  child: readonly string[],
+  parent: readonly string[],
+  schemeIds: ReadonlySet<string>,
+): boolean {
+  return child.some((id) => schemeIds.has(id) && parent.includes(id));
+}
+
 function reviewedTagConceptsReady(
   rows: readonly ReviewedTagCurrentSubject[],
   requested: readonly string[],
@@ -1930,7 +1998,11 @@ function reviewedTagConceptsReady(
     if (row.type !== 'skos:Concept' || !row.inScheme.some((id) => schemeIds.has(id))) return false;
     for (const parentId of row.broader) {
       const parent = byId.get(parentId);
-      if (!parent?.available || parent.type !== 'skos:Concept' || !parent.inScheme.some((id) => schemeIds.has(id)))
+      if (
+        !parent?.available ||
+        parent.type !== 'skos:Concept' ||
+        !reviewedTagSharedSchemes(row.inScheme, parent.inScheme, schemeIds)
+      )
         return false;
     }
   }
@@ -1982,10 +2054,7 @@ export async function completeReviewedSharedTagFlow(input: {
   const rejected: string[] = [];
   const adopted: Record<string, ReviewedTagAdoption | null> = {};
   const retiredCandidateIds: string[] = [];
-  const reviewAll = (
-    subjectIds: readonly string[],
-    properties: readonly string[],
-  ) =>
+  const reviewAll = (subjectIds: readonly string[], properties: readonly string[]) =>
     reviewProperties(
       input.review,
       input.journal,
@@ -2020,9 +2089,7 @@ export async function completeReviewedSharedTagFlow(input: {
   const schemeIds = new Set(schemes.map((row) => row.currentId));
   const knownConcepts = new Set(concepts.flatMap((row) => [row.requestedId, row.currentId]));
   const citedParents = [...new Set(concepts.flatMap((row) => row.broader).filter((id) => !knownConcepts.has(id)))];
-  const parents = citedParents.length
-    ? await resolveCurrentReviewedTagSubjects(input.review, citedParents)
-    : [];
+  const parents = citedParents.length ? await resolveCurrentReviewedTagSubjects(input.review, citedParents) : [];
   if (!reviewedTagConceptsReady(concepts, input.concepts, schemeIds, parents)) {
     return {
       pages,

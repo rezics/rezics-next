@@ -106,10 +106,10 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
       proposeBindings.results.every((result) => result.status === 201),
       JSON.stringify(proposeBindings.results),
     ).toBe(true);
-    await acceptAndAdopt( schemeId, 'schema:url');
+    await acceptAndAdopt(schemeId, 'schema:url');
     for (const id of [childId, parentId]) {
-      await acceptAndAdopt( id, 'schema:url');
-      await acceptAndAdopt( id, 'skos:inScheme');
+      await acceptAndAdopt(id, 'schema:url');
+      await acceptAndAdopt(id, 'skos:inScheme');
     }
 
     const binding = {
@@ -147,7 +147,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
     const readBefore = before.body as { subject: { statements: Record<string, { value: { content: unknown } }[]> } };
     expect(readBefore.subject.statements['skos:broader'] ?? []).toEqual([]);
 
-    await acceptAndAdopt( childId, 'skos:broader');
+    await acceptAndAdopt(childId, 'skos:broader');
     const after = await editor.http(`/v1/subjects/${childId}?context=${context}`);
     expect(after.status).toBe(200);
     const readAfter = after.body as { subject: { statements: Record<string, { value: { content: unknown } }[]> } };
@@ -234,7 +234,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
         statement: { property: { id: 'skos:broader' }, value: { type: 'value', content: parentId } },
       });
       expect(editorial.status).toBe(201);
-      await acceptAndAdopt( childId, 'skos:broader');
+      await acceptAndAdopt(childId, 'skos:broader');
 
       // The same source parent now resolves to another independently reviewed native identity.
       const replacementId = await create('replacement-g12', 'skos:Concept');
@@ -258,8 +258,8 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
         replacementFacts.results.every((entry) => entry.status === 201),
         JSON.stringify(replacementFacts.results),
       ).toBe(true);
-      await acceptAndAdopt( replacementId, 'schema:url');
-      await acceptAndAdopt( replacementId, 'skos:inScheme');
+      await acceptAndAdopt(replacementId, 'schema:url');
+      await acceptAndAdopt(replacementId, 'skos:inScheme');
       const changed = { ...binding, parentId: replacementId };
       const replaced = await publish([changed]);
       expect(replaced.manifest.tagParentPublications).toMatchObject([{ status: 'public', parentId: replacementId }]);
