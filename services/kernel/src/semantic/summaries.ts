@@ -39,6 +39,8 @@ export type SubjectSummary = {
   creativeWork: boolean;
   cover: CoverSummary | null;
 };
+/** A merged original keeps its id; its summary is the survivor's and `redirect` names that survivor. */
+export type RelatedSubjectSummary = SubjectSummary & { redirect?: string };
 export type SummaryDependencies = {
   /** Compatibility input; the executor binds the live same-pool snapshot, never a pool.query facade. */
   client: Pick<PoolClient, 'query'>;

@@ -303,6 +303,18 @@ test('the survivor gathers the links of the redirected subject, whose own links 
     types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
     cover: null,
   });
+  // A membership link to the merged original still names the survivor its related summary now reads.
+  const membership = await call('GET', `/v1/subjects/${kept.id}/links?property=schema%3AexampleOfWork`, {
+    as: 'editor',
+  });
+  expect(membership.response.status).toBe(200);
+  expect(
+    membership.body.links.find((link: { subject: string }) => link.subject === later.id)?.related[gone.id],
+  ).toMatchObject({
+    id: kept.id,
+    redirect: kept.id,
+    type: 'schema:Book',
+  });
 });
 
 test('merging a survivor again repoints every redirect to the final survivor', async () => {

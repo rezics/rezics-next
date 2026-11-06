@@ -1083,7 +1083,11 @@ Global and community Context subject reads return `summary` beside `subject`. Th
 `statement` and adds `related`. These are current selected source statements, resolved in the selected Context
 from compact facts or the current adoption, with their own stored release, revision, rank and Snak datatypes.
 Projection rows are locators and ordering keys, never qualifier bodies. Related item values use the shared current
-summary authorization and tuple fences, in the same bounded batch as row labels. Concealed item qualifiers and
+summary authorization and tuple fences, in the same bounded batch as row labels. A related item that a merge redirected
+keeps its original id and carries `redirect` with the survivor id; its summary is then the survivor's, and the survivor
+is authorized separately. Receiving routes follow that survivor, so a merged Character or Person stays reachable from its
+links. A hidden original or an unauthorized survivor omits the entry. The survivor lookup is one batched redirect read
+per `/links` and `/relations` call, capped at 256 ids. Concealed item qualifiers and
 references are omitted. Source tuple takedowns omit the statement. Related display fills retain the 256 raw-ID
 bound: main rows take priority and qualifiers without an admitted display fill are omitted. A public page retains
 its aggregate only when an unfiltered first page exhausts and currently discloses the entire counted set. Internal
