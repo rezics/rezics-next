@@ -376,8 +376,10 @@ comparison copy, never in the checkout or frozen files.
 
 Use `bun check --no-script -p tsconfig.json` in the eleven workspaces below, both in
 their check commands and their root-invoked typecheck scripts. `--no-script` is required
-because each workspace defines a `check` script. Keep generation before checking the
-websites. Both checkers reported zero errors for every workspace in the paired run.
+because each workspace defines a `check` script. Leaf packages `access`, `bounds`, `money`,
+`operations`, `progress` and `search-text` define the same `check` script so a root-file
+typecheck can gate them. Keep generation before checking the websites. Both checkers
+reported zero errors for every workspace in the paired run.
 The regression fixture also compares diagnostic locations, error codes and messages
 for incompatible imported types, exact optional properties and indexed access, and
 checks that the corrected source passes both tools.

@@ -587,6 +587,9 @@ Decision: Catalogue receives origin/dev producer and consumer typecheck repairs 
 the generated `@rezics/client` Diary types; Bangumi and MAL tag types stay on that same public entry. Probe routes
 keep the trusted module mount. Fewest tests stay the three catalogue publication cases plus `saved-query-results.test.ts`.
 
+Decision: Following return keeps the existing `following-return-frontier` assertions and the page window kind, not the
+row label. Leaf packages that the root typecheck selects also define a `check` script. No extra stories.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.

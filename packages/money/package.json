@@ -4,6 +4,7 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
+    "check": "bun check --no-script -p tsconfig.json && bun test",
     "test": "bun test",
     "typecheck": "bun check --no-script -p tsconfig.json"
   },
