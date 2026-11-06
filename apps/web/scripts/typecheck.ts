@@ -18,9 +18,7 @@ export const WEB_COMPILER_PROGRAMS = [
 ] as const;
 
 /** Both programs always run; the first nonzero status is kept so a red web program cannot skip the scripts. */
-export async function compileWebPrograms(
-  run: (args: readonly string[]) => Promise<number>,
-): Promise<number> {
+export async function compileWebPrograms(run: (args: readonly string[]) => Promise<number>): Promise<number> {
   let result = 0;
   for (const args of WEB_COMPILER_PROGRAMS) {
     const code = await run(args);

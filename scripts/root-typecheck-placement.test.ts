@@ -301,7 +301,9 @@ test('admitted root DB startup failures preserve the original error without comp
     console.error = reportError;
   }
   // Database setup failure is infrastructure, and the original diagnostic stays in the report.
-  expect(messages.join('\n')).toContain('compiler database setup could not be proven: migration failed: exact diagnostic');
+  expect(messages.join('\n')).toContain(
+    'compiler database setup could not be proven: migration failed: exact diagnostic',
+  );
   expect(f.events).toEqual([]);
 });
 

@@ -53,10 +53,7 @@ export type DockerSpawnSyncOptions = SpawnSyncOptions & { encoding: 'utf8'; time
 /** A caller's bound replaces the verb's default; cleanup of a busy container or volume passes its own. */
 export type DockerRunOptions = Pick<SpawnSyncOptions, 'cwd' | 'env'> & { timeout?: number };
 
-export function dockerSpawnSyncOptions(
-  args: readonly string[],
-  extra: DockerRunOptions = {},
-): DockerSpawnSyncOptions {
+export function dockerSpawnSyncOptions(args: readonly string[], extra: DockerRunOptions = {}): DockerSpawnSyncOptions {
   const forcedRm = args[0] === 'rm' && args.includes('-f');
   const { timeout = dockerTimeoutMs(args), ...rest } = extra;
   return {

@@ -656,10 +656,7 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     await runTests(files, env, testScript);
     return;
   }
-  const results = await Promise.allSettled([
-    runWebTypecheck(env),
-    runTests(files, env, testScript),
-  ]);
+  const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript)]);
   const hostResult = await Promise.allSettled([runHostTests(env)]);
   const failures = results
     .flatMap((result) =>

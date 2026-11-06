@@ -108,7 +108,9 @@ test('untilReady retains observed probe, fetch and child-exit causes instead of 
     `stack: probe ${url} closed`,
   );
   expect(walkReadyWaitingMessage({ kind: 'fetch', url, status: 503 })).toBe(`stack: fetch ${url} HTTP 503`);
-  expect(walkReadyWaitingMessage({ kind: 'child-exit', url, code: '1' })).toBe(`stack: child exited 1 waiting for ${url}`);
+  expect(walkReadyWaitingMessage({ kind: 'child-exit', url, code: '1' })).toBe(
+    `stack: child exited 1 waiting for ${url}`,
+  );
 
   const reports: string[][] = [];
   await waitUntilWalkReady({

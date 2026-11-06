@@ -207,9 +207,7 @@ export function hydrationMonitorMessage(url: string, error: unknown): string | u
   return `stack: hydration ${url} ${code}`;
 }
 
-export type WalkFetchObservation =
-  | { ready: true }
-  | { ready: false; error?: unknown; status?: number };
+export type WalkFetchObservation = { ready: true } | { ready: false; error?: unknown; status?: number };
 
 export type WalkReadyWaiting =
   | { kind: 'probe'; url: string; error: unknown }
@@ -252,12 +250,10 @@ export async function walkReadyFetchObservation(url: string, budgetMs = 2_000): 
         },
         (error: unknown): WalkFetchObservation => ({ ready: false, error }),
       ),
-      Bun.sleep(budgetMs + 500).then(
-        (): WalkFetchObservation => ({
-          ready: false,
-          error: Object.assign(new Error(`fetch timeout ${url}`), { code: 'ETIMEDOUT' }),
-        }),
-      ),
+      Bun.sleep(budgetMs + 500).then((): WalkFetchObservation => ({
+        ready: false,
+        error: Object.assign(new Error(`fetch timeout ${url}`), { code: 'ETIMEDOUT' }),
+      })),
     ]);
   } catch (error) {
     return { ready: false, error };
@@ -299,7 +295,8 @@ export async function waitUntilWalkReady(options: {
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
   const probe = options.probe ?? ((url: string) => walkOriginProbe(url));
-  const fetchReady = options.fetchReady ?? ((url: string, budgetMs: number) => walkReadyFetchObservation(url, budgetMs));
+  const fetchReady =
+    options.fetchReady ?? ((url: string, budgetMs: number) => walkReadyFetchObservation(url, budgetMs));
   const deadline = now() + deadlineMs;
   const childExit = (): WalkReadyWaiting | undefined => {
     const exited = options.children.find((child) => child.exitCode !== null || child.signalCode !== null);
