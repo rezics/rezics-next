@@ -177,7 +177,7 @@ test('a community party locator effect that runs after the fence closes writes n
   const event = await ban(target, realmId, person);
   const erased = await erase(person);
   await closeFence(person.accountId);
-  await createPartyLocatorEffect(system.database.pool).run(event);
+  await createPartyLocatorEffect(system.database.pool, () => new Date()).run(event);
 
   expect(
     (
@@ -210,7 +210,7 @@ test('a community party locator effect that runs after the fence closes writes n
 test('a community locator committed before closure is found and fence closure waits for its in-flight transaction', async () => {
   const person = await createPerson();
   const event = await ban(person);
-  const effect = createPartyLocatorEffect(system.database.pool);
+  const effect = createPartyLocatorEffect(system.database.pool, () => new Date());
   await effect.run(event);
   await ban(person, inFlightRealmId);
   const erased = await erase(person);

@@ -279,7 +279,7 @@ test('pending requester custody uses the existing erasure obligation and event r
     sequence: outcome.position.toString().padStart(19, '0'),
     data: eventRow.data,
   };
-  const effect = createPartyLocatorEffect(system.database.pool);
+  const effect = createPartyLocatorEffect(system.database.pool, () => new Date());
   await effect.run(event);
   await effect.run(event);
   const locator = await system.database.pool.query(

@@ -28,7 +28,7 @@ test('trusted optional content runtime types retain exactly the native ports and
     'fetchConfig' | 'workflows' | 'anonymousVerifier' | 'readConsent'
   >();
   expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
-  expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<(() => number) | undefined>();
+  expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<() => number>();
   expectTypeOf<Pick<routes.Dependencies, keyof ContentRuntime>>().toEqualTypeOf<ContentRuntime>();
   expectTypeOf<Parameters<typeof routes.contentRoutes>[1]>().toEqualTypeOf<routes.Dependencies>();
   expectTypeOf<KernelDependencies['clock']>().toEqualTypeOf<(() => Date) | undefined>();
@@ -79,7 +79,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.fetchConfig).toBe(content.fetchConfig);
       expect(received.workflows).toBe(content.workflows);
       expect(received.anonymousVerifier).toBe(content.anonymousVerifier);
-      expect(received.cursorNow).toBe(content.cursorNow);
+      expect(received.cursorNow).toBe(content.cursorNow!);
       expect(received.pool).toBe(pool);
       expect(received.tokens).toBe(tokens);
       expect(received.routeKey).toBe(base.routeKey);

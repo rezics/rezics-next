@@ -194,7 +194,7 @@ async function project(f: Awaited<ReturnType<typeof fixture>>, editionId: string
     source: `urn:rezics:log:${partitionOf(f.route)}.${basis.rows[0]!.epoch}`,
     sequence: String(basis.rows[0]!.position).padStart(19, '0'),
   };
-  const effect = createCreatorEditionIndexEffect(f.native.database.pool);
+  const effect = createCreatorEditionIndexEffect(f.native.database.pool, () => new Date());
   await effect.run(event);
   await effect.run(event);
   return { effect, event };
