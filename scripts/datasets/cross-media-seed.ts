@@ -144,6 +144,7 @@ export async function runDevelopmentSeed(
   const auth = requiredEnvironment('AUTH_ORIGIN', env);
   const api = env.KERNEL_ORIGIN || 'http://127.0.0.1:' + (env.KERNEL_PORT || '4100');
   const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
+  const gameEnvironmentBindings = env.REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
   const exportPath = env.REZICS_DEV_VNDB_EXPORT?.trim();
   const personalXml = exportPath ? await readShowcasePersonalListExport(exportPath) : undefined;
@@ -191,6 +192,7 @@ export async function runDevelopmentSeed(
     '--client',
     client,
   ];
+  if (gameEnvironmentBindings) args.push('--bangumi-game-environment-bindings', gameEnvironmentBindings);
   if (gameGenreBindings) args.push('--bangumi-game-genre-bindings', gameGenreBindings);
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
   const creatorToken = await (options.createTokenProvider ?? createAccountTokenProvider)({
