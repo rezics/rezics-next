@@ -21,6 +21,8 @@ const catalogueCharacterTypes = ['wd:Q95074'];
 const cataloguePeopleTypes = ['schema:Person', 'schema:Organization'];
 const catalogueReleaseTypes = ['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'];
 const catalogueLiteraryTypes = ['schema:Book', 'schema:BookSeries', 'bf:Instance'];
+const catalogueRecipeTypes = ['schema:Recipe'];
+const catalogueSoftwareTypes = ['schema:SoftwareApplication'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
   if (type === base) return true;
@@ -48,6 +50,8 @@ export function cataloguePageMetadata(
     ...cataloguePeopleTypes,
     ...catalogueReleaseTypes,
     ...catalogueLiteraryTypes,
+    ...catalogueRecipeTypes,
+    ...catalogueSoftwareTypes,
   ].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
@@ -56,12 +60,35 @@ export function cataloguePageMetadata(
   const people = peopleProducerTypeAdmitted(release, type);
   const catalogueRelease = catalogueReleaseTypes.some((base) => release && typeIsA(release, type, base));
   const literary = catalogueLiteraryTypes.some((base) => release && typeIsA(release, type, base));
+  const recipe = catalogueRecipeTypes.some((base) => release && typeIsA(release, type, base));
+  const software = catalogueSoftwareTypes.some((base) => release && typeIsA(release, type, base));
   const work = release !== undefined && typeIsA(release, type, 'schema:CreativeWork');
-  if (!candidate && !file && !group && !music && !people && !catalogueRelease && !literary && !work) return;
+  if (
+    !candidate &&
+    !file &&
+    !group &&
+    !music &&
+    !people &&
+    !catalogueRelease &&
+    !literary &&
+    !recipe &&
+    !software &&
+    !work
+  )
+    return;
   if (!release || !digest) return { state: 'unavailable', type, directions: [] };
   if (
     !release.types[type] ||
-    (!file && !group && !music && !character && !people && !catalogueRelease && !literary && !work)
+    (!file &&
+      !group &&
+      !music &&
+      !character &&
+      !people &&
+      !catalogueRelease &&
+      !literary &&
+      !recipe &&
+      !software &&
+      !work)
   )
     return { state: 'unsupported', type, digest, directions: [] };
 

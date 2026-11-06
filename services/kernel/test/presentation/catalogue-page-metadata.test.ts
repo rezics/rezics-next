@@ -23,6 +23,24 @@ test('released CreativeWork descendants carry only their current bounded tag and
   }
 });
 
+test('released Recipe and SoftwareApplication join catalogue page metadata without CreativeWork ancestry', () => {
+  for (const type of ['schema:Recipe', 'schema:SoftwareApplication'] as const) {
+    const page = cataloguePageMetadata(bundledRelease, bundledDigest, type);
+    expect(page).toMatchObject({ state: 'released', type, digest: bundledDigest });
+    expect(page?.definitions?.types[type]).toBeDefined();
+    expect(page?.definitions?.types['schema:CreativeWork']).toBeUndefined();
+    expect(page?.directions?.every((entry) => entry.release === bundledDigest)).toBe(true);
+  }
+  const recipe = cataloguePageMetadata(bundledRelease, bundledDigest, 'schema:Recipe');
+  for (const property of [
+    'schema:cookTime',
+    'schema:suitableForDiet',
+    'schema:recipeIngredient',
+    'schema:recipeInstructions',
+  ])
+    expect(recipe?.definitions?.properties).toHaveProperty(property);
+});
+
 test('released inheritance admits descendants while an unrelated type remains outside catalogue metadata', () => {
   const release = {
     ...bundledRelease,
