@@ -248,7 +248,7 @@ identity access paths, Commerce supplies occurrence versus canonical read bounda
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | specification validated red             | Existing assertions present; measured red not recorded; complete4096-original matrix not frozen. |
 | native driver registered                | Existing HTTP slices registered; large-group cross-surface binding missing.                      |
-| implementation exposed                  | Cursor/generation seams exist; complete native epoch traversal not established.                  |
+| implementation exposed                  | Cursor/generation seams exist; executed-request HTTP is canonical-executed-recovery.test.ts.     |
 | user-case native pass at named revision | None recorded for this capability.                                                               |
 | promoted                                | No main closure evidence.                                                                        |
 
@@ -329,7 +329,7 @@ Focused Web adapter tests pin installed Search/suggest/facet/Realm native HTTP f
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | specification validated red             | Original assertions present; measured red not recorded; expanded persona coverage remains unbound. |
 | native driver registered                | Original Search wrapper registered; expanded personas unbound.                                     |
-| implementation exposed                  | Public suggest/search mounted; full current persona and cross-surface admission unproven.          |
+| implementation exposed                  | Suggest canonical-admits after identity; in-budget invalid HTTP keeps pointers.                    |
 | user-case native pass at named revision | None recorded for this capability.                                                                 |
 | promoted                                | No main closure evidence.                                                                          |
 
@@ -475,7 +475,7 @@ response closes publication, and no native context schema is invented here.
 | --------------------------------------- | ----------------------------------------------------------------------------------------- |
 | specification validated red             | Existing separate route assertions present; composed context/claim journey not frozen.    |
 | native driver registered                | Pages and Semantic route slices registered; complete context/publication binding missing. |
-| implementation exposed                  | Standalone relations/views exist; Realm-context aggregate schema pending owner adoption.  |
+| implementation exposed                  | Standalone relations/views exist; rating pair restarts together. Realm-context pending.   |
 | user-case native pass at named revision | None recorded for this capability or its publication stage.                               |
 | promoted                                | No main closure evidence.                                                                 |
 

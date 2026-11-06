@@ -56,6 +56,7 @@ function fixture() {
     const now = Date.now();
     return {
       principal: 'account:reader' as const,
+      identityEpoch: 'epoch-digest',
       text: undefined,
       filter: undefined,
       originalFilter: undefined,
@@ -111,6 +112,7 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
   const facet = { property: 'type', size: 10 };
   const input: FacetCursorInput = {
     principal: readerPrincipal,
+    identityEpoch: 'epoch-digest',
     text: undefined,
     originalFilter: undefined,
     kinds: ['schema:Book', 'collection'],
@@ -175,6 +177,9 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
   ).toThrow(expect.objectContaining({ code: 'search_restart_required' }));
   expect(facetCursorBinding(input, facet).request).not.toEqual(
     facetCursorBinding({ ...input, languages: ['zh-Hant'] }, facet).request,
+  );
+  expect(facetCursorBinding(input, facet).request).not.toEqual(
+    facetCursorBinding({ ...input, identityEpoch: 'other-epoch' }, facet).request,
   );
   expect(facetCursorBinding(input, facet).request).not.toEqual(
     facetCursorBinding({ ...input, facets: [{ ...facet, size: 11 }] }, { ...facet, size: 11 }).request,

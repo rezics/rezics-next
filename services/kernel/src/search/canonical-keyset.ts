@@ -8,9 +8,15 @@ import {
 
 export {
   admitCanonicalKeyset,
+  bindExecutedSearchRequest,
   bindSearchIdentityCursorRequest,
+  executedRatingPair,
+  executedSearchOperands,
   type CanonicalHitKey,
   type CanonicalKeysetAdmission,
+  type ExecutedRatingPair,
+  type ExecutedSearchOperands,
+  type ExecutedSearchRequest,
   type SearchIdentityMapping,
 } from './canonical-keyset-admit.ts';
 

@@ -654,6 +654,28 @@ export function createSearchService({
     return (await observation(generation)).as_of;
   }
 
+  async function executedIdentity(deadline: number): Promise<string> {
+    const identity = await sourceRequest(() => observeSearchIdentityEpoch(pool, deadline));
+    if (identity.status === 'preparing') throw indexNotReady();
+    return identity.digest;
+  }
+
+  async function admitSuggestedSubjects(subjects: readonly IndexedSubject[]): Promise<IndexedSubject[]> {
+    const canonical = await sourceRequest(() => resolveCanonicalKeyset(pool, subjects));
+    if (canonical.status === 'preparing') throw indexNotReady();
+    const unique: IndexedSubject[] = [];
+    const seen = new Set<string>();
+    for (const subject of subjects) {
+      const terminal = canonical.accepted.get(subject);
+      if (!terminal) continue;
+      const id = canonical.canonicalId(terminal);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      unique.push(terminal);
+    }
+    return unique;
+  }
+
   async function admitQuery(
     text: ReturnType<typeof parseText> | undefined,
     filter: SearchFilterDocument | undefined,
@@ -986,11 +1008,8 @@ export function createSearchService({
       const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
       if (publicFilters && !native) throw indexNotReady();
-      const identity = await sourceRequest(() =>
-        observeSearchIdentityEpoch(pool, readContext?.deadline ?? now + 10_000),
-      );
-      if (identity.status === 'preparing') throw indexNotReady();
-      const bindingRequest = bindSearchIdentityCursorRequest(admittedRequest, identity.digest);
+      const identityEpoch = await executedIdentity(readContext?.deadline ?? now + 10_000);
+      const bindingRequest = bindSearchIdentityCursorRequest(admittedRequest, identityEpoch);
       const kinds: KindSnapshot | undefined = current
         ? compileKinds(current, native?.digest ?? kindDigest(current))
         : undefined;
@@ -1787,6 +1806,7 @@ export function createSearchService({
       context: { deadline: number; scope?: LeafOptions } = { deadline: deadlineFor(30_000) },
     ): Promise<FacetDiscovery200Response> {
       request = ownSubjectRequest(request);
+      const identityEpoch = await executedIdentity(context.deadline);
       if (request.scope !== undefined) {
         const provider =
           (await facetProvider?.()) ??
@@ -1837,6 +1857,7 @@ export function createSearchService({
             scopeWork.native(prepared.work);
             return {
               principal,
+              identityEpoch,
               text: normalized.text,
               filter: catalogue,
               originalFilter: normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
@@ -1864,6 +1885,7 @@ export function createSearchService({
           scopeWork.native(scope.work(prepared));
           return {
             principal,
+            identityEpoch,
             text: normalized.text,
             filter: catalogue,
             originalFilter: normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
@@ -1893,6 +1915,7 @@ export function createSearchService({
       });
       const positions = await authenticateFacetCursors(cursors, {
         principal,
+        identityEpoch,
         text,
         originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
         ...(kinds ? { kinds } : {}),
@@ -1916,6 +1939,7 @@ export function createSearchService({
         provider,
         {
           principal,
+          identityEpoch,
           text,
           filter: catalogue,
           originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
@@ -1948,6 +1972,7 @@ export function createSearchService({
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
       const contextDeadline = read?.deadline ?? Date.now() + 10_000;
+      await executedIdentity(contextDeadline);
       let currentTextDisclosure: ReturnType<typeof createCurrentTextDisclosure> | undefined;
       const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
         const { passed: current } = await sourceRequest(() =>
@@ -2061,6 +2086,7 @@ export function createSearchService({
               completed = await completePage(page);
             },
             prepare,
+            admitCanonical: admitSuggestedSubjects,
           });
           return completed ?? response;
         } finally {
@@ -2107,15 +2133,17 @@ export function createSearchService({
               },
             ),
           );
-          const visible = passed.slice(0, limit);
+          const visible = (await admitSuggestedSubjects(passed.map(({ subject }) => subject))).slice(0, limit);
+          const visibleHits = visible.map((subject) => {
+            const row = passed.find((entry) => entry.subject.id === subject.id);
+            if (!row) throw indexNotReady();
+            return row.hit;
+          });
           const page = {
-            subjects: visible.map(({ subject }) => project(subject, options.languages)),
+            subjects: visible.map((subject) => project(subject, options.languages)),
             as_of: await asOf(generation),
           };
-          const response = await completePage(
-            page,
-            visible.map(({ hit }) => hit),
-          );
+          const response = await completePage(page, visibleHits);
           if ((await indexRequest(freshAliasGeneration)) !== generation)
             throw new ProblemError('search_restart_required');
           const final = await bound.operations.readStatus(
@@ -2144,15 +2172,17 @@ export function createSearchService({
           },
         ),
       );
-      const visible = passed.slice(0, limit);
+      const visible = (await admitSuggestedSubjects(passed.map(({ subject }) => subject))).slice(0, limit);
+      const visibleHits = visible.map((subject) => {
+        const row = passed.find((entry) => entry.subject.id === subject.id);
+        if (!row) throw indexNotReady();
+        return row.hit;
+      });
       const page = {
-        subjects: visible.map(({ subject }) => project(subject, options.languages)),
+        subjects: visible.map((subject) => project(subject, options.languages)),
         as_of: await asOf(generation),
       };
-      const response = await completePage(
-        page,
-        visible.map(({ hit }) => hit),
-      );
+      const response = await completePage(page, visibleHits);
       if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
       return response;
     },

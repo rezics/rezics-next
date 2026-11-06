@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import {
   admitCanonicalKeyset,
+  bindExecutedSearchRequest,
   bindSearchIdentityCursorRequest,
+  executedRatingPair,
   type SearchIdentityMapping,
 } from '../../src/search/canonical-keyset-admit.ts';
 
@@ -56,4 +58,22 @@ test('cursor bindings retain the published identity epoch beside the executed op
     sort: 'name',
     identityEpoch: 'epoch-digest',
   });
+});
+
+test('search, facets and typeahead share one executed request including the rating pair', () => {
+  const executed = bindExecutedSearchRequest('anonymous', 'epoch-digest', {
+    text: 'lantern',
+    sort: 'rating',
+    population: { realm: '11111111-1111-4111-8111-111111111111' },
+    limit: 20,
+    languages: ['en'],
+  });
+  expect(executed.principal).toBe('anonymous');
+  expect(executed.identityEpoch).toBe('epoch-digest');
+  expect(executed.operands.sort).toBe('rating');
+  expect(executedRatingPair(executed.operands)).toEqual({
+    sort: 'rating',
+    population: { realm: '11111111-1111-4111-8111-111111111111' },
+  });
+  expect(bindSearchIdentityCursorRequest(executed.operands, executed.identityEpoch).identityEpoch).toBe('epoch-digest');
 });
