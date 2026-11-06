@@ -271,7 +271,7 @@ explicitly includes that scope. Auth's host creates a missing `login` client wit
 
 ## Grant rule
 
-A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
+A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. Composed Auth/Access fixtures call these native grant commands rather than a separate HTTP Access app. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
 
 `gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). Mounted route declarations use `<group>` matching `^[a-z][a-z_]{0,62}$`; native opening and gate-action validation retains `^[a-z][a-z_-]{0,62}$`. On that resource, holding `gate:any` counts as holding every admitted `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
 
