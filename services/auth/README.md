@@ -1155,7 +1155,8 @@ persisted or exposed outside the host. Expired registration terminals the stage 
 records handle release before `erase-auth-owner`, which is how the owner producer
 recognizes pending-registration cleanup. Mock workflow hosts that exercise native
 operations supply creation context, actor roles and approval bindings; they do not
-reconstruct those from an unprotected callback. The official dev-stack copy omits
+reconstruct those from an unprotected callback. `authorizeOperation` receives the
+host-bound `operationKey` on that same operation. The official dev-stack copy omits
 check-host `.last-test-file` artifacts so a concurrent check receipt cannot break
 the isolated checkout.
 

@@ -1,6 +1,6 @@
 import { registrationAccountId, registrationAcknowledgement } from '@rezics/auth-contract';
 import type {
-  AccountWorkflowPorts,
+  AccountWorkflowPorts as ContractAccountWorkflowPorts,
   AccountOperation as ContractAccountOperation,
   WorkflowMembership,
   WorkflowResponsibility,
@@ -25,7 +25,6 @@ import {
 } from './creation-party-context.ts';
 import { installNativeRoleProducer } from './erasure-coverage.ts';
 export type {
-  AccountWorkflowPorts,
   WorkflowMembership,
   WorkflowResponsibility,
   WorkflowAccount,
@@ -51,6 +50,14 @@ export type AccountOperation = (
   | TransferOperation
   | TransferAcceptanceOperation
 ) & { operationKey?: string };
+/** Host ports see the bound operation, including the logical key `runOperation` attaches before approval. */
+export type AccountWorkflowPorts<Context = WorkflowContext> = Omit<
+  ContractAccountWorkflowPorts<Context>,
+  'authorizeOperation' | 'authorizeUnprotectedOperation'
+> & {
+  authorizeOperation?(reference: string, operation: AccountOperation): Promise<Context>;
+  authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
+};
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
