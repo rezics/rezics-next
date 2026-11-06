@@ -64,6 +64,7 @@ test('saved catalogue delegates the exact property query, accepted meaning and n
               mean: null,
               score: null,
             },
+            matchEvidence: { state: 'absent' },
           },
         ],
         next: 'next-native-continuation',

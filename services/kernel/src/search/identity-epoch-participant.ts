@@ -13,13 +13,18 @@ import type {
   IdentityNativeReceipt,
 } from '../semantic/identity-epoch-contract.ts';
 import {
+  activeIdentitySourceConsumerMaintenance,
+  bindSemanticProducerRoles,
+  currentIdentitySourceConsumerMaintenance,
+  identityErasureRoles,
   identityEpochStore,
   identityJobPartition,
   IdentityEpochStoreError,
+  identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
-import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import {
   installSearchIdentityReceivingNative,
   lookupIdentityReceivingEffect,
@@ -28,12 +33,6 @@ import {
   reconcileIdentityReceivingEffect,
   type SearchReceivingWorkDeclaration,
 } from '../semantic/identity-receiving-effects.ts';
-import {
-  activeIdentitySourceConsumerMaintenance,
-  currentIdentitySourceConsumerMaintenance,
-  identitySourceConsumerLibraryWork,
-  identitySourceConsumerNativeWork,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';

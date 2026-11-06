@@ -906,7 +906,9 @@ export type {
 export type * from './identity-epoch-contract.ts';
 export { bindSemanticProducerRoles, identityErasureRoles } from '../erasure-producer.ts';
 export {
+  activeIdentitySourceConsumerMaintenance,
   currentIdentitySourceConsumerMaintenance,
   identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
 } from '../identity-source-consumer-maintenance.ts';
 export { searchReceivingProductionDeclaration } from '../identity-search-receiving-statements.ts';
