@@ -12,67 +12,25 @@ and Profile owners are linked from the [Performance Goal](performance.md). This 
 not evidence that the capabilities have passed.
 
 Decision: Published Log public lifecycle acceptance stays on the seven existing Log operation/growth/retention/source
-suites and the five retained Search scope/work-context suites, plus affected Web log tests. FULL withhold of a changed
-Source and the My Logs history-state return frontier are pinned on those suites. Full native Auth walk,
-64/512/4096 growth and rendered 720-hour retention remain open until observed passing. Verification.md keeps general
-check policy; these suites and the deferred native walk live here and in Library owners. Fewest tests: extend
-operation-bounds and retract causal, plus one FULL withhold and one My Logs return-frontier pin. A retired completed
-session clears `completedAt` (`progress_session_check3`). FULL publication keeps the current public-account and
-`targetFields` unions, including deleted/pending curator/log-account cases; Accounts optional contribution-attribution
-producer is not in this checkout.
+suites and the five retained Search scope/work-context suites, plus affected Web log tests. Public reads keep the
+immutable snapshot without current Source; FULL withholds `subject: null` on a changed Source. Retract hides the
+snapshot from the public list immediately; replaying the original create receipt does not restore it. Growth uses 64/512/4096
+with `scale` rows per population and a fixed selected neighbourhood; publish resolves one real subject and retract
+uses the stored CAS revision. restoreExpired CAS-sets `restore_until`;
+restoreHistorical retires the private session. Empty and post-drain sweeps use the default worker. Back href is
+cursor-free My Logs; ordinary click uses history.back() only for this captured My Logs visit, log and current session,
+otherwise the href. Native Auth-persona walks, phone/desktop/locale keyboard evidence and rendered 720-hour browser
+retention stay with the controller-owned driver after integration. Verification.md keeps general check policy; these
+suites and the deferred native walk live here and in Library owners. Fewest tests: extend those suites, complete
+native-published-log-responses, and pin captured/direct/replaced-session Back on the existing mounted return scenario. A retired completed session clears
+`completedAt` (`progress_session_check3`). FULL publication keeps the current public-account and `targetFields`
+unions, including deleted/pending curator/log-account cases; Accounts optional contribution-attribution producer is
+not in this checkout.
 
 Executable scenarios, user-case acceptance and promotion require separate evidence. A scenario name alone proves
 nothing; it becomes frozen with its executable acceptance. Existing frozen tests remain unchanged. Promotion requires
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
 workers where relevant, and recorded revision evidence.
-
-## First-public journey walk
-
-This is Performance's receiving matrix for its assigned interface journeys within the [first public scope](../scope.md).
-Product owners keep native policy and schema authority. The one Performance walk executes integrated `dev`, records
-its exact revision and seed, and replaces each pending result with **passing** or **failing** by 2026-11-07 00:30 UTC.
-The finishing target is 2026-11-07 09:30 UTC. Repeat the walk hourly until that target; report passing/17 and the
-slowest failing path. A failure records its first causal error, elapsed time, affected owner and evidence link;
-infrastructure or unavailable evidence remains an explicit failing walk, without claiming product denial.
-A pass requires the complete visible path and its applicable native work proof, not typing or a focused unit result.
-
-| Path | Scope row and assigned user-visible journey | Current dev result and evidence |
-| ---- | ------------------------------------------ | ------------------------------- |
-| P01 | Accounts/preferences: open signed-in Settings Profile, edit, Save, read back the current private profile, leave and return with correct draft and focus recovery. | Pending initial dev walk. |
-| P02 | Agents/public profiles: change the admitted public profile fields and view flags, Save/read back, then view the immutable public profile as owner, another member and anonymous. | Pending initial dev walk. |
-| P03 | Accounts: open Safety's managed-account directory, page to an admitted account, open its detail/profile and return to the exact directory frontier and focus. | Pending initial dev walk. |
-| P04 | Authentication: follow Settings' account security action into the trusted native Auth security page and return using the current session. | Pending initial dev walk. |
-| P05 | Accounts: follow Settings' rename action into native Auth, complete the admitted rename and return to the current account identity. | Pending initial dev walk. |
-| P06 | Accounts/deletion: follow Settings' deletion action into native Auth and complete the owner-admitted deletion/recovery path; consume Accounts' native evidence for irreversible effects. | Pending initial dev walk. |
-| P07 | Authentication: sign out through the native action, reach the signed-out destination and recover an uncertain response through the current session read. | Pending initial dev walk. |
-| P08 | Accounts: from Safety choose an eligible verification subject, submit, revisit and withdraw the exact request, then return to Safety with the current status. | Pending initial dev walk. |
-| P09 | Notifications/preferences: open per-kind notification preferences, edit and Save/read back, then Reset/read back with compulsory kinds and current admission visible. | Pending initial dev walk. |
-| P10 | Accounts/preferences: open Reading, Save/read back spoiler and suitability choices, then Reset and read back native defaults. | Pending initial dev walk. |
-| P11 | Accounts/preferences: open layout defaults, select a native type, Save/read back its override, remove it and read back the resulting default. | Pending initial dev walk. |
-| P12 | Library/Collections: open Settings' private Collection inventory, change an admitted Collection's privacy, Save/read back and recover a current-version conflict for that same row. | Pending initial dev walk. |
-| P13 | Notifications: open the in-app Inbox, page to a reply, mention or moderation notice, visit its admitted destination, return to the same range and acknowledge with the correct unread badge. | Pending initial dev walk. |
-| P14 | Follows: follow a supported target, read and page the private Following list, visit the current target, return to the original frontier, remove the edge and recover its acknowledged replay. | Pending initial dev walk. |
-| P15 | Library/labels: create or select an admitted label, assign it to a subject, read the FULL assignment and label shelf, then remove the exact assignment and read back. | Pending initial dev walk. |
-| P16 | Library/progress: open the assigned active shelf, page to a session, follow its target and return, then complete or retire the session and read the updated shelf. | Pending initial dev walk. |
-| P17 | Library/Collections: publish a session Log, read its public snapshot as owner/member/anonymous, retract and restore the eligible episode, and return to the captured private My Logs frontier under the current session. | Pending initial dev walk. |
-
-[Settings](../../apps/web/src/settings/README.md), [Profile](../../apps/web/src/accounts/profile-editor/README.md),
-[Inbox](../../apps/web/src/inbox/README.md), [Web Library](../../apps/web/src/library/README.md) and the
-[Library performance contract](../../services/kernel/src/library/performance-contract.md) own these paths' recovery
-and cost semantics. Accounts supplies native Auth security, rename, deletion and session evidence; this Goal receives
-that evidence through its Settings handoffs. Record first HTML and hydrated behavior where applicable, current
-admission, conflict/uncertain-result recovery, phone/desktop rendering and the complete nested native cost.
-
-The assigned Profile/Watches return milestone remains an additional frozen integration check. Watches are second
-scope in the public scope table and do not enter this public denominator. Grant-closed discovery, prepared/mounted
-Source plans and Realm rating sorts likewise retain their existing proof obligations without public exposure.
-Installed Rating, Work/Auth retention, History/Command and the shared growth harness supply the native proof for
-reached public paths; their technical operations are not extra user-journey rows.
-
-After the initial walk, dispatch only complete repairs of failing rows and same-day net-new architecture violations.
-Consolidate shared causes and send repairs to existing owners. Implementation attempts land on clean changed-workspace
-typing with money-path tests remaining strict; the single Goal walk owns environment and growth execution. Each hourly
-result replaces the previous row evidence and keeps unresolved native evidence explicit.
 
 ## composed-discovery-cost
 
@@ -163,14 +121,27 @@ hidden/denied/suspended/empty controls. Bound derivation is
 
 **Test choice:** Fewest tests: one HTTP/native helper per admitted public cell covering first/deep/empty together,
 sparse and unrelated-history growth as independent axes, one composed 16-read page, one alias/duplicate, one resume,
-one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites.
+one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites. Isolated Auth's
+fork installs the ordinary History composition and product event catalogue (bun test preloads do not apply there),
+binds the parent Kernel receipt ring to its Access pool, reports the original Access error on the child stream, and
+settles acquired fixture resources on setup failure as well as completion. Released classification, diet, books and
+recipes share one promise each and run on one editor stream so concurrent composed setup cannot double-create
+subjects. Empty classification-ballot cleanup after Access lifecycle still emits a command event; the follow-up
+is no-effect, and exact replay is receipt-only. Charge command/outbox/relay and that terminal no-effect, including
+empty and repeated-empty/replay, in Rating's lifecycle-cleanup Cost under the original actor and current request
+deadline. Derive preparation, rereads, discarded candidates and nested Access/engine producer costs from the
+published per-read ceilings before any page assertion. Accounts producer corrections arrive through ordinary
+`account-discovery-source` integration. An in-flight discovery generation whose allocated review owner is later
+omitted as preparing retires rather than looping as unsupported kinds.
 
-**Remaining evidence limits:** `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels` remain frozen on
-Commerce's unadopted completion/history and owner-query/libraryOperations contracts. Privacy-reduction served-share
-grows hidden unrelated subjects and checks a nondecreasing served share for the selected public job; it does not yet
-prove a production acknowledgement delay `τ`. Original/terminal alias uses native `POST /v1/subjects:merge`; if
-identity publication is still preparing, that cell reports the producer failure rather than a local matcher. Owner
-direct/prepared plans stay with Commerce. Native/browser/root acceptance after integration still owns promotion.
+**Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access/History
+composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`
+remain frozen on Commerce's unadopted completion/history and owner-query/libraryOperations contracts.
+Privacy-reduction served-share grows hidden unrelated subjects and checks a nondecreasing served share for the
+selected public job; it does not yet prove a production acknowledgement delay `τ`. Original/terminal alias uses
+native `POST /v1/subjects:merge`; if identity publication is still preparing, that cell reports the producer
+failure rather than a local matcher. Owner direct/prepared plans stay with Commerce. Native/browser/root
+acceptance after integration still owns promotion.
 
 ## private-follow-edge
 
@@ -184,6 +155,38 @@ result on command replay. Empty exhaustion and other-member/anonymous views use 
 command frame, and Following history-state return. Fewest tests: one HTTP follow/replay/foreign/empty journey, one
 FULL withhold, one typed transport bind, one return-frontier pin. Native Auth-persona/browser/growth walks stay
 open until their owning check.
+
+## native-notice-consumption
+
+**User job:** A signed-in member receives an ordinary `thread_watch` notice from Content, reads All/Unread and the
+native badge, opens the admitted thread-post destination, returns to the exact original Inbox range, acknowledges the
+selected notice and sees badge/page readback. Available, withheld and system actors, sparse continuation and a genuine
+empty Inbox keep their admitted presentation. Browser work stays inside one 20-row body, eight prior addresses, one
+return receipt and one coalesced count per viewer episode as unrelated notices and visits grow.
+
+**Personas:** Alice on her own Inbox; Bob with an empty or unrelated Inbox; anonymous without a private page.
+
+**Released fixtures:** Content ordinary `thread_watch` production, recorded `notifications-inbox-thread-watch` and
+empty envelopes, installed Auth sessions.
+
+**Decision for this increment:** bind Content's closed page/count/acknowledgement and Accounts preference delivery;
+complete the native-notifications fixture/journey; pin causal recovery on the existing Inbox suites plus consumption
+stories. Fewest tests: keep inbox-read/page/native-triage/notice-detail/session-authority/pagination,
+notifications-inbox, recorded-responses and consumption stories; extend `native-notifications.host.test.ts`; add one
+browser-work pin at 64/512/4096 linking Content `growth-notice-inbox`. Native, browser and root acceptance remain
+with integration.
+
+**Native acceptance command:**
+
+```sh
+bun apps/web/scripts/focused.ts --private-network -- bun test tests/native/native-notifications.host.test.ts
+```
+
+Scenario names: ordinary `thread_watch` production through actual Auth at phone/desktop and supported locales;
+All/Unread; lower-bound badge; keyboard return to the exact range; one-item and admitted-range acknowledgement;
+unknown-command exact original recovery; validated receipt then failed page/count readback; mounted viewer/credential
+replacement; genuine empty and sparse continuation. Nested examined rows/buffers/statements stay on Content
+`growth-notice-inbox` list, disclosure and unread cases at 256/1024/4096.
 
 ## growth-harness
 
@@ -358,7 +361,7 @@ suite, including harness diagnostics. The sole tracked `*cost-table.test.ts` is 
 | `services/kernel` / `test`              | `anonymous-receipts-growth.test.ts`, `check-growth-rerun.test.ts`, `growth-command-wait.test.ts`, `growth-command.test.ts`, `growth-effects.test.ts`, `growth-events.test.ts`, `growth-projection.test.ts`, `growth-request.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `services/kernel` / `test/commerce`     | `growth-orders.test.ts`, `growth-payouts.test.ts`, `growth-transactions.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `services/kernel` / `test/community`    | `growth-ban.test.ts`, `growth-join.test.ts`, `growth-membership-history.test.ts`, `growth-membership.test.ts`, `growth-publication.test.ts`, `growth-realm.test.ts`, `growth-sitemap.test.ts`, `growth-space-address.test.ts`, `growth-space.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `services/kernel` / `test/content`      | `growth-board-sorts.test.ts`, `growth-boards.test.ts`, `growth-lifecycle.test.ts`, `growth-media-erase.test.ts`, `growth-media.test.ts`, `growth-notices.test.ts`, `growth-reactions.test.ts`, `growth-reports.test.ts`, `growth-sitemap.test.ts`, `growth-subject-threads.test.ts`, `growth-threads.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `services/kernel` / `test/content`      | `growth-board-sorts.test.ts`, `growth-boards.test.ts`, `growth-lifecycle.test.ts`, `growth-media-erase.test.ts`, `growth-media.test.ts`, `growth-notice-inbox.test.ts`, `growth-notices.test.ts`, `growth-reactions.test.ts`, `growth-reports.test.ts`, `growth-sitemap.test.ts`, `growth-subject-threads.test.ts`, `growth-threads.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `services/kernel` / `test/imports`      | `growth-outcomes.test.ts`, `growth-warmups.test.ts`, `identity-growth.test.ts`, `media-boundary-growth.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `services/kernel` / `test/library`      | `collection-source-native-growth.test.ts`, `entry-due-store-growth.test.ts`, `growth-bulk-outcome-page.test.ts`, `growth-canonical-source.test.ts`, `growth-collections.test.ts`, `growth-curator-list.test.ts`, `growth-listing.test.ts`, `growth-loops.test.ts`, `growth-maintenance-history-page.test.ts`, `growth-maintenance-session-page.test.ts`, `growth-members.test.ts`, `growth-personal-reads.test.ts`, `growth-personal-writes.test.ts`, `growth-preparation-native-reader.test.ts`, `growth-published-logs.test.ts`, `growth-scales.test.ts`, `growth-sessions.test.ts`, `growth-sitemap-discovery.test.ts`, `growth-sitemap.test.ts`, `label-assignment-growth.test.ts`, `label-assignment-lifecycle-growth.test.ts`, `shelf-active-growth.test.ts`, `shelf-page-activity-asc-growth.test.ts`, `shelf-page-activity-desc-growth.test.ts`, `shelf-page-created-asc-growth.test.ts`, `shelf-page-finished-asc-growth.test.ts`, `shelf-page-finished-desc-growth.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `services/kernel` / `test/presentation` | `growth-pages.test.ts`, `growth-profile-routes.test.ts`, `growth-profiles.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

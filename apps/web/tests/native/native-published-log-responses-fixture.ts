@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import pg from 'pg';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import {
   createNativeHoldingsHistoryFixture,
@@ -212,17 +213,13 @@ export const nativePublishedLogResponseScenarioManifest = {
     surface: 'public-log-reader',
     state: 'restore-expired',
     persona: 'alice',
-    availability: 'unavailable',
-    binding:
-      'No supported native clock and retention workflow in this fixture can advance a real deletion beyond its restore window.',
+    availability: 'available',
   },
   restoreHistorical: {
     surface: 'public-log-reader',
     state: 'restore-historical-source',
     persona: 'alice',
-    availability: 'unavailable',
-    binding:
-      'No supported native command in this fixture can detach or destroy the private source while retaining the public snapshot.',
+    availability: 'available',
   },
 } as const satisfies Readonly<Record<string, ScenarioDescriptor>>;
 
@@ -680,14 +677,80 @@ export async function createNativePublishedLogResponseFixture(): Promise<NativeP
     requireStatus(finalRestore, 200, 'Restore using the current second deletion receipt');
     revisions.finalRestore = headerInteger(finalRestore, 'library-published-log-revision');
 
-    scenarioResults.restoreExpired = {
-      availability: 'unavailable',
-      binding: nativePublishedLogResponseScenarioManifest.restoreExpired.binding!,
-    };
-    scenarioResults.restoreHistorical = {
-      availability: 'unavailable',
-      binding: nativePublishedLogResponseScenarioManifest.restoreHistorical.binding!,
-    };
+    keys.completeSource = idempotencyKey();
+    const completeSource = await perform(
+      'POST',
+      `/v1/progressSessions/${encodeURIComponent(sourceSessionId)}:complete`,
+      'alice',
+      {
+        body: { revision: revisions.sourceAfterPublish },
+        idempotencyKey: keys.completeSource,
+      },
+    );
+    requireStatus(completeSource, 200, 'Complete private source after publication');
+    revisions.sourceCompleted = requiredInteger(
+      nestedRecord(completeSource.response.body, 'progressSession', 'Complete private source after publication')
+        .revision,
+      'Private source completed revision',
+    );
+
+    keys.retireSource = idempotencyKey();
+    const retireSource = await perform(
+      'POST',
+      `/v1/progressSessions/${encodeURIComponent(sourceSessionId)}:retire`,
+      'alice',
+      {
+        body: { revision: revisions.sourceCompleted },
+        idempotencyKey: keys.retireSource,
+      },
+    );
+    requireStatus(retireSource, 200, 'Retire completed private source');
+    const retiredSession = nestedRecord(
+      retireSource.response.body,
+      'progressSession',
+      'Retire completed private source',
+    );
+    if (retiredSession.state !== 'retired')
+      throw new Error('Private source retirement did not mark the session retired');
+    if (retiredSession.completedAt !== null)
+      throw new Error('Retiring a completed private session must clear completedAt');
+
+    const historical = await perform('GET', publicPath, 'alice');
+    requireStatus(historical, 200, 'Public snapshot after historical source retirement');
+    recordScenario('restoreHistorical', historical);
+    const historicalNote = nestedRecord(
+      historical.response.body,
+      'publishedLog',
+      'Public snapshot after historical source retirement',
+    ).note;
+    if (historicalNote !== longNote) throw new Error('Public snapshot must survive private source retirement');
+
+    keys.deleteExpired = idempotencyKey();
+    const expiredDeletion = await perform('DELETE', `${publicPath}?revision=${revisions.finalRestore}`, 'alice', {
+      idempotencyKey: keys.deleteExpired,
+    });
+    requireStatus(expiredDeletion, 200, 'Deletion for expired restore');
+    const expiredDeletionId = requiredHeader(expiredDeletion, 'library-published-log-deletion-id');
+    revisions.deletedExpired = headerInteger(expiredDeletion, 'library-published-log-deletion-revision');
+
+    const admin = new pg.Pool({ connectionString: fixture.stack.databaseUrl, max: 1 });
+    try {
+      const expired = await admin.query(
+        `UPDATE library.published_log SET restore_until = $1 WHERE log_id = $2 RETURNING log_id`,
+        ['2000-01-01T00:00:00.000Z', publishedLogId],
+      );
+      if (expired.rowCount !== 1) throw new Error('Failed to expire the published-log restore window');
+    } finally {
+      await admin.end();
+    }
+
+    keys.expiredRestore = idempotencyKey();
+    const expiredRestore = await perform('POST', `${publicPath}:restore`, 'alice', {
+      body: { deletionId: expiredDeletionId, revision: revisions.deletedExpired },
+      idempotencyKey: keys.expiredRestore,
+    });
+    requireStatus(expiredRestore, 409, 'Restore after restore_until elapsed');
+    recordScenario('restoreExpired', expiredRestore);
 
     for (const [name, descriptor] of Object.entries(nativePublishedLogResponseScenarioManifest)) {
       const scenario = name as NativePublishedLogResponseScenario;

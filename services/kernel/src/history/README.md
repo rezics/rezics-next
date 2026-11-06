@@ -52,6 +52,14 @@ hook; facades never fall back to an implementation. The governance bootstrap com
 preload hook. Only typed History vocabulary imports the contract; comment or string matches of Pending are not consumers. The inherited ZoneWorkLedger ClassDeclaration load-time read is
 `membership.ts:90`.
 
+Decision: `adapters/record-source-set-native.ts` lazy-loads Semantic's public `record-source-set.ts` from
+`../../semantic/record-source-set.ts`, matching its type import. A `../semantic/` lookup from `history/adapters`
+treats the landed owner as absent and fails every native subject write. Semantic `beginSemanticRecordSourceSet`
+declares the command set; a History consumer that declares again is a repeated declaration. Begin also registers
+the seal-guard callback, so those commands cannot return `noEffect`; the History consumer test emits the same
+outbox event as Semantic's owner test, and the sealed copies keep `command-receipt/v1`, `durable-work/v1` and
+`outbox-event/v1`.
+
 ## Zone receipts, outbox events and current closure boundary
 
 The delivered Zone producer cut is the native command receipts `zone.create`, `zone.configure`,

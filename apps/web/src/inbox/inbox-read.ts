@@ -6,125 +6,67 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { MediaProblem } from '../media/kernel';
-import { m } from '../paraglide/messages.js';
-import { getLocale, localizeHref } from '../paraglide/runtime.js';
-import { threadLocation } from '../threads/thread-href';
+import {
+  decodeInboxPage,
+  decodeUnreadCount,
+  InboxReadError,
+  isInboxSelection,
+  isRecord,
+  nativeFailure,
+  noticeId,
+  resolveInboxItems,
+  type InboxSelection,
+  type NativeInboxFailure,
+  type ResolvedInboxPage,
+} from './inbox-decode';
 import { INBOX_PAGE_SIZE, MAX_INBOX_CURSOR_LENGTH } from './inbox-work';
 
 export { INBOX_PAGE_KERNEL_READ_CEILING, INBOX_PAGE_SIZE } from './inbox-work';
-export const INBOX_SELECTIONS = ['all', 'unread'] as const;
-export type InboxSelection = (typeof INBOX_SELECTIONS)[number];
-export const DEFAULT_INBOX_SELECTION: InboxSelection = 'all';
-
-export type InboxPageMarkSeen = { method: 'POST'; path: string; through: string };
-export type InboxPageActions = { markSeen: InboxPageMarkSeen | null };
-export type InboxPageViewer = { accountId: string };
-
-type NoticeRead = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['notifications']['get']>>;
-type NativeNotice = NonNullable<NoticeRead['data']>['items'][number];
-type NativeActor = NativeNotice['actor'];
-type NativeTarget = NativeNotice['target'];
-type NativeActions = NativeNotice['actions'];
-
-/** Optional composed fields keep presentational test seams small; native decoding requires every field. */
-export type InboxNotice = {
-  id: string;
-  kind: string;
-  createdAt: string;
-  unread: boolean;
-  actorId: string | null;
-  threadId: string | null;
-  postId: string | null;
-  decisionId: string | null;
-  reportId: string | null;
-  actor?: NativeActor;
-  target?: NativeTarget;
-  summary?: string;
-  actions?: NativeActions;
-  /** Retained for older presentation fixtures; the native wire uses thread_watch/board_activity. */
-  watch?: 'thread' | 'board';
-};
-type NoticePage = {
-  items: InboxNotice[];
-  next: string | null;
-  viewer: InboxPageViewer;
-  selection: InboxSelection;
-  actions: InboxPageActions;
-};
-type ResolvedNotice = InboxNotice & {
-  href?: string;
-  text: string;
-  unavailable: boolean;
-  actorName?: string;
-  context?: string;
-};
-export type ResolvedInboxPage = {
-  items: ResolvedNotice[];
-  next: string | null;
-  viewer: InboxPageViewer;
-  selection: InboxSelection;
-  actions: InboxPageActions;
-};
-
-export type NativeInboxFailure = {
-  status: number | null;
-  code?: string;
-  retryable?: boolean;
-  requestId?: string;
-  retryAfter?: string;
-};
+export {
+  DEFAULT_INBOX_SELECTION,
+  decodeInboxPage,
+  decodeUnreadCount,
+  inboxKindLabel,
+  inboxOpenHref,
+  inboxPageActions,
+  inboxTargetContext,
+  INBOX_SELECTIONS,
+  InboxReadError,
+  isInboxSelection,
+  nativeInboxEnvelope,
+  noticeId,
+  readyInboxPage,
+  resolveInboxItems,
+  type InboxNotice,
+  type InboxPageActions,
+  type InboxPageMarkSeen,
+  type InboxPageViewer,
+  type InboxSelection,
+  type NativeActor,
+  type NativeInboxFailure,
+  type NativeTarget,
+  type NoticePage,
+  type ResolvedInboxPage,
+  type ResolvedNotice,
+  type UnreadCountReady,
+} from './inbox-decode';
 
 export type InboxPage =
   | { signedIn: false }
   | {
       signedIn: true;
       state: 'ready';
-      items: ResolvedNotice[];
+      items: ResolvedInboxPage['items'];
       next: string | null;
-      viewer: InboxPageViewer;
+      viewer: ResolvedInboxPage['viewer'];
       selection: InboxSelection;
-      actions: InboxPageActions;
+      actions: ResolvedInboxPage['actions'];
     }
   | {
       signedIn: true;
       state: 'closed' | 'preparing' | 'unavailable';
       failure: NativeInboxFailure;
     };
-
-class InboxReadError extends Error {
-  constructor(readonly failure: NativeInboxFailure) {
-    super('Native inbox read failed');
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function nativeFailure(value: unknown, status?: number, headers?: HeadersInit): NativeInboxFailure {
-  const root = isRecord(value) ? value : undefined;
-  const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
-  const retryAfter =
-    (headers === undefined ? undefined : new Headers(headers).get('retry-after')) ??
-    (value instanceof MediaProblem ? new Headers(value.headers).get('retry-after') : undefined);
-  return {
-    status:
-      status ??
-      (root && typeof root.status === 'number'
-        ? root.status
-        : problem && typeof problem.status === 'number'
-          ? problem.status
-          : null),
-    ...(problem && typeof problem.code === 'string' ? { code: problem.code } : {}),
-    ...(problem && typeof problem.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
-    ...(problem && typeof problem.request_id === 'string'
-      ? { requestId: problem.request_id }
-      : problem && typeof problem.requestId === 'string'
-        ? { requestId: problem.requestId }
-        : {}),
-    ...(retryAfter ? { retryAfter } : {}),
-  };
-}
 
 function rethrowFrameworkControlFlow(error: unknown): void {
   if (isNotFound(error) || isRedirect(error)) throw error;
@@ -136,419 +78,18 @@ function failureState(failure: NativeInboxFailure): 'closed' | 'preparing' | 'un
   return 'unavailable';
 }
 
+function transportFailure(value: unknown, status?: number, headers?: HeadersInit): NativeInboxFailure {
+  const fromProblem = value instanceof MediaProblem ? value.headers : undefined;
+  return nativeFailure(value, status, headers ?? fromProblem);
+}
+
 export function inboxReadFailure(error: unknown): Extract<InboxPage, { failure: NativeInboxFailure }> {
   rethrowFrameworkControlFlow(error);
   const failure =
     error instanceof InboxReadError
       ? error.failure
-      : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+      : transportFailure(error, isPlatformClosedError(error) ? error.status : undefined);
   return { signedIn: true, state: failureState(failure), failure };
-}
-
-/** The native DTO declares string IDs; require a nonempty, unambiguous route segment. */
-function noticeId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
-}
-
-function positiveInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]) {
-  const actual = Object.keys(value).sort();
-  return actual.length === expected.length && actual.every((key, index) => key === [...expected].sort()[index]);
-}
-
-function validAvatarSummary(value: unknown): boolean {
-  if (value === null) return true;
-  if (
-    !isRecord(value) ||
-    !exactKeys(value, ['media', 'width', 'height', 'placeholder', 'variants', 'focalPoint', 'credit']) ||
-    !noticeId(value.media) ||
-    !positiveInteger(value.width) ||
-    !positiveInteger(value.height) ||
-    value.credit !== null
-  )
-    return false;
-  const placeholder = value.placeholder;
-  if (
-    !isRecord(placeholder) ||
-    !exactKeys(placeholder, ['thumbhash', 'color']) ||
-    typeof placeholder.thumbhash !== 'string' ||
-    placeholder.thumbhash.length > 44 ||
-    typeof placeholder.color !== 'string' ||
-    !/^#[0-9a-f]{6}$/.test(placeholder.color)
-  )
-    return false;
-  if (!Array.isArray(value.variants) || value.variants.length > 12) return false;
-  for (const variant of value.variants) {
-    if (
-      !isRecord(variant) ||
-      !exactKeys(variant, ['format', 'width']) ||
-      (variant.format !== 'avif' && variant.format !== 'webp') ||
-      !positiveInteger(variant.width)
-    )
-      return false;
-  }
-  if (value.focalPoint === null) return true;
-  return (
-    isRecord(value.focalPoint) &&
-    exactKeys(value.focalPoint, ['x', 'y']) &&
-    typeof value.focalPoint.x === 'number' &&
-    value.focalPoint.x >= 0 &&
-    value.focalPoint.x <= 1 &&
-    typeof value.focalPoint.y === 'number' &&
-    value.focalPoint.y >= 0 &&
-    value.focalPoint.y <= 1
-  );
-}
-
-function validClosedActorLabels(
-  value: Record<string, unknown>,
-  state: 'withheld' | 'system',
-  displayName: 'Former or unavailable account' | 'Moderation team',
-): boolean {
-  const installed = exactKeys(value, ['state', 'displayName', 'handle', 'avatar', 'avatarUrl']);
-  const retained = exactKeys(value, ['state', 'displayName', 'handle', 'avatarUrl']);
-  return (
-    (installed || retained) &&
-    value.state === state &&
-    value.displayName === displayName &&
-    value.handle === null &&
-    value.avatarUrl === null &&
-    (!installed || value.avatar === null)
-  );
-}
-
-function validActor(value: unknown): value is NativeActor {
-  if (!isRecord(value)) return false;
-  if (value.state === 'available') {
-    const installed = exactKeys(value, [
-      'state',
-      'accountId',
-      'displayName',
-      'handle',
-      'avatar',
-      'avatarUrl',
-      'automated',
-    ]);
-    const retained = exactKeys(value, ['state', 'accountId', 'displayName', 'handle', 'avatarUrl', 'automated']);
-    return (
-      (installed || retained) &&
-      noticeId(value.accountId) &&
-      typeof value.displayName === 'string' &&
-      (value.handle === null || typeof value.handle === 'string') &&
-      typeof value.automated === 'boolean' &&
-      (installed
-        ? validAvatarSummary(value.avatar) && value.avatarUrl === null
-        : value.avatarUrl === null || typeof value.avatarUrl === 'string')
-    );
-  }
-  if (value.state === 'withheld') return validClosedActorLabels(value, 'withheld', 'Former or unavailable account');
-  return validClosedActorLabels(value, 'system', 'Moderation team');
-}
-
-function validTarget(value: unknown): value is NativeTarget {
-  if (!isRecord(value) || !exactKeys(value, ['state', 'threadId', 'postId', 'boardId', 'threadTitle', 'boardTitle']))
-    return false;
-  if (value.state !== 'available' && value.state !== 'withheld') return false;
-  for (const field of ['threadId', 'postId', 'boardId'] as const)
-    if (value[field] !== null && !noticeId(value[field])) return false;
-  for (const field of ['threadTitle', 'boardTitle'] as const)
-    if (value[field] !== null && typeof value[field] !== 'string') return false;
-  return true;
-}
-
-function validOpenAction(value: unknown): value is NativeActions['open'] {
-  if (value === null) return true;
-  if (!isRecord(value) || typeof value.kind !== 'string') return false;
-  if (value.kind === 'board') return exactKeys(value, ['kind', 'boardId']) && noticeId(value.boardId);
-  if (value.kind === 'thread') return exactKeys(value, ['kind', 'threadId']) && noticeId(value.threadId);
-  if (value.kind === 'thread_post')
-    return exactKeys(value, ['kind', 'threadId', 'postId']) && noticeId(value.threadId) && noticeId(value.postId);
-  if (value.kind === 'moderation_decision')
-    return exactKeys(value, ['kind', 'decisionId']) && noticeId(value.decisionId);
-  if (value.kind === 'report_outcome') return exactKeys(value, ['kind', 'reportId']) && noticeId(value.reportId);
-  return false;
-}
-
-function openMatchesNotice(open: NativeActions['open'], item: Record<string, unknown>) {
-  if (open === null) return true;
-  const target = item.target as NativeTarget;
-  if (open.kind === 'board') return target.state === 'available' && target.boardId === open.boardId;
-  if (open.kind === 'thread') return target.state === 'available' && target.threadId === open.threadId;
-  if (open.kind === 'thread_post')
-    return target.state === 'available' && target.threadId === open.threadId && target.postId === open.postId;
-  if (open.kind === 'moderation_decision')
-    return item.kind === 'moderation_decision' && item.decisionId === open.decisionId;
-  return item.kind === 'moderation_decision' && item.reportId === open.reportId;
-}
-
-function validNotice(value: unknown, accountId?: string): value is NativeNotice {
-  if (
-    !isRecord(value) ||
-    !exactKeys(value, [
-      'id',
-      'kind',
-      'createdAt',
-      'actorId',
-      'threadId',
-      'postId',
-      'decisionId',
-      'reportId',
-      'actor',
-      'target',
-      'summary',
-      'actions',
-      'unread',
-    ]) ||
-    !noticeId(value.id) ||
-    !['reply', 'mention', 'moderation_decision', 'thread_watch', 'board_activity'].includes(String(value.kind)) ||
-    typeof value.createdAt !== 'string' ||
-    !Number.isFinite(Date.parse(value.createdAt)) ||
-    new Date(value.createdAt).toISOString() !== value.createdAt ||
-    typeof value.unread !== 'boolean' ||
-    typeof value.summary !== 'string' ||
-    !validActor(value.actor) ||
-    !validTarget(value.target) ||
-    !isRecord(value.actions) ||
-    !exactKeys(value.actions, ['open', 'markSeen']) ||
-    !validOpenAction(value.actions.open) ||
-    !isRecord(value.actions.markSeen) ||
-    !exactKeys(value.actions.markSeen, ['method', 'path']) ||
-    value.actions.markSeen.method !== 'POST' ||
-    typeof value.actions.markSeen.path !== 'string'
-  )
-    return false;
-  for (const field of ['actorId', 'threadId', 'postId', 'decisionId', 'reportId'] as const)
-    if (value[field] !== null && !noticeId(value[field])) return false;
-  if (value.postId !== null && value.threadId === null) return false;
-  if (value.actor.state === 'system' && value.kind !== 'moderation_decision') return false;
-  if (value.actor.state === 'available' && value.actorId !== value.actor.accountId) return false;
-  const expectedPath = accountId
-    ? `/v1/accounts/${encodeURIComponent(accountId)}/notifications/${encodeURIComponent(value.id)}:markSeen`
-    : /^\/v1\/accounts\/[^/]+\/notifications\/[^/]+:markSeen$/.test(value.actions.markSeen.path)
-      ? value.actions.markSeen.path
-      : '';
-  if (!expectedPath || value.actions.markSeen.path !== expectedPath) return false;
-  const target = value.target;
-  if (value.threadId !== target.threadId || value.postId !== target.postId) return false;
-  const open = value.actions.open as NativeActions['open'];
-  if (value.kind === 'reply' || value.kind === 'mention')
-    return (
-      target.state === 'available' &&
-      target.threadId !== null &&
-      target.postId !== null &&
-      value.decisionId === null &&
-      value.reportId === null &&
-      openMatchesNotice(open, value)
-    );
-  if (value.kind === 'thread_watch')
-    return (
-      target.state === 'available' &&
-      target.threadId !== null &&
-      value.decisionId === null &&
-      value.reportId === null &&
-      openMatchesNotice(open, value)
-    );
-  if (value.kind === 'board_activity')
-    return (
-      target.state === 'available' &&
-      target.boardId !== null &&
-      value.decisionId === null &&
-      value.reportId === null &&
-      openMatchesNotice(open, value)
-    );
-  if (value.kind === 'moderation_decision') {
-    if (value.decisionId === null && value.reportId === null) return open === null;
-    if (value.decisionId !== null && value.reportId !== null) return false;
-    return openMatchesNotice(open, value);
-  }
-  return false;
-}
-
-function projectNativeNotice(item: NativeNotice): InboxNotice {
-  const target: NativeTarget =
-    item.target.state === 'withheld'
-      ? { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null }
-      : item.target;
-  return {
-    id: item.id,
-    kind: item.kind,
-    createdAt: item.createdAt,
-    unread: item.unread,
-    actorId: item.actor.state === 'available' ? item.actor.accountId : null,
-    threadId: target.threadId,
-    postId: target.postId,
-    decisionId: item.decisionId,
-    reportId: item.reportId,
-    actor: item.actor,
-    target,
-    summary: item.summary,
-    actions: item.actions,
-  };
-}
-
-export function isInboxSelection(value: unknown): value is InboxSelection {
-  return value === 'all' || value === 'unread';
-}
-
-function validPageViewer(value: unknown, accountId?: string): value is InboxPageViewer {
-  return (
-    isRecord(value) &&
-    exactKeys(value, ['accountId']) &&
-    noticeId(value.accountId) &&
-    (accountId === undefined || value.accountId === accountId)
-  );
-}
-
-function bulkMarkSeenPath(accountId: string) {
-  return `/v1/accounts/${encodeURIComponent(accountId)}/notifications:markSeen`;
-}
-
-function validPageActions(
-  value: unknown,
-  items: readonly InboxNotice[],
-  next: string | null,
-  selection: InboxSelection,
-  accountId: string,
-): value is InboxPageActions {
-  if (!isRecord(value) || !exactKeys(value, ['markSeen'])) return false;
-  const admitted = value.markSeen;
-  if (admitted === null) return true;
-  if (
-    !isRecord(admitted) ||
-    !exactKeys(admitted, ['method', 'path', 'through']) ||
-    admitted.method !== 'POST' ||
-    admitted.path !== bulkMarkSeenPath(accountId) ||
-    !noticeId(admitted.through)
-  )
-    return false;
-  const through = items.find((item) => item.id === admitted.through);
-  if (!through || !items.some((item) => item.unread)) return false;
-  if (selection === 'unread' && next !== null) return false;
-  return through.id === items[0]?.id;
-}
-
-export function inboxPageActions(
-  items: readonly { id: string; unread: boolean }[],
-  next: string | null,
-  selection: InboxSelection,
-  accountId: string,
-): InboxPageActions {
-  const newest = items[0];
-  if (!newest || !items.some((item) => item.unread) || (selection === 'unread' && next !== null))
-    return { markSeen: null };
-  return { markSeen: { method: 'POST', path: bulkMarkSeenPath(accountId), through: newest.id } };
-}
-
-export function nativeInboxEnvelope<T extends { id: string; unread: boolean }>(
-  items: readonly T[],
-  next: string | null,
-  accountId: string,
-  selection: InboxSelection = DEFAULT_INBOX_SELECTION,
-) {
-  return {
-    items: [...items],
-    next,
-    viewer: { accountId },
-    selection,
-    actions: inboxPageActions(items, next, selection, accountId),
-  };
-}
-
-export function readyInboxPage<T extends { id: string; unread: boolean }>(
-  items: readonly T[],
-  next: string | null,
-  accountId: string,
-  selection: InboxSelection = DEFAULT_INBOX_SELECTION,
-) {
-  return {
-    signedIn: true as const,
-    state: 'ready' as const,
-    ...nativeInboxEnvelope(items, next, accountId, selection),
-  };
-}
-
-/** A malformed or unknown row fails the complete page; the native page already owns disclosure and destinations. */
-export function decodeInboxPage(value: unknown, accountId?: string): NoticePage {
-  if (
-    !isRecord(value) ||
-    !exactKeys(value, ['items', 'next', 'viewer', 'selection', 'actions']) ||
-    !Array.isArray(value.items) ||
-    value.items.length > INBOX_PAGE_SIZE ||
-    !(
-      value.next === null ||
-      (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= MAX_INBOX_CURSOR_LENGTH)
-    ) ||
-    !isInboxSelection(value.selection)
-  )
-    throw new InboxReadError({ status: 200 });
-  const viewer = value.viewer;
-  if (!validPageViewer(viewer, accountId)) throw new InboxReadError({ status: 200 });
-  const items = value.items.map((item) => {
-    if (!validNotice(item, accountId ?? viewer.accountId)) throw new InboxReadError({ status: 200 });
-    return projectNativeNotice(item);
-  });
-  const next = value.next as string | null;
-  const selection = value.selection;
-  const actions = value.actions;
-  if (!validPageActions(actions, items, next, selection, viewer.accountId)) throw new InboxReadError({ status: 200 });
-  return { items, next, viewer, selection, actions };
-}
-
-/** Convert only native action identities to existing localized routes; never consume a supplied URL. */
-export function inboxOpenHref(item: InboxNotice): string | undefined {
-  const open = item.actions?.open;
-  if (
-    !open ||
-    !item.target ||
-    (item.target.state !== 'available' && open.kind !== 'report_outcome' && open.kind !== 'moderation_decision')
-  )
-    return undefined;
-  if (open.kind === 'board' && item.target.boardId === open.boardId)
-    return localizeHref(`/boards/${encodeURIComponent(open.boardId)}`);
-  if (open.kind === 'thread' && item.target.threadId === open.threadId)
-    return threadLocation(getLocale(), { id: open.threadId, title: item.target.threadTitle });
-  if (open.kind === 'thread_post' && item.target.threadId === open.threadId && item.target.postId === open.postId)
-    return threadLocation(getLocale(), { id: open.threadId, title: item.target.threadTitle }, undefined, open.postId);
-  if (open.kind === 'moderation_decision' && item.kind === 'moderation_decision' && item.decisionId === open.decisionId)
-    return localizeHref(`/moderation/decisions/${encodeURIComponent(open.decisionId)}`);
-  if (open.kind === 'report_outcome' && item.kind === 'moderation_decision' && item.reportId === open.reportId)
-    return localizeHref(`/moderation/reports/${encodeURIComponent(open.reportId)}`);
-  return undefined;
-}
-
-export function inboxTargetContext(target: NativeTarget | undefined): string | undefined {
-  if (!target || target.state !== 'available') return undefined;
-  const titles = [target.threadTitle, target.boardTitle].filter(
-    (title): title is string => typeof title === 'string' && title.trim().length > 0,
-  );
-  return titles.length ? titles.join(' · ') : undefined;
-}
-
-/** The composed response supplies owner summary, current actor and target disclosure without point reads. */
-export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInboxPage> {
-  return {
-    viewer: page.viewer,
-    selection: page.selection,
-    actions: page.actions,
-    items: page.items.map((notice) => {
-      const native = notice.actor && notice.target && notice.actions;
-      const actorName = notice.actor?.state === 'available' ? notice.actor.displayName.trim() : undefined;
-      const context = inboxTargetContext(notice.target);
-      const href = inboxOpenHref(notice);
-      return {
-        ...notice,
-        ...(href ? { href } : {}),
-        text: notice.summary ?? '',
-        unavailable: !native || notice.target?.state === 'withheld',
-        ...(actorName ? { actorName } : {}),
-        ...(context ? { context } : {}),
-      };
-    }),
-    next: page.next,
-  };
 }
 
 function authHeaders(authorization: string) {
@@ -569,12 +110,12 @@ async function readNoticePage(
       limit: INBOX_PAGE_SIZE,
       selection: query.selection,
       ...(query.cursor ? { cursor: query.cursor } : {}),
-    } as { limit: number; cursor?: string },
+    },
     headers: authHeaders(authorization),
     ...(signal ? { fetch: { signal } } : {}),
   });
   if (result.error || result.status !== 200)
-    throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
+    throw new InboxReadError(transportFailure(result.error, result.status, result.headers));
   return decodeInboxPage(result.data, accountId);
 }
 
@@ -590,8 +131,8 @@ async function inboxKernelClient() {
 }
 
 function inboxPageQueryOf(value: InboxPageQuery | string | undefined): InboxPageQuery {
-  if (value === undefined) return { selection: DEFAULT_INBOX_SELECTION };
-  if (typeof value === 'string') return { selection: DEFAULT_INBOX_SELECTION, cursor: value };
+  if (value === undefined) return { selection: 'all' };
+  if (typeof value === 'string') return { selection: 'all', cursor: value };
   return { selection: value.selection, ...(value.cursor ? { cursor: value.cursor } : {}) };
 }
 
@@ -600,7 +141,7 @@ export async function loadInboxPage(
   client: KernelClient,
   accountId: string,
   authorization: string,
-  query: InboxPageQuery | string = { selection: DEFAULT_INBOX_SELECTION },
+  query: InboxPageQuery | string = { selection: 'all' },
   signal?: AbortSignal,
 ): Promise<ResolvedInboxPage> {
   return resolveInboxItems(await readNoticePage(client, accountId, authorization, inboxPageQueryOf(query), signal));
@@ -620,7 +161,7 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       (typeof value.cursor !== 'string' || value.cursor.length > MAX_INBOX_CURSOR_LENGTH)
     )
       throw new Error('Invalid inbox cursor');
-    const selection = value.selection === undefined ? DEFAULT_INBOX_SELECTION : value.selection;
+    const selection = value.selection === undefined ? 'all' : value.selection;
     if (!isInboxSelection(selection)) throw new Error('Invalid inbox selection');
     return {
       selection,
@@ -675,32 +216,9 @@ export async function loadUnreadCount(
       ...(signal ? { fetch: { signal } } : {}),
     });
     if (result.error || !result.data)
-      throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
-    const count = result.data;
-    if (
-      !Number.isInteger(count.count) ||
-      count.count < 0 ||
-      count.count > 100 ||
-      typeof count.capped !== 'boolean' ||
-      (count.capped && count.basis === 'current-visible-unread' && count.count !== 100) ||
-      (!count.capped && count.basis === 'current-visible-lower-bound') ||
-      (count.basis !== 'current-visible-unread' && count.basis !== 'current-visible-lower-bound') ||
-      !isRecord(count.witness) ||
-      !exactKeys(count.witness, ['kind', 'at']) ||
-      count.witness.kind !== 'current-disclosure' ||
-      typeof count.witness.at !== 'string' ||
-      !Number.isFinite(Date.parse(count.witness.at)) ||
-      new Date(count.witness.at).toISOString() !== count.witness.at
-    )
-      throw new InboxReadError({ status: result.status });
-    return {
-      signedIn: true,
-      state: 'ready',
-      count: count.count,
-      capped: count.capped,
-      basis: count.basis,
-      witness: { kind: count.witness.kind, at: count.witness.at },
-    };
+      throw new InboxReadError(transportFailure(result.error, result.status, result.headers));
+    const count = decodeUnreadCount(result.data, result.status);
+    return { signedIn: true, state: 'ready', ...count };
   } catch (error) {
     return unreadCountUnavailable(error);
   }
@@ -711,7 +229,7 @@ function unreadCountUnavailable(error: unknown): Extract<UnreadCount, { state: '
   const failure =
     error instanceof InboxReadError
       ? error.failure
-      : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+      : transportFailure(error, isPlatformClosedError(error) ? error.status : undefined);
   return {
     signedIn: true,
     state: 'unavailable',
@@ -746,7 +264,7 @@ export class InboxSeenError extends Error {
 /** Project only bounded native diagnostics. Body text, credentials and body-supplied waits stay private. */
 export function inboxSeenFailure(error: unknown): Extract<InboxSeenResult, { failure: NativeInboxFailure }> {
   rethrowFrameworkControlFlow(error);
-  const native = error instanceof InboxSeenError ? error.failure : nativeFailure(error);
+  const native = error instanceof InboxSeenError ? error.failure : transportFailure(error);
   const bounded = (value: string | undefined) =>
     value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
   const code = bounded(native.code);
@@ -781,7 +299,7 @@ export async function markInboxThrough(
       { headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) } },
     );
   if (result.error || result.status !== 204)
-    throw new InboxSeenError(nativeFailure(result.error, result.status, result.headers));
+    throw new InboxSeenError(transportFailure(result.error, result.status, result.headers));
 }
 
 /** A chosen notice has its own native identity; it never advances the bulk through frontier. */
@@ -800,7 +318,7 @@ export async function markInboxNoticeSeen(
       headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) },
     });
   if (result.error || result.status !== 204)
-    throw new InboxSeenError(nativeFailure(result.error, result.status, result.headers));
+    throw new InboxSeenError(transportFailure(result.error, result.status, result.headers));
 }
 
 /** The private server-function result, including session/CSRF refusals, has one serializable failure shape. */

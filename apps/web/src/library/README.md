@@ -328,8 +328,11 @@ Decision: a published snapshot is independently readable after later private ses
 publish open, session-log paging and Undo use 44px (`min-h-11`) targets with visible keyboard focus; confirmation
 receives focus. Exact Undo restores the original snapshot, not the current private session. Ordinary 720-hour
 retention removes expired output from API and pages. Return from a public log restores the original My Logs cursor
-and row from this visit's history state; the public log URL never carries the private cursor. Official client
-publication stays with its owner. Relative timestamps use the Content `threads/byline-time` public leaf.
+and row from this visit's history state with the current session; the public log URL never carries the private cursor.
+Back href is the cursor-free My Logs address. Ordinary click uses history.back() only when this public-log visit
+carries the captured My Logs frontier for this log and the current session; a direct visitor or a replaced session
+follows the href. Official client publication stays with its owner. Relative timestamps use the Content
+`threads/byline-time` public leaf.
 
 # Following private edges
 

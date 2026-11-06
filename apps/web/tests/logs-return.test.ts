@@ -1,15 +1,19 @@
 import { expect, test } from 'bun:test';
 import {
   LOGS_RETURN_STATE,
+  bindLogsReturnVisit,
   captureLogsReturn,
   clearLogsReturn,
   logsDestinationClick,
   logsListHref,
+  logsReturnBackClick,
+  logsReturnBackHref,
   logsReturnFrontier,
   logsReturnFrontierFromState,
   logsReturnLocationState,
   logsReturnMatchesWindow,
   logsReturnTrigger,
+  logsReturnVisitFromState,
   readLogsReturn,
 } from '../src/library/logs-return';
 
@@ -86,4 +90,90 @@ test('My Logs return keeps the private list frontier on this history entry and r
   };
   expect(logsReturnTrigger(root as never, logId)).toBe(open);
   expect(logsReturnTrigger(root as never, '0192f3a0-6c1e-7b2a-9d4e-000000000099')).toBeNull();
+});
+
+test('public log Back uses history only for this captured My Logs visit, log and current session', () => {
+  const frontier = logsReturnFrontier(locale, subject, cursor, logId)!;
+  const otherLog = '0192f3a0-6c1e-7b2a-9d4e-000000000099';
+  expect(logsReturnBackHref(locale)).toBe('/en/library/logs');
+  expect(logsReturnBackHref(locale)).not.toContain('cursor');
+  expect(logsListHref(locale, cursor)).toContain('cursor=');
+  expect(logsReturnVisitFromState(logsReturnLocationState(frontier), locale, subject, logId)).toEqual(frontier);
+  expect(logsReturnVisitFromState(logsReturnLocationState(frontier), locale, subject, otherLog)).toBeNull();
+  expect(logsReturnVisitFromState(logsReturnLocationState(frontier), locale, 'other-session', logId)).toBeNull();
+  expect(logsReturnVisitFromState({}, locale, subject, logId)).toBeNull();
+
+  let prevented = false;
+  let backed = 0;
+  let state: unknown = {};
+  const location = { href: `https://site.test${logsListHref(locale, cursor)}` };
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      location,
+      history: {
+        length: 8,
+        get state() {
+          return state;
+        },
+        replaceState(next: unknown, _title: string, url: string) {
+          state = next;
+          location.href = new URL(url, location.href).href;
+        },
+        back() {
+          backed += 1;
+        },
+      },
+    },
+  });
+  try {
+    const event = {
+      defaultPrevented: false,
+      button: 0,
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      preventDefault() {
+        prevented = true;
+      },
+    };
+    bindLogsReturnVisit(locale, subject, logId);
+    state = {};
+    expect(logsReturnBackClick(event, logId, locale, subject)).toBe(true);
+    expect(prevented).toBe(false);
+    expect(backed).toBe(0);
+
+    state = logsReturnLocationState(frontier);
+    expect(logsReturnBackClick(event, logId, locale, subject)).toBe(false);
+    expect(prevented).toBe(true);
+    expect(backed).toBe(1);
+
+    prevented = false;
+    expect(logsReturnBackClick(event, logId, locale, 'replaced-session')).toBe(true);
+    expect(prevented).toBe(false);
+    expect(backed).toBe(1);
+    expect(logsReturnBackClick(event, logId, locale, null)).toBe(true);
+    expect(logsReturnBackClick(event, otherLog, locale, subject)).toBe(true);
+    expect(logsReturnBackClick({ ...event, metaKey: true }, logId, locale, subject)).toBe(false);
+    expect(prevented).toBe(false);
+    expect(backed).toBe(1);
+
+    bindLogsReturnVisit(locale, subject, logId);
+    state = { kept: true };
+    expect(logsDestinationClick(event, () => true, frontier)).toBe(true);
+    state = { public: true };
+    location.href = `https://site.test/${locale}/logs/${logId}`;
+    expect(bindLogsReturnVisit(locale, subject, logId)).toEqual(frontier);
+    expect(state).toMatchObject({ public: true, ...logsReturnLocationState(frontier) });
+    expect(bindLogsReturnVisit(locale, subject, otherLog)).toBeNull();
+    prevented = false;
+    expect(logsReturnBackClick(event, logId, locale, subject)).toBe(false);
+    expect(prevented).toBe(true);
+    expect(backed).toBe(2);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'window', previous);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
 });

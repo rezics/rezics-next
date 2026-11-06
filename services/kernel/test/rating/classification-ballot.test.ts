@@ -15,7 +15,11 @@ import {
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { Value } from 'typebox/value';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
-import { CLASSIFICATION_AGGREGATE_CHANGED, CLASSIFICATION_BALLOT_CHANGED } from '../../src/rating/events.ts';
+import {
+  CLASSIFICATION_AGGREGATE_CHANGED,
+  CLASSIFICATION_BALLOT_CHANGED,
+  CLASSIFICATION_BALLOT_CLEANUP,
+} from '../../src/rating/events.ts';
 import { classificationAggregateView } from '../../src/rating/classification-ballot.ts';
 import { interleaveClassificationRead } from './support/classification-ballot-interleave.ts';
 
@@ -26,6 +30,7 @@ const accounts = {
   voter3: '019a1b2c-3d4e-7f00-8a00-5ab1ec700104',
   voter4: '019a1b2c-3d4e-7f00-8a00-5ab1ec700105',
   voter5: '019a1b2c-3d4e-7f00-8a00-5ab1ec700106',
+  voterEmpty: '019a1b2c-3d4e-7f00-8a00-5ab1ec700107',
 } as const;
 type Persona = keyof typeof accounts;
 type TestSubject = { id: string; statements: Record<string, Array<{ id: string }>> };
@@ -172,6 +177,26 @@ async function driveWorker(partitions: readonly number[]): Promise<void> {
     if (delivered === 0) return;
   }
   throw new Error('Classification ballot relay did not catch up');
+}
+
+async function cleanupObservation(partition: number, actorId: string, route: number) {
+  // subject is text and principal_id/actor_id are uuid; one bind cannot be both.
+  const settled = await database.admin.query<{ events: number; receipts: number; pending: boolean }>(
+    `SELECT
+       (SELECT count(*)::int FROM core.outbox
+         WHERE partition_no = $1 AND type = $2 AND subject = $3) AS events,
+       (SELECT count(*)::int FROM core.receipt
+         WHERE partition_no = $1 AND principal_id = $4::uuid
+           AND command_kind IN (
+             'rating.classification-ballot.lifecycle',
+             'rating.classification-ballot.cleanup'
+           )) AS receipts,
+       (SELECT cleanup_pending
+          FROM rating.classification_ballot_actor
+         WHERE route = $5 AND actor_id = $4::uuid) AS pending`,
+    [partition, CLASSIFICATION_BALLOT_CLEANUP, actorId, actorId, route],
+  );
+  return settled.rows[0]!;
 }
 
 function ballotPath(subjectId: string, associationId: string, suffix: 'assessment' | 'aggregate') {
@@ -560,4 +585,63 @@ test('mounted classification ballots stay private and converge through the durab
     [routeOf(accounts.voter3), accounts.voter3, subject.id, associationId],
   );
   expect(withdrawn.rows).toEqual([{ assessment: null, revision: '2' }]);
+});
+
+test('lifecycle cleanup of an actor with no ballots still emits a command event', async () => {
+  const actorId = accounts.voterEmpty;
+  const route = routeOf(actorId)!;
+  const partition = partitionOf(route)!;
+  const origin = await database.admin.query<{ epoch: number | null; position: string }>(
+    'SELECT epoch, position::text AS position FROM core.partition WHERE partition_no = $1',
+    [partition],
+  );
+  await seedCheckpoint(partition);
+  await suspendAccount(database.admin, actorId);
+  await driveWorker([partition]);
+  const actor = await database.admin.query<{ cleanup_pending: boolean; generation: string }>(
+    `SELECT cleanup_pending, generation::text AS generation
+     FROM rating.classification_ballot_actor
+     WHERE route = $1 AND actor_id = $2::uuid`,
+    [route, actorId],
+  );
+  expect(actor.rows).toEqual([{ cleanup_pending: false, generation: '1' }]);
+  const cleanups = await database.admin.query<{ generation: string }>(
+    `SELECT data->>'generation' AS generation FROM core.outbox
+     WHERE partition_no = $1 AND type = $2 AND subject = $3
+     ORDER BY position, event_seq`,
+    [partition, CLASSIFICATION_BALLOT_CLEANUP, actorId],
+  );
+  expect(cleanups.rows).toEqual([{ generation: '1' }, { generation: '1' }]);
+  const receipts = await database.admin.query<{ command_kind: string; n: number }>(
+    `SELECT command_kind, count(*)::int AS n FROM core.receipt
+     WHERE partition_no = $1 AND principal_id = $2::uuid
+       AND command_kind IN (
+         'rating.classification-ballot.lifecycle',
+         'rating.classification-ballot.cleanup'
+       )
+     GROUP BY command_kind ORDER BY command_kind`,
+    [partition, actorId],
+  );
+  expect(receipts.rows).toEqual([
+    { command_kind: 'rating.classification-ballot.cleanup', n: 2 },
+    { command_kind: 'rating.classification-ballot.lifecycle', n: 1 },
+  ]);
+  await driveWorker([partition]);
+  expect(await cleanupObservation(partition, actorId, route)).toEqual({
+    events: 2,
+    receipts: 3,
+    pending: false,
+  });
+  const originRow = origin.rows[0];
+  await database.admin.query(
+    `UPDATE core.consumer_checkpoint SET epoch = $3, position = $4
+     WHERE partition_no = $1 AND consumer = $2`,
+    [partition, consumer, originRow && originRow.position !== '0' ? originRow.epoch : null, originRow?.position ?? '0'],
+  );
+  await driveWorker([partition]);
+  expect(await cleanupObservation(partition, actorId, route)).toEqual({
+    events: 2,
+    receipts: 3,
+    pending: false,
+  });
 });

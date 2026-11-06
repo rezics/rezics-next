@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   composedLimitBound,
+  deriveNestedProducerBound,
   growthByteBounds,
   growthSeriesBounds,
   ordinaryCountedBounds,
   ordinaryCountedLimits,
   ordinaryDirectBound,
+  ordinaryNestedBound,
   PAGE_SLOTS,
   REQUESTED_SIZE,
   SCALES,
@@ -41,7 +43,7 @@ import {
   revokeDuringPreparation,
   surfacePages,
 } from './support/composed-discovery-plans.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, type GrowthDatabase } from '../support/growth.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { discoveryKey, type CreatedSubject } from '../support/released-discovery.ts';
 
@@ -49,7 +51,7 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 let world: ComposedDiscoveryWorld | undefined;
-let database: GrowthDatabase | undefined;
+let database: GrowthDatabase;
 let fixture: ComposedDiscoveryWorld['fixture'];
 let books: ComposedDiscoveryWorld['books'];
 let recipes: ComposedDiscoveryWorld['recipes'];
@@ -60,11 +62,8 @@ beforeAll(async () => {
   world = await createComposedDiscoveryWorld({
     version: 1,
     search: 'native',
-    async kernelPool(url) {
-      database = await openGrowthDatabase(url);
-      return database.pool;
-    },
   });
+  database = world.database;
   fixture = world.fixture;
   books = world.books;
   recipes = world.recipes;
@@ -72,8 +71,7 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  await database?.admin.end();
-  await world?.population.close();
+  await world?.close();
 }, 180_000);
 
 test('derived composed 16-read 128-slot bound matches the published Cost table before repair', () => {
@@ -81,13 +79,20 @@ test('derived composed 16-read 128-slot bound matches the published Cost table b
     reads: 16,
     slots: 128,
     candidates: 816,
+    discardedCandidates: 816,
+    rereads: 16,
     accessDependencyPoints: 6784,
     examinedRows: 14080,
     statements: 72,
     engineSearches: 96,
     connections: 1,
+    preparationInputKeys: 16_000,
+    nestedEngineSearches: 160,
   });
   expect(ordinaryDirectBound.candidates).toBe(Math.min(600, 6 * PAGE_SLOTS + 3));
+  expect(ordinaryNestedBound).toEqual(deriveNestedProducerBound('direct', PAGE_SLOTS));
+  expect(ordinaryNestedBound.discardedCandidates).toBe(ordinaryDirectBound.candidates);
+  expect(ordinaryNestedBound.rereads).toBe(1);
   expect(FEWEST_TESTS_DECISION).toContain('not-cooked and bulk stay frozen');
 });
 
@@ -358,6 +363,7 @@ test('quick-vegetarian-recipes/catalogue-direct/sparse-page', async () => {
 }, 600_000);
 
 test('long-harem-light-novels/own-state/unrelated-owner-history', async () => {
+  // Independent history axis: Bob's owner history grows at 64/512/4096; Alice's neighbourhood stays fixed.
   const accepted = world!.population.profile('schema:Book');
   const active = accepted.profile.entryStateSet?.states.find(({ role }) => role === 'active');
   expect(active).toBeDefined();

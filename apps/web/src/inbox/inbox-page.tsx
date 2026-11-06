@@ -39,6 +39,7 @@ import {
   type InboxReturnReceipt,
 } from './inbox-return';
 import {
+  inboxKindLabel,
   inboxTargetContext,
   inboxSeenFailure,
   type InboxNoticeSeenAttempt,
@@ -70,12 +71,7 @@ type InboxPageIntent = Readonly<{
 }>;
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
-  if (item.kind === 'thread_watch' || item.watch === 'thread') return m.inbox_kind_thread_activity();
-  if (item.kind === 'board_activity' || item.watch === 'board') return m.inbox_kind_board_activity();
-  if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
-  if (item.kind === 'mention') return m.inbox_kind_mention();
-  if (item.kind === 'reply') return m.inbox_kind_reply();
-  return m.inbox_kind_unknown();
+  return inboxKindLabel(item);
 }
 
 function accessRefused(failure: NativeInboxFailure | undefined) {

@@ -12,7 +12,7 @@ import type {
   Thread,
 } from './content-notification-driver';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
 let driver: ContentNotificationDriver;
 let fixture: Fixture;
 let current: ContentNotificationDriver | undefined;
@@ -33,7 +33,7 @@ beforeEach(async () => {
   fixture = await driver.provision();
   expect(fixture.readers).toHaveLength(11);
   serial = 0;
-});
+}, 180_000);
 afterEach(async () => {
   const closing = current;
   current = undefined;

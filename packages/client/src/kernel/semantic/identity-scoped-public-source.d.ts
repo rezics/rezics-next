@@ -47,6 +47,6 @@ export declare function verifyPublicIdentitySourceCaptureLocator(tx: CommandTran
 export declare function lockPublicIdentityOutputCaptureDisposition(tx: CommandTransaction, selection: import('../library/native-public-output-contract.ts').PublicOutputDispositionSelection, context: import('../library/native-public-output-contract.ts').PublicOutputCommandContext): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../library/collection-source.ts").WorkReceipt;
 }> | import("../library/native-public-output-contract.ts").LockedPublicOutputDisposition>;
 export {};

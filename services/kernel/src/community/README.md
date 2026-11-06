@@ -686,7 +686,9 @@ claim and returns `{ spaceId }` only when the Space passes its ordinary `space:r
 A Realm is the community carried by a Space. `createRealm` mints its distinct identity
 and initial revision on the Space's route, with `realm:create` on the Global Context
 and `space:manage` on the host. Both checks use the same trusted command context and
-share one admission observation. The host must exist and be active at T. Its single
+share one admission observation. The Global parent is authorized as `semantic.context`
+through Access's page path, so the extra `space:manage` and `context:read` checks wrap
+`preparePage` as well as `prepare` and retain that evidence deadline for authorize. The host must exist and be active at T. Its single
 Realm slot is observed at T and enforced before new writes and by a unique database
 key, so concurrent creations cannot both commit. Authorized receipt replays can return
 their original result without attempting to claim the slot again.

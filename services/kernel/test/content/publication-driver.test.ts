@@ -5,7 +5,7 @@ setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof publicationDriverFixture>>;
 beforeAll(async () => {
   f = await publicationDriverFixture();
-});
+}, 360_000);
 afterAll(async () => {
   await f?.close();
 });

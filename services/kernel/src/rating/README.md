@@ -1972,7 +1972,7 @@ One current slot belongs to the account and exact association. A set response co
 
 Below five eligible current ballots, the aggregate is `{ "associationId": "…", "state": "suppressed", "pending": "unknown" }` and includes no numeric count, fraction, voter identifier or ordering clue. At five or more, `state: "published"` includes support and oppose counts, an independent false-positive count, `supportFraction = supportCount / (supportCount + opposeCount)`, `asOf`, `generation` and `pending: "unknown"`. The fraction is defined only when support plus oppose has a denominator. The public pending state is unknown because an exact association-home read does not scan actor homes. Published values describe the last delivered target-home generation; current Semantic subject, target, association, spoiler and moderation disclosure gates apply on every own-state and aggregate read. Loss of current association disclosure hides the aggregate immediately without erasing private ballot provenance.
 
-The default worker consumes the actor-home outbox with `projectBatch`, preserves source route, epoch and position, and applies each actor slot revision once at the association home. It subtracts the exact retained contribution before adding the next eligible contribution. Account suspension, reinstatement and tombstone events use the existing Access lifecycle producer; cleanup advances through indexed pages of at most 50 ballots per actor. A redirect or replacement never transfers a contribution. These totals are separate from `rating.vote`, rating figures, reaction counts, semantic acceptance and imported source statistics. Web owns the following subject classification reader/editor; this slice adds no second presentation owner.
+The default worker consumes the actor-home outbox with `projectBatch`, preserves source route, epoch and position, and applies each actor slot revision once at the association home. It subtracts the exact retained contribution before adding the next eligible contribution. Account suspension, reinstatement and tombstone events use the existing Access lifecycle producer; cleanup advances through indexed pages of at most 50 ballots per actor. An empty page still emits `classification-ballot.cleanup` after writing `cleanup_pending=false`, because that write cannot be noEffect; the follow-up envelope is then no-effect. Exact replay of either command is receipt-only. Charge the lifecycle command, empty cleanup fence, follow-up no-effect fence and receipt replays separately. A redirect or replacement never transfers a contribution. These totals are separate from `rating.vote`, rating figures, reaction counts, semantic acceptance and imported source statistics. Web owns the following subject classification reader/editor; this slice adds no second presentation owner.
 
 Decision: support fraction is support divided by support plus oppose, false-positive flags count independently, public pending is unknown without an actor-home scan, own pending compares only the caller's slot revision with its retained contribution, changed writes say enqueued and unchanged writes say unchanged.
 
@@ -2047,6 +2047,22 @@ the original response only after current admission, even if a later command has 
 - Growth check: Retain change-clear-change and exact uncertain-clear replay with a newer slot. Grow selected actor
   history and eligible cleanup obligations independently of unrelated actors at 256/1024/4096; capture all shared
   runner controls, preparations, physical prefixes and bytes, including every cleanup and target-delivery phase.
+
+### Cost: lifecycle cleanup
+
+- Touches: The Access lifecycle command locks one actor primary key, writes eligibility/generation/`cleanup_pending`,
+  then the shared event fence (partition, one cleanup outbox row, receipt). Each cleanup command re-locks that actor,
+  seeks the `(route, actor, generation)` obligation prefix (`LIMIT 51`), and either updates at most 50 exact ballots
+  plus a continuation event or, on an empty page, writes `cleanup_pending=false` and one terminal cleanup event. The
+  follow-up envelope is a no-effect command: actor lock, no-effect fence (partition share and receipt), no domain row
+  and no outbox append. Exact replay of lifecycle, empty cleanup or the follow-up is receipt lookup then commit.
+- Bound: One actor key per command, charged as the original actor under the current request deadline
+  (`deadlineFor` inherits an enclosing request, otherwise a fresh 2s envelope per source envelope). Empty, follow-up
+  and replay do not rescan unrelated ballots or write `cleanup_pending` again. The empty write uses the event fence;
+  the follow-up uses the no-effect fence; replay writes neither. Unrelated actors and ballot history do not expand
+  the selected actor's empty/replay path.
+- Growth check: `test/rating/classification-ballot.test.ts` pins empty emission, follow-up no-effect and repeated
+  empty/replay on one actor with no ballots. Native 256/1024/4096 remain with the withdraw/cleanup growth obligation.
 
 ### Cost: read own state
 

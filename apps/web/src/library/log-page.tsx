@@ -2,9 +2,11 @@ import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-relative-time';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { removePublishedLog, restorePublishedLog } from './logs-server';
+import { bindLogsReturnVisit, logsReturnBackClick, logsReturnBackHref } from './logs-return';
 import { UndoNotice } from './copies-undo';
 import type { DeletionEvidence } from './copies-receipt';
 import type { PublishedLog } from './logs-read';
@@ -26,6 +28,28 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
       <span className="font-medium">{label}: </span>
       <RelativeTime value={value} />
     </p>
+  );
+}
+
+function PublishedLogBack({
+  logId,
+  locale,
+  sessionSubject,
+}: {
+  logId: string;
+  locale: string;
+  sessionSubject?: string | null;
+}) {
+  const href = logsReturnBackHref(locale);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      className="inline-flex min-h-11 items-center rounded text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      onClick={(event) => logsReturnBackClick(event, logId, locale, sessionSubject ?? null)}
+    >
+      {m.library_logs_back()}
+    </a>
   );
 }
 
@@ -94,12 +118,15 @@ export function PublishedLogPageView({
   isOwner,
   revision: loadedRevision,
   originating,
+  sessionSubject = null,
 }: {
   log: PublishedLog;
   isOwner: boolean;
   revision?: number;
   originating?: PublishedLogOrigin;
+  sessionSubject?: string | null;
 }) {
+  const locale = getLocale();
   const [page, setPage] = useState(() => publicationPage(log.id, isOwner, loadedRevision, originating));
   const committed = useRef<{
     lifetime: symbol;
@@ -112,6 +139,10 @@ export function PublishedLogPageView({
   const { lifetime, revision, undo, deleteStarted, confirming, deleted, pending, error, idempotencyKey } = page;
   const deletionId = undo?.deletionId;
   const deletionRevision = undo?.revision;
+
+  useLayoutEffect(() => {
+    bindLogsReturnVisit(locale, sessionSubject ?? null, log.id);
+  }, [locale, log.id, sessionSubject]);
 
   useLayoutEffect(() => {
     committed.current = { lifetime, revision, deleted, deletionId, deletionRevision };
@@ -253,6 +284,7 @@ export function PublishedLogPageView({
           failure={m.library_logs_write_failed()}
           restore={restore}
         />
+        <PublishedLogBack logId={log.id} locale={locale} sessionSubject={sessionSubject} />
       </article>
     );
   }
@@ -262,6 +294,7 @@ export function PublishedLogPageView({
       <header className="space-y-3">
         <PageHeading>{m.library_logs_page_heading()}</PageHeading>
         <p>{m.library_logs_description()}</p>
+        <PublishedLogBack logId={log.id} locale={locale} sessionSubject={sessionSubject} />
       </header>
       <dl className="space-y-3">
         <div>

@@ -1,7 +1,7 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
 export type * from './kind-audience.ts';
-export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult, } from './work.ts';
+export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, isAccessWorkDispatch, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult, } from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, readErasureStatus, resolveRetention, recordLateErasureItem, resolveLateErasureItem, ERASURE_LOCATOR_EFFECTS, type RetentionException, type ErasureOutcome, type ErasureStatus, } from './erasure.ts';
 export { readPublicViews, type PublicViews } from './public-views.ts';

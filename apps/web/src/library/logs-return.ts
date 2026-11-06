@@ -87,6 +87,8 @@ export function logsReturnMatchesWindow(frontier: LogsReturnFrontier, cursor: st
   return frontier.cursor === cursor;
 }
 
+let pendingReturn: LogsReturnFrontier | null = null;
+
 type Pointer = {
   defaultPrevented: boolean;
   button: number;
@@ -109,11 +111,65 @@ export function logsDestinationClick(
   }
   if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return false;
-  if (frontier) captureLogsReturn(frontier);
+  if (frontier) {
+    captureLogsReturn(frontier);
+    pendingReturn = frontier;
+  }
   return true;
+}
+
+/** Attach a captured My Logs visit to this public-log history entry, once. */
+export function bindLogsReturnVisit(locale: string, subject: string | null, logId: string): LogsReturnFrontier | null {
+  if (typeof window === 'undefined') return null;
+  const existing = logsReturnVisitFromState(window.history.state, locale, subject, logId);
+  const pending = pendingReturn;
+  pendingReturn = null;
+  if (existing) return existing;
+  if (!pending || !subject) return null;
+  const visit = logsReturnVisitFromState(logsReturnLocationState(pending), locale, subject, logId);
+  if (!visit) return null;
+  try {
+    const previous = record(window.history.state) ?? {};
+    window.history.replaceState({ ...previous, ...logsReturnLocationState(visit) }, '', window.location.href);
+    return visit;
+  } catch {
+    return null;
+  }
 }
 
 export function logsReturnTrigger(root: HTMLElement | null, logId: string): HTMLAnchorElement | null {
   if (!root || !uuid.test(logId)) return null;
   return (root as unknown as ParentNode).querySelector(`a[data-published-log="${logId}"]`);
+}
+
+/** Public log Back never carries the private My Logs cursor. */
+export function logsReturnBackHref(locale: string): string | null {
+  return logsListHref(locale, null);
+}
+
+/** This public-log visit, this log, and the current session — not browser history length. */
+export function logsReturnVisitFromState(
+  value: unknown,
+  locale: string,
+  subject: string | null,
+  logId: string,
+): LogsReturnFrontier | null {
+  if (!subject) return null;
+  const frontier = logsReturnFrontierFromState(value, locale, subject);
+  return frontier && frontier.logId === logId ? frontier : null;
+}
+
+/**
+ * Ordinary left-click restores the captured My Logs visit through history. Direct visitors and a replaced
+ * session follow the cursor-free My Logs href. Modified clicks keep that href without history.back().
+ */
+export function logsReturnBackClick(event: Pointer, logId: string, locale: string, subject: string | null): boolean {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return false;
+  if (typeof window === 'undefined') return true;
+  bindLogsReturnVisit(locale, subject, logId);
+  if (!logsReturnVisitFromState(window.history.state, locale, subject, logId)) return true;
+  event.preventDefault();
+  window.history.back();
+  return false;
 }

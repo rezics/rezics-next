@@ -1,7 +1,8 @@
-import { type Pool } from 'pg';
+import type { Pool } from 'pg';
 import { type CommandEvent, type CommandTransaction } from '../command/command.ts';
-export const IDENTITY_RATING_REPAIR_MAX_CONTINUATION = 8;
-export const IDENTITY_RATING_REPAIR_CONTINUATION = 'com.rezics.semantic.identity-rating-repair.continuation.v1';
+import { IDENTITY_RATING_REPAIR_CONTINUATION } from './events.ts';
+export declare const IDENTITY_RATING_REPAIR_MAX_CONTINUATION = 8;
+export { IDENTITY_RATING_REPAIR_CONTINUATION };
 export type IdentityRatingRepairVoteKey = Readonly<{
     questionId: string;
     targetId: string;
@@ -42,6 +43,7 @@ export type IdentityRatingRepairAuthority = Readonly<{
     mappings: readonly IdentityRatingRepairMapping[];
     extraHomes?: readonly number[];
 }>;
+/** Structurally the Rating identity-repair producer. Rating retains vote/effect/receipt writes. */
 export type IdentityRatingRepairProducer = Readonly<{
     hold(tx: CommandTransaction, page: IdentityRatingRepairPage): Promise<IdentityRatingRepairAuthority>;
     complete(tx: CommandTransaction, input: Readonly<{
@@ -69,6 +71,13 @@ export type IdentityRatingRepairDrain = Readonly<{
     continuing: boolean;
     events: readonly CommandEvent[];
 }>;
+declare function identityRatingRepairMappingDigest(mappings: readonly IdentityRatingRepairMapping[]): string;
+/**
+ * Exact original-to-visible-terminal mappings for a Rating identity-repair page.
+ * Same-home voter commands lock core.partition through COMMIT. Foreign source or
+ * control homes persist a preparing obligation and one-partition prepare/handoff
+ * receipts; later mapping and vote writes drain through bounded owner commands.
+ */
 export declare function createIdentityRatingRepairProducer(): IdentityRatingRepairProducer;
 export declare function continueIdentityRatingRepair(pool: Pool, data: Readonly<{
     partition: number;
@@ -77,4 +86,4 @@ export declare function continueIdentityRatingRepair(pool: Pool, data: Readonly<
     kind: 'prepare' | 'drain';
     originals: readonly string[];
 }>): Promise<void>;
-export declare function identityRatingRepairMappingDigest(mappings: readonly IdentityRatingRepairMapping[]): string;
+export { identityRatingRepairMappingDigest };

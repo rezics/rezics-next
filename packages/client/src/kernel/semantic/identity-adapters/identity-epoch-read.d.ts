@@ -1,4 +1,4 @@
-import { identityRatingReviewEvidence, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
+import { identityRatingReviewEvidence, type IdentityMappingEvidence, type IdentityMappingRequest, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
 export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, IdentityRatingNativeEvidence, };
@@ -24,6 +24,26 @@ export declare function readIdentityRatingEvidenceInTransaction(client: Queryabl
 }> | Readonly<{
     state: 'foreign-control';
 }>>;
+export declare const IDENTITY_RATING_REPAIR_MAX_ORIGINALS = 64;
+export type IdentityRepairEvidence = Readonly<{
+    state: 'empty';
+}> | Readonly<{
+    state: 'ready';
+    requests: IdentityMappingRequest[];
+    evidence: IdentityMappingEvidence;
+}> | Readonly<{
+    state: 'split';
+    foreignHomes: readonly number[];
+    local: Readonly<{
+        requests: IdentityMappingRequest[];
+        evidence: IdentityMappingEvidence;
+    }> | null;
+}>;
+/** Repair evidence on the caller's locked command connection. Up to 64 originals. */
+export declare function readIdentityRepairEvidenceInTransaction(client: Queryable, input: Readonly<{
+    originals: readonly string[];
+    commandHome: number;
+}>): Promise<IdentityRepairEvidence>;
 /** Pure classifier reused by the transaction participant after it has acquired the native owner fence. */
 export declare function classifyIdentityRatingReviewEvidence(requestedOriginalId: string, canonicalTerminalId: string, sourceIdentities: readonly string[], sourceHomes: readonly number[], evidence: IdentityRatingNativeEvidence): IdentityRatingReviewResult;
 /** Bounded exact mapping proof, with source and control homes released independently. */

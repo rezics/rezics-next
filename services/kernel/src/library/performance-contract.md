@@ -681,11 +681,14 @@ reads. Runtime contention backoff and command deadlines are unchanged. Retention
 steps each keep their configured eight attempts.
 
 The detail read charges its point transaction and row plus the current owner-state/floor read. Tombstones and
-inactive owners serialize the tombstone response without Semantic disclosure; a live row repeats the existing
-original and terminal disclosure work. The public list charges its repeatable-read transaction, partition epoch and
-account-state/floor reads, the cursor input, page streams, source disclosure and serialized result. The first page
-has one ordered stream; a next page charges both independently limited streams before sorting, including discarded
-candidates and the `limit + 1` sentinel. Disclosure examines at most the shown page and never refills filtered rows.
+inactive owners serialize the tombstone response without Semantic disclosure. A live snapshot is independently
+readable without a command-layer Source gate; FULL `present`/`fullView` owns original and terminal disclosure and
+withholds `subject: null` when the Source changed, keeping the public snapshot. The public list charges its
+repeatable-read transaction, partition epoch and account-state/floor reads, the cursor input, page streams and
+serialized result. Retract omits the snapshot from that page immediately; replaying the original create receipt
+does not restore it. The first page has one ordered stream; a next page charges both independently limited streams
+before sorting, including discarded candidates and the `limit + 1` sentinel. FULL disclosure examines at most the
+shown page and never refills filtered rows.
 The cursor bound follows the existing 4096-byte sealed-token ceiling. Public reads use
 `readAccountCommandState`, which returns only the account state, fence and authentication floor used by these
 owners.
@@ -716,12 +719,17 @@ account read. Commands size retry slots from remaining original deadline millise
 attempts share that envelope. HTTP `present`/`fullView` and `resolveSubject` keep the same absolute cutoff and pass
 Access work. A changed Source on FULL published-log is withheld (`subject: null`) so later private session edits
 leave the snapshot readable. The native interceptor catalogues reached SQL and skips consume while the enclosing
-operation reservation is open; an empty subject list is the zero operand. Growth suites keep scales 1/4/16 until
-native receiving observes 64/512/4096. Fewest tests: extend the existing operation-bounds composition suite and the
-retract causal for exact Undo, plus one FULL withhold, rather than a second lifecycle file. A later private
-retirement of the source session clears `completedAt`. FULL account/target embeddings stay the current unions,
-including deleted/pending curator and log-account cases; Accounts optional contribution attribution is received
-when that producer lands.
+operation reservation is open; an empty subject list is the zero operand. Growth suites use 64/512/4096 with `scale`
+rows per owner, same-route and other-partition population and a fixed selected neighbourhood.
+Publish growth resolves one real subject so original/terminal Source is charged; retract uses the stored CAS
+revision. restoreExpired
+CAS-sets `restore_until`; restoreHistorical retires the private session while the public snapshot remains. Empty
+and post-drain sweeps use the default worker bound to that native fixture's shared WorkClient/Pool. Native receiving evidence remains integration-owned. Web Back href is
+cursor-free My Logs; ordinary click uses history.back() only for the captured My Logs visit, log and current session.
+Fewest tests: extend the existing operation-bounds, growth, retention, source and retract suites, plus native-published-log-responses
+and the existing Web logs-return/mounted Back pins, rather than a second lifecycle file. A later private retirement of the source session clears `completedAt`. FULL
+account/target embeddings stay the current unions, including deleted/pending curator and log-account cases; Accounts
+optional contribution attribution is received when that producer lands.
 
 ## Private Collection pin operations
 

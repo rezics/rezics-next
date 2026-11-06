@@ -2168,7 +2168,7 @@ no-candidate. No separate snapshot or mutable transaction-id surrogate is provid
 ### Generic / parent creation authorization
 
 - Touches: `resource-authorization.ts` prepares actor/principal inverses and matched group proofs, validates the trusted authority existence/revision, then runs one Access formula at attempt T on one authority connection, released before target checkout. Fresh proof on every retry; authorization precedes replay. `parent-creation.ts` additionally binds the exact child UUID/partition and unique INSERT provenance, single-use initialization and manifest guard. Reads are the P/Q keys plus exact owning-module validation keys; no writes during authorization.
-- Typed parent: a parent anchor that declares its own `resourceType` (the Global platform root declares `semantic.context`) is authorized as that resource type through the page path. The child action's declared type never selects the parent's profile, so a direct Global grant for `space:create` or `realm:create` authorizes creation under the Global parent.
+- Typed parent: a parent anchor that declares its own `resourceType` (the Global platform root declares `semantic.context`) is authorized as that resource type through the page path. The child action's declared type never selects the parent's profile, so a direct Global grant for `space:create` or `realm:create` authorizes creation under the Global parent. Independently anchored extra checks on that parent wrap `preparePage` as well as `prepare` and retain the evidence deadline for authorize.
 - Bound: `P+Q` plus shared command admission and the authority validation seek per attempt: measured constant rows/statements and logarithmic blocks in S at fixed J/output, with permission work at most linear in capped J and V. Target changes add their own indexed writes; creation adds an exact provenance seek per declared child. No ACL/history enumeration or held connection across anchors.
 - Growth check: `test/access/growth-resource-authorization.test.ts`: composed stable tuple and creation commands at three scales
 
@@ -3158,6 +3158,9 @@ keeps the version and writes no row.
 Both routes require the acting account to equal the path account, with `account:read` and `account:update` respectively. Grants to
 another account do not bypass this equality check. An operator-opened session acts as its automated account and changes
 that account's settings; the operator's own bearer cannot change them directly. Responses are private and not cached.
+Content notice fixtures keep Global creation on ordinary grant receipts; `thread:read` is not a Global-reach action
+and Content owner roles omit `access:grant`, so those resource rows use the existing `seedGovernanceAuthority` setup.
+Account-erasure fixtures drive optional notice effects from `post.published` and bind the test receipt ring onto the work pool that launches those effects. Isolated notification effect hosts inherit `workerTestEnv` and configure `KERNEL_RECEIPT_KEYS` on their own pool; bun test preloads do not apply to that child.
 
 PATCH uses the structured-field `Idempotency-Key` header, the shared write-rate stage (one write unit), and `runCommand`.
 A changed value increments the version once. Unchanged values preserve the version and write no preference row;
@@ -3206,9 +3209,9 @@ not old inbox entries, content authority or follows. See [Accounts adoption](../
 and the [notification research](../../../../docs/research/accounts-design-notification-preferences.md).
 
 Consumers retain the actual effective-map/default, null-reset, shared CAS and replay contracts above. Native notice
-fixtures create boards as the governance operator through ordinary Space/Realm routes; Community's current witness
-refresh copies reference removals from the Space witness epoch because `space_discovery_tuple_reference` has no
-`producer_epoch`. Web must
+fixtures create boards as the governance operator or erasure staff through ordinary Space/Realm routes and ordinary
+Global creation receipts; Community's landed witness refresh copies identity-only reference removals with epoch 0
+because `space_discovery_tuple_reference` has no `producer_epoch`. Web must
 distinguish an ambiguous save from confirmed Saved and unavailable unread data from zero, preserving session
 and CSRF behavior. A replayed preference response is historical acknowledgement; fresh GET establishes current
 readback. No channel, quiet-hour or conversation setting is implied.
@@ -3219,8 +3222,15 @@ catalogue and shelf observation can add their slices without a second preference
 data is unavailable; consumers do not guess the spoiler or suitability enum, nor invent shelf catalogues or limits.
 
 Decision: Native content fixtures grant Global parent-creation actions through ordinary `POST /v1/grants` receipts
-issued with the grantor client's `access:grant` token. Whether the Global B-tree seek admits those rows for Space
-and Realm creation is the permission-formula owner.
+issued with the grantor client's `access:grant` token. Identical grant intents reuse one receipt key so a later
+fixture POST replays instead of inserting a second row; Access maps that unique conflict to 403, not 409.
+Whether the Global B-tree seek admits those rows for Space and Realm creation is the permission-formula owner.
+
+Decision: Leftover History consumers after the composition split import `history/contract` and `history/application`
+public entries rather than the retired `history/contracts.ts` and `history/record.ts` paths. Zone commands already
+bind History evidence, so kernel-zones depends on those modules. History's lazy Semantic source-set producer loads
+that public entry from `history/adapters` (`../../semantic/record-source-set.ts`). Existing native notification
+assertions remain the pin; no extra stories.
 
 ## Direct resource role data
 
