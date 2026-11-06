@@ -301,5 +301,7 @@ command/history value cycle. Fewest tests remain the native journeys and two web
 Decision: preserve the native Content lifecycle fallback through the public `content/cover-reference-read.ts`
 leaf; cover reads and metadata validation share no value import with the claim command writer. Existing
 cover claim and lifecycle journeys retain their assertions; focused fallback coverage exercises native reads
-without worker composition. Native cleanup/hold commit fences, erasure effects, independent public readback
-and the original browser journeys remain acceptance obligations after landing.
+without worker composition. Internal Zone purge pages carry a unique `zone.purge` receipt and declare idle
+history on no-effect paths so COMMIT can match enrolled event pages. Account-agent authorized reads prepare
+Access evidence at authorize time. Native cleanup/hold commit fences, erasure effects, independent public
+readback and the original browser journeys remain acceptance obligations after landing.

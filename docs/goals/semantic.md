@@ -57,7 +57,8 @@ New deletion helpers and the account-erasure Zone writer are import-acyclic leav
 command/history value cycle. Content lifecycle resolution falls back to the native adapter like hashing
 and routing, so HTTP tests that skip worker composition still project covers. Zone configure keeps the
 current locale map when renaming one label. Platform hold/purge bind operator history evidence before
-enrollment. Account-agent tests use a wall-clock request budget, not an enclosing ALS deadline.
+enrollment. Internal Zone purge pages use a unique `zone.purge` receipt and idle history on no-effect
+paths. Account-agent tests use a wall-clock request budget and prepare Access evidence at authorize time.
 
 ## Ownership
 

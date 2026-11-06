@@ -116,17 +116,14 @@ test("an erased account's agent keeps no label, current or past, and a later ens
   expect(removed.rows[0]!.n).toBeGreaterThan(0);
   await realAccess.grant({ route, id: agent }, 'owner', 'subject:read');
   const read = async () => {
-    const check = await accessCheck(
-      access,
-      owner,
-      'subject:read',
-      { route, id: agent },
-      {
-        pool: admin,
-        deadline: requestDeadline(),
+    const deadline = requestDeadline();
+    return readSubject(pool, agent, async () => false, undefined, new Uint8Array(32).fill(1), {
+      deadline,
+      prepareAuthorization: async () => {
+        owner = await access.authenticate(realAccess.bearer('owner'), { pool: admin, deadline });
+        return accessCheck(access, owner, 'subject:read', { route, id: agent }, { pool: admin, deadline });
       },
-    );
-    return readSubject(pool, agent, check, undefined, new Uint8Array(32).fill(1));
+    });
   };
   const erased = await ensureAccountAgent(pool, { ...options, name: null });
   expect(erased.subject.labels).toEqual({});
