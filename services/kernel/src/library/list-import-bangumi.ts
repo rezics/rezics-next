@@ -161,7 +161,7 @@ function scoreQuestion(question: Awaited<ReturnType<NativeVotes['readRatingQuest
   return {
     id: question.id,
     revision: question.revision,
-    meaning: question.meaning ?? question.label,
+    meaning: question.meaning,
     label: question.label,
     grain: question.grain,
     lifecycleState: question.lifecycleState,

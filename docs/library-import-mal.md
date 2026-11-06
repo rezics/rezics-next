@@ -84,7 +84,7 @@ and require a fresh review; they are never upgraded by sampling new operands dur
 
 Decision: compose Content's existing conditional writer and complete native review operands with Library checkpoints;
 retain original guards and keys across uncertain delivery, and require native readback before reporting score success.
-Frozen vote observations use Content's meaning, or the question label when meaning is absent.
+Frozen vote observations use Content's meaning, or the question label when meaning is absent. Reviewed question DTOs keep Content's optional meaning, including null; they do not copy the display label into meaning.
 Confirmation calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
 source-document admission, persists `score.started` with that command, then `putVoteOutcome` with those operands; an
 uncertain retry first uses `reconcilePutVote(actor, receipt)`.

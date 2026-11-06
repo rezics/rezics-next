@@ -534,7 +534,8 @@ test('score review retains source scale and native vote while requiring separate
         admission: { status: 'reviewed', reason: 'native_review_observed' },
       },
     });
-    expect(typeof reviews[0].score.native.question.meaning).toBe('string');
+    expect(reviews[0].score.native.question.meaning).toBeNull();
+    expect(reviews[0].score.native.question.label).toEqual(expect.any(String));
     expect(reviews[3].score.source.reason).toContain('integer');
 
     const missingConsent = await score.send('owner', 'POST', `${root}/${uploadId}:apply`, {
