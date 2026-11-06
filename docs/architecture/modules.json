@@ -270,10 +270,7 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
-      "publicEntries": [
-        "services/kernel/src/commerce/config.ts",
-        "services/kernel/src/commerce/work-module.ts"
-      ],
+      "publicEntries": ["services/kernel/src/commerce/config.ts", "services/kernel/src/commerce/work-module.ts"],
       "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic", "money"],
       "capabilities": ["commerce"],
       "postgresPaths": ["services/kernel/src/commerce/**"]
