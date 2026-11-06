@@ -12,11 +12,11 @@ import {
   receiveCommittedOperationalWork,
   resolveCommittedOperationalWork,
   verifyCommittedOperationalWorkOrigin,
-} from '../../src/history/operational-work.ts';
+} from '../../src/history/adapters/operational-work.ts';
 import {
   inspectOperationalWorkRetirement,
   verifyOperationalWorkReplay,
-} from '../../src/history/operational-work-receiving.ts';
+} from '../../src/history/adapters/operational-work-receiving.ts';
 import { runMembersPreparationRequest } from '../../src/library/members-preparation-request.ts';
 import { definition, membersPreparationRuntime } from './support/members-preparation-runtime.ts';
 import eraseResults from '../../src/library/erasure-owned-members-preparation-result.sql';

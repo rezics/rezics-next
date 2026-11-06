@@ -16,8 +16,8 @@ import {
   type Metric,
 } from '../../support/growth.ts';
 import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
-import { ACCOUNT_ROLE_BITS } from '../../../src/history/contracts.ts';
-import { bindCommandHistoryEvidence } from '../../../src/history/record.ts';
+import { ACCOUNT_ROLE_BITS } from '../../../src/history/contract/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../../src/history/adapters/record.ts';
 import { createCopyArchive } from '../../../src/library/copy-archive.ts';
 import { exportSectionsV2, LIBRARY_EXPORT_FORMAT } from '../../../src/library/library-export-format.ts';
 import { createSessionCommands } from '../../../src/library/sessions.ts';

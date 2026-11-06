@@ -792,3 +792,34 @@ describe('Comparison handoff remains independent of native editor and Undo inten
     });
   }
 });
+
+test('adopting server changes keeps overlapping edits dirty and inventory authoritative until save', async () => {
+  const copy = item();
+  await render(pageOf(copy));
+  await edit(copy);
+  await click(m.library_copy_more(), form());
+  await text(m.library_copy_note(), 'Local unsaved note');
+  await text(m.library_copy_location(), '');
+  await submit();
+  await settle(latest('update'), { ok: false, reason: 'conflict' });
+  await click(m.library_copy_conflict_review_open(), form());
+  const incoming = { ...copy, note: 'Server note', location: 'Server shelf', source: 'Server gift', revision: 9 };
+  await settle(latest('detail'), { ok: true, copy: incoming });
+  await click(m.library_copy_conflict_review_accept(), form());
+  expect(field(m.library_copy_note()).value).toBe('Local unsaved note');
+  expect(field(m.library_copy_location()).value).toBe('');
+  expect(field(m.library_copy_source()).value).toBe('Server gift');
+  expect(row('Server note').textContent).toContain('Server shelf');
+  expect(row('Server note').textContent).not.toContain('Local unsaved note');
+  // The merged local values differ from the clean incoming baseline and still require a departure decision.
+  await click(m.library_copy_cancel(), form());
+  expect(window.document.body.textContent).toContain(m.library_copy_draft_navigation_discard());
+  await click(m.library_copy_draft_navigation_stay(), window.document);
+  await submit();
+  expect(latest('update').input).toMatchObject({
+    data: { revision: 9, note: 'Local unsaved note', location: null, source: 'Server gift' },
+  });
+  const saved = { ...incoming, note: 'Local unsaved note', location: null, revision: 10 };
+  await settle(latest('update'), { ok: true, copy: saved });
+  expect(row('Local unsaved note').textContent).not.toContain('Server shelf');
+});

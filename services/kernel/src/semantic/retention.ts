@@ -8,11 +8,6 @@ import {
 } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import { purgeAuthoredFieldForDeletedRecord } from '../content/authored-field-retention.ts';
-import {
-  prepareRecordHistoryPurge,
-  minimizeRecordHistoryPurge,
-  type RecordHistoryPurgeResult,
-} from '../history/record-purge.ts';
 import { inspectDeletedZoneRetention, minimizeDeletedZone } from '../zones/resource-retention.ts';
 import {
   prepareRecordPurgeAuthority,
@@ -22,6 +17,8 @@ import {
   type NativeRecordPurgeReference,
 } from './record-purge-authority.ts';
 import { nextRecordFragment, minimizeRecordFragment, type RetentionKey } from './retention-fragments.ts';
+import { minimizeRecordHistoryPurge, prepareRecordHistoryPurge } from '../history/application/index.ts';
+import { type RecordHistoryPurgeResult } from '../history/contract/index.ts';
 
 export type RetentionPage = Readonly<{ examined: number; purged: number; checkpoint: string | null; done: boolean }>;
 export type RetentionInput = Readonly<{ partition: number; limit: number; key: string }>;

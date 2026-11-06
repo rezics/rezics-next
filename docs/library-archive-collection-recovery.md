@@ -56,9 +56,9 @@ uses the existing native pin command.
 
 ## Bounds and work
 
-The consumer shares the installed decoder vocabulary: versions 1 and 2 on this base, with their fourteen- and
-seventeen-section orders respectively. V2 annotations, provenance and journals remain unsupported here. The
-assessment adoption owns V3 decoding; this change neither installs V3 nor promises future versions. It reuses the
+The consumer shares the installed decoder vocabulary for V1 through V4, preserving each original inventory,
+manifest, accounting and unsupported coverage. Personal annotations, provenance, journals and provider records remain
+unsupported by Collection recovery. It reuses the
 producer manifest and limits: upload bytes `U <= 34 MiB`, depth at most 32, `N <= 100,000` archive records, aggregate compact
 record bytes at most 32 MiB and each record at most 65,536 bytes. The HTTP JSON body is bounded to the canonical
 base64 encoding of 34 MiB plus envelope allowance (under 48 MiB). Parsing and projection are `O(U + N)`; raw bytes,

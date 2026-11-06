@@ -6831,7 +6831,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                             expiresAt: string;
                             privacy: "private";
                             completeness: "supported-native-facts";
-                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                            sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                             omissions: {
                                 trash: string;
                                 providerIdentifiers: string;
@@ -6843,40 +6843,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                             fullExport: false;
                             rows: number;
                             recordBytes: number;
-                        } | {
-                            format: "https://rezics.com/formats/library-export";
-                            exportId: string;
-                            capturedAt: string;
-                            expiresAt: string;
-                            privacy: "private";
-                            completeness: "supported-native-facts";
-                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                            omissions: {
-                                trash: string;
-                                providerIdentifiers: string;
-                                personalImportEvidence: string;
-                                commerce: string;
-                                publication: string;
-                                reimport: string;
-                            };
-                            fullExport: false;
-                            rows: number;
-                            recordBytes: number;
-                            version: 2;
-                            coverage: "private-library-owner-facts-v2";
-                            sectionTotals: {
-                                [x: string]: {
-                                    rows: number;
-                                    recordBytes: number;
-                                };
-                                [x: number]: {
-                                    rows: number;
-                                    recordBytes: number;
-                                };
-                            };
                         } | null;
                         coverage: {
-                            section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                            section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                             capture: "empty" | "present";
                             treatment: "requires-explicit-mapping" | "retained-unsupported";
                             rows: number;
@@ -7012,7 +6981,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                 expiresAt: string;
                                 privacy: "private";
                                 completeness: "supported-native-facts";
-                                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                                 omissions: {
                                     trash: string;
                                     providerIdentifiers: string;
@@ -7024,40 +6993,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                 fullExport: false;
                                 rows: number;
                                 recordBytes: number;
-                            } | {
-                                format: "https://rezics.com/formats/library-export";
-                                exportId: string;
-                                capturedAt: string;
-                                expiresAt: string;
-                                privacy: "private";
-                                completeness: "supported-native-facts";
-                                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                                omissions: {
-                                    trash: string;
-                                    providerIdentifiers: string;
-                                    personalImportEvidence: string;
-                                    commerce: string;
-                                    publication: string;
-                                    reimport: string;
-                                };
-                                fullExport: false;
-                                rows: number;
-                                recordBytes: number;
-                                version: 2;
-                                coverage: "private-library-owner-facts-v2";
-                                sectionTotals: {
-                                    [x: string]: {
-                                        rows: number;
-                                        recordBytes: number;
-                                    };
-                                    [x: number]: {
-                                        rows: number;
-                                        recordBytes: number;
-                                    };
-                                };
                             } | null;
                             coverage: {
-                                section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                                section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                                 capture: "empty" | "present";
                                 treatment: "requires-explicit-mapping" | "retained-unsupported";
                                 rows: number;
@@ -7198,7 +7136,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -7210,40 +7148,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                                    omissions: {
-                                        trash: string;
-                                        providerIdentifiers: string;
-                                        personalImportEvidence: string;
-                                        commerce: string;
-                                        publication: string;
-                                        reimport: string;
-                                    };
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                    version: 2;
-                                    coverage: "private-library-owner-facts-v2";
-                                    sectionTotals: {
-                                        [x: string]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                        [x: number]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                    };
                                 } | null;
                                 coverage: {
-                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                                    section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -7406,7 +7313,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                             expiresAt: string;
                                             privacy: "private";
                                             completeness: "supported-native-facts";
-                                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                            sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                                             omissions: {
                                                 trash: string;
                                                 providerIdentifiers: string;
@@ -7418,40 +7325,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                             fullExport: false;
                                             rows: number;
                                             recordBytes: number;
-                                        } | {
-                                            format: "https://rezics.com/formats/library-export";
-                                            exportId: string;
-                                            capturedAt: string;
-                                            expiresAt: string;
-                                            privacy: "private";
-                                            completeness: "supported-native-facts";
-                                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                                            omissions: {
-                                                trash: string;
-                                                providerIdentifiers: string;
-                                                personalImportEvidence: string;
-                                                commerce: string;
-                                                publication: string;
-                                                reimport: string;
-                                            };
-                                            fullExport: false;
-                                            rows: number;
-                                            recordBytes: number;
-                                            version: 2;
-                                            coverage: "private-library-owner-facts-v2";
-                                            sectionTotals: {
-                                                [x: string]: {
-                                                    rows: number;
-                                                    recordBytes: number;
-                                                };
-                                                [x: number]: {
-                                                    rows: number;
-                                                    recordBytes: number;
-                                                };
-                                            };
                                         } | null;
                                         coverage: {
-                                            section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                                            section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                                             capture: "empty" | "present";
                                             treatment: "requires-explicit-mapping" | "retained-unsupported";
                                             rows: number;
@@ -7634,7 +7510,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -7646,40 +7522,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                                    omissions: {
-                                        trash: string;
-                                        providerIdentifiers: string;
-                                        personalImportEvidence: string;
-                                        commerce: string;
-                                        publication: string;
-                                        reimport: string;
-                                    };
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                    version: 2;
-                                    coverage: "private-library-owner-facts-v2";
-                                    sectionTotals: {
-                                        [x: string]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                        [x: number]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                    };
                                 } | null;
                                 coverage: {
-                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                                    section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -7849,7 +7694,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -7861,40 +7706,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                                    omissions: {
-                                        trash: string;
-                                        providerIdentifiers: string;
-                                        personalImportEvidence: string;
-                                        commerce: string;
-                                        publication: string;
-                                        reimport: string;
-                                    };
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                    version: 2;
-                                    coverage: "private-library-owner-facts-v2";
-                                    sectionTotals: {
-                                        [x: string]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                        [x: number]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                    };
                                 } | null;
                                 coverage: {
-                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                                    section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -8036,7 +7850,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -8048,40 +7862,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                                    omissions: {
-                                        trash: string;
-                                        providerIdentifiers: string;
-                                        personalImportEvidence: string;
-                                        commerce: string;
-                                        publication: string;
-                                        reimport: string;
-                                    };
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                    version: 2;
-                                    coverage: "private-library-owner-facts-v2";
-                                    sectionTotals: {
-                                        [x: string]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                        [x: number]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                    };
                                 } | null;
                                 coverage: {
-                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                                    section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -8353,7 +8136,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>>;
                 omissions: import("typebox").TObject<{
                     trash: import("typebox").TString;
                     providerIdentifiers: import("typebox").TString;
@@ -8365,14 +8148,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: import("typebox").TLiteral<false>;
                 rows: import("typebox").TInteger;
                 recordBytes: import("typebox").TInteger;
-            }>, import("typebox").TObject<{
+            }>, ...import("typebox").TObject<{
                 format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                 exportId: import("typebox").TString;
                 capturedAt: import("typebox").TString;
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>>;
                 omissions: import("typebox").TObject<{
                     trash: import("typebox").TString;
                     providerIdentifiers: import("typebox").TString;
@@ -8384,17 +8167,17 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: import("typebox").TLiteral<false>;
                 rows: import("typebox").TInteger;
                 recordBytes: import("typebox").TInteger;
-                version: import("typebox").TLiteral<2>;
-                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+                version: import("typebox").TLiteral<2 | 3 | 4>;
+                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2" | "private-library-owner-facts-v3" | "private-library-owner-facts-v4">;
                 sectionTotals: import("typebox").TObject<{
                     [k: string]: import("typebox").TObject<{
                         rows: import("typebox").TInteger;
                         recordBytes: import("typebox").TInteger;
                     }>;
                 }>;
-            }>]>, import("typebox").TNull]>;
+            }>[]]>, import("typebox").TNull]>;
             coverage: import("typebox").TArray<import("typebox").TObject<{
-                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
+                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>;
                 capture: import("typebox").TUnion<[import("typebox").TLiteral<"present">, import("typebox").TLiteral<"empty">]>;
                 treatment: import("typebox").TUnion<[import("typebox").TLiteral<"requires-explicit-mapping">, import("typebox").TLiteral<"retained-unsupported">]>;
                 rows: import("typebox").TInteger;
@@ -8538,7 +8321,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: string;
                 privacy: "private";
                 completeness: "supported-native-facts";
-                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                 omissions: {
                     trash: string;
                     providerIdentifiers: string;
@@ -8550,40 +8333,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: false;
                 rows: number;
                 recordBytes: number;
-            } | {
-                format: "https://rezics.com/formats/library-export";
-                exportId: string;
-                capturedAt: string;
-                expiresAt: string;
-                privacy: "private";
-                completeness: "supported-native-facts";
-                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                omissions: {
-                    trash: string;
-                    providerIdentifiers: string;
-                    personalImportEvidence: string;
-                    commerce: string;
-                    publication: string;
-                    reimport: string;
-                };
-                fullExport: false;
-                rows: number;
-                recordBytes: number;
-                version: 2;
-                coverage: "private-library-owner-facts-v2";
-                sectionTotals: {
-                    [x: string]: {
-                        rows: number;
-                        recordBytes: number;
-                    };
-                    [x: number]: {
-                        rows: number;
-                        recordBytes: number;
-                    };
-                };
             } | null;
             coverage: {
-                section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                 capture: "empty" | "present";
                 treatment: "requires-explicit-mapping" | "retained-unsupported";
                 rows: number;
@@ -8704,7 +8456,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: string;
                 privacy: "private";
                 completeness: "supported-native-facts";
-                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
                 omissions: {
                     trash: string;
                     providerIdentifiers: string;
@@ -8716,40 +8468,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: false;
                 rows: number;
                 recordBytes: number;
-            } | {
-                format: "https://rezics.com/formats/library-export";
-                exportId: string;
-                capturedAt: string;
-                expiresAt: string;
-                privacy: "private";
-                completeness: "supported-native-facts";
-                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-                omissions: {
-                    trash: string;
-                    providerIdentifiers: string;
-                    personalImportEvidence: string;
-                    commerce: string;
-                    publication: string;
-                    reimport: string;
-                };
-                fullExport: false;
-                rows: number;
-                recordBytes: number;
-                version: 2;
-                coverage: "private-library-owner-facts-v2";
-                sectionTotals: {
-                    [x: string]: {
-                        rows: number;
-                        recordBytes: number;
-                    };
-                    [x: number]: {
-                        rows: number;
-                        recordBytes: number;
-                    };
-                };
             } | null;
             coverage: {
-                section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+                section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
                 capture: "empty" | "present";
                 treatment: "requires-explicit-mapping" | "retained-unsupported";
                 rows: number;
@@ -8895,7 +8616,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     expiresAt: import("typebox").TString;
                     privacy: import("typebox").TLiteral<"private">;
                     completeness: import("typebox").TLiteral<"supported-native-facts">;
-                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>>;
                     omissions: import("typebox").TObject<{
                         trash: import("typebox").TString;
                         providerIdentifiers: import("typebox").TString;
@@ -8907,14 +8628,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     fullExport: import("typebox").TLiteral<false>;
                     rows: import("typebox").TInteger;
                     recordBytes: import("typebox").TInteger;
-                }>, import("typebox").TObject<{
+                }>, ...import("typebox").TObject<{
                     format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                     exportId: import("typebox").TString;
                     capturedAt: import("typebox").TString;
                     expiresAt: import("typebox").TString;
                     privacy: import("typebox").TLiteral<"private">;
                     completeness: import("typebox").TLiteral<"supported-native-facts">;
-                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>>;
                     omissions: import("typebox").TObject<{
                         trash: import("typebox").TString;
                         providerIdentifiers: import("typebox").TString;
@@ -8926,17 +8647,17 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     fullExport: import("typebox").TLiteral<false>;
                     rows: import("typebox").TInteger;
                     recordBytes: import("typebox").TInteger;
-                    version: import("typebox").TLiteral<2>;
-                    coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+                    version: import("typebox").TLiteral<2 | 3 | 4>;
+                    coverage: import("typebox").TLiteral<"private-library-owner-facts-v2" | "private-library-owner-facts-v3" | "private-library-owner-facts-v4">;
                     sectionTotals: import("typebox").TObject<{
                         [k: string]: import("typebox").TObject<{
                             rows: import("typebox").TInteger;
                             recordBytes: import("typebox").TInteger;
                         }>;
                     }>;
-                }>]>, import("typebox").TNull]>;
+                }>[]]>, import("typebox").TNull]>;
                 coverage: import("typebox").TArray<import("typebox").TObject<{
-                    section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
+                    section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>;
                     capture: import("typebox").TUnion<[import("typebox").TLiteral<"present">, import("typebox").TLiteral<"empty">]>;
                     treatment: import("typebox").TUnion<[import("typebox").TLiteral<"requires-explicit-mapping">, import("typebox").TLiteral<"retained-unsupported">]>;
                     rows: import("typebox").TInteger;
@@ -9037,7 +8758,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         expiresAt: string;
         privacy: "private";
         completeness: "supported-native-facts";
-        sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+        sections: ("anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads")[];
         omissions: {
             trash: string;
             providerIdentifiers: string;
@@ -9049,40 +8770,9 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         fullExport: false;
         rows: number;
         recordBytes: number;
-    } | {
-        format: "https://rezics.com/formats/library-export";
-        exportId: string;
-        capturedAt: string;
-        expiresAt: string;
-        privacy: "private";
-        completeness: "supported-native-facts";
-        sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
-        omissions: {
-            trash: string;
-            providerIdentifiers: string;
-            personalImportEvidence: string;
-            commerce: string;
-            publication: string;
-            reimport: string;
-        };
-        fullExport: false;
-        rows: number;
-        recordBytes: number;
-        version: 2;
-        coverage: "private-library-owner-facts-v2";
-        sectionTotals: {
-            [x: string]: {
-                rows: number;
-                recordBytes: number;
-            };
-            [x: number]: {
-                rows: number;
-                recordBytes: number;
-            };
-        };
     } | null;
     coverage: {
-        section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
+        section: "anilistEvidence" | "anilistUploads" | "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units" | "vndbEvidence" | "vndbUploads";
         capture: "empty" | "present";
         treatment: "requires-explicit-mapping" | "retained-unsupported";
         rows: number;
@@ -9226,7 +8916,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>>;
                 omissions: import("typebox").TObject<{
                     trash: import("typebox").TString;
                     providerIdentifiers: import("typebox").TString;
@@ -9238,14 +8928,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: import("typebox").TLiteral<false>;
                 rows: import("typebox").TInteger;
                 recordBytes: import("typebox").TInteger;
-            }>, import("typebox").TObject<{
+            }>, ...import("typebox").TObject<{
                 format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                 exportId: import("typebox").TString;
                 capturedAt: import("typebox").TString;
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>>;
                 omissions: import("typebox").TObject<{
                     trash: import("typebox").TString;
                     providerIdentifiers: import("typebox").TString;
@@ -9257,17 +8947,17 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: import("typebox").TLiteral<false>;
                 rows: import("typebox").TInteger;
                 recordBytes: import("typebox").TInteger;
-                version: import("typebox").TLiteral<2>;
-                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+                version: import("typebox").TLiteral<2 | 3 | 4>;
+                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2" | "private-library-owner-facts-v3" | "private-library-owner-facts-v4">;
                 sectionTotals: import("typebox").TObject<{
                     [k: string]: import("typebox").TObject<{
                         rows: import("typebox").TInteger;
                         recordBytes: import("typebox").TInteger;
                     }>;
                 }>;
-            }>]>, import("typebox").TNull]>;
+            }>[]]>, import("typebox").TNull]>;
             coverage: import("typebox").TArray<import("typebox").TObject<{
-                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
+                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>;
                 capture: import("typebox").TUnion<[import("typebox").TLiteral<"present">, import("typebox").TLiteral<"empty">]>;
                 treatment: import("typebox").TUnion<[import("typebox").TLiteral<"requires-explicit-mapping">, import("typebox").TLiteral<"retained-unsupported">]>;
                 rows: import("typebox").TInteger;

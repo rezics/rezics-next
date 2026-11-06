@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { FilterRelease } from '@rezics/filter';
+import { admitFilter, type FilterRelease } from '@rezics/filter';
+import { systemClock } from '../../src/clock.ts';
+import { compileFilter } from '../../src/search/filter.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
 import type { Access } from '../../src/request/access.ts';
@@ -13,6 +15,7 @@ import { createSearchScopeForService, type ScopeRuntime, type SearchService } fr
 import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type SubjectSource } from '../../src/search/source.ts';
 import { activeRelease } from '../../src/semantic/definitions.ts';
+import { createPublicFilterSourceBinding, publicFilterSource } from '../../src/semantic/index.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { closeOwnedSemanticAuth } from '../semantic/outcome-auth.ts';
@@ -197,6 +200,25 @@ describe('real constructor binding and native reuse', () => {
   });
 
   test('native readiness reuses the real client prefix source pool and authenticated context', async () => {
+    const current = (await activeRelease(runtime.pool))!;
+    const filterDocument = admitFilter({ type: { in: ['schema:Book'] } }, current.release);
+    const binding = createPublicFilterSourceBinding(runtime.pool, routeKey, options.access);
+    const resolved = await binding.resolve(
+      {
+        source: publicFilterSource({ pool: runtime.pool, routeKey, access: options.access, clock: systemClock }),
+        meaning: { digest: current.digest, release: current.release, type: 'schema:Book' },
+        capture: {
+          sort: 'id',
+          filterDocument,
+          filter: compileFilter(filterDocument, { prefix: 'f', relationOverflow: true }).query,
+          text: undefined,
+          generation: 1,
+          size: 100,
+        },
+      },
+      { deadline: options.deadline },
+    );
+    expect(resolved.status, JSON.stringify(resolved)).toBe('resolved');
     const scope = createSearchScopeForService(service, options);
     const before = sourceReads;
     paths.length = 0;

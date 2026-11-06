@@ -1,0 +1,57 @@
+import { ORIGINAL_WORK_AXES, type AccessWorkDeclaration, type AccessWorkDimensions } from '../contract/bounds.ts';
+export { ORIGINAL_WORK_AXES };
+/** A local SQL declaration. An absent child declaration is represented separately, never by zero. */
+export declare function originalControlWork(rows: number, points: number, statements: number, bytes: number, emptySeeks?: number): AccessWorkDimensions;
+export declare function originalWorkVector(work: AccessWorkDimensions): readonly number[];
+export declare function sumOriginalControl(...parts: readonly AccessWorkDimensions[]): AccessWorkDimensions;
+export declare function admitOriginalWorkDeclaration(declaration: AccessWorkDeclaration | null): AccessWorkDimensions | null;
+export declare const ORIGINAL_NATIVE_CONTROL: AccessWorkDimensions;
+export declare const HISTORY_ORIGINAL_CONTROL: Readonly<{
+    discovery: AccessWorkDimensions;
+    native: AccessWorkDimensions;
+    registry: AccessWorkDimensions;
+    select: AccessWorkDimensions;
+    barrier: AccessWorkDimensions;
+    previous: AccessWorkDimensions;
+    insert: AccessWorkDimensions;
+    lease: AccessWorkDimensions;
+}>;
+export declare const HISTORY_ORIGINAL_SELECTION: AccessWorkDimensions;
+export declare const HISTORY_ORIGINAL_VALIDATION: AccessWorkDimensions;
+export declare const HISTORY_ORIGINAL_SETTLEMENT: AccessWorkDimensions;
+export declare const HISTORY_SELECTED_LOCAL_CONTROL: Readonly<{
+    transaction: AccessWorkDimensions;
+    job: AccessWorkDimensions;
+    dispatchPosition: AccessWorkDimensions;
+    barrier: AccessWorkDimensions;
+    partition: AccessWorkDimensions;
+    seal: AccessWorkDimensions;
+    progressInsert: AccessWorkDimensions;
+    progressLock: AccessWorkDimensions;
+    epochReset: AccessWorkDimensions;
+    gapReset: AccessWorkDimensions;
+    page: AccessWorkDimensions;
+    applicable: AccessWorkDimensions;
+    classify: AccessWorkDimensions;
+    unavailableHome: AccessWorkDimensions;
+    emptyProgress: AccessWorkDimensions;
+    emptySeal: AccessWorkDimensions;
+    nextHome: AccessWorkDimensions;
+    phaseChange: AccessWorkDimensions;
+    verifyHome: AccessWorkDimensions;
+    verifyTransition: AccessWorkDimensions;
+    authProof: AccessWorkDimensions;
+    pending: AccessWorkDimensions;
+}>;
+export declare const HISTORY_ORIGINAL_LOCAL_ALLOWANCE: AccessWorkDimensions;
+export declare const HISTORY_ORIGINAL_TRANSFER_CONTROL: Readonly<{
+    discoveryControls: AccessWorkDimensions;
+    allocationInsert: AccessWorkDimensions;
+    entryBarrier: AccessWorkDimensions;
+    progress: AccessWorkDimensions;
+    settlementAllocation: AccessWorkDimensions;
+    grant: AccessWorkDimensions;
+    finish: AccessWorkDimensions;
+}>;
+export declare const ADDITIONAL_ORIGINAL_TRANSFER_CONTROL: AccessWorkDimensions;
+export declare function composeOriginalWorkAdmission(local: AccessWorkDimensions, source: AccessWorkDimensions | null, library: AccessWorkDimensions | null, transfer?: AccessWorkDimensions): AccessWorkDimensions;

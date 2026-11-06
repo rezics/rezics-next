@@ -1,7 +1,7 @@
 /** Adopted Semantic declaration only. The native implementation is supplied by its owner. */
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
-import type { RecordHistorySourceReference } from '../history/record-source.ts';
+import { RecordHistorySourceReference } from '../history/contract/index.ts';
 declare const semanticSourceSet: unique symbol;
 export type SemanticRecordSourceSet = Readonly<{ [semanticSourceSet]: true }>;
 export type SemanticRecordSourceSetLocator = Readonly<{

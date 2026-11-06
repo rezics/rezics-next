@@ -5,6 +5,7 @@ import type { AuthenticationConfig } from '../access/authenticate.ts';
 import { composeAccessApplication } from './access.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
+import { installNativeHistory } from './history.ts';
 import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
@@ -71,6 +72,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
+  installNativeHistory();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);

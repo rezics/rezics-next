@@ -12,7 +12,7 @@ import {
   associateIdentityFxOriginal,
   isIdentityOriginalEffect,
   requireIdentityFxOriginalDispatch,
-} from '../history/identity-original-association.ts';
+} from '../history/application/index.ts';
 
 export { DBOS_SCHEMA } from '../work/client.ts';
 export const EFFECTS_QUEUE = 'effects';

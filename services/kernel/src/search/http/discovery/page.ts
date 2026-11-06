@@ -7,7 +7,7 @@ import { SearchFreshnessSchema } from '../../search-context.ts';
 import { SpaceEntryPageSchema } from '../../../community/space-discovery-entry-contract.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from '../../discovery.ts';
-import { EmptyRecoverySchema } from '../../http/empty-recovery-schemas.ts';
+import { EmptyRecoverySchema } from '../empty-recovery-schemas.ts';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { closed, continuation, unavailable, evidenceOrDefault } from './primitives.ts';

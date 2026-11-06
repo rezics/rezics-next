@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { admitFilter, parseFilter, type FilterDocument } from '@rezics/filter';
@@ -21,6 +21,13 @@ import { membersPreparationRuntime } from '../library/support/members-preparatio
 import { testRouteKey } from '../support/test-kernel.ts';
 
 type Runtime = Awaited<ReturnType<typeof membersPreparationRuntime>>;
+let native: Runtime;
+beforeAll(async () => {
+  native = await membersPreparationRuntime();
+}, 120000);
+afterAll(async () => {
+  await native?.close();
+});
 type Fixture = Awaited<ReturnType<Runtime['fixture']>>;
 const presence: FilterDocument = { owner: { presence: true } };
 const definition = (
@@ -190,8 +197,7 @@ async function preparedFixture(native: Runtime) {
 // reserve/admit/getter, Source capture, Semantic association and operational custody must actually succeed.
 // A specification stub, fake READY empty result or test certificate is a failure, never an accepted outcome.
 test('genuine Members native scopes evaluate owner facts and continue ID/ordinal with one client and cumulative work', async () => {
-  const native = await membersPreparationRuntime();
-  try {
+  {
     const f = await preparedFixture(native);
     let unrelated = 0;
     const footprints: number[] = [];
@@ -421,14 +427,11 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
     }
     // Native admission/current points do not scan unrelated owner facts.
     expect(Math.max(...footprints) - Math.min(...footprints)).toBeLessThan(16);
-  } finally {
-    await native.close();
   }
 }, 240000);
 
 test('genuine Members admission refuses stale native source, expired episode and revoked owner without fake readiness', async () => {
-  const native = await membersPreparationRuntime();
-  try {
+  {
     for (const scale of [1, 10, 100]) {
       const f = await preparedFixture(native);
       for (let index = 0; index < scale; index++) {
@@ -490,8 +493,6 @@ test('genuine Members admission refuses stale native source, expired episode and
         ),
       ).rejects.toBeDefined();
     }
-  } finally {
-    await native.close();
   }
 }, 240000);
 

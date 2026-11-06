@@ -15,7 +15,6 @@ import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { declareCommandHistory } from '../history/record.ts';
 
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -88,6 +87,7 @@ import readSubjectRevision from './candidates-read-subject-revision.sql';
 import readCandidateVisibility from './candidates-read-visibility.sql';
 import readCandidateOwners from './candidates-read-owners.sql';
 import updateSubjectRelease from './update-subject-release.sql';
+import { declareCommandHistory } from '../history/application/index.ts';
 
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}

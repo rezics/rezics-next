@@ -11213,5 +11213,9 @@
   "library_archive_progress_open_session": "Ouvrir la Session actuelle",
   "library_archive_progress_restart": "Commencer une autre récupération avec l’archive d’origine",
   "exposure_grants_link": "Review tester grants",
-  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access."
+  "exposure_grants_help": "Use Resource access to grant or revoke gate permissions on the Global Context. That page checks your current grant authority. Closing a capability preserves tester grants; revoke a grant to end that tester’s access.",
+  "library_archive_observation_correct": "Conserver ou corriger une observation existante",
+  "library_archive_observation_admit": "Ajouter une nouvelle observation",
+  "library_archive_observation_revision": "Révision actuelle de l’observation",
+  "library_archive_observation_admit_help": "L’ajout utilise tous les champs archivés, y compris les effacements explicites. La vérification native confirme qu’aucune observation n’existe."
 }

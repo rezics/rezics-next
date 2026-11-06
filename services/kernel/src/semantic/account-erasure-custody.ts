@@ -2,8 +2,8 @@ import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import read from './account-erasure-custody-read.sql';
-import { readHistoryOwnerCoverage } from '../history/receiving.ts';
 import { readSubjectErasureSourceProof } from './account-erasure-source.ts';
+import { readHistoryOwnerCoverage } from '../history/application/index.ts';
 
 /** A pending observation, never a receiving receipt or permission to acknowledge. */
 export type SemanticErasureCustody = Readonly<{

@@ -8,7 +8,7 @@ export declare function LIBRARY_ARCHIVE_LIMITS(): {
     readonly pageRows: 16;
     readonly uploadBytes: number;
     readonly depth: 32;
-    readonly sections: 17;
+    readonly sections: 21;
 };
 /** Installed private Collection recovery bounds; these are independent of each native command's own cap. */
 export declare const LIBRARY_ARCHIVE_RECOVERY_LIMITS: {

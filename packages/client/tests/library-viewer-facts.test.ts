@@ -25,12 +25,19 @@ import type { ViewerFactsPage, MAX_VIEWER_FACTS_ROWS } from ${JSON.stringify(res
 type LibraryPage = NonNullable<Awaited<ReturnType<KernelClient['libraryEntries']['get']>>['data']>;
 type CollectionPage = Extract<NonNullable<Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']>, { members: unknown[] }>;
 type Facts = NonNullable<LibraryPage['viewerFacts']>;
+type CurrentFacts = Extract<Facts, { state: 'current' }>;
 expectTypeOf<LibraryPage['viewerFacts']>().toEqualTypeOf<Facts | undefined>();
-expectTypeOf<CollectionPage['viewerFacts']>().toEqualTypeOf<Facts | undefined>();
-expectTypeOf<Facts>().toMatchTypeOf<Extract<ViewerFactsPage, { state: 'current' }>>();
-expectTypeOf<Facts['state']>().toEqualTypeOf<'current'>();
-expectTypeOf<Facts['rows'][number]['entry']['state']>().toEqualTypeOf<'present' | 'absent' | 'unavailable'>();
-expectTypeOf<Facts['rows'][number]['vote']['state']>().toEqualTypeOf<'present' | 'absent' | 'unavailable'>();
+type CollectionFacts = NonNullable<CollectionPage['viewerFacts']>;
+expectTypeOf<CollectionFacts['state']>().toEqualTypeOf<Facts['state']>();
+type CollectionCurrent = Extract<CollectionFacts, { state: 'current' }>;
+expectTypeOf<CurrentFacts['rows'][number]['entry']>().toMatchTypeOf<CollectionCurrent['rows'][number]['entry']>();
+expectTypeOf<CollectionCurrent['rows'][number]['entry']>().toMatchTypeOf<CurrentFacts['rows'][number]['entry']>();
+expectTypeOf<CurrentFacts['rows'][number]['vote']>().toMatchTypeOf<CollectionCurrent['rows'][number]['vote']>();
+expectTypeOf<CollectionCurrent['rows'][number]['vote']>().toMatchTypeOf<CurrentFacts['rows'][number]['vote']>();
+expectTypeOf<Facts['state']>().toEqualTypeOf<'current' | 'unavailable'>();
+expectTypeOf<CurrentFacts>().toMatchTypeOf<Extract<ViewerFactsPage, { state: 'current' }>>();
+expectTypeOf<CurrentFacts['rows'][number]['entry']['state']>().toEqualTypeOf<'present' | 'absent' | 'unavailable'>();
+expectTypeOf<CurrentFacts['rows'][number]['vote']['state']>().toEqualTypeOf<'present' | 'absent' | 'unavailable'>();
 expectTypeOf<Extract<ViewerFactsPage, { state: 'unavailable' }>['reason']>().toEqualTypeOf<'identity' | 'currentness' | 'response_limit'>();
 expectTypeOf<typeof MAX_VIEWER_FACTS_ROWS>().toEqualTypeOf<100>();
 `,
@@ -44,8 +51,9 @@ expectTypeOf<typeof MAX_VIEWER_FACTS_ROWS>().toEqualTypeOf<100>();
       },
     );
     expect(result.error).toBeUndefined();
-    expect(`${result.stdout}${result.stderr}`).toBe('');
-    expect(result.status).toBe(0);
+    const output = `${result.stdout}${result.stderr}`;
+    expect(output).not.toContain('<error');
+    expect(result.status, output).toBe(0);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

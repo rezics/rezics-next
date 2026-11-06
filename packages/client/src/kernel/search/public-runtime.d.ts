@@ -30,9 +30,9 @@ export type DefaultPublicFilterRuntime = Readonly<{
     bindRequest(request: Readonly<{
         plan: PublicFilterConsumerCaptureInput;
         snapshot: 'pit' | 'prepared';
-    }>, context: PublicFilterConsumerContext): Promise<BoundPublicRequest>;
+    }>, context: PublicFilterConsumerContext, acceptedRelease?: string): Promise<BoundPublicRequest>;
     /** Reopen a factory for retained producer state without recapturing or resetting its allowance. */
-    resumeRequest(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerOperations>;
+    resumeRequest(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, acceptedRelease?: string): Promise<PublicFilterConsumerOperations>;
     bindSuggestion(request: PublicSuggestionCaptureInput, context: PublicFilterConsumerContext): Promise<Readonly<{
         operations: PublicSuggestionOperations;
         capture: PublicFilterConsumerCapture;

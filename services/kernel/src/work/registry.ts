@@ -3,7 +3,7 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import type { WorkClient } from './client.ts';
 import { registerEffects, type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
-import type { HistoryRegistry } from '../history/registry.ts';
+import type { HistoryRegistry } from '../history/contract/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';

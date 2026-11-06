@@ -6,7 +6,6 @@ import locatePublicationCandidate from './moderation-read-live-candidate.sql';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { declareCommandHistory } from '../history/record.ts';
 
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
@@ -40,6 +39,7 @@ import readClaim from './bulk-read-claim.sql';
 import readCompactCandidate from './bulk-read-compact-candidate.sql';
 import readProposedSource from './bulk-read-proposed-source.sql';
 import readSourceCandidate from './bulk-read-source-candidate.sql';
+import { declareCommandHistory } from '../history/application/index.ts';
 
 export type BulkValue =
   | { id: string; revision: number }

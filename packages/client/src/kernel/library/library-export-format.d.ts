@@ -16,8 +16,8 @@ export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
 export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
 export type LibraryExportSectionV4 = (typeof exportSectionsV4)[number];
-/** V2/V3 share the archive consumer inventory; V4 provider sections remain unsupported for recovery. */
-export type LibraryExportSection = LibraryExportSectionV2 | LibraryExportSectionV3;
+/** All installed sections can be retained as evidence; recovery support is decided per section. */
+export type LibraryExportSection = LibraryExportSectionV4;
 export declare function sectionsForVersion(version: LibraryExportVersion): readonly ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"] | readonly ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"] | readonly ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
 type Capture = {
     export_id: string;
@@ -153,6 +153,6 @@ export declare function libraryExportManifest(capture: Capture & {
 export declare function libraryExportManifest(capture: Capture & {
     format_version?: LibraryExportVersion;
 }): LibraryExportManifest;
-/** The native archive decoder recognizes the exact completed V1, V2, and V3 manifests. */
-export type LibraryArchiveManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2 | LibraryExportFinalManifestV3;
+/** Recovery validates the original completed manifest before selecting supported facts. */
+export type LibraryArchiveManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2 | LibraryExportFinalManifestV3 | LibraryExportFinalManifestV4;
 export {};

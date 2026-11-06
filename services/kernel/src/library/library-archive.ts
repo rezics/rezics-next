@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import {
-  exportSectionsV2,
+  exportSectionsV4,
   LIBRARY_EXPORT_FORMAT,
   LIBRARY_EXPORT_LIMITS,
   sectionsForVersion,
@@ -19,7 +19,7 @@ export function LIBRARY_ARCHIVE_LIMITS() {
         // Compact producer records plus commas, the final manifest and bounded formatting whitespace.
         uploadBytes: 34 * 1024 * 1024,
         depth: 32,
-        sections: exportSectionsV2.length,
+        sections: exportSectionsV4.length,
       }) as const,
   );
 }
@@ -175,7 +175,7 @@ function parse(bytes: Uint8Array): unknown {
 function manifestOf(value: unknown): LibraryArchiveManifest {
   if (value === null || value === undefined) fail('incomplete_capture');
   const m = object(value, 'invalid_envelope');
-  if (m.format !== LIBRARY_EXPORT_FORMAT || (m.version !== 1 && m.version !== 2 && m.version !== 3))
+  if (m.format !== LIBRARY_EXPORT_FORMAT || (m.version !== 1 && m.version !== 2 && m.version !== 3 && m.version !== 4))
     fail('unsupported_version');
   const version = m.version as LibraryExportVersion;
   const installedSections: readonly string[] = sectionsForVersion(version);
@@ -204,8 +204,7 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     m.privacy !== 'private' ||
     m.completeness !== 'supported-native-facts' ||
     m.fullExport !== false ||
-    (version === 2 && m.coverage !== 'private-library-owner-facts-v2') ||
-    (version === 3 && m.coverage !== 'private-library-owner-facts-v3')
+    (version >= 2 && m.coverage !== `private-library-owner-facts-v${version}`)
   )
     fail('invalid_envelope');
   const sections = m.sections;
@@ -301,6 +300,27 @@ function validJournalDate(value: unknown): boolean {
 }
 
 function supportedRecord(row: ObjectValue, section: MergeSection, version: LibraryArchiveManifest['version']) {
+  if (section === 'provenance') {
+    if (
+      !exactKeys(row, [
+        'section',
+        'accountId',
+        'subjectId',
+        'entryIncarnationId',
+        'libraryProfilePin',
+        'observation',
+      ]) ||
+      !uuid(row.accountId) ||
+      !uuid(row.subjectId) ||
+      (row.entryIncarnationId !== null && !uuid(row.entryIncarnationId)) ||
+      (row.libraryProfilePin !== null &&
+        (!row.libraryProfilePin || typeof row.libraryProfilePin !== 'object' || Array.isArray(row.libraryProfilePin)))
+    )
+      fail('invalid_record');
+    // Source field meanings are inert evidence here. The observation owner decides supported review.
+    object(row.observation, 'invalid_record');
+    return;
+  }
   if (section === 'annotations') {
     if (
       !exactKeys(
@@ -340,7 +360,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
   }
   if (section === 'journals') {
     const journal = object(row.journal, 'invalid_record');
-    const assessment = version === 3 ? object(journal.assessment, 'invalid_record') : null;
+    const assessment = version >= 3 ? object(journal.assessment, 'invalid_record') : null;
     if (
       !exactKeys(row, [
         'section',
@@ -358,8 +378,8 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
       ]) ||
       !exactKeys(
         journal,
-        ['sessionId', 'revision', ...(version === 3 ? ['startDate', 'finishDate', 'reflection', 'assessment'] : [])],
-        version === 3 ? [] : ['startDate', 'finishDate', 'reflection'],
+        ['sessionId', 'revision', ...(version >= 3 ? ['startDate', 'finishDate', 'reflection', 'assessment'] : [])],
+        version >= 3 ? [] : ['startDate', 'finishDate', 'reflection'],
       ) ||
       !uuid(row.accountId) ||
       !uuid(row.sessionId) ||
@@ -383,7 +403,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
     )
       fail('invalid_record');
     if (
-      version === 3 &&
+      version >= 3 &&
       (!assessment ||
         !exactKeys(assessment, ['meaningRevision', 'units']) ||
         !Number.isSafeInteger(assessment.meaningRevision) ||
@@ -461,6 +481,10 @@ const identityFields: Record<LibraryExportSection, readonly string[]> = {
   annotations: ['subjectId'],
   provenance: ['subjectId'],
   journals: ['sessionId'],
+  vndbUploads: ['upload_id'],
+  vndbEvidence: ['upload_id', 'ordinal'],
+  anilistUploads: ['upload_id'],
+  anilistEvidence: ['upload_id', 'ordinal'],
 };
 function recordKey(row: ObjectValue, section: LibraryExportSection) {
   const values = identityFields[section].map((key) => {
@@ -491,9 +515,9 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
   if (envelope.records.length > LIBRARY_ARCHIVE_LIMITS().records) fail('bounds');
   if (envelope.records.length !== manifest.rows) fail('inconsistent_manifest');
   const manifestSections: readonly string[] = sectionsForVersion(manifest.version);
-  const counts = new Map<LibraryExportSection, number>(exportSectionsV2.map((s) => [s, 0]));
+  const counts = new Map<LibraryExportSection, number>(exportSectionsV4.map((s) => [s, 0]));
   const totals = new Map<LibraryExportSection, { rows: number; recordBytes: number }>(
-    exportSectionsV2.map((s) => [s, { rows: 0, recordBytes: 0 }]),
+    exportSectionsV4.map((s) => [s, { rows: 0, recordBytes: 0 }]),
   );
   const seen = new Set<string>(),
     labelIds = new Set<string>(),
@@ -528,9 +552,10 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (section === 'assignments' && !labelIds.has(row.label_id as string)) fail('incomplete_capture');
   }
   if (recordBytes !== manifest.recordBytes) fail('inconsistent_manifest');
-  if (manifest.version === 2 || manifest.version === 3) {
-    for (const section of exportSectionsV2) {
-      const expected = manifest.sectionTotals[section];
+  if (manifest.version !== 1) {
+    const sectionTotals = manifest.sectionTotals as Record<string, { rows: number; recordBytes: number }>;
+    for (const section of sectionsForVersion(manifest.version)) {
+      const expected = sectionTotals[section]!;
       const actual = totals.get(section)!;
       if (expected.rows !== actual.rows || expected.recordBytes !== actual.recordBytes) fail('inconsistent_manifest');
     }
@@ -539,7 +564,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     manifest,
     records: envelope.records as ArchiveRecord[],
     fullRestoration: false,
-    coverage: exportSectionsV2.map((section) => ({
+    coverage: exportSectionsV4.map((section) => ({
       section,
       rows: counts.get(section)!,
       capture: counts.get(section) ? 'present' : 'empty',

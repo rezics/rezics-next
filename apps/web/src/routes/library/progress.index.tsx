@@ -25,17 +25,9 @@ export const Route = createFileRoute('/library/progress/')({
     cursor: search.cursor,
   }),
   loader: ({ deps }) => readCurrentViewerProgressIndex({ data: deps }),
-  shouldReload: ({ deps, prevDeps, location }) => {
+  shouldReload: ({ location, deps }) => {
     const movement = progressIndexWindowRouteState(location.state);
-    return !(
-      movement &&
-      prevDeps &&
-      movement.to === (location.search.cursor ?? null) &&
-      deps.subjectId === prevDeps.subjectId &&
-      deps.state === prevDeps.state &&
-      deps.mode === prevDeps.mode &&
-      deps.profileId === prevDeps.profileId
-    );
+    return !movement || movement.to !== (deps.cursor ?? null);
   },
   staleTime: 0,
   head: ({ match }) =>

@@ -17,7 +17,8 @@ import {
 import allowed from './preferences-notification-allowed.sql';
 import read from './preferences-read.sql';
 import set from './preferences-set.sql';
-import { declareCommandHistory, preferenceSubjectScope } from '../history/record.ts';
+import { declareCommandHistory } from '../history/application/index.ts';
+import { preferenceSubjectScope } from '../history/contract/index.ts';
 
 export const SHELF_LAYOUTS = ['grid', 'list', 'table'] as const;
 export const SHELF_TABS = ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'] as const;

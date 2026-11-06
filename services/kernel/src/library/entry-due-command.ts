@@ -14,8 +14,8 @@ import { partitionOf } from '../route/route.ts';
 import { requireRoute, workStepDeadline } from './command-support.ts';
 import { purgeDueEntryDeletion, type DueEntryDeletionKey } from './entry-due-store.ts';
 import eligibility from './entry-due-eligibility.sql';
-import { bindCommandHistoryEvidence, declareCommandHistory } from '../history/record.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { bindCommandHistoryEvidence, declareCommandHistory } from '../history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 
 export class EntryPurgeNotDueError extends Error {
   constructor() {

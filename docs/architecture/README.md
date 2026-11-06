@@ -31,6 +31,14 @@ Decision: Semantic is registered as contract, core, application and adapter modu
 Decision: Routed Zone composition consumes Search page, visit-return and slot-admission helpers through existing public entries (`showcase-work`, `search/index.ts`, `kernel/client.ts`) and already-imported Zone reader files; it does not add manifest public entries.
 
 Decision: The public Zone shell type is the composition appearance, label and language vocabulary in the Zone reader; Web does not import kernel `contract.ts` for it.
+Decision: History is registered as contract, core, application and adapter modules. Foreign modules use its declared application and contract entries; `composition/history.ts` binds native Postgres, command, Access, Semantic, Search, Zones and Work adapters. Server, worker, the shared runtime defaults and the explicit `composition/preload.ts` hook install that composition before use. Application facades remain implementation-free, native adapters import owner facade leaves rather than the application barrel, and no History file participates in a value-import cycle.
+
+Measured with `scripts/architecture.ts` against base `a311990286`: the changed-base check passes with no new violations.
+Kernel files in value cycles are 345 and the largest value component is 326 files; History files in value cycles are
+zero. Violations that touch History source fell from 312 to zero. History source files have 109 outgoing value edges to
+other modules at final; the increase is the native owner bindings in adapters, while contract, core and application
+import no implementation. Baseline entries fell from 8,496 to 7,437. The full-graph check reports inherited unbaselined
+errors outside this change at final.
 
 `modules.json` assigns the production sources in Kernel, Auth, Importer, Web, and the runtime packages to one module each. Tests, stories, fixtures, and workspace configuration are not production source roots. Each module records its kind, owner Goal, registered capabilities, public entries, and current allowed module dependencies. Kernel foundation code with no product owner is assigned to `platform`.
 

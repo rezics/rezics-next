@@ -61,8 +61,8 @@ import {
   type SelectedInvocation,
   type SelectedChildren,
 } from '../work/selected-runtime.ts';
-import type { SelectedOutcome } from '../history/operational-work-selected.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
+import { type SelectedOutcome } from '../history/contract/index.ts';
 
 type Dependencies = Pick<WorkContext, 'pool' | 'client' | 'clock'> & {
   runtime?: () => ReturnType<typeof collectionPublicationScopeRuntime>;

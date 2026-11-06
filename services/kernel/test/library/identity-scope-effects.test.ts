@@ -566,9 +566,9 @@ async function withAuthenticLibraryOriginal<T>(
     work: NativeCollectionWork,
   ) => Promise<T>,
 ) {
-  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { HistoryRegistry } = await import('../../src/history/contract/registry.ts');
   const { createWorkClient } = await import('../../src/work/client.ts');
-  const { admitSharedHistory } = await import('../../src/access/shared-history.ts');
+  const { admitSharedHistory } = await import('../../src/history/adapters/shared-history.ts');
   const { withSelectedHistoryOriginal, consumeSelectedHistoryOriginal, withIdentityOriginalSourceTransfer } =
     await import('../../src/access/identity-original-admission.ts');
   const { withPrepaidIdentitySourceConsumerMaintenance, claimIdentitySourceCustodyAdvancement } =

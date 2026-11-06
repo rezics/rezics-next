@@ -14,7 +14,7 @@ type PendingMovement = {
   movement: Movement;
   href: string;
   loading: boolean;
-  focus?: FocusHandoff;
+  focus?: FocusHandoff | undefined;
 };
 
 /** One public directory visit retains cursor coordinates only, never prior page data. */

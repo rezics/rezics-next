@@ -6,7 +6,7 @@ import { openGrowthDatabase } from '../support/growth.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeSelectedRuntime } from '../../src/work/selected-runtime.ts';
 import { bindExecutionContract } from '../../src/command/execution-contract.ts';
-import { historyExecutionPort } from '../../src/history/operational-work.ts';
+import { historyExecutionPort } from '../../src/history/adapters/operational-work.ts';
 import { workExecutionPort } from '../../src/work/selected-runtime.ts';
 import { newId } from '../../src/route/route.ts';
 import type { SelectedIdentity } from '../../src/work/selected-runtime.ts';

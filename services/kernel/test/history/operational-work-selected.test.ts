@@ -7,11 +7,11 @@ import {
   registerPositionedOperationalHistoryWork,
   reserveOperationalWorkTransfer,
   resolveCommittedOperationalWork,
-  type OperationalMembersBinding,
-} from '../../src/history/operational-work.ts';
+} from '../../src/history/adapters/operational-work.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
 import { operationalFixture } from '../command/support/operational-fixture.ts';
+import { type OperationalMembersBinding } from '../../src/history/contract/operational-types.ts';
 // UNRUN: native original funding/association oracles are deferred to integration.
 let native: Awaited<ReturnType<typeof operationalFixture>>;
 beforeAll(async () => {

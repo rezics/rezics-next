@@ -13,7 +13,7 @@ import {
 } from '../command/execution-contract.ts';
 import { enqueueWorkIntent, type WorkClient, type WorkIntent } from './client.ts';
 import { WORK_EXECUTION_ATTEMPT_BOUND, type SelectedCost } from './selected-runtime-cost.ts';
-import type { SelectedEpisode, SelectedLocator, SelectedOutcome } from '../history/operational-work-selected.ts';
+import type { SelectedEpisode, SelectedLocator, SelectedOutcome } from '../history/contract/index.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
 import { SelectedRuntimeUnavailable } from './application/index.ts';
 import type { WorkSelectedIdentity } from './contract/index.ts';

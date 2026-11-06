@@ -1,6 +1,9 @@
 import { memoizedValue } from '../memoized.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { OPERATIONAL_WORK_REGISTRATION, OPERATIONAL_WORK_TRANSFER_COST } from '../history/operational-work.ts';
+import {
+  OPERATIONAL_WORK_REGISTRATION,
+  OPERATIONAL_WORK_TRANSFER_COST,
+} from '../history/core/operational-work-budget.ts';
 
 /** Members-owned SQL ceilings, not funding and not a quote for Core, Access, Search or History.
  * All eight axes are named: History and Source use different tuple orders.

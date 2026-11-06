@@ -714,7 +714,7 @@ function ProgressHistoryLink({
         return historySearch(previous, search);
       }}
       state={(previous) => previous}
-      hash={(previous) => previous}
+      hash={true}
       preload={false}
       onClick={(event) => {
         if (!current()) {
@@ -741,7 +741,7 @@ function ProgressHistoryLink({
               params: { id },
               search: nextSearch,
               state: (previous) => previous,
-              hash: (previous) => previous,
+              hash: true,
             })
             .then(cancel);
         }

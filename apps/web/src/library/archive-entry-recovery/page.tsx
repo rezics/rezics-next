@@ -230,7 +230,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                       {json(row.review)}
                     </>
                   )}
-                  {supportedRecoverySection(row.section) && !['applying', 'acknowledged'].includes(row.status) ? (
+                  {supportedRecoverySection(row.section) &&
+                  !['unsupported', 'applying', 'acknowledged'].includes(row.status) ? (
                     row.section === 'annotations' ? (
                       <AnnotationMappingForm
                         key={`${row.ordinal}:${state.upload!.id}`}
@@ -244,6 +245,17 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                       />
                     ) : row.section === 'journals' ? (
                       <JournalMappingForm
+                        key={`${row.ordinal}:${state.upload!.id}`}
+                        row={row}
+                        disabled={
+                          busy ||
+                          locked ||
+                          (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))
+                        }
+                        onChoose={(choice) => journey!.choose(choice)}
+                      />
+                    ) : row.section === 'provenance' ? (
+                      <ObservationMappingForm
                         key={`${row.ordinal}:${state.upload!.id}`}
                         row={row}
                         disabled={
@@ -789,12 +801,14 @@ function JournalMappingForm({
             startDate: fieldChoice(values, 'startDate'),
             finishDate: fieldChoice(values, 'finishDate'),
             reflection: fieldChoice(values, 'reflection'),
+            ...(Object.hasOwn((row.evidence.journal ?? {}) as object, 'assessment')
+              ? { assessment: fieldChoice(values, 'assessment') }
+              : {}),
           },
         });
       }}
     >
       <fieldset disabled={disabled} className="space-y-3">
-        <p>{m.library_archive_personal_assessment_evidence()}</p>
         <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
         <input
           id={`${prefix}-subject`}
@@ -831,6 +845,144 @@ function JournalMappingForm({
           label={m.library_archive_personal_reflection()}
           disabled={disabled}
         />
+        {Object.hasOwn((row.evidence.journal ?? {}) as object, 'assessment') ? (
+          <FieldChoiceSelect
+            id={`${prefix}-assessment`}
+            name="assessment"
+            label={m.library_occurrence_assessment()}
+            disabled={disabled}
+          />
+        ) : (
+          <p>{m.library_archive_personal_assessment_evidence()}</p>
+        )}
+        <button type="submit" className={control}>
+          {m.library_archive_entry_select({ ordinal: row.ordinal })}
+        </button>
+      </fieldset>
+    </form>
+  );
+}
+
+/** Source identity stays bound to the archived observation; native review supplies current admission and CAS. */
+function ObservationMappingForm({
+  row,
+  disabled,
+  onChoose,
+}: {
+  row: ArchiveRow;
+  disabled: boolean;
+  onChoose: (choice: ArchiveReviewItem) => void;
+}) {
+  const prefix = `archive-observation-${row.ordinal}`;
+  const [action, setAction] = useState<'admit' | 'correct'>('correct');
+  const observation = row.evidence.observation as {
+    provider: string;
+    recordId: string;
+    privacy: { status: string };
+    sourceCreated: { status: string };
+    sourceUpdated: { status: string };
+  };
+  const fields = [
+    ['privacy', m.library_rich_entry_privacy()],
+    ['sourceCreated', m.library_rich_entry_source_created()],
+    ['sourceUpdated', m.library_rich_entry_source_updated()],
+  ] as const;
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const values = new FormData(event.currentTarget);
+        const common = {
+          ordinal: row.ordinal,
+          kind: 'observation' as const,
+          subjectId: String(values.get('subjectId')),
+          provider: observation.provider,
+          recordId: observation.recordId,
+        };
+        onChoose(
+          action === 'admit'
+            ? {
+                ...common,
+                action,
+                fields: {
+                  privacy: observation.privacy?.status === 'cleared' ? 'clear' : 'set',
+                  sourceCreated: observation.sourceCreated?.status === 'cleared' ? 'clear' : 'set',
+                  sourceUpdated: observation.sourceUpdated?.status === 'cleared' ? 'clear' : 'set',
+                },
+              }
+            : {
+                ...common,
+                action,
+                revision: Number(values.get('revision')),
+                fields: {
+                  privacy: fieldChoice(values, 'privacy'),
+                  sourceCreated: fieldChoice(values, 'sourceCreated'),
+                  sourceUpdated: fieldChoice(values, 'sourceUpdated'),
+                },
+              },
+        );
+      }}
+    >
+      <fieldset disabled={disabled} className="space-y-3">
+        <p>{m.library_archive_personal_help()}</p>
+        <dl className="space-y-2 [overflow-wrap:anywhere]">
+          <div>
+            <dt>{m.source_observation_provider()}</dt>
+            <dd>{observation.provider}</dd>
+          </div>
+          <div>
+            <dt>{m.source_observation_record()}</dt>
+            <dd>{observation.recordId}</dd>
+          </div>
+        </dl>
+        <label htmlFor={`${prefix}-subject`} className="block space-y-1">
+          <span>{m.library_archive_entry_subject_id()}</span>
+          <input
+            id={`${prefix}-subject`}
+            className={`${control} block w-full`}
+            name="subjectId"
+            required
+            pattern={uuidPattern}
+            autoComplete="off"
+          />
+        </label>
+        <label htmlFor={`${prefix}-action`} className="block space-y-1">
+          <span>{m.library_archive_entry_action()}</span>
+          <select
+            id={`${prefix}-action`}
+            className={`${control} block w-full`}
+            name="action"
+            value={action}
+            onChange={(event) => setAction(event.target.value as 'admit' | 'correct')}
+          >
+            <option value="correct">{m.library_archive_observation_correct()}</option>
+            <option value="admit">{m.library_archive_observation_admit()}</option>
+          </select>
+        </label>
+        {action === 'correct' ? (
+          <>
+            <label htmlFor={`${prefix}-revision`} className="block space-y-1">
+              <span>{m.library_archive_observation_revision()}</span>
+              <input
+                id={`${prefix}-revision`}
+                className={`${control} block w-full`}
+                name="revision"
+                type="number"
+                min="1"
+                max="2147483647"
+                step="1"
+                required
+                inputMode="numeric"
+              />
+            </label>
+            {fields.map(([name, label]) => (
+              <FieldChoiceSelect key={name} id={`${prefix}-${name}`} name={name} label={label} disabled={disabled} />
+            ))}
+          </>
+        ) : (
+          <p>{m.library_archive_observation_admit_help()}</p>
+        )}
         <button type="submit" className={control}>
           {m.library_archive_entry_select({ ordinal: row.ordinal })}
         </button>

@@ -20,19 +20,18 @@ import {
   runCommand,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import type { AccountReference } from '../history/locator.ts';
-import { declareCommandHistory } from '../history/record.ts';
-import {
-  declareCommandRecordSources,
-  recordHistorySourceKey,
-  type RecordHistorySourceReference,
-} from '../history/record-source.ts';
 import {
   lockRecordPurgeAuthoritySource,
   prepareRecordPurgeAuthority,
   readRecordPurgeAuthoritySource,
 } from './record-purge-authority.ts';
+import { declareCommandHistory, declareCommandRecordSources } from '../history/application/index.ts';
+import {
+  ACCOUNT_ROLE_BITS,
+  type AccountReference,
+  type RecordHistorySourceReference,
+  recordHistorySourceKey,
+} from '../history/contract/index.ts';
 
 // Permanent owner-assigned codec IDs; existing receipt command strings remain unchanged.
 type ResourceHistoryCommand =

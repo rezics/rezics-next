@@ -3,6 +3,7 @@ import type { IdentityJobRef, IdentityIntent, IdentityStepReceipt, IdentityChang
 /** Native identity storage and fixed participant protocol. Mapping conveys no permission. */
 import type { Pool } from 'pg';
 import type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
+import type { IdentityEpochParticipantPorts } from '../contract/identity-epoch-ports.ts';
 export type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
 import type { CommandBasis, CommandAuthorization, CommandReceipt, CommandResult, CommandTransaction } from '../../command/command.ts';
 import type { mergeSubjects } from '../merges.ts';
@@ -52,11 +53,23 @@ export type IdentityAdmissionInput = Readonly<{
         release: Release;
     }>;
 }>;
+/** The caller's authority. Every store command runs on one native partition.
+ * Colocated callers keep a single `authorization`. HTTP merge supplies `authorizationFor`
+ * because admission home and the redirected Subject partition can differ. */
 export type IdentityAdmissionAuthority = Readonly<{
     basis?: CommandBasis;
     authorization?: CommandAuthorization;
+    authorizationFor?: (partition: number) => Promise<CommandAuthorization>;
     deadline?: number;
     clock?: () => Date;
+}>;
+/** Command options for one store command on `partition`, with the caller's authorization prepared for it. */
+export declare function commandAuthorityAt(authority: IdentityAdmissionAuthority, partition: number): Promise<{
+    partition: number;
+    basis?: CommandBasis;
+    deadline?: number;
+    clock?: () => Date;
+    authorization?: CommandAuthorization;
 }>;
 export type IdentityEpochStore = Readonly<{
     /** Bootstrap topology home. Job control homes are encoded in native job IDs. */
@@ -125,12 +138,8 @@ export type IdentityEpochStep = (pool: Pool, job: IdentityJobRef) => Promise<Ide
  * Both adapters consume Store + Step contracts; neither imports the final coordinator.
  * No default/noData implementation and no request-selected participant list.
  */
-export type IdentityEpochParticipants = Readonly<{
-    version: 1;
-    'search-canonical-index': IdentityEpochStep;
-    /** Same participant/receipt ABI; all canonical removals/additions/fences/directory rekeys must be custodied. */
-    'library-private-follow-counts': IdentityEpochStep;
-}>;
+/** Same participant/receipt ABI; the composition root binds the pool (contract/identity-epoch-ports.ts). */
+export type IdentityEpochParticipants = IdentityEpochParticipantPorts<Pool>;
 /** Final composition: semantic/identity-epoch-coordinator.ts.
  * DBOS resumes job identity only. Completion reads persisted native receipts, not this return value.
  */

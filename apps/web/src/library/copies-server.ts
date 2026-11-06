@@ -46,6 +46,49 @@ function isStatusEditing(value: unknown): value is NativeCopyPresentation['statu
   );
 }
 
+const conditionIds = ['fair', 'good', 'mint', 'near_mint', 'poor', 'unknown', 'very_good', 'very_good_plus'];
+
+function isCondition(value: unknown): value is NativeCopyPresentation['mediaCondition'] {
+  if (!isRecord(value)) return false;
+  if (value.state === 'not_recorded' || value.state === 'cleared' || value.state === 'unavailable')
+    return onlyKeys(value, ['state']);
+  return (
+    value.state === 'recorded' &&
+    onlyKeys(value, ['state', 'id', 'label']) &&
+    typeof value.id === 'string' &&
+    conditionIds.includes(value.id) &&
+    typeof value.label === 'string'
+  );
+}
+
+function isConditionEditing(value: unknown): value is NativeCopyPresentation['conditionEditing'] {
+  if (!isRecord(value)) return false;
+  if (value.state === 'unavailable')
+    return (
+      onlyKeys(value, ['state', 'currentness', 'reason']) &&
+      (value.currentness === 'current' || value.currentness === 'retired' || value.currentness === 'unavailable') &&
+      (value.reason === 'current_source_unavailable' ||
+        value.reason === 'retired' ||
+        value.reason === 'unrecognized_vocabulary' ||
+        value.reason === 'unsupported')
+    );
+  return (
+    value.state === 'supported' &&
+    value.currentness === 'current' &&
+    onlyKeys(value, ['state', 'currentness', 'choices']) &&
+    Array.isArray(value.choices) &&
+    value.choices.every(
+      (choice: unknown) =>
+        isRecord(choice) &&
+        onlyKeys(choice, ['id', 'label', 'description']) &&
+        typeof choice.id === 'string' &&
+        conditionIds.includes(choice.id) &&
+        typeof choice.label === 'string' &&
+        typeof choice.description === 'string',
+    )
+  );
+}
+
 function isPresentation(value: unknown): value is NativeCopyPresentation {
   return (
     isRecord(value) &&
@@ -56,18 +99,31 @@ function isPresentation(value: unknown): value is NativeCopyPresentation {
       'statusLabel',
       'statusLabelLanguage',
       'statusEditing',
+      'mediaCondition',
+      'packagingCondition',
+      'conditionEditing',
     ]) &&
     (value.meaning === 'known' || value.meaning === 'unknown' || value.meaning === 'unavailable') &&
     labelPair(value, 'kindLabel', 'kindLabelLanguage') &&
     labelPair(value, 'statusLabel', 'statusLabelLanguage') &&
-    isStatusEditing(value.statusEditing)
+    isStatusEditing(value.statusEditing) &&
+    isCondition(value.mediaCondition) &&
+    isCondition(value.packagingCondition) &&
+    isConditionEditing(value.conditionEditing)
   );
 }
 
 /** Decode only the declared owner DTO; current choices never supply historical labels. */
 export function nativeCopyPresentation(copy: NativeCopy): NativeCopyPresentation {
   const presentation = copy.presentation;
-  if (!isPresentation(presentation)) return { meaning: 'unavailable', statusEditing: { state: 'unavailable' } };
+  if (!isPresentation(presentation))
+    return {
+      meaning: 'unavailable',
+      statusEditing: { state: 'unavailable' },
+      mediaCondition: { state: 'unavailable' },
+      packagingCondition: { state: 'unavailable' },
+      conditionEditing: { state: 'unavailable', currentness: 'unavailable', reason: 'current_source_unavailable' },
+    };
   const { meaning, statusEditing } = presentation;
   return {
     meaning,
@@ -88,5 +144,8 @@ export function nativeCopyPresentation(copy: NativeCopy): NativeCopyPresentation
           ? { state: 'supported', statuses: statusEditing.statuses.map((choice) => ({ ...choice })) }
           : { state: 'unavailable' }
         : { state: statusEditing.state },
+    mediaCondition: { ...presentation.mediaCondition },
+    packagingCondition: { ...presentation.packagingCondition },
+    conditionEditing: structuredClone(presentation.conditionEditing),
   };
 }
