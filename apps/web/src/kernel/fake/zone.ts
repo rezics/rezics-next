@@ -235,8 +235,7 @@ async function subjectsResponse(request: Request, match: RegExpExecArray | null)
   if (id === staticOwnerZoneId && !request.headers.has('authorization'))
     return problem(404, { 'cache-control': 'no-store' });
   const listed = id === staticZoneId ? recordedSubjectId : subjectId;
-  const labels =
-    id === staticZoneId ? recordedSubject.subject.labels : { en: 'Kokoro', 'zh-Hans': '心' };
+  const labels = id === staticZoneId ? recordedSubject.subject.labels : { en: 'Kokoro', 'zh-Hans': '心' };
   return {
     status: 200,
     subjects: [{ id: listed, type: 'schema:Book', labels, summary: null }],
@@ -260,8 +259,7 @@ const subjectPageRoute: FakeRoute = {
 const subjectReactionsRoute: FakeRoute = {
   method: 'GET',
   path: /^\/v1\/subjects\/([^/]+)\/reactions$/,
-  story: ({ match }) =>
-    match?.[1] === subjectId || match?.[1] === recordedSubjectId ? subjectReactions : undefined,
+  story: ({ match }) => (match?.[1] === subjectId || match?.[1] === recordedSubjectId ? subjectReactions : undefined),
 };
 
 const subjectsRoute: FakeRoute = {

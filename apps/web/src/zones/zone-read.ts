@@ -13,13 +13,7 @@ import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject
 import { loadViewPages } from '../features/pages/subject-frame';
 import { locales } from '../paraglide/runtime.js';
 
-export {
-  isZoneSubjectId,
-  zonePageSearch,
-  zoneReturnHref,
-  zoneRouteHref,
-  zoneSubjectHref,
-} from './destinations.ts';
+export { isZoneSubjectId, zonePageSearch, zoneReturnHref, zoneRouteHref, zoneSubjectHref } from './destinations.ts';
 
 type ZoneRouteClient = {
   zones(input: { id: string }): {
@@ -147,7 +141,7 @@ export async function readZonePage(
   let cursor = options.cursor;
   let restarted = false;
   const follow = options.followContinuations !== false;
-  for (let follows = 0; ; ) {
+  for (let follows = 0; ;) {
     let result: Awaited<ReturnType<typeof zone.$readPage.post>>;
     try {
       result = await zone.$readPage.post(request, {

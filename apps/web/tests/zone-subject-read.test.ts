@@ -102,7 +102,12 @@ test('a stale continuation restarts under current authority without the expired 
       sent.push(`${url.pathname}${url.search}`);
       if (url.searchParams.has('cursor'))
         return Response.json(
-          { code: 'stale_cursor', status: 409, title: 'Stale Cursor', type: 'https://rezics.com/problems/stale_cursor' },
+          {
+            code: 'stale_cursor',
+            status: 409,
+            title: 'Stale Cursor',
+            type: 'https://rezics.com/problems/stale_cursor',
+          },
           { status: 409, headers: { 'content-type': 'application/problem+json' } },
         );
       return Response.json(page);

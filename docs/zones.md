@@ -184,24 +184,24 @@ invalid targets or reserved configured routes fail with 400 `invalid_request` an
 errors. Shared validation violations map `limit` to `out_of_range`, and the remaining composition violations
 to `invalid_format`, prefixed with `/configuration`. Unknown envelope fields use `unknown_field`.
 
-| Method and native path                          | Body and success                                                | Authority                                                                 |
-| ----------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `POST /v1/zones`                                | `CreateZone` → 201 `ZoneResponse`, Location `/v1/zones/{id}`    | `zone:create` on Global Context; authenticated                            |
-| `GET /v1/zones?limit=&cursor=&deleted=`         | 200 `ZoneList`                                                  | caller's own Zones only; authenticated `zone:read` per returned resource  |
-| `GET /v1/zones/{id}`                            | 200 `ZoneMetadataResponse`                                      | `zone:read`, public exposure                                              |
-| `GET /v1/zones/{id}/configuration`              | 200 `ConfigurationResponse`                                     | `zone:configure` or current owner-role `zone:read`; authenticated         |
-| `PUT /v1/zones/{id}/configuration`              | `ConfigureZone` → 200 `ZoneResponse`                            | `zone:configure`; authenticated                                           |
-| `POST /v1/zones/{id}:publish`                   | `PublishZone` → 200 `ZoneResponse`                              | `zone:publish`; authenticated                                             |
-| `POST /v1/zones/{id}:readPage`                  | `PageRequest` → 200 `ZonePageResponse`                          | `zone:read`, public exposure                                              |
-| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | 200 `{subjects,next}`, 202 `{next}`, or dependency 503          | `zone:read`, anonymous floor and current source Access                    |
-| `GET /v1/zones/{id}/collections?limit=&cursor=` | 200 `{collections,next}`                                        | `zone:read`, current source Access                                        |
-| `DELETE /v1/zones/{id}`                         | no body → 200 `ZoneResponse`                                    | `zone:delete`; authenticated                                              |
-| `POST /v1/zones/{id}:restore`                   | `{}` → 200 `ZoneResponse`                                       | current owner role and `zone:restore`; authenticated                      |
-| `POST /v1/zones/{id}:takedown`                  | `Takedown` → 200 `ZoneResponse`                                 | `moderation:takedown`; authenticated                                      |
-| `POST /v1/zones/{id}:releaseTakedown`           | `ReleaseTakedown` → 200 `ZoneResponse`                          | `moderation:takedown`; authenticated                                      |
-| `POST /v1/platform/zones/{id}:purge`            | `Purge` → 200 `{id,state:'purge_pending'}`                      | `zone:purge` on existing Platform resource                                |
-| `POST /v1/platform/zones/{id}:hold`             | `{reason:string}` → 200 `{id,held:true}`                        | `zone:purge` on Platform                                                  |
-| `POST /v1/platform/zones/{id}:releaseHold`      | `{}` → 200 `{id,held:false}`                                    | `zone:purge` on Platform                                                  |
+| Method and native path                          | Body and success                                             | Authority                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `POST /v1/zones`                                | `CreateZone` → 201 `ZoneResponse`, Location `/v1/zones/{id}` | `zone:create` on Global Context; authenticated                           |
+| `GET /v1/zones?limit=&cursor=&deleted=`         | 200 `ZoneList`                                               | caller's own Zones only; authenticated `zone:read` per returned resource |
+| `GET /v1/zones/{id}`                            | 200 `ZoneMetadataResponse`                                   | `zone:read`, public exposure                                             |
+| `GET /v1/zones/{id}/configuration`              | 200 `ConfigurationResponse`                                  | `zone:configure` or current owner-role `zone:read`; authenticated        |
+| `PUT /v1/zones/{id}/configuration`              | `ConfigureZone` → 200 `ZoneResponse`                         | `zone:configure`; authenticated                                          |
+| `POST /v1/zones/{id}:publish`                   | `PublishZone` → 200 `ZoneResponse`                           | `zone:publish`; authenticated                                            |
+| `POST /v1/zones/{id}:readPage`                  | `PageRequest` → 200 `ZonePageResponse`                       | `zone:read`, public exposure                                             |
+| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | 200 `{subjects,next}`, 202 `{next}`, or dependency 503       | `zone:read`, anonymous floor and current source Access                   |
+| `GET /v1/zones/{id}/collections?limit=&cursor=` | 200 `{collections,next}`                                     | `zone:read`, current source Access                                       |
+| `DELETE /v1/zones/{id}`                         | no body → 200 `ZoneResponse`                                 | `zone:delete`; authenticated                                             |
+| `POST /v1/zones/{id}:restore`                   | `{}` → 200 `ZoneResponse`                                    | current owner role and `zone:restore`; authenticated                     |
+| `POST /v1/zones/{id}:takedown`                  | `Takedown` → 200 `ZoneResponse`                              | `moderation:takedown`; authenticated                                     |
+| `POST /v1/zones/{id}:releaseTakedown`           | `ReleaseTakedown` → 200 `ZoneResponse`                       | `moderation:takedown`; authenticated                                     |
+| `POST /v1/platform/zones/{id}:purge`            | `Purge` → 200 `{id,state:'purge_pending'}`                   | `zone:purge` on existing Platform resource                               |
+| `POST /v1/platform/zones/{id}:hold`             | `{reason:string}` → 200 `{id,held:true}`                     | `zone:purge` on Platform                                                 |
+| `POST /v1/platform/zones/{id}:releaseHold`      | `{}` → 200 `{id,held:false}`                                 | `zone:purge` on Platform                                                 |
 
 Decision: `GET /v1/zones/{id}/collections` walks the current configured mount order, omits only native
 `not_found` Collection reads, and returns the Collection owner's existing safe resource projection. Its default

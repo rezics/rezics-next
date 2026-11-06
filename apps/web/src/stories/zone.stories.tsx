@@ -222,9 +222,9 @@ async function typeListFullReady({ canvasElement }: { canvasElement: HTMLElement
   expect(view.queryByRole('link', { name: m.home_see_all() })).toBeNull();
   const subjectLabel = staticSubject.subject.labels[getLocale()];
   expect(
-    view.getAllByRole('link', { name: subjectLabel }).some((link) =>
-      link.getAttribute('href')?.includes(`/zones/${zone}/subjects/`),
-    ),
+    view
+      .getAllByRole('link', { name: subjectLabel })
+      .some((link) => link.getAttribute('href')?.includes(`/zones/${zone}/subjects/`)),
   ).toBe(true);
 }
 
