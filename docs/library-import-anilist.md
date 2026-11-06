@@ -53,7 +53,9 @@ library-gate delegation. Subject merge for a Rating redirect authenticates that 
 Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish
 identity bootstrap on that partition before Rating review or merge. Native import vote, merge, progress and
 metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home
-guarded path apply. Guarded Rating apply uses the same `rating:vote`
+guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on
+that home so the first scan includes it; sealing the empty question/control home first leaves later creations
+past the cursor. Guarded Rating apply uses the same `rating:vote`
 token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal
 admits the job and mapping applies the redirect; it does not persist-command the catalogue redirect against that hold. A reduced sibling token is denied even when the role row exists. Reusing a prior actor
 snapshot, `deadlineFor` from a leaked request budget, or putting `gate:personal_library` on the grantor identity

@@ -425,7 +425,7 @@ async function copyPage(pool: Pool, ref: IdentityJobRef, page: Page, work: Work)
         tx,
         `UPDATE semantic.identity_epoch_input SET prearm_sequence=$4,
         prearm_transaction_id=CASE WHEN $5 THEN $6::uuid ELSE NULL END,
-        prearm_epoch=CASE WHEN $5 THEN $7 ELSE NULL END,prearm_position=CASE WHEN $5 THEN $8::bigint ELSE NULL END
+        prearm_epoch=CASE WHEN $5 THEN $7::integer ELSE NULL END,prearm_position=CASE WHEN $5 THEN $8::bigint ELSE NULL END
         WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
         [
           identityJobPartition(ref),
@@ -672,7 +672,7 @@ export async function sealColocatedEmptyIdentityPrearm(
     await tx.query(
       `INSERT INTO semantic.identity_epoch_admission_validation
       (partition_no,job_id,original,source_home,transaction_id,native_epoch,native_position)
-      VALUES($1,$2,$3,$1,$4,$5,$6)`,
+      VALUES($1,$2,$3,$1,$4::uuid,$5::integer,$6::bigint)`,
       [home, ref.jobId, base.original, transactionId, native.epoch, native.position.toString()],
     );
   }
@@ -712,7 +712,7 @@ export async function sealColocatedEmptyIdentityPrearm(
     );
     await tx.query(
       `UPDATE semantic.identity_epoch_input
-      SET prearm_sequence=1,prearm_transaction_id=$4,prearm_epoch=$5,prearm_position=$6
+      SET prearm_sequence=1,prearm_transaction_id=$4::uuid,prearm_epoch=$5::integer,prearm_position=$6::bigint
       WHERE partition_no=$1 AND job_id=$2 AND generation=$3`,
       [home, ref.jobId, input.generation, transactionId, native.epoch, native.position.toString()],
     );

@@ -268,7 +268,10 @@ export async function createProfileEntryFixture(
       // Each native command still supplies and enforces its own physical operation deadline.
       // Use wall time, not deadlineFor: a leaked request ALS deadline is the kernel's 30s budget.
       const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 300_000 }, claims);
-      if (identityHomesReady) await catchUpIdentity(home);
+      // Partition 0 is the Global question/control home. Sealing it before the first
+      // Subject exists leaves later creations past the bootstrap cursor with captured
+      // dirty, so catch it up only after createHomeSubject/admitSubjectMerge.
+      if (identityHomesReady && home !== 0) await catchUpIdentity(home);
       return { actor, bearer: await accountToken(claims) };
     }
     // Grant-routes and outcome-driver admit platform.governance only on a token
@@ -380,7 +383,10 @@ export async function createProfileEntryFixture(
     await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
     await installIdentityEpochBootstrap(pool);
     identityHomesReady = true;
-    for (const home of partitions) await catchUpIdentity(home);
+    for (const home of partitions) {
+      if (home === 0) continue;
+      await catchUpIdentity(home);
+    }
     const grantAccountActions = (accountId: string, actions: readonly string[]) =>
       grantOnDeadline({ kind: 'account', id: accountId }, actions);
 
@@ -544,7 +550,6 @@ export async function createProfileEntryFixture(
       label: string = vertical,
     ) {
       partitions.add(home);
-      await catchUpIdentity(home);
       const key = homeKey(person.actor.accountId, home);
       const response = await send(
         person.bearer,
