@@ -362,7 +362,14 @@ export function bulkRoutes(
                   cause: error,
                   commandIndex: pending.index,
                 });
-              const payload = await response.json();
+              const payload = (await response.json()) as {
+                type: string;
+                title: string;
+                status: number;
+                detail?: string;
+                errors?: unknown[];
+                redirect?: { from: unknown; to: unknown };
+              };
               if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
               results[pending.index] = { key, status: response.status, problem: payload };
             }
@@ -396,7 +403,17 @@ export function bulkRoutes(
             id: requestId,
             action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
           });
-          results[pending.index] = { key, status: response.status, problem: await response.json() };
+          results[pending.index] = {
+            key,
+            status: response.status,
+            problem: (await response.json()) as {
+              type: string;
+              title: string;
+              status: number;
+              detail?: string;
+              errors?: unknown[];
+            },
+          };
         }
       }
       for (const component of components) if (component) session.record(component);

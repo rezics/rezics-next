@@ -168,3 +168,8 @@ Decision: Library score and progress native children decorate `startWorker`'s li
 Content ambient and the Semantic domain reach registrations once. `KERNEL_WORK_MODULES` remains a registration-name
 pin and is not executed as the child composition. Host-walk tests keep pinning the seeded voter, second-account and
 anonymous score journey; no extra suite for the decorator.
+
+Decision: Discovery maps a personal-score `stale` write to `rejected` so Search does not retry that command; the owner
+requires an explicit fresh save. Worker composition keeps History's application public entries and still installs the
+native History composition plus Library domain. The root typecheck runner is not a workspace source file. Host-walk
+tests keep pinning the seeded voter, second-account and anonymous score journey; fewer test lines than product lines.

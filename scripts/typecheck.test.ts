@@ -366,6 +366,8 @@ test('a change checks the workspaces containing it and their dependents; a root 
   expect(names(['packages/ui/src/b.tsx', 'docs/x.md'])).toEqual(['@x/ui', '@x/web']);
   expect(names(['services/kernel/src/c.ts'])).toEqual(['@x/kernel']);
   expect(names(['apps/web/README.md'])).toEqual([]);
+  expect(names(['scripts/typecheck.ts', 'scripts/typecheck.test.ts', 'apps/web/src/a.ts'])).toEqual(['@x/web']);
+  expect(names(['scripts/typecheck.ts'])).toEqual([]);
   expect(names(['bun.lock'])).toHaveLength(4);
   expect(names(undefined)).toHaveLength(4);
 });

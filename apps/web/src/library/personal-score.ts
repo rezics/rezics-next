@@ -32,6 +32,13 @@ export function personalScoreWriteNotice(result: PersonalScoreWriteResult | bool
   return undefined;
 }
 
+/** Discovery retries uncertain delivery; a stale review must not reuse that command. */
+export function personalScoreDiscoveryWrite(
+  result: PersonalScoreWriteResult,
+): Exclude<PersonalScoreWriteResult, 'stale'> {
+  return result === 'stale' ? 'rejected' : result;
+}
+
 export function classifyPersonalScoreWriteProblem(input: {
   status: number;
   code?: string;

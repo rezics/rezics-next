@@ -70,6 +70,11 @@ function invalidJwt(error: unknown) {
     !(error instanceof errors.JWKSTimeout)
   );
 }
+function jsonRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
 function failure(code: RefusalCode | 'temporarily_unavailable') {
   return Response.json(
     { error: code },
@@ -85,7 +90,8 @@ async function protocolResponse(run: () => Promise<Response>, token: boolean) {
     if (response.status >= 500) return failure('temporarily_unavailable');
     if (response.status >= 400) {
       if (!token) return failure('invalid_request');
-      const { error } = await response.json();
+      const error = jsonRecord(await response.json())?.error;
+      if (typeof error !== 'string') return failure('temporarily_unavailable');
       switch (error) {
         case 'invalid_request':
         case 'invalid_client':
@@ -521,7 +527,8 @@ export function websiteRoutes(input: {
           if (request.method !== 'GET' || url.search) deny('invalid_request');
           const response = await input.native().handler(request);
           if (!response.ok) return response;
-          const metadata = await response.json();
+          const metadata = jsonRecord(await response.json());
+          if (!metadata) return response;
           return Response.json(
             {
               ...metadata,
@@ -647,7 +654,7 @@ export function websiteRoutes(input: {
             if (
               invalidated &&
               response.status === 400 &&
-              (await response.clone().json()).error === 'unsupported_token_type'
+              jsonRecord(await response.clone().json())?.error === 'unsupported_token_type'
             )
               return Response.json(null, { headers: { 'cache-control': 'no-store' } });
             return response;

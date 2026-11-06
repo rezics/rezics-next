@@ -1,6 +1,6 @@
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { erasureWorkModule } from '../access/erasure.ts';
-import { sharedHistoryWorkModule } from '../history/work.ts';
+import { sharedHistoryWorkModule } from '../history/application/index.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';

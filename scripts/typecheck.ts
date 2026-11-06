@@ -337,8 +337,8 @@ async function loadWorkspaces(root: string): Promise<Workspace[]> {
 
 /**
  * The workspaces a change can affect: each workspace containing a changed file, and every workspace that depends on
- * one of them. Markdown changes nothing a type checker reads; any other file outside every workspace (the lockfile,
- * the root package.json or tsconfig) can affect all of them.
+ * one of them. Markdown and the root typecheck runner change nothing a type checker reads; any other file outside
+ * every workspace (the lockfile, the root package.json or tsconfig) can affect all of them.
  */
 export function affectedWorkspaces<W extends { name: string; directory: string; dependencies: string[] }>(
   root: string,
@@ -348,7 +348,7 @@ export function affectedWorkspaces<W extends { name: string; directory: string; 
   if (changedFiles === undefined) return [...workspaces];
   const affected = new Set<string>();
   for (const file of changedFiles) {
-    if (file.endsWith('.md')) continue;
+    if (file.endsWith('.md') || file === 'scripts/typecheck.ts' || file === 'scripts/typecheck.test.ts') continue;
     const owner = workspaces.find((workspace) => {
       const directory = relative(root, workspace.directory);
       return file === directory || file.startsWith(`${directory}/`);

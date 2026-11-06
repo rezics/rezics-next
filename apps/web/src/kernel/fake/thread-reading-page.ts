@@ -20,8 +20,6 @@ export function authoredReadingPage(
     actions: { state: 'unavailable', retryable: true, references: [], reply: { state: 'unavailable' } },
     watch: { state: 'sign_in_required' },
     slowMode: { state: 'unavailable', retryable: true },
-    conversationActivity: { state: 'unavailable', retryable: true },
-    documentMedia: { state: 'unavailable', documents: [] },
     currentness: {
       source: 'current',
       place: 'current',

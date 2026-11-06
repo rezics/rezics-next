@@ -3,6 +3,7 @@ import { QUESTION } from '../src/features/pages/subject-ratings';
 import { ownScoreUnits } from '../src/library/score';
 import {
   classifyPersonalScoreWriteProblem,
+  personalScoreDiscoveryWrite,
   personalScoreWriteCommand,
   personalScoreWriteNotice,
   scoreOrderReadState,
@@ -68,6 +69,8 @@ test('vote writes classify stale review separately from uncertain delivery and r
   expect(personalScoreWriteNotice('uncertain')).toBe('uncertain');
   expect(personalScoreWriteNotice('stale')).toBe('stale');
   expect(personalScoreWriteNotice('successful')).toBeUndefined();
+  expect(personalScoreDiscoveryWrite('stale')).toBe('rejected');
+  expect(personalScoreDiscoveryWrite('uncertain')).toBe('uncertain');
   const first = personalScoreWriteCommand(null, 0);
   expect(personalScoreWriteCommand(first, 0)).toEqual(first);
   expect(personalScoreWriteCommand(first, 15).key).not.toBe(first.key);

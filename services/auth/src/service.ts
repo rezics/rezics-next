@@ -194,7 +194,10 @@ function recoveryJson(data: unknown, status = 200): Response {
     throw new RecoveryProjectionError();
   return jsonText(body, status);
 }
-async function bodyOf(request: Request): Promise<Record<string, unknown>> {
+async function bodyOf(request: {
+  headers: { get(name: string): string | null };
+  body: ReadableStream<Uint8Array> | null;
+}): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json') throw new Denied(415);
   if (Number(request.headers.get('content-length') ?? 0) > 16384) throw new Denied(413);
   // Bound the streamed body too; Content-Length is not evidence of its size.

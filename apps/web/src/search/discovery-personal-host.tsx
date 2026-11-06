@@ -14,6 +14,7 @@ import { collectionFollowSource } from './collection-context/schema';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { changeQuestionBoundRating } from '../features/pages/rating-actions';
+import { personalScoreDiscoveryWrite } from '../library/personal-score';
 import { discoveryKey, type DiscoveryHit, type DiscoveryRequest, type DiscoveryState } from './discovery';
 import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from '../library/subject-slot';
 import type { QuestionBoundRatingInput } from '../features/pages/rating-actions';
@@ -644,13 +645,15 @@ export function useDiscoveryPersonalResults(input: {
           locale={input.locale}
           returnTo={input.returnTo}
           suppressed={value.suppressed}
-          write={(command) => {
+          write={async (command) => {
             const data = {
               ...command,
               expectedReader: value.observation.scope.viewer,
               expectedCredential: value.observation.scope.credential,
             };
-            return input.writeVote ? input.writeVote(data) : changeQuestionBoundRating({ data });
+            return personalScoreDiscoveryWrite(
+              input.writeVote ? await input.writeVote(data) : await changeQuestionBoundRating({ data }),
+            );
           }}
         />
       </div>
