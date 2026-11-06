@@ -68,8 +68,8 @@ independently, and records the exact profile occurrence return. The walk owns it
 
 Decision: remote placement forwards the original launcher `GOAL_TASK_ID`, `GOAL_ATTEMPT` and
 `GOAL_ACCEPTANCE_REQUIRES` into that walk command without rewriting recorded argv. Walk stacks cap OpenSearch at
-256m without mmap; the journey uses a short Chromium TMPDIR, one fresh viewport-sized context per capture, and skips
-media during the locale matrix so the seeded stack fits the host 6 GiB run limit.
+256m without mmap. The journey retires one viewport-sized capture context per visit, relaunches Chromium after the
+locale matrix, and skips media during those captures so renderer and screenshot buffers do not outlive the visit.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
 no extra stories.

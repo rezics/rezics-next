@@ -105,9 +105,34 @@ test('an observed away episode cannot revive when its identity looks equal on re
     () => current,
   );
   await receiver.refresh();
+  const ready = receiver.snapshot();
   current = false;
+  expect(receiver.snapshot()).toBe(ready);
+  expect(receiver.isCurrent()).toBe(false);
   expect(receiver.snapshot()).toEqual({ state: 'retired' });
   current = true;
   await receiver.refresh();
   expect(receiver.snapshot()).toEqual({ state: 'retired' });
+});
+
+test('paired snapshot reads stay referentially stable and never retire from getSnapshot', async () => {
+  let current = true;
+  const notifications: string[] = [];
+  const receiver = new ContributionActionsReceiver(
+    input(),
+    {
+      async read() {
+        return 'private';
+      },
+    },
+    () => current,
+  );
+  receiver.subscribe(() => notifications.push(receiver.snapshot().state));
+  await receiver.refresh();
+  current = false;
+  const first = receiver.snapshot();
+  const second = receiver.snapshot();
+  expect(first).toBe(second);
+  expect(first.state).toBe('ready');
+  expect(notifications).toEqual(['pending', 'ready']);
 });

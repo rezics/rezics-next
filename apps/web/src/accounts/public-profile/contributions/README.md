@@ -80,6 +80,8 @@ original operation lease through advice/projection failure, and preserve exact p
 its private no-store response never enters the anonymous document. `receiver.ts` consumes only that document's
 actual `actionSelection`, caps the cohort at twenty, freezes author/view/cursor/proof/references and coalesces refreshes.
 Failure retries that input. Retirement aborts reads, clears private advice and rejects late completion.
+`getSnapshot` returns the last published state by identity until a subscription fires; origin away is fenced by
+`isCurrent` and `subscribeCache`, never by a paired React read.
 
 The host uses Web's `browserObservation` and `subscribeCache` plus address/read/operation leases. Session fetching,
 invalidation, equal successful replacement and A/B/A retire the original reader synchronously. The named anonymous

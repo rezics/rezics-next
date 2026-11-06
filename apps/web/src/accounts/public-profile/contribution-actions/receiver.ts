@@ -112,10 +112,8 @@ export class ContributionActionsReceiver<T = AuthorContributionActionsResponse> 
     if (!this.retired && !this.originCurrent()) this.retire();
     return !this.retired;
   };
-  snapshot = (): ContributionActionsState<T> => {
-    this.isCurrent();
-    return this.current;
-  };
+  /** Paired React reads compare this by Object.is; origin fences live on isCurrent/subscribeCache, not here. */
+  snapshot = (): ContributionActionsState<T> => this.current;
   /**
    * The last advice this visit read. A refresh keeps it until readback replaces it, so admitted owners stay mounted;
    * it never acknowledges a write, and retirement clears it.

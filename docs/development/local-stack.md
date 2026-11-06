@@ -264,6 +264,7 @@ Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts perso
 stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
 Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
+Each capture owns one viewport-sized context and the locale matrix relaunches Chromium before the signed-in session.
 
 Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
 defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona
