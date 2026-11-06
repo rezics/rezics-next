@@ -511,15 +511,15 @@ test('default committed-erasure succession uses the original root instant and re
       )
     ).rows[0];
   await eraseAccountMembershipsPage(
-    { clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now()  },
-      person.accountId,
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() },
+    person.accountId,
     null,
   );
   const first = await read();
   expect(first).toMatchObject({ ownership_state: 'orphaned', original_root: true, original_deadline: true });
   await eraseAccountMembershipsPage(
-    { clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now()  },
-      person.accountId,
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() },
+    person.accountId,
     null,
   );
   expect(await read()).toEqual(first);

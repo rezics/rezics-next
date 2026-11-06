@@ -86,9 +86,7 @@ test('a composing kernel refuses early Access resolution and uses its final cata
   expect(() => resolver.resolveAccess(partial)).toThrow('Access was resolved before kernel composition finished');
   mounted = actionCatalogue(createKernel({ pool: db.pool, routeKey: testRouteKey(), receiptKeys: testReceiptKeys() }));
   const installed = resolver.resolveAccess(partial);
-  expect(resourceRoleCatalogue(installed)).toEqual(
-    resolveResourceRoles(accessModule.accessActionCatalogue(mounted)),
-  );
+  expect(resourceRoleCatalogue(installed)).toEqual(resolveResourceRoles(accessModule.accessActionCatalogue(mounted)));
   expect(resolver.resolveAccess(partial)).toBe(installed);
 });
 
