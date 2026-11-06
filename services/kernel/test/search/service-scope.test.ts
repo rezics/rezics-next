@@ -42,7 +42,13 @@ test('unregistered mocks and cloned service methods fail before native I/O or co
     calls++;
     throw new Error('Unregistered service performed native I/O');
   };
-  const service: SearchService = { releaseGroups: forbidden, search: forbidden, facets: forbidden, suggest: forbidden };
+  const service: SearchService = {
+    savedCatalogueMembers: forbidden,
+    releaseGroups: forbidden,
+    search: forbidden,
+    facets: forbidden,
+    suggest: forbidden,
+  };
   for (const unregistered of [service, { ...service }, Object.create(service) as SearchService])
     expect(() => createSearchScopeForService(unregistered, forbiddenOptions)).toThrow(
       expect.objectContaining({ code: 'index_not_ready', headers: { 'retry-after': '1' } }),

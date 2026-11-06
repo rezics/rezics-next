@@ -104,7 +104,7 @@ test('native reservation retains distinct owner and catalogue populations for th
         { canonicalBasis: row.canonical_basis, basisDigest: row.basis_digest },
         async () => selected.release.value,
       ),
-    ).toEqual(definitions[index]);
+    ).toEqual(definitions[index]!);
   }
 });
 

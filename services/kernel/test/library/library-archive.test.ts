@@ -325,7 +325,7 @@ test('V4 validates the original complete manifest and retains provider evidence 
     },
   };
   const decoded = decode(file);
-  expect(decoded.manifest).toEqual(file.manifest);
+  expect<unknown>(decoded.manifest).toEqual(file.manifest);
   expect(decoded.records).toEqual(records);
   expect(decoded.coverage.find((row) => row.section === 'vndbEvidence')).toMatchObject({
     rows: 1,
