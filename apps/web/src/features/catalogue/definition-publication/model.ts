@@ -1,3 +1,4 @@
+import { CATALOGUE_FORMAT, CatalogueArtifactError, parseCataloguePin } from '@rezics/definitions/catalogue';
 import {
   classifyImportedDocument,
   diagnosticField,
@@ -18,13 +19,7 @@ import {
 
 export const publicationPageSize = 20;
 export const publicationFileLimit = 4_194_304;
-export type PublicationJson =
-  | null
-  | boolean
-  | number
-  | string
-  | PublicationJson[]
-  | { [key: string]: PublicationJson };
+export type PublicationJson = null | boolean | number | string | PublicationJson[] | { [key: string]: PublicationJson };
 export type PublicationDocument = { [key: string]: PublicationJson };
 export type PublicationFailure =
   | 'signed-out'
@@ -59,7 +54,7 @@ export type CatalogueBuildStatus = {
   error: string | null;
 };
 export type PublicationPreview = {
-  kind: PublicationDocumentKind;
+  kind: PublicationDocumentKind | 'catalogue';
   identity: PublicationIdentity | null;
   diagnostics: PublicationDiagnostic[];
   comparison: ReleaseComparison | ExtensionComparison | null;
@@ -147,14 +142,19 @@ export function parseImportedText(
   name: string,
   text: string,
 ): { document: PublicationDocument } | { diagnostics: PublicationDiagnostic[] } {
-  if (text.length > publicationFileLimit)
+  if (new TextEncoder().encode(text).byteLength > publicationFileLimit)
     return { diagnostics: [{ pointer: '/document', code: 'out_of_range', file: name }] };
   const trimmed = text.trim();
   if (!trimmed) return { diagnostics: [unknownImportedDocumentDiagnostic()] };
   try {
     const parsed = publicationDocument(JSON.parse(trimmed) as unknown);
     if (!parsed) return { diagnostics: [unknownImportedDocumentDiagnostic()] };
-    if (classifyImportedDocument(parsed) === 'invalid' && !name.endsWith('.yaml') && !name.endsWith('.yml')) {
+    if (
+      classifyImportedDocument(parsed) === 'invalid' &&
+      !cataloguePublicationPin(parsed) &&
+      !name.endsWith('.yaml') &&
+      !name.endsWith('.yml')
+    ) {
       return { diagnostics: [unknownImportedDocumentDiagnostic()] };
     }
     return { document: parsed };
@@ -169,6 +169,17 @@ export function parseImportedText(
       };
     }
     return { diagnostics: [{ pointer: '/document', code: 'invalid_format', file: name }] };
+  }
+}
+
+/** Pins are external files; the package parser enforces the closed versioned format. */
+export function cataloguePublicationPin(document: PublicationDocument) {
+  if (document.format !== CATALOGUE_FORMAT) return null;
+  try {
+    return parseCataloguePin(document);
+  } catch (error) {
+    if (error instanceof CatalogueArtifactError) return null;
+    throw error;
   }
 }
 
@@ -189,6 +200,8 @@ export function commandPath(
   context?: string,
 ): string {
   if (operation === 'build') return '/v1/definitions/catalogues';
+  if (operation === 'activate' && identity?.format === CATALOGUE_FORMAT)
+    return `/v1/definitions/catalogues/${identity.digest}:activate`;
   if (operation === 'step' && identity) return `/v1/definitions/catalogues/${identity.digest}:step`;
   if (scope === 'context' && context && identity && operation === 'activate')
     return `/v1/contexts/${context}/definitions/extensions/${identity.digest}:activate`;

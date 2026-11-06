@@ -161,8 +161,6 @@ export function DefinitionPublicationWorkspace({
     if (kind === 'publish' && preview?.kind !== 'extension') {
       const published = await transport.readRelease(result.result.digest);
       if (published.ok) setIndependent({ digest: published.digest });
-      const status = await transport.readBuild(result.result.digest);
-      if (!('ok' in status)) setBuild(status);
     }
     if (kind === 'publish' && preview?.kind === 'extension' && context) {
       const published = await transport.readExtension(context, result.result.digest);
@@ -172,14 +170,22 @@ export function DefinitionPublicationWorkspace({
     if (kind === 'build') {
       const status = await transport.readBuild(result.result.digest);
       if ('ok' in status && status.ok === false) setAlert(status.reason);
-      else setBuild(status as CatalogueBuildStatus);
+      else {
+        const next = status as CatalogueBuildStatus;
+        setBuild(next);
+        if (next.state === 'ready') setIndependent({ digest: next.pin.rootDigest });
+      }
     }
   }
 
   async function onPublish(event: FormEvent) {
     event.preventDefault();
-    if (!preview?.identity || document === undefined || !operations?.publish) return;
+    if (!preview?.identity || document === undefined || !operations?.publish || uncertain) return;
     const published = preview.document ?? document;
+    if (preview.kind === 'catalogue') {
+      await run(publicationCommand(scope, 'build', newPublicationKey(), preview.identity, { pin: published }), 'build');
+      return;
+    }
     const body =
       preview.kind === 'extension' ? publishBody('extension', published, context) : publishBody('release', published);
     await run(publicationCommand(scope, 'publish', newPublicationKey(), preview.identity, body, context), 'publish');
@@ -188,7 +194,12 @@ export function DefinitionPublicationWorkspace({
   async function onActivate(event: FormEvent) {
     event.preventDefault();
     if (!preview?.identity || !operations?.activate) return;
-    const expected = opening.ok ? (opening.current?.head ?? null) : null;
+    const expected =
+      preview.kind === 'catalogue'
+        ? (preview.current?.head ?? null)
+        : opening.ok
+          ? (opening.current?.head ?? null)
+          : null;
     await run(
       publicationCommand(scope, 'activate', newPublicationKey(), preview.identity, activateBody(expected), context),
       'activate',
@@ -196,15 +207,29 @@ export function DefinitionPublicationWorkspace({
   }
 
   async function onContinueBuild() {
-    if (!preview?.identity || !operations?.build) return;
-    await run(publicationCommand(scope, 'step', newPublicationKey(), preview.identity, {}, context), 'build');
+    if (!preview?.identity || !build || !operations?.build) return;
+    await run(
+      publicationCommand(
+        scope,
+        'step',
+        newPublicationKey(),
+        { ...preview.identity, digest: build.pin.rootDigest },
+        {},
+        context,
+      ),
+      'build',
+    );
   }
 
   async function onResume() {
     if (!uncertain) return;
     await run(
       uncertain,
-      uncertain.operation === 'activate' ? 'activate' : uncertain.operation === 'step' ? 'build' : 'publish',
+      uncertain.operation === 'activate'
+        ? 'activate'
+        : uncertain.operation === 'step' || uncertain.operation === 'build'
+          ? 'build'
+          : 'publish',
     );
   }
 
@@ -260,7 +285,7 @@ export function DefinitionPublicationWorkspace({
       {phase === 'uncertain' && uncertain && (
         <section className="space-y-3">
           <p role="status">{m.definition_publication_uncertain({}, o)}</p>
-          <Button className={actionClassName} onClick={() => void onResume()}>
+          <Button className={actionClassName} disabled={busy !== null} onClick={() => void onResume()}>
             {m.definition_publication_resume({}, o)}
           </Button>
         </section>
@@ -280,6 +305,7 @@ export function DefinitionPublicationWorkspace({
             <input
               id={fileId}
               type="file"
+              disabled={busy !== null || uncertain !== null}
               accept="application/json,.json,.yaml,.yml"
               className={cn(actionClassName, 'block w-full')}
               onChange={(event) => void onFile(event)}
@@ -356,7 +382,7 @@ export function DefinitionPublicationWorkspace({
             </section>
           )}
           {preview?.identity && operations.publish && diagnostics.length === 0 && (
-            <Button type="submit" className={actionClassName} disabled={busy !== null}>
+            <Button type="submit" className={actionClassName} disabled={busy !== null || uncertain !== null}>
               {m.definition_publication_publish({}, o)}
             </Button>
           )}
@@ -367,14 +393,20 @@ export function DefinitionPublicationWorkspace({
           <p role="status">
             {m.definition_publication_build({}, o)}: {build.state} ({build.phase})
           </p>
-          <Button className={actionClassName} onClick={() => void onContinueBuild()} disabled={busy !== null}>
+          {build.missing_digest && <code className="block break-all">{build.missing_digest}</code>}
+          {build.error && <p role="alert">{build.error}</p>}
+          <Button
+            className={actionClassName}
+            disabled={busy !== null || uncertain !== null}
+            onClick={() => void onContinueBuild()}
+          >
             {m.definition_publication_continue_build({}, o)}
           </Button>
         </section>
       )}
       {preview?.identity && operations?.activate && (independent || completed) && phase !== 'completed' && (
         <form className="space-y-3" onSubmit={onActivate}>
-          <Button type="submit" className={actionClassName} disabled={busy !== null}>
+          <Button type="submit" className={actionClassName} disabled={busy !== null || uncertain !== null}>
             {m.definition_publication_activate({}, o)}
           </Button>
         </form>
@@ -401,7 +433,11 @@ export function DefinitionPublicationWorkspace({
             </Field>
           ) : null}
           {selectedType && (
-            <Button className={actionClassName} onClick={() => void onCreate()} disabled={busy !== null}>
+            <Button
+              className={actionClassName}
+              onClick={() => void onCreate()}
+              disabled={busy !== null || uncertain !== null}
+            >
               {m.definition_publication_create_subject({}, o)}
             </Button>
           )}

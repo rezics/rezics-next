@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
+import { kernelClient } from '../../../kernel/client';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { canonicalMediaId, artworkResponseBudget, readSubjectArtwork, type ArtworkResult } from './read';
 
@@ -17,10 +18,9 @@ export const loadSubjectArtwork = createServerFn({ method: 'POST', strict: false
   })
   .handler(async ({ data }): Promise<ArtworkResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ env }, { prepareSession, sessionSubject, viewerCredential }, { kernelClient }] = await Promise.all([
+    const [{ env }, { prepareSession, sessionSubject, viewerCredential }] = await Promise.all([
       import('cloudflare:workers'),
       import('../../../session/request'),
-      import('../../../kernel/client'),
     ]);
     const request = getRequest();
     await prepareSession(request, env);

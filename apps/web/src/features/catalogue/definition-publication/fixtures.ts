@@ -1,3 +1,4 @@
+import { CATALOGUE_FORMAT, KIND_FORMAT, KIND_REDUCTION } from '@rezics/definitions/catalogue';
 import { closedPublicationOperations, grantedPublicationOperations } from '@rezics/definitions';
 import type { CatalogueBuildStatus, PublicationPreview, PublicationRead, PublicationTransport } from './model';
 
@@ -72,11 +73,19 @@ export function definitionPublicationFixture(scenario: PublicationScenario = 're
     current: { digest: previous, head: 4 },
   };
   const denied: PublicationRead = { ok: false, reason: scenario === 'denied' ? 'denied' : 'closed' };
-  const document = {
-    format: 'https://rezics.com/definitions/release/1',
-    types: { 'ex:BoardGame': { labels: { en: 'Board game' }, properties: [] } },
-    properties: {},
-  };
+  const review = preview();
+  if (scenario === 'build') {
+    review.kind = 'catalogue';
+    review.identity = { digest, version: null, format: CATALOGUE_FORMAT };
+    review.document = {
+      format: CATALOGUE_FORMAT,
+      rootDigest: digest,
+      kindSpec: KIND_FORMAT,
+      reduction: KIND_REDUCTION,
+    };
+    review.types = [];
+    review.comparison = null;
+  }
   let calls = 0;
   const transport: PublicationTransport = {
     open: async () =>
@@ -89,7 +98,7 @@ export function definitionPublicationFixture(scenario: PublicationScenario = 're
           identity: null,
           diagnostics: [{ pointer: '/release/types/ex:BoardGame/labels/en', code: 'required', file: null }],
         };
-      return preview();
+      return review;
     },
     submit: async (command) => {
       calls += 1;
@@ -107,10 +116,9 @@ export function definitionPublicationFixture(scenario: PublicationScenario = 're
     createSubject: async () => ({ ok: true, id: '019a1b2c-3d4e-7f00-8a00-def000000001' }),
     readSubject: async (id) => ({ ok: true, id, type: 'ex:BoardGame' }),
   };
-  void document;
   return {
     initial: scenario === 'closed' ? closed : scenario === 'denied' ? denied : ready,
-    preview: preview(),
+    preview: review,
     build: scenario === 'build' ? buildStatus() : null,
     transport,
   };

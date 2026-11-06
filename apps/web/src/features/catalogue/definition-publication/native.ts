@@ -9,6 +9,7 @@ import {
 import {
   activateBody,
   commandPath,
+  cataloguePublicationPin,
   previewFailure,
   publishBody,
   quotedPublicationKey,
@@ -18,44 +19,12 @@ import {
   type PublicationFailure,
   type PublicationPreview,
   type PublicationRead,
-  type PublicationResult,
   type PublicationScope,
   type PublicationTransport,
 } from './model';
 
 type KernelResult = { status: number; data?: unknown; error?: { value?: unknown } | null };
 type NativeWriteHeaders = { authorization: string; 'idempotency-key': string };
-type WriteOptions = { headers?: NativeWriteHeaders | Record<string, string> };
-type ImportClient = {
-  definitions: {
-    imports: {
-      post(
-        body: { document: unknown; context?: string; expected_head?: number | null },
-        options?: WriteOptions,
-      ): Promise<KernelResult>;
-    };
-    catalogues: {
-      post(body: unknown, options?: WriteOptions): Promise<KernelResult>;
-      (params: { root: string }): {
-        $step: { post(body: Record<string, never>, options?: WriteOptions): Promise<KernelResult> };
-        $activate: { post(body: { expected_head: number | null }, options?: WriteOptions): Promise<KernelResult> };
-        build: { get(options?: WriteOptions): Promise<KernelResult> };
-      };
-    };
-  };
-  contexts(params: { id: string }): {
-    definitions: {
-      get(options?: WriteOptions): Promise<KernelResult>;
-      extensions: {
-        post(body: { extension: unknown }, options?: WriteOptions): Promise<KernelResult>;
-        (params: { digest: string }): {
-          get(options?: WriteOptions): Promise<KernelResult>;
-          $activate: { post(body: { expected_head: number | null }, options?: WriteOptions): Promise<KernelResult> };
-        };
-      };
-    };
-  };
-};
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -97,7 +66,6 @@ export function definitionPublicationNative(
   client: KernelClient,
   headers: Record<string, string> = {},
 ): PublicationTransport {
-  const imports = client as unknown as ImportClient;
   const authorization = headers.authorization ?? '';
   return {
     async open(scope, context) {
@@ -113,7 +81,7 @@ export function definitionPublicationNative(
           return { ok: true, phase: 'closed', scope, operations, current: null, ...(context ? { context } : {}) };
         }
         if (scope === 'context' && context) {
-          const current = await imports.contexts({ id: context }).definitions.get({ headers });
+          const current = await client.contexts({ id: context }).definitions.get({ headers });
           if (current.status === 404) return { ok: false, reason: 'missing' };
           if (current.status !== 200 || !record(current.data)) return { ok: false, reason: failureOf(current) };
           const digest = typeof current.data.digest === 'string' ? current.data.digest : null;
@@ -144,7 +112,29 @@ export function definitionPublicationNative(
     },
     async preview(document, context, expectedHead) {
       try {
-        const result = await imports.definitions.imports.post(
+        const pin = cataloguePublicationPin(document);
+        if (pin) {
+          if (context) return { ok: false, reason: 'invalid' };
+          const exposure = await client.platform.exposure.get({ headers });
+          if (exposure.status !== 200 || !exposure.data) return { ok: false, reason: failureOf(exposure) };
+          const operations = operationsFrom(exposure.data.admitted, false);
+          if (!operations.admitted) return { ok: false, reason: 'closed' };
+          const active = await client.definitions.catalogue.get({ headers });
+          if (active.status !== 200) return { ok: false, reason: failureOf(active) };
+          const current = active.data ? { digest: active.data.pin.rootDigest, head: active.data.head } : null;
+          return {
+            kind: 'catalogue',
+            identity: { digest: pin.rootDigest, version: null, format: pin.format },
+            diagnostics: [],
+            comparison: null,
+            types: [],
+            current,
+            reconciliation: { intended: pin.rootDigest, current, stale: expectedHead !== (current?.head ?? null) },
+            operations,
+            document: { ...pin },
+          };
+        }
+        const result = await client.definitions.imports.post(
           {
             document,
             ...(context ? { context } : {}),
@@ -162,7 +152,7 @@ export function definitionPublicationNative(
     async submit(command) {
       try {
         const write = writeHeaders(authorization, command.key);
-        const result = await fetchCommand(imports, client, command, write);
+        const result = await fetchCommand(client, command, write);
         if (result.status === 409) {
           const expected =
             record(result.data) && record(result.data.current) && typeof result.data.current.head === 'number'
@@ -209,7 +199,7 @@ export function definitionPublicationNative(
     },
     async readExtension(context, digest) {
       try {
-        const result = await imports.contexts({ id: context }).definitions.extensions({ digest }).get({ headers });
+        const result = await client.contexts({ id: context }).definitions.extensions({ digest }).get({ headers });
         if (result.status !== 200 || !record(result.data) || result.data.digest !== digest)
           return { ok: false, reason: failureOf(result) };
         return { ok: true, digest };
@@ -219,7 +209,7 @@ export function definitionPublicationNative(
     },
     async readBuild(root) {
       try {
-        const result = await imports.definitions.catalogues({ root }).build.get({ headers });
+        const result = await client.definitions.catalogues({ root }).build.get({ headers });
         if (result.status !== 200 || !record(result.data) || !record(result.data.pin))
           return { ok: false, reason: failureOf(result) };
         return result.data as CatalogueBuildStatus;
@@ -258,22 +248,30 @@ export function definitionPublicationNative(
 }
 
 async function fetchCommand(
-  imports: ImportClient,
   client: KernelClient,
   command: PublicationCommand,
   headers: NativeWriteHeaders,
 ): Promise<KernelResult> {
   if (command.operation === 'publish' && command.path.includes('/extensions')) {
     const context = command.path.split('/')[3];
-    return imports
+    return client
       .contexts({ id: context! })
-      .definitions.extensions.post(command.body as { extension: unknown }, { headers });
+      .definitions.extensions.post(
+        command.body as Parameters<ReturnType<KernelClient['contexts']>['definitions']['extensions']['post']>[0],
+        { headers },
+      );
   }
   if (command.operation === 'activate' && command.path.includes('/extensions/')) {
     const parts = command.path.split('/');
-    return imports
+    return client
       .contexts({ id: parts[3]! })
       .definitions.extensions({ digest: parts[6]!.replace(/:activate$/, '') })
+      .$activate.post(command.body as { expected_head: number | null }, { headers });
+  }
+  if (command.operation === 'activate' && command.path.includes('/catalogues/')) {
+    const root = command.path.split('/')[4]!.replace(/:activate$/, '');
+    return client.definitions
+      .catalogues({ root })
       .$activate.post(command.body as { expected_head: number | null }, { headers });
   }
   if (command.operation === 'activate' && command.path.includes('/releases/')) {
@@ -286,10 +284,13 @@ async function fetchCommand(
     return client.definitions.releases.post(command.body as { release: Record<string, unknown> }, { headers });
   }
   if (command.operation === 'build') {
-    return imports.definitions.catalogues.post(command.body, { headers });
+    return client.definitions.catalogues.post(
+      command.body as Parameters<KernelClient['definitions']['catalogues']['post']>[0],
+      { headers },
+    );
   }
   const root = command.path.split('/')[4]!.replace(/:step$/, '');
-  return imports.definitions.catalogues({ root }).$step.post({}, { headers });
+  return client.definitions.catalogues({ root }).$step.post({}, { headers });
 }
 
 export function publicationCommand(

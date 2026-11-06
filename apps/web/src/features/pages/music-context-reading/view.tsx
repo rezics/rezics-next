@@ -707,7 +707,7 @@ function MusicContextReadingBound({
                                 : undefined;
                             const generalWithReturn =
                               !exact && !realm && visibleAddress
-                                ? withSubjectVisitReturn(targetBase, visibleAddress)
+                                ? withSubjectVisitReturn(targetBase, visibleAddress, locale)
                                 : targetBase;
                             const generalFits = fitsRetainedAddress(generalWithReturn);
                             const href = exact

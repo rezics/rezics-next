@@ -16,6 +16,7 @@ export const literaryWorkExample = {
   factsHref: '/en/subjects/0192f3a0-6c1e-7b2a-9d4e-000000000911/details',
 };
 
+import type { SelectedContext } from '@rezics/composition';
 import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Subject, Related } from '../../../subject/types';
 import type { ProfileRelationWindow } from '../../pages/views';
@@ -135,7 +136,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     related: {},
     summary: { id: literaryIds.edition, type: 'bf:Instance', label: { value: 'Harbour, 2nd edition', language: 'en' } },
   };
-  const window: ProfileRelationWindow = {
+  const window = {
     node: 'members',
     property: 'wdt:P179',
     direction: 'inverse',
@@ -146,19 +147,19 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     complete: false,
     next: 'native/opaque?cursor=next',
     caughtUp: true,
-  };
-  const windows: ProfileRelationWindow[] =
+  } satisfies ProfileRelationWindow;
+  const windows =
     type === 'schema:BookSeries'
       ? [window]
       : type === 'schema:Book'
         ? [{ ...window, node: 'editions', property: 'schema:exampleOfWork', rows: [editionRow] }]
-        : [];
+        : ([] satisfies ProfileRelationWindow[]);
   return {
     work: subject,
     related,
     source: {},
     locale: 'en',
-    context: { id: subject.context, population: { kind: 'global' } },
+    context: { id: subject.context, population: { kind: 'global' } } satisfies SelectedContext,
     definitions: literaryDefinitions,
     descriptorState: 'released' as const,
     digest: literaryDigest,

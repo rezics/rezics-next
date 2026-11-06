@@ -32,3 +32,11 @@ and retains property identifiers, fallback languages, ordered groups (including 
 Correction lists render the existing `recipeEvidenceChanges` current/next observations independently, including
 replaced and removed groups, without claiming stable citation identities. Returning to a field retires unsent
 review; explicit revised review uses sanitized evidence while an uncertain command retains its original operands.
+
+Decision: publication uses the generated native Kernel client and the existing catalogue session port. Release/source
+imports publish immutable Release1 bodies; an installed versioned catalogue pin starts its native build, continues by
+returned root, and activates against the separately read catalogue head. A missing artifact keeps its exact digest
+visible. An uncertain command locks replacement imports and retains its original body and key for explicit replay.
+Focused tests preserve current profile/route assertions and exercise native transport and mounted publication;
+persona, ten-Type/hundred-manifest growth, installation, independent publication readback and held browser journeys
+remain capability-row acceptance after product landing.

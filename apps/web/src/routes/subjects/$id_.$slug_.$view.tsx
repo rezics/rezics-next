@@ -1,3 +1,4 @@
+import type { typeFrame } from '../../subject/definitions';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
@@ -248,7 +249,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     const type = subjectPageType(loaded.overview);
     const [typeData, relations] = await awaitSubjectRoute(signal, () =>
       Promise.all([
-        type ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : Promise.resolve({}),
+        type
+          ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
+          : Promise.resolve<Awaited<ReturnType<typeof typeFrame>>>({}),
         deps.streamProperty
           ? context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale()))
           : Promise.resolve(undefined),
