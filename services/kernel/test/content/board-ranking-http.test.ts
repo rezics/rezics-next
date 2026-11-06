@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
@@ -105,6 +106,7 @@ beforeAll(async () => {
       .sign(pair.privateKey);
   };
   kernel = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: system.database.pool,
     routeKey: system.routeKey,
     tokens: system.tokenKeys,

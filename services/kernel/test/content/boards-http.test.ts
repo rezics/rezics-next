@@ -3,6 +3,7 @@ import { fromPlainText } from '@rezics/document';
 import { runCommand } from '../../src/command/command.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { applyBoardCandidate, createBoardEffect } from '../../src/content/board-projection.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
@@ -42,7 +43,7 @@ beforeAll(async () => {
   } finally {
     fixture.access.authenticate = authenticate;
   }
-  const config = { pool: db.pool, routeKey, tokens, content: { cursorNow: () => now } };
+  const config = { pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys(), content: { cursorNow: () => now } };
   app = createKernel(config);
   memberApp = createKernel({ ...config, access: fixture.access });
   // A single checkout detects accidental nested board/thread pool acquisitions.

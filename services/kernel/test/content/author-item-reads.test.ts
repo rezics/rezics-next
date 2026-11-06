@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
@@ -24,6 +25,7 @@ beforeAll(async () => {
   const issuer = 'https://auth.test';
   const audience = 'https://kernel.test';
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(7),
     tokens,

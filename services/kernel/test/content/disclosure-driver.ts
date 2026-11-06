@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -209,6 +210,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   let trustedInstant: number | undefined;
   const clock = () => new Date(trustedInstant ?? Date.now());
   const kernel = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: system.routeKey,
     tokens: system.tokenKeys,
@@ -1487,6 +1489,7 @@ export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<
     const clock = () => new Date();
     let nativeAuth: AuthService;
     const kernel = createKernel({
+      receiptKeys: testReceiptKeys(),
       pool: database.pool,
       routeKey,
       tokens: tokenKeys,

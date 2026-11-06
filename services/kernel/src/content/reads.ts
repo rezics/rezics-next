@@ -164,12 +164,15 @@ export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstP
 /** Timing seam for composed tests. It runs after a read's initial Board and Access checks and before its final
  * disclosure; it never changes what the read returns. Production leaves it absent. */
 export type DisclosureBarrier = (target: Readonly<{ threadId: string; postId?: string }>) => Promise<void>;
+/** Timing-only observation after page enrichment, with all source connections released. */
+export type PageDisclosureBarrier = (target: Readonly<{ boardId: string; threadId?: string }>) => Promise<void>;
 export type ContentReadDependencies = Readonly<{
   pool: Pool;
   access: Access;
   tokens: KeyRing;
   clock?: () => Date;
   disclosureBarrier?: DisclosureBarrier;
+  pageDisclosureBarrier?: PageDisclosureBarrier;
 }>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same
@@ -1848,6 +1851,7 @@ export async function readThread(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
   context: ReadContext,
+  retain?: RetainContentRead<ThreadView>,
 ): Promise<Anchored<ThreadView | null>> {
   return withRealmDisclosureScope(
     async () =>
@@ -1862,6 +1866,8 @@ export async function readThread(
         undefined,
         true,
         threadReadAdmission.getStore(),
+        false,
+        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
       )) as Anchored<ThreadView | null>,
   );
 }
@@ -2094,7 +2100,10 @@ async function list(
 ): Promise<Page<PostEntry>> {
   const clock = dependencies.clock ?? (() => new Date());
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
-  const root = await readThread(dependencies, threadId, context);
+  let finishRoot!: Parameters<RetainContentRead<ThreadView>>[0];
+  const root = await readThread(dependencies, threadId, context, (finish) => {
+    finishRoot = finish;
+  });
   if (!root.value) throw new ContentNotFoundError();
   const binding: CursorBinding = {
     operation: 'content.posts',
@@ -2120,6 +2129,7 @@ async function list(
     after = { at: decoded.after[0], id: decoded.after[1] };
   }
   const entries: PostEntry[] = [];
+  const finishEntries: Parameters<RetainContentRead<PostEntry>>[0][] = [];
   const selectedKeys: Key[] = [];
   let scanned = 0;
   let more = false;
@@ -2133,6 +2143,10 @@ async function list(
       after = key;
       scanned++;
       selectedKeys.push(key);
+      let finishEntry!: Parameters<RetainContentRead<PostEntry>>[0];
+      const retainEntry: RetainContentRead<PostEntry> = (finish) => {
+        finishEntry = finish;
+      };
       const result = await withRealmDisclosureScope(
         async () =>
           (await disclose(
@@ -2145,20 +2159,30 @@ async function list(
             undefined,
             undefined,
             true,
+            undefined,
+            false,
+            retainEntry as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata>,
           )) as Anchored<PostEntry | null>,
       );
       if (!result.value) continue;
       entries.push(result.value);
+      finishEntries.push(finishEntry);
     }
     if (!more) break;
   }
   // Later reads (reaction totals) run before the root's final disclosure, so a Board takedown or revoked
   // read grant committed in that window is still observed by the last check. Concealed and missing roots share absence.
   await beforeFinal?.(entries);
-  const final = await readThread(dependencies, threadId, context);
+  await dependencies.pageDisclosureBarrier?.({ boardId: root.value.boardId, threadId });
+  const currentEntries: PostEntry[] = [];
+  for (const finish of finishEntries) {
+    const current = await finish();
+    if (current.value) currentEntries.push(current.value);
+  }
+  const final = await finishRoot();
   if (!final.value) throw new ContentNotFoundError();
   const page: Page<PostEntry> = {
-    entries,
+    entries: currentEntries,
     anchor: final.anchor,
     nextCursor:
       more && after

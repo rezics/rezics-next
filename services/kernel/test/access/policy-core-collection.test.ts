@@ -124,6 +124,10 @@ test('exact registered Global reach is the only alternate path, and unavailable 
   );
   expect(reach).toMatchObject({ decision: 'allow', reason: 'global-reach' });
 
-  const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
+  const unknown = decideNativePermission(
+    catalogue,
+    collection,
+    projection({ actorActionGrant: null, principalActionGrant: true }),
+  );
   expect(unknown.decision).toBe('unavailable');
 });

@@ -62,7 +62,7 @@ import {
   type RatingHttpApp,
 } from '../rating/module.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
-import { currentRealmDisclosureScope, type DisclosureBarrier } from '../content/reads.ts';
+import { currentRealmDisclosureScope, type DisclosureBarrier, type PageDisclosureBarrier } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
 import { noticeRoutes } from '../content/notice-routes.ts';
@@ -164,6 +164,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
       shelfTitleInputs?: ContentShelfTitleInputs;
       /** Composed-test timing seam between a read's initial and final disclosure; absent in production. */
       disclosureBarrier?: DisclosureBarrier;
+      pageDisclosureBarrier?: PageDisclosureBarrier;
     };
   search?: SearchRuntime;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
@@ -644,6 +645,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.content?.disclosureBarrier === undefined
       ? {}
       : { disclosureBarrier: dependencies.content.disclosureBarrier }),
+    ...(dependencies.content?.pageDisclosureBarrier === undefined
+      ? {}
+      : { pageDisclosureBarrier: dependencies.content.pageDisclosureBarrier }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
     viewerActionRuntime,
     realmParticipation: checkRealmParticipation,

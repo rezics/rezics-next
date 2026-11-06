@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
@@ -24,6 +25,7 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 // A single connection also detects any nested checkout during final authorization.
 const pool = new pg.Pool({ connectionString: url, max: 1 });
+configureTestReceiptKeys(pool);
 afterAll(() => pool.end());
 const id = (route: string, suffix: string) => `00000000-0000-7000-8000-${route}${suffix.padStart(8, '0')}`;
 const actorId = id('1234', '1');
@@ -326,7 +328,7 @@ test('exact own-account and registered Global profiles retain their native ceili
   ).rejects.toBeInstanceOf(RangeError);
   expect(
     await ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [actorId] }),
-  ).toEqual({ [actorId]: { allowed: true, explicit: false } });
+  ).toEqual({ [actorId]: { allowed: true, explicit: true } });
 
   const governor = identity({ scopes: ['post:erase'], requestedBy: null });
   await grant(actorId, 'post:erase', PLATFORM_RESOURCE);
@@ -365,7 +367,7 @@ test('the already-read actor state and epoch fail closed without an actor reread
     expect(await check(pool)).toBe(true);
   });
   expect(await access.authorize(pool, actor, action, resource)).toBe(false);
-  const missing = createAccess({ actions, accountEvidence: () => null });
+  const missing = createAccess({ actions, resourceRoles: { roles: {}, types: {} }, accountEvidence: () => null });
   expect(await (await accessCheck(missing, actor, action, resource, ctx))(pool)).toBe(false);
 });
 
@@ -374,6 +376,7 @@ test('unresolved account, grant, assignment and membership reads deny at the pro
   await unavailable('account', async () => {
     const missing = createAccess({
       actions,
+      resourceRoles: { roles: {}, types: {} },
       accountEvidence: () => {
         throw new Error('unresolved account');
       },

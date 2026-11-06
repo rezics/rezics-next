@@ -72,17 +72,19 @@ repair any source, grant or membership history.
 
 ### Late Board revocation for point and page reads
 
-Reaction totals are read after a thread or post has passed its Board and Access checks. Thread head and post head
-disclose the same item again after those totals, and the post page rechecks its containing thread after them, so the
-last authority check precedes the response. A Board takedown or protected read-grant revocation committed in that
-window yields `404` for a head or an absent item for a page; no totals leave for an item whose final disclosure
-fails. Subject discussions observe each listed thread again after their totals. Author activity reads no totals: each
-listed item passes the point-read disclosure, and its context is finished before the response. Board pages select and
-disclose their entries and parent authority in the final board snapshot.
+Thread and post heads retain their original source fingerprint and prepared Access checks across reaction enrichment.
+The final check validates that exact source, including its current Board and Realm authority; a different head cannot
+validate bytes selected earlier. Thread post pages retain each selected post and the containing opening in the same
+way. A changed reply is omitted without refilling or moving the bounded selection frontier. Counts and their oldest
+source watermark describe only the final disclosed entries. A concealed containing Board or opening returns `404`.
+Subject discussions and author activity retain their native final disclosure and context assembly.
 
-The composed timing seam `disclosureBarrier` pauses a point read after its initial Board and Access checks and before
-its final disclosure. It changes timing only, is absent in production, and is used by the native
-late-board-revocation point-read suite.
+Decision: retain original source authority through enrichment, preserve sparse continuation frontiers, and use
+connection-free timing barriers for late-revocation acceptance. `disclosureBarrier` pauses after initial Board/Access
+checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
+Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.
+They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
+author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.
 
 ### Cost: native directory assembly
 

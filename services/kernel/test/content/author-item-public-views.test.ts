@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -24,6 +25,7 @@ beforeAll(async () => {
   signingKeys = await generateKeyPair('ES256');
   publicKey = { ...(await exportJWK(signingKeys.publicKey)), kid: 'author-views', alg: 'ES256' };
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(7),
     tokens,
