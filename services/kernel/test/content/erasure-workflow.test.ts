@@ -176,7 +176,7 @@ async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
 
 test('production Access requires native identity evidence even when a persisted snapshot matches a live actor', async () => {
   const selected = await scope(2);
-  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   // Positive control: the real Auth-issued actor and actual native point command work.
   expect(
     (await erasePostLogical(deps, selected.actor, { postId: selected.ids[0]!, reason: 'Erase' }, context())).value
@@ -749,7 +749,7 @@ test('every measured revision erasure is a HOT update while another backend hold
         for (let run = 0; run < runsPerScale; run++) {
           const value = await scope(1, scale);
           await erasePostLogical(
-            { pool: fixture.pool, access: fixture.access, routeKey },
+            { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
             value.actor,
             { postId: value.ids[0]!, reason: 'Erase' },
             context(),
@@ -876,7 +876,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
         for (let run = 0; run < fixedRunsPerScale; run++) {
           const value = await scope(1, 100);
           await erasePostLogical(
-            { pool: fixture.pool, access: fixture.access, routeKey },
+            { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
             value.actor,
             { postId: value.ids[0]!, reason: 'Erase' },
             context(),

@@ -475,7 +475,7 @@ test('commerce counts exactly its two tokenized numbered outcomes and replays th
     'order:create',
     'access:grant',
   ]);
-  const commands = createCommerceCommands({ pool: db.pool, access: production.access });
+  const commands = createCommerceCommands({ clock: () => new Date(), pool: db.pool, access: production.access });
   const offer = (
     await commands.createOffer(
       buyer,
@@ -568,7 +568,7 @@ test('membership continuation restores the original native command through its t
     }
   });
   await fixture.grant(actor.accountId, 'realm:join', { route, id: realmId });
-  const deps = { pool: db.pool, access: fixture.access, tokens: testTokens(), client };
+  const deps = { clock: () => new Date(), pool: db.pool, access: fixture.access, tokens: testTokens(), client };
   const input = {
     actor,
     realmId,
@@ -596,6 +596,7 @@ test('membership continuation restores the original native command through its t
   expect(workflow).not.toBeNull();
   const workInput = (workflow!.input as { authorization: string }[])[0]!;
   const membership = createRealmMembership({
+    clock: () => new Date(),
     pool: db.pool,
     access: fixture.access,
     referenceKeys: testTokens(),

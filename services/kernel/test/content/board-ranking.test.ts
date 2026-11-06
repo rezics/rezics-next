@@ -58,6 +58,7 @@ function readerContext() {
 function dependencies(pool = db.pool): ContentBoardDependencies {
   return {
     pool,
+    clock: () => new Date(),
     access: anonymousAccess,
     tokens: tokenKeys,
     cursorNow: () => Date.parse(refreshAt),

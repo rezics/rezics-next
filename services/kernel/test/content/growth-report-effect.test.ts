@@ -186,7 +186,7 @@ async function createReportEvents(
   const sourcePartition = partitionOf(sourceRoute);
   for (const key of keys) {
     const outcome = await createReport(
-      { pool: db.pool, access: system.access, routeKey: system.routeKey },
+      { clock: () => new Date(), pool: db.pool, access: system.access, routeKey: system.routeKey },
       authorActor,
       { target, reason: 'other', evidence: 'Growth report evidence' },
       { idempotencyKey: key, requestId: randomUUID(), deadline: Date.now() + 30_000 },

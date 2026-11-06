@@ -584,7 +584,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         .png()
         .toBuffer();
       const reserved = await reserveMedia(
-        { pool: system.database.pool, access: system.access },
+        { clock: () => new Date(), pool: system.database.pool, access: system.access },
         system.actors.moderator.actor,
         { containerId: native.threadId, purpose: 'post-image', mediaType: 'image/png', byteCount: bytes.byteLength },
         { deadline: Date.now() + 10000, idempotencyKey: randomUUID(), requestId: randomUUID() },
@@ -605,14 +605,14 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         scopes: system.actors.moderator.actor.scopes,
       });
       const erased = await eraseStandaloneMedia(
-        { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+        { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
         moderator.actor,
         { mediaId: fixture.mediaId, reason: 'Remove bytes' },
         { requestId: randomUUID(), idempotencyKey: randomUUID(), deadline: Date.now() + 10_000 },
       );
       expect(
         await decideDownload(
-          { pool: system.database.pool, access: system.access },
+          { clock: () => new Date(), pool: system.database.pool, access: system.access },
           fixture.mediaId,
           system.actors.author.actor,
           'webp-16',
@@ -815,7 +815,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       visibility: 'published',
     });
     const command = await createThread(
-      { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+      { clock: () => new Date(), pool: system.database.pool, access: system.access, routeKey: system.routeKey },
       person.actor,
       {
         boardId: board.id,

@@ -169,6 +169,7 @@ export async function openSubjectReactionBoundaryObservation(
         pool: database.pool,
         access: fixture.base.system.access,
         tokens: fixture.base.system.tokenKeys,
+        clock: () => new Date(),
       },
       async call(method, path, options = {}) {
         const headers = new Headers();

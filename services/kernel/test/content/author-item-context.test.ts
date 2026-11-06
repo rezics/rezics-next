@@ -12,6 +12,7 @@ test('author replies carry only their immediate public parent and retire changed
   const f = await createReviewLifecycleFixture();
   try {
     const dependencies = {
+      clock: () => new Date(),
       pool: f.system.database.pool,
       access: f.system.access,
       tokens: f.system.tokenKeys,
@@ -130,6 +131,8 @@ test('author page refuses publication revoked after selection without returning 
     const gate = observer.hold({ statement: views.sql }, 'after');
     const pending = listAuthorPosts(
       {
+        cursorNow: () => Date.now(),
+        clock: () => new Date(),
         pool: f.system.database.pool,
         access: f.system.access,
         tokens: f.system.tokenKeys,

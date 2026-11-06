@@ -117,7 +117,7 @@ test('public review discovery refreshes the same thread and omits protected or r
 
   const create = (reviewAuthor: typeof author, target: string, body: string) =>
     createThread(
-      { pool: fixture.pool, access: fixture.access, routeKey },
+      { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
       reviewAuthor,
       {
         kind: 'review',
@@ -132,10 +132,13 @@ test('public review discovery refreshes the same thread and omits protected or r
     );
   const published = await create(author, subjectId, 'Current review excerpt.');
   const partition = partitionOf(routeOf(published.value.threadId)!);
-  const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
-    actor: { kind: 'anonymous' },
-    deadline: Date.now() + 30_000,
-  }));
+  const source = createReviewDiscoverySource(
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, tokens },
+    () => ({
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    }),
+  );
 
   const admitted = await invalidate(published, 'com.rezics.content.thread.created.v1');
   let changePage = await readReviewDiscoveryChanges(fixture.pool, partition);
@@ -210,7 +213,7 @@ test('public review discovery refreshes the same thread and omits protected or r
   changePage = publicPage;
 
   const revised = await revisePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     {
       threadId: published.value.threadId,
@@ -239,7 +242,7 @@ test('public review discovery refreshes the same thread and omits protected or r
     id: published.value.itemId,
   });
   const deleted = await softDeletePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     { postId: published.value.itemId, reason: 'Withdraw' },
     request(),
@@ -248,7 +251,7 @@ test('public review discovery refreshes the same thread and omits protected or r
   const withdrawn = await readReviewDiscoveryChanges(fixture.pool, partition, revisionPage.after);
   expect((await refreshReviewDiscoveryChanges(source, withdrawn)).removed).toEqual([published.value.threadId]);
   const restored = await restorePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     published.value.itemId,
     request(),
@@ -266,7 +269,7 @@ test('public review discovery refreshes the same thread and omits protected or r
     restoredReview.sourceVersion,
   );
   const erased = await erasePost(
-    { pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
     author,
     { postId: published.value.itemId, reason: 'Author removed the review' },
     request(),
@@ -292,7 +295,7 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
     await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")
   ).rows[0]!;
   await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
-  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const create = (subject: string, title: string, route: number) =>
     createThread(
       deps,
@@ -426,10 +429,13 @@ test('durable cross-partition gate pages retain disappearance, fixed catch-up cu
   }
   expect(caught).toHaveLength(100);
   expect(page.after).toBe(cut.through);
-  const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
-    actor: { kind: 'anonymous' },
-    deadline: Date.now() + 30_000,
-  }));
+  const source = createReviewDiscoverySource(
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, tokens },
+    () => ({
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    }),
+  );
   const late = await readReviewDiscoveryChanges(fixture.pool, partition, cut.through);
   expect(late.changes).toHaveLength(1);
   expect((await refreshReviewDiscoveryChanges(source, late)).removed).toEqual(late.changes.map((change) => change.id));
@@ -455,7 +461,7 @@ test('opening publication and native takedown refresh the discovered review iden
     await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")
   ).rows[0]!;
   await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
-  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const draft = await createThread(
     deps,
     author,

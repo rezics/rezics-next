@@ -169,7 +169,7 @@ function commandContext(key: string) {
 export async function restoreSelectedReview(scenario: RestoreScenario, pool: GrowthDatabase['pool'], key: string) {
   const { fixture, original } = scenario;
   return restorePost(
-    { pool, access: fixture.system.access, routeKey: fixture.system.routeKey },
+    { clock: () => new Date(), pool, access: fixture.system.access, routeKey: fixture.system.routeKey },
     fixture.system.actors.author.actor,
     original.postId,
     commandContext(key),
@@ -293,7 +293,7 @@ export async function growRetainedRevisionHistory(
   const review = history.review;
   for (let ordinal = from; ordinal < to; ordinal++) {
     const revised = await revisePost(
-      { pool, access: fixture.system.access, routeKey: fixture.system.routeKey },
+      { clock: () => new Date(), pool, access: fixture.system.access, routeKey: fixture.system.routeKey },
       fixture.system.actors.author.actor,
       {
         threadId: review.threadId,

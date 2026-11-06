@@ -327,7 +327,7 @@ async function summary() {
     deadline: Date.now() + 30_000,
   });
   return readRealmPresentationImages(
-    { pool: fixture.db.pool, access: fixture.kernel.testAccess },
+    { clock: () => new Date(), pool: fixture.db.pool, access: fixture.kernel.testAccess },
     { realmId: fixture.realmId, avatarMediaId: fixture.image.id, bannerMediaId: null },
     { actor, deadline: Date.now() + 30_000 },
   );

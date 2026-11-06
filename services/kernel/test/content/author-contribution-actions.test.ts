@@ -90,6 +90,7 @@ test('publication withdrawal during private assembly retires all advice', async 
     const gate = observer.hold({ statement: views.sql }, 'after');
     const pending = readAuthorContributionActions(
       {
+        clock: () => new Date(),
         pool: f.system.database.pool,
         access: f.system.access,
         tokens: f.system.tokenKeys,

@@ -19,7 +19,7 @@ const context = () => ({
   idempotencyKey: crypto.randomUUID(),
   requestId: crypto.randomUUID(),
 });
-const dependencies = () => ({ pool: fixture.pool, access: fixture.access });
+const dependencies = () => ({ clock: () => new Date(), pool: fixture.pool, access: fixture.access });
 
 beforeAll(async () => {
   fixture = await standingFixture(['account:read']);

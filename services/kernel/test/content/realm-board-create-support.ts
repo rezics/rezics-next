@@ -240,10 +240,11 @@ export async function realmBoardWorld() {
     const actor = await access.authenticate(owner.bearer, { pool: db.pool, deadline });
     return createBoard(
       {
+        clock: () => new Date(),
         pool: db.pool,
         access,
         routeKey: testRouteKey(),
-        realmParticipation: createRealmParticipationCheck({ pool: db.pool, access }),
+        realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: db.pool, access }),
       },
       actor,
       { realmId: realm.realmId, conceptId: id, title: 'Native Concept board', visibility: 'published' },

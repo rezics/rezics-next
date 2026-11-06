@@ -279,7 +279,7 @@ test('Native creator edition inventory for returning to genuine draft and publis
     authorize: (...args) => f.native.access.authorize(...args),
   };
   const raced = await readCreatorEditions(
-    { pool: f.native.database.pool, access },
+    { clock: () => new Date(), pool: f.native.database.pool, access },
     f.author.actor,
     { accountId },
     { deadline: Date.now() + 10000 },
@@ -301,7 +301,7 @@ test('creator inventory preserves current source denial and retryable partition 
   );
   await expect(
     readCreatorEditions(
-      { pool: f.native.database.pool, access: f.native.access },
+      { clock: () => new Date(), pool: f.native.database.pool, access: f.native.access },
       f.author.actor,
       { accountId },
       { deadline: Date.now() + 10000 },

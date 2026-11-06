@@ -49,6 +49,7 @@ test('subject thread page stays within its bound as the subject thread index gro
     ]),
   });
   const dependencies = {
+    clock: () => new Date(),
     pool: db.pool,
     routeKey: testRouteKey(),
     access,

@@ -22,6 +22,8 @@ let runtime: ReturnType<typeof communityFixtureRuntime>;
 const key = () => JSON.stringify(crypto.randomUUID());
 const context = () => ({ actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 });
 const deps = () => ({
+  cursorNow: () => Date.now(),
+  clock: () => new Date(),
   pool: runtime.system.database.pool,
   access: runtime.system.access,
   routeKey: runtime.system.routeKey,

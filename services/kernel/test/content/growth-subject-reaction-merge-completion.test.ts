@@ -192,7 +192,7 @@ async function createCase(scenario: Scenario, scale: number, phase: FixturePhase
 async function setReactionSlot(actor: AccountActor, targetId: string, kind: 'like' | 'love', label: string) {
   if (!base || !growth) throw new Error('Native reaction fixture is not ready');
   const result = await setReaction(
-    { pool: growth.pool, access: base.system.access },
+    { clock: () => new Date(), pool: growth.pool, access: base.system.access },
     actor,
     { targetKind: 'subject', targetId, kind },
     {
@@ -388,7 +388,7 @@ async function executeCase(
   let denied: unknown;
   try {
     await setReaction(
-      { pool: growth.pool, access: base.system.access },
+      { clock: () => new Date(), pool: growth.pool, access: base.system.access },
       deniedActor,
       { targetKind: 'subject', targetId: item.final, kind: 'like' },
       {

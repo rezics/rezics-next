@@ -61,7 +61,11 @@ beforeAll(async () => {
   deletion = accountDeletionRuntime(system);
   member = await deletion.person();
   production = await createProductionAccess({ actions: [...system.actions.keys()] });
-  membership = createRealmMembership({ pool: system.database.pool, access: production.access });
+  membership = createRealmMembership({
+    clock: () => new Date(),
+    pool: system.database.pool,
+    access: production.access,
+  });
   const changeMembership = async (realmId: string, account: Account, join: boolean) => {
     const response = await driver.request({
       actor: join ? fixture.owner : account,
@@ -176,13 +180,19 @@ test.serial(
     expect(
       (await pool.query('SELECT * FROM community.realm_member_terminal WHERE account_id=$1', [member.accountId])).rows,
     ).toHaveLength(2);
-    await expect(eraseAccountMembershipsPage({ pool, access }, fixture.outsider.id, null)).rejects.toThrow();
+    await expect(
+      eraseAccountMembershipsPage({ clock: () => new Date(), pool, access }, fixture.outsider.id, null),
+    ).rejects.toThrow();
     await deletePersona({ version: 1, pool, auth: deletion.auth }, member);
     await drainEffects(pool, partitionOf(routeOf(member.accountId)!));
     let after: string | null = null;
     let found = 0;
     for (let step = 0; step < 20; step++) {
-      const page = await eraseAccountMembershipsPage({ pool, access }, member.accountId, after);
+      const page = await eraseAccountMembershipsPage(
+        { clock: () => new Date(), pool, access },
+        member.accountId,
+        after,
+      );
       found += page.found;
       if (page.next === null && page.pending === 0) break;
       after = page.next;
@@ -199,7 +209,9 @@ test.serial(
     expect(
       (await pool.query('SELECT * FROM community.realm_ban WHERE account_id=$1', [member.accountId])).rows,
     ).toEqual(bans);
-    expect(await eraseAccountMembershipsPage({ pool, access }, member.accountId, null)).toEqual({
+    expect(
+      await eraseAccountMembershipsPage({ clock: () => new Date(), pool, access }, member.accountId, null),
+    ).toEqual({
       next: null,
       found: 0,
       pending: 0,
@@ -287,7 +299,11 @@ test.serial(
       },
       async operation() {
         await restore();
-        const page = await eraseAccountMembershipsPage({ pool: growth.pool, access }, member.accountId, null);
+        const page = await eraseAccountMembershipsPage(
+          { clock: () => new Date(), pool: growth.pool, access },
+          member.accountId,
+          null,
+        );
         expect(page).toEqual({ next: expect.any(String), found: 50, pending: 0 });
         return page;
       },

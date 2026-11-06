@@ -19,6 +19,7 @@ test('bundled discovery definitions have native producers for every discoverable
   } as unknown as Pool;
   const routeKey = new Uint8Array(32);
   const producers = createDiscoveryProducerEntry({
+    clock: () => new Date(),
     pool,
     routeKey,
     access: {} as never,

@@ -252,10 +252,14 @@ test('a community locator committed before closure is found and fence closure wa
     closer.release();
   }
 
-  const page = await eraseAccountCommunityRecordsPage({ pool: system.database.pool }, person.accountId, {
-    erasedAt: erased.at,
-    after: null,
-  });
+  const page = await eraseAccountCommunityRecordsPage(
+    { clock: () => new Date(), pool: system.database.pool },
+    person.accountId,
+    {
+      erasedAt: erased.at,
+      after: null,
+    },
+  );
   expect(page.found).toBeGreaterThanOrEqual(2);
   expect(page.pending).toBe(0);
   expect(page.next).toBeNull();

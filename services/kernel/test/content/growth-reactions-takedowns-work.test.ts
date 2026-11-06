@@ -625,7 +625,7 @@ async function clearOneReaction(
 ): Promise<void> {
   const targetId = targetKind === 'thread' ? keys.threadId : targetKind === 'post' ? keys.postId : keys.subjectId;
   const outcome = await clearReaction(
-    { pool: fixture.db.pool, access: fixture.access },
+    { clock: () => new Date(), pool: fixture.db.pool, access: fixture.access },
     actor,
     { targetKind, targetId },
     request(),

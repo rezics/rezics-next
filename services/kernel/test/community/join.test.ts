@@ -361,7 +361,7 @@ async function captureFailure(
   let error: unknown;
   try {
     error = await enqueueRealmJoin(
-      { pool, access, tokens, client: work },
+      { clock: () => new Date(), pool, access, tokens, client: work },
       { actor, ...realm, memberAccountId: actor.accountId, idempotencyKey, deadline },
     ).catch((error: unknown) => error);
     if (options.retry) expect(capture).toHaveBeenCalledTimes(2);

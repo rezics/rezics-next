@@ -87,7 +87,7 @@ export async function createMembershipGrowthFixture() {
       [other, otherOnly, 'love'],
     ] as const) {
       const result = await setReaction(
-        { pool: growth.pool, access: system.access },
+        { clock: () => new Date(), pool: growth.pool, access: system.access },
         who,
         { targetKind: 'subject', targetId, kind },
         { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },

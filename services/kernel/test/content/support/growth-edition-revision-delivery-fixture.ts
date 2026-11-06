@@ -368,7 +368,7 @@ export async function growthEditionRevisionDeliveryFixture() {
         const key = randomUUID();
         if (axis === 'source-history') {
           const outcome = await revisePost(
-            { pool: db.pool, access: app.testAccess, routeKey: testRouteKey() },
+            { clock: () => new Date(), pool: db.pool, access: app.testAccess, routeKey: testRouteKey() },
             actor,
             {
               threadId: selected.threadId,

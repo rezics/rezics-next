@@ -468,11 +468,16 @@ test("an authored field is admitted under a Global Context authorization when th
     [route, stored.id, newId(route), newId(route + 1)],
   );
   const { eraseAuthoredField } = await import('../../src/content/authored-fields.ts');
-  await eraseAuthoredField({ pool: db.pool, access: creationAccess }, creationActor, stored.id, {
-    deadline: Date.now() + 10_000,
-    idempotencyKey: crypto.randomUUID(),
-    requestId: crypto.randomUUID(),
-  });
+  await eraseAuthoredField(
+    { clock: () => new Date(), pool: db.pool, access: creationAccess },
+    creationActor,
+    stored.id,
+    {
+      deadline: Date.now() + 10_000,
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    },
+  );
   expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({
     anchor,
     availability: 'erased',

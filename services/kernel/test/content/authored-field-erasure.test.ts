@@ -155,7 +155,7 @@ async function appendThroughSemanticSubjectCommand(): Promise<{ id: string; subj
 }
 
 async function erase(id: string, actor: Actor, key = randomUUID()) {
-  return eraseAuthoredField({ pool: db.pool, access }, actor, id, request(key));
+  return eraseAuthoredField({ clock: () => new Date(), pool: db.pool, access }, actor, id, request(key));
 }
 
 beforeAll(async () => {

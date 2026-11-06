@@ -65,7 +65,10 @@ function dependencies(selected = access) {
   return {
     pool: db.pool,
     access: selected,
+    clock: () => new Date(),
+    cursorNow: () => Date.now(),
     routeKey,
+    now: () => Date.now(),
     tokens,
     writeRate: {
       async spend() {

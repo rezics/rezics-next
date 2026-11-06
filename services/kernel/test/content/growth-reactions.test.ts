@@ -197,7 +197,7 @@ test('reaction writes remain one point mutation with constant rows and statement
       const trace = observeSql(f.db.pool);
       try {
         const result = await commands.setReaction(
-          { pool: f.db.pool, access: f.access },
+          { clock: () => new Date(), pool: f.db.pool, access: f.access },
           actor,
           { targetKind: 'thread', targetId: target.thread, kind: repetition % 2 ? 'upvote' : 'downvote' },
           request(),
@@ -259,7 +259,7 @@ test('Subject reaction slot', async () => {
     },
     async warmup(_database, scale, repetition) {
       await commands.setReaction(
-        { pool: f.db.pool, access: f.access },
+        { clock: () => new Date(), pool: f.db.pool, access: f.access },
         actor,
         { targetKind: 'subject', targetId: warmupTargets.get(scale)!, kind: repetition % 2 ? 'love' : 'like' },
         request(),
@@ -267,7 +267,7 @@ test('Subject reaction slot', async () => {
     },
     async operation(_database, _scale, _repetition) {
       await commands.setReaction(
-        { pool: f.db.pool, access: f.access },
+        { clock: () => new Date(), pool: f.db.pool, access: f.access },
         actor,
         { targetKind: 'subject', targetId, kind: measured++ % 2 ? 'love' : 'like' },
         request(),

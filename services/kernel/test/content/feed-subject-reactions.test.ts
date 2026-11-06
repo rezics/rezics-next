@@ -14,6 +14,7 @@ test('selected native Subject projections distinguish coverage, five kinds, clea
   let effects: Awaited<ReturnType<typeof world.startEffects>> | undefined;
   try {
     const dependencies = {
+      clock: () => new Date(),
       pool: world.system.database.pool,
       access: world.system.access,
       tokens: world.system.tokenKeys,
@@ -161,6 +162,7 @@ test('final native identity and account checks retire merged cards and suspended
   const world = await createReactionRelayBase();
   try {
     const dependencies = {
+      clock: () => new Date(),
       pool: world.system.database.pool,
       access: world.system.access,
       tokens: world.system.tokenKeys,

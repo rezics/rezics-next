@@ -6186,11 +6186,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/community/realm-votes.ts",
-          "edge": "value import \"../content/events.ts\" #1 => services/kernel/src/content/events.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/community/realm.ts",
           "edge": "type import \"../access/viewer-actions.ts\" #1 => services/kernel/src/access/viewer-actions.ts"
         },
@@ -6233,11 +6228,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm.ts",
           "edge": "value import \"../content/community-presentation-rules.ts\" #1 => services/kernel/src/content/community-presentation-rules.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm.ts",
-          "edge": "value import \"../content/events.ts\" #1 => services/kernel/src/content/events.ts"
         },
         {
           "rule": "rule 2",
@@ -6393,11 +6383,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/rules-authoring.ts",
           "edge": "value import \"../content/reads.ts\" #1 => services/kernel/src/content/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/schemas.ts",
-          "edge": "value import \"../content/events.ts\" #1 => services/kernel/src/content/events.ts"
         },
         {
           "rule": "rule 2",
@@ -6628,11 +6613,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/space-discovery.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/space-discovery.ts",
-          "edge": "value import \"../events/catalogue.ts\" #1 => services/kernel/src/events/catalogue.ts"
         },
         {
           "rule": "rule 2",
@@ -7983,11 +7963,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/community-presentation-rules.ts",
-          "edge": "type import \"../community/realm.ts\" #1 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/community-presentation.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
@@ -8070,11 +8045,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/cover-reference.ts",
           "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/decision-page.ts",
-          "edge": "value import \"../access/access-clock.ts\" #1 => services/kernel/src/access/access-clock.ts"
         },
         {
           "rule": "rule 2",
@@ -19726,16 +19696,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/events/catalogue.ts",
-          "edge": "value import \"../content/events.ts\" #1 => services/kernel/src/content/events.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/events/catalogue.ts",
-          "edge": "value import \"../content/report-locator-events.ts\" #1 => services/kernel/src/content/report-locator-events.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/events/catalogue.ts",
           "edge": "value import \"../library/events.ts\" #1 => services/kernel/src/library/events.ts"
         },
         {
@@ -20221,32 +20181,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../content/media-routes.ts\" #1 => services/kernel/src/content/media-routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../content/notice-routes.ts\" #1 => services/kernel/src/content/notice-routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../content/reads.ts\" #1 => services/kernel/src/content/reads.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../content/realm-of-item.ts\" #1 => services/kernel/src/content/realm-of-item.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../content/routes.ts\" #1 => services/kernel/src/content/routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../content/viewer-actions.ts\" #1 => services/kernel/src/content/viewer-actions.ts"
         },
         {
           "rule": "rule 2",
@@ -20577,11 +20517,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/work/modules.ts",
           "edge": "value import \"../community/work.ts\" #1 => services/kernel/src/community/work.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/work/modules.ts",
-          "edge": "value import \"../content/register.ts\" #1 => services/kernel/src/content/register.ts"
         },
         {
           "rule": "rule 2",

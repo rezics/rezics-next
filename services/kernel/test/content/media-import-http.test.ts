@@ -157,6 +157,8 @@ beforeAll(async () => {
     pool: db.pool,
     access,
     routeKey,
+    now: () => Date.now(),
+    cursorNow: () => Date.now(),
     tokens,
     clock: () => new Date(),
     fetchConfig: { allowedHosts: ['images.example.test'] },

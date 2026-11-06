@@ -290,9 +290,13 @@ test('pending requester custody uses the existing erasure obligation and event r
   expect(locator.rows).toEqual([{ kind: 'claim_request', owner_id: realm.realmId, key: outcome.value.requestId }]);
 
   const erased = await deletePersona({ pool: system.database.pool, auth: runtime.auth }, person);
-  const disposition = await eraseAccountCommunityRecordsPage({ pool: system.database.pool }, person.accountId, {
-    erasedAt: erased.at,
-  });
+  const disposition = await eraseAccountCommunityRecordsPage(
+    { clock: () => new Date(), pool: system.database.pool },
+    person.accountId,
+    {
+      erasedAt: erased.at,
+    },
+  );
   expect(disposition.pending).toBe(0);
   await effect.run(event);
   expect(
@@ -505,10 +509,18 @@ test('default committed-erasure succession uses the original root instant and re
         [routeOf(realm.realmId), realm.realmId, erased.at],
       )
     ).rows[0];
-  await eraseAccountMembershipsPage({ pool: system.database.pool, access: system.access }, person.accountId, null);
+  await eraseAccountMembershipsPage(
+    { clock: () => new Date(), pool: system.database.pool, access: system.access },
+    person.accountId,
+    null,
+  );
   const first = await read();
   expect(first).toMatchObject({ ownership_state: 'orphaned', original_root: true, original_deadline: true });
-  await eraseAccountMembershipsPage({ pool: system.database.pool, access: system.access }, person.accountId, null);
+  await eraseAccountMembershipsPage(
+    { clock: () => new Date(), pool: system.database.pool, access: system.access },
+    person.accountId,
+    null,
+  );
   expect(await read()).toEqual(first);
 });
 
@@ -546,7 +558,7 @@ test('native erasure segment rolls grants and continuity back together and repla
   const { realm } = await realmResponse.json();
   const erased = await deletePersona({ pool: system.database.pool, auth: runtime.auth }, person);
   const input = { realmId: realm.realmId, accountId: person.accountId };
-  const nativeDeps = { pool: system.database.pool, access: system.access };
+  const nativeDeps = { clock: () => new Date(), pool: system.database.pool, access: system.access };
   const commands = createRealmOwnershipCommands(nativeDeps);
   const route = routeOf(realm.realmId)!;
   const read = async () =>
