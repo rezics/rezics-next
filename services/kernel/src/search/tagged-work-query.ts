@@ -138,12 +138,18 @@ export function currentTaggedWorkSubjects(
 }
 
 /** Engine candidate query for the remaining predicate. Concept closures stay match_all for native evaluation. */
-export function compileTaggedWorkFilter(remaining: FilterDocument | undefined, prefix = 'tagged') {
+export function compileTaggedWorkFilter(
+  remaining: FilterDocument | undefined,
+  prefix = 'tagged',
+): ReturnType<typeof compileFilter> {
   if (remaining === undefined) return { query: { match_all: { _name: `${prefix}all` } }, leaves: [] };
   return compileFilter(remaining, { prefix, relationOverflow: true });
 }
 
-export function compileTaggedWorkPlanFilter(plan: TaggedWorkPlan, prefix = 'tagged') {
+export function compileTaggedWorkPlanFilter(
+  plan: TaggedWorkPlan,
+  prefix = 'tagged',
+): ReturnType<typeof compileFilter> {
   return compileTaggedWorkFilter(taggedWorkCatalogueFilter(plan), prefix);
 }
 

@@ -165,7 +165,7 @@ reviewed vocabulary seeds and measured-input expansion remain deferred until pol
 authority and reviewed vocabulary seeds retain their explicit platform authority and seed review
 requirements. Ordinary provider imports do not auto-seed them.
 
-Decision: fewest tests pin user-visible publication behaviour and named-state stories only;
+Decision: fewest tests pin publication, named stories and the emitted import contract;
 `expansion.test.ts` remains the ten-Type and one-hundred-manifest measurement.
 
 ### Definition publication admission cost

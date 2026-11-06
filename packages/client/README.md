@@ -21,6 +21,9 @@ token returned by the kernel. Use `onSession` to observe token changes, for exam
 The declarations in `src/kernel/` are generated through managed compiler placement by
 `bun run --cwd services/kernel typecheck --emit-client`.
 
+Decision: `POST /v1/definitions/imports` (`definitions.import`) is admitted by the generated
+`definitions.imports` route. Callers keep authenticated transport and do not hand-edit declarations.
+
 Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
 Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.
 It preserves the generated methods and authenticated transport and yields to the generated Progress review union

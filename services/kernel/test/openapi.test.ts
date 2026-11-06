@@ -219,3 +219,34 @@ test('the committed contract is the document generated from the kernel app', asy
   if (committed !== (await kernelContract()))
     throw new Error('contracts/openapi.json is stale; run `bun run --cwd services/kernel openapi`');
 });
+
+test('definitions.import publishes the mounted catalogue import contract', async () => {
+  const imported = JSON.parse(await kernelContract()).paths['/v1/definitions/imports']?.post;
+  expect(imported).toMatchObject({
+    operationId: 'definitions.import',
+    'x-action': 'definitions:publish',
+    'x-exposure': 'gate:definition_publication',
+    'x-rate-limit': { family: 'write', units: 1 },
+    'x-resource-types': ['semantic.context'],
+    security: [{ bearerAuth: [] }],
+  });
+  expect(typeof imported['x-body-limit']).toBe('number');
+  expect(imported.requestBody).toMatchObject({
+    required: true,
+    content: {
+      'application/json': {
+        schema: { type: 'object', additionalProperties: false, required: ['document'] },
+      },
+    },
+  });
+  expect(Object.keys(imported.requestBody.content['application/json'].schema.properties).sort()).toEqual([
+    'context',
+    'document',
+    'expected_head',
+  ]);
+  expect(Object.keys(imported.responses).sort()).toEqual(['200', '400', '401', '403', '404', '503']);
+  const operations = imported.responses['200'].content['application/json'].schema.properties.operations;
+  expect(operations).toMatchObject({ additionalProperties: false, type: 'object' });
+  expect(operations.properties.grant.const).toBe('definition_publication');
+  expect([...operations.required].sort()).toEqual(['activate', 'admitted', 'build', 'grant', 'publish']);
+});
