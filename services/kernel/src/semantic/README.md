@@ -1485,8 +1485,9 @@ document references count separately; the existing snak bounds do not raise the 
 set. There is no repeated declaration, truncated vector or raised sixteen-reference history limit.
 Native membership is relational and indexed in both set and member directions. Seal validates exact
 native revisions and computes the canonical digest in PostgreSQL; the executor callback and deferred
-commit constraint reject an unsealed, mismatched or incomplete native writer attempt. Committed heads
-and members are immutable. Rollback exposes no set.
+commit constraint reject an unsealed, mismatched or incomplete native writer attempt. That callback is
+registered work, so a command that begins a set emits a domain event rather than `noEffect`. Committed
+heads and members are immutable. Rollback exposes no set.
 
 Accounts owns the mutually exclusive `declareCommandRecordSourceSet(tx,set)` declaration and its
 association with each real generated HistoryLocator. The Source producer provides the transaction-local

@@ -3,7 +3,7 @@ import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts
 import { admitZoneCleanup, advanceZoneCleanupGrants } from '../semantic/deletion/index.ts';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contract/contracts.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
 import { declareCommandHistory } from '../history/application/index.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
