@@ -1,6 +1,7 @@
 /** Native Source capture adapter. Uses the existing Collection Source factory on the live pool. */
 
 import type { Pool } from 'pg';
+import type { AuthoritativeTime } from '../../command/command.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import type { SourceCaptureCapability } from '../contract/index.ts';
 import { createCollectionSource, createOrdinaryCollectionPageSource } from '../collection-source.ts';
@@ -16,12 +17,13 @@ export function createNativeSourceCaptureAdapter(dependencies: {
     : createCollectionSource(dependencies);
   return {
     prepare(input) {
-      if (input.at === undefined) throw new TypeError('Collection Source prepare requires authoritative time');
+      const at = input.at;
+      if (at === undefined) throw new TypeError('Collection Source prepare requires authoritative time');
       return source.prepare({
         actor: input.actor as Actor,
         collectionId: input.collectionId,
         deadline: input.deadline,
-        at: input.at as Parameters<typeof source.prepare>[0]['at'],
+        at: at as AuthoritativeTime,
         allowance: input.allowance,
       });
     },

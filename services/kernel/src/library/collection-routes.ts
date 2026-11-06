@@ -1299,8 +1299,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         if ('preparing' in result) {
           set.status = 202;
           set.headers['retry-after'] = '1';
+          return { preparing: true as const };
         }
-        return result;
+        return { ...result, members: [...result.members] };
       },
     )
     .post(

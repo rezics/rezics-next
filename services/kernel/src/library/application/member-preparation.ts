@@ -53,7 +53,7 @@ export function createMemberPreparationApplication(capabilities: {
             incarnation: '',
             revision: 0,
             authority: { kind: 'curated' },
-            stamp: { epoch: 0 },
+            stamp: { partition: 0, epoch: 0, position: 0n },
             basis: { digest: '', identity: { digest: '' }, query: null, profilePins: [], projection: null },
           },
           work: {

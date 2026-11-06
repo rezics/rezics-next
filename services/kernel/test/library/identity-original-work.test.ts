@@ -577,11 +577,7 @@ test('fixed-width Library transform preserves unmerge/repoint remainder semantic
     [[]],
   );
   expect(
-    await pageLibraryIdentityEpochChanges(
-      empty.tx,
-      { jobId: '00000000-0000-7000-8000-000000000001', epoch: 1n },
-      null,
-    ),
+    await pageLibraryIdentityEpochChanges(empty.tx, { jobId: '00000000-0000-7000-8000-000000000001', epoch: 1n }, null),
   ).toEqual({
     changes: [],
     next: null,

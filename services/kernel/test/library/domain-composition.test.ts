@@ -1,9 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  composeLibraryDomain,
-  peekLibraryDomain,
-  unbindLibraryDomain,
-} from '../../src/composition/library.ts';
+import { composeLibraryDomain, peekLibraryDomain, unbindLibraryDomain } from '../../src/composition/library.ts';
 import { createLibraryApplications } from '../../src/library/application/index.ts';
 import type { LibraryCapabilities } from '../../src/library/contract/capabilities.ts';
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
