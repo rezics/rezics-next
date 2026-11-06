@@ -92,11 +92,11 @@ export const GUARDS = {
   },
   'dev-landing-architecture': {
     defect:
-      'A final dev candidate introduces a module-boundary violation beyond its captured base, allowing new architecture drift to land.',
+      'A final dev candidate fails the architecture check on a manifest, parser or boundary-ratchet error; boundary violations do not hold a candidate.',
     owner: 'control-plane',
     since: '2026-11-06',
     repair:
-      'Return the added architecture violation lines and retained log to the original worker session; repair in place and recheck the recomposed candidate before landing. Cost target: <15000ms per candidate. Measured full base-delta check: 14.6s for 7,433 production files in this worktree; original full check: 10.5s for 6,876 files, no database.',
+      'Return the failing architecture lines and retained log to the original worker session; repair in place and recheck the recomposed candidate before landing. Boundary violations of rules 1 to 7 and 9 land and are recorded per Goal for the same-day repair brief. Cost target: <15000ms per candidate. Measured full base-delta check: 14.6s for 7,433 production files in this worktree; original full check: 10.5s for 6,876 files, no database.',
   },
   'dev-landing-schema': {
     defect:

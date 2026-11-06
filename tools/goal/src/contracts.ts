@@ -275,8 +275,10 @@ export type GateOutcome = AttemptRef & {
 
 /**
  * A dev landing repair returns to the source owner as a nonterminal same-session repair: a compiler diagnostic
- * (`dev-landing-transpile`), an architecture-boundary diagnostic (`dev-landing-architecture`), a failed schema-dump
- * regeneration (`dev-landing-schema`), or a Kernel entry-import / SQL-analysis failure (`dev-landing-kernel-import`).
+ * (`dev-landing-transpile`), a non-boundary architecture failure such as a manifest, parser or ratchet error
+ * (`dev-landing-architecture`), a failed schema-dump regeneration (`dev-landing-schema`), or a Kernel
+ * entry-import / SQL-analysis failure (`dev-landing-kernel-import`). Boundary violations do not return; they are
+ * recorded per Goal and repaired by one urgent brief a day.
  */
 export type DevLandingTranspileHandoff = AttemptRef & {
   kind: 'dev-landing-transpile';

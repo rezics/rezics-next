@@ -1858,7 +1858,7 @@ export class WorkerJob implements GateOutcomeSink {
             : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
       `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
       architectureRepair
-        ? `New architecture violations:\n${handoff.diagnostic.message}`
+        ? `Architecture check failures (manifest, parser or boundary ratchet; boundary violations land and are repaired separately):\n${handoff.diagnostic.message}`
         : schemaRepair
           ? `Regeneration error: ${handoff.diagnostic.message}`
           : kernelImportRepair
