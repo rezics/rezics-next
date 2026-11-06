@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -20,6 +20,8 @@ import { newId } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
+// Each test drives the real HTTP command path and several native projections against the migrated database.
+setDefaultTimeout(120_000);
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
