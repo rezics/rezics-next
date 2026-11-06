@@ -1,8 +1,6 @@
 import { MAX_NAME_SORT_CHARACTERS } from './document.ts';
-import { analyzeInstalled, NAME_KEY_NORMALIZER } from './engine-analysis.ts';
+import { analyzeInstalled, ENGINE_ANALYSIS_LIMITS, NAME_KEY_NORMALIZER } from './engine-analysis.ts';
 import type { OpenSearch } from './opensearch.ts';
-
-const MAX_ANALYZE_CONCURRENCY = 16;
 
 function isScalarString(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -65,7 +63,7 @@ export async function prepareBoundedSortKeys<
     }
   }
 
-  const concurrency = Math.min(MAX_ANALYZE_CONCURRENCY, names.length);
+  const concurrency = Math.min(ENGINE_ANALYSIS_LIMITS.concurrency, names.length);
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   if (failed) throw failure;
 

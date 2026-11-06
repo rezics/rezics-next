@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { IndexedSubject } from '../../src/search/source.ts';
 import {
   compileMatchEvidence,
+  MATCH_EVIDENCE_LIMITS,
   projectMatchEvidence,
   readEngineMatchEvidence,
 } from '../../src/search/match-evidence.ts';
@@ -73,4 +74,44 @@ test('negative matches, ambiguous sources, missing engine excerpts and missing p
   ).toEqual({ state: 'unavailable' });
   expect(projectMatchEvidence(subject(), { matched: ['e_names_t0'] }, plan)).toEqual({ state: 'unavailable' });
   expect(projectMatchEvidence(subject(), undefined, undefined)).toEqual({ state: 'absent' });
+});
+
+test('native truncated excerpts keep exact source characters, and scan truncation cannot invent a later alias', () => {
+  const plan = compileMatchEvidence(compileText(parseText('shutage'), { field: 'search_text', prefix: 't' }));
+  const longAlias = 'Shutage, the science adventure nickname used in conversation';
+  expect(
+    projectMatchEvidence(
+      subject({
+        labels: [],
+        aliases: [{ language: 'und', value: longAlias }],
+        descriptions: [],
+      }),
+      { matched: ['e_n_t0'], highlight: { names: ['<em>Shutage</em>, the science adventure'] } },
+      plan,
+    ),
+  ).toEqual({
+    state: 'current',
+    source: { id: subject().id, revision: 7 },
+    query: plan.queryBinding,
+    reasons: [
+      {
+        field: 'alias',
+        language: 'und',
+        text: 'Shutage, the science adventure',
+        spans: [{ start: 0, end: 7 }],
+      },
+    ],
+  });
+
+  const bulky = Array.from({ length: 8 }, (_, n) => ({
+    language: 'und',
+    value: `${'x'.repeat(Math.ceil(MATCH_EVIDENCE_LIMITS.scanBytes / 6))}${n}`,
+  }));
+  expect(
+    projectMatchEvidence(
+      subject({ labels: [], aliases: [...bulky, { language: 'und', value: 'Shutage' }], descriptions: [] }),
+      { matched: ['e_n_t0'], highlight: { names: ['<em>Shutage</em>'] } },
+      plan,
+    ),
+  ).toEqual({ state: 'unavailable' });
 });
