@@ -375,11 +375,12 @@ function CreateRoutePage() {
   const location = useLocation();
   const { lifetime, snapshot } = useOwnerLifetime(location.pathname + JSON.stringify(location.search));
   const navigate = useNavigate();
+  const session = state === 'unknown' && backendViewer.state === 'signed-in' ? 'signed-in' : state;
   return (
     <CreateZone
       key={`${location.pathname}:${snapshot.incarnation}`}
       locale="en"
-      session={state}
+      session={session}
       owner={lifetime}
       onCreate={createZone}
       onNavigate={(href) => {
@@ -473,13 +474,23 @@ function starterSelector(host: HTMLElement): string {
   );
   return `select[id="${label?.htmlFor ?? ''}"]`;
 }
+function reactProps(element: Element): { [name: string]: unknown } | undefined {
+  for (const node of [element, ...element.querySelectorAll('*')]) {
+    const key = Object.keys(node).find((entry) => entry.startsWith('__reactProps$'));
+    if (key) return Reflect.get(element, key) as { [name: string]: unknown };
+  }
+  return undefined;
+}
 function setInput(host: HTMLElement, selector: string, value: string) {
   const target = host.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
   if (!target) throw new Error(`Missing input: ${selector}`);
+  const onChange = reactProps(target)?.onChange;
   target.value = value;
-  target.dispatchEvent(
-    new window.Event(target instanceof window.HTMLSelectElement ? 'change' : 'input', { bubbles: true }),
-  );
+  if (typeof onChange === 'function') onChange({ target, currentTarget: target });
+  else
+    target.dispatchEvent(
+      new window.Event(target instanceof window.HTMLSelectElement ? 'change' : 'input', { bubbles: true }),
+    );
 }
 function signedIn(subject: string, csrfToken: string | null): Viewer {
   return { state: 'signed-in', subject, csrfToken };
@@ -616,7 +627,7 @@ test('mounted My Zones to publish journey keeps async state in its original read
     expect(button(host, m.zone_editor_save()).disabled).toBe(true);
     expect(oldReader.subject).toBe('A');
 
-    await settle(() => router.navigate({ to: '/my/zones/new' }));
+    await settle(() => void router.navigate({ to: '/my/zones/new' }));
     await until(() => !!host.querySelector(starterSelector(host)));
     backendViewer = signedIn('B', csrfB);
     await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
@@ -626,8 +637,16 @@ test('mounted My Zones to publish journey keeps async state in its original read
     delayedCreateOutcome = lateCreate;
     await settle(() => button(host, m.zones_create_submit({}, { locale: 'en' })).click());
     await until(() => createCalls.length === 2);
-    await settle(() => router.navigate({ to: '/my/zones' }));
-    await until(() => host.textContent?.includes(m.zones_owner_title({}, { locale: 'en' })) ?? false);
+    await settle(() => void router.navigate({ to: '/my/zones' }));
+    await until(() => host.textContent?.includes(m.zone_editor_leave()) ?? false);
+    await settle(() => button(host, m.zone_editor_discard()).click());
+    await until(() => {
+      try {
+        return !!button(host, m.zones_owner_trash_action({}, { locale: 'en' }));
+      } catch {
+        return false;
+      }
+    });
     lateCreate.resolve({ kind: 'saved', zone: fixtureZone(), ownerObservation: createCalls.at(-1)!.capture });
     await flush();
     expect(navigations).toHaveLength(1);
@@ -841,8 +860,7 @@ type BrowserCapture = NonNullable<Parameters<typeof createZone>[1]>;
 type CreateInput = Parameters<typeof createZone>[0];
 type LifecycleInput = Parameters<typeof changeZone>[0];
 function retainHandler(element: Element, name = 'onClick'): () => void {
-  const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'));
-  const handler = key && Reflect.get(element, key)?.[name];
+  const handler = reactProps(element)?.[name];
   if (typeof handler !== 'function') throw new Error(`Missing mounted React ${name}`);
   return () => {
     const nativeEvent = new window.MouseEvent('click', { bubbles: true, cancelable: true });
@@ -1519,21 +1537,21 @@ for (const transition of ['route', 'id', 'search', 'locale', 'unmount'] as const
           const stop = visit.router.subscribe('onBeforeNavigate', invoke);
           try {
             if (transition === 'search')
-              await settle(() => visit.router.navigate({ to: start, search: { marker: 'replacement' } }));
+              await settle(() => void visit.router.navigate({ to: start, search: { marker: 'replacement' } }));
             else if (transition === 'id' && surface === 'editor')
               await settle(() =>
-                visit.router.navigate({
+                void visit.router.navigate({
                   to: '/my/zones/$id/edit',
                   params: { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e71' },
                 }),
               );
-            else await settle(() => visit.router.navigate({ to: '/elsewhere' }));
+            else await settle(() => void visit.router.navigate({ to: '/elsewhere' }));
           } finally {
             stop();
           }
           // Invoke once more after the original controls have genuinely left the tree.
           await settle(invoke);
-          await settle(() => visit.router.navigate({ to: start }));
+          await settle(() => void visit.router.navigate({ to: start }));
           await settle(invoke);
           expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Old address draft');
         }
@@ -1829,12 +1847,16 @@ for (const transition of ['route', 'search', 'locale', 'unmount'] as const) {
             });
           else if (transition === 'search')
             await settle(() =>
-              visit.router.navigate({
+              void visit.router.navigate({
                 to: visit.router.state.location.pathname,
                 search: { marker: 'replacement' },
               }),
             );
-          else await settle(() => visit.router.navigate({ to: '/elsewhere' }));
+          else await settle(() => void visit.router.navigate({ to: '/elsewhere' }));
+          const discard = [...visit.host.querySelectorAll('button')].find(
+            (node) => node.textContent?.trim() === m.zone_editor_discard(),
+          );
+          if (discard) await settle(() => discard.click());
           const before = totals(visit);
           const failure = {
             kind: 'failure' as const,
@@ -1926,7 +1948,7 @@ test('unavailable Zone routes retry once at the requested location', async () =>
       </QueryClientProvider>,
     ),
   );
-  await settle(() => router.navigate({ to: '/my/zones/recovery' as never }));
+  await settle(() => void router.navigate({ to: '/my/zones/recovery' as never }));
   await until(() => host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false);
   const address = router.state.location.href,
     retry = button(host, m.zones_owner_retry({}, { locale: 'en' }));
