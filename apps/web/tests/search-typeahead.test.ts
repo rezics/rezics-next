@@ -293,6 +293,7 @@ test('genuine empty, loading, closed, preparing, restart, credentials and unavai
   expect(suggestionFailure(403, 'platform_closed')).toBe('closed');
   expect(suggestionFailure(409, 'search_restart_required')).toBe('restart');
   expect(suggestionFailure(503, 'index_not_ready')).toBe('preparing');
+  expect(suggestionFailure(503, 'semantic_not_ready')).toBe('preparing');
   expect(suggestionFailure(503)).toBe('unavailable');
   expect(suggestionFailure(401, 'invalid_credentials')).toBe('credentials');
   expect(suggestionErrorState(new TypeError('Network failed'))).toBe('error');

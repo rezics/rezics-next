@@ -10,6 +10,11 @@ closed behind `search` platform grants. Advanced filters/scopes, facets and rati
 `search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
 deferred; this closed slice does not complete the Search Goal.
 
+Decision: Search, suggest and facet HTTP problems share one typed family (`invalid`, `invalid-cursor`, `session`,
+`closed`, `denied`, `restart`, `index-not-ready`, `source-not-ready`, `unavailable`, `ready`) before a reader
+publishes ready. `503 semantic_not_ready` is source preparation, never an empty success. Generation or identity
+change restarts the executed request. Suggest `503` documents `semantic_not_ready` with the other unavailable codes.
+
 Decision: native identity receiving refuses a missing or incomplete Source directory definition with typed unavailable;
 a complete unchanged retained definition must reach the native reader. Immutable projection meaning alone cannot
 substitute for the Source binding, capture and dependency keys.

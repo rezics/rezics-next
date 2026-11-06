@@ -24,10 +24,12 @@ import type { SuggestionResult } from '../suggestions';
 import { headerSearchAction, removesHeaderScope } from './authority';
 import {
   isSearchResourceScope,
+  parseSearchResourceScope,
   removeSearchResourceScope,
   searchFilterWithScope,
   type SearchResourceScope,
 } from '../advanced-scope';
+import { withoutRetiredScopeFacets } from '../search-scope-restart';
 import { useHeaderSearchFilterRegion, type HeaderSearchFilterRegion } from './filter-region';
 import { ScopeChip } from './scope-chip';
 import {
@@ -87,8 +89,15 @@ export function headerSearchFields(
   action: string | undefined,
 ): [string, string][] {
   const carried = (fields ?? []).filter(([key]) => key !== 'q' && key !== 'cursor');
-  const other = carried.filter(([key]) => key !== 'filter');
   const currentFilters = carried.filter(([key]) => key === 'filter');
+  const previousScope =
+    currentFilters.length === 1 ? parseSearchResourceScope(currentFilters[0]![1]).scope : undefined;
+  const nextScope = resourceScope(scope);
+  const other = withoutRetiredScopeFacets(
+    carried.filter(([key]) => key !== 'filter'),
+    previousScope,
+    nextScope,
+  );
   const actionFields = action
     ? [...new URL(action, 'https://rezics.invalid').searchParams].filter(([key]) => key !== 'q' && key !== 'cursor')
     : [];
@@ -99,7 +108,7 @@ export function headerSearchFields(
     return filter ? [...other, ['filter', filter]] : other;
   }
 
-  const resource = resourceScope(scope);
+  const resource = nextScope;
   if (!resource) {
     const currentKeys = new Set(carried.map(([key]) => key));
     return [

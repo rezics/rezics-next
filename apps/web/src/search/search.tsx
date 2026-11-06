@@ -82,6 +82,11 @@ import {
   searchFilterWithScope,
   type SearchResourceScope,
 } from './advanced-scope';
+import {
+  searchResourceScopeChanged,
+  searchScopeFromFilter,
+  searchStateWithoutScope,
+} from './search-scope-restart';
 import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
 
@@ -1149,7 +1154,9 @@ export function SearchPage({
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const revertStatus = useRef<HTMLParagraphElement>(null);
-  const checkpoint = discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of;
+  const nativeObservation =
+    discovery?.status === 'ready' ? discovery.page : result;
+  const checkpoint = nativeObservation?.as_of;
   const requestOwnerKey = JSON.stringify([stateKey, locale, session]);
   const recoveryOwnerKey = JSON.stringify([requestOwnerKey, readerOwner, checkpoint]);
   const retryFocus = useSearchRetryFocus(
@@ -1158,11 +1165,7 @@ export function SearchPage({
       locale,
       session,
       checkpoint,
-      ...(discovery?.status === 'ready' && discovery.page.emptyRecovery
-        ? { observation: discovery.page.emptyRecovery }
-        : result?.emptyRecovery
-          ? { observation: result.emptyRecovery }
-          : {}),
+      ...(nativeObservation ? { observation: nativeObservation } : {}),
       reader: readerOwner,
     },
     data?.recovery?.status !== 'loading',
@@ -1201,15 +1204,7 @@ export function SearchPage({
     }
     void router?.navigate({ href });
   };
-  const removeScope = () =>
-    navigate(
-      hrefFor({
-        ...committedState,
-        filter: removeSearchResourceScope(committedState.filter),
-        resourceScope: undefined,
-        cursor: undefined,
-      }),
-    );
+  const removeScope = () => navigate(hrefFor(searchStateWithoutScope(committedState)));
   const clearResourceLanguage = () =>
     navigate(
       hrefFor({
@@ -1240,6 +1235,13 @@ export function SearchPage({
       const params = new URLSearchParams();
       for (const [key, value] of new FormData(event.currentTarget))
         if (typeof value === 'string' && value !== '') params.append(key, value);
+      if (
+        searchResourceScopeChanged(
+          committedState.resourceScope,
+          searchScopeFromFilter(params.get('filter') ?? undefined),
+        )
+      )
+        for (const key of [...params.keys()]) if (key.startsWith('f.')) params.delete(key);
       const action = new URL(formAction ?? `/${locale}/search`, 'https://rezics.invalid');
       for (const [key, value] of params) action.searchParams.append(key, value);
       navigate(`${action.pathname}${action.search}`);

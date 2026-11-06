@@ -79,7 +79,10 @@ export async function readFacetPage(
             ? 'withheld'
             : response.status === 403 || response.status === 404
               ? 'refused'
-              : response.status === 202 || code === 'index_not_ready' || code === 'preparing'
+              : response.status === 202 ||
+                  code === 'index_not_ready' ||
+                  code === 'semantic_not_ready' ||
+                  code === 'preparing'
                 ? 'preparing'
                 : response.status === 400 || response.status === 422 || code === 'invalid_request'
                   ? 'invalid'

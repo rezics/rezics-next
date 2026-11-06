@@ -317,6 +317,7 @@ driver cannot express it.
 `bun run --cwd services/kernel check test/search/outcomes.test.ts`.
 No new suggest suite is needed for already frozen prefixes/operators/budgets; extend only missing persona/source
 outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and composition-and-profile-governance.
+Focused Web adapter tests pin installed Search/suggest/facet/Realm native HTTP families; they are not a native pass.
 
 | Stage                                   | Evidence                                                                                           |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- |

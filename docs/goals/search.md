@@ -93,7 +93,11 @@ intention.
 
 Decision: Search, facet and typeahead recovery stays bound to the exact executed request and current reader/locale;
 `ready` requires useful output from an actual current-generation native observation, and Retry-After expiry enables only
-a deliberate retry.
+a deliberate retry. A new or removed resource scope retires prior facet fields and the hit cursor. Installed readers
+share the native HTTP families (invalid, invalid-cursor, session, closed, denied, restart, index-not-ready,
+source-not-ready, unavailable, ready). Decision: the fewest adapter tests pin that journey through createKernelClient
+on Search, suggest, facets and Realm More/Retry/Restart; named stories stay unchanged; native/browser cells remain
+deferred until stack releases land.
 
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other

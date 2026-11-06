@@ -44,7 +44,9 @@ function unauthorized() {
   return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
 }
 function unavailable() {
-  return memoizedValue(unavailable, () => problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded'));
+  return memoizedValue(unavailable, () =>
+    problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
+  );
 }
 function resource() {
   return memoizedValue(resource, () => ({ route: 0, id: GLOBAL_CONTEXT }));
