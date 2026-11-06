@@ -45,12 +45,12 @@ export type IdentityStallFields = { readonly stalledPhase: string; readonly phas
 export function identityStallError(phase: string, startedAtMs: number, error: unknown): Error & IdentityStallFields {
   const phaseElapsedMs = Math.max(0, Date.now() - startedAtMs);
   const detail = error instanceof Error ? error.message : String(error);
-  const wrapped = new Error(`Import identity stalled at ${phase} after ${phaseElapsedMs}ms: ${detail}`, {
-    cause: error instanceof Error ? error : undefined,
-  }) as Error & IdentityStallFields;
-  wrapped.stalledPhase = phase;
-  wrapped.phaseElapsedMs = phaseElapsedMs;
-  return wrapped;
+  return Object.assign(
+    new Error(`Import identity stalled at ${phase} after ${phaseElapsedMs}ms: ${detail}`, {
+      cause: error instanceof Error ? error : undefined,
+    }),
+    { stalledPhase: phase, phaseElapsedMs },
+  );
 }
 
 function isIdentityStall(error: unknown): error is Error & IdentityStallFields {
