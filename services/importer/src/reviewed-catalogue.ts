@@ -546,6 +546,31 @@ export async function readReviewedBangumiBinding(
   return result.state === 'bound' ? result.evidence.binding : null;
 }
 
+/** Independent current reads of a bound Bangumi tag pair before membership publication. */
+export async function resolveCurrentReviewedBangumiTagSubjects(
+  port: Pick<ReviewedCataloguePort, 'readReviewedSubject'>,
+  binding: { sourceConcept: string; canonicalConcept: string },
+  signal?: AbortSignal,
+): Promise<{
+  source: { requestedId: string; currentId: string; available: boolean };
+  canonical: { requestedId: string; currentId: string; available: boolean };
+}> {
+  const read = async (requestedId: string) => {
+    try {
+      const subject = await port.readReviewedSubject(requestedId, signal);
+      const currentId = (subject.subject as { id?: unknown }).id;
+      return {
+        requestedId,
+        currentId: typeof currentId === 'string' ? currentId : requestedId,
+        available: true,
+      };
+    } catch {
+      return { requestedId, currentId: requestedId, available: false };
+    }
+  };
+  return { source: await read(binding.sourceConcept), canonical: await read(binding.canonicalConcept) };
+}
+
 export function createReviewedCatalogueLookup(
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
   port: ReviewedCataloguePort,

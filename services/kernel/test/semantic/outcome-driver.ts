@@ -105,6 +105,8 @@ function phaseTimer() {
 export type SemanticOutcomeDriver = SemanticDriver & {
   readonly fixtures: {
     pool: Pool;
+    /** Shared Auth registration owner; Grants and rate-tier changes use this account. */
+    governor: Account;
     runtime: {
       databaseUrl: string;
       routeKey: string;
@@ -119,6 +121,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
     openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
     grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
+    handle(request: Request): Promise<Response>;
     send(
       account: Account | null,
       method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
@@ -662,7 +665,9 @@ async function startDriver(
           }
         },
         grantAccount: (account, actions, resourceId) => grantAccount(account, actions, resourceId),
+        handle: (request) => app.handle(request),
         send: (account, method, path, body, headers) => send(account, method, path, body, headers),
+        governor,
       },
     };
   } catch (error) {

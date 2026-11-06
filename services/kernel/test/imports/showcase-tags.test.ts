@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,9 +22,7 @@ import {
   readShowcaseVndbPublicTagVocabulary,
 } from '../../../importer/src/showcase-tags.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { identitySupport } from './identity-fixture.ts';
-import { openApiObserver } from './api-observer.ts';
-import { openApiRuntime } from './api-runtime.ts';
+import { openReviewedTagRuntime } from './reviewed-tag-runtime.ts';
 import { importShowcaseTags } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
@@ -75,7 +72,7 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -83,22 +80,7 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
   })();
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-native-'));
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
     const authored = {
       source: 'authored-showcase-tags',
       record_revision: 'unversioned',
@@ -444,7 +426,7 @@ function guessedTagCreate(input: {
   };
 }
 
-async function acceptAdopted(editor: Awaited<ReturnType<typeof openApiObserver>>, subjectId: string, property: string) {
+async function acceptAdopted(editor: { http: (path: string, body?: unknown) => Promise<{ status: number; body: unknown }> }, subjectId: string, property: string) {
   const seen = new Set<string>();
   for (;;) {
     const page = await editor.http(
@@ -480,7 +462,7 @@ test('default selected VN tag publication keeps language-less names as und throu
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -489,22 +471,7 @@ test('default selected VN tag publication keeps language-less names as und throu
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-und-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const tables = dictionaryTables();
     const plan = await planShowcaseTags({ tables, selectedVids: ['v410'] });
@@ -604,7 +571,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -614,22 +581,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
     const kana = guessedTagCreate({
       sourceKey: 'vndb.tag.cont:g12',
       uri: vndbPublicTagConceptUri('cont', 'g12'),

@@ -105,6 +105,10 @@ Native seed fixtures configure dedicated receipt keys on every command pool befo
 
 Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims through the released asynchronous merge contract; retain sealed intent and original bindings while observing native operation completion and separate public canonical reads. Client binds these exact methods while whole-Kernel declaration publication is pending. HTTP 202 is admission; HTTP 200 merge or an application reread is not completion. Current Person identifiers exclude deprecated rows and require every remaining value to agree. Native redirects resolve reads on the same API; manifest assertions and dependent credits keep original source ownership. Credits wait for current canonical delivery, not another binding or publisher.
 
+Existing franchise, work-links, publication, focused Game and VNDB cases remain the acceptance pins; no extra tests. Native Game publication current-read, VNDB release seed/reseed, VNDB statistics Auth-registration, native transaction retry and Kernel type errors outside this branch stay named capability repairs.
+
+Decision: shared reviewed Bangumi/VNDB tags finish as one flow with separately observable proposal, authorized acceptance, adoption and independent current Scheme/Concept/membership reads. Native tag callers consume Accounts' shared Auth producer (`createSemanticDriver` fixtures) instead of registering a second Auth host; service rate tier and 503 retry sit on that caller. Refresh retires only importer-owned candidates. Fewest tests: existing m1-cross-provider-tags, vndb-public-tags and showcase-tags native scenarios plus two importer unit cases and explorer membership assertions; phone/desktop stories cover current and unavailable membership and retained weight-scale bounds. Native/browser/growth acceptance stays deferred.
+
 ## Deletion
 
 Vanished source fields retract only matching importer-owned candidates through ordinary APIs. Subjects, adoption and unrelated statements survive. Current source/media fences prevent refresh from restoring withdrawn facts; see [deletion](../../docs/deletion.md).

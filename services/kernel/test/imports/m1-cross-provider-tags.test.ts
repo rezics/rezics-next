@@ -13,77 +13,20 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
-import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   showcaseTagParentCommand,
   showcaseTagParentMetadata,
 } from '../../../importer/src/showcase-cross-provider-tags.ts';
-import { createSemanticDriver } from '../semantic/outcome-driver.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { identitySupport } from './identity-fixture.ts';
-import { openApiObserver } from './api-observer.ts';
-import { openApiRuntime } from './api-runtime.ts';
+import { openReviewedTagRuntime } from './reviewed-tag-runtime.ts';
 
 const context = GLOBAL_CONTEXT;
 
-async function acceptAndAdopt(
-  editor: Awaited<ReturnType<typeof openApiObserver>>,
-  subjectId: string,
-  property: string,
-): Promise<void> {
-  const seen = new Set<string>();
-  for (;;) {
-    const response = await editor.http(
-      `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context, limit: '100' })}`,
-    );
-    expect(response.status).toBe(200);
-    const page = response.body as {
-      candidates: { id: string; head: number | null; retracted: number | null; decision?: string | null }[];
-      adoption: { head: number } | null;
-    };
-    const next = page.candidates.find((candidate) => !candidate.retracted && !seen.has(candidate.id));
-    if (next) {
-      const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-        context,
-        expected_head: next.head,
-      });
-      expect(accepted.status).toBe(200);
-      seen.add(next.id);
-      continue;
-    }
-    const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-      context,
-      property,
-      mode: 'replace',
-      expected_head: page.adoption?.head ?? null,
-      selection: page.candidates
-        .filter((candidate) => !candidate.retracted && candidate.decision === 'accepted')
-        .map((candidate) => ({ candidate: candidate.id, rank: 'normal' as const })),
-    });
-    expect(adopted.status).toBe(200);
-    return;
-  }
-}
-
 test('exact VNDB parent assertions need separate native acceptance and adoption before a public broader read', async () => {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+  const runtime = await openReviewedTagRuntime();
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: context },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const editor = runtime.editor;
+    const acceptAndAdopt = runtime.acceptAndAdopt;
 
     const authored = {
       source: 'm1-cross-provider-tags',
@@ -163,10 +106,10 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
       proposeBindings.results.every((result) => result.status === 201),
       JSON.stringify(proposeBindings.results),
     ).toBe(true);
-    await acceptAndAdopt(editor, schemeId, 'schema:url');
+    await acceptAndAdopt( schemeId, 'schema:url');
     for (const id of [childId, parentId]) {
-      await acceptAndAdopt(editor, id, 'schema:url');
-      await acceptAndAdopt(editor, id, 'skos:inScheme');
+      await acceptAndAdopt( id, 'schema:url');
+      await acceptAndAdopt( id, 'skos:inScheme');
     }
 
     const binding = {
@@ -204,7 +147,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
     const readBefore = before.body as { subject: { statements: Record<string, { value: { content: unknown } }[]> } };
     expect(readBefore.subject.statements['skos:broader'] ?? []).toEqual([]);
 
-    await acceptAndAdopt(editor, childId, 'skos:broader');
+    await acceptAndAdopt( childId, 'skos:broader');
     const after = await editor.http(`/v1/subjects/${childId}?context=${context}`);
     expect(after.status).toBe(200);
     const readAfter = after.body as { subject: { statements: Record<string, { value: { content: unknown } }[]> } };
@@ -220,16 +163,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
     journal.acknowledgeCommand(proposal, oldReceipt);
     const oldBytes = JSON.stringify(journal.acknowledgedCommands()[0]!.command);
     const publicationPort = captureShowcaseCommands(runtime.importTransport, journal);
-    const publicClient = createPublicBulkClient({
-      origin: runtime.origin,
-      fetch: Object.assign(
-        async (input: string | URL | Request) => {
-          const url = new URL(String(input));
-          return runtime.request(`${url.pathname}${url.search}`);
-        },
-        { preconnect: fetch.preconnect },
-      ),
-    });
+    const publicClient = runtime.publicClient;
     const plan = emptyCrossMediaPlan();
     const result: CrossMediaSeedResult = {
       status: 'imported',
@@ -284,6 +218,8 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
       // Reopening the current proposal is idempotent even after independent manual adoption.
       const reopened = await publish([binding]);
       expect(reopened.manifest.tagParentPublications).toMatchObject([{ status: 'public', parentId }]);
+      const schemeRead = await publicClient.readSubject(schemeId);
+      expect((schemeRead.subject as { type: string }).type).toBe('skos:ConceptScheme');
       const correctedRead = await publicClient.readSubject(childId);
       expect(JSON.stringify(correctedRead.subject)).toContain('https://vndb.org/g311#/tags_parents/g311/g12');
       expect(JSON.stringify(correctedRead.subject)).toContain('ODbL-1.0');
@@ -298,7 +234,7 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
         statement: { property: { id: 'skos:broader' }, value: { type: 'value', content: parentId } },
       });
       expect(editorial.status).toBe(201);
-      await acceptAndAdopt(editor, childId, 'skos:broader');
+      await acceptAndAdopt( childId, 'skos:broader');
 
       // The same source parent now resolves to another independently reviewed native identity.
       const replacementId = await create('replacement-g12', 'skos:Concept');
@@ -322,8 +258,8 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
         replacementFacts.results.every((entry) => entry.status === 201),
         JSON.stringify(replacementFacts.results),
       ).toBe(true);
-      await acceptAndAdopt(editor, replacementId, 'schema:url');
-      await acceptAndAdopt(editor, replacementId, 'skos:inScheme');
+      await acceptAndAdopt( replacementId, 'schema:url');
+      await acceptAndAdopt( replacementId, 'skos:inScheme');
       const changed = { ...binding, parentId: replacementId };
       const replaced = await publish([changed]);
       expect(replaced.manifest.tagParentPublications).toMatchObject([{ status: 'public', parentId: replacementId }]);
@@ -361,12 +297,12 @@ test('exact VNDB parent assertions need separate native acceptance and adoption 
   }
 }, 180_000);
 
-test('shared reviewed-tag setup delegates Global review actions to a new native account', async () => {
-  const driver = await createSemanticDriver();
+test('shared Auth fixtures expose handle and governor for reviewed-tag callers', async () => {
+  const runtime = await openReviewedTagRuntime();
   try {
-    const reviewer = await driver.fixtures.person('tag-reviewer');
-    await driver.fixtures.grantAccount(reviewer, ['context:accept', 'context:adopt', 'statement:propose']);
+    expect(runtime.fixtures.governor.accountId).toBeTruthy();
+    expect(typeof runtime.fixtures.handle).toBe('function');
   } finally {
-    await driver.close();
+    await runtime.close();
   }
 }, 180_000);

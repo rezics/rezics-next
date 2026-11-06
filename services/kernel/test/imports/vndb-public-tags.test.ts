@@ -15,11 +15,8 @@ import {
 import { vndbTagsRatingMetric } from '../../../../packages/conversion/src/vndb-vocabulary.ts';
 import { parseAuthoredVndbCopy, readVndbPublicTagBindings } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
-import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { identitySupport } from './identity-fixture.ts';
-import { openApiObserver } from './api-observer.ts';
-import { openApiRuntime } from './api-runtime.ts';
+import { openReviewedTagRuntime } from './reviewed-tag-runtime.ts';
 import { importVndbPublicTags } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
@@ -72,7 +69,7 @@ async function openPublicTagWorld() {
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
     try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+      return await openReviewedTagRuntime();
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;
@@ -80,23 +77,8 @@ async function openPublicTagWorld() {
   })();
   const directory = await mkdtemp(join(tmpdir(), 'vndb-public-tags-native-'));
   try {
-    const tierKey = randomUUID();
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: tierKey, tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-      tierKey,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
-    const ballotsBefore = await runtime.database.admin.query('SELECT count(*)::text AS n FROM rating.vote');
+    const editor = runtime.editor;
+    const ballotsBefore = await runtime.pool.query('SELECT count(*)::text AS n FROM rating.vote');
     const authored = {
       source: 'authored-vndb-public-tags',
       record_revision: 'unversioned',
@@ -299,7 +281,7 @@ test('production operator publishes authored VNDB public tags through ordinary a
     expect(spoilerOf(techId)).toEqual({ amount: '+0', unit: '1' });
     expect(JSON.stringify(current.subject.statements)).not.toContain('vndb-tag-rating');
     expect(JSON.stringify(current.subject.statements)).not.toContain('u9001');
-    const ballotsAfter = await runtime.database.admin.query('SELECT count(*)::text AS n FROM rating.vote');
+    const ballotsAfter = await runtime.pool.query('SELECT count(*)::text AS n FROM rating.vote');
     expect(ballotsAfter.rows[0]?.n).toBe(ballotsBefore.rows[0]?.n);
     const original = await candidates(workId!, 'schema:genre');
     const originalKeys = original.candidates.map((item) => item.id).sort();
@@ -407,16 +389,7 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
   const { runtime, editor, directory, create, candidates, acceptAdopt } = world;
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
-  const publicClient = createPublicBulkClient({
-    origin: runtime.origin,
-    fetch: Object.assign(
-      async (input: string | URL | Request) => {
-        const url = new URL(String(input));
-        return runtime.request(`${url.pathname}${url.search}`);
-      },
-      { preconnect: fetch.preconnect },
-    ),
-  });
+  const publicClient = runtime.publicClient;
   try {
     const schemeId = world.known.schemes[0]!.id;
     const concepts = [];

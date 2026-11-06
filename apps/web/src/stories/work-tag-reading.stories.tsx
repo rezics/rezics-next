@@ -83,13 +83,51 @@ const model: WorkTagProjection = {
   sourceKey: 'storybook-work-tag-reading',
 };
 
+const unavailable: WorkTagProjection = {
+  state: 'unavailable',
+  rows: [],
+  disclosedCount: 0,
+  hasUnavailable: true,
+  workHref: `/en/subjects/${subjectId}/demo-work`,
+  sourceKey: 'storybook-work-tag-unavailable',
+};
+
 const meta = {
   title: 'Pages/Work tag reading',
   component: WorkTagReadingView,
-  args: { model, related, definitions, locale: 'en', spoilerThreshold: 0 },
+  args: { model, related, definitions, locale: 'en', spoilerThreshold: 0, workHref: model.workHref },
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '960px' } },
+      },
+    },
+  },
+  globals: { viewport: { value: 'phone390' } },
 } satisfies Meta<typeof WorkTagReadingView>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const BoundedReading: Story = {};
+export const CurrentMembershipPhone: Story = {};
+export const CurrentMembershipDesktop: Story = { globals: { viewport: { value: 'desktop1440' } } };
+export const UnavailableMembership: Story = { args: { model: unavailable } };
+export const WeightScaleBounds: Story = {
+  args: {
+    model: {
+      ...model,
+      rows: model.rows.filter((row) => row.statement.qualifiers.some((part) => part.property.id === 'rezics:sourceTagWeight')),
+    },
+  },
+};
+export const SourceAttribution: Story = {
+  args: {
+    model: {
+      ...model,
+      rows: [model.rows[0]!],
+    },
+  },
+};

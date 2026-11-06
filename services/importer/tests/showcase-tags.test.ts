@@ -34,6 +34,10 @@ import {
   prepareShowcaseVndbPublicTagVocabulary,
   readShowcaseVndbPublicTagVocabulary,
   projectShowcaseTagTables,
+  openReviewedTagCandidates,
+  readReviewedTagCandidatePage,
+  importerOwnedReviewedTagRetirements,
+  completeReviewedSharedTagFlow,
 } from '../src/showcase-tags.ts';
 
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');
@@ -1010,3 +1014,174 @@ test('selected rating evidence survives response loss and reopen before terminal
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('reviewed-tag pages separate pending acceptance from rejected rows and retire vanished importer candidates', () => {
+  const page = readReviewedTagCandidatePage({
+    candidates: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        decision: null,
+        retracted: null,
+        head: 1,
+        source: { source: 'vndb', external_id: 'g311' },
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        decision: 'accepted',
+        retracted: null,
+        rank: 'normal',
+        head: 2,
+        source: { source: 'vndb', external_id: 'g12' },
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000003',
+        decision: 'rejected',
+        retracted: null,
+        head: 3,
+        source: { source: 'vndb', external_id: 'g88' },
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000004',
+        decision: 'accepted',
+        retracted: null,
+        head: 4,
+        source: { source: 'vndb', external_id: 'g99' },
+      },
+    ],
+    next: null,
+    adoption: { head: 4, selection: [{ candidate: '00000000-0000-4000-8000-000000000002', rank: 'normal' }] },
+  });
+  const opened = openReviewedTagCandidates(page);
+  expect(opened.pending.map((row) => row.id)).toEqual(['00000000-0000-4000-8000-000000000001']);
+  expect(opened.accepted.map((row) => row.id)).toEqual([
+    '00000000-0000-4000-8000-000000000002',
+    '00000000-0000-4000-8000-000000000004',
+  ]);
+  expect(opened.rejected.map((row) => row.id)).toEqual(['00000000-0000-4000-8000-000000000003']);
+  expect(importerOwnedReviewedTagRetirements(page, new Set(['g311', 'g12']))).toEqual([
+    '00000000-0000-4000-8000-000000000004',
+  ]);
+});
+
+test('reviewed-tag flow accepts, adopts, rereads current identities and selected work membership separately', async () => {
+  const schemeId = '00000000-0000-4000-8000-000000000010';
+  const conceptId = '00000000-0000-4000-8000-000000000011';
+  const workId = '00000000-0000-4000-8000-000000000012';
+  const pendingId = '00000000-0000-4000-8000-000000000021';
+  const pages = new Map<string, Record<string, unknown>>();
+  const subjects: Record<string, ReviewedSubjectRead> = {
+    [schemeId]: { subject: { id: schemeId, type: 'skos:ConceptScheme', statements: {} } } as ReviewedSubjectRead,
+    [conceptId]: { subject: { id: conceptId, type: 'skos:Concept', statements: {} } } as ReviewedSubjectRead,
+    [workId]: {
+      subject: {
+        id: workId,
+        type: 'schema:VideoGame',
+        statements: {
+          'schema:genre': [
+            {
+              id: pendingId,
+              rank: 'normal',
+              property: { id: 'schema:genre' },
+              value: { type: 'value', content: conceptId },
+              qualifiers: [
+                {
+                  property: { id: 'rezics:sourceTagWeight' },
+                  value: { type: 'value', content: { amount: '+2.6', unit: '1' } },
+                },
+                {
+                  property: { id: 'rezics:sourceTagWeightMetric' },
+                  value: { type: 'value', content: 'vndbTagsRating' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    } as unknown as ReviewedSubjectRead,
+  };
+  const accepted = new Set<string>();
+  const review = {
+    async reviewedCandidates(id: string, query: { property: string }) {
+      const key = `${id}:${query.property}`;
+      if (accepted.has(pendingId) && key === `${workId}:schema:genre`) {
+        return {
+          candidates: [
+            {
+              id: pendingId,
+              decision: 'accepted',
+              retracted: null,
+              head: 1,
+              rank: 'normal',
+              source: { source: 'vndb', external_id: 'g311' },
+            },
+          ],
+          next: null,
+          adoption: { head: 1, selection: [{ candidate: pendingId, rank: 'normal' }] },
+        };
+      }
+      if (key === `${workId}:schema:genre`) {
+        return {
+          candidates: [
+            {
+              id: pendingId,
+              decision: null,
+              retracted: null,
+              head: 1,
+              rank: 'normal',
+              source: { source: 'vndb', external_id: 'g311' },
+            },
+          ],
+          next: null,
+          adoption: null,
+        };
+      }
+      return pages.get(key) ?? { candidates: [], next: null, adoption: null };
+    },
+    async acceptReviewedCandidate(_id: string, candidate: string) {
+      accepted.add(candidate);
+      return { candidate };
+    },
+    async adoptReviewedCandidates() {
+      return { adoption: { head: 2, selection: [{ candidate: pendingId, rank: 'normal' }] } };
+    },
+    async readReviewedSubject(id: string) {
+      const read = subjects[id];
+      if (!read) throw new TypeError('missing subject');
+      return read;
+    },
+  };
+  const result = await completeReviewedSharedTagFlow({
+    review,
+    schemes: [schemeId],
+    concepts: [conceptId],
+    works: [workId],
+    properties: ['schema:genre'],
+    keepExternalIds: new Set(['g311']),
+  });
+  expect(result.accepted).toEqual([pendingId]);
+  expect(result.rejected).toEqual([]);
+  expect(result.adopted[`${workId}:schema:genre`]?.head).toBe(2);
+  expect(result.schemes).toEqual([
+    { requestedId: schemeId, currentId: schemeId, type: 'skos:ConceptScheme', available: true },
+  ]);
+  expect(result.concepts[0]?.available).toBe(true);
+  expect(result.membership).toEqual([
+    {
+      workId,
+      property: 'schema:genre',
+      currentId: workId,
+      available: true,
+      values: [conceptId],
+      weights: [{ target: conceptId, amount: '+2.6', metric: 'vndbTagsRating' }],
+    },
+    {
+      workId,
+      property: 'schema:keywords',
+      currentId: workId,
+      available: true,
+      values: [],
+      weights: [],
+    },
+  ]);
+  expect(result.retiredCandidateIds).toEqual([]);
+});

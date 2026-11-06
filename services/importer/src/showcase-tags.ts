@@ -23,7 +23,10 @@ import {
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaTables,
+  type ShowcaseReviewPort,
 } from './showcase-contract.ts';
+import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
+import type { ReviewedSubjectRead } from './import-client.ts';
 import type { seedCrossMedia } from './cross-media-seed.ts';
 import {
   showcaseDigest,
@@ -1287,3 +1290,384 @@ export async function readShowcaseVndbPublicTagVocabulary(input: {
 
 export type { VndbPublicTagKnownBindings };
 export type { CrossMediaGap };
+
+export type ReviewedTagCandidateVerdict = 'accepted' | 'rejected' | 'abstained' | null;
+export type ReviewedTagRank = 'normal' | 'preferred' | 'deprecated';
+export type ReviewedTagCandidate = Readonly<{
+  id: string;
+  decision: ReviewedTagCandidateVerdict;
+  retracted: number | null;
+  rank: ReviewedTagRank | null;
+  head: number | null;
+  source: { source?: string; external_id?: string } | null;
+}>;
+export type ReviewedTagAdoption = Readonly<{
+  head: number | null;
+  selection: readonly { candidate: string; rank: ReviewedTagRank }[];
+}>;
+export type ReviewedTagCandidatePage = Readonly<{
+  candidates: readonly ReviewedTagCandidate[];
+  next: string | null;
+  adoption: ReviewedTagAdoption | null;
+}>;
+export type ReviewedTagPhase =
+  | 'proposal'
+  | 'acceptance'
+  | 'adoption'
+  | 'current-scheme'
+  | 'current-concept'
+  | 'membership';
+export type ReviewedTagCurrentSubject = Readonly<{
+  requestedId: string;
+  currentId: string;
+  type: string | null;
+  available: boolean;
+}>;
+export type ReviewedTagMembershipRead = Readonly<{
+  workId: string;
+  property: string;
+  currentId: string;
+  available: boolean;
+  values: readonly string[];
+  weights: readonly { target: string; amount: string; metric: string }[];
+}>;
+export type ReviewedTagFlowResult = Readonly<{
+  pages: Readonly<Record<string, ReviewedTagCandidatePage>>;
+  accepted: readonly string[];
+  rejected: readonly string[];
+  adopted: Readonly<Record<string, ReviewedTagAdoption | null>>;
+  schemes: readonly ReviewedTagCurrentSubject[];
+  concepts: readonly ReviewedTagCurrentSubject[];
+  membership: readonly ReviewedTagMembershipRead[];
+  retiredCandidateIds: readonly string[];
+}>;
+
+const reviewedTagUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const reviewedTagProperties = ['schema:url', 'skos:inScheme', 'skos:broader', 'schema:genre', 'schema:keywords'] as const;
+const kanaWeightMetric = 'vndbTagsRating';
+const kanaWeightAmount = /^\+?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function reviewedTagRank(value: unknown): ReviewedTagRank | null {
+  return value === 'normal' || value === 'preferred' || value === 'deprecated' ? value : null;
+}
+
+function reviewedTagDecision(value: unknown): ReviewedTagCandidateVerdict {
+  if (value === 'accepted' || value === 'rejected' || value === 'abstained') return value;
+  return null;
+}
+
+/** Native candidate pages stay closed: only the contract fields enter acceptance/adoption. */
+export function readReviewedTagCandidatePage(value: unknown): ReviewedTagCandidatePage {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) throw new TypeError('Invalid reviewed-tag candidate page');
+  const candidates: ReviewedTagCandidate[] = [];
+  for (const row of value.candidates) {
+    if (!isRecord(row) || typeof row.id !== 'string' || !reviewedTagUuid.test(row.id))
+      throw new TypeError('Invalid reviewed-tag candidate identity');
+    const statement = isRecord(row.statement) ? row.statement : null;
+    const rank = statement ? reviewedTagRank(statement.rank) : reviewedTagRank(row.rank);
+    const source = isRecord(row.source)
+      ? {
+          ...(typeof row.source.source === 'string' ? { source: row.source.source } : {}),
+          ...(typeof row.source.external_id === 'string' ? { external_id: row.source.external_id } : {}),
+        }
+      : null;
+    candidates.push({
+      id: row.id,
+      decision: reviewedTagDecision(row.decision),
+      retracted: typeof row.retracted === 'number' && Number.isSafeInteger(row.retracted) ? row.retracted : null,
+      rank,
+      head: typeof row.head === 'number' && Number.isSafeInteger(row.head) ? row.head : null,
+      source,
+    });
+  }
+  const adoption = isRecord(value.adoption)
+    ? {
+        head:
+          typeof value.adoption.head === 'number' && Number.isSafeInteger(value.adoption.head)
+            ? value.adoption.head
+            : null,
+        selection: Array.isArray(value.adoption.selection)
+          ? value.adoption.selection.flatMap((entry) => {
+              if (!isRecord(entry) || typeof entry.candidate !== 'string' || !reviewedTagUuid.test(entry.candidate))
+                return [];
+              const rank = reviewedTagRank(entry.rank) ?? 'normal';
+              return [{ candidate: entry.candidate, rank }];
+            })
+          : [],
+      }
+    : null;
+  return {
+    candidates,
+    next: typeof value.next === 'string' ? value.next : null,
+    adoption,
+  };
+}
+
+/** Pending acceptance excludes rejected, retracted and already accepted rows. */
+export function openReviewedTagCandidates(page: ReviewedTagCandidatePage) {
+  const pending = page.candidates.filter(
+    (candidate) => !candidate.retracted && candidate.decision !== 'accepted' && candidate.decision !== 'rejected',
+  );
+  const accepted = page.candidates.filter((candidate) => !candidate.retracted && candidate.decision === 'accepted');
+  const rejected = page.candidates.filter((candidate) => candidate.decision === 'rejected' || !!candidate.retracted);
+  return { pending, accepted, rejected, adoption: page.adoption };
+}
+
+function pageKey(subjectId: string, property: string): string {
+  return `${subjectId}:${property}`;
+}
+
+export async function loadReviewedTagCandidatePage(
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>,
+  subjectId: string,
+  property: string,
+): Promise<ReviewedTagCandidatePage> {
+  return readReviewedTagCandidatePage(
+    await review.reviewedCandidates(subjectId, { property, context: GLOBAL_CONTEXT, limit: 100 }),
+  );
+}
+
+export async function acceptPendingReviewedTagCandidates(
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'acceptReviewedCandidate'>,
+  subjectId: string,
+  property: string,
+): Promise<ReviewedTagCandidatePage> {
+  const seen = new Set<string>();
+  for (;;) {
+    const page = await loadReviewedTagCandidatePage(review, subjectId, property);
+    const opened = openReviewedTagCandidates(page);
+    const next = opened.pending.find((candidate) => !seen.has(candidate.id));
+    if (!next) return page;
+    await review.acceptReviewedCandidate(
+      subjectId,
+      next.id,
+      { context: GLOBAL_CONTEXT, expected_head: next.head },
+      `reviewed-tag-accept:${subjectId}:${next.id}`,
+    );
+    seen.add(next.id);
+  }
+}
+
+export async function adoptAcceptedReviewedTagSelection(
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+  subjectId: string,
+  property: string,
+): Promise<ReviewedTagAdoption | null> {
+  const page = await loadReviewedTagCandidatePage(review, subjectId, property);
+  const opened = openReviewedTagCandidates(page);
+  const selection = opened.accepted.map((candidate) => ({
+    candidate: candidate.id,
+    rank: candidate.rank ?? 'normal',
+  }));
+  const receipt = await review.adoptReviewedCandidates(
+    subjectId,
+    {
+      context: GLOBAL_CONTEXT,
+      property,
+      mode: 'replace',
+      expected_head: page.adoption?.head ?? null,
+      selection,
+    },
+    `reviewed-tag-adopt:${subjectId}:${property}`,
+  );
+  const adoption = isRecord(receipt) && isRecord(receipt.adoption) ? readReviewedTagCandidatePage({
+    candidates: page.candidates,
+    next: null,
+    adoption: receipt.adoption,
+  }).adoption : opened.adoption;
+  return adoption;
+}
+
+function subjectIdentity(read: ReviewedSubjectRead | null | undefined): ReviewedTagCurrentSubject['type'] {
+  const type = (read?.subject as { type?: unknown } | undefined)?.type;
+  return typeof type === 'string' ? type : null;
+}
+
+function subjectCanonicalId(requestedId: string, read: ReviewedSubjectRead | null | undefined): string {
+  const id = (read?.subject as { id?: unknown } | undefined)?.id;
+  return typeof id === 'string' && reviewedTagUuid.test(id) ? id : requestedId;
+}
+
+/** Independent current Scheme/Concept reread; canonical redirects replace the requested id for membership. */
+export async function resolveCurrentReviewedTagSubjects(
+  review: Pick<ShowcaseReviewPort, 'readReviewedSubject'>,
+  ids: readonly string[],
+): Promise<ReviewedTagCurrentSubject[]> {
+  const seen = new Set<string>();
+  const resolved: ReviewedTagCurrentSubject[] = [];
+  for (const requestedId of ids) {
+    if (!reviewedTagUuid.test(requestedId) || seen.has(requestedId)) continue;
+    seen.add(requestedId);
+    try {
+      const read = await review.readReviewedSubject(requestedId);
+      const currentId = subjectCanonicalId(requestedId, read);
+      resolved.push({
+        requestedId,
+        currentId,
+        type: subjectIdentity(read),
+        available: true,
+      });
+    } catch {
+      resolved.push({ requestedId, currentId: requestedId, type: null, available: false });
+    }
+  }
+  return resolved;
+}
+
+function statementValues(read: ReviewedSubjectRead, property: string): string[] {
+  const statements = (read.subject as { statements?: Record<string, unknown[]> }).statements?.[property] ?? [];
+  return statements.flatMap((row) => {
+    if (!isRecord(row) || !isRecord(row.value) || row.value.type !== 'value' || typeof row.value.content !== 'string')
+      return [];
+    return [row.value.content];
+  });
+}
+
+function statementWeights(
+  read: ReviewedSubjectRead,
+  property: string,
+): { target: string; amount: string; metric: string }[] {
+  const statements = (read.subject as { statements?: Record<string, unknown[]> }).statements?.[property] ?? [];
+  return statements.flatMap((row) => {
+    if (!isRecord(row) || !isRecord(row.value) || row.value.type !== 'value' || typeof row.value.content !== 'string')
+      return [];
+    const target = row.value.content;
+    const qualifiers = Array.isArray(row.qualifiers) ? row.qualifiers : [];
+    const weights = qualifiers.filter((part) => isRecord(part) && isRecord(part.property) && part.property.id === 'rezics:sourceTagWeight');
+    const metrics = qualifiers.filter(
+      (part) => isRecord(part) && isRecord(part.property) && part.property.id === 'rezics:sourceTagWeightMetric',
+    );
+    if (weights.length !== 1 || metrics.length !== 1) return [];
+    const weight = weights[0]!;
+    const metric = metrics[0]!;
+    if (
+      !isRecord(weight) ||
+      !isRecord(metric) ||
+      !isRecord(weight.value) ||
+      !isRecord(metric.value) ||
+      weight.value.type !== 'value' ||
+      metric.value.type !== 'value' ||
+      typeof metric.value.content !== 'string' ||
+      metric.value.content !== kanaWeightMetric ||
+      !isRecord(weight.value.content) ||
+      typeof weight.value.content.amount !== 'string' ||
+      !kanaWeightAmount.test(weight.value.content.amount)
+    )
+      return [];
+    const amount = weight.value.content.amount;
+    const [integer, fraction = ''] = amount.replace(/^\+/u, '').split('.');
+    if (
+      !['0', '1', '2', '3'].includes(integer!) ||
+      (integer === '0' && !/[1-9]/u.test(fraction)) ||
+      (integer === '3' && /[1-9]/u.test(fraction))
+    )
+      return [];
+    return [{ target, amount, metric: kanaWeightMetric }];
+  });
+}
+
+/** Public membership of selected works after current Concept identities are known. */
+export async function readCurrentReviewedTagMembership(
+  review: Pick<ShowcaseReviewPort, 'readReviewedSubject'>,
+  works: readonly string[],
+  properties: readonly string[] = ['schema:genre', 'schema:keywords'],
+): Promise<ReviewedTagMembershipRead[]> {
+  const readings: ReviewedTagMembershipRead[] = [];
+  for (const workId of works) {
+    if (!reviewedTagUuid.test(workId)) continue;
+    let read: ReviewedSubjectRead | null = null;
+    try {
+      read = await review.readReviewedSubject(workId);
+    } catch {
+      read = null;
+    }
+    const currentId = subjectCanonicalId(workId, read);
+    for (const property of properties) {
+      readings.push({
+        workId,
+        property,
+        currentId,
+        available: !!read,
+        values: read ? statementValues(read, property) : [],
+        weights: read ? statementWeights(read, property) : [],
+      });
+    }
+  }
+  return readings;
+}
+
+/** Refresh retires importer-owned candidates whose source key is no longer in the current inventory. */
+export function importerOwnedReviewedTagRetirements(
+  page: ReviewedTagCandidatePage,
+  keepExternalIds: ReadonlySet<string>,
+  importerSources: readonly string[] = ['vndb', 'vndb_cross_media', 'bangumi', 'bangumi_cross_media'],
+): string[] {
+  const owned = new Set(importerSources);
+  return page.candidates.flatMap((candidate) => {
+    if (candidate.retracted || candidate.decision === 'rejected') return [];
+    const source = candidate.source?.source;
+    const externalId = candidate.source?.external_id;
+    if (!source || !owned.has(source) || !externalId) return [];
+    return keepExternalIds.has(externalId) ? [] : [candidate.id];
+  });
+}
+
+export async function completeReviewedSharedTagFlow(input: {
+  review: ShowcaseReviewPort;
+  schemes: readonly string[];
+  concepts: readonly string[];
+  works: readonly string[];
+  properties?: readonly string[];
+  keepExternalIds?: ReadonlySet<string>;
+}): Promise<ReviewedTagFlowResult> {
+  const properties = input.properties ?? [...reviewedTagProperties];
+  const pages: Record<string, ReviewedTagCandidatePage> = {};
+  const accepted: string[] = [];
+  const rejected: string[] = [];
+  const adopted: Record<string, ReviewedTagAdoption | null> = {};
+  const retiredCandidateIds: string[] = [];
+  const subjects = [...new Set([...input.schemes, ...input.concepts, ...input.works])];
+  for (const subjectId of subjects) {
+    for (const property of properties) {
+      const acceptedPage = await acceptPendingReviewedTagCandidates(input.review, subjectId, property);
+      const opened = openReviewedTagCandidates(acceptedPage);
+      accepted.push(...opened.accepted.map((candidate) => candidate.id));
+      rejected.push(...opened.rejected.map((candidate) => candidate.id));
+      if (input.keepExternalIds)
+        retiredCandidateIds.push(
+          ...importerOwnedReviewedTagRetirements(acceptedPage, input.keepExternalIds),
+        );
+      if (!opened.accepted.length && !opened.adoption) {
+        pages[pageKey(subjectId, property)] = acceptedPage;
+        continue;
+      }
+      adopted[pageKey(subjectId, property)] = await adoptAcceptedReviewedTagSelection(
+        input.review,
+        subjectId,
+        property,
+      );
+      pages[pageKey(subjectId, property)] = await loadReviewedTagCandidatePage(input.review, subjectId, property);
+    }
+  }
+  const schemes = await resolveCurrentReviewedTagSubjects(input.review, input.schemes);
+  const concepts = await resolveCurrentReviewedTagSubjects(
+    input.review,
+    schemes.every((row) => row.available) ? input.concepts : [],
+  );
+  const currentWorks = concepts.every((row) => row.available) ? input.works : [];
+  const membership = await readCurrentReviewedTagMembership(input.review, currentWorks);
+  return {
+    pages,
+    accepted: [...new Set(accepted)],
+    rejected: [...new Set(rejected)],
+    adopted,
+    schemes,
+    concepts,
+    membership,
+    retiredCandidateIds: [...new Set(retiredCandidateIds)],
+  };
+}

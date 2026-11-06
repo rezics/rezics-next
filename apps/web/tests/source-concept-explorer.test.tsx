@@ -89,8 +89,47 @@ function client(mode: 'ok' | 'unreadable' | 'retired', linksStatus = 200) {
     subjects: ({ id }: { id: string }) => ({
       get: async () => (mode === 'unreadable' ? { status: 404 } : { status: 200, data: item(mode) }),
       links: {
-        get: async ({ query }: { query: { cursor?: string } }) =>
-          linksStatus === 200
+        get: async ({ query }: { query: { cursor?: string; property?: string } }) => {
+          if (query.property === 'schema:genre' || query.property === 'schema:keywords') {
+            return {
+              status: 200,
+              data: {
+                links: [
+                  {
+                    subject: '00000000-0000-4000-8000-00000000c010',
+                    statement: '00000000-0000-4000-8000-00000000e030',
+                    assertion: {
+                      id: '00000000-0000-4000-8000-00000000e030',
+                      rank: 'normal',
+                      property: { id: query.property, data_type: 'wikibase-item' },
+                      value: { type: 'value', content: concept },
+                      qualifiers: [],
+                      references: [
+                        {
+                          parts: [
+                            {
+                              property: { id: 'schema:url', data_type: 'url' },
+                              value: { type: 'value', content: 'https://vndb.org/v17' },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    summary: {
+                      id: '00000000-0000-4000-8000-00000000c010',
+                      type: 'schema:VideoGame',
+                      label: { value: 'Selected current work', language: 'en' },
+                    },
+                    related: {},
+                  },
+                ],
+                next: null,
+                freshness: { caught_up: true },
+                count: { value: 1, exact: true },
+              },
+            };
+          }
+          return linksStatus === 200
             ? {
                 status: 200,
                 data: {
@@ -110,7 +149,8 @@ function client(mode: 'ok' | 'unreadable' | 'retired', linksStatus = 200) {
                   freshness: { caught_up: true },
                 },
               }
-            : { status: linksStatus, data: { code: 'dependency_unavailable' } },
+            : { status: linksStatus, data: { code: 'dependency_unavailable' } };
+        },
       },
     }),
   } as unknown as KernelClient;
@@ -130,6 +170,12 @@ test('source concept explorer covers two schemes, duplicate labels, unknown role
   expect(read.broader.rows.some((row) => row.direction === 'broader' && row.id === broader)).toBe(true);
   expect(read.codes.some((code) => code.property === 'schema:sameAs')).toBe(false);
   expect(read.narrower.next).toBe('concept-next');
+  expect(read.membership.state).toBe('available');
+  expect(read.membership.rows.map((row) => row.id)).toEqual([
+    '00000000-0000-4000-8000-00000000c010',
+    '00000000-0000-4000-8000-00000000c010',
+  ]);
+  expect(read.membership.rows[0]?.citations).toEqual([{ url: 'https://vndb.org/v17' }]);
   const continued = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', {
     cursor: 'concept-next',
   });
@@ -197,7 +243,13 @@ test('native inverse stays bounded, distinguishes exact empty and readiness, and
     subjects: () => ({
       get: async () => ({ status: 200, data: subject, headers: { 'rezics-session-token': 'source-receipt' } }),
       links: {
-        get: async (request: unknown) => {
+        get: async (request: { query: { property: string } }) => {
+          if (request.query.property === 'schema:genre' || request.query.property === 'schema:keywords') {
+            return {
+              status: 200,
+              data: { links: [], next: null, freshness: { caught_up: true }, count: { value: 0, exact: true } },
+            };
+          }
           calls++;
           expect(request).toEqual({
             query: { property: 'skos:broader', language: 'ja', limit: 20, cursor: 'original' },
@@ -272,4 +324,73 @@ test('native inverse stays bounded, distinguishes exact empty and readiness, and
     ).ok,
   ).toBe(false);
   expect(calls).toBe(before);
+});
+
+test('anonymous explorer reads current work membership and keeps unavailable inverse membership separate from hierarchy', async () => {
+  const work = '00000000-0000-4000-8000-00000000c010';
+  const native = {
+    subjects: () => ({
+      get: async () => ({ status: 200, data: item('ok') }),
+      links: {
+        get: async ({ query }: { query: { property: string } }) => {
+          if (query.property === 'skos:broader')
+            return {
+              status: 200,
+              data: { links: [], next: null, freshness: { caught_up: true }, count: { value: 0, exact: true } },
+            };
+          if (query.property === 'schema:keywords')
+            return { status: 503, data: { code: 'dependency_unavailable' } };
+          return {
+            status: 200,
+            data: {
+              links: [
+                {
+                  subject: work,
+                  statement: work,
+                  assertion: {
+                    id: work,
+                    rank: 'normal',
+                    property: { id: 'schema:genre', data_type: 'wikibase-item' },
+                    value: { type: 'value', content: concept },
+                    qualifiers: [],
+                    references: [
+                      {
+                        parts: [
+                          {
+                            property: { id: 'schema:url', data_type: 'url' },
+                            value: { type: 'value', content: 'https://vndb.org/v17' },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  summary: {
+                    id: work,
+                    type: 'schema:VideoGame',
+                    label: { value: 'Selected current work', language: 'en' },
+                  },
+                },
+              ],
+              next: null,
+              freshness: { caught_up: true },
+            },
+          };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+  const read = await readSourceConcept(native, undefined, bundledRelease, concept, 'en', {});
+  expect(read.ok && read.membership.state).toBe('unavailable');
+  expect(read.ok && read.membership.rows).toEqual([
+    {
+      id: work,
+      label: 'Selected current work',
+      lang: 'en',
+      type: 'schema:VideoGame',
+      property: 'schema:genre',
+      workPage: true,
+      citations: [{ url: 'https://vndb.org/v17' }],
+    },
+  ]);
+  expect(read.ok && read.narrower.state).toBe('available');
 });
