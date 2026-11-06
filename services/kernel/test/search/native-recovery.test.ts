@@ -1,8 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  searchNativePageTransition,
-  searchNativeRecoveryFamily,
-} from '../../src/search/http/native-recovery.ts';
+import { searchNativePageTransition, searchNativeRecoveryFamily } from '../../src/search/http/native-recovery.ts';
 
 test('native Search, suggest and facet problems share one typed family before ready', () => {
   expect(searchNativeRecoveryFamily({ status: 200 })).toBe('ready');

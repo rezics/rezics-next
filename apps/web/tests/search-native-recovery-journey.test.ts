@@ -53,7 +53,14 @@ function problem(status: number, code: string, extra?: Record<string, unknown>) 
 
 test('installed Search, suggest and facet readers consume the same native HTTP families', async () => {
   const cases = [
-    [400, 'invalid_request', { errors: [{ pointer: '/text', code: 'invalid_format' }] }, 'invalid', 'invalid', 'invalid'],
+    [
+      400,
+      'invalid_request',
+      { errors: [{ pointer: '/text', code: 'invalid_format' }] },
+      'invalid',
+      'invalid',
+      'invalid',
+    ],
     [401, 'invalid_credentials', {}, 'session', 'credentials', 'unavailable'],
     [403, 'platform_closed', {}, 'closed', 'closed', 'refused'],
     [403, 'forbidden', {}, 'denied', 'unavailable', 'refused'],
@@ -104,9 +111,8 @@ test('empty terminal pages stay distinct from failed continuations that keep the
   const client = createKernelClient('http://kernel.local', {
     fetch: async () => Response.json(empty),
   });
-  const first = await readSearchOutcome(
-    { ...request, cursor: undefined },
-    (body) => client.subjects.$search.post(body),
+  const first = await readSearchOutcome({ ...request, cursor: undefined }, (body) =>
+    client.subjects.$search.post(body),
   );
   expect(first.recovery.status).toBe('ready');
   expect(nativeSearchObservation(first)).toEqual(expect.objectContaining({ hits: [], next: null }));

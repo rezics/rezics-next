@@ -140,10 +140,7 @@ export function isAdmittedRealmDiscoveryState(value: unknown): value is RealmDis
     return Object.keys(value).length === 3 && isValidRealmDiscoveryPage(page);
   }
   return (
-    (value.kind === 'loading' ||
-      value.kind === 'unavailable' ||
-      value.kind === 'closed' ||
-      value.kind === 'restart') &&
+    (value.kind === 'loading' || value.kind === 'unavailable' || value.kind === 'closed' || value.kind === 'restart') &&
     Object.keys(value).length === 1
   );
 }

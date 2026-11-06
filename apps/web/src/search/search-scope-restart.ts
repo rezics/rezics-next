@@ -1,15 +1,8 @@
-import {
-  parseSearchResourceScope,
-  removeSearchResourceScope,
-  type SearchResourceScope,
-} from './advanced-scope';
+import { parseSearchResourceScope, removeSearchResourceScope, type SearchResourceScope } from './advanced-scope';
 import type { SearchLoaderDeps } from './search-params';
 
 /** A new or removed resource scope starts a first traversal without the previous facet window. */
-export function searchResourceScopeChanged(
-  previous?: SearchResourceScope,
-  next?: SearchResourceScope,
-): boolean {
+export function searchResourceScopeChanged(previous?: SearchResourceScope, next?: SearchResourceScope): boolean {
   return previous?.kind !== next?.kind || previous?.id !== next?.id;
 }
 

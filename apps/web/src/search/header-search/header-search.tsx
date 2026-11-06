@@ -90,8 +90,7 @@ export function headerSearchFields(
 ): [string, string][] {
   const carried = (fields ?? []).filter(([key]) => key !== 'q' && key !== 'cursor');
   const currentFilters = carried.filter(([key]) => key === 'filter');
-  const previousScope =
-    currentFilters.length === 1 ? parseSearchResourceScope(currentFilters[0]![1]).scope : undefined;
+  const previousScope = currentFilters.length === 1 ? parseSearchResourceScope(currentFilters[0]![1]).scope : undefined;
   const nextScope = resourceScope(scope);
   const other = withoutRetiredScopeFacets(
     carried.filter(([key]) => key !== 'filter'),

@@ -82,11 +82,7 @@ import {
   searchFilterWithScope,
   type SearchResourceScope,
 } from './advanced-scope';
-import {
-  searchResourceScopeChanged,
-  searchScopeFromFilter,
-  searchStateWithoutScope,
-} from './search-scope-restart';
+import { searchResourceScopeChanged, searchScopeFromFilter, searchStateWithoutScope } from './search-scope-restart';
 import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
 
@@ -1154,8 +1150,7 @@ export function SearchPage({
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const revertStatus = useRef<HTMLParagraphElement>(null);
-  const nativeObservation =
-    discovery?.status === 'ready' ? discovery.page : result;
+  const nativeObservation = discovery?.status === 'ready' ? discovery.page : result;
   const checkpoint = nativeObservation?.as_of;
   const requestOwnerKey = JSON.stringify([stateKey, locale, session]);
   const recoveryOwnerKey = JSON.stringify([requestOwnerKey, readerOwner, checkpoint]);
