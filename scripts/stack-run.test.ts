@@ -1207,7 +1207,7 @@ async function holdSlots(lease: string, indexes: number[]): Promise<() => Promis
 test('a walk worker starts its task-scoped stack through dev-stack, and its containers and volumes are removed when the attempt ends', async () => {
   const fixture = walkFixture();
   const walker = spawnWalk(fixture, 'walk-one', ['sleep', '60']);
-  const database = 'rezics-walk-walk-one-database';
+  const database = walkStackNames('walk-one', 1).database;
   await until(
     () => dockerRan(fixture, database),
     () => walker.stderr(),
@@ -1243,15 +1243,17 @@ test('walk stacks past the host policy wait in arrival order, each with its posi
     () => second.stderr(),
   );
   await release();
+  const firstDatabase = walkStackNames('walk-first', 1).database;
+  const secondDatabase = walkStackNames('walk-second', 1).database;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-first-database'),
+    () => dockerRan(fixture, firstDatabase),
     () => first.stderr(),
   );
-  expect(dockerRan(fixture, 'rezics-walk-walk-second-database')).toBe(false);
+  expect(dockerRan(fixture, secondDatabase)).toBe(false);
   first.child.kill('SIGTERM');
   await first.child.exited;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-second-database'),
+    () => dockerRan(fixture, secondDatabase),
     () => second.stderr(),
   );
   second.child.kill('SIGTERM');
@@ -1263,8 +1265,10 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
   const fixture = walkFixture();
   const release = await holdSlots(fixture.lease, [1, 2, 3, 4, 5]);
   const sixth = spawnWalk(fixture, 'walk-sixth', ['sleep', '60']);
+  const sixthDatabase = walkStackNames('walk-sixth', 6).database;
+  const seventhDatabase = walkStackNames('walk-seventh', 6).database;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-sixth-database'),
+    () => dockerRan(fixture, sixthDatabase),
     () => sixth.stderr(),
   );
   expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(
@@ -1275,11 +1279,11 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
     () => seventh.stderr().includes('walk walk-seventh waiting (6/6 held, 0 ahead)'),
     () => seventh.stderr(),
   );
-  expect(dockerRan(fixture, 'rezics-walk-walk-seventh-database')).toBe(false);
+  expect(dockerRan(fixture, seventhDatabase)).toBe(false);
   sixth.child.kill('SIGTERM');
   await sixth.child.exited;
   await until(
-    () => dockerRan(fixture, 'rezics-walk-walk-seventh-database'),
+    () => dockerRan(fixture, seventhDatabase),
     () => seventh.stderr(),
   );
   seventh.child.kill('SIGTERM');
@@ -1295,7 +1299,8 @@ test('a local stack container needs a worker whose brief lists native or browser
   const dir = join(root, `walk-gate-${counter++}`);
   mkdirSync(dir);
   const worker = { GOAL_TASK_ID: 'walk-gate', REZICS_WALK_STACK_DIR: dir };
-  const allowed = (environment: Record<string, string>) => workerLocalContainerError(environment, repository);
+  // Probe a cwd that is not the check-host run; onCheckHost(repository) is true when this file itself is remote.
+  const allowed = (environment: Record<string, string>) => workerLocalContainerError(environment, root);
   expect(await allowed(worker)).toBe(LOCAL_CONTAINER_REFUSAL);
   expect(await allowed({ ...worker, GOAL_ACCEPTANCE_REQUIRES: 'root', REZICS_WALK_STACK_SLOT: '1' })).toBe(
     LOCAL_CONTAINER_REFUSAL,
@@ -1310,7 +1315,7 @@ test('a local stack container needs a worker whose brief lists native or browser
     LOCAL_CONTAINER_REFUSAL,
   );
   await release();
-  expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, repository)).toBeNull();
+  expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, root)).toBeNull();
   expect(() => walkStackNames('not a name', 1)).toThrow('GOAL_TASK_ID cannot name a walk stack');
 });
 
