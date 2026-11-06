@@ -41,6 +41,23 @@ function linkedDependencyAllow(packageRealPath: string): string | undefined {
 const linkedDependencyRoot = linkedDependencyAllow(
   realpathSync(join(appRoot, 'node_modules/@tanstack/react-start')),
 );
+const calendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
+const workerExplicitOptimizeDeps = ['@inlang/paraglide-js/urlpattern-polyfill'] as const;
+
+function pinWorkerOptimizeDeps(optimizeDeps: {
+  noDiscovery?: boolean;
+  include?: string[];
+  exclude?: string[];
+}): void {
+  optimizeDeps.noDiscovery = true;
+  // Vite concatenates include arrays across plugins. Cloudflare sets noDiscovery false, TanStack then
+  // enqueues react-dom/server, and Rolldown hangs the Worker optimizer before Copies can print ready.
+  optimizeDeps.include = [...workerExplicitOptimizeDeps];
+  optimizeDeps.exclude ??= [];
+  for (const packageName of calendarOptimizeDeps) {
+    if (!optimizeDeps.exclude.includes(packageName)) optimizeDeps.exclude.push(packageName);
+  }
+}
 let inspectorPort: number | false = false;
 if (configuredInspectorPort !== undefined) {
   const parsedInspectorPort = Number(configuredInspectorPort);
@@ -83,11 +100,11 @@ export default defineConfig((context) => {
       // react-day-picker/date-fns if some other graph edge still names them.
       entries: ['src/routes/**/*.tsx'],
       holdUntilCrawlEnd: true,
-      exclude: ['react-day-picker', 'date-fns', '@date-fns/tz'],
+      exclude: [...calendarOptimizeDeps],
     },
     ssr: {
       optimizeDeps: {
-        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+        include: [...workerExplicitOptimizeDeps],
       },
     },
     plugins: [
@@ -127,19 +144,15 @@ export default defineConfig((context) => {
           return {
             optimizeDeps: {
               noDiscovery: true,
-              exclude: ['react-day-picker', 'date-fns', '@date-fns/tz'],
+              include: [...workerExplicitOptimizeDeps],
+              exclude: [...calendarOptimizeDeps],
             },
           };
         },
         configResolved(config) {
           for (const [name, environment] of Object.entries(config.environments)) {
             if (name === 'client') continue;
-            const optimizeDeps = environment.optimizeDeps;
-            optimizeDeps.noDiscovery = true;
-            optimizeDeps.exclude ??= [];
-            for (const packageName of ['react-day-picker', 'date-fns', '@date-fns/tz']) {
-              if (!optimizeDeps.exclude.includes(packageName)) optimizeDeps.exclude.push(packageName);
-            }
+            pinWorkerOptimizeDeps(environment.optimizeDeps);
           }
         },
       },

@@ -126,6 +126,17 @@ test('SSR optimizeDeps keeps discovery off after the Cloudflare Worker environme
             if (name === 'client') continue;
             const optimizeDeps = environment.optimizeDeps;
             assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name);
+            assert.deepEqual(
+              optimizeDeps.include,
+              ['@inlang/paraglide-js/urlpattern-polyfill'],
+              command + ':' + name + ':include',
+            );
+            for (const pkg of ['react', 'react-dom', 'react-dom/server', 'react-day-picker', 'date-fns'])
+              assert.equal(
+                optimizeDeps.include.includes(pkg),
+                false,
+                command + ':' + name + ':without:' + pkg,
+              );
             for (const pkg of ['react-day-picker', 'date-fns', '@date-fns/tz'])
               assert.ok(optimizeDeps.exclude.includes(pkg), command + ':' + name + ':' + pkg);
           }
