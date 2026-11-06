@@ -240,7 +240,10 @@ name alone does not admit a container. Walk stacks do not change check placement
 hosts a and b.
 
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
-brief lists native or browser acceptance.
+brief lists native or browser acceptance. A slot is usable only when this process can bind its loopback ports, so
+Docker's later bind cannot discover an allocation `ss` missed. Ready waits give up on a listener that never writes; a
+hung first request cannot skip the ten-minute deadline. One failed database bring-up retires this task's containers
+and retries once.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
