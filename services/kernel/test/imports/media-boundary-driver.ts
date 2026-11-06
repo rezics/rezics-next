@@ -107,23 +107,52 @@ function mediaStart(stage: string) {
   process.stderr.write(`MEDIA_START ${stage}\n`);
 }
 
+/** Last MEDIA_START line the child actually reached; spawn has no phase yet. */
+export function mediaReachedPhase(output: string): string | undefined {
+  const matches = [...output.matchAll(/^MEDIA_START (.+)$/gm)];
+  return matches.at(-1)?.[1]?.trim();
+}
+
+export function mediaStallMessage(input: {
+  reason: string;
+  pid: number;
+  exit: number | null;
+  signal: NodeJS.Signals | number | null;
+  stdout: string;
+  stderr: string;
+  startedAtMs: number;
+}): string {
+  const stalledPhase = mediaReachedPhase(input.stderr) ?? mediaReachedPhase(input.stdout) ?? 'media-spawn';
+  const phaseElapsedMs = Math.max(0, Date.now() - input.startedAtMs);
+  return [
+    input.reason,
+    `stalledPhase=${stalledPhase} phaseElapsedMs=${phaseElapsedMs}`,
+    `pid=${input.pid} exit=${input.exit ?? 'none'} signal=${input.signal ?? 'none'}`,
+    `stdout:\n${input.stdout || '(empty)'}`,
+    `stderr:\n${input.stderr || '(empty)'}`,
+  ].join('\n');
+}
+
 async function startupFailure(
   spawned: ReturnType<typeof Bun.spawn>,
   reason: string,
   stdout: string,
   collectedErrors: Promise<string>,
+  startedAtMs: number,
   stderrSnapshot = '',
 ) {
   await stopBoundaryProcess(spawned);
   const stderr = await Promise.race([collectedErrors, Bun.sleep(1_000).then(() => stderrSnapshot)]);
   return new Error(
-    [
+    mediaStallMessage({
       reason,
-      `pid=${spawned.pid} exit=${spawned.exitCode ?? 'none'} signal=${spawned.signalCode ?? 'none'}`,
-      'awaited MEDIA_READY http://127.0.0.1:<port> on stdout after workerHost/applicationHost and Bun.serve',
-      `stdout:\n${stdout || '(empty)'}`,
-      `stderr:\n${stderr || '(empty)'}`,
-    ].join('\n'),
+      pid: spawned.pid,
+      exit: spawned.exitCode,
+      signal: spawned.signalCode,
+      stdout,
+      stderr: stderr || stderrSnapshot,
+      startedAtMs,
+    }),
   );
 }
 
@@ -198,6 +227,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
   let errors: Promise<string>;
   try {
     ({ child, origin, reading, errors } = await withExclusiveMediaLaunch(async () => {
+      const startedAtMs = Date.now();
       const spawned = Bun.spawn(
         [process.execPath, `--config=${sql.config}`, '--preload', sql.loader, import.meta.path, `--media-${mode}`],
         {
@@ -236,13 +266,15 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
         }
         ready.reject(
           new Error(
-            [
-              `Media ${mode} exited before startup`,
-              `pid=${spawned.pid} exit=${spawned.exitCode ?? 'none'} signal=${spawned.signalCode ?? 'none'}`,
-              'awaited MEDIA_READY http://127.0.0.1:<port> on stdout after workerHost/applicationHost and Bun.serve',
-              `stdout:\n${output || '(empty)'}`,
-              `stderr:\n${(await collectedErrors) || '(empty)'}`,
-            ].join('\n'),
+            mediaStallMessage({
+              reason: `Media ${mode} exited before startup`,
+              pid: spawned.pid,
+              exit: spawned.exitCode,
+              signal: spawned.signalCode,
+              stdout: output,
+              stderr: (await collectedErrors) || '',
+              startedAtMs,
+            }),
           ),
         );
       })();
@@ -257,6 +289,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
                 `Media ${mode} startup exceeded its fixture deadline`,
                 output,
                 collectedErrors,
+                startedAtMs,
                 errorOutput,
               ).then(reject, reject);
             }, 110_000);

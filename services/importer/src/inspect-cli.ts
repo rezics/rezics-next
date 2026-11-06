@@ -308,6 +308,9 @@ export function renderInspection(document: InspectionDocument): string {
       `  invalid input flag: ${generation.counts.invalidInputFlag === null ? 'unknown' : generation.counts.invalidInputFlag ? 'set' : 'not set'}`,
     );
     lines.push(`  classified: ${count(generation.counts.classified)}`);
+    lines.push(
+      `  classified records: new=${count(generation.counts.new)} changed=${count(generation.counts.changed)} unchanged=${count(generation.counts.unchanged)} vanished=${count(generation.counts.vanished)}`,
+    );
     lines.push(`  resolved: ${count(generation.counts.resolved)}`);
     lines.push(`  expected after sealing: ${count(generation.counts.expected, 'not set during acquisition')}`);
     lines.push(`  prepared records: ${count(generation.counts.prepared)}`);
