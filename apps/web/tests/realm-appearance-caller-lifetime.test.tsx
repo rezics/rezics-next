@@ -345,9 +345,9 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     const postInput = view.getByRole('textbox', { name: m.realm_appearance_rules_link() });
     await user.type(postInput, rulesLink);
     await rerenderPanel();
-    expect((within(host).getByRole('textbox', { name: m.realm_appearance_rules_link() }) as HTMLInputElement).value).toBe(
-      rulesLink,
-    );
+    expect(
+      (within(host).getByRole('textbox', { name: m.realm_appearance_rules_link() }) as HTMLInputElement).value,
+    ).toBe(rulesLink);
 
     const oldWrite = deferred<RealmAppearanceResult>();
     operations.change = async () => oldWrite.promise;
