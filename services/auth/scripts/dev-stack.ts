@@ -735,8 +735,9 @@ async function launch(action: 'pages' | 'web', args: string[]) {
 }
 
 /**
- * Starts the local stack in two bounded groups. Identity and kernel start first and must answer before the Pages,
- * Web and worker processes, whose compilation is the heaviest startup work, begin beside them. Peak startup memory
+ * Starts the local stack in two bounded groups. The kernel side starts first: identity, the kernel, and its worker,
+ * which launches the DBOS system schema the kernel's work client boots against. The kernel side must answer before
+ * the Pages and Web processes, whose compilation is the heaviest startup work, begin beside it. Peak startup memory
  * therefore never covers every compiler at once.
  */
 async function start() {
@@ -754,34 +755,49 @@ async function start() {
   let stopping = false;
   const stop = () => {
     stopping = true;
-    for (const child of children) child.kill('SIGTERM');
+    void stopChildren(children);
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
     const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
     const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
+    const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker']);
     await untilReady(
       [`${origins.issuer}/.well-known/openid-configuration`, `${origins.kernel}/v1/definitions`],
-      [identity, kernel],
+      [identity, kernel, worker],
     );
     launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
     const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
     await untilReady([`${origins.web}/`], [web]);
-    launch(['bun', 'run', '--cwd', 'services/kernel', 'worker']);
     const first = await Promise.race(children.map(async (child) => await child.exited));
     const interrupted = stopping;
-    stop();
-    await Promise.all(children.map((child) => child.exited));
+    await stopChildren(children);
     process.exitCode = interrupted ? 0 : first || 1;
   } catch (error) {
-    stop();
-    await Promise.all(children.map((child) => child.exited));
+    await stopChildren(children);
     throw error;
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
   }
+}
+
+/** SIGTERM every running child, then SIGKILL any that outlive the grace period, so a stuck child cannot hold teardown. */
+async function stopChildren(children: ReturnType<typeof Bun.spawn>[], graceMs = 30_000): Promise<void> {
+  const running = () => children.filter((child) => child.exitCode === null && child.signalCode === null);
+  for (const child of running()) child.kill('SIGTERM');
+  const exits = Promise.all(children.map((child) => child.exited));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const outlived = await Promise.race([
+    exits.then(() => false),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(true), graceMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (outlived) for (const child of running()) child.kill('SIGKILL');
+  await exits;
 }
 const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 

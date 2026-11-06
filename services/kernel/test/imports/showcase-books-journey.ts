@@ -89,7 +89,13 @@ async function ready(url: string, child: Bun.Subprocess) {
     }
     await Bun.sleep(1000);
   }
-  throw new Error(`Local stack did not become ready: ${url}`);
+  // The stack's own output names what it was doing; only the final 4 KiB of each stream enters the error.
+  const tails = await Promise.all(
+    ['stack.log', 'stack-errors.log'].map(
+      async (name) => `${name}: ${await Bun.file(resolve(directory, name)).slice(-4096).text()}`,
+    ),
+  );
+  throw new Error(`Local stack did not become ready: ${url}\n${tails.join('\n')}`);
 }
 const tables: CrossMediaTables = {
   async *rows(provider, table) {
@@ -302,7 +308,17 @@ try {
   journal?.close();
   await browser?.close();
   if (stack) {
+    // The stack tears its own children down within its grace period; this bound covers a stuck parent.
     stack.kill('SIGTERM');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stopped = await Promise.race([
+      stack.exited.then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), 90_000);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!stopped) stack.kill('SIGKILL');
     await stack.exited;
   }
   // These unique containers were created by this invocation; retained development stacks are never touched.
