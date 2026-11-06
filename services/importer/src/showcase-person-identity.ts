@@ -27,6 +27,9 @@ export type CurrentPersonIdentity = Readonly<{
   identity: PersonIdentity;
 }>;
 
+/** Durable original binding plus the current canonical Person it now reads as. */
+export type BoundPersonIdentity = CurrentPersonIdentity & { boundSubjectId: string };
+
 export type PersonIdentityObservation =
   | CurrentPersonIdentity
   | Readonly<{
@@ -131,6 +134,37 @@ export function observePersonIdentity(identity: PersonIdentity, read: ReviewedSu
   const unique = new Set(values);
   if (unique.size !== 1 || !unique.has(identity.value)) return { state: 'conflicting', identity };
   return { state: 'current', currentSubjectId: subject.id, identity };
+}
+
+/**
+ * After a reviewed merge, reread each original binding through the public reader. Only identities that are
+ * still current on that canonical Person are retained; `semantic_not_ready` is skipped for a later run.
+ */
+export async function rereadCanonicalPersonIdentities(input: {
+  identities: readonly BoundPersonIdentity[];
+  readPublic: (id: string) => Promise<ReviewedSubjectRead>;
+}): Promise<{
+  identities: BoundPersonIdentity[];
+  canonicalPersons: Record<string, string>;
+  unconfirmed: readonly BoundPersonIdentity[];
+}> {
+  const identities: BoundPersonIdentity[] = [];
+  const unconfirmed: BoundPersonIdentity[] = [];
+  const canonicalPersons: Record<string, string> = {};
+  for (const entry of input.identities) {
+    const read = await input.readPublic(entry.boundSubjectId).catch((error: unknown) => {
+      if (error instanceof ReviewedSubjectNotReady) return null;
+      throw error;
+    });
+    const observed = read ? observePersonIdentity(entry.identity, read) : undefined;
+    if (!observed || observed.state !== 'current') {
+      unconfirmed.push(entry);
+      continue;
+    }
+    identities.push({ ...observed, boundSubjectId: entry.boundSubjectId });
+    canonicalPersons[entry.identity.externalId] = observed.currentSubjectId;
+  }
+  return { identities, canonicalPersons, unconfirmed };
 }
 
 /** Native paired merge and operation surface; the import transport satisfies it structurally. */

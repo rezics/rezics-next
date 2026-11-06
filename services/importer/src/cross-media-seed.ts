@@ -31,9 +31,10 @@ import {
   personIdentityForSource,
   personReviewSource,
   publishReviewedPersonMerge,
+  rereadCanonicalPersonIdentities,
   selectPersonReviewPair,
   showcasePersonReview,
-  type CurrentPersonIdentity,
+  type BoundPersonIdentity,
   type PersonReviewSource,
   type PersonReviewPair,
   type ReviewedPersonPublication,
@@ -2139,7 +2140,7 @@ export type CrossMediaReading = {
   route: string;
   selection: 'selected' | 'proposed';
 };
-export type CrossMediaPersonIdentity = CurrentPersonIdentity & { boundSubjectId: string };
+export type CrossMediaPersonIdentity = BoundPersonIdentity;
 export type CrossMediaSeedResult = {
   status: 'imported' | 'imported-with-gaps';
   franchises: CrossMediaPlan['franchises'];
@@ -2148,6 +2149,8 @@ export type CrossMediaSeedResult = {
   readings: CrossMediaReading[];
   /** Current native identities for exact source records, including their durable original binding. */
   personIdentities: CrossMediaPersonIdentity[];
+  /** Current canonical Person beside each credit Person's durable original source key. */
+  canonicalPersons: Record<string, string>;
   /** Private comparison inputs from actual admitted records, independent of canonical read availability. */
   personReviewSources?: readonly PersonReviewSource[];
   personReview?: typeof showcasePersonReview & { pair: PersonReviewPair };
@@ -3084,6 +3087,9 @@ export async function seedCrossMedia(
       runs,
       readings,
       personIdentities,
+      canonicalPersons: Object.fromEntries(
+        personIdentities.map((entry) => [entry.identity.externalId, entry.currentSubjectId]),
+      ),
       personReviewSources,
       personReview: {
         ...showcasePersonReview,
@@ -3343,6 +3349,10 @@ export async function seedCrossMedia(
       runs,
       readings,
       personIdentities,
+      canonicalPersons: {
+        ...Object.fromEntries(personIdentities.map((entry) => [entry.identity.externalId, entry.currentSubjectId])),
+        ...credits.canonicalPersons,
+      },
       personReviewSources,
       personReview: baseResult.personReview!,
       mediaOutcomes,
@@ -4531,10 +4541,24 @@ export async function runCrossMediaSeedCli(
             journal,
           })
         : undefined;
+    const afterMerge =
+      personMerge?.state === 'published' && publicClient
+        ? await rereadCanonicalPersonIdentities({
+            identities: combinedResult.personIdentities,
+            readPublic: (id) => publicClient.readSubject(id),
+          })
+        : undefined;
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {
       ...publicCombinedResultFields,
       vndbWorkRelations: showcase?.vndbWorkRelations ?? combinedResult.vndbWorkRelations,
+      ...(afterMerge
+        ? {
+            personIdentities: afterMerge.identities,
+            canonicalPersons: { ...combinedResult.canonicalPersons, ...afterMerge.canonicalPersons },
+            ...(afterMerge.unconfirmed.length ? { status: 'imported-with-gaps' as const } : {}),
+          }
+        : {}),
     };
     const persona =
       options.composePersona && journal && options.selection

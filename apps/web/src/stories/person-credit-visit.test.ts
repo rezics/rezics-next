@@ -118,3 +118,32 @@ test('Person credit visits retain each admitted VN and anime window and its exac
     connectionCreditVisit(value, { ...vn, stream: { ...vn.stream, property: 'schema:contributor' } }),
   ).toBeUndefined();
 });
+
+test('Character credit visits use the live inverse window when RelationGroups nodes are absent', () => {
+  const vn = credit('schema:author', id(10), 'VN');
+  const value = {
+    subject: person,
+    context: { id: id(20), population: { kind: 'global' } },
+    releaseDigest: release,
+    unlabelled: 'Unlabelled',
+    relations: { 'schema:author': { forwardLabel: 'Author' } },
+    relationDirections: [
+      { state: 'admitted', property: 'schema:author', direction: 'inverse', release },
+    ],
+    relationNodes: [],
+    candidatePropertyLabel: (property: string) =>
+      ({ 'wdt:P1932': 'Credited name', 'wdt:P3831': 'Credit role' })[property],
+  } as unknown as OverviewValue;
+  expect(connectionCreditVisit(value, vn)).toMatchObject({
+    person,
+    node: 'in:schema:author',
+    stream: { kind: 'links', id: person, property: 'schema:author', limit: 12, cursor: 'cursor:VN' },
+    propertyLabel: 'Author',
+  });
+  expect(
+    connectionCreditVisit(
+      { ...value, relationNodes: [{ id: 'other', props: { property: 'wdt:P725' } }] } as unknown as OverviewValue,
+      vn,
+    ),
+  ).toBeUndefined();
+});

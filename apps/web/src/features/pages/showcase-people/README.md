@@ -20,4 +20,8 @@ navigation to the existing command hosts; displaying facts grants no command aut
 
 Visible merged Person and Character URLs redirect to the canonical subject while preserving the active subpage,
 search and hash. Credit and appearance statements keep their original source IDs; receiving readers resolve them only
-when Semantic supplies the exact visible one-hop survivor.
+when Semantic supplies the exact visible one-hop survivor. Character pages without RelationGroups nodes use the live
+inverse credit window as the visit locator. Focused child cwd is apps/web, so Person
+credit visit, mounted Person credit return and relation-public-origin run as
+`src/stories/person-credit-visit.test.ts`, `tests/person-credit-visit.test.tsx` and
+`tests/relation-public-origin.test.tsx` in separate focused invocations.

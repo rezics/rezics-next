@@ -8,6 +8,8 @@ import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   personIdentityForSource,
   publishReviewedPersonMerge,
+  rereadCanonicalPersonIdentities,
+  type BoundPersonIdentity,
   type PersonReviewSource,
   type ReviewedPersonMergeTransport,
 } from '../src/showcase-person-identity.ts';
@@ -310,3 +312,40 @@ test('a not-yet-current Subject read is observed again, while any other read fai
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
+
+test('after merge, reread maps each original binding onto the survivor and skips only semantic_not_ready', async () => {
+  const identities: BoundPersonIdentity[] = [
+    { state: 'current', currentSubjectId: bangumiOriginal, boundSubjectId: bangumiOriginal, identity: bangumi },
+    { state: 'current', currentSubjectId: vndbOriginal, boundSubjectId: vndbOriginal, identity: vndb },
+  ];
+  expect(
+    await rereadCanonicalPersonIdentities({
+      identities,
+      readPublic: async () => publicPerson(survivor),
+    }),
+  ).toEqual({
+    identities: [
+      { state: 'current', currentSubjectId: survivor, boundSubjectId: bangumiOriginal, identity: bangumi },
+      { state: 'current', currentSubjectId: survivor, boundSubjectId: vndbOriginal, identity: vndb },
+    ],
+    canonicalPersons: { 'person:1916': survivor, s224: survivor },
+    unconfirmed: [],
+  });
+  const lagging = await rereadCanonicalPersonIdentities({
+    identities,
+    readPublic: async (id) => {
+      if (id === vndbOriginal) throw new ReviewedSubjectNotReady(id);
+      return publicPerson(survivor);
+    },
+  });
+  expect(lagging.canonicalPersons).toEqual({ 'person:1916': survivor });
+  expect(lagging.unconfirmed).toEqual(identities.slice(1));
+  await expect(
+    rereadCanonicalPersonIdentities({
+      identities,
+      readPublic: async () => {
+        throw new Error('gateway unavailable');
+      },
+    }),
+  ).rejects.toThrow('gateway unavailable');
+});

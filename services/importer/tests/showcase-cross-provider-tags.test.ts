@@ -339,6 +339,7 @@ function emptySeed(plan: ReturnType<typeof emptyCrossMediaPlan>): CrossMediaSeed
     runs: {},
     readings: [],
     personIdentities: [],
+    canonicalPersons: {},
     mediaOutcomes: [],
     workLinks: [],
     gaps: [],
