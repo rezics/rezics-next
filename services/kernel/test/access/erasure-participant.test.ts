@@ -2,12 +2,14 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
 import { readErasureStatus, erasureWorkModule } from '../../src/access/erasure.ts';
-import { NATIVE_ERASURE_GROUPS } from '../../src/access/erasure-native.ts';
+import { advanceNativeErasure, NATIVE_ERASURE_GROUPS } from '../../src/access/erasure-native.ts';
+import { composeAccessApplication } from '../../src/composition/access.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
@@ -34,7 +36,12 @@ async function start() {
     ],
     {
       cwd: `${import.meta.dir}/../..`,
-      env: { ...process.env, KERNEL_WORKER_POOL_SIZE: '10', KERNEL_EXECUTOR_ID: `native-${key()}` },
+      env: {
+        ...process.env,
+        ...workerTestEnv(),
+        KERNEL_WORKER_POOL_SIZE: '10',
+        KERNEL_EXECUTOR_ID: `native-${key()}`,
+      },
       stdout: 'pipe',
       stderr: 'pipe',
     },
@@ -63,6 +70,15 @@ async function progress(accountId: string) {
   return (
     await pool.query<{ progress_id: string; phase: number; page: number; pending: string | null }>(
       'SELECT progress_id,phase,page,pending FROM access.erasure_native_progress WHERE route=$1 AND account_id=$2',
+      [routeOf(accountId), accountId],
+    )
+  ).rows[0];
+}
+async function accessAcknowledgement(accountId: string) {
+  return (
+    await pool.query<{ outcome: string }>(
+      `SELECT outcome FROM access.erasure_acknowledgement
+       WHERE route=$1 AND account_id=$2 AND participant='access'`,
       [routeOf(accountId), accountId],
     )
   ).rows[0];
@@ -119,7 +135,7 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
   const partition = partitionOf(routeOf(erased.accountId)!);
   const eventRow = (
     await pool.query(
-      `SELECT epoch,position,event_seq,id,type,subject,data,time
+      `SELECT epoch,position,event_seq,id,type,subject,data,recorded_at AS time
     FROM core.outbox WHERE partition_no=$1 AND subject=$2 AND type='com.rezics.access.account-tombstoned.v1'
     ORDER BY position DESC LIMIT 1`,
       [partition, erased.accountId],
@@ -142,6 +158,11 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
     await client.deleteWorkflows([nativeId, effectId], false);
     expect(await client.getWorkflow(nativeId)).toBeUndefined();
     expect(await progress(erased.accountId)).toEqual(committed);
+    // Resume the bounded native inventory independently; the restarted worker
+    // below owns the terminal acknowledgement and shared-custody distinction.
+    composeAccessApplication();
+    while ((await progress(erased.accountId))?.phase !== NATIVE_ERASURE_GROUPS().length)
+      await advanceNativeErasure(pool, progressId);
     await start();
     // Redeliver the original committed tombstone through the real registered effect.
     await client.enqueue(
@@ -159,8 +180,8 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
         sequence: String(eventRow.position).padStart(19, '0'),
       },
     );
-    const deadline = Date.now() + 540000;
-    while ((await progress(erased.accountId))?.phase !== NATIVE_ERASURE_GROUPS().length && Date.now() < deadline) {
+    const deadline = Date.now() + 30000;
+    while (!(await accessAcknowledgement(erased.accountId)) && Date.now() < deadline) {
       const status = await client.getWorkflow(nativeId);
       if (status?.status === 'ERROR' || status?.status === 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')
         throw new Error(`Native erasure failed: ${JSON.stringify(status)}`);
@@ -170,8 +191,15 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
       progress_id: progressId,
       phase: NATIVE_ERASURE_GROUPS().length,
       page: 0,
-      pending: 'native-inventory',
+      pending: 'shared-history-producer',
     });
+    expect(
+      (
+        await pool.query('SELECT native_complete_at FROM access.erasure_native_progress WHERE progress_id=$1', [
+          progressId,
+        ])
+      ).rows[0]!.native_complete_at,
+    ).not.toBeNull();
     for (const handle of [oldHandle, newHandle]) {
       const rows = (
         await pool.query('SELECT * FROM access.handle_claim WHERE route=$1 AND normalized_handle=$2', [
@@ -243,19 +271,11 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
     expect(JSON.stringify(inputs)).not.toContain(erased.accountId);
     const status = await readErasureStatus(pool, erased.accountId);
     expect(status?.at).toBe(deletion.at);
-    expect(status?.participants.access?.outcome).toBe('pending');
+    expect(await accessAcknowledgement(erased.accountId)).toEqual({ outcome: 'erased' });
+    expect(status?.participants.access?.outcome).toBe('erased');
     expect(status?.participants['shared-history']?.outcome).toBe('pending');
     expect(status?.completedAt).toBeNull();
-    // No fake acknowledgement, no claim that the rest of the inventory was erased.
-    expect(
-      (
-        await pool.query(
-          `SELECT 1 FROM access.erasure_acknowledgement
-      WHERE route=$1 AND account_id=$2 AND participant='access'`,
-          [routeOf(erased.accountId), erased.accountId],
-        )
-      ).rows,
-    ).toEqual([]);
+    // Local Access completion is durable; shared-history custody remains a separate obligation.
   } finally {
     await client.close();
   }

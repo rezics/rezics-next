@@ -33,18 +33,7 @@ import {
 } from './erasure-native-stores.ts';
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { discoverErasurePage, ERASURE_DISCOVERY_ROLES, type ErasureDiscoveryPage } from './erasure-progress.ts';
-
-type NativeErasureAcknowledgement = (
-  deps: { pool: Pool },
-  input: { accountId: string; participant: string; outcome: 'erased' | 'none' },
-) => Promise<unknown>;
-
-let acknowledgeAccessErasure: NativeErasureAcknowledgement | undefined;
-
-/** Coordinator binds acknowledgement so native paging does not import the public erasure module. */
-export function bindNativeErasureAcknowledgement(acknowledge: NativeErasureAcknowledgement): void {
-  acknowledgeAccessErasure = acknowledge;
-}
+import { accessApplication } from './adapters/index.ts';
 
 /** Delivered native groups only. The rest of the inventory is explicitly pending.
  * Ordering consumes handle effect children before their terminal operation parents.
@@ -173,10 +162,7 @@ export async function advanceNativeErasure(
           [progressId, groups.length],
         );
       });
-      await acknowledgeAccessErasure!(
-        { pool },
-        { accountId: expected.account_id, participant: 'access', outcome: 'erased' },
-      );
+      await accessApplication().ports.nativeErasure.acknowledgeCompletion(pool, expected.account_id);
       return 'pending-shared-custody';
     }
     expected = { ...anchor, ...blocked, retry: true };

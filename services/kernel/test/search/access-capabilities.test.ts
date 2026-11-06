@@ -6,7 +6,7 @@ import {
 } from '../../src/search/access-capabilities.ts';
 
 test('Access native ports receive Search collection-kind work and erasure observation', () => {
-  const ports = createNativeAccessPorts();
+  const ports = createNativeAccessPorts(async () => undefined);
   expect(typeof ports.kindAudience.collectionKindPreparationNativeWork).toBe('function');
   expect(typeof ports.searchErasure?.observeAccountErasureSearch).toBe('function');
   expect(typeof collectionKindPreparationNativeWork).toBe('function');

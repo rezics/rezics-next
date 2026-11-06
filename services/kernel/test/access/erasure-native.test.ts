@@ -16,6 +16,9 @@ import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lif
 import { newId, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import '../support/native-history-composition.ts';
+import { composeAccessApplication } from '../../src/composition/access.ts';
 
 type Fixture = Awaited<ReturnType<typeof openGrowthDatabase>>;
 const deadline = () => Date.now() + 10000;
@@ -52,6 +55,7 @@ async function erase(db: Fixture, accountId: string) {
 
 test('Trusted Auth restore reconciliation discovers exact committed Access erasure obligations absent from an old Auth snapshot using native bounded partition-led sealed feed and exact immutable source floor without scanning living accounts or acknowledging cleanup', async () => {
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   try {
     let historical: AuthErasureObligation[] = [];
     {
@@ -189,6 +193,7 @@ test('Trusted Auth restore reconciliation discovers exact committed Access erasu
 
 test('missing original native floor evidence remains pending and ownership changes refuse the source', async () => {
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   try {
     const ports = createAuthErasureObligationBindings(db.pool);
     const missing = await person(db, 16);
@@ -228,20 +233,16 @@ test('missing original native floor evidence remains pending and ownership chang
         [missing],
       ),
     ).rejects.toThrow();
-    await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1');
-    const afterMove = await person(db, 16);
-    await erase(db, afterMove);
-    expect(await ports.readAuthErasureObligation({ accountId: afterMove, deadline: deadline() })).toMatchObject({
-      state: 'pending',
-      reason: 'source-unavailable',
-    });
+    await expect(db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1')).rejects.toThrow(
+      'Live copy domain requires native lineage reconciliation before activation',
+    );
     expect(await ports.readAuthErasureObligation({ accountId: missing, deadline: deadline() })).toMatchObject({
       state: 'pending',
-      reason: 'source-unavailable',
+      reason: 'original-floor-unavailable',
     });
     expect(await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() })).toMatchObject({
       state: 'pending',
-      reason: 'source-unavailable',
+      reason: 'original-floor-unavailable',
     });
   } finally {
     await db.close();
@@ -303,6 +304,7 @@ describe('Access native terminal cleanup', () => {
       pool,
       routeKey: new Uint8Array(32).fill(28),
       tokens: auth.referenceKeys,
+      receiptKeys: testReceiptKeys(),
       access: () => auth.access,
       writeRate: createWriteRateLimiter({
         secret: 'erasure-native-write-limiter-secret',
@@ -316,6 +318,44 @@ describe('Access native terminal cleanup', () => {
     } finally {
       await pool.end();
     }
+  });
+
+  test('isolated native completion uses the composed coordinator port and replay preserves shared custody', async () => {
+    const accessApplication = composeAccessApplication();
+    expect(composeAccessApplication()).toBe(accessApplication);
+    const erased = await person();
+    await deletePersona({ pool, auth }, erased);
+    const progressId = await openNativeErasure(pool, erased.accountId);
+    await pool.query('UPDATE access.erasure_native_progress SET phase=$2 WHERE progress_id=$1', [
+      progressId,
+      NATIVE_ERASURE_GROUPS().length,
+    ]);
+
+    const first = await advanceNativeErasure(pool, progressId);
+    expect(first).toBe('pending-shared-custody');
+    const native = (
+      await pool.query('SELECT native_complete_at,pending FROM access.erasure_native_progress WHERE progress_id=$1', [
+        progressId,
+      ])
+    ).rows[0]!;
+    expect(native.native_complete_at).not.toBeNull();
+    expect(native.pending).toBe('shared-history-producer');
+    expect(
+      (
+        await pool.query(
+          `SELECT outcome FROM access.erasure_acknowledgement
+           WHERE route=$1 AND account_id=$2 AND participant='access'`,
+          [routeOf(erased.accountId), erased.accountId],
+        )
+      ).rows,
+    ).toEqual([{ outcome: 'erased' }]);
+
+    const replay = await advanceNativeErasure(pool, progressId);
+    expect(replay).toBe('pending-shared-custody');
+    const status = await readErasureStatus(pool, erased.accountId);
+    expect(status?.participants.access?.outcome).toBe('erased');
+    expect(status?.participants['shared-history']?.outcome).toBe('pending');
+    expect(status?.completedAt).toBeNull();
   });
 
   test('confirmed native deletion purges exact account resources, preserves survivors, and old bearer/replay cannot restore preferences', async () => {

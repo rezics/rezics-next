@@ -17,6 +17,10 @@ Decision: resource-role identifier helpers are functions so circular Access comp
 
 ## Domain composition
 
+Decision: native erasure completion acknowledges the coordinator through a required Access adapter port composed
+with the real `acknowledgeErasure` command. Normal startup and the isolated native preload use the same composition;
+local Access completion remains distinct from pending shared-history custody.
+
 Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
 `public-identity.ts`. Contribution attribution is nullable: missing, pending and unavailable identity are `null`,
 not evidence of deletion. `contributionDeleted` requires an explicit deletion label with no id; an id-free
