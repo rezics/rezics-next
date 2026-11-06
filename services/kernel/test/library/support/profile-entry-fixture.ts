@@ -241,6 +241,7 @@ export async function createProfileEntryFixture(
       let key = entryKey();
       let accountId = lifecycle.registrationTarget(key);
       while (
+        routeOf(accountId) === 0 ||
         (partition !== undefined && partitionOf(routeOf(accountId)!) !== partition) ||
         (exactRoute !== undefined && routeOf(accountId) !== exactRoute)
       ) {
@@ -277,8 +278,8 @@ export async function createProfileEntryFixture(
     const steward = await identity([
       ...new Set([...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete').concat('gate:any')),
     ]);
-    const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
-    const other = await identity(entryScopes);
+    const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])], 0);
+    const other = await identity(entryScopes, 0);
     await bootstrapGovernance(pool, steward.actor.accountId);
     // Bootstrap writes platform.governance on the Global Context for this steward.
     // Grant-routes authenticates that original bearer onto a fresh command boundary
@@ -529,7 +530,11 @@ export async function createProfileEntryFixture(
     }
     function homeKey(accountId: string, home = partitionOf(routeOf(accountId)!)) {
       let key = entryKey();
-      while (partitionOf(subjectTarget(routeKey, accountId, key).route) !== home) key = entryKey();
+      let route = subjectTarget(routeKey, accountId, key).route;
+      while (partitionOf(route) !== home || route === 0) {
+        key = entryKey();
+        route = subjectTarget(routeKey, accountId, key).route;
+      }
       return key;
     }
     async function createHomeSubject(

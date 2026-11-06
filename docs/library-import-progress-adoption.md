@@ -89,7 +89,8 @@ accepts the same occurrence and per-measure choices alongside its existing sourc
 to confirm the stored review ID. Both APIs return `stale` for a changed shared revision, current profile or selected
 occurrence; separate start and measure receipts expose an admitted partial occurrence when a later measure fails.
 Failed or uncertain effects retry the original native receipt and operands. A definite native invalid, denied or
-unavailable write throws; it is not recorded as an uncertain retry. The row page adds the private field/unit
+unavailable write throws; it is not recorded as an uncertain retry. Native import progress actors occupy partition 0
+with the selected Subject so the same-home identity mapping Rating already uses for guarded votes applies. The row page adds the private field/unit
 matrix and per-measure result.
 
 Both provider methods use the native `GET /v1/progressSessions?subjectId=...` bounded selection pages,

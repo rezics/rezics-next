@@ -413,12 +413,10 @@ test.serial(
 test.serial(
   'MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer',
   async () => {
-    const actor = await native.identity([
-      ...native.owner.actor.scopes,
-      'rating:vote',
-      'definitions:read',
-      'subject:read',
-    ]);
+    const actor = await native.identity(
+      [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
+      0,
+    );
     const targets: string[] = [];
     for (let index = 0; index < 4; index++) targets.push(await native.createHomeSubject('game', actor));
     await native.grantLibraryGate(actor.actor.accountId);
@@ -831,12 +829,10 @@ test.serial(
 test.serial(
   'native redirect requires a deliberate review of the canonical MAL target',
   async () => {
-    const actor = await native.identity([
-      ...native.owner.actor.scopes,
-      'rating:vote',
-      'definitions:read',
-      'subject:read',
-    ]);
+    const actor = await native.identity(
+      [...native.owner.actor.scopes, 'rating:vote', 'definitions:read', 'subject:read'],
+      0,
+    );
     await native.grantLibraryGate(actor.actor.accountId);
     const subjects = [
       await native.createHomeSubject('game', actor),
