@@ -1,4 +1,4 @@
-import { isView, platformRegistry, type CompositionNode, type View } from '@rezics/composition';
+import { isView, platformRegistry, walkStructuralContent, type CompositionNode, type View } from '@rezics/composition';
 import type { PageDocument } from './render';
 
 export type TypeListTarget = ({ route: string } | { subject: string; realm?: string } | { account: string }) & {
@@ -43,30 +43,8 @@ export function typeListHref(locale: string, target: TypeListTarget, node: strin
   return `/${encodeURIComponent(locale)}/search/list?${params}`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNode(value: unknown): value is CompositionNode {
-  return (
-    isRecord(value) && typeof value.type === 'string' && isRecord(value.props) && typeof value.props.id === 'string'
-  );
-}
-
 export function findTypeList(document: PageDocument, id: string): CompositionNode | undefined {
-  const components = new Map(platformRegistry.components.map((component) => [component.type, component]));
-  const visit = (nodes: unknown): CompositionNode | undefined => {
-    if (!Array.isArray(nodes)) return;
-    for (const item of nodes) {
-      if (!isNode(item)) continue;
-      const component = components.get(item.type);
-      if (!component) continue;
-      if (item.type === 'TypeList' && item.props.id === id) return item;
-      for (const slot of component.slots) {
-        const found = visit(item.props[slot]);
-        if (found) return found;
-      }
-    }
-  };
-  return visit(document.content);
+  for (const item of walkStructuralContent(platformRegistry, document.content)) {
+    if (item.type === 'TypeList' && item.props.id === id) return item;
+  }
 }

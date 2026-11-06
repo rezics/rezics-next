@@ -5,6 +5,16 @@ import { ProblemError } from '../http/problem.ts';
 import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
+import {
+  collectionDirectoryOrder,
+  collectionDirectoryQuery,
+  collectionDirectoryRows,
+  pageCollectionDirectory,
+  parseCollectionDirectoryAfter,
+  projectCollectionDirectoryHit,
+  sortCollectionDirectory,
+} from './collection-directory.ts';
+import type { DiscoveryOwnerMetadataSummary } from './discovery.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -326,6 +336,8 @@ function executeDiscoverySearch(
     )
       throw new ProblemError('dependency_unavailable');
     let currentContext: DiscoveryContextWithSpace = { ...context };
+    const directoryAfter: import('./cursor.ts').SearchSortValue[] = [];
+    let directoryNextAfter: import('./cursor.ts').SearchSortValue[] | null = null;
     const kindDirectory = discoveryKindDirectory(registry);
     const registryDigest = createHash('sha256')
       .update(
@@ -377,11 +389,18 @@ function executeDiscoverySearch(
           throw token.reason === 'expired' ? new ProblemError('search_restart_required') : invalid('/cursor');
         if (token.state.release !== digest || token.state.registry !== registryDigest)
           throw new ProblemError('search_restart_required');
-        if (!token.state.retained) throw new ProblemError('search_restart_required');
-        queried = token.state.queried;
-        observationOpened = true;
-        repair = token.state.repair;
-        refill = { ...token.state.retained, size: Math.min(200, 2 * admitted.limit + 1) };
+        if (admitted.collectionDirectory) {
+          // Directory pages recapture the identity frontier so newly eligible rows sort globally.
+          if (token.state.retained || !parseCollectionDirectoryAfter(token.state.after))
+            throw new ProblemError('search_restart_required');
+          directoryAfter.push(...token.state.after);
+        } else {
+          if (!token.state.retained) throw new ProblemError('search_restart_required');
+          queried = token.state.queried;
+          observationOpened = true;
+          repair = token.state.repair;
+          refill = { ...token.state.retained, size: Math.min(200, 2 * admitted.limit + 1) };
+        }
       }
       const conceptFilter =
         admitted.filter === undefined || !config.prepareConceptFilter
@@ -397,8 +416,11 @@ function executeDiscoverySearch(
       currentContext = {
         ...context,
         ...(conceptFilter ? { conceptFilter } : {}),
+        ...(admitted.collectionDirectory
+          ? { collectionQuery: collectionDirectoryQuery(admitted.collectionDirectory) }
+          : {}),
       };
-      if (!request.cursor) {
+      if (!observationOpened) {
         const plan = compileDiscoveryCapture(
           {
             representation: 'discovery-v1',
@@ -445,7 +467,78 @@ function executeDiscoverySearch(
       try {
         if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
           throw new ProblemError('search_restart_required');
-        for (let round = 0; round < 3; round++) {
+        if (admitted.collectionDirectory) {
+          const identities: string[] = [];
+          const identitySeen = new Set<string>();
+          const scanBound = discoveryCandidateScanBound(admitted.limit);
+          let refillDirectory = refill;
+          for (;;) {
+            const batch = await coverage.queryDiscovery(queried, refillDirectory);
+            if (batch.status !== 'queried') {
+              retained = batch.status === 'preparing';
+              if (retained && repair) await config.prepare?.(repair);
+              if (
+                batch.status === 'unavailable' &&
+                (batch.reason === 'incarnation_changed' || batch.reason === 'observation_lost') &&
+                request.cursor
+              )
+                throw new ProblemError('search_restart_required');
+              throw ready();
+            }
+            last = batch;
+            queried = batch.queried;
+            const { window, result } = batch;
+            if (
+              !Number.isSafeInteger(window.examined) ||
+              window.examined < 0 ||
+              typeof window.exhausted !== 'boolean' ||
+              window.positions.length !== result.hits.length
+            )
+              throw ready();
+            examined += window.examined;
+            if (examined > scanBound) throw ready();
+            for (const candidate of result.hits) {
+              if (candidate.key.kind !== 'collection' || identitySeen.has(candidate.key.id)) continue;
+              identitySeen.add(candidate.key.id);
+              identities.push(candidate.key.id);
+            }
+            await coverage.consume(batch.execution, window.examined);
+            consumed = window.examined;
+            exhausted = window.exhausted;
+            if (exhausted) break;
+            const remaining = scanBound - examined;
+            if (remaining < 1) throw ready();
+            refillDirectory = {
+              execution: batch.execution,
+              consumed: window.examined,
+              size: Math.min(200, remaining),
+            };
+          }
+          if (!last || !exhausted) throw ready();
+          const adapter = registry.getOwnerAdapter?.('collection');
+          if (!adapter || adapter.kind !== 'collection') throw ready();
+          const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
+          for (let offset = 0; offset < identities.length; offset += 100) {
+            const batch = identities.slice(offset, offset + 100);
+            const summaries = await adapter.readCurrent(batch, currentContext);
+            for (const [id, summary] of summaries) current.set(id, summary);
+          }
+          const order = collectionDirectoryOrder(admitted.collectionDirectory);
+          const paged = pageCollectionDirectory(
+            sortCollectionDirectory(collectionDirectoryRows(current), order),
+            order,
+            directoryAfter,
+            admitted.limit,
+          );
+          for (const row of paged.items) {
+            const hit = projectCollectionDirectoryHit(row);
+            hits.push(hit);
+            witnesses.set(hit.key.kind, (witnesses.get(hit.key.kind) ?? 0) + 1);
+          }
+          directoryNextAfter = paged.nextAfter;
+          exhausted = paged.nextAfter === null;
+        }
+        for (let round = 0; !admitted.collectionDirectory && round < 3; round++) {
           const batch = await coverage.queryDiscovery(queried, refill);
           if (batch.status !== 'queried') {
             retained = batch.status === 'preparing';
@@ -677,14 +770,21 @@ function executeDiscoverySearch(
             : await encodeDiscoveryCursor(
                 config.keys,
                 binding,
-                {
-                  release: digest,
-                  registry: registryDigest,
-                  queried,
-                  after: [],
-                  retained: { execution: execution.execution, consumed },
-                  ...(repair ? { repair } : {}),
-                },
+                admitted.collectionDirectory
+                  ? {
+                      release: digest,
+                      registry: registryDigest,
+                      queried,
+                      after: directoryNextAfter!,
+                    }
+                  : {
+                      release: digest,
+                      registry: registryDigest,
+                      queried,
+                      after: [],
+                      retained: { execution: execution.execution, consumed },
+                      ...(repair ? { repair } : {}),
+                    },
                 now,
               );
           projected.kinds.next =
@@ -705,7 +805,7 @@ function executeDiscoverySearch(
           );
           return projected;
         });
-        retained = page.next !== null;
+        retained = page.next !== null && !admitted.collectionDirectory;
         return page;
       } catch (error) {
         failed = true;

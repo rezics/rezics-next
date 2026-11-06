@@ -22,6 +22,18 @@ const subjectId = '018f0000-0000-7000-8000-00a000000003';
 const noRead = async (): Promise<never> => {
   throw new Error('This registry test must not read existing producer sources');
 };
+const queryObservation = 'a'.repeat(64);
+function collectionOperands(currentId: string) {
+  return {
+    id: currentId,
+    presentationKind: { kind: 'mixed' as const },
+    curator: { state: 'unavailable' as const, reason: 'deidentified' as const },
+    subjectMembership: null,
+    popularity: null,
+    recency: [null, route, currentId] as const,
+    eligible: { presentationKind: null, curator: null, subject: null },
+  };
+}
 function collectionCard(currentId: string): PublicCollectionDiscoverySummary {
   return {
     id: currentId,
@@ -78,17 +90,9 @@ const options: DiscoveryRegistryOptions = {
                     summary: null,
                     revision: '1',
                     sourcePosition: '1',
-                    queryObservation: '0'.repeat(64),
+                    queryObservation,
                     card: collectionCard(currentId),
-                    operands: {
-                      id: currentId,
-                      presentationKind: { kind: 'mixed' },
-                      curator: { state: 'unavailable', reason: 'deidentified' },
-                      subjectMembership: null,
-                      popularity: null,
-                      recency: [null, route, currentId],
-                      eligible: { presentationKind: null, curator: null, subject: null },
-                    },
+                    operands: collectionOperands(currentId),
                   },
                 ] as const,
             ),
@@ -184,6 +188,7 @@ test('ready owner adapters preserve canonical identity and current text/kind met
     { kind: 'review', value: { id, kind: 'review', title: 'Review' } },
     { kind: 'space', value: { id, title: 'Space', address: 'native-space' } },
   ]);
+  expect(registry.domains('collection')).toEqual(['text', 'kind', 'collectionDirectory']);
   for (const kind of ['collection', 'review', 'space']) {
     expect(discoveryDomain(registry, kind, 'text')).toBe('applicable');
     expect(discoveryDomain(registry, kind, 'kind')).toBe('applicable');

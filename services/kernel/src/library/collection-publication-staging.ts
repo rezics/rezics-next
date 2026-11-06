@@ -12,8 +12,9 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
+import { readCataloguePublicationPage } from '../search/catalogue-publication.ts';
 import { zeroScopeWork } from '../search/scope-execution.ts';
-import { createSearchScopeSource, type ScopeBasis } from '../search/scope-source.ts';
+import { createSearchScopeSource, type PreparedSearchScope, type ScopeBasis } from '../search/scope-source.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import {
@@ -29,6 +30,7 @@ import { readCollectionSourceWorkState } from './collection-source-work-native.t
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity } from './native-source-custody.ts';
 import {
+  enterCataloguePublicationMembers,
   enterCollectionPublicationPrefix,
   initialCollectionPublicationFrontier,
   settleCollectionPublicationSubject,
@@ -327,24 +329,52 @@ export async function stageCollectionPublicationStep(
       throw unavailable();
     if (source.metadata.factFence === null) throw unavailable();
     const plan = compileCurrentOwnerFilter(native.definition.filter);
-    // The delivered adapter has no current public Source/index proof. Refuse this foreign branch before
-    // scope preparation can issue a public Search request or use it as part of private whole-query meaning.
-    if (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner'))
-      throw unavailable();
-    const scope = createSearchScopeSource(options);
-    const prepared = await work.compose(async (allowance) => {
-      const prepared = await scope.prepare(native.definition.filter, {
-        releaseDigest: native.releaseDigest,
-        order: { kind: 'id', source: native.sourceIdentity },
-        allowance,
-        readOnly: true,
-      });
-      return { prepared, work: scope.work(prepared) };
-    });
+    const catalogueOnly = plan.leaves.length > 0 && plan.leaves.every((leaf) => leaf.kind === 'catalogue');
+    // Owner publication keeps the private capture. Catalogue publication uses Search's public population.
     if (
-      prepared.prepared.basis.release !== native.releaseDigest ||
-      !prepared.prepared.basis.nativeOwner ||
-      !isDeepStrictEqual(prepared.prepared.basis.nativeOwner, {
+      !catalogueOnly &&
+      (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner'))
+    )
+      throw unavailable();
+    const scope = catalogueOnly ? null : createSearchScopeSource(options);
+    const ownerPrepared: PreparedSearchScope | null = catalogueOnly
+      ? null
+      : (
+          await work.compose(async (allowance) => {
+            const prepared = await scope!.prepare(native.definition.filter, {
+              releaseDigest: native.releaseDigest,
+              order: { kind: 'id', source: native.sourceIdentity },
+              allowance,
+              readOnly: true,
+            });
+            return { prepared, work: scope!.work(prepared) };
+          })
+        ).prepared;
+    const basis: ScopeBasis = catalogueOnly
+      ? (Object.freeze({
+          release: native.releaseDigest,
+          query: createHash('sha256')
+            .update(canonicalize({ filter: native.definition.filter, source: 'catalogue' })!)
+            .digest('hex'),
+          profile: native.observation.basis.digest,
+          canonical: createHash('sha256')
+            .update(
+              canonicalize({
+                ...native.identityObservation,
+                committedRevision: native.identityObservation.committedRevision.toString(),
+              })!,
+            )
+            .digest('hex'),
+          nativeOwner: Object.freeze({
+            source: structuredClone(native.sourceIdentity),
+            observation: structuredClone(native.observation),
+          }),
+        }) as ScopeBasis)
+      : ownerPrepared!.basis;
+    if (
+      basis.release !== native.releaseDigest ||
+      !basis.nativeOwner ||
+      !isDeepStrictEqual(basis.nativeOwner, {
         source: native.sourceIdentity,
         observation: native.observation,
       })
@@ -385,7 +415,7 @@ export async function stageCollectionPublicationStep(
           locator.ownerAccountId,
           definitionDigest(native),
           json(binding(native)),
-          json(prepared.prepared.basis),
+          json(basis),
           source.generation,
           source.basis.digest,
           json(initialCollectionPublicationFrontier()),
@@ -400,7 +430,7 @@ export async function stageCollectionPublicationStep(
       row.generation !== native.output.ref.generation ||
       row.definition_digest !== definitionDigest(native) ||
       !isDeepStrictEqual(row.binding, binding(native)) ||
-      !isDeepStrictEqual(row.scope_basis, prepared.prepared.basis) ||
+      !isDeepStrictEqual(row.scope_basis, basis) ||
       row.canonical_generation !== source.generation ||
       row.canonical_basis_digest !== source.basis.digest ||
       row.fact_fence !== source.metadata.factFence ||
@@ -418,40 +448,80 @@ export async function stageCollectionPublicationStep(
     let included: boolean | null = null;
     let references: readonly string[] = [];
     if (!frontier.exhausted && !frontier.pending) {
-      const page = await work.compose((allowance) =>
-        scope.sourcePrefix(prepared.prepared, {
-          afterSubjectId: frontier.after,
-          candidateLimit: 16,
-          allowance,
-        }),
-      );
-      if (!isDeepStrictEqual(page.basis, row.scope_basis) || !isDeepStrictEqual(page.observation, native.observation))
-        throw unavailable();
-      frontier = enterCollectionPublicationPrefix(frontier, page);
+      if (catalogueOnly) {
+        const page = await work.compose(async (allowance) => {
+          const remaining = Math.min(16, allowance.remaining.candidateKeys);
+          if (remaining < 1) throw unavailable();
+          const result = await readCataloguePublicationPage({
+            client: options.client,
+            prefix: options.prefix,
+            filter: native.definition.filter,
+            release: native.definition.release.value,
+            after: frontier.after,
+            limit: remaining,
+          });
+          return {
+            ...result,
+            work: {
+              reservationId: allowance.reservationId,
+              used: {
+                ...zeroScopeWork(),
+                candidateKeys: result.subjects.length,
+                statements: 1,
+              },
+            },
+          };
+        });
+        frontier = enterCataloguePublicationMembers(frontier, page.subjects, page.exhausted);
+      } else {
+        const page = await work.compose((allowance) =>
+          scope!.sourcePrefix(ownerPrepared!, {
+            afterSubjectId: frontier.after,
+            candidateLimit: 16,
+            allowance,
+          }),
+        );
+        if (!isDeepStrictEqual(page.basis, row.scope_basis) || !isDeepStrictEqual(page.observation, native.observation))
+          throw unavailable();
+        frontier = enterCollectionPublicationPrefix(frontier, page);
+      }
     }
     if (frontier.pending) {
       subject = frontier.pending.subject;
-      const evaluated = await work.compose(async (allowance) => {
-        const r = allowance.remaining;
-        const evaluation = await scope.evaluate(prepared.prepared, [subject!], {
-          rawKeys: Math.min(256, r.candidateKeys),
-          allowance,
-          native: {
-            rows: r.nativeRows,
-            points: r.nativePoints,
-            witnesses: r.witnessKeys,
-            bytes: r.bytes,
-            emptySeeks: r.emptySeeks,
-          },
-          progress: frontier.pending?.progress ?? null,
+      if (catalogueOnly) {
+        const settled = settleCollectionPublicationSubject(frontier, {
+          values: [true],
+          basis,
+          usage: { keys: 1, native: { points: 0, witnesses: 0, rows: 0, bytes: 0, emptySeeks: 0 } },
+          evidence: [],
+          progress: null,
         });
-        return { evaluation, work: scope.work(evaluation) };
-      });
-      if (!isDeepStrictEqual(evaluated.evaluation.basis, row.scope_basis)) throw unavailable();
-      const settled = settleCollectionPublicationSubject(frontier, evaluated.evaluation);
-      frontier = settled.frontier;
-      included = settled.included;
-      references = evaluated.evaluation.evidence;
+        frontier = settled.frontier;
+        included = settled.included;
+        references = [];
+      } else {
+        const evaluated = await work.compose(async (allowance) => {
+          const r = allowance.remaining;
+          const evaluation = await scope!.evaluate(ownerPrepared!, [subject!], {
+            rawKeys: Math.min(256, r.candidateKeys),
+            allowance,
+            native: {
+              rows: r.nativeRows,
+              points: r.nativePoints,
+              witnesses: r.witnessKeys,
+              bytes: r.bytes,
+              emptySeeks: r.emptySeeks,
+            },
+            progress: frontier.pending?.progress ?? null,
+          });
+          return { evaluation, work: scope!.work(evaluation) };
+        });
+        if (!isDeepStrictEqual(evaluated.evaluation.basis, row.scope_basis)) throw unavailable();
+        const settled = settleCollectionPublicationSubject(frontier, evaluated.evaluation);
+        frontier = settled.frontier;
+        included = settled.included;
+        references = evaluated.evaluation.evidence;
+      }
     }
     // Release the held envelope before dispatching its native rereads/writes. It is the SAME root allowance.
     settlement.cancel();
