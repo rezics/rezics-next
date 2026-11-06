@@ -1,9 +1,11 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import type { CloudEvent, Envelope } from '../../../src/events/log.ts';
+import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createNativeContentSystemWithWriteRateOverrides, nativeGrantor, nativeOperator } from './native-system.ts';
 import {
   grantAccountActions,
@@ -17,15 +19,32 @@ const WRITE_RATE_OVERRIDES = JSON.stringify({
   member: { write: { maximum: 10_000, seconds: 86_400 } },
 });
 
+function instrumentNativePool(pool: Pool, database: GrowthDatabase): void {
+  const target = pool as unknown as { query: Pool['query']; connect: Pool['connect'] };
+  target.query = database.pool.query.bind(database.pool) as Pool['query'];
+  target.connect = database.pool.connect.bind(database.pool) as Pool['connect'];
+}
+
+function appDatabaseUrl(source: string, namespace: string): string {
+  const url = new URL(source);
+  url.pathname = `/${namespace}_app`;
+  return url.href;
+}
+
 export async function replyNoticeFixture() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required for native reply notices');
+  const namespace = `reply_notice_${randomUUID().replaceAll('-', '')}`;
   const system = await createNativeContentSystemWithWriteRateOverrides(
-    { databaseUrl, namespace: `reply_notice_${randomUUID().replaceAll('-', '')}` },
+    { databaseUrl, namespace },
     WRITE_RATE_OVERRIDES,
   );
+  let db: GrowthDatabase | undefined;
   try {
     await bootstrapRelease(system.database.pool, bundledRelease);
+    const growth = await openGrowthDatabase(appDatabaseUrl(databaseUrl, namespace));
+    db = growth;
+    instrumentNativePool(system.database.pool, growth);
     const operator = nativeOperator(system);
     const grantor = nativeGrantor(system);
     const board = await provisionNativeDiscussionBoard(system.kernel, operator, { label: 'Reply notice' });
@@ -37,12 +56,18 @@ export async function replyNoticeFixture() {
       [actor.actor.accountId, actor.bearer],
       [principal.actor.accountId, principal.bearer],
     ]);
+    async function grant(subject: string, action: string, target: { route: number; id: string }): Promise<void> {
+      await grantAccountActions(system.kernel, grantor, target, subject, [action]);
+    }
     for (const id of credentials.keys()) {
-      await grantAccountActions(system.kernel, grantor, grantResource(board.id), id, ['board:read', 'thread:create']);
+      await grant(id, 'account:read', grantResource(id));
+      await grant(id, 'account:update', grantResource(id));
+      await grant(id, 'board:read', grantResource(board.id));
+      await grant(id, 'thread:create', grantResource(board.id));
       await installRealmMember(system.database.pool, board.realmId, id);
     }
-    const originalQuery = system.database.pool.query.bind(system.database.pool);
-    system.database.pool.query = new Proxy(originalQuery, {
+    const originalQuery = growth.admin.query.bind(growth.admin);
+    growth.admin.query = new Proxy(originalQuery, {
       apply(query, client, args) {
         if (typeof args[0] === 'string') {
           args[0] = args[0].replace(
@@ -52,7 +77,7 @@ export async function replyNoticeFixture() {
         }
         return Reflect.apply(query, client, args);
       },
-    }) as typeof system.database.pool.query;
+    }) as typeof growth.admin.query;
     async function call(account: string, method: string, path: string, payload?: unknown, key: string = randomUUID()) {
       const response = await system.kernel.handle(
         new Request(`https://content.test${path}`, {
@@ -90,8 +115,9 @@ export async function replyNoticeFixture() {
       expect(result).toMatchObject({ status: 201 });
       const value = result.value.thread as { id: string; firstPost: { id: string; revisionId: string } };
       for (const id of credentials.keys()) {
-        await grantAccountActions(system.kernel, grantor, grantResource(value.id), id, ['thread:read', 'post:create']);
-        await grantAccountActions(system.kernel, grantor, grantResource(value.firstPost.id), id, ['post:read']);
+        await grant(id, 'thread:read', grantResource(value.id));
+        await grant(id, 'post:create', grantResource(value.id));
+        await grant(id, 'post:read', grantResource(value.firstPost.id));
       }
       return value;
     }
@@ -104,12 +130,11 @@ export async function replyNoticeFixture() {
       });
       expect(result).toMatchObject({ status: 201 });
       const value = result.value.post as { id: string; revisionId: string };
-      for (const id of credentials.keys())
-        await grantAccountActions(system.kernel, grantor, grantResource(value.id), id, ['post:read']);
+      for (const id of credentials.keys()) await grant(id, 'post:read', grantResource(value.id));
       return value;
     }
     async function envelope(postId: string): Promise<Envelope> {
-      const { rows } = await system.database.pool.query(
+      const { rows } = await growth.admin.query(
         "SELECT * FROM core.outbox WHERE type='com.rezics.content.post.published.v1' AND data->>'itemId'=$1",
         [postId],
       );
@@ -132,19 +157,20 @@ export async function replyNoticeFixture() {
     }
     async function notices(postId: string) {
       return (
-        await system.database.pool.query(
+        await growth.admin.query(
           'SELECT recipient_id,kind,actor_id,thread_id,post_id,source_id FROM content.notice WHERE source_id=$1',
           [postId],
         )
       ).rows;
     }
     return {
-      db: { pool: system.database.pool, admin: system.database.pool },
+      db: growth,
       accounts: {
         actor: actor.actor.accountId,
         recipient: recipient.actor.accountId,
         principal: principal.actor.accountId,
         access: system.access,
+        grant,
       },
       boardId: board.id,
       call,
@@ -153,11 +179,19 @@ export async function replyNoticeFixture() {
       envelope,
       notices,
       async close() {
-        await system.close();
+        try {
+          await db?.close();
+        } finally {
+          await system.close();
+        }
       },
     };
   } catch (error) {
-    await system.close();
+    try {
+      await db?.close();
+    } finally {
+      await system.close();
+    }
     throw error;
   }
 }

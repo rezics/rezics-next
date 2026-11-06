@@ -823,7 +823,7 @@ use their own optional, default-on `thread_watch` preference, separate from repl
 
 Decision: `thread_watch` has its own default-on preference, and a reader can clear their own watch after access to the thread is lost.
 
-Decision: Notice fixtures create discussion boards through ordinary Space, Realm and board routes; a SQL-inserted Board without Realm, purpose or identity is not a thread parent. Realm creation after Space creation uses Community's current witness refresh (`20261106043000_space_discovery_witness_locals.sql`), which copies reference removals from the Space witness producer epoch rather than from identity-only reference rows.
+Decision: Notice fixtures create discussion boards through ordinary Space, Realm and board routes; a SQL-inserted Board without Realm, purpose or identity is not a thread parent. Realm creation after Space creation uses Community's current witness refresh (`20261106043000_space_discovery_witness_locals.sql`), which copies reference removals from the Space witness producer epoch rather than from identity-only reference rows. The native reply-notice fixture keeps `accounts.grant` as ordinary `POST /v1/grants` receipts and a GrowthDatabase over the cloned app namespace so existing consumer assertions and growth captures stay unchanged.
 
 A published post with a parent notifies that parent's author with `reply`. A published post without a parent
 notifies the thread's opening-post author. Creating the opening post never notifies its own author. A `mention`
