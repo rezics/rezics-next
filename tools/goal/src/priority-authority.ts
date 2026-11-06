@@ -85,11 +85,7 @@ function sessionGoal(state: ManagerSession | undefined): string | undefined {
  * The manager named in a brief may submit backlog dispatch only when that manager's live session owns the Goal
  * directory, or when the manager id is the directory name and the session claims no other Goal.
  */
-export function confirmedBacklogOwner(
-  db: Database,
-  goal: string,
-  manager: string,
-): AuthenticatedManager | undefined {
+export function confirmedBacklogOwner(db: Database, goal: string, manager: string): AuthenticatedManager | undefined {
   const actor = backlogManagerActor(db, manager);
   if (!actor) return undefined;
   const owned = sessionGoal(managerSession(db, manager));

@@ -56,11 +56,7 @@ import {
 } from './backlog-shared.ts';
 import { fail, recordGoalDispatch, recoverClaims } from './backlog-claims.ts';
 import { deliverResearchCompletions, dispatchResearchClaim, recoverResearchClaims } from './backlog-research.ts';
-import {
-  confirmedBacklogOwner,
-  requireUrgentDispatch,
-  type AuthenticatedManager,
-} from './priority-authority.ts';
+import { confirmedBacklogOwner, requireUrgentDispatch, type AuthenticatedManager } from './priority-authority.ts';
 
 export { backlogDirectory };
 

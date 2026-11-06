@@ -4,11 +4,7 @@ import { join } from 'node:path';
 import { sweepBacklog, type BacklogRuntime } from './backlog.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import {
-  confirmedBacklogOwner,
-  setUrgentGrant,
-  type AuthenticatedManager,
-} from './priority-authority.ts';
+import { confirmedBacklogOwner, setUrgentGrant, type AuthenticatedManager } from './priority-authority.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { markdown, temporaryDirectory } from './test-support.ts';
