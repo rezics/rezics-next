@@ -8,10 +8,9 @@ import {
 
 test('event-callback-source-association is the fence profile plus two Source callbacks', () => {
   const fence = SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE;
-  const association = SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE;
-  const extra =
-    SOURCE_ASSOCIATION_COMMAND_DISPATCH_CONTROLS.callbackAdmission.work.bytes +
-    SOURCE_ASSOCIATION_COMMAND_DISPATCH_CONTROLS.sourceAssociation.work.bytes;
+  const association = SOURCE_ASSOCIATION_COMMAND_DISPATCH_ALLOWANCE();
+  const controls = SOURCE_ASSOCIATION_COMMAND_DISPATCH_CONTROLS();
+  const extra = controls.callbackAdmission.work.bytes + controls.sourceAssociation.work.bytes;
   expect(association.profile).toBe('event-callback-source-association');
   expect(association.maxima.callbacks).toBe(SOURCE_ASSOCIATION_CALLBACK_MAX);
   expect(SOURCE_ASSOCIATION_CALLBACK_MAX).toBe(2);
@@ -23,7 +22,7 @@ test('event-callback-source-association is the fence profile plus two Source cal
   expect(association.total.work.bytes).toBe(fence.total.work.bytes + extra);
   expect(association.total.work.emptySeeks).toBe(fence.total.work.emptySeeks);
   expect(association.effect.work.bytes).toBe(fence.effect.work.bytes + extra);
-  expect(association.cleanup).toEqual(SOURCE_ASSOCIATION_COMMAND_DISPATCH_CONTROLS.cleanupRollback);
+  expect(association.cleanup).toEqual(controls.cleanupRollback);
 });
 
 test('original-funded disposition composes Access, participant, binding, hold and association from installed owners', async () => {

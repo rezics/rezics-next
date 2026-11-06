@@ -8,6 +8,7 @@ export {
   AccessWorkAccounting,
   AccessWorkUnavailableError,
   EMPTY_ACCESS_WORK,
+  isAccessWorkDispatch,
   type AccessWork,
   type AccessWorkSink,
   type AccessWorkProducer,

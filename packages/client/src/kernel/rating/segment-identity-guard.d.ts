@@ -1,4 +1,4 @@
-import type { CommandTransaction } from '../command/command.ts';
+import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import type { IdentityRepairPage } from './identity-work-frame.ts';
 export type RatingIdentityMapping = Readonly<{
     originalId: string;
@@ -8,6 +8,8 @@ export type RatingIdentityMapping = Readonly<{
 export type RatingIdentityAuthority = Readonly<{
     status: 'pending';
     reason: string;
+    obligationId?: string;
+    events?: readonly CommandEvent[];
 }> | Readonly<{
     status: 'current';
     obligationId: string;
@@ -29,6 +31,8 @@ export type RatingIdentityProducer = Readonly<{
     }>): Promise<boolean>;
 }>;
 export declare const unavailableRatingIdentityProducer: RatingIdentityProducer;
+export declare function bindRatingIdentityProducer(producer: RatingIdentityProducer): void;
+export declare function ratingIdentityProducer(): RatingIdentityProducer;
 export declare function validIdentityAuthority(page: IdentityRepairPage, authority: Extract<RatingIdentityAuthority, {
     status: 'current';
 }>): boolean;

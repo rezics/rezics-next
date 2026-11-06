@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { mergeVerifiedAgent } from '../../src/access/agent-verification.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/adapters/agent-identity-recovery-receiving.ts';
 import {
@@ -29,7 +30,11 @@ import {
   identitySourceConsumerDirectoryPlan,
   readIdentitySourceMaintenanceConfig,
 } from '../../src/semantic/identity-source-maintenance-config.ts';
-import { approvedVerification, cutoverFixture } from './support/identity-epoch-cutover.ts';
+import {
+  approvedVerification,
+  cutoverFixture,
+  installIdentityEpochPublication,
+} from './support/identity-epoch-cutover.ts';
 import * as bindingConsumer from '../../src/semantic/identity-epoch-binding.ts';
 import {
   readIdentityScopeConsumerWork,
@@ -39,24 +44,35 @@ import type { IdentityPrearmTicketData } from '../../src/semantic/identity-epoch
 import type { LibraryScopeEffectSeal } from '../../src/library/identity-scope-effects.ts';
 import { IdentityHistoryWorkUnavailable } from '../../src/history/contract/errors.ts';
 
-/** Admit the original Accounts job. Verify resume still needs worker Search and Library. */
-async function admitOriginalAccountIdentity(pool: Pool, account: string, receiptId: string) {
-  const { loadAccountIdentitySource } = await import('../../src/access/agent-verification-identity.ts');
-  const { identityEpochStore } = await import('../../src/semantic/identity-adapters/index.ts');
-  const receipt = { kind: 'account-agent.verify' as const, account, receipt: receiptId };
-  await identityEpochStore().prepareAdmission(pool, {}, (await loadAccountIdentitySource(pool, receipt)).input);
-  return receipt;
+/** Publish the original Accounts job through installed Search and Library participants. */
+async function publishOriginalAccountIdentity(pool: Pool, workflow: Parameters<typeof mergeVerifiedAgent>[1]) {
+  const receipt = { kind: 'account-agent.verify' as const, account: workflow.accountId, receipt: workflow.receiptId };
+  const until = Date.now() + 120_000;
+  let last: unknown;
+  while (Date.now() < until) {
+    try {
+      await mergeVerifiedAgent(pool, workflow);
+      await readAccountIdentityUndo(pool, receipt);
+      return receipt;
+    } catch (error) {
+      last = error;
+      await Bun.sleep(250);
+    }
+  }
+  throw last instanceof Error ? last : new Error('Native identity publication did not complete');
 }
 
 // Authored native cases only. Run through the existing kernel fixture runner after integration.
 let f: Awaited<ReturnType<typeof cutoverFixture>>;
+let publication: Awaited<ReturnType<typeof installIdentityEpochPublication>>;
 let reference: IdentitySourceConsumerReference;
 beforeAll(async () => {
   f = await cutoverFixture();
   const catalogue = (await f.create('Custody verification catalogue')).subject.id;
   const approved = await approvedVerification(f, catalogue);
   await ensureAccountAgent(f.pool, { account: approved.account, kind: 'person', name: null });
-  const receipt = await admitOriginalAccountIdentity(f.pool, approved.account, approved.workflow.receiptId);
+  publication = await installIdentityEpochPublication(f);
+  const receipt = await publishOriginalAccountIdentity(f.pool, approved.workflow);
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   reference = {
     receipt,
@@ -76,9 +92,13 @@ beforeAll(async () => {
     },
     erasedRole: 'subject',
   };
-});
+}, 180_000);
 afterAll(async () => {
-  await f?.close();
+  try {
+    await publication?.stop();
+  } finally {
+    await f?.close();
+  }
 });
 
 test('Original native binding and scoped writers serialize terminal Source consumer cuts and retained scope obligations using genuine work admission and owner-native receipts rather than publication or inventory alone', async () => {
@@ -217,6 +237,16 @@ test('History-sized Source funding preserves the directory child bounds and refu
     statements: 173,
     bytes: 630784,
     engineRequests: 0,
+  });
+  expect(configured.library).toEqual({
+    candidateKeys: 1,
+    identityMetadataRows: 0,
+    nativeRows: 8192,
+    nativePoints: 128,
+    witnessKeys: 1,
+    statements: 128,
+    bytes: 1048576,
+    emptySeeks: 128,
   });
   expect(identitySourceConsumerDirectoryPlan(configured.native)).toEqual({
     envelope: { rows: 100, points: 200, statements: 36, bytes: 229376, engineRequests: 0 },
@@ -535,6 +565,7 @@ test('The original Source owner durably guards exact History readiness and closu
   await bootstrapGovernance(f.pool, accounts.staff);
   await real.grant({ route: 1, id: accounts.person }, 'person', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'staff', 'account:verify_agent');
+  await ensureAccountAgent(f.pool, { account: accounts.person, kind: 'person', name: null });
   const context = async (persona: 'person' | 'staff') => ({
     pool: f.pool,
     deadline: Date.now() + 5000,
@@ -556,8 +587,7 @@ test('The original Source owner durably guards exact History readiness and closu
   expect(saved.decisionReceiptId).toBe(decided.value.decisionReceiptId);
   const workflow = { ...saved, receiptId: saved.decisionReceiptId };
   await recordPendingAgentVerification(f.pool, workflow, () => new Date());
-  await ensureAccountAgent(f.pool, { account: accounts.person, kind: 'person', name: null });
-  const receipt = await admitOriginalAccountIdentity(f.pool, accounts.person, workflow.receiptId);
+  const receipt = await publishOriginalAccountIdentity(f.pool, workflow);
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   const erased = (
     await f.admin.query(
@@ -683,7 +713,7 @@ test('The original Source owner durably guards exact History readiness and closu
   } finally {
     await client.close();
   }
-}, 60_000);
+}, 180_000);
 
 test('independent Source verification prepays its complete nested body on every entry and refuses an insufficient frame before SQL', async () => {
   const { spyOn } = await import('bun:test');

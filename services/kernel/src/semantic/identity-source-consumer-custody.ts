@@ -12,22 +12,22 @@ import type {
   NativeStepWork,
 } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
-import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type {
+  LibraryExpectedEffectAfter,
   LibraryScopeEffectSeal,
   LibraryScopeEffectsPage,
   LibraryScopeEffectsKey,
 } from '../library/identity-scope-effects.ts';
-import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } from '../library/identity-scope-effects.ts';
-import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effects.ts';
-import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-source-work.ts';
+import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/access-capabilities.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
 import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import type { IdentityReceivingSelection, IdentityReceivingRecord } from './identity-receiving-effects-types.ts';
-import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
-import type { AccountIdentityReversalSettlement } from '../access/agent-verification-identity-reversal.ts';
+import type {
+  AccountIdentityReversalSettlement,
+  AccountIdentitySource,
+} from '../access/agent-verification-identity.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -90,7 +90,7 @@ import {
   IdentitySourceOriginalUnavailable,
   identitySourceConsumerLibraryWork,
 } from './identity-source-consumer-maintenance.ts';
-import { ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION } from '../access/agent-verification-identity.ts';
+import { identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
 import {
   IDENTITY_EPOCH_JOB_READ_DECLARATION,
   IDENTITY_EPOCH_STEP_RECONCILE_DECLARATION,
@@ -769,27 +769,20 @@ export async function readIdentitySourcePrepaidLibraryPage(
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-resources-changed');
   claimIdentitySourceLibraryCall(pool, 'effectPages');
   input = structuredClone(input);
-  const installed = await import('../library/identity-scope-effects.ts');
+  const library = identitySourceConsumerRuntime();
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
-  const entry = Object.getOwnPropertyDescriptor(installed, 'readLibraryScopeEffectsPageWithWork');
-  if (!entry || !('value' in entry) || typeof entry.value !== 'function')
+  if (typeof library.readLibraryScopeEffectsPageWithWork !== 'function')
     throw new IdentitySourceOriginalUnavailable('identity-source-readLibraryScopeEffectsPageWithWork-not-installed');
-  const libraryOwner = await import('../library/collection-source-work.ts');
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
-  const declaration = Object.getOwnPropertyDescriptor(libraryOwner, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
-  if (!declaration || !('value' in declaration) || !declaration.value)
+  const declaration = library.libraryOriginalDeclaration();
+  if (!declaration?.work)
     throw new IdentitySourceOriginalUnavailable('identity-source-LibraryAllReachedCalls-declaration-not-installed');
-  const read = entry.value as (
-    pool: Pool,
-    pageInput: typeof input,
-    work: import('../library/collection-source-work.ts').NativeCollectionWork,
-  ) => Promise<LibraryScopeEffectsPage>;
   // The installed Library body enforces its own exact literal policy on the
   // SAME ledger. Its Core controls are reserved by the private Source adapter
   // from the disjoint Source partition, outside Library body observation.
-  const page = await read(pool, input, work);
+  const page = await library.readLibraryScopeEffectsPageWithWork(pool, input, work);
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
   const receipt = work.receipt();
@@ -953,16 +946,17 @@ async function original(pool: Pool, reference: IdentitySourceConsumerReference, 
     chargeDeclared(
       pool,
       deadline,
-      ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+      identitySourceConsumerRuntime().originalSourceDeclaration(),
       'identity-source-original-Account-reader-declaration-missing',
     );
   }
   const prepaid = isPrepaidIdentitySourceConsumerMaintenance(pool);
+  const accounts = identitySourceConsumerRuntime();
   if (prepaid) {
     const source = (
       await withIdentitySourceNoEffectCommand(pool, deadline, () =>
         runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
-          noEffect(await readAccountIdentitySource(tx, reference.receipt, undefined, true)),
+          noEffect(await accounts.readAccountIdentitySource(tx, reference.receipt, undefined, true)),
         ),
       )
     ).value;
@@ -976,7 +970,7 @@ async function original(pool: Pool, reference: IdentitySourceConsumerReference, 
   } else {
     source = (
       await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
-        noEffect(await readAccountIdentitySource(tx, reference.receipt)),
+        noEffect(await accounts.readAccountIdentitySource(tx, reference.receipt)),
       )
     ).value;
     if (!sameSource(reference, source)) return null;
@@ -1225,10 +1219,15 @@ export async function readIdentitySourceConsumerCustody(
             chargeDeclared(
               pool,
               context.deadline,
-              ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+              identitySourceConsumerRuntime().originalSourceDeclaration(),
               'identity-source-original-Account-reader-declaration-missing',
             );
-            const live = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+            const live = await identitySourceConsumerRuntime().readAccountIdentitySource(
+              tx,
+              reference.receipt,
+              undefined,
+              true,
+            );
             const owner = await readPartition(tx, reference.source.partition);
             if (!sameSource(reference, live) || !owner || owner.writeState !== 'active') return noEffect(null);
             const values = referenceValues(reference);
@@ -1402,12 +1401,10 @@ async function verifiedTerminal(
   ).value;
 }
 async function owners() {
-  // Only exact original modules are consulted. Missing additive exports fail pending, with
-  // their complete native requirements published in the owner contract. No replacement producer.
+  // Binding and scope stay on their Semantic modules. Access technical bodies come from composition.
   const binding = (await import('./identity-adapters/identity-epoch-binding.ts')) as Partial<BindingConsumerOwner>;
   const scope = (await import('./identity-scoped-observations.ts')) as Partial<ScopedConsumerOwner>;
-  const technical = (await import('../access/agent-verification-identity.ts')) as Partial<TechnicalConsumerOwner>;
-  return { binding, scope, technical };
+  return { binding, scope, technical: identitySourceConsumerRuntime() };
 }
 async function latest(tx: CommandTransaction, retained: Retained): Promise<Progress | null> {
   const row =
@@ -1510,10 +1507,15 @@ async function checkpoint(
         chargeDeclared(
           pool,
           deadline,
-          ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+          identitySourceConsumerRuntime().originalSourceDeclaration(),
           'identity-source-original-Account-reader-declaration-missing',
         );
-        const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+        const source = await identitySourceConsumerRuntime().readAccountIdentitySource(
+          tx,
+          reference.receipt,
+          undefined,
+          true,
+        );
         if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
         bindSemanticProducerRoles(tx, roles);
         registerCommandCallback(tx, async (transactionId) => {
@@ -1636,7 +1638,7 @@ async function advanceConsumers(
           const ticketKey = hash(ticket);
           const prior = previous?.state === 'scope' && previous.ticket_key === ticketKey ? previous : null;
           const readPage = (allowance: WorkAllowance) =>
-            readLibraryScopeEffectsPage(pool, {
+            identitySourceConsumerRuntime().readLibraryScopeEffectsPage(pool, {
               ...key,
               after: prior?.effect_after ?? null,
               limit: 1,
@@ -1710,9 +1712,7 @@ async function advanceConsumers(
                   IDENTITY_SOURCE_RECEIVING_SELECTION_DECLARATION(),
                   'identity-source-receiving-selection-native-hold-declaration-missing',
                 );
-                const hold = (
-                  await import('../library/identity-original-work.ts')
-                ).declareLibraryIdentityCustodyOperation('revalidateHold');
+                const hold = identitySourceConsumerRuntime().declareLibraryIdentityCustodyOperation('revalidateHold');
                 chargeDeclared(
                   pool,
                   deadline,
@@ -1753,7 +1753,8 @@ async function advanceConsumers(
                 { partition: identityScopeAddress(ticket.scope).partition, deadline },
                 async (tx) => {
                   claimIdentitySourceLibraryCall(pool, 'currentVerifications');
-                  const verify = () => verifyLibraryScopeEffectsSeal(tx, key, page.seal);
+                  const verify = () =>
+                    identitySourceConsumerRuntime().verifyLibraryScopeEffectsSeal(tx, key, page.seal);
                   if (!(await (prepaid ? observe(verify, tx) : verify()))) return noEffect(null);
                   if (!page.exhausted) return noEffect({ fence: null });
                   const fence = await ports.scope.retainIdentityScopeConsumerFence!(tx, ticket, page.seal);
@@ -1936,10 +1937,15 @@ async function finishConsumers(
       chargeDeclared(
         pool,
         deadline,
-        ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(),
+        identitySourceConsumerRuntime().originalSourceDeclaration(),
         'identity-source-original-Account-reader-declaration-missing',
       );
-      const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+      const source = await identitySourceConsumerRuntime().readAccountIdentitySource(
+        tx,
+        reference.receipt,
+        undefined,
+        true,
+      );
       if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
       const disposition = await ports.binding.lockIdentitySourceConsumerCut!(
         tx,

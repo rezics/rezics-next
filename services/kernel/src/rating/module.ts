@@ -13,6 +13,7 @@ import { sourceClassificationRouteDeclarations } from './source-classification-r
 import { createSourceClassificationProducer } from './source-classification.ts';
 import { createRatingWorkModule, ratingWorkDeclarations } from './work-module.ts';
 import { createRatingIdentityRepairCommands } from './identity-repair.ts';
+import { ratingIdentityProducer, type RatingIdentityProducer } from './segment-identity-guard.ts';
 import { createVoteCommands } from './votes.ts';
 import { createClassificationBallotCommands } from './classification-ballot.ts';
 import { createRealmRatingQuestion } from './question-authoring.ts';
@@ -28,6 +29,7 @@ import { RATING_EVENTS } from './events.ts';
 
 export { createNativeRatingCapabilities } from './adapters/native.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
+export { bindRatingIdentityProducer, ratingIdentityProducer } from './segment-identity-guard.ts';
 
 export type RatingHttpApp = ReturnType<typeof ratingRoutes> & ReturnType<typeof sourceStatisticRoutes>;
 
@@ -62,6 +64,7 @@ export function createRatingModule(options: {
   pool: Pool;
   capabilities: RatingCapabilities;
   definition?: RatingDefinition;
+  producer?: RatingIdentityProducer;
 }) {
   const { pool, capabilities } = options;
   const definition = options.definition ?? createRatingDefinition();
@@ -89,7 +92,10 @@ export function createRatingModule(options: {
       const supplied = dependencies(config);
       return {
         votes: createVoteCommands(supplied),
-        identityRepair: createRatingIdentityRepairCommands(supplied),
+        identityRepair: createRatingIdentityRepairCommands({
+          ...supplied,
+          producer: options.producer ?? ratingIdentityProducer(),
+        }),
         classifications: createClassificationBallotCommands(supplied),
         providers: createSourceStatisticCommands(supplied),
         sourceClassifications: createSourceClassificationProducer(supplied),

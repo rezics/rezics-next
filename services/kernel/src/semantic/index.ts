@@ -40,6 +40,22 @@ export type {
   IdentityRatingCommitPreparation,
 } from './identity-rating-commit-participant.ts';
 export {
+  continueIdentityRatingRepair,
+  createIdentityRatingRepairProducer,
+  identityRatingRepairMappingDigest,
+  IDENTITY_RATING_REPAIR_CONTINUATION,
+  IDENTITY_RATING_REPAIR_MAX_CONTINUATION,
+} from './identity-rating-repair-producer.ts';
+export type {
+  IdentityRatingRepairAuthority,
+  IdentityRatingRepairDrain,
+  IdentityRatingRepairMapping,
+  IdentityRatingRepairPage,
+  IdentityRatingRepairProducer,
+  IdentityRatingRepairVote,
+  IdentityRatingRepairVoteKey,
+} from './identity-rating-repair-producer.ts';
+export {
   readCopyWorkDisclosure,
   COPY_WORK_DISCLOSURE_LOOKAHEAD,
   COPY_WORK_DISCLOSURE_MAX_RAW,
@@ -71,6 +87,8 @@ export type {
 } from './facet-population-contract.ts';
 export { createFacetPopulationSource } from './facet-population.ts';
 
+export { bindIdentitySourceConsumerRuntime, identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
+export type { IdentitySourceConsumerRuntime, IdentitySourceWorkDeclaration } from './identity-source-consumer-ports.ts';
 export { createIdentitySourceSupportReader } from './identity-source-support.ts';
 export type {
   IdentitySourceSupportRequest,

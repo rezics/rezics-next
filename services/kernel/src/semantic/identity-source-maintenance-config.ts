@@ -89,7 +89,10 @@ export function identitySourceConsumerDirectoryPlan(allowance: NativeStepWork): 
 
 // One private Library effect selection uses the existing one-page bounds. Identity metadata
 // is not read by this consumer path; the Source page is limited to one raw effect and keeps
-// the established Collection Source SQL/point/byte caps for that child.
+// the established Collection Source SQL/point/byte caps for that child. Coordinator produce
+// runs Search and Library participants inside this same independent frame; emptySeeks follows
+// the statement ceiling so Search readJob (partition, job, ack) and later participant SQL
+// can dispatch. Consumer page-end and sealed-empty probes still use two seeks, not this cap.
 const libraryDefaults = {
   CANDIDATE_KEYS: 1,
   IDENTITY_METADATA_ROWS: 0,
@@ -98,7 +101,7 @@ const libraryDefaults = {
   WITNESS_KEYS: 1,
   STATEMENTS: 128,
   BYTES: 1048576,
-  EMPTY_SEEKS: 2,
+  EMPTY_SEEKS: 128,
 } as const;
 
 function dimension(env: Environment, key: string, fallback: number, maximum: number): number {
@@ -131,7 +134,7 @@ export function readIdentitySourceMaintenanceConfig(env: Environment): IdentityS
       witnessKeys: dimension(env, 'LIBRARY_WITNESS_KEYS', libraryDefaults.WITNESS_KEYS, 1),
       statements: dimension(env, 'LIBRARY_STATEMENTS', libraryDefaults.STATEMENTS, 128),
       bytes: dimension(env, 'LIBRARY_BYTES', libraryDefaults.BYTES, 1048576),
-      emptySeeks: dimension(env, 'LIBRARY_EMPTY_SEEKS', libraryDefaults.EMPTY_SEEKS, 2),
+      emptySeeks: dimension(env, 'LIBRARY_EMPTY_SEEKS', libraryDefaults.EMPTY_SEEKS, 128),
     }),
   });
 }

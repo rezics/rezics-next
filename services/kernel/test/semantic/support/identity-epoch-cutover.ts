@@ -371,6 +371,7 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
     'collection:create',
     'collection:read',
     'collection:update',
+    'collection:delete',
     'subject:read',
     'follow:create',
     'follow:delete',
@@ -382,7 +383,7 @@ export async function libraryCutoverInput(f: EpochFixture, originals: readonly s
         action,
         {
           anonymous: action === 'subject:read',
-          ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
+          ...(action.startsWith('collection:') ? { 'x-resource-types': ['library.collection'] } : {}),
         },
       ]),
     ),
@@ -550,4 +551,43 @@ export async function interruptNativeStatement<T>(f: EpochFixture, pattern: RegE
     f.pool.off('acquire', acquire);
     for (const [client, query] of wrapped) client.query = query;
   }
+}
+
+/** Install Search and Library participants on this fixture pool, then launch the coordinator. */
+export async function installIdentityEpochPublication(f: Pick<EpochFixture, 'pool'>) {
+  const { startWorker } = await import('../../../src/worker.ts');
+  const { workerTestEnv } = await import('../../support/worker-env.ts');
+  const { readSearchConfig } = await import('../../../src/search/work.ts');
+  const { createOpenSearch } = await import('../../../src/search/opensearch.ts');
+  const { createSubjectIndex } = await import('../../../src/search/indices.ts');
+  const databaseUrl = f.pool.options.connectionString;
+  if (!databaseUrl) throw new Error('Identity publication fixture requires the owned pool connection string');
+  const env = workerTestEnv({
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+    KERNEL_SEARCH_PREFIX: `identity-${randomUUID().replaceAll('-', '')}`,
+  });
+  const config = readSearchConfig(env);
+  if (!config) throw new Error('Actual default fixed Search participant needs OPENSEARCH_URL');
+  await createSubjectIndex(createOpenSearch(config.url), config.prefix, 1);
+  const pool = f.pool;
+  // Commands, coordinator produce, SDK and relays share this owned pool. A second connection
+  // lets discovery relays observe NativeCollectionWork checkouts and refuse publication SQL.
+  pool.options.max = 1;
+  pool.options.idleTimeoutMillis = 0;
+  pool.options.connectionTimeoutMillis = 5_000;
+  const end = pool.end.bind(pool);
+  let closing: Promise<void> | undefined;
+  pool.end = () => (closing ??= end());
+  return startWorker(
+    {
+      databaseUrl,
+      poolSize: 1,
+      kernelPool() {
+        return pool;
+      },
+    },
+    undefined,
+    env,
+  );
 }

@@ -230,6 +230,9 @@
         "services/kernel/src/access/gates/admission.ts",
         "services/kernel/src/access/account-share.sql",
         "services/kernel/src/access/account-share.ts",
+        "services/kernel/src/access/account-public-read.sql",
+        "services/kernel/src/access/account-command-state.sql",
+        "services/kernel/src/access/work.ts",
         "services/kernel/src/access/durable-initiator-capture.ts"
       ],
       "allowedDependencies": [
@@ -497,7 +500,10 @@
         "services/kernel/src/library/access-capabilities.ts",
         "services/kernel/src/library/work-module.ts",
         "services/kernel/src/library/adapters/index.ts",
-        "services/kernel/src/library/domain-binding.ts"
+        "services/kernel/src/library/domain-binding.ts",
+        "services/kernel/src/library/identity-original-work.ts",
+        "services/kernel/src/library/identity-scope-effects.ts",
+        "services/kernel/src/library/collection-source-work.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -605,6 +611,8 @@
         "services/kernel/src/semantic/identity-epoch-contract.ts",
         "services/kernel/src/semantic/identity-source-consumer-custody.ts",
         "services/kernel/src/semantic/identity-source-consumer-maintenance.ts",
+        "services/kernel/src/semantic/identity-source-consumer-ports.ts",
+        "services/kernel/src/semantic/identity-rating-repair-producer.ts",
         "services/kernel/src/semantic/record-purge-authority.ts",
         "services/kernel/src/semantic/record-purge-custody.ts",
         "services/kernel/src/semantic/record-source-set.ts",
@@ -746,6 +754,9 @@
         "services/kernel/src/command/time.sql",
         "services/kernel/src/command/fence.sql",
         "services/kernel/src/command/no-effect-fence.sql",
+        "services/kernel/src/command/read-receipt.sql",
+        "services/kernel/src/command/work-context.ts",
+        "services/kernel/src/command/index.ts",
         "services/kernel/src/partition/read.sql"
       ],
       "allowedDependencies": [
@@ -1074,6 +1085,7 @@
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
         "apps/web/src/media/cover-src.ts",
+        "apps/web/src/threads/byline-time.ts",
         "apps/web/src/threads/community-entry.ts",
         "apps/web/src/threads/post-command-lifetime.ts",
         "apps/web/src/threads/thread-reading-context.ts"

@@ -109,6 +109,7 @@ import {
 } from '../history/adapters/index.ts';
 import { installHistoryComposition } from '../history/application/index.ts';
 import { type HistoryComposition } from '../history/contract/index.ts';
+import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 
 /** The composed implementation, bound by name. Every member has exactly one native adapter. */
 export function nativeHistoryComposition(): HistoryComposition {
@@ -222,4 +223,5 @@ export function nativeHistoryComposition(): HistoryComposition {
 /** Process composition installs the native History before requests are served or Work runs. */
 export function installNativeHistory(): void {
   installHistoryComposition(nativeHistoryComposition());
+  installIdentitySourceConsumerRuntime();
 }

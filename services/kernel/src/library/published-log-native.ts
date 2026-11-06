@@ -145,6 +145,39 @@ export function consumePublishedLogWork<T>(kind: string, total: Bound, dispatch:
   return association ? association.run(`library.published-log.${kind}`, native.dimensions, dispatch) : dispatch();
 }
 
+export const executePublishedLogRead = (
+  client: Parameters<typeof read.run>[0],
+  plan: ReturnType<typeof publishedLogReadPlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => read.run(client, plan.input));
+export const executePublishedLogLock = (
+  client: Parameters<typeof lock.run>[0],
+  plan: ReturnType<typeof publishedLogLockPlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => lock.run(client, plan.input));
+export const executePublishedLogPage = (
+  client: Parameters<typeof page.run>[0],
+  plan: ReturnType<typeof publishedLogPagePlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => page.run(client, plan.input));
+export const executePublishedLogDue = (
+  client: Parameters<typeof due.run>[0],
+  plan: ReturnType<typeof publishedLogDuePlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => due.run(client, plan.input));
+export const executePublishedLogInsert = (
+  client: Parameters<typeof insert.run>[0],
+  plan: ReturnType<typeof publishedLogInsertPlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => insert.run(client, plan.input));
+export const executePublishedLogDelete = (
+  client: Parameters<typeof remove.run>[0],
+  plan: ReturnType<typeof publishedLogDeletePlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => remove.run(client, plan.input));
+export const executePublishedLogRestore = (
+  client: Parameters<typeof restore.run>[0],
+  plan: ReturnType<typeof publishedLogRestorePlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => restore.run(client, plan.input));
+export const executePublishedLogPurge = (
+  client: Parameters<typeof purge.run>[0],
+  plan: ReturnType<typeof publishedLogPurgePlan>,
+) => consumePublishedLogWork(plan.kind, plan.total, () => purge.run(client, plan.input));
+
 /** Original absolute deadline plus the existing Access ledger. Remaining ms size retries, not this cutoff. */
 export function publishedLogAccessContext(pool: Pool, deadline: number): AccessContext {
   const association = currentCommandWorkAssociation();

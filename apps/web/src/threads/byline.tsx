@@ -7,6 +7,8 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthor } from '../identity/read';
 import { coverSrc } from '../media/cover-src';
+import { fullDateTime, timeText } from './byline-time';
+export { fullDateTime, timeText } from './byline-time';
 
 type BoardBylineAuthor = Readonly<{
   state: 'available';
@@ -17,33 +19,6 @@ type BoardBylineAuthor = Readonly<{
   automated: boolean;
 }>;
 type BylineAuthor = PageAuthor | BoardBylineAuthor;
-
-const minute = 60_000;
-const hour = 60 * minute;
-const day = 24 * hour;
-
-export function timeText(createdAt: string, now: string, locale: string): string {
-  const difference = new Date(createdAt).getTime() - new Date(now).getTime();
-  const distance = Math.abs(difference);
-  if (distance <= 7 * day) {
-    const [unit, milliseconds] =
-      distance < minute
-        ? (['second', 1_000] as const)
-        : distance < hour
-          ? (['minute', minute] as const)
-          : distance < day
-            ? (['hour', hour] as const)
-            : (['day', day] as const);
-    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(Math.round(difference / milliseconds), unit);
-  }
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(createdAt));
-}
-
-export function fullDateTime(createdAt: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'long', timeZone: 'UTC' }).format(
-    new Date(createdAt),
-  );
-}
 
 const personLink =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-start whitespace-normal [overflow-wrap:anywhere] underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';

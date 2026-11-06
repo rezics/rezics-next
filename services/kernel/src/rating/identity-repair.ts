@@ -206,7 +206,11 @@ export function createRatingIdentityRepairCommands(config: {
           const active = await eligible(tx, voterId);
           if (active !== (page.mode === 'repair')) throw new RepairPending('voter-eligibility-changed');
           const authority = page.mode === 'repair' ? await producer.hold(tx, page) : null;
-          if (authority?.status === 'pending') throw new RepairPending(authority.reason);
+          if (authority?.status === 'pending') {
+            if (authority.events?.length)
+              return { value: { status: 'pending', reason: authority.reason }, events: [...authority.events] };
+            throw new RepairPending(authority.reason);
+          }
           if (authority?.status === 'current' && !validIdentityAuthority(page, authority))
             throw new RepairPending('invalid-exact-currentness');
           const events = await applyRatingIdentityPage(

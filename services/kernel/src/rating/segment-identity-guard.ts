@@ -1,11 +1,11 @@
-import type { CommandTransaction } from '../command/command.ts';
+import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { createHash } from 'node:crypto';
 import type { IdentityRepairPage } from './identity-work-frame.ts';
 
 export type RatingIdentityMapping = Readonly<{ originalId: string; terminalId: string; epoch: string }>;
 export type RatingIdentityAuthority =
-  | Readonly<{ status: 'pending'; reason: string }>
+  | Readonly<{ status: 'pending'; reason: string; obligationId?: string; events?: readonly CommandEvent[] }>
   | Readonly<{ status: 'current'; obligationId: string; mappings: readonly RatingIdentityMapping[] }>;
 
 /** Trusted producer composition only. Released Pool observations cannot implement this port.
@@ -35,6 +35,17 @@ export const unavailableRatingIdentityProducer: RatingIdentityProducer = {
     return false;
   },
 };
+
+let bound: RatingIdentityProducer | undefined;
+
+/** Composition installs the Semantic producer. Rating never constructs that factory. */
+export function bindRatingIdentityProducer(producer: RatingIdentityProducer): void {
+  bound = producer;
+}
+
+export function ratingIdentityProducer(): RatingIdentityProducer {
+  return bound ?? unavailableRatingIdentityProducer;
+}
 
 export function validIdentityAuthority(
   page: IdentityRepairPage,

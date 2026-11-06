@@ -51,6 +51,8 @@ export const IDENTITY_EPOCH_HOME_AVAILABLE = 'com.rezics.semantic.identity-epoch
 export const IDENTITY_EPOCH_PROGRESS = 'com.rezics.semantic.identity-epoch.progress.v1' as const;
 export const IDENTITY_EPOCH_BOOTSTRAP = 'com.rezics.semantic.identity-epoch.bootstrap.v1' as const;
 export const IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED = 'com.rezics.semantic.identity-epoch.bootstrap-scheduled.v1' as const;
+export const IDENTITY_RATING_REPAIR_CONTINUATION =
+  'com.rezics.semantic.identity-rating-repair.continuation.v1' as const;
 
 export const RECORD_DELETED = 'com.rezics.semantic.record.deleted.v1' as const;
 export const RECORD_RESTORED = 'com.rezics.semantic.record.restored.v1' as const;
@@ -187,6 +189,16 @@ export const SEMANTIC_EVENTS = {
   ),
   [IDENTITY_EPOCH_PROGRESS]: Type.Object(
     { partition: Type.Integer({ minimum: 0, maximum: 4095 }), generation: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    { additionalProperties: false },
+  ),
+  [IDENTITY_RATING_REPAIR_CONTINUATION]: Type.Object(
+    {
+      partition: Type.Integer({ minimum: 0, maximum: 4095 }),
+      voterPartition: Type.Integer({ minimum: 0, maximum: 4095 }),
+      obligationId: UUID,
+      kind: Type.Union([Type.Literal('prepare'), Type.Literal('drain')]),
+      originals: Type.Array(UUID, { maxItems: 64 }),
+    },
     { additionalProperties: false },
   ),
   [IDENTITY_EPOCH_BOOTSTRAP]: Type.Object(
