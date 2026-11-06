@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { vndbLimits } from '@rezics/conversion/vndb';
 import { sourceDigest } from '@rezics/conversion/support';
+import { CrossMediaGraph, graphEdgeIdentity, graphEdgeKey } from '../src/cross-media-bindings.ts';
 import { CrossMediaDumpFiles, crossMediaAliases, planCrossMediaSeed } from '../src/cross-media-seed.ts';
 import { vndbWorkLinkConverterRevision } from '../src/showcase-work-links.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -294,6 +297,62 @@ test('malformed and oversized selected work links stay atomic bounded gaps', asy
     expect(
       oversized.edges.some((edge) => edge.holder === 'v411' && edge.property === 'rezics:crossMediaCounterpart'),
     ).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('unchanged work-link reopen replays the sealed proposal and does not retract', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'showcase-work-links-reopen-'));
+  try {
+    const paths = await copiedDumps(root);
+    const plan = await planCrossMediaSeed(new CrossMediaDumpFiles(paths.bangumi, paths.vndb));
+    const draft = plan.edges.find((edge) => edge.property === 'rezics:crossMediaCounterpart')!;
+    expect(draft).toMatchObject({ holder: 'v411', target: '100', table: 'extlinks' });
+    const db = new Database(':memory:');
+    const graph = new CrossMediaGraph(db);
+    graph.remember([draft]);
+    const sends: BatchCommand[][] = [];
+    const native = (key: string) =>
+      `00000000-0000-4000-8000-${key.replace(/\D/g, '').padStart(12, '0')}`;
+    const snapshot = {
+      provider: 'vndb' as const,
+      table: 'extlinks',
+      currentKeys: [graphEdgeKey(draft)],
+      currentIdentities: [graphEdgeIdentity(draft)],
+      scope: plan.workLinkSnapshot!.scope,
+      digest: plan.workLinkSnapshot!.digest,
+      complete: true,
+    };
+    const deliver = () =>
+      graph.deliver({
+        claim: ({ external_id }) => ({ state: 'bound', subject: native(external_id) }),
+        nativeType: (key) => (key === 'v411' ? 'wd:Q689445' : 'schema:TVSeries'),
+        currentRelationEndpoint: async () => 'current',
+        fence: async () => ({ fenced: false, securityRevision: null }),
+        batch: async ({ commands }) => {
+          sends.push(commands);
+          return {
+            results: commands.map((command, index) => ({
+              key: command.key,
+              status: 201 as const,
+              value: { candidate: native(String(900000 + index)), revision: 1 },
+            })),
+          };
+        },
+        relationSnapshots: [snapshot],
+      });
+    const first = await deliver();
+    expect(first.proposed).toEqual([
+      expect.objectContaining({ holder: 'v411', target: '100', property: 'rezics:crossMediaCounterpart' }),
+    ]);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.every((command) => command.op === 'propose')).toBe(true);
+    const reopened = await deliver();
+    expect(reopened.proposed).toEqual([]);
+    expect(reopened.unresolved).toEqual([]);
+    expect(sends).toHaveLength(1);
+    expect(sends.flat().some((command) => command.op === 'retract')).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
