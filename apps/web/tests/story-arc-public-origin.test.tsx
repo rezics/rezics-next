@@ -139,18 +139,22 @@ test('the mounted Subject, canonical route, correction session and existing read
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
+  // Module mocks are process-wide under the combined runner; capture each real module to restore it on exit.
+  const realEditorial = await import('../src/features/catalogue/editorial-entry');
   mock.module('../src/features/catalogue/editorial-entry', () => ({
     EditorialEntry: ({ children }: { children: ReactNode }) =>
       Children.toArray(children).find((child) => isValidElement(child) && child.type === StoryArcProfileEntry) ?? null,
   }));
   const fixture = storyArcProfileFixture();
   const profileLoads: unknown[] = [];
+  const realProfileActions = await import('../src/features/catalogue/story-arc-profile-actions');
   mock.module('../src/features/catalogue/story-arc-profile-actions', () => ({
     loadStoryArcProfile: async ({ data }: { data: { id?: string; work?: string } }) => {
       profileLoads.push(data);
       return fixture.transport.load(data);
     },
   }));
+  const realReaderActions = await import('../src/features/catalogue/story-arc-reader/actions');
   mock.module('../src/features/catalogue/story-arc-reader/actions', () => ({
     loadArcReader: async () => ({ ok: false, reason: 'unavailable' }),
   }));
@@ -399,6 +403,10 @@ test('the mounted Subject, canonical route, correction session and existing read
     await act(async () => root.unmount());
     client.clear();
     mock.restore();
+    mock.module('../src/features/catalogue/editorial-entry', () => realEditorial);
+    mock.module('../src/features/catalogue/story-arc-profile-actions', () => realProfileActions);
+    mock.module('../src/features/catalogue/story-arc-reader/actions', () => realReaderActions);
+    mock.module('../src/kernel/client', () => originalKernel);
     setLocale(oldLocale, { reload: false });
     await window.happyDOM.close();
     for (const [key, descriptor] of previous) {
