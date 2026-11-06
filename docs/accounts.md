@@ -235,9 +235,12 @@ Unknown-result handoff inputs stay concealed until an explicit current recovery 
 Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source
 relation nor its approval or execution; those require the original native source and exact-intent commands.
 
-Decision: the organization and software-account journey walk uses the admitted stack's persona command, then
-creates extra named personas through public signup and membership. Catalogue seed is not part of this journey:
-these account operations do not consume catalogue identities.
+Decision: the organization and software-account journey walk uses the admitted stack host's persona provisioning
+(native origin ready and `keys.json`), then creates extra named personas through public signup and membership.
+It does not launch a second in-process Kernel/Auth assemble: that duplicate sits beside the live stack and exceeds
+the 6 GiB check memory cap. Catalogue seed is not part of this journey: these account operations do not consume
+catalogue identities. Auth HTTP for the walk uses native Auth; mounted pages still use the public issuer and Web
+origins. A single Chromium process covers desktop, phone, zh-Hant, ja, light and dark.
 
 ## 3. Credentials, sessions and tokens
 

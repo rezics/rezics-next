@@ -1,8 +1,9 @@
 /**
  * Organization and software-account lifecycle walk. Runs inside `dev-stack.ts walk`.
  * Extra personas use public signup and membership; it never precomputes authority.
- * Catalogue seed is not consumed: these operations do not use catalogue identities,
- * and the import exceeds the check memory cap when composed with the walk stack.
+ * Catalogue seed is not consumed: these operations do not use catalogue identities.
+ * The stack host already provisions the developer; a second persona assemble would
+ * load another Kernel and Auth beside the live stack and exceed the 6 GiB check cap.
  */
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -102,19 +103,6 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
   return values;
 }
 
-async function run(command: string[]): Promise<number> {
-  const child = Bun.spawn(command, {
-    cwd: root,
-    stdin: 'ignore',
-    stdout: 'inherit',
-    stderr: 'inherit',
-    env: process.env,
-  });
-  const code = await child.exited;
-  if (code !== 0) throw new Error(`${command.join(' ')} exited ${code}`);
-  return code;
-}
-
 async function send(
   url: string,
   init: {
@@ -188,13 +176,26 @@ async function auth(
   body: unknown,
   timeout = 5_000,
 ) {
-  return send(`${stack.issuer}${path}`, {
+  return send(`${stack.native}${path}`, {
     method: 'POST',
     origin: stack.issuer,
     cookie: session?.cookie,
     body,
     timeout,
   });
+}
+
+async function untilAnswers(url: string, label: string) {
+  const deadline = Date.now() + 600_000;
+  while (Date.now() < deadline) {
+    const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
+      (response) => response.status < 500,
+      () => false,
+    );
+    if (ok) return;
+    await Bun.sleep(500);
+  }
+  throw new Error(`${label} was not ready after ten minutes`);
 }
 
 async function signup(stack: Origins, tag: string): Promise<Person> {
@@ -292,6 +293,8 @@ async function credentialEffect(
 }
 
 function loopbackOnly(route: import('playwright').Route) {
+  const type = route.request().resourceType();
+  if (type === 'image' || type === 'media' || type === 'font') return route.abort();
   const url = new URL(route.request().url());
   return url.hostname === '127.0.0.1' || ['data:', 'blob:'].includes(url.protocol) ? route.continue() : route.abort();
 }
@@ -348,7 +351,8 @@ const evidence: Evidence = {
   seed: {
     path: '.temp/cross-media-seed/result.json',
     exit: null,
-    skipped: 'catalogue seed omitted; account operations do not consume catalogue identities',
+    skipped:
+      'catalogue seed omitted; stack host persona plus public signup supply identities without a second assemble',
   },
   personas: [
     'ordinary-human',
@@ -364,8 +368,13 @@ const evidence: Evidence = {
   defects: [],
 };
 
-await run(['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
-evidence.sequence.push('persona');
+function note(step: string) {
+  evidence.sequence.push(step);
+  console.log(`managed-accounts-walk: ${step}`);
+}
+
+await untilAnswers(`${stack.native}/`, 'native Auth');
+note('native-ready');
 const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as {
   password: string;
 };
@@ -409,7 +418,7 @@ const website = await (async () => {
   return { session, bearer: token.value.access_token as string };
 })();
 evidence.native.push({ developer: developer.accountId });
-evidence.sequence.push('developer-token');
+note('developer-token');
 
 const opened = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:open', {
   bearer: website.bearer,
@@ -427,7 +436,7 @@ if (createdOrg.status !== 200) {
 }
 const organizationId = asId(createdOrg.value.accountId, 'organization');
 evidence.native.push({ organizationId, handle: orgHandle });
-evidence.sequence.push('organization-create');
+note('organization-create');
 
 const publicOrg = requireStatus(
   await kernel(stack, 'GET', '/v1/accounts', { query: { handle: orgHandle } }),
@@ -450,7 +459,7 @@ evidence.native.push({
   outsider: outsider.accountId,
   destination: dest.accountId,
 });
-evidence.sequence.push('extra-personas');
+note('extra-personas');
 
 const membershipSession = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.membership);
 async function addMember(person: Person, role: 'owner' | 'member') {
@@ -465,7 +474,7 @@ async function addMember(person: Person, role: 'owner' | 'member') {
 }
 await addMember(delegated, 'member');
 await addMember(member, 'member');
-evidence.sequence.push('named-membership');
+note('named-membership');
 
 const roster: Person[] = [];
 for (let index = 0; index < 20; index += 1) {
@@ -474,7 +483,7 @@ for (let index = 0; index < 20; index += 1) {
   await addMember(person, 'member');
 }
 evidence.native.push({ roster: roster.length });
-evidence.sequence.push('twenty-row-roster');
+note('twenty-row-roster');
 
 const rosterPage = await auth(stack, '/account-management/organizations/page', membershipSession, {
   organizationId,
@@ -553,7 +562,7 @@ if (removable) {
     else await addMember(removable, 'member');
   }
 }
-evidence.sequence.push('roster-selected-roles');
+note('roster-selected-roles');
 
 const manageGrant = await kernel(stack, 'POST', '/v1/grants', {
   bearer: website.bearer,
@@ -566,7 +575,7 @@ const manageGrant = await kernel(stack, 'POST', '/v1/grants', {
 });
 if (![201, 409].includes(manageGrant.status))
   evidence.native.push({ delegatedGrant: manageGrant.status });
-evidence.sequence.push('delegated-manage');
+note('delegated-manage');
 
 const management = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.transfer);
 const humanSoftwareHandle = handle('bot');
@@ -607,7 +616,7 @@ if (orgSoftwareDraft.status !== 200)
 const orgSoftwareId =
   orgSoftwareDraft.status === 200 ? asId(orgSoftwareDraft.value.accountId, 'organization software') : '';
 evidence.native.push({ humanSoftwareId, orgSoftwareId });
-evidence.sequence.push('software-create');
+note('software-create');
 
 async function passwordSignInStatus(accountId: string, secret: string) {
   return auth(stack, '/signin', undefined, {
@@ -659,7 +668,7 @@ if (humanSoftwareId) {
       afterRemove: afterRemove.status,
     },
   });
-  evidence.sequence.push('software-credentials');
+  note('software-credentials');
 }
 
 async function openOperator(session: Session, subjectAccountId: string) {
@@ -709,7 +718,7 @@ if (humanSoftwareId) {
     outsiderOpening: outsiderOpening.status,
     memberOpening: memberOpening.status,
   });
-  evidence.sequence.push('operator-opening');
+  note('operator-opening');
 }
 
 if (humanSoftwareId) {
@@ -756,7 +765,7 @@ if (humanSoftwareId) {
       evidence.native.push({ transfer: { status: execution.status, accountId: execution.value.accountId } });
     }
   }
-  evidence.sequence.push('software-transfer');
+  note('software-transfer');
 }
 
 const renameHandle = handle('ren');
@@ -797,7 +806,7 @@ if (currentHandle) {
       rename: { former: currentHandle, next: renameHandle, formerMovedTo: formerRow?.movedTo ?? null },
     });
   }
-  evidence.sequence.push('rename');
+  note('rename');
 }
 
 const inventory = await kernel(stack, 'GET', '/v1/me/managedAccounts', { bearer: website.bearer });
@@ -847,7 +856,7 @@ evidence.native.push({
   memberDetail: memberDetail.status,
   delegatedSoftware: delegatedSoftware.status,
 });
-evidence.sequence.push('persona-management-reads');
+note('persona-management-reads');
 
 await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
 if (typeof Bun.gc === 'function') Bun.gc(true);
@@ -855,8 +864,18 @@ const require = createRequire(resolve(root, 'apps/web/package.json'));
 const { chromium } = require('playwright') as typeof import('playwright');
 const browser = await chromium.launch({
   headless: true,
+  chromiumSandbox: false,
   env: { ...process.env, TMPDIR: '/tmp/rw' },
-  args: ['--disable-dev-shm-usage', '--disable-gpu', '--renderer-process-limit=1'],
+  args: [
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--disable-extensions',
+    '--no-zygote',
+    '--single-process',
+    '--renderer-process-limit=1',
+    '--js-flags=--max-old-space-size=256',
+  ],
 });
 try {
   const capture = async (
@@ -866,11 +885,16 @@ try {
     width: number,
     theme: 'light' | 'dark',
     path: string,
+    reload = true,
   ) => {
-    await page.context().addCookies([{ name: 'rezics_theme', value: theme, url: stack.web }]);
     await page.setViewportSize({ width, height: 1000 });
     await page.emulateMedia({ colorScheme: theme });
-    const response = await settle(page, `${stack.web}/${locale}${path}`);
+    const target = `${stack.web}/${locale}${path}`;
+    let response: import('playwright').Response | null = null;
+    if (reload) {
+      await page.context().addCookies([{ name: 'rezics_theme', value: theme, url: stack.web }]);
+      response = await settle(page, target);
+    }
     evidence.pages.push({
       persona,
       locale,
@@ -883,88 +907,84 @@ try {
     return response;
   };
 
-  const ownerContext = await browser.newContext({ locale: 'en-US' });
-  const ownerPage = await ownerContext.newPage();
-  ownerPage.setDefaultTimeout(60_000);
-  await ownerPage.route('**/*', loopbackOnly);
-  await signInWebsitePage(ownerPage, stack, developer.email, developerPassword);
-  for (const width of [390, 1280] as const)
-    for (const theme of ['light', 'dark'] as const)
-      await capture(ownerPage, 'organization-owner', 'en', width, theme, '/accounts');
+  const context = await browser.newContext({ locale: 'en-US' });
+  const page = await context.newPage();
+  page.setDefaultTimeout(60_000);
+  await page.route('**/*', loopbackOnly);
+  await signInWebsitePage(page, stack, developer.email, developerPassword);
+  await capture(page, 'organization-owner', 'en', 1280, 'light', '/accounts');
+  await capture(page, 'organization-owner', 'en', 390, 'dark', '/accounts', false);
   for (const locale of ['zh-Hant', 'ja'] as const)
-    await capture(ownerPage, 'organization-owner', locale, 1280, 'light', '/accounts');
-  await capture(ownerPage, 'organization-owner', 'en', 1280, 'light', `/organizations/${organizationId}`);
-  const heading = await ownerPage.locator('h1, [data-slot="page-heading"]').first().textContent().catch(() => '');
+    await capture(page, 'organization-owner', locale, 1280, 'light', '/accounts');
+  await capture(page, 'organization-owner', 'en', 1280, 'light', `/organizations/${organizationId}`);
+  const heading = await page.locator('h1, [data-slot="page-heading"]').first().textContent().catch(() => '');
   if (heading?.includes('account:read')) evidence.defects.push('mounted management heading mentioned account:read');
-  evidence.sequence.push('owner-web-management');
+  note('owner-web-management');
 
-  await signInAuthPage(ownerPage, stack, developer.email, developerPassword);
-  const orgCreate = await settle(ownerPage, `${stack.issuer}/organizations/new`);
+  await signInAuthPage(page, stack, developer.email, developerPassword);
+  const orgCreate = await settle(page, `${stack.issuer}/organizations/new`);
   evidence.pages.push({
     persona: 'organization-owner',
     path: '/organizations/new',
     status: orgCreate?.status() ?? 0,
-    heading: await ownerPage.locator('h1').first().textContent().catch(() => null),
+    heading: await page.locator('h1').first().textContent().catch(() => null),
   });
   const subject = orgSoftwareId || humanSoftwareId;
   if (subject) {
-    const transfer = await settle(ownerPage, `${stack.issuer}/operators/transfer?accountId=${subject}`);
+    const transfer = await settle(page, `${stack.issuer}/operators/transfer?accountId=${subject}`);
     evidence.pages.push({
       persona: 'organization-owner',
       path: '/operators/transfer',
       status: transfer?.status() ?? 0,
+      heading: await page.locator('h1').first().textContent().catch(() => null),
     });
-    const opening = await settle(ownerPage, `${stack.issuer}/automated/open`);
+    const confirm = page.getByRole('button', { name: /confirm|execute|transfer/i }).first();
+    if (await confirm.isVisible({ timeout: 3_000 }).catch(() => false))
+      evidence.pages.push({ persona: 'organization-owner', path: '/operators/transfer', review: 'visible' });
+    const opening = await settle(page, `${stack.issuer}/automated/open`);
     evidence.pages.push({
       persona: 'organization-owner',
       path: '/automated/open',
       status: opening?.status() ?? 0,
     });
-    const create = await settle(ownerPage, `${stack.issuer}/automated/new`);
+    const create = await settle(page, `${stack.issuer}/automated/new`);
     evidence.pages.push({
       persona: 'organization-owner',
       path: '/automated/new',
       status: create?.status() ?? 0,
     });
-    const renamePage = await settle(ownerPage, `${stack.issuer}/account/rename`);
+    const renamePage = await settle(page, `${stack.issuer}/account/rename`);
     evidence.pages.push({
       persona: 'organization-owner',
       path: '/account/rename',
       status: renamePage?.status() ?? 0,
     });
   }
-  const membersPage = await settle(ownerPage, `${stack.issuer}/organizations/members?organizationId=${organizationId}`);
+  const membersPage = await settle(page, `${stack.issuer}/organizations/members?organizationId=${organizationId}`);
   evidence.pages.push({
     persona: 'organization-owner',
     path: '/organizations/members',
     status: membersPage?.status() ?? 0,
-    rows: await ownerPage.locator('li, [data-slot="membership-row"]').count().catch(() => 0),
+    rows: await page.locator('li, [data-slot="membership-row"]').count().catch(() => 0),
   });
-  const firstRow = ownerPage.locator('li a, [data-slot="membership-row"] a, li button').first();
+  const firstRow = page.locator('li a, [data-slot="membership-row"] a, li button').first();
   if (await firstRow.count()) await firstRow.click().catch(() => {});
-  evidence.sequence.push('owner-auth-pages');
-  await ownerContext.close();
+  note('owner-auth-pages');
 
   for (const [persona, person] of [
     ['delegated-member', delegated],
     ['nondelegated-member', member],
     ['outsider', outsider],
   ] as const) {
-    const context = await browser.newContext({ locale: 'en-US' });
-    const page = await context.newPage();
-    page.setDefaultTimeout(60_000);
-    await page.route('**/*', loopbackOnly);
+    await context.clearCookies();
+    await page.goto('about:blank');
     await signInWebsitePage(page, stack, person.email, password);
     await capture(page, persona, 'en', persona === 'outsider' ? 390 : 1280, 'light', `/organizations/${organizationId}`);
-    await context.close();
   }
-  evidence.sequence.push('persona-web');
+  note('persona-web');
 
   if (currentHandle || renameHandle) {
-    const anonymous = await browser.newContext({ locale: 'en-US' });
-    const page = await anonymous.newPage();
-    page.setDefaultTimeout(45_000);
-    await page.route('**/*', loopbackOnly);
+    await context.clearCookies();
     if (renameHandle) {
       const current = await page.goto(`${stack.web}/en/@${renameHandle}`, { waitUntil: 'domcontentloaded' });
       evidence.pages.push({ persona: 'anonymous', path: `/@${renameHandle}`, status: current?.status() ?? 0 });
@@ -978,9 +998,9 @@ try {
         finalPath: new URL(page.url()).pathname,
       });
     }
-    await anonymous.close();
-    evidence.sequence.push('public-handle-destinations');
+    note('public-handle-destinations');
   }
+  await context.close();
 } finally {
   await browser.close();
 }

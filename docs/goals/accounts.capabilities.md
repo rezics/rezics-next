@@ -33,7 +33,7 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Worker focused evidence:** At head `7275db3bd2`, `bun test apps/auth/tests/recovery.test.ts` passed 21/21, `bun test apps/auth/tests/step-up.test.ts` passed 3/3, and `bun run --cwd apps/auth typecheck` reported no type errors in 228 files. At head `79815141d3`, `bun test apps/auth/tests/login.test.ts` passed 4/4 and `bun test apps/auth/tests/signup.test.ts` passed 8/8; Auth source and those test files are unchanged at `7275db3bd2`. Seeded persona acceptance and the full browser/native walk remain deferred to the verifier.
 
-**Lifecycle journey acceptance:** Not accepted. Native lifecycle, focused Auth creation/opening/membership/rename/transfer, and Web management fixtures remain as previously executed. The seeded multi-persona walk no longer runs the catalogue import: persona plus public signup supply the journey identities, matching the Accounts owner decision. Check 372c5fd6-82e7-4339-b7d8-b86a199f08b1 exceeded the 6 GiB run memory cap while that import ran beside the walk stack.
+**Lifecycle journey acceptance:** Not accepted. Native lifecycle, focused Auth creation/opening/membership/rename/transfer, and Web management fixtures remain as previously executed. The seeded multi-persona walk uses the stack host persona and public signup, talks to native Auth for HTTP, and keeps one Chromium process; it does not run catalogue import or a second persona assemble. Checks 372c5fd6-82e7-4339-b7d8-b86a199f08b1 and 9d3d14ee-1fc4-4a6b-b868-b73746a017ec exceeded the 6 GiB run memory cap (import, then the duplicate assemble beside the live stack).
 
 ## credential-session-consent
 
