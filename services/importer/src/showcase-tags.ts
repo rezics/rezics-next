@@ -26,7 +26,7 @@ import {
   type ShowcaseReviewPort,
 } from './showcase-contract.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
-import type { ReviewedSubjectRead } from './import-client.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import type { seedCrossMedia } from './cross-media-seed.ts';
 import {
   showcaseDigest,
@@ -1322,6 +1322,8 @@ export type ReviewedTagCurrentSubject = Readonly<{
   currentId: string;
   type: string | null;
   available: boolean;
+  inScheme: readonly string[];
+  broader: readonly string[];
 }>;
 export type ReviewedTagMembershipRead = Readonly<{
   workId: string;
@@ -1436,9 +1438,15 @@ function reviewedTagErrorCode(error: unknown): string {
 }
 
 function reviewedTagPermanentRefusal(code: string | null | undefined): boolean {
-  return ['review-http-401', 'review-http-403', 'review-http-409', 'review-http-412', 'review-http-423'].includes(
-    code ?? '',
-  );
+  return ['review-http-401', 'review-http-403', 'review-http-423'].includes(code ?? '');
+}
+
+function reviewedTagStaleHead(code: string | null | undefined): boolean {
+  return code === 'review-http-409' || code === 'review-http-412';
+}
+
+function reviewedTagAbsentSubject(error: unknown): boolean {
+  return error instanceof ImportTransportError && error.status === 404;
 }
 
 function sameReviewedTagSelection(
@@ -1520,19 +1528,30 @@ async function sendReviewedTagAction<T>(
   action: string,
   body: unknown,
   send: (sealedBody: unknown, sealedKey: string) => Promise<T>,
-): Promise<T | 'skipped'> {
+): Promise<T | 'skipped' | 'stale'> {
   const idempotencyKey = reviewedTagActionIdempotencyKey(action, body);
   const prior = journal.action(action);
   if (prior?.state === 'acknowledged') return 'skipped';
   if (prior?.state === 'refused' && reviewedTagPermanentRefusal(prior.error_code)) return 'skipped';
   const sealedBody = journal.prepareAction(action, body, idempotencyKey);
-  const sealedKey = journal.action(action)!.idempotency_key;
+  const sealed = journal.action(action)!;
+  if (sealed.state === 'acknowledged') return 'skipped';
+  if (sealed.state === 'refused' && reviewedTagPermanentRefusal(sealed.error_code)) return 'skipped';
+  if (sealed.state === 'refused' && reviewedTagStaleHead(sealed.error_code)) return 'stale';
   try {
-    const receipt = await send(sealedBody, sealedKey);
+    const receipt = await send(sealedBody, sealed.idempotency_key);
     journal.acknowledgeAction(action);
     return receipt;
   } catch (error) {
-    journal.refuseAction(action, reviewedTagErrorCode(error));
+    const code = reviewedTagErrorCode(error);
+    if (reviewedTagStaleHead(code)) {
+      journal.refuseAction(action, code);
+      return 'stale';
+    }
+    if (reviewedTagPermanentRefusal(code)) {
+      journal.refuseAction(action, code);
+      throw error;
+    }
     throw error;
   }
 }
@@ -1544,6 +1563,7 @@ export async function acceptPendingReviewedTagCandidates(
   journal: ShowcaseJournal,
 ): Promise<ReviewedTagCandidatePages> {
   const accepted = new Set<string>();
+  let staleCandidate: string | null = null;
   for (;;) {
     const loaded = await loadReviewedTagCandidatePages(review, subjectId, property);
     const pending = loaded.candidates.filter(
@@ -1556,7 +1576,7 @@ export async function acceptPendingReviewedTagCandidates(
     const next = pending[0];
     if (!next) return loaded;
     const body = { context: GLOBAL_CONTEXT, expected_head: next.head };
-    const action = reviewedTagActionKey('accept', next.id, showcaseDigest({ subjectId, candidate: next.id, head: next.head }));
+    const action = reviewedTagActionKey('accept', next.id, showcaseDigest({ subjectId, candidate: next.id }));
     const result = await sendReviewedTagAction(journal, action, body, (sealedBody, sealedKey) =>
       review.acceptReviewedCandidate(
         subjectId,
@@ -1565,33 +1585,40 @@ export async function acceptPendingReviewedTagCandidates(
         sealedKey,
       ),
     );
-    if (result === 'skipped') {
-      accepted.add(next.id);
+    if (result === 'stale') {
+      if (staleCandidate === next.id) throw new ImportTransportError(409);
+      staleCandidate = next.id;
       continue;
     }
+    staleCandidate = null;
     accepted.add(next.id);
   }
 }
 
-export async function adoptAcceptedReviewedTagSelection(
-  review: Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
-  subjectId: string,
+function adoptSelectionBody(
+  loaded: ReviewedTagCandidatePages,
   property: string,
-  journal: ShowcaseJournal,
-  input: { keepExternalIds?: ReadonlySet<string>; intent: string } = { intent: 'current' },
-): Promise<{ adoption: ReviewedTagAdoption | null; retiredCandidateIds: readonly string[]; complete: boolean }> {
-  const loaded = await loadReviewedTagCandidatePages(review, subjectId, property);
-  if (!loaded.complete)
-    return { adoption: loaded.adoption, retiredCandidateIds: [], complete: false };
+  keepExternalIds: ReadonlySet<string> | undefined,
+): {
+  opened: ReturnType<typeof openReviewedTagCandidates>;
+  retired: string[];
+  body: {
+    context: string;
+    property: string;
+    mode: 'replace';
+    expected_head: number | null;
+    selection: { candidate: string; rank: ReviewedTagRank }[];
+  };
+} {
   const opened = openReviewedTagCandidates({
     candidates: loaded.candidates,
     next: null,
     adoption: loaded.adoption,
   });
-  const retired = input.keepExternalIds
+  const retired = keepExternalIds
     ? importerOwnedReviewedTagRetirements(
         { candidates: loaded.candidates, next: null, adoption: loaded.adoption },
-        input.keepExternalIds,
+        keepExternalIds,
       )
     : [];
   const retiredIds = new Set(retired);
@@ -1604,46 +1631,79 @@ export async function adoptAcceptedReviewedTagSelection(
     if (retiredIds.has(candidate.id)) continue;
     selections.set(candidate.id, candidate.rank ?? selections.get(candidate.id) ?? 'normal');
   }
-  if (!selections.size && !opened.adoption && !retired.length) return { adoption: opened.adoption, retiredCandidateIds: [], complete: true };
-  const body = {
-    context: GLOBAL_CONTEXT,
-    property,
-    mode: 'replace' as const,
-    expected_head: loaded.adoption?.head ?? null,
-    selection: [...selections]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([candidate, rank]) => ({ candidate, rank })),
+  return {
+    opened,
+    retired,
+    body: {
+      context: GLOBAL_CONTEXT,
+      property,
+      mode: 'replace',
+      expected_head: loaded.adoption?.head ?? null,
+      selection: [...selections]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([candidate, rank]) => ({ candidate, rank })),
+    },
   };
-  if (opened.adoption && sameReviewedTagSelection(opened.adoption.selection, body.selection))
-    return { adoption: opened.adoption, retiredCandidateIds: retired, complete: true };
-  const action = reviewedTagActionKey(
-    'adopt',
-    `${subjectId}:${property}`,
-    showcaseDigest({ intent: input.intent, body }),
-  );
-  const receipt = await sendReviewedTagAction(journal, action, body, (sealedBody, sealedKey) =>
-    review.adoptReviewedCandidates(
-      subjectId,
-      sealedBody as {
-        context: string;
-        property: string;
-        mode: 'replace';
-        expected_head: number | null;
-        selection: { candidate: string; rank: ReviewedTagRank }[];
-      },
-      sealedKey,
-    ),
-  );
-  if (receipt === 'skipped') return { adoption: opened.adoption, retiredCandidateIds: retired, complete: true };
-  const adoption =
-    isRecord(receipt) && isRecord(receipt.adoption)
-      ? readReviewedTagCandidatePage({
-          candidates: loaded.candidates,
-          next: null,
-          adoption: receipt.adoption,
-        }).adoption
-      : opened.adoption;
-  return { adoption, retiredCandidateIds: retired, complete: true };
+}
+
+export async function adoptAcceptedReviewedTagSelection(
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+  subjectId: string,
+  property: string,
+  journal: ShowcaseJournal,
+  input: { keepExternalIds?: ReadonlySet<string>; intent: string } = { intent: 'current' },
+): Promise<{ adoption: ReviewedTagAdoption | null; retiredCandidateIds: readonly string[]; complete: boolean }> {
+  let staleOnce = false;
+  for (;;) {
+    const loaded = await loadReviewedTagCandidatePages(review, subjectId, property);
+    if (!loaded.complete) return { adoption: loaded.adoption, retiredCandidateIds: [], complete: false };
+    const planned = adoptSelectionBody(loaded, property, input.keepExternalIds);
+    if (!planned.body.selection.length && !planned.opened.adoption && !planned.retired.length)
+      return { adoption: planned.opened.adoption, retiredCandidateIds: [], complete: true };
+    const action = reviewedTagActionKey(
+      'adopt',
+      `${subjectId}:${property}`,
+      showcaseDigest({ intent: input.intent, selection: planned.body.selection }),
+    );
+    const prior = journal.action(action);
+    const alreadyCurrent =
+      planned.opened.adoption && sameReviewedTagSelection(planned.opened.adoption.selection, planned.body.selection);
+    if (
+      alreadyCurrent &&
+      prior?.state !== 'prepared' &&
+      !(prior?.state === 'refused' && reviewedTagStaleHead(prior.error_code))
+    )
+      return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+    const receipt = await sendReviewedTagAction(journal, action, planned.body, (sealedBody, sealedKey) =>
+      review.adoptReviewedCandidates(
+        subjectId,
+        sealedBody as {
+          context: string;
+          property: string;
+          mode: 'replace';
+          expected_head: number | null;
+          selection: { candidate: string; rank: ReviewedTagRank }[];
+        },
+        sealedKey,
+      ),
+    );
+    if (receipt === 'skipped')
+      return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+    if (receipt === 'stale') {
+      if (staleOnce) throw new ImportTransportError(409);
+      staleOnce = true;
+      continue;
+    }
+    const adoption =
+      isRecord(receipt) && isRecord(receipt.adoption)
+        ? readReviewedTagCandidatePage({
+            candidates: loaded.candidates,
+            next: null,
+            adoption: receipt.adoption,
+          }).adoption
+        : planned.opened.adoption;
+    return { adoption, retiredCandidateIds: planned.retired, complete: true };
+  }
 }
 
 /** Journaled accept/adopt for one subject property, preserving editorial ranks and applying managed retirement. */
@@ -1713,9 +1773,19 @@ export async function resolveCurrentReviewedTagSubjects(
         currentId,
         type: subjectIdentity(read),
         available: true,
+        inScheme: statementValues(read, 'skos:inScheme'),
+        broader: statementValues(read, 'skos:broader'),
       });
-    } catch {
-      resolved.push({ requestedId, currentId: requestedId, type: null, available: false });
+    } catch (error) {
+      if (!reviewedTagAbsentSubject(error)) throw error;
+      resolved.push({
+        requestedId,
+        currentId: requestedId,
+        type: null,
+        available: false,
+        inScheme: [],
+        broader: [],
+      });
     }
   }
   return resolved;
@@ -1829,6 +1899,44 @@ function allCurrent(rows: readonly ReviewedTagCurrentSubject[], requested: reado
   return rows.every((row) => row.available);
 }
 
+function reviewedTagSchemesReady(
+  rows: readonly ReviewedTagCurrentSubject[],
+  requested: readonly string[],
+): boolean {
+  return allCurrent(rows, requested) && rows.every((row) => row.type === 'skos:ConceptScheme');
+}
+
+function reviewedTagParentById(
+  rows: readonly ReviewedTagCurrentSubject[],
+  parents: readonly ReviewedTagCurrentSubject[],
+): Map<string, ReviewedTagCurrentSubject> {
+  const byId = new Map<string, ReviewedTagCurrentSubject>();
+  for (const row of [...rows, ...parents]) {
+    byId.set(row.requestedId, row);
+    byId.set(row.currentId, row);
+  }
+  return byId;
+}
+
+function reviewedTagConceptsReady(
+  rows: readonly ReviewedTagCurrentSubject[],
+  requested: readonly string[],
+  schemeIds: ReadonlySet<string>,
+  parents: readonly ReviewedTagCurrentSubject[],
+): boolean {
+  if (!allCurrent(rows, requested)) return false;
+  const byId = reviewedTagParentById(rows, parents);
+  for (const row of rows) {
+    if (row.type !== 'skos:Concept' || !row.inScheme.some((id) => schemeIds.has(id))) return false;
+    for (const parentId of row.broader) {
+      const parent = byId.get(parentId);
+      if (!parent?.available || parent.type !== 'skos:Concept' || !parent.inScheme.some((id) => schemeIds.has(id)))
+        return false;
+    }
+  }
+  return true;
+}
+
 async function reviewProperties(
   review: ShowcaseReviewPort,
   journal: ShowcaseJournal,
@@ -1894,8 +2002,7 @@ export async function completeReviewedSharedTagFlow(input: {
 
   await reviewAll(input.schemes, schemeReviewProperties);
   const schemes = await resolveCurrentReviewedTagSubjects(input.review, input.schemes);
-  const schemesReady = allCurrent(schemes, input.schemes);
-  if (!schemesReady) {
+  if (!reviewedTagSchemesReady(schemes, input.schemes)) {
     return {
       pages,
       accepted: [...new Set(accepted)],
@@ -1910,8 +2017,13 @@ export async function completeReviewedSharedTagFlow(input: {
 
   await reviewAll(input.concepts, conceptReviewProperties);
   const concepts = await resolveCurrentReviewedTagSubjects(input.review, input.concepts);
-  const conceptsReady = allCurrent(concepts, input.concepts);
-  if (!conceptsReady) {
+  const schemeIds = new Set(schemes.map((row) => row.currentId));
+  const knownConcepts = new Set(concepts.flatMap((row) => [row.requestedId, row.currentId]));
+  const citedParents = [...new Set(concepts.flatMap((row) => row.broader).filter((id) => !knownConcepts.has(id)))];
+  const parents = citedParents.length
+    ? await resolveCurrentReviewedTagSubjects(input.review, citedParents)
+    : [];
+  if (!reviewedTagConceptsReady(concepts, input.concepts, schemeIds, parents)) {
     return {
       pages,
       accepted: [...new Set(accepted)],

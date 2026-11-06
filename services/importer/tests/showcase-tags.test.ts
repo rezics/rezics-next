@@ -23,7 +23,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables.ts';
 import { captureShowcaseCommands, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
 import { importShowcaseTags } from '../src/selected-import.ts';
 import {
@@ -1083,6 +1083,7 @@ function candidateRow(
 function journaledReview(options: {
   schemeAvailable?: boolean;
   loseAdopt?: boolean;
+  conflictOnce?: boolean;
   workCandidates: {
     first: ReturnType<typeof candidateRow>[];
     second: ReturnType<typeof candidateRow>[];
@@ -1092,8 +1093,10 @@ function journaledReview(options: {
   const accepted = new Set<string>();
   const adoptKeys: string[] = [];
   const adoptBodies: unknown[] = [];
+  const committedAdoptions = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
   let schemeAvailable = options.schemeAvailable ?? true;
   let loseAdopt = options.loseAdopt ?? false;
+  let conflictOnce = options.conflictOnce ?? false;
   const workCandidates = {
     first: options.workCandidates.first.map((row) => ({ ...row })),
     second: options.workCandidates.second.map((row) => ({ ...row })),
@@ -1103,9 +1106,18 @@ function journaledReview(options: {
     accepted.add(id);
     for (const row of [...workCandidates.first, ...workCandidates.second]) if (row.id === id) row.decision = 'accepted';
   };
+  const valueStatement = (content: string) => ({
+    value: { type: 'value', content },
+  });
   const subjects: Record<string, ReviewedSubjectRead> = {
     [schemeId]: { subject: { id: schemeId, type: 'skos:ConceptScheme', statements: {} } } as ReviewedSubjectRead,
-    [conceptId]: { subject: { id: conceptId, type: 'skos:Concept', statements: {} } } as ReviewedSubjectRead,
+    [conceptId]: {
+      subject: {
+        id: conceptId,
+        type: 'skos:Concept',
+        statements: { 'skos:inScheme': [valueStatement(schemeId)] },
+      },
+    } as unknown as ReviewedSubjectRead,
     [workId]: {
       subject: {
         id: workId,
@@ -1153,22 +1165,44 @@ function journaledReview(options: {
     async adoptReviewedCandidates(_id: string, body: unknown, key: string) {
       adoptKeys.push(key);
       adoptBodies.push(body);
+      const recovered = committedAdoptions.get(key);
+      if (recovered) {
+        workCandidates.adoption = recovered;
+        return { adoption: recovered };
+      }
+      if (conflictOnce) {
+        conflictOnce = false;
+        workCandidates.adoption = {
+          head: (workCandidates.adoption?.head ?? 1) + 1,
+          selection: workCandidates.adoption?.selection ?? [],
+        };
+        throw new ImportTransportError(409);
+      }
+      const selection = isRecord(body) && Array.isArray(body.selection) ? body.selection : [];
+      const adoption = {
+        head: (workCandidates.adoption?.head ?? 1) + 1,
+        selection: selection as { candidate: string; rank: 'normal' | 'preferred' }[],
+      };
+      workCandidates.adoption = adoption;
+      committedAdoptions.set(key, adoption);
       if (loseAdopt) {
         loseAdopt = false;
         throw new Error('Lost committed adoption');
       }
-      const selection = isRecord(body) && Array.isArray(body.selection) ? body.selection : [];
-      workCandidates.adoption = {
-        head: (workCandidates.adoption?.head ?? 1) + 1,
-        selection: selection as { candidate: string; rank: 'normal' | 'preferred' }[],
-      };
-      return { adoption: workCandidates.adoption };
+      return { adoption };
     },
     async readReviewedSubject(id: string) {
-      if (id === schemeId && !schemeAvailable) throw new TypeError('missing subject');
+      if (id === schemeId && !schemeAvailable) throw new ImportTransportError(404);
       const read = subjects[id];
-      if (!read) throw new TypeError('missing subject');
+      if (!read) throw new ImportTransportError(404);
       return read;
+    },
+    moveHead() {
+      if (!workCandidates.adoption) return;
+      workCandidates.adoption = { ...workCandidates.adoption, head: workCandidates.adoption.head + 1 };
+    },
+    conflictNextAdopt() {
+      conflictOnce = true;
     },
   };
   return review;
@@ -1180,7 +1214,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 test('journaled caller paginates, binds distinct refresh keys, applies managed retirement beside editorial selection, and replays unknown delivery', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-flow-'));
-  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
   try {
     const review = journaledReview({
       loseAdopt: true,
@@ -1202,7 +1237,6 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     });
     const input = {
       review: review as unknown as ShowcaseReviewPort,
-      journal,
       schemes: [schemeId],
       concepts: [conceptId],
       works: [workId],
@@ -1211,15 +1245,20 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     await expect(
       completeReviewedSharedTagFlow({
         ...input,
+        journal,
         keepExternalIds: new Set(['g311', 'g12', 'g99']),
       }),
     ).rejects.toThrow('Lost committed adoption');
     expect([...review.accepted].sort()).toEqual([pageOneId, pageTwoId].sort());
     expect(review.adoptKeys).toHaveLength(1);
     const sealedKey = review.adoptKeys[0]!;
+    review.moveHead();
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
 
     const replayed = await completeReviewedSharedTagFlow({
       ...input,
+      journal,
       keepExternalIds: new Set(['g311', 'g12', 'g99']),
     });
     expect(review.adoptKeys).toEqual([sealedKey, sealedKey]);
@@ -1228,13 +1267,16 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
       [editorialId, pageOneId, pageTwoId, vanishedId].sort(),
     );
 
+    review.conflictNextAdopt();
     const retired = await completeReviewedSharedTagFlow({
       ...input,
+      journal,
       keepExternalIds: new Set(['g311', 'g12']),
       intent: 'retire-g99',
     });
     expect(retired.retiredCandidateIds).toEqual([vanishedId]);
     expect(review.adoptKeys[2]).not.toBe(sealedKey);
+    expect(review.adoptKeys[3]).not.toBe(review.adoptKeys[2]);
     expect(retired.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
       [editorialId, pageOneId, pageTwoId].sort(),
     );
@@ -1267,7 +1309,9 @@ test('unavailable Scheme withholds membership until independent recovery on unch
       properties: ['schema:genre'],
       keepExternalIds: new Set(['g311']),
     });
-    expect(withheld.schemes).toEqual([{ requestedId: schemeId, currentId: schemeId, type: null, available: false }]);
+    expect(withheld.schemes).toEqual([
+      { requestedId: schemeId, currentId: schemeId, type: null, available: false, inScheme: [], broader: [] },
+    ]);
     expect(withheld.concepts).toEqual([]);
     expect(withheld.membership).toEqual([]);
     expect(review.accepted.size).toBe(0);
