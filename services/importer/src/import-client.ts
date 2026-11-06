@@ -254,9 +254,7 @@ export class ImportTransportError extends Error {
     readonly retry?: ImportRetryState,
     readonly phase?: ImportTransportPhase,
   ) {
-    super(
-      phase ? `Import transport request failed at ${phase}` : 'Import transport request failed',
-    );
+    super(phase ? `Import transport request failed at ${phase}` : 'Import transport request failed');
     this.name = 'ImportTransportError';
   }
 }

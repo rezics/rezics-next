@@ -4586,8 +4586,7 @@ export async function runCrossMediaSeedCli(
         : undefined;
     const canonicalPersonId =
       afterMerge?.identities[0]?.currentSubjectId ??
-      combinedResult.personIdentities.find((entry) => entry.identity.externalId === 'person:1916')
-        ?.currentSubjectId;
+      combinedResult.personIdentities.find((entry) => entry.identity.externalId === 'person:1916')?.currentSubjectId;
     const creditWorks = publicClient
       ? combinedResult.readings.flatMap((reading) =>
           reading.externalId === '1851' || reading.externalId === 'v4'

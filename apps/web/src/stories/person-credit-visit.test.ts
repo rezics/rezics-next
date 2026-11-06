@@ -127,9 +127,7 @@ test('Character credit visits use the live inverse window when RelationGroups no
     releaseDigest: release,
     unlabelled: 'Unlabelled',
     relations: { 'schema:author': { forwardLabel: 'Author' } },
-    relationDirections: [
-      { state: 'admitted', property: 'schema:author', direction: 'inverse', release },
-    ],
+    relationDirections: [{ state: 'admitted', property: 'schema:author', direction: 'inverse', release }],
     relationNodes: [],
     candidatePropertyLabel: (property: string) =>
       ({ 'wdt:P1932': 'Credited name', 'wdt:P3831': 'Credit role' })[property],

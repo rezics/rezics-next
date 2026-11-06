@@ -276,7 +276,10 @@ test('Publish reviewed Person identities with Character and credit reads through
         { boundPersonId: vndbOriginal, personExternalId: 's224' },
       ],
       works: [
-        { externalId: '1851', read: workCredits(angelBeats, bangumiOriginal, 'wdt:P725', 'https://bgm.tv/subject/1851') },
+        {
+          externalId: '1851',
+          read: workCredits(angelBeats, bangumiOriginal, 'wdt:P725', 'https://bgm.tv/subject/1851'),
+        },
         { externalId: 'v4', read: workCredits(clannad, vndbOriginal, 'schema:author', 'https://vndb.org/v4') },
       ],
     });

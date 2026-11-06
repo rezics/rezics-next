@@ -380,7 +380,9 @@ type StatementRow = {
   rank?: unknown;
   value?: { type?: unknown; content?: unknown };
   qualifiers?: readonly { property?: { id?: unknown }; value?: { type?: unknown; content?: unknown } }[];
-  references?: readonly { parts?: readonly { property?: { id?: unknown }; value?: { type?: unknown; content?: unknown } }[] }[];
+  references?: readonly {
+    parts?: readonly { property?: { id?: unknown }; value?: { type?: unknown; content?: unknown } }[];
+  }[];
 };
 
 function subjectStatements(read: ReviewedSubjectRead): Record<string, readonly StatementRow[]> {
@@ -535,10 +537,7 @@ export async function readAdoptedCharacter(input: {
     boundSubjectId: input.boundSubjectId,
     currentSubjectId: observed.currentSubjectId,
     identity: input.identity,
-    names: [
-      ...selectedValues(statements['schema:name']),
-      ...selectedValues(statements['schema:alternateName']),
-    ],
+    names: [...selectedValues(statements['schema:name']), ...selectedValues(statements['schema:alternateName'])],
     traits: [
       ...selectedValues(statements['schema:gender']),
       ...selectedValues(statements['schema:keywords']),
