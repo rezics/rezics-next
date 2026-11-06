@@ -2740,7 +2740,7 @@ The producer compares the tuple, Content independently admits the exact document
 
 Only exact Global selection is supported; non-Global Context/Realm is unsupported before Global resolution. Malformed input is invalid, concealed absence missing, changed binding changed, denial denied, and timeout/dependency failure unavailable; none reveals tuple details. Rank change, retired assertion, replacement digest/language/document, merge, withheld body or erasure cannot bind another row. If a rank change still admits the same row, run native evaluation again. Final Content reference/fence checks remain.
 
-The installed explainSubjectSources projection uses the independently admitted selected fact before ordinary language preference, including a non-default language choice. Its closed native result preserves exact empty citations and omits the document comparison operands. The mounted consumer binds this result to its original visit and reader attempt; general Sources continues to project current facts independently.
+The installed explainSubjectSources projection uses the independently admitted selected fact before ordinary language preference, including a non-default language choice. Its closed native result preserves exact empty citations and omits the document comparison operands. Before Sources or authored correction uses a matched result, the Web consumer compares it with the same current Subject statement: candidate ID, current document locator, best rank, qualifiers and exact references must agree. The mounted consumer also binds this result to its original visit and reader attempt; general Sources continues to project current facts independently.
 
 ### Cost and acceptance bounds
 

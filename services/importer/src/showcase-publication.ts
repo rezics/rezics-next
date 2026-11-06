@@ -755,6 +755,33 @@ function statementOnPublicRead(value: unknown, expected: BatchStatement): boolea
   return sameStatementProvenance(value, expected);
 }
 
+function selectedSynopsisOnPublicRead(value: unknown, expected: BatchStatement, candidateId: string): boolean {
+  if (expected.property.id !== 'schema:abstract' || expected.value.type !== 'value') return false;
+  const authored = expected.value.content;
+  if (!authored || typeof authored !== 'object' || Array.isArray(authored)) return false;
+  const language = (authored as { language?: unknown }).language;
+  if (typeof language !== 'string') return false;
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (row.id !== candidateId || !row.property || typeof row.property !== 'object' || Array.isArray(row.property))
+    return false;
+  if ((row.property as { id?: unknown }).id !== 'schema:abstract') return false;
+  const content =
+    row.value && typeof row.value === 'object' && !Array.isArray(row.value)
+      ? (row.value as { content?: unknown }).content
+      : undefined;
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    const currentLanguage = (content as { language?: unknown }).language;
+    if (typeof currentLanguage === 'string' && currentLanguage !== language) return false;
+  }
+
+  // A public document statement carries a current document locator; the authored proposal carries its snapshot.
+  // The selected-slot read below validates that locator. Here, compare all remaining statement attribution exactly.
+  const comparable = { type: 'value' as const, content: 'selected-synopsis-current' };
+  return sameStatementProvenance({ ...row, value: comparable }, { ...expected, value: comparable });
+}
+
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
   if (record.provider === 'vndb') return { property: 'wdt:P3180', value: record.sourceKey };
   if (record.kind === 'work' && !isBookSeriesSourceTuple(record.sourceKey, record.nativeType ?? undefined))
@@ -3056,7 +3083,11 @@ export async function publishShowcase(input: {
       )
         return false;
       const rows = publicSubject?.statements?.[assertion.property] ?? [];
-      const readback = rows.find((row) => statementOnPublicRead(row, assertion.statement));
+      const readback = rows.find((row) =>
+        assertion.property === 'schema:abstract'
+          ? selectedSynopsisOnPublicRead(row, assertion.statement, assertion.candidateId)
+          : statementOnPublicRead(row, assertion.statement),
+      );
       if (!readback && assertion.graphTarget) {
         withheldGraphCandidates.add(assertion.candidateId);
         omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-relation-not-public' });
@@ -3096,7 +3127,10 @@ export async function publishShowcase(input: {
           ? (readback as { id: string }).id
           : assertion.candidateId;
       const operands = selectedSynopsisQueryFromPublic(read, statementId);
-      if (!operands) continue;
+      if (!operands) {
+        selectedSynopsisCurrent = false;
+        break;
+      }
       try {
         const supportRead = await input.publicClient.readSelectedSynopsis(record.subjectId, operands.query);
         if (admitSelectedSynopsisSupport(supportRead, statementId, operands.document).kind !== 'matched')

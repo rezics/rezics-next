@@ -48,7 +48,10 @@ export function selectedSynopsisQuery(selection: SelectedSynopsisSelection): str
 const closed = (row: Record<string, unknown>, keys: string[]) => Object.keys(row).every((key) => keys.includes(key));
 
 /** Native HTTP transport is external input, including its optional selected component. */
-export function selectedSynopsisResponse(value: unknown): value is NonNullable<SubjectRead['selectedSynopsis']> {
+export function selectedSynopsisResponse(
+  value: unknown,
+  selection?: SelectedSynopsisSelection,
+): value is NonNullable<SubjectRead['selectedSynopsis']> {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!isRecord(value)) return false;
   if (value.kind !== 'matched')
@@ -61,6 +64,10 @@ export function selectedSynopsisResponse(value: unknown): value is NonNullable<S
   )
     return false;
   const fact = value.fact;
+  if (selection) {
+    const serialized = JSON.stringify(value);
+    if (serialized.includes(selection.documentId) || serialized.includes(selection.digest)) return false;
+  }
   const snak = (part: unknown): boolean => {
     if (
       !isRecord(part) ||
@@ -107,4 +114,87 @@ export function selectedSynopsisResponse(value: unknown): value is NonNullable<S
         reference.parts.every(part),
     )
   );
+}
+
+function redactedSnak(value: unknown): { property: { id: string; data_type: string }; value: unknown } | undefined {
+  if (!isRecord(value) || !isRecord(value.property) || !isRecord(value.value)) return;
+  const { id, data_type: dataType } = value.property;
+  if (typeof id !== 'string' || typeof dataType !== 'string') return;
+  const snak = value.value;
+  if (snak.type === 'value') {
+    if (!closed(snak, ['type', 'content']) || !Object.hasOwn(snak, 'content')) return;
+    return {
+      property: { id, data_type: dataType },
+      value: ['document', 'media'].includes(dataType) ? { type: 'somevalue' } : snak,
+    };
+  }
+  if (!['somevalue', 'novalue'].includes(String(snak.type)) || !closed(snak, ['type'])) return;
+  return { property: { id, data_type: dataType }, value: snak };
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right))
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameJson(value, right[index]))
+    );
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index] && sameJson(left[key], right[key]))
+  );
+}
+
+/** Bind the independently redacted result back to the exact current best-rank public statement. */
+export function selectedSynopsisMatchesCurrent(
+  read: SubjectRead,
+  selection: SelectedSynopsisSelection,
+  value: unknown,
+): boolean {
+  if (!selectedSynopsisResponse(value, selection) || value.kind !== 'matched') return false;
+  const subject = read.subject;
+  if (subject.context !== selection.context || subject.release !== selection.subjectRelease) return false;
+  const statements = subject.statements[SELECTED_SYNOPSIS_PROPERTY];
+  if (!Array.isArray(statements)) return false;
+  const matches = statements.filter((statement) => statement.id === selection.candidateId);
+  if (matches.length !== 1) return false;
+  const statement = matches[0]!;
+  if (
+    !['normal', 'preferred'].includes(statement.rank) ||
+    statement.rank !== value.fact.rank ||
+    statement.property.id !== SELECTED_SYNOPSIS_PROPERTY ||
+    statement.property.data_type !== 'document' ||
+    statement.value.type !== 'value' ||
+    !isRecord(statement.value.content) ||
+    statement.value.content.document !== selection.documentId ||
+    statement.value.content.digest !== selection.digest ||
+    statement.value.content.language !== selection.language
+  )
+    return false;
+  const hasPreferred = statements.some((candidate) => candidate.rank === 'preferred');
+  if (statement.rank !== (hasPreferred ? 'preferred' : 'normal')) return false;
+  if (!Array.isArray(statement.qualifiers) || !Array.isArray(statement.references)) return false;
+  const qualifiers = statement.qualifiers.map(redactedSnak);
+  if (qualifiers.some((part) => !part)) return false;
+  const references = statement.references.map((reference) => {
+    if (!isRecord(reference) || typeof reference.hash !== 'string' || !Array.isArray(reference.parts)) return;
+    const parts = reference.parts.map(redactedSnak);
+    if (parts.some((part) => !part)) return;
+    return { hash: reference.hash, parts };
+  });
+  if (references.some((reference) => !reference)) return false;
+  const current = {
+    id: statement.id,
+    rank: statement.rank,
+    property: { id: statement.property.id, data_type: statement.property.data_type },
+    value: { type: 'somevalue' },
+    qualifiers,
+    references,
+  };
+  return sameJson(current, value.fact);
 }

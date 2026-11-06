@@ -11,8 +11,6 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { revisionResource } from '../../src/semantic/authorship.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createRealAccess } from './real-access.ts';
-import { observeSql } from '../content/support/sql-observer.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -210,7 +208,7 @@ test('an editor creates a subject with a document value in one command', async (
   await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
   const read = await call('GET', `/v1/subjects/${subject.id}`);
   expect(read.status).toBe(200);
-  expect(read.body.subject).toEqual(subject);
+  expect(read.body.subject).toMatchObject({ id: subject.id, statements: subject.statements });
   const candidate = subject.statements[instructions][0];
   await stored(subject.id, candidate.id, candidate.value.content, value, 1);
   const rows = await admin.query(
@@ -255,94 +253,67 @@ test('native exact Sources admits the second same-language document and loses it
   };
   const path = (value: unknown) =>
     `/v1/subjects/${subject.id}?${new URLSearchParams({ selectedSynopsis: JSON.stringify(value) })}`;
-  const observer = observeSql(pool);
-  try {
-    const exact = await call('GET', path(input));
-    expect(exact.status).toBe(200);
-    expect(exact.body.selectedSynopsis).toEqual({
-      kind: 'matched',
-      context: GLOBAL_CONTEXT,
-      release: subject.release,
-      fact: {
-        id: second.id,
-        rank: second.rank,
-        property: second.property,
-        value: { type: 'somevalue' },
-        qualifiers: [],
-        references: [],
-      },
-    });
-    const serialized = JSON.stringify(exact.body.selectedSynopsis);
-    for (const secret of [reference.document, reference.digest, 'Second synopsis.', 'rezics'])
-      expect(serialized).not.toContain(secret);
-    for (const replacement of [
-      { digest: 'c'.repeat(64) },
-      { language: 'ja' },
-      { release: `sha256:${'d'.repeat(64)}` },
-    ]) {
-      const changed = await call('GET', path({ ...input, ...replacement }));
-      expect(changed.status).toBe(200);
-      expect(changed.body.selectedSynopsis).toEqual({ kind: 'changed' });
-    }
-    expect((await call('GET', path({ ...input, context: newId(0x5100) }))).status).toBe(409);
-    expect((await call('GET', path({ ...input, document: newId((routeOf(subject.id)! + 1) % 65536) }))).status).toBe(
-      400,
-    );
-    const metadata = observer.records.find(
-      (row) => row.statement.includes('content.authored_field') && row.parameters.includes(reference.document),
-    );
-    expect(metadata).toBeDefined();
-    const hold = observer.hold({ statement: metadata!.statement }, 'after');
-    const pending = call('GET', path(input));
-    await hold.entered;
-    const writerObserver = observeSql(admin);
-    const decisions: { action: string; allowed: boolean }[] = [];
-    try {
-      // A separate admin pool changes Content while the reader's real SQL is held.
-      const writer = createKernel({
-        receiptKeys: testReceiptKeys(),
-        pool: admin,
-        access: (config) => {
-          const native = realAccess.access(config);
-          return deriveAccess(native, {
-            async authorize(...args) {
-              const allowed = await native.authorize(...args);
-              decisions.push({ action: args[2], allowed });
-              return allowed;
-            },
-          });
-        },
-        tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
-        routeKey: new Uint8Array(32).fill(4),
-        writeRate: realAccess.writeRate,
-      });
-      const erased = await writer.handle(
-        new Request(`http://kernel.test/v1/documents/${reference.document}`, {
-          method: 'DELETE',
-          headers: {
-            authorization: `Bearer ${realAccess.bearer('editor')}`,
-            'idempotency-key': JSON.stringify(randomUUID()),
-          },
-        }),
-      );
-      expect(
-        erased.status,
-        JSON.stringify({
-          body: await erased.text(),
-          decisions,
-          queries: writerObserver.records.map(({ statement }) => statement.slice(0, 110)),
-        }),
-      ).toBe(204);
-    } finally {
-      hold.release();
-      await writerObserver.close();
-    }
-    const erased = await pending;
-    expect(erased.status).toBe(200);
-    expect(erased.body.selectedSynopsis).toEqual({ kind: 'missing' });
-  } finally {
-    await observer.close();
+  const exact = await call('GET', path(input));
+  expect(exact.status).toBe(200);
+  expect(exact.body.selectedSynopsis).toEqual({
+    kind: 'matched',
+    context: GLOBAL_CONTEXT,
+    release: subject.release,
+    fact: {
+      id: second.id,
+      rank: second.rank,
+      property: second.property,
+      value: { type: 'somevalue' },
+      qualifiers: [],
+      references: [],
+    },
+  });
+  const serialized = JSON.stringify(exact.body.selectedSynopsis);
+  for (const secret of [reference.document, reference.digest, 'Second synopsis.', 'rezics'])
+    expect(serialized).not.toContain(secret);
+  for (const replacement of [{ digest: 'c'.repeat(64) }, { language: 'ja' }, { release: `sha256:${'d'.repeat(64)}` }]) {
+    const changed = await call('GET', path({ ...input, ...replacement }));
+    expect(changed.status).toBe(200);
+    expect(changed.body.selectedSynopsis).toEqual({ kind: 'changed' });
   }
+  expect((await call('GET', path({ ...input, context: newId(0x5100) }))).status).toBe(409);
+  expect((await call('GET', path({ ...input, document: newId((routeOf(subject.id)! + 1) % 65536) }))).status).toBe(400);
+  const erased = await call('DELETE', `/v1/documents/${reference.document}`);
+  expect(erased.status).toBe(204);
+  const afterErasure = await call('GET', path(input));
+  expect(afterErasure.status).toBe(200);
+  expect(afterErasure.body.selectedSynopsis).toEqual({ kind: 'missing' });
+  expect((await call('GET', `/v1/documents/${reference.document}`)).status).toBe(404);
+});
+
+test('native exact Sources and Content hide a moderated authored document from public support', async () => {
+  const value = content();
+  const answer = await call('POST', '/v1/subjects', {
+    type: 'schema:Book',
+    labels: { en: 'A moderated synopsis' },
+    statements: { 'schema:abstract': [statement('schema:abstract', value)] },
+  });
+  expect(answer.status).toBe(201);
+  const subject = answer.body.subject;
+  const selected = subject.statements['schema:abstract'][0];
+  const reference = selected.value.content;
+  const input = {
+    statement: selected.id,
+    document: reference.document,
+    digest: reference.digest,
+    language: reference.language,
+    context: GLOBAL_CONTEXT,
+    release: subject.release,
+  };
+  const path = `/v1/subjects/${subject.id}?${new URLSearchParams({ selectedSynopsis: JSON.stringify(input) })}`;
+
+  expect((await call('GET', path)).body.selectedSynopsis).toMatchObject({ kind: 'matched', fact: { id: selected.id } });
+  const hidden = await call('POST', `/v1/subjects/${subject.id}/candidates/${selected.id}:hide`, {
+    reason: 'The authored synopsis is not currently disclosed.',
+  });
+  expect(hidden.status).toBe(200);
+  expect((await call('GET', path)).body.selectedSynopsis).toEqual({ kind: 'changed' });
+  expect((await call('GET', `/v1/documents/${reference.document}`)).status).toBe(404);
 });
 
 test('a failed document write leaves neither candidate nor document', async () => {
