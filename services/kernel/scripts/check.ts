@@ -581,8 +581,9 @@ async function psql(sql: string): Promise<void> {
 export function docker(args: string[]): string {
   const result = spawnSync('docker', args, dockerSpawnSyncOptions(args, { cwd: directory, env: process.env }));
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return result.stdout.trim();
+  if (result.status !== 0)
+    throw new Error(`docker ${args.join(' ')} failed:\n${String(result.stdout)}${String(result.stderr)}`);
+  return String(result.stdout).trim();
 }
 
 type DockerCommand = (args: string[]) => string;
