@@ -773,11 +773,15 @@ custody and public dynamic/frozen output authority remain unavailable. The local
 same-home account/source/receiving/control work, under the actual account barrier; it cannot create late private
 control copies after terminal T. Ordinary destination disposition is separate from identity hold release.
 
-Remaining native bindings are the Source manifest/registration and six-driver generation/rebuild implementation,
-complete owner candidate/winner/label/support/first-apply closure, and the existing follow owner's source delivery,
-canonical pair/support/total/outgoing/negative and source/target fences. State repair must use highest live native
-`owner_write_seq` and keep conflicts; null is unbuilt. These handlers supply no alternate business writer or fake
-empty coverage. Actual mapping/Search/coordinator publication is also required for published undo acceptance.
+The fixed participant now binds six-driver discovery/advance and sealed scope-effect pages inside the original
+Source maintenance frame when that frame is live, and independently otherwise. ALL-Library completes after a
+committed 16-route original scan with no affected collections and no building plans, or after sealed pages are
+applied through receiving. Empty registration is not an ACK. Remaining native bindings are Source manifest
+registration for homes that do have collections, complete owner candidate/winner/label/support/first-apply
+closure, and the existing follow owner's source delivery, canonical pair/support/total/outgoing/negative and
+source/target fences. State repair must use highest live native `owner_write_seq` and keep conflicts; null is
+unbuilt. These handlers supply no alternate business writer or fake empty coverage. Actual mapping/Search/
+coordinator publication is also required for published undo acceptance.
 
 Retention inventory: `identity_epoch_participant_work` stores exact receiving locators at the account/control home;
 `identity_epoch_source_basis` retains detached source bases at that same home; `owner_identity_scope` stores structural

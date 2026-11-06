@@ -188,6 +188,14 @@ async function drainMapping(pool: Pool, job: IdentityJobRef, bound = 512) {
   throw new Error(`Native mapping did not finish within ${bound} bounded steps`);
 }
 
+async function drainLibrary(pool: Pool, job: IdentityJobRef, bound = 32) {
+  for (let attempt = 0; attempt < bound; attempt++) {
+    const progress = await stepLibraryIdentityEpoch(pool, job);
+    if (progress.state === 'complete') return progress;
+  }
+  throw new Error(`ALL-Library identity did not finish within ${bound} bounded steps`);
+}
+
 test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
   const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
@@ -616,8 +624,14 @@ test('the authorized vote transaction excludes native control writes through com
     const reconciled = await identityEpochStore().reconcileStepReceipt(f.pool, mapping.receipt);
     expect(reconciled.state).toBe('complete');
     expect(reconciled.receipt).toEqual(mapping.receipt);
+    const library = await drainLibrary(f.pool, job);
+    expect(library.state).toBe('complete');
+    const libraryReceipt = await identityEpochStore().reconcileStepReceipt(f.pool, library.receipt);
+    expect(libraryReceipt.state).toBe('complete');
+    expect(libraryReceipt.receipt).toEqual(library.receipt);
     const saved = await withConnection(f.pool, (tx) => identityEpochStore().readJob(tx, job));
     expect(saved?.mapping?.state).toBe('complete');
+    expect(saved?.participants['library-private-follow-counts']?.state).toBe('complete');
     await expect(votes.putVoteOutcome(caller.actor, prior, randomUUID())).rejects.toMatchObject({
       reason: 'identity_pending',
     });

@@ -15,6 +15,7 @@ import {
   stepIdentityEpochBootstrap,
   stepIdentityEpochBootstrapWork,
 } from '../../src/semantic/identity-epoch-bootstrap.ts';
+import { CommandUnavailableError } from '../../src/command/command.ts';
 import { epochFixture, home, identityEpochDatabase, seedLegacyRoot } from './support/identity-epoch.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 
@@ -386,8 +387,13 @@ test('full native topology closure cannot substitute for an interrupted installa
     // Drive the actual bounded producer while the installation command is interrupted.
     // No topology, source ACK, receiving custody or completion row is installed by test SQL.
     let remaining = 4096;
-    for (let batch = 0; batch < 100 && remaining > 0; batch++) {
-      await runIdentityEpochBootstrapBatch(db.pool);
+    const deadline = Date.now() + 120_000;
+    while (remaining > 0 && Date.now() < deadline) {
+      try {
+        await runIdentityEpochBootstrapBatch(db.pool);
+      } catch (error) {
+        if (!(error instanceof CommandUnavailableError) || error.reason !== 'contention') throw error;
+      }
       remaining = (await db.admin.query('SELECT remaining FROM semantic.identity_epoch_bootstrap_topology')).rows[0]!
         .remaining;
     }

@@ -1,9 +1,17 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { runCommand } from '../command/command.ts';
+import type { SearchReceivingConfiguration } from '../search/identity-receiving-native.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import { commitSearchIdentityReceivingPlans } from './identity-search-receiving-source.ts';
+import {
+  identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
+  withIdentitySourceConsumerMaintenance,
+} from './identity-source-consumer-maintenance.ts';
 import type {
   IdentityJobRef,
   IdentityStepName,
@@ -121,12 +129,19 @@ function installed(pool: Pool): Installation {
 
 /** Trusted registration only. The composition root supplies the fixed participants; null leaves the coordinator
  * unavailable. There is no caller-selected participant list or mutable installation setter.
+ * Search plan preparation uses the same configuration supplied to the Search participant by that root.
  */
 export function registerIdentityEpochCoordinator(
   context: WorkContext,
   participants: IdentityEpochParticipantPorts<Pool> | null,
+  receivingConfiguration: SearchReceivingConfiguration | null = null,
 ): void {
   if (installations.has(context.pool)) throw new Error('Identity epoch coordinator is already registered');
+  if (receivingConfiguration && receivingConfiguration.pool !== context.pool)
+    throw new TypeError('Search receiving composition differs from its coordinator Pool');
+  const receiving = receivingConfiguration
+    ? Object.freeze({ ...receivingConfiguration, routeKey: Uint8Array.from(receivingConfiguration.routeKey) })
+    : null;
   const read = DBOS.registerStep(async (job: JobLocator) => readNext(context.pool, nativeJob(job)), {
     name: `${workflowName}.read`,
     ...COMMAND_STEP_RETRIES,
@@ -146,12 +161,36 @@ export function registerIdentityEpochCoordinator(
     async (job: JobLocator, step: IdentityStepName) => {
       const ref = nativeJob(job);
       const binding = installed(context.pool);
-      // The producer rereads its saved frontier and commits locally. Its home has been released on return.
-      const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
-        context.pool,
-        ref,
+      const deadline = deadlineFor(1000);
+      return withIdentitySourceConsumerMaintenance(
+        { pool: context.pool, env: context.env, clock: context.clock },
+        { deadline },
+        async (funded) => {
+          if (step === 'search-canonical-index') {
+            if (!receiving) throw unavailable('Search receiving composition is not installed');
+            const parent = identitySourceConsumerLibraryWork(
+              context.pool,
+              funded.identityConsumerWork,
+              funded.deadline,
+            );
+            const allowance = identitySourceConsumerNativeWork(
+              context.pool,
+              funded.identityConsumerWork,
+              funded.deadline,
+            );
+            if (!parent || !allowance) throw unavailable('Search requires the original live Source maintenance frame');
+            await commitSearchIdentityReceivingPlans(context.pool, ref, receiving, {
+              deadline: funded.deadline,
+              allowance,
+            });
+          }
+          const progress = await (step === 'mapping' ? stepIdentityEpochMapping : binding.participants![step])(
+            context.pool,
+            ref,
+          );
+          return { receipt: receiptLocator(ref, step, progress), state: progress.state };
+        },
       );
-      return { receipt: receiptLocator(ref, step, progress), state: progress.state };
     },
     { name: `${workflowName}.produce`, ...COMMAND_STEP_RETRIES },
   );

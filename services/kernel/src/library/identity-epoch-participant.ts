@@ -1,14 +1,23 @@
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { shareAccount } from '../access/account-share.ts';
-import { noEffect, runCommand } from '../command/command.ts';
+import { currentCommand, noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import type { IdentityEpochStep, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
+import type {
+  IdentityEpochStep,
+  IdentityJobRef,
+  IdentityStepProgress,
+  NativeStepWork,
+} from '../semantic/identity-epoch-contract.ts';
 import {
   identityEpochStore,
   identityJobPartition,
   IdentityEpochStoreError,
+  recordIdentityEpochNativeCommit,
+  serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
+import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import {
   lookupIdentityReceivingEffect,
   prepareIdentityReceivingEffect,
@@ -17,15 +26,33 @@ import {
   type IdentityReceivingEffect,
   type IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects.ts';
+import {
+  currentIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
+} from '../semantic/identity-source-consumer-maintenance.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
+import type { WorkAllowance } from './collection-source.ts';
+import {
+  nextLibraryIdentityNativePlan,
+  nextLibraryIdentityNativePlanWithWork,
+  advanceLibraryIdentityNativePlan,
+  advanceLibraryIdentityNativePlanWithWork,
+} from './identity-native-planner.ts';
+import { readLibraryScopeEffectsPage, readLibraryScopeEffectsPageWithWork } from './identity-scope-effects.ts';
 import {
   libraryIdentityInvalidationRole,
   registerLibraryOwnerIdentityScope,
   type LibraryIdentityRole,
 } from './owner-identity.ts';
 import invalidate from './identity-epoch-participant-invalidate.sql';
+import completeSql from './identity-epoch-participant-complete.sql';
+import stepSql from './identity-epoch-participant-step.sql';
+import coverageSql from './identity-epoch-participant-coverage.sql';
+import affectedSql from './identity-epoch-participant-affected.sql';
+import buildingSql from './identity-epoch-participant-building.sql';
+import jobScopeSql from '../semantic/identity-search-receiving-job-scope.sql';
 
 const step = 'library-private-follow-counts';
 const stale = (detail: string) => new IdentityEpochStoreError('identity_effect_stale', detail);
@@ -299,12 +326,209 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
       );
       return noEffect(result.rows[0] ?? null);
     });
-    if (pending.value) await applySourceInvalidation(pool, job, pending.value, deadline);
-    // No complete step/native ACK. Invalidation is only part of the ALL-role contract.
-    // Empty registration cannot prove current birth/first-apply/late-writer closure.
-    throw unavailable(
-      'ALL-Library identity remains pending: complete six-driver Source rebuild/OLD/NEW manifests, ' +
-        'owner candidate/winner and first-apply coverage, follow pair/support/total/outgoing/negative/fences, ' +
-        'cross-home owner custody and public/frozen output authority are not bound',
+    if (pending.value) {
+      await applySourceInvalidation(pool, job, pending.value, deadline);
+      return writeLibraryStep(pool, job, deadline, { after: [pending.value.effect_key], segment: 0 }, 'more', {
+        rows: 1,
+        points: 1,
+        statements: 1,
+        bytes: 256,
+        engineRequests: 0,
+      });
+    }
+    const token = currentIdentitySourceConsumerMaintenance(pool, deadline);
+    const prepaid = token ? identitySourceConsumerLibraryWork(pool, token, deadline) : null;
+    const discovered = prepaid
+      ? await nextLibraryIdentityNativePlanWithWork(pool, job, { deadline }, prepaid)
+      : await nextLibraryIdentityNativePlan(pool, job, { allowance: libraryAllowance(), deadline });
+    if (discovered.key) {
+      const advanced = prepaid
+        ? await advanceLibraryIdentityNativePlanWithWork(
+            pool,
+            { ...discovered.key, deadline, limit: 100 },
+            prepaid,
+          )
+        : await advanceLibraryIdentityNativePlan(pool, {
+            ...discovered.key,
+            allowance: libraryAllowance(),
+            deadline,
+            limit: 100,
+          });
+      if (advanced.status === 'unavailable')
+        throw unavailable(
+          'ALL-Library identity remains pending: complete six-driver Source rebuild/OLD/NEW manifests, ' +
+            'owner candidate/winner and first-apply coverage, follow pair/support/total/outgoing/negative/fences, ' +
+            'cross-home owner custody and public/frozen output authority are not bound',
+        );
+      if (advanced.status === 'sealed') {
+        const page = prepaid
+          ? await readLibraryScopeEffectsPageWithWork(
+              pool,
+              { ...discovered.key, after: null, limit: 1, deadline },
+              prepaid,
+            )
+          : await readLibraryScopeEffectsPage(pool, {
+              ...discovered.key,
+              after: null,
+              limit: 1,
+              allowance: libraryAllowance(),
+              deadline,
+            });
+        if (page.status === 'sealed' && page.rows[0]) {
+          const effect = await prepareIdentityReceivingEffect(pool, page.rows[0]);
+          await registerLibraryIdentitySourceInvalidation(pool, effect);
+        }
+      }
+      return writeLibraryStep(
+        pool,
+        job,
+        deadline,
+        { after: [discovered.key.scope, discovered.key.sourceIdentity.collectionId], segment: 0 },
+        'more',
+        { rows: 1, points: 1, statements: 1, bytes: 256, engineRequests: 0 },
+      );
+    }
+    const home = identityJobPartition(job);
+    const inventory = await runCommand(pool, { partition: home, deadline }, async (tx) => {
+      const affected = (await tx.query<{ affected: number }>(affectedSql.sql, [home, job.jobId, job.epoch.toString()]))
+        .rows[0];
+      const building = (await tx.query<{ building: number }>(buildingSql.sql, [home, job.jobId, job.epoch.toString()]))
+        .rows[0];
+      return noEffect({ affected: affected?.affected ?? 0, building: building?.building ?? 0 });
+    });
+    if (inventory.value.building > 0)
+      throw unavailable(
+        'ALL-Library identity remains pending: complete six-driver Source rebuild/OLD/NEW manifests, ' +
+          'owner candidate/winner and first-apply coverage, follow pair/support/total/outgoing/negative/fences, ' +
+          'cross-home owner custody and public/frozen output authority are not bound',
+      );
+    if (inventory.value.affected > 0)
+      throw unavailable(
+        'ALL-Library identity remains pending: complete six-driver Source rebuild/OLD/NEW manifests, ' +
+          'owner candidate/winner and first-apply coverage, follow pair/support/total/outgoing/negative/fences, ' +
+          'cross-home owner custody and public/frozen output authority are not bound',
+      );
+    const roles = await identityErasureRoles(pool, job.jobId);
+    const scope = await withReadTransaction(
+      pool,
+      async (tx) =>
+        (
+          await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [home, job.jobId, job.epoch.toString()])
+        ).rows[0]?.scope_digest,
+      deadline,
     );
+    if (!scope) throw stale('Library identity work requires an admitted native job');
+    const frontier = { after: ['coverage', 0], segment: 0 };
+    const sealed = await runCommand(pool, { partition: home, deadline }, async (tx) => {
+      const covered = await tx.query(coverageSql.sql, [
+        home,
+        job.jobId,
+        job.epoch.toString(),
+        currentCommand(tx).transactionId,
+        0,
+      ]);
+      if (covered.rowCount !== 1) throw unavailable('ALL-Library coverage scan lost its native seal');
+      bindSemanticProducerRoles(tx, roles);
+      recordIdentityEpochNativeCommit(tx, step);
+      registerCommandCallback(tx, async (id) => {
+        const inserted = await tx.query(completeSql.sql, [
+          currentCommand(tx).partition,
+          id,
+          job.jobId,
+          job.epoch.toString(),
+          scope,
+          json(frontier),
+          json({ rows: 1, points: 1, statements: 1, bytes: 256, engineRequests: 0 }),
+        ]);
+        if (inserted.rowCount !== 1) throw unavailable('ALL-Library completion lost its native step');
+      });
+      return { value: null, events: [wake(job)] };
+    });
+    return {
+      job,
+      frontier,
+      state: 'complete',
+      receipt: {
+        job,
+        step,
+        version: 1,
+        native: {
+          partition: sealed.partition,
+          transactionId: sealed.transactionId,
+          epoch: sealed.epoch,
+          position: sealed.position,
+        },
+      },
+      work: { rows: 1, points: 1, statements: 1, bytes: 256, engineRequests: 0 },
+    } satisfies IdentityStepProgress;
   });
+
+function libraryAllowance(): WorkAllowance {
+  return {
+    reservationId: randomUUID(),
+    remaining: {
+      candidateKeys: 1,
+      identityMetadataRows: 0,
+      nativeRows: 8192,
+      nativePoints: 128,
+      witnessKeys: 1,
+      statements: 128,
+      bytes: 1048576,
+      emptySeeks: 2,
+    },
+  };
+}
+
+async function writeLibraryStep(
+  pool: Pool,
+  job: IdentityJobRef,
+  deadline: number,
+  frontier: IdentityStepProgress['frontier'],
+  state: 'more' | 'complete',
+  work: NativeStepWork,
+): Promise<IdentityStepProgress> {
+  const home = identityJobPartition(job);
+  const roles = await identityErasureRoles(pool, job.jobId);
+  const scope = await withReadTransaction(
+    pool,
+    async (tx) =>
+      (await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [home, job.jobId, job.epoch.toString()])).rows[0]
+        ?.scope_digest,
+    deadline,
+  );
+  if (!scope) throw stale('Library identity work requires an admitted native job');
+  const progress = await runCommand(pool, { partition: home, deadline }, async (tx) => {
+    bindSemanticProducerRoles(tx, roles);
+    recordIdentityEpochNativeCommit(tx, step);
+    registerCommandCallback(tx, async (id) => {
+      const inserted = await tx.query(state === 'complete' ? completeSql.sql : stepSql.sql, [
+        currentCommand(tx).partition,
+        id,
+        job.jobId,
+        job.epoch.toString(),
+        scope,
+        json(frontier),
+        json(work),
+      ]);
+      if (inserted.rowCount !== 1) throw unavailable('Library identity step lost its native commit');
+    });
+    return { value: null, events: [wake(job)] };
+  });
+  return {
+    job,
+    frontier,
+    state,
+    receipt: {
+      job,
+      step,
+      version: 1,
+      native: {
+        partition: progress.partition,
+        transactionId: progress.transactionId,
+        epoch: progress.epoch,
+        position: progress.position,
+      },
+    },
+    work,
+  };
+}

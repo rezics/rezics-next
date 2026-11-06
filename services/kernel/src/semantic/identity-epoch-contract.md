@@ -647,7 +647,7 @@ narrowing remain separately owned work; do not fork their public-filter contract
 
 Library must export a real `IdentityEpochStep` adapter under the existing fixed `library-private-follow-counts`
 name for ALL Library canonical records; `library/identity-epoch-participant.ts` exports `stepLibraryIdentityEpoch`. Its native Source invalidation
-work is integrated, while complete six-driver/follow coverage still fails unavailable. It receives the same
+and six-driver planner are bound. Empty-home coverage seals after a committed original scan; homes with collections still require Source manifests. It receives the same
 affected-original/new-terminal stream, re-keys in <=100-row steps, and ACKs before
 publication. Support is per (canonical target, follower); totals change only at 0->1 / 1->0. Derived pair/support/total
 rows live in the canonical-target home; stored follows stay in the source owner home. Admission uses
@@ -819,8 +819,8 @@ be counted as `noData` while missing.
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below                                                    |
 | Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING                                                                                                           |
-| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | Constructor integrated; complete native coverage remains unavailable                                              |
-| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | Native Source invalidation integrated; complete ALL-role coverage remains unavailable                             |
+| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | Coordinator installs same-Pool receiving, six native operations and directory-complete ACK                        |
+| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | Six-driver planner bound; empty-home coverage seal ACK; collection rebuild still requires Source manifests        |
 | Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required                                          |
 | Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | Composition implemented; mapping/participant completeness, native proof and actual Accounts caller remain missing |
 
@@ -1554,6 +1554,10 @@ locks would miss a drained writer; it is not used for this migration inspection.
 installation enables the deferred birth guard and commits immutable `identity_epoch_installation_cut`
 custody. An interrupted cut rolls back atomically; a committed cut without native closure remains unavailable.
 Even all 4096 retained native topology closures cannot substitute for the missing installation receipt.
+While a cut exists without a valid installation, remaining() counts unclosed topology homes so bounded batches
+can finish; cutover stays blocked until the installation receipt. An empty selected frontier is a no-effect
+repair pass, not an unavailable failure. Generation-1 is the current Search physical owner until a live
+generation is readable.
 
 A separately released home-0 command verifies the committed cut and installed guards and records the actual
 bootstrap native commit plus `identity_epoch_installation` closure. The exported result is
@@ -1585,6 +1589,8 @@ remain independent obligations.
 Default legacy bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
 home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
 advances the cursor; one later local command takes at most 100 independently released native closure receipts.
+A contended home is skipped inside the batch so successful empty-home seals still reach that take; a later batch
+reads the retained native closure instead of re-exporting.
 Four initial native wake events seed bounded chains under the same worker registration. The first actual source ACK
 in each batch commits its continuation at that source home, preserving the existing queue partitioning instead of
 serializing every batch on topology home 0. A crash before the ACK is recovered by the already durable DBOS effect.

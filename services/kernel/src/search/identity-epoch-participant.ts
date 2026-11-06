@@ -40,7 +40,11 @@ import nextSql from './identity-epoch-participant-next.sql';
 import stepSql from './identity-epoch-participant-step.sql';
 import advanceSql from './identity-epoch-participant-advance.sql';
 import replaySql from './identity-epoch-participant-replay.sql';
+import completeSql from './identity-epoch-participant-complete.sql';
+import directorySql from './identity-epoch-participant-directory.sql';
 import { validSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
+import { enrollSearchIdentityReceivingPlans } from '../semantic/identity-search-receiving-source.ts';
+import jobScopeSql from '../semantic/identity-search-receiving-job-scope.sql';
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 
@@ -152,16 +156,90 @@ export function createSearchIdentityEpochParticipant(options: {
           throw unavailable('Unfinished Search cancellation requires the original Source writer disposition');
         if (saved.mapping?.state !== 'complete')
           throw unavailable('Search requires authoritative native mapping custody');
+        const enrolled = await enrollSearchIdentityReceivingPlans(pool, ref);
         const row = await withReadTransaction(
           pool,
           async (tx) =>
             (await tx.query(nextSql.sql, [identityJobPartition(ref), ref.jobId, String(ref.epoch)])).rows[0],
           deadline,
         );
-        if (!row)
-          throw unavailable(
-            'Complete Source receiving-plan discovery and its sealed original/copy directory are not installed',
+        if (!row) {
+          const directory = await withReadTransaction(
+            pool,
+            async (tx) =>
+              (
+                await tx.query<{ pending: number; originals: number; plans: number }>(directorySql.sql, [
+                  identityJobPartition(ref),
+                  ref.jobId,
+                  String(ref.epoch),
+                ])
+              ).rows[0],
+            deadline,
           );
+          if (
+            !directory ||
+            directory.pending !== 0 ||
+            directory.originals < 1 ||
+            directory.plans !== directory.originals ||
+            enrolled !== 'ready'
+          )
+            throw unavailable(
+              'Complete Source receiving-plan discovery and its sealed original/copy directory are not installed',
+            );
+          const roles = await identityErasureRoles(pool, ref.jobId);
+          const frontier = { after: ['directory', directory.originals], segment: 0 };
+          const scope = await withReadTransaction(
+            pool,
+            async (tx) =>
+              (
+                await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [
+                  identityJobPartition(ref),
+                  ref.jobId,
+                  String(ref.epoch),
+                ])
+              ).rows[0]?.scope_digest,
+            deadline,
+          );
+          if (!scope) throw unavailable('Search completion lost the admitted job scope');
+          const sealed = await runCommand(
+            pool,
+            { partition: identityJobPartition(ref), deadline, clock: configured.configuration.clock },
+            async (tx) => {
+              bindSemanticProducerRoles(tx, roles);
+              recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
+              registerCommandCallback(tx, async (id) => {
+                const inserted = await tx.query(completeSql.sql, [
+                  currentCommand(tx).partition,
+                  id,
+                  ref.jobId,
+                  String(ref.epoch),
+                  scope,
+                  json(frontier),
+                  json(used(allowance, identitySourceConsumerNativeWork(pool, token, deadline))),
+                ]);
+                if (inserted.rowCount !== 1) throw unavailable('Search completion lost its native step');
+              });
+              return { value: null, events: searchIdentityWriterChanged() };
+            },
+          );
+          return {
+            job: ref,
+            frontier,
+            state: 'complete' as const,
+            receipt: {
+              job: ref,
+              step: 'search-canonical-index' as const,
+              version: 1 as const,
+              native: {
+                partition: sealed.partition,
+                transactionId: sealed.transactionId,
+                epoch: sealed.epoch,
+                position: sealed.position,
+              },
+            },
+            work: used(allowance, identitySourceConsumerNativeWork(pool, token, deadline)),
+          };
+        }
         const b = row.binding;
         const s = b?.source;
         if (
