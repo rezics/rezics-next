@@ -18,17 +18,21 @@ type RealmRoutes = ReturnType<KernelClient['realms']>;
 type Realm = NonNullable<Awaited<ReturnType<RealmRoutes['get']>>['data']>['realm'];
 export type RealmMediaReservation = Parameters<RealmRoutes['media']['post']>[0];
 
-/** The mounted Realm route owns parent authorization, reservation identity and native purpose. */
+/**
+ * The mounted Realm route owns parent authorization, reservation identity and native purpose. The caller's
+ * exact-command key is forwarded unchanged so a repeated command finds the same reservation.
+ */
 export async function reserveRealmMedia(
   client: KernelClient,
   authorization: string | null,
   realmId: string,
   input: RealmMediaReservation,
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<Media> {
   const result = await client.realms({ realmId }).media.post(input, {
     headers: {
       ...(authorization ? { authorization } : {}),
-      'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      'idempotency-key': JSON.stringify(idempotencyKey),
     },
   });
   if (result.error) {

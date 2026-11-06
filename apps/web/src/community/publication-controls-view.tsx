@@ -46,6 +46,7 @@ type PublicationSessionSource = {
   dataUpdatedAt: () => number;
   snapshot: () => number;
   subscribe: (listener: () => void) => () => void;
+  release: () => void;
 };
 
 const publicationSessionSources = new WeakMap<QueryClient, PublicationSessionSource>();
@@ -70,8 +71,17 @@ function publicationSessionSource(client: QueryClient): PublicationSessionSource
   let previous = identity();
   let revision = 0;
   const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(({ query }) => {
+  const stop = client.getQueryCache().subscribe((event) => {
+    const query = event.query;
     if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+    const action = 'action' in event ? event.action : undefined;
+    if (
+      event.type !== 'removed' &&
+      (event.type !== 'updated' ||
+        !action ||
+        (action.type !== 'success' && action.type !== 'error' && action.type !== 'setState'))
+    )
+      return;
     const next = identity();
     if (next === previous) return;
     previous = next;
@@ -88,9 +98,21 @@ function publicationSessionSource(client: QueryClient): PublicationSessionSource
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    release() {
+      stop();
+      listeners.clear();
+    },
   };
   publicationSessionSources.set(client, source);
   return source;
+}
+
+/** Drop the session cache subscriber so a discarded QueryClient cannot retain publication drafts. */
+export function releasePublicationSessionSource(client: QueryClient) {
+  const source = publicationSessionSources.get(client);
+  if (!source) return;
+  source.release();
+  publicationSessionSources.delete(client);
 }
 
 const noSessionSubscribe = () => () => {};

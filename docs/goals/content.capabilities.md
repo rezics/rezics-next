@@ -82,7 +82,8 @@ generation and named OpenAPI/client exports, and publishes independently of cons
 installed Home and boardShelf callables without a local DTO, cast or native import. The connected visitor journey
 shows at most three newest admitted ordinary threads per Board in one receiver, preserves
 exact/lower-bound/unavailable reply counts and empty/unavailable state, and uses existing Realm-return and
-shelf-cursor navigation slots.
+shelf-cursor navigation slots. Connected visit, membership, publication and space-page lifetime tests are the
+fewest that pin that journey, once-only completion and disposal; no extra stories.
 
 Personas: anonymous, creator, manager, moderator, Realm member, banned member and outsider, including a banned
 member with an independent read grant. Fixtures: the bound community suite's native Space/Realm fixtures and the

@@ -40,6 +40,10 @@ capabilities appear. A value's representation does not determine its semantic me
 
 ## Modules and boundaries
 
+Decision: a dev candidate that adds boundary violations lands; the architecture check does not hold it. The train
+records each Goal's net-new violations, and the same day an urgent repair brief per Goal, owned by its manager, removes
+them as one batch. Development continues while the boundary baseline cannot drift.
+
 Capabilities are modules with one owner and a declared public surface. Their structure is checked by tools, not by
 convention. The evidence is in [engineering modularity (Opus 5.5)](research/engineering-modularity-opus-5-5.md) and
 [(GPT-6 Astra)](research/engineering-modularity-gpt-6-astra.md).

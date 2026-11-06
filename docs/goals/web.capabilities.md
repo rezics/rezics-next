@@ -160,7 +160,8 @@ a served-page binding marked pending does not become covered merely by linking a
   configured TypeList — `session-transport` shared media requests, slot binding pending.
 - **Scenarios**: `specs/web-personal-outcomes.test.ts`: `session-transport` (parallel specification).
   Content owns `specs/content-media-outcomes.test.ts` and `specs/content-disclosure-outcomes.test.ts` native
-  authorization/disclosure; accounts owns session lifecycle. Web is their served-page/BFF binding.
+  authorization/disclosure; accounts owns session lifecycle. Web is their served-page/BFF binding. Attachment publish,
+  reply, type refusal and recovery on the native host are in `apps/web/tests/native/publish-attachment-reply.host.test.ts`.
 - **Acceptance command**: `bun test specs/web-personal-outcomes.test.ts` with `WEB_PERSONAL_DRIVER` configured
   to its native binding; pending parallel suite delivery.
 

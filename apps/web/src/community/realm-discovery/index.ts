@@ -13,7 +13,7 @@ export type RealmDiscoveryCard = Readonly<{
 export type RealmDiscoveryState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'ready'; realms: readonly RealmDiscoveryCard[]; next: string | null }>
-  | Readonly<{ kind: 'unavailable' | 'closed' }>;
+  | Readonly<{ kind: 'unavailable' | 'closed' | 'restart' }>;
 
 export type RealmDiscoverySectionProps = Readonly<{
   sort: RealmDiscoverySort;

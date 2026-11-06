@@ -45,6 +45,8 @@ import readVisibility from './read-visibility.sql';
 import { withReadTransaction } from './read.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 
+export { readPartition };
+
 type SubjectRow = {
   selection_ready: boolean;
   current_revision: number | null;

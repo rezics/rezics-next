@@ -317,6 +317,7 @@ driver cannot express it.
 `bun run --cwd services/kernel check test/search/outcomes.test.ts`.
 No new suggest suite is needed for already frozen prefixes/operators/budgets; extend only missing persona/source
 outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and composition-and-profile-governance.
+Focused Web adapter tests pin installed Search/suggest/facet/Realm native HTTP families; they are not a native pass.
 
 | Stage                                   | Evidence                                                                                           |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -366,7 +367,7 @@ These native seams are retained, without claiming complete runtime closure.
 **Native wrapper/command:** original Search/relation wrappers use
 [outcome-driver](../../services/kernel/test/search/outcome-driver.ts)→[driver client](../../services/kernel/test/search/support/driver-client.ts)
 →[supervisor](../../services/kernel/test/search/support/outcome-supervisor.ts)→[worker child](../../services/kernel/test/search/support/outcome-worker.ts).
-Worker invokes startWorker with decorated full KERNEL_WORK_MODULES, original registrations and observed real starters;
+Worker invokes startWorker with a decorator of the live `createKernelWorkModules` list (Content ambient included), original registrations and observed real starters;
 pause/resume captures only Search, rebuild uses real rebuildSubjects/subjectSource and runner refresh. Current
 source has progressed beyond [harness README](../../services/kernel/test/search/README.md)'s older captured-starter
 status; neither source nor that stale status supplies a native pass.

@@ -31,6 +31,8 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 Decision: one composition runtime; lost SDK responses keep publication outcomes unknown.
 Decision: this increment uses the focused CJK projection, review-readiness, alias-locale and walk regressions as its owning cells, adds no stories or seeded-matrix cases, and leaves the seeded matrix unaccepted because local Web never listened on 20010 within 20 minutes. Path 17 walk first-compile HTTP uses the remaining readiness window; session modules stay in the route graph rather than Vite URL entries. Walk regressions assert slot-qualified container names from `walkStackNames`; worker container-gate probes use a cwd that is not the check-host run. Stack-run probe fixtures emit `DISK_FREE` and `MEMORY_RECLAIMABLE` with numeric `MEMORY_CURRENT`/`MEMORY_MAX` so `parseProbe` admits them; nested worker-check `--local` uses the repository cwd when the suite itself is on a check host.
 Decision: typecheck repairs keep those assertions; review-population readiness fixtures pass KernelClock into createDiscoveryProducerEntry; walk `stopSpawned` accepts Bun's numeric or named `signalCode`; Library access-capabilities re-exports work types from kernel-library-contract, not the Source runtime.
+Decision: the default worker child decorates `startWorker`'s live `createKernelWorkModules` list, including Content ambient; a pre-imported substitute list is not the production composition.
+Decision: write-rate-stage Search stubs keep one `savedCatalogueMembers` method and expect the HTTP empty-recovery envelope on an empty text page; duplicate Search/library/strict-JSON fixtures stay with their owners.
 
 Decision: delayed-index disclosure recovers through the same ordinary relay. Withholding an unsafe kind preserves independently current kinds; unsafe combined execution remains withheld through sibling projection and cursor construction.
 
@@ -91,7 +93,11 @@ intention.
 
 Decision: Search, facet and typeahead recovery stays bound to the exact executed request and current reader/locale;
 `ready` requires useful output from an actual current-generation native observation, and Retry-After expiry enables only
-a deliberate retry.
+a deliberate retry. A new or removed resource scope retires prior facet fields and the hit cursor. Installed readers
+share the native HTTP families (invalid, invalid-cursor, session, closed, denied, restart, index-not-ready,
+source-not-ready, unavailable, ready). Decision: the fewest adapter tests pin that journey through createKernelClient
+on Search, suggest, facets and Realm More/Retry/Restart; named stories stay unchanged; native/browser cells remain
+deferred until stack releases land.
 
 Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
 unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other

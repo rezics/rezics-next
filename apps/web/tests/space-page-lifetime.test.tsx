@@ -190,6 +190,7 @@ mock.module('../src/community/space-actions', () => ({
     }));
   },
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
+  changeRealmMembership: async () => ({ outcome: 'refused' }),
   readSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
   changeSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
   resolveSpaceSetupChoice: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
@@ -197,17 +198,14 @@ mock.module('../src/community/space-actions', () => ({
   readSpaceSetupBoardChoices: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
   readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
 }));
+const actualMembership = await import('../src/community/realm-membership');
+const actualHeader = await import('../src/community/realm-home-header');
 mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
 mock.module('../src/community/realm-membership', () => ({
-  RealmMembership: ({
-    realm,
-    onCompleted,
-  }: {
-    realm: { id: string };
-    onCompleted?: (receipt: MembershipTestReceipt) => boolean;
-  }) => {
-    if (!showMembershipHarness) return null;
+  ...actualMembership,
+  RealmMembership: (props: Parameters<typeof actualMembership.RealmMembership>[0]) => {
+    if (!showMembershipHarness) return createElement(actualMembership.RealmMembership, props);
     return createElement(
       'button',
       {
@@ -217,8 +215,8 @@ mock.module('../src/community/realm-membership', () => ({
         type: 'button',
         onClick: () => {
           membershipResult =
-            onCompleted?.({
-              realmId: realm.id,
+            props.onCompleted?.({
+              realmId: props.realm.id,
               action: 'join',
               membership: 'member',
               current: () => membershipCurrent,
@@ -235,8 +233,11 @@ mock.module('../src/community/realm-presentation-panel', () => ({ RealmAppearanc
 mock.module('../src/community/realm-claim-panel', () => ({ RealmClaimPanel: () => null }));
 mock.module('../src/community/container-lifecycle-controls', () => ({ ContainerLifecyclePanel: () => null }));
 mock.module('../src/community/realm-home-header', () => ({
-  RealmHomeHeader: ({ participation }: { participation?: ReactNode }) =>
-    showMembershipHarness ? createElement('header', null, participation) : null,
+  ...actualHeader,
+  RealmHomeHeader: (props: Parameters<typeof actualHeader.RealmHomeHeader>[0]) =>
+    showMembershipHarness
+      ? createElement('header', null, props.participation)
+      : createElement(actualHeader.RealmHomeHeader, props),
 }));
 
 const { createRoot } = await import('react-dom/client');
@@ -253,8 +254,10 @@ mock.module('../src/kernel/query', () => ({
 const { sessionQuery } = await import('../src/session/query');
 const { spaceQuery, useShelfList } = await import('../src/community/space-queries');
 const { ShelfContinuation } = await import('../src/community/publication-controls-view');
-const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime } =
+const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime, releaseSpacePageSessionSource } =
   await import('../src/community/space-page-lifetime');
+const { releaseRealmMembershipLifetime } = await import('../src/community/realm-membership-lifetime');
+const { releasePublicationSessionSource } = await import('../src/community/publication-controls-view');
 const { SpacePage } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -281,7 +284,8 @@ function fileRouteTree(route: unknown, path: string) {
 }
 
 async function mountFileRoute(tree: ReturnType<typeof fileRouteTree>, entry: string, queryClient: QueryClient) {
-  await close(false);
+  clients.add(queryClient);
+  await close(queryClient);
   calls.pages.length = 0;
   calls.realms.length = 0;
   calls.boards.length = 0;
@@ -307,6 +311,12 @@ async function mountFileRoute(tree: ReturnType<typeof fileRouteTree>, entry: str
 
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
+const clients = new Set<QueryClient>();
+function testClient() {
+  const next = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  clients.add(next);
+  return next;
+}
 let root: Root | undefined;
 let client: QueryClient | undefined;
 let router: ReturnType<typeof createRouter> | undefined;
@@ -433,7 +443,9 @@ async function mount(
     queryClient?: QueryClient;
   } = {},
 ) {
-  await close(false);
+  const nextClient = options.queryClient ?? testClient();
+  clients.add(nextClient);
+  await close(nextClient);
   calls.pages.length = 0;
   calls.realms.length = 0;
   calls.boards.length = 0;
@@ -442,8 +454,6 @@ async function mount(
   realmReader = async () => ({ kind: 'page', page: pageFor(address) });
   boardReader = async () => ({ kind: 'page', items: [], next: null, unavailable: 0 });
   publicationReader = async () => ({ kind: 'page', items: [], next: null, unavailable: 0 });
-  const nextClient =
-    options.queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   client = nextClient;
   if (options.session && !options.queryClient) nextClient.setQueryData(sessionQuery.queryKey, options.session);
   view = node;
@@ -480,7 +490,7 @@ async function repaint(node: ReactNode) {
   });
 }
 
-async function close(clearClient = true) {
+async function close(keep?: QueryClient) {
   if (root) {
     await act(async () => {
       root!.unmount();
@@ -488,8 +498,16 @@ async function close(clearClient = true) {
     });
     root = undefined;
   }
-  if (clearClient) client?.clear();
-  client = undefined;
+  for (const item of [...clients]) {
+    if (item === keep) continue;
+    item.cancelQueries();
+    item.clear();
+    releaseSpacePageSessionSource(item);
+    releaseRealmMembershipLifetime(item);
+    releasePublicationSessionSource(item);
+    clients.delete(item);
+  }
+  client = keep;
   router = undefined;
   replaceView = undefined;
   strictMode = false;
@@ -529,8 +547,9 @@ afterEach(async () => {
 
 afterAll(async () => {
   mock.restore();
+  await close();
   host.remove();
-  window.happyDOM.abort();
+  await window.happyDOM.close();
   for (const [key, descriptor] of previousGlobals) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
@@ -540,7 +559,7 @@ afterAll(async () => {
 describe('Complete Space and Realm route/query/page/shelf caller lifetime', () => {
   test('the actual Space loader binds its anonymous read and the public page hydrates through initial session preparation', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     pageReader = async (input) => pageFor(input.address, false);
     const loaded = await loadSpaceRoute(nextClient);
@@ -577,7 +596,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('the actual Realm loader binds its target and locale to the same page and shelf composition', async () => {
     setLocale('ja', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     realmReader = async () => ({ kind: 'page', page: pageFor(address, true) });
@@ -590,7 +609,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('mounted route recovery refreshes one retired public visit without looping', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     let reads = 0;
@@ -615,7 +634,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('the actual Space route composes its signed-in query and hides an obsolete ready result while the replacement is pending', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, viewer());
     const replacement = deferred<SpacePageData>();
@@ -655,7 +674,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('a same-key cached route success is refreshed before the loader can reuse it for a later visit', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     pageReader = async (input) => pageFor(input.address, false);
     const first = await loadSpaceRoute(nextClient);
@@ -674,7 +693,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     setLocale('en', { reload: false });
     for (const transition of ['equal', 'error', 'remove', 'aba'] as const) {
       calls.pages.length = 0;
-      const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+      const nextClient = testClient();
       client = nextClient;
       nextClient.setQueryData(sessionQuery.queryKey, viewer());
       let reads = 0;
@@ -713,7 +732,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('a session Query setState notification retires the actual loader read', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, viewer());
     calls.pages.length = 0;
@@ -753,7 +772,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('the actual loader stops after one fresh recovery when each committed result is retired', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, viewer());
     let reads = 0;
@@ -785,7 +804,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('removing the exact original Query allows one fresh read when no successor owns its cache entry', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     let reads = 0;
     pageReader = async (input) => {
@@ -823,7 +842,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     setLocale('en', { reload: false });
     for (const replacement of ['result', 'query'] as const) {
       calls.pages.length = 0;
-      const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+      const nextClient = testClient();
       client = nextClient;
       let reads = 0;
       pageReader = async (input) => {
@@ -875,7 +894,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('an equal manual page success retires the loader and keeps the committed successor data', async () => {
     setLocale('en', { reload: false });
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     let reads = 0;
     pageReader = async (input) => {
@@ -918,7 +937,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('a same-account credential replacement rejects an in-flight private page result before QueryClient caches success', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, viewer());
     const read = deferred<SpacePageData>();
@@ -940,7 +959,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('current signed-in page results render under their exact session observation and ordinary rerenders preserve them', async () => {
     const loaded = await (async () => {
-      const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+      const nextClient = testClient();
       client = nextClient;
       nextClient.setQueryData(sessionQuery.queryKey, viewer());
       pageReader = async (input) => pageFor(input.address, false, input.credentialMode);
@@ -957,11 +976,11 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('hydration with a replacement session tuple has no fallback authority for private loader rows', async () => {
-    const serverClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const serverClient = testClient();
     serverClient.setQueryData(sessionQuery.queryKey, viewer());
     pageReader = async (input) => pageFor(input.address, false, input.credentialMode);
     const loaded = await loadSessionSpace(serverClient);
-    const browserClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const browserClient = testClient();
     browserClient.setQueryData(sessionQuery.queryKey, viewer('csrf-replaced'), {
       updatedAt: loaded.admission.sessionDataUpdatedAt,
     });
@@ -975,12 +994,12 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('serialized public admission bridges only an exact hydrated session tuple and update count', async () => {
-    const serverClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const serverClient = testClient();
     serverClient.setQueryData(sessionQuery.queryKey, signedOut());
     pageReader = async (input) => pageFor(input.address, false);
     const loaded = await loadSpaceRoute(serverClient);
     const admission = structuredClone(loaded.admission);
-    const browserClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const browserClient = testClient();
     browserClient.setQueryData(sessionQuery.queryKey, signedOut(), {
       updatedAt: admission.sessionDataUpdatedAt,
     });
@@ -995,7 +1014,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
 
   test('same-account token/readiness changes, signed-out changes and batched away/back retire rendered private rows', async () => {
     for (const transition of ['token', 'readiness', 'sign-out', 'away-back'] as const) {
-      const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+      const nextClient = testClient();
       client = nextClient;
       nextClient.setQueryData(sessionQuery.queryKey, viewer());
       pageReader = async (input) => pageFor(input.address, false, input.credentialMode);
@@ -1027,7 +1046,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('two shelf reads retire independently before and after their deferred responses settle', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, viewer());
     pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
@@ -1066,7 +1085,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('current explicit next and retry preserve independent cursors, bounded reads and merge behavior', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
@@ -1132,7 +1151,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('saved update and continuation callbacks cannot change a new target, locale or remounted visit', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     const admission = captureSpacePageAdmission(nextClient, {
@@ -1186,7 +1205,6 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(host.textContent).not.toContain('Stale update');
 
     // The same admission cannot be rebound after a real unmount/remount; a new route read is required.
-    await close(false);
     await mount(
       <SpacePageLifetimeHost
         page={routePage}
@@ -1207,7 +1225,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     });
     expect(calls.boards).toHaveLength(0);
 
-    const localeClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const localeClient = testClient();
     localeClient.setQueryData(sessionQuery.queryKey, signedOut());
     const localeAdmission = captureSpacePageAdmission(localeClient, {
       target: pageTarget(),
@@ -1252,7 +1270,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
   });
 
   test('StrictMode effect reconnection keeps one healthy visit able to continue both shelves', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const nextClient = testClient();
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
@@ -1282,7 +1300,7 @@ test('the admitted Space returns acknowledged membership focus to its selected s
   showMembershipHarness = true;
   pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
   boardReader = async () => ({ kind: 'page', items: [board()], next: null, unavailable: 0 });
-  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const nextClient = testClient();
   nextClient.setQueryData(sessionQuery.queryKey, viewer());
   await mountFileRoute(
     fileRouteTree(spaceRoute, '/spaces/$address'),
@@ -1316,7 +1334,7 @@ test('the admitted Space returns acknowledged membership focus to its selected s
 
 test('the mounted Realm return reads only its selected native window and keeps publication continuation independent', async () => {
   setLocale('en', { reload: false });
-  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const nextClient = testClient();
   nextClient.setQueryData(sessionQuery.queryKey, signedOut());
   const selectedId = id(71);
   realmReader = async () => ({ kind: 'page', page: pageFor(address) });

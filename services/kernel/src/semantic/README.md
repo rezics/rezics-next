@@ -643,6 +643,62 @@ source-fence or target read; source authority is checked again afterwards. Exhau
 while Access/deadline/dependency errors retain their typed unavailable behavior. A foreign work-mode producer
 without a native work receipt refuses before IO rather than manufacturing an Actor or hiding its IO.
 
+### Credited-name adapter
+
+Decision: credited-name observation is the work header plus `search_canonical_generation`, so paging stays stable
+without expanding omitted creators; creator names and identity are bound by `nameRevision`, exact `current` witness
+checks and whole-dependency `unchanged`, and an incomplete fourth page or name coverage keeps selection ready.
+
+The installed port is `createCreditSearchSource` from `semantic/credit-search.ts`, a public Semantic entry outside
+the barrel. Runtime defaults expose `createKernelCreditSearchSource` (re-exported by `server.ts`). Search calls
+either factory; `page`, `current` and `unchanged` are the producer methods. Attaching the adapter onto
+`subjectSource` or `createRatedSubjectSource` stays Search-owned, because those files already participate in the
+Semantic value-import cycle. It uses released `listWorkPlan` / `workCreditProperties` outgoing credit properties,
+never a role roster or the three-entry work-context preview.
+`receiveCreditSearch` and `receiveCreditSearchMatch` are the receiving entries; restart maps onto `changed`, so the
+existing pipeline publishes preparing, incomplete, changed or complete. Hidden or concealed credits and creators are
+omitted, not counted as incomplete. Identity `absent` follows the public redirect chain; pending identity is
+preparing; any other unavailable identity (moved, bootstrap or missing owner) is unavailable, because a redirect
+chain never stands in for unknown identity.
+
+Decision: CreditSearchSource is a public Search contract; the native producer is a public Semantic entry composed
+by `createKernelCreditSearchSource`, not the Semantic barrel, `subjectSource` or `createRatedSubjectSource`, so it
+stays outside the existing value-import cycle. Landing tests keep the existing native adapter, fourth-page,
+preparation and growth assertions and pin that composition; Search-owned writer, facet, source attachment and
+native user-case proof stay with the receiving Person Search outcome.
+
+Modules: `credit-search-cut.ts` holds the installed ceilings, observation, cursor and digests;
+`credit-search-selection.ts` holds the work cut, selected-credit seeks, release plan, parsing and native disclosure;
+`credit-search-creators.ts` holds public labels/aliases and identity terminals.
+
+The page cursor is the last selected row returned, so the next strict seek resumes after it. The lookahead row only
+proves another page exists; a cursor on it would skip that credit.
+
+#### Cost: credited-name page
+
+- Touches: one work cut, one selected-credit seek of at most 33 rows on `search_selected`, native fences for the 32
+  returned rows, then for at most 32 targets one creator subject read, one name read of at most 33 rows and identity
+  mappings in batches of 100.
+- Bound: 32 credits and 16 names per creator before expansion; 256 bytes per name; 64 KiB per page; 128 KiB per
+  document; four pages. An unfinished fourth page returns incomplete without a fifth read.
+- Growth check: `test/semantic/growth-credit-search.test.ts` measures page, current and unchanged at 256/1024/4096 while
+  unrelated subjects grow in another partition.
+
+#### Cost: credited-name current
+
+- Touches: one work cut, one exact statement seek of at most two rows, one fence check, then one creator with its
+  names and identity mapping.
+- Bound: constant per witness; a stale observation or missing statement returns before any name read.
+- Growth check: the growth test validates the matched witness at each scale.
+
+#### Cost: credited-name unchanged
+
+- Touches: two work cuts, one selected-credit seek of at most 129 rows, fences for the four-page window, and creator
+  names and identity for at most 128 creators.
+- Bound: at most 128 creators with 33 name rows each, independent of catalogue size; the observation is checked
+  before and after the reads.
+- Growth check: the growth test checks unchanged at each scale.
+
 Selection coverage requires the complete selected slot in this observation. Partial selections and witness
 revalidation do not prove negatives. Empty-pair coverage requires both complete canonical possible-witness ranges
 to be empty from the beginning for every requested pair in this observation. Historical witnesses rejected by

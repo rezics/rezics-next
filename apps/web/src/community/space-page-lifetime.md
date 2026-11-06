@@ -81,17 +81,31 @@ first-render producer/SSR contract remains deferred.
 The mounted Kernel home now composes a current viewer observation with its container, presentation and shelves.
 Its anonymous observation is `{ state: 'anonymous' }` with sign-in advice. Its signed-in observation carries native
 readability, membership episode and participation, plus current entry, management and leave advice. It does not
-supply join or claim advice. The installed generated Client declaration still omits home, boardShelf and
-publicationShelf. The prepared consumer and its local operation seam do not establish generated default-route
-availability; the normal producer and controller retain generation and native acceptance.
+supply join or claim advice. The installed generated Client declaration owns `home`, `boardShelf` and
+`publicationShelf`. Web binds those methods once and maps recent and Board visibility from the installed types;
+it does not assemble a substitute DTO. Public exact and lower-bound reply counts stay public; viewer-cohort activity
+stays unavailable. Native producer recordings remain with their owners.
 
 Membership and each command require their own explicit composed native advice. Separate standing, participation,
 setup or claim reads cannot manufacture that observation. Missing publication support remains unavailable; it must
-not fall back to per-publication Subject hydration, another DTO or an endpoint assembled by Web. The legacy fixture
-helpers retain their original reads until the generated replacement is installed.
+not fall back to per-publication Subject hydration, another DTO or an endpoint assembled by Web. Legacy fixture
+helpers retain their original list reads for stories that still exercise the pre-composed producer.
 
-Decision: a fresh native response starts both shelves again, while replacing or mutating the original heads,
-selected presentation or viewer observation permanently retires the complete visit.
+Decision: connected visit, membership, publication and space-page lifetime tests are the fewest that pin the
+supplying-shelf journey, once-only completion, observer-chatter bound and disposal; no extra stories.
+
+Decision: a same-source admitted Home refresh is a new page under the original admission. The visit admits it by
+source identity only when nested observation actually changed, remounts neither membership nor publication hosts,
+and resets both shelf windows. One accepted command stores one acknowledgement; the original host invalidates the
+route once and does not refetch, poll or renew the command. An equal page envelope, in-place mutation, or changed
+heads, account, credential, route or operations still retires that visit.
+
+Decision: the page lifetime notifies connected hosts only for session replacement and for the owned query's committed
+success, error, setState or removal; observer add/remove and fetch-status chatter do not increment the visit or
+recreate membership/publication drafts. Visit and lifetime tests dispose their Happy-DOM window, router, root and
+QueryClient per case so fixture, response and subscription lifetimes stay inside the check wrapper's 6 GiB cap.
+Connected visit, membership, publication and space-page lifetime tests pin the supplying-shelf journey, once-only
+completion, observer-chatter bound and disposal; no extra stories.
 
 The prepared consumer checks the carrying Space and Realm heads, active lifecycle and selected media and rules
 revision before presenting them. Native concealment may retain an empty optional presentation even when a selected
@@ -101,8 +115,9 @@ The original heads and selected references survive route serialization alongside
 The route lifetime captures the exact page, container, native source, lifecycle, presentation and observation
 references before mounting. Value snapshots also reject in-place changes. An outer page copy, equal nested
 replacement or removed observation cannot transfer a response into that lifetime. The injectable rendering boundary
-uses the same source comparison and retires old pages permanently; a fresh response remounts both shelves and their
-controllers. Credential, locale, route and operation replacement also require a fresh response. Existing route
+uses the same source comparison and retires old pages permanently. A fresh same-source response resets both shelf
+windows and keeps the outer membership and publication completion hosts. Credential, locale, route and operation
+replacement also require a fresh response. Existing route
 admission remains required for session-cache generations, pending continuation tickets, lifecycle retirement and
 hydration; this local boundary supplies neither native viewer currentness nor private first-paint proof.
 
@@ -122,7 +137,7 @@ existing server login return consumes these addresses; its short-lived recovery 
 A recovered consumed login callback can therefore restart at the carrying page instead of restoring a cursor.
 No browser storage, private command operands or automatic participation are added.
 
-A fresh page object remounts the outer visit even when values compare equal. Changed shelf source, account,
+A fresh same-source page resets both shelf windows and keeps the outer membership and publication hosts. Changed shelf source, account,
 credential, route or frozen state retires its pending return effects before replacement render. A late read may
 not navigate or move focus after retirement. Missing, denied and stale windows keep the native shelf's explicit
 retry/restart controls; focus restoration never takes focus from an intervening user action.

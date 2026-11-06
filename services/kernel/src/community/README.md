@@ -355,11 +355,15 @@ discussions, never a substitute ABI. Web mounts `RealmCommunityBoards` in its or
 Board/thread links, native cursors, existing navigation and outer membership/publication completion/focus hosts.
 Client publication, browser retirement and rendered journey acceptance remain required; native source is insufficient.
 
-Decision: supplying Board links use the existing localized Board address and retain the exact Realm/shelf return;
-native shelf-reader injection keeps the original publication command host. Only an acknowledged command followed
-directly by its admitted membership result can complete; intervening source replacement retires its completion,
-and unrelated membership reads retain an uncertain command for exact retry or discard. The original Home/shelf
-root-derived types remain in place until the existing publisher installs recent discussions and Board visibility.
+Decision: the supplied-discussion visit renders each original Board's admitted recent prefix, keeps independent
+localized Board and thread links, and returns through the exact Realm/supplying-shelf cursor; existing outer hosts
+retain membership/publication completion and focus. Only an acknowledged command followed directly by its admitted
+membership result can complete; intervening source replacement retires its completion, and unrelated membership
+reads retain an uncertain command for exact retry or discard.
+
+Decision: the initial Home and continued Board shelf map `recent` and Board visibility directly from their installed root methods; complete-empty and unavailable discussion states and all reply-count states stay distinct, public exact/lower-bound counts stay public, and viewer-cohort activity stays unavailable, while the existing current-source completion host returns eligible focus to the selected supplying shelf.
+
+Decision: a same-source admitted Home refresh is a new page under the original admission; Web admits it by source identity when nested observation changed, resets both shelves, and keeps the outer membership and publication hosts. One accepted command stores one acknowledgement; the original host invalidates once and does not refetch or renew the command. Equal envelopes, in-place mutation and intervening source replacement still retire that completion. The Web visit notifies only for session replacement and the owned query's committed success, error, setState or removal; visit tests dispose window, router and QueryClient per case. Connected visit, membership, publication and space-page lifetime tests pin that journey, once-only completion, observer-chatter bound and disposal; no extra stories.
 
 ### Cost
 

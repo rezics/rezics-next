@@ -51,6 +51,7 @@ export type RealmMembershipCommandAttempt = Readonly<{
   credential: string;
   body: Readonly<{ realmId: string; action: 'join' | 'leave'; idempotencyKey: string }>;
   observation: number;
+  source: string | null;
 }>;
 
 function readSessionSnapshot(client: QueryClient): SessionSnapshot | null {
@@ -85,6 +86,8 @@ export class RealmMembershipLifetimeStore {
   private readonly reads = new Set<ActiveRead>();
   private readonly owners = new Map<string, Set<{ owner: CallerOwner; scope: CallerScope }>>();
   private readonly nativeCommands = new Map<string, RealmMembershipCommandAttempt>();
+  private readonly acknowledgements = new WeakSet<RealmMembershipCommandAttempt>();
+  private readonly stopCache: () => void;
 
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -95,7 +98,30 @@ export class RealmMembershipLifetimeStore {
 
   constructor(readonly client: QueryClient) {
     this.snapshot = readSessionSnapshot(client);
-    client.getQueryCache().subscribe(() => this.onQueryCacheChange());
+    this.stopCache = client.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey;
+      if (key.length === 1 && key[0] === 'session') {
+        const action = 'action' in event ? event.action : undefined;
+        if (
+          event.type !== 'removed' &&
+          (event.type !== 'updated' ||
+            !action ||
+            (action.type !== 'success' && action.type !== 'error' && action.type !== 'setState'))
+        ) {
+          this.cleanupReads();
+          return;
+        }
+        this.onQueryCacheChange();
+      } else this.cleanupReads();
+    });
+  }
+
+  dispose(): void {
+    this.stopCache();
+    this.listeners.clear();
+    this.reads.clear();
+    this.owners.clear();
+    this.nativeCommands.clear();
   }
 
   currentSession(): SessionSnapshot | null {
@@ -122,7 +148,23 @@ export class RealmMembershipLifetimeStore {
   discardNativeCommand(realmId: string, actor: string, expected?: RealmMembershipCommandAttempt): void {
     const key = this.commandKey(realmId, actor);
     const current = this.nativeCommands.get(key);
-    if (current && (!expected || current === expected)) this.nativeCommands.delete(key);
+    if (current && (!expected || current === expected)) {
+      this.acknowledgements.delete(current);
+      this.nativeCommands.delete(key);
+    }
+  }
+
+  acknowledgeNativeCommand(attempt: RealmMembershipCommandAttempt): void {
+    if (this.nativeCommands.get(this.commandKey(attempt.realmId, attempt.actor)) === attempt)
+      this.acknowledgements.add(attempt);
+  }
+
+  nativeCommandAcknowledged(attempt: RealmMembershipCommandAttempt): boolean {
+    return this.acknowledgements.has(attempt);
+  }
+
+  retireNativeCommandAcknowledgement(attempt: RealmMembershipCommandAttempt): void {
+    this.acknowledgements.delete(attempt);
   }
 
   addRead(read: ActiveRead): void {
@@ -230,6 +272,14 @@ function storeFor(client: QueryClient): RealmMembershipLifetimeStore {
     stores.set(client, store);
   }
   return store;
+}
+
+/** Drop the session cache subscriber so a discarded QueryClient cannot retain membership callers. */
+export function releaseRealmMembershipLifetime(client: QueryClient) {
+  const store = stores.get(client);
+  if (!store) return;
+  store.dispose();
+  stores.delete(client);
 }
 
 function matchesCaller(session: SessionSnapshot | null, scope: CallerScope): boolean {
@@ -391,6 +441,16 @@ export function hasCurrentRealmMembership(
   const query = client.getQueryCache().find({ queryKey: keyFor(realmId, subject), exact: true });
   if (!query || query.state.data === undefined) return false;
   let revision = standingRevisions.get(query);
+  if (
+    (revision === undefined || revision === null) &&
+    query.state.status === 'success' &&
+    query.state.fetchStatus !== 'fetching' &&
+    caller.isReadCurrent()
+  ) {
+    // A completed current caller owns this standing even if a first in-flight paint marked it untrusted.
+    standingRevisions.set(query, caller.revision);
+    return true;
+  }
   if (revision === undefined) {
     // Hydrated/bootstrap data remains compatible before the browser observes an authority transition, including the
     // first paint before the membership caller is command-ready. A read that was already queued or in flight is
