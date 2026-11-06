@@ -79,6 +79,8 @@ beforeAll(async () => {
     access: real.access,
     writeRate: real.writeRate,
   });
+  // Compile the served routes during startup, outside the native request budget.
+  app.compile();
 });
 afterAll(async () => {
   await db?.close();
@@ -129,7 +131,9 @@ test('fallback language stays explicit and erasure withholds the body while pres
   expect(fallback.body.documents).toEqual({
     [statement.id]: expect.objectContaining({ language: 'en', body: text }),
   });
-  const erased = await call('DELETE', `/v1/documents/${statement.value.content.document}`, undefined, true);
+  const document = statement.value.content.document;
+  await real.grant({ route: routeOf(document)!, id: document }, 'editor', 'document:erase');
+  const erased = await call('DELETE', `/v1/documents/${document}`, undefined, true);
   expect(erased.status, JSON.stringify(erased.body)).toBe(204);
   const exact = await call('GET', `/v1/documents/${statement.value.content.document}`);
   expect(exact.status, JSON.stringify(exact.body)).toBe(404);

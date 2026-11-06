@@ -26,9 +26,10 @@ production changes are limited to code that violates those contracts.
 Decision: the installed Character read contract admits includeDocuments and reuses Content's public document type;
 preserve native preview bounds and exact bindings, with typed anonymous and signed-in readback coverage.
 
-Decision: Character API fixtures drain the native link consumer before timed reads and erase authored documents
-through Content's command. Authored bodies remain immutable; HTTP fallback retains its actual language and mounted
-exact-binding cases cover unreadable previews without rewriting stored bodies.
+Decision: Character API fixtures compile routes at startup, drain the native link consumer before timed reads and
+erase authored documents through Content's command under an exact document grant. Authored bodies remain immutable;
+HTTP fallback retains its actual language and mounted exact-binding cases cover unreadable previews without rewriting
+stored bodies.
 
 ## Ownership
 
