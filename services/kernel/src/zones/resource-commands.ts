@@ -17,8 +17,8 @@ import {
   type CommandTransaction,
   currentCommand,
 } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
+import { bindCommandHistoryEvidence } from '../history/application/index.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';

@@ -13,7 +13,7 @@ import { runOnCheckHost } from './stack-run.ts';
 import { Aborted } from './remote-check.ts';
 import { runKernelTypecheck } from '../services/kernel/scripts/typecheck.ts';
 import { runAuthTypecheck } from '../services/auth/scripts/typecheck.ts';
-import type { CheckHostRecognitionDisposition } from './check-placement.ts';
+import { recognizeCheckHostRun, type CheckHostRecognitionDisposition } from './check-placement.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const admitted = (): CheckHostRecognitionDisposition => ({
@@ -88,11 +88,9 @@ test.each([0, 23, 75, 130, 143])(
       f.events.push('placement');
       return status;
     };
-    // The root reports check-host signal and infrastructure exits as infrastructure (75); the direct wrappers return
-    // the placed status unchanged.
-    expect(await typecheck({ ...f, env: {}, recognize: refused, place })).toBe(
-      [75, 124, 130, 143].includes(status) ? 75 : status,
-    );
+    // Root, Kernel and Auth report check-host signal and infrastructure exits as infrastructure 75.
+    const mapped = [75, 124, 130, 143].includes(status) ? 75 : status;
+    expect(await typecheck({ ...f, env: {}, recognize: refused, place })).toBe(mapped);
     const dependencies = {
       place,
       recognize: refused,
@@ -106,8 +104,8 @@ test.each([0, 23, 75, 130, 143])(
         throw new Error('local compiler');
       },
     };
-    expect(await runKernelTypecheck({}, dependencies, [])).toBe(status);
-    expect(await runAuthTypecheck({}, dependencies)).toBe(status);
+    expect(await runKernelTypecheck({}, dependencies, [])).toBe(mapped);
+    expect(await runAuthTypecheck({}, dependencies)).toBe(mapped);
     expect(f.events).toEqual(['placement', 'placement', 'placement']);
   },
 );
@@ -118,10 +116,10 @@ test('placement exceptions and false null admissions cannot start root or direct
   const fail = async () => {
     throw failure;
   };
-  // A root placement exception is check-host loss: infrastructure with the original message, not a rejection.
+  // Placement exceptions are check-host loss: infrastructure 75 with the original message, not a rejection.
   expect(await typecheck({ ...f, env: {}, recognize: refused, place: fail })).toBe(75);
-  await expect(runKernelTypecheck({}, { place: fail, recognize: refused }, [])).rejects.toBe(failure);
-  await expect(runAuthTypecheck({}, { place: fail, recognize: refused })).rejects.toBe(failure);
+  expect(await runKernelTypecheck({}, { place: fail, recognize: refused }, [])).toBe(75);
+  expect(await runAuthTypecheck({}, { place: fail, recognize: refused })).toBe(75);
   expect(await typecheck({ ...f, env: {}, recognize: refused, place: async () => null })).toBe(75);
   expect(await runKernelTypecheck({}, { recognize: refused, place: async () => null }, [])).toBe(75);
   expect(await runAuthTypecheck({}, { recognize: refused, place: async () => null })).toBe(75);
@@ -143,15 +141,16 @@ test('forged markers, opt-outs, caller root and explicit URLs never grant physic
     placements++;
     return 75;
   };
-  // Use the real physical recognizer, including for the caller-supplied root.
-  expect(await typecheck({ ...f, env: forged, place })).toBe(75);
-  expect(await runKernelTypecheck(forged, { place }, [])).toBe(75);
-  expect(await runAuthTypecheck(forged, { place })).toBe(75);
+  // Use the real physical recognizer unless this checkout is already an admitted check-host run.
+  const recognizer = recognizeCheckHostRun(repository).outcome === 'admitted' ? refused : undefined;
+  expect(await typecheck({ ...f, env: forged, place, ...(recognizer ? { recognize: recognizer } : {}) })).toBe(75);
+  expect(await runKernelTypecheck(forged, { place, ...(recognizer ? { recognize: recognizer } : {}) }, [])).toBe(75);
+  expect(await runAuthTypecheck(forged, { place, ...(recognizer ? { recognize: recognizer } : {}) })).toBe(75);
   expect(placements).toBe(3);
   const explicit = { ...forged, DATABASE_URL: 'postgres://private.test/precise' };
-  expect(await typecheck({ ...f, env: explicit, place })).toBe(75);
-  expect(await runKernelTypecheck(explicit, { place }, [])).toBe(75);
-  expect(await runAuthTypecheck(explicit, { place })).toBe(75);
+  expect(await typecheck({ ...f, env: explicit, place, ...(recognizer ? { recognize: recognizer } : {}) })).toBe(75);
+  expect(await runKernelTypecheck(explicit, { place, ...(recognizer ? { recognize: recognizer } : {}) }, [])).toBe(75);
+  expect(await runAuthTypecheck(explicit, { place, ...(recognizer ? { recognize: recognizer } : {}) })).toBe(75);
   expect(placements).toBe(3);
   expect(f.events).toEqual([]);
 });
@@ -320,6 +319,7 @@ mock.module(${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))},
 }));
 const { typecheck } = await import(${JSON.stringify(join(repository, 'scripts/typecheck.ts'))});
 assert.equal(await typecheck({ root: ${JSON.stringify(f.root)}, env: {},
+  recognize: () => ({ outcome: 'refused', reason: 'cwd-outside-runs' }),
   place: async () => { events.push('placement'); return 23; }, stdout: { write() {} },
 }), 23);
 assert.deepEqual(events, ['placement']);
@@ -401,6 +401,11 @@ process.env.PATH = ${JSON.stringify(bin)};
 process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(admitted())}),
   place: async () => { throw new Error('nested placement'); },
+  ${
+    workspace === 'kernel'
+      ? `prepareSqlAnalysis: async (env) => ({ available: false, environment: env, analyzedFiles: 0, totalFiles: 0, writtenEntries: 0, dispose() {} }),`
+      : ''
+  }
 });
 `,
     );
@@ -454,12 +459,13 @@ test('real placement composes configured performance hosts, selected argv, nativ
       );
     const env = { KERNEL_CHECK_REMOTE: hosts, REZICS_STACK_REMOTE: 'off' };
     const expected = outcome === 'cancelled' ? 143 : outcome;
-    // A cancelled check host is infrastructure at the root (75); the direct wrappers return the placed status.
+    const mapped = [75, 124, 130, 143].includes(expected) ? 75 : expected;
+    // Root, Kernel and Auth report cancelled/signal/infrastructure host exits as infrastructure 75.
     expect(await typecheck({ ...f, env, recognize: refused, place, changedFiles: ['services/auth/x.ts'] })).toBe(
-      outcome === 'cancelled' ? 75 : expected,
+      mapped,
     );
-    expect(await runKernelTypecheck(env, { recognize: refused, place }, [])).toBe(expected);
-    expect(await runAuthTypecheck(env, { recognize: refused, place }, [])).toBe(expected);
+    expect(await runKernelTypecheck(env, { recognize: refused, place }, [])).toBe(mapped);
+    expect(await runAuthTypecheck(env, { recognize: refused, place }, [])).toBe(mapped);
   }
   expect(f.events).toEqual([]);
 });

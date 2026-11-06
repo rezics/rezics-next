@@ -74,6 +74,9 @@ Stderr reports connection work and probe failures (including `unix_listener` ove
 execution. `--exclude-hosts` and the wait line's `reservation N GiB` expose host exclusions and the memory reservation,
 including the 11 GiB wait that still places on host b.
 
+Decision: leftover History callers use the contract and application public entries; placement-path units inject a
+refusing recognizer so check-host execution still relocates; Kernel/Auth map host 75/124/130/143 and placement
+exceptions to infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files.
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume

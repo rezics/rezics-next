@@ -72,7 +72,7 @@ async function run(): Promise<void> {
     process.exit(await child.exited);
   }
 
-  const assert = (await import('node:assert/strict')).default;
+  const assert: typeof import('node:assert/strict') = await import('node:assert/strict');
   const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings.ts');
   const pageTypes = installedRatingsPage();
   assert.equal(pageTypes.questionId, QUESTION);

@@ -362,9 +362,18 @@ export function bulkRoutes(
                   cause: error,
                   commandIndex: pending.index,
                 });
-              const payload = await response.json();
-              if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
-              results[pending.index] = { key, status: response.status, problem: payload };
+              const payload: unknown = await response.json();
+              if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
+              const problem = payload as {
+                type: string;
+                title: string;
+                status: number;
+                detail?: string;
+                errors?: unknown[];
+                redirect?: { from: unknown; to: unknown };
+              };
+              if (error instanceof SubjectRedirectError) problem.redirect = { from: error.from, to: error.to };
+              results[pending.index] = { key, status: response.status, problem };
             }
           }
         } finally {
@@ -396,7 +405,13 @@ export function bulkRoutes(
             id: requestId,
             action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
           });
-          results[pending.index] = { key, status: response.status, problem: await response.json() };
+          const payload: unknown = await response.json();
+          if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
+          results[pending.index] = {
+            key,
+            status: response.status,
+            problem: payload as { type: string; title: string; status: number; detail?: string; errors?: unknown[] },
+          };
         }
       }
       for (const component of components) if (component) session.record(component);

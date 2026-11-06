@@ -120,7 +120,7 @@ export function sourceIdentity(repository: string): string | undefined {
     encoding: 'utf8',
     timeout: 5_000,
   });
-  const source = result.stdout.trim();
+  const source = result.stdout?.trim() ?? '';
   return result.status === 0 && /^[0-9a-f]{40}$/.test(source) ? source : undefined;
 }
 

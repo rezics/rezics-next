@@ -216,6 +216,18 @@ export type WalkReadyWaiting =
   | { kind: 'fetch'; url: string; error?: unknown; status?: number }
   | { kind: 'child-exit'; url: string; code: string };
 
+function fetchWaiting(
+  url: string,
+  result: Extract<WalkFetchObservation, { ready: false }>,
+): Extract<WalkReadyWaiting, { kind: 'fetch' }> {
+  return {
+    kind: 'fetch',
+    url,
+    ...(result.error === undefined ? {} : { error: result.error }),
+    ...(result.status === undefined ? {} : { status: result.status }),
+  };
+}
+
 export type WalkReadyChild = {
   exitCode: number | null;
   signalCode: number | NodeJS.Signals | null;
@@ -335,11 +347,7 @@ export async function waitUntilWalkReady(options: {
     throwIfFailed(childExit());
     if (ready.every(([, result]) => result.ready)) return;
     report(
-      ready.flatMap(([url, result]) =>
-        result.ready
-          ? []
-          : [walkReadyWaitingMessage({ kind: 'fetch', url, error: result.error, status: result.status })],
-      ),
+      ready.flatMap(([url, result]) => (result.ready ? [] : [walkReadyWaitingMessage(fetchWaiting(url, result))])),
     );
     await sleep(pollMs);
   }

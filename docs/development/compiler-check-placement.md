@@ -55,9 +55,11 @@ to fail validation before any placement or database starts.
 
 The existing direct-wrapper acceptance in `scripts/typecheck-placement.test.ts` pins these cases with inert
 placement, database and compiler boundaries. Its old Auth executable-launch assertion expected a rejected promise;
-it now expects status 75 while retaining the original cleanup assertion. Compiler diagnostic/status, selection,
-output and physical admission assertions remain unchanged. Native, browser and full root journeys remain separate
-acceptance; focused execution does not establish them.
+it now expects status 75 while retaining the original cleanup assertion. Placement-path units inject a refusing
+recognizer so they still relocate when the suite itself runs inside a check-host checkout; compiler diagnostic
+assertions unset `REZICS_CHECK_PHASES` so observation lines do not mix with tsc stderr. Compiler diagnostic/status,
+selection, output and physical admission assertions remain unchanged. Native, browser and full root journeys remain
+separate acceptance; focused execution does not establish them.
 
 ## Authored acceptance and execution receipts
 

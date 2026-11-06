@@ -174,3 +174,7 @@ messages-ready and storybook-dev unit files. Original native acceptance remains 
 Decision: Web official typecheck and the check gate both run `tsc --noEmit --runExternalCode` for `tsconfig.json` then
 `tsconfig.scripts.json`; the scripts program still runs after a red web program. Fewest tests: one shared-program pin
 and one continue-after-red pin in `apps/web/scripts/typecheck.test.ts`. Original native acceptance remains open.
+Decision: leftover History callers import the contract and application public entries; placement-path units inject a
+refusing recognizer so they relocate on check hosts; Kernel/Auth map host 75/124/130/143 and placement exceptions to
+infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files. Original native
+acceptance remains open.
