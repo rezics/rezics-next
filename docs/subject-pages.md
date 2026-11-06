@@ -1854,13 +1854,14 @@ forward cast admission is added. `CreditInspectionSession` and `CreditInspection
 revision, release and slot, shared value rendering, citations, revision metadata and native bounded correction editor.
 Public inspect reads the page's current session cache and does not start another session fetch; a failed or in-flight
 session read cannot dismiss the original credit window.
+Inspect, close, original-work title and Sources wrap at phone width with 44px targets.
 The readable inspection links the original work and Sources, keeps Character-qualified voices separate, and uses
 released field labels rather than property identifiers. Partial dates keep the shared renderer's exact precision.
 Missing field labels have an unavailable label; identifiers live only in explicit technical details. Unknown source
 values, an empty disclosed citation list, refused correction and unavailable correction remain distinct.
 Return metadata preserves the native caller's link decision for an unlabelled work; it never substitutes a new anchor.
 
-Person credit return carries one bounded assertion locator and reopens only an exact current holder, property, assertion, revision, release, slot and Definition pin. Return rereads the public window. Whole-association concealment gates inspection, links, labels and evidence together. Public reading and return intent grant no mutation; current native advice and the existing exact editor own correction.
+Person credit return carries one bounded assertion locator and reopens only an exact current holder, property, assertion, revision, release, slot and Definition pin. Return rereads the public window. Whole-association concealment gates inspection, links, labels and evidence together. Public reading and return intent grant no mutation; current native advice and the existing exact editor own correction. Current selection, replacement, disclosure and keyboard entry stay pinned by `person-credit-visit`; no extra stories.
 
 ### Person credit visit Cost
 
@@ -2657,7 +2658,8 @@ The people view imports the work-name grouping/admission producer, with work-onl
 It admits the entire labels/aliases response within the same 262,144-byte UTF-8 presentation budget; oversized,
 malformed, empty, retired and empty-filter results have separate states. The limit does not establish a native
 producer bound. Filtering searches only admitted spellings, without normalizing punctuation, scripts or diacritics.
-The names filter control is at least 44px in both dimensions.
+The names filter, open, copy and continuation controls wrap at phone width and are at least 44px in both dimensions.
+Current Person identity, name keyboard entry and unconfirmed recognition stay pinned by `person-identity-credits`; no extra stories.
 No catalogue-wide or provider completeness is implied. At most eight groups and 24 rows per group are mounted, with
 explicit local continuation. All admitted groups and names remain reachable. Copy results are announced beside the
 originating control; late callbacks cannot update a replacement visit.

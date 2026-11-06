@@ -64,7 +64,7 @@ function Value({ part, reading }: { part: PersonStatement | PersonStatement['qua
     const summary = read.related[id];
     if (!summary || !('labels' in summary)) return unavailable;
     const label = pickText(summary.labels ?? {}, locale);
-    if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type))
+    if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type ?? ''))
       return (
         <span lang={label.lang ?? undefined}>{label.text || m.subject_value_unlabelled({}, options(locale))}</span>
       );

@@ -147,9 +147,14 @@ test('current Person credit returns from work, Character and Sources with exact 
     });
   try {
     await render();
+    const inspect = [...window.document.querySelectorAll('button')].find(
+      (button) => button.textContent === m.credit_inspect(),
+    )!;
+    expect(inspect.className).toContain('min-w-11');
     await click(m.credit_inspect());
     const dialog = window.document.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
+    expect(dialog!.querySelector('nav a')?.className).toContain('min-w-11');
     expect(dialog!.textContent).toContain(labels['wdt:P1932']);
     expect(dialog!.textContent).toContain('Original credit');
     expect(dialog!.textContent).toContain('The traveler');
@@ -169,7 +174,12 @@ test('current Person credit returns from work, Character and Sources with exact 
       expect(new URL(target.href).searchParams.get('realm')).toBe(visit.realm!);
       expect(target.target).toBe('_blank');
     }
-    await click(m.credit_close());
+    await act(async () => {
+      window.document.activeElement?.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    });
+    expect(window.document.querySelector('[role="dialog"]')).toBeNull();
     await act(async () => {
       (host.querySelectorAll('button[data-credit-statement]')[1] as HTMLButtonElement).click();
     });
