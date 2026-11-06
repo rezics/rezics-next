@@ -147,6 +147,7 @@ export function SubjectCommunityRegion({
   const reading = useSubjectCommunityReading({
     source: community?.sourceKey ?? region,
     reader: community?.reader ?? null,
+    queryKey: community?.queryKey,
     descriptor: JSON.stringify([
       id,
       node,

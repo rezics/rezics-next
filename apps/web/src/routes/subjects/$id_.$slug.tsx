@@ -285,7 +285,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   }),
   loader: async ({ params, deps, location, context, abortController }) => {
     const signal = abortController.signal;
-    const reader = await awaitSubjectRoute(signal, () => subjectRequestReader({ data: { realm: deps.realm }, signal }));
+    const reader = await awaitSubjectRoute(signal, () =>
+      subjectRequestReader({ data: { realm: deps.realm, board: deps.board }, signal }),
+    );
     const data = await awaitSubjectRoute(signal, () =>
       readSubject({
         data: {
@@ -339,6 +341,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       paths: address?.paths ?? data.paths,
       reader,
       page: page.page,
+      communityQueryKey: pageQuery.queryKey,
       tabs: subjectTabs(page.page),
     };
   },
@@ -382,7 +385,7 @@ export function SubjectOverview({
   } = search;
   const browserSession = useSession();
   const { state: session } = browserSession;
-  const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
+  const readerKey = subjectReaderPartition(realm ?? page.requestedBoard, initialReader, browserSession);
   const queryClient = useQueryClient();
   const locale = getLocale();
   const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
@@ -506,6 +509,7 @@ export function SubjectOverview({
           >
             <RatingsContext.Provider value={ratings}>
               <SubjectPage
+                communityQueryKey={data.communityQueryKey}
                 page={page}
                 selectedNode={node}
                 selectedStreamProperty={streamProperty}

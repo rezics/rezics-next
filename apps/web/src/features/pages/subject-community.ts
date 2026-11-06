@@ -84,6 +84,8 @@ export type SubjectCommunity = {
   reader?: string | null;
   contextId?: string | null;
   sourceKey?: string;
+  /** The mounted composition query; omitted by standalone lists and recorded presentation. */
+  queryKey?: readonly unknown[] | undefined;
 };
 
 export const COMMUNITY_PREVIEW_LIMIT = 5;
