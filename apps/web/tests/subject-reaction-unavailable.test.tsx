@@ -337,6 +337,10 @@ function tree(
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
   const deadline = Date.now() + 3_000;
+  // Native completion precedes the React consumer's commit; inspect only after flushing that commit.
+  await act(async () => {
+    await tick();
+  });
   while (!check() && Date.now() < deadline)
     await act(async () => {
       await tick();
@@ -586,13 +590,13 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(chip('like').textContent).toContain('2');
   expect(nativeWrites).toHaveLength(0);
 
-  await until(() => libraryEntryButton() !== null && followReads.includes(subjectId));
+  await until(() => libraryEntryButton() !== null && followButton()?.disabled === false);
   expect(libraryEntryButton()?.disabled).toBe(false);
-  const followButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+  const followControl = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent?.trim() === m.library_follow(),
   );
-  expect(followButton).toBeDefined();
-  expect(followButton!.disabled).toBe(false);
+  expect(followControl).toBeDefined();
+  expect(followControl!.disabled).toBe(false);
   const moreActions = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.getAttribute('aria-label') === m.report_more(),
   );
@@ -881,7 +885,10 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         expect(oldButton.isConnected).toBe(false);
         expect(window.document.activeElement).not.toBe(oldButton);
         expect(countReads).toHaveLength(countsBefore);
-        if (surface === 'production Zone') independentZone(1, 1, mountedFollowReads + 1);
+        if (surface === 'production Zone') {
+          await until(() => followReads.length === mountedFollowReads + 1 && followButton()?.disabled === false);
+          independentZone(1, 1, mountedFollowReads + 1);
+        }
         // The fresh response comes through the real prepared native read, never from a copied cache value.
         await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
         await until(() => chips().some((button) => !button.disabled));
@@ -894,8 +901,10 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
           nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one'),
         ).toBe(true);
         expect(ownReads).toHaveLength(2);
-        if (surface === 'production Zone') independentZone(1, 1, mountedFollowReads + 1);
-        else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
+        if (surface === 'production Zone') {
+          await until(() => followReads.length === mountedFollowReads + 1 && followButton()?.disabled === false);
+          independentZone(1, 1, mountedFollowReads + 1);
+        } else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
       });
 
 for (const source of ['manual', 'fetch'] as const)
@@ -1061,7 +1070,10 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(countReads).toHaveLength(initialCountReads);
-    if (surface === 'production Zone') independentZone(1, 1, mountedFollowReads + 1);
+    if (surface === 'production Zone') {
+      await until(() => followReads.length === mountedFollowReads + 1 && followButton()?.disabled === false);
+      independentZone(1, 1, mountedFollowReads + 1);
+    }
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
   });

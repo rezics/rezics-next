@@ -87,3 +87,6 @@ choices come from the recorded release through its production reader. Follow cos
 settled StrictMode mount baseline and require one fresh read after session replacement; reaction-only fetch
 notifications preserve that baseline. Public Zone route fixtures provide the Worker's declared startup secret
 without authenticating a persona; they remain separate from seeded browser/native acceptance.
+
+Mounted regressions flush native completion through the React consumer before inspecting its DOM, and await
+Follow's fresh enabled control before asserting the independent read count after a session replacement.
