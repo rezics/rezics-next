@@ -70,9 +70,7 @@ async function kernel(
     signal: AbortSignal.timeout(60_000),
     headers: {
       ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(method === 'GET'
-        ? {}
-        : { 'idempotency-key': JSON.stringify(options.key ?? crypto.randomUUID()) }),
+      ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(options.key ?? crypto.randomUUID()) }),
       ...(options.ifMatch ? { 'if-match': JSON.stringify(options.ifMatch) } : {}),
       ...(options.observation === undefined ? {} : { 'x-rating-observation': JSON.stringify(options.observation) }),
       ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : {}),
@@ -277,7 +275,8 @@ async function setSlider(
   await thumb.waitFor({ state: 'visible', timeout: 60_000 });
   const current = Number(await thumb.getAttribute('aria-valuenow'));
   const presses = (units - current) / displayStep;
-  if (!Number.isFinite(current) || !Number.isInteger(presses)) throw new Error(`slider cannot reach ${units} from ${current}`);
+  if (!Number.isFinite(current) || !Number.isInteger(presses))
+    throw new Error(`slider cannot reach ${units} from ${current}`);
   await thumb.focus();
   for (let index = 0; index < Math.abs(presses); index++)
     await page.keyboard.press(presses > 0 ? 'ArrowRight' : 'ArrowLeft');
@@ -300,7 +299,8 @@ async function capturePage(
   await page.setViewportSize({ width, height: 1000 });
   await page.emulateMedia({ colorScheme: theme });
   const response = await page.goto(`${stack.web}/${locale}/${path}`, { waitUntil: 'domcontentloaded' });
-  if (response?.status() !== 200) throw new Error(`${name} ${locale} ${width}px ${theme} returned HTTP ${response?.status()}`);
+  if (response?.status() !== 200)
+    throw new Error(`${name} ${locale} ${width}px ${theme} returned HTTP ${response?.status()}`);
   await page.locator(ready).first().waitFor({ state: 'visible', timeout: 90_000 });
   const file = `screenshots/${name}-${locale}-${width}-${theme}.png`;
   await page.screenshot({ path: join(evidenceDir, file) });
@@ -428,7 +428,9 @@ walk(
 
     try {
       const dev = parseEnv(await readFile(join(root, 'apps/web/.dev.vars'), 'utf8'));
-      const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+      const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as {
+        password: string;
+      };
       const seed = JSON.parse(await readFile(seedPath, 'utf8')) as Json;
       const subjectId = workIdentity(seed, 'vndb', 'v2002');
       const bangumiId = workIdentity(seed, 'bangumi', '10380');
@@ -459,7 +461,8 @@ walk(
       if (!scale || !Number.isSafeInteger(scale.min) || !Number.isSafeInteger(scale.displayStep))
         throw new Error('Standard rating question has no integer scale');
       evidence.native.scale = scale;
-      const grid = (index: number) => scale.min + scale.displayStep * ((index * 3) % Math.floor((scale.max - scale.min) / scale.displayStep));
+      const grid = (index: number) =>
+        scale.min + scale.displayStep * ((index * 3) % Math.floor((scale.max - scale.min) / scale.displayStep));
 
       const before = figureOf(
         requireStatus(await kernel(stack, 'GET', `/v1/subjects/${subjectId}/figure`), 'anonymous figure before votes'),
@@ -481,7 +484,9 @@ walk(
       for (const voter of voters) {
         const readback = await readVote(stack, voter, subjectId);
         if (readback?.units !== voteUnits[voter.label])
-          throw new Error(`${voter.label} independent readback is ${readback?.units}, expected ${voteUnits[voter.label]}`);
+          throw new Error(
+            `${voter.label} independent readback is ${readback?.units}, expected ${voteUnits[voter.label]}`,
+          );
       }
       evidence.native.voterUnits = voteUnits;
       step('independent-voters-counted');
@@ -556,8 +561,16 @@ walk(
       const realmAsOutsider = await aggregateFigure(stack, subjectId, privateRealmId, outsider.bearer);
       const realmAnonymous = await aggregateFigure(stack, subjectId, privateRealmId);
       const realmAsModerator = await aggregateFigure(stack, subjectId, privateRealmId, developer.bearer);
-      expect(realmAsOutsider).toMatchObject({ population: privateRealmId, count: 0, freshness: { asOf: null, updating: false } });
-      expect(realmAnonymous).toMatchObject({ population: privateRealmId, count: 0, freshness: { asOf: null, updating: false } });
+      expect(realmAsOutsider).toMatchObject({
+        population: privateRealmId,
+        count: 0,
+        freshness: { asOf: null, updating: false },
+      });
+      expect(realmAnonymous).toMatchObject({
+        population: privateRealmId,
+        count: 0,
+        freshness: { asOf: null, updating: false },
+      });
       expect(realmAsMember.count as number).toBeGreaterThanOrEqual(1);
       expect(realmAsModerator.count as number).toBe(realmAsMember.count);
       expect(globalAfterRealm.count as number).toBeGreaterThanOrEqual((counted.count as number) + 1);
@@ -593,30 +606,20 @@ walk(
             scale: { min: 0, max: 10, displayStep: 1 },
           },
         };
-        const first = await kernel(
-          stack,
-          'PUT',
-          `/v1/subjects/${subjectId}/ratings/${extraId}/vote`,
-          {
-            bearer: realmMember.bearer,
-            body: { units: 8 },
-            key: unavailableKey,
-            observation: unavailableObservation,
-          },
-        );
+        const first = await kernel(stack, 'PUT', `/v1/subjects/${subjectId}/ratings/${extraId}/vote`, {
+          bearer: realmMember.bearer,
+          body: { units: 8 },
+          key: unavailableKey,
+          observation: unavailableObservation,
+        });
         expect(first.status).toBe(503);
         expect(first.value).toMatchObject({ code: 'atomic_guard_unavailable', retryable: true });
-        const retry = await kernel(
-          stack,
-          'PUT',
-          `/v1/subjects/${subjectId}/ratings/${extraId}/vote`,
-          {
-            bearer: realmMember.bearer,
-            body: { units: 8 },
-            key: unavailableKey,
-            observation: unavailableObservation,
-          },
-        );
+        const retry = await kernel(stack, 'PUT', `/v1/subjects/${subjectId}/ratings/${extraId}/vote`, {
+          bearer: realmMember.bearer,
+          body: { units: 8 },
+          key: unavailableKey,
+          observation: unavailableObservation,
+        });
         expect(retry.status).toBe(503);
         expect(retry.value).toMatchObject({ code: 'atomic_guard_unavailable', retryable: true });
         evidence.native.atomicGuard = { questionId: extraId, first: first.value, retry: retry.value };
@@ -721,7 +724,17 @@ walk(
         for (const locale of launchLocales)
           for (const width of widths)
             for (const theme of themes) {
-              await capturePage(page, stack, subjectPath, locale, width, theme, 'developer-subject', subjectReady, evidence);
+              await capturePage(
+                page,
+                stack,
+                subjectPath,
+                locale,
+                width,
+                theme,
+                'developer-subject',
+                subjectReady,
+                evidence,
+              );
               await capturePage(
                 page,
                 stack,

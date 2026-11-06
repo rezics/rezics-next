@@ -7,9 +7,8 @@ import type { Figure, Statistic } from '../src/features/pages/subject-ratings';
 // The view and the rating state reach the Kernel client, which imports Cloudflare's Workers module at load time.
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { RatingsView, RatingsRecoveryContext } = await import('../src/features/pages/subject-ratings-view');
-const { GLOBAL, QUESTION, readRatings, readOwnRating, writeRatingVote } = await import(
-  '../src/features/pages/subject-ratings'
-);
+const { GLOBAL, QUESTION, readRatings, readOwnRating, writeRatingVote } =
+  await import('../src/features/pages/subject-ratings');
 // Subject ids are UUIDs; the aggregate reader admits a response only when its subject is the requested one.
 const subjectId = '00000000-0000-7000-8000-000000000010';
 
@@ -479,4 +478,3 @@ test('a vote write quotes its command key and treats 503 atomic_guard_unavailabl
     }),
   ).toBe('rejected');
 });
-

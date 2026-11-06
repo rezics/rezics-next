@@ -72,13 +72,20 @@ const identities = {
   vndbSteinsGate: workIdentity(seed, 'vndb', 'v2002'),
   bangumiSteinsGate: workIdentity(seed, 'bangumi', '10380'),
 };
-await writeFile(join(evidenceDir, 'seed-identities.json'), `${JSON.stringify({ seedExit: seedCode, identities }, null, 2)}\n`);
+await writeFile(
+  join(evidenceDir, 'seed-identities.json'),
+  `${JSON.stringify({ seedExit: seedCode, identities }, null, 2)}\n`,
+);
 if (!identities.vndbSteinsGate)
   throw new Error(`Seed result has no native identity for VNDB v2002 after exit ${seedCode}`);
 
 // apps/web bunfig has no root stack-lease preload, so this process keeps the walk-stack origins.
-const testCode = await run(['bun', 'test', 'tests/seeded-content-ratings-reviews.test.ts'], {
-  ...stackEnv,
-  REZICS_RATINGS_WALK_SEED_EXIT: String(seedCode),
-}, join(root, 'apps/web'));
+const testCode = await run(
+  ['bun', 'test', 'tests/seeded-content-ratings-reviews.test.ts'],
+  {
+    ...stackEnv,
+    REZICS_RATINGS_WALK_SEED_EXIT: String(seedCode),
+  },
+  join(root, 'apps/web'),
+);
 if (testCode !== 0) throw new Error(`Seeded ratings walk exited ${testCode}`);
