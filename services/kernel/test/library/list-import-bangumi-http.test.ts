@@ -1,11 +1,10 @@
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { batchCommand } from '../../src/semantic/bulk.ts';
 import { globalContextAnchor } from '../../src/semantic/context.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
@@ -61,16 +60,7 @@ async function setState(state: string) {
 beforeAll(async () => {
   f = await createProfileEntryFixture();
   const importer = await f.identity(['subject:batch_write', 'subject:read']);
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: importer.actor.accountId },
-      actions: ['subject:batch_write'],
-      valid: '(,)',
-      key: randomUUID(),
-    },
-  );
+  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
   const route = tupleRoute(testRouteKey(), 'bangumi', String(providerId));
   const result = await batchCommand(f.pool, {
     actor: importer.actor,
@@ -356,16 +346,7 @@ test('lost native acknowledgement replays the original receipt and a changed pro
 
   const lateId = 900103,
     importer = await f.identity(['subject:batch_write', 'subject:read']);
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: importer.actor.accountId },
-      actions: ['subject:batch_write'],
-      valid: '(,)',
-      key: randomUUID(),
-    },
-  );
+  await f.grantAccountActions(importer.actor.accountId, ['subject:batch_write']);
   const claimRoute = tupleRoute(testRouteKey(), 'bangumi', String(lateId));
   const changedTarget = await f.createSubject('game');
   const unbound = await preview([record(lateId)]);
