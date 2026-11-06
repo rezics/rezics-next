@@ -4,11 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import {
-  planCrossMediaSeed,
-  seedCrossMedia,
-  type CrossMediaTables,
-} from '../../../importer/src/cross-media-seed.ts';
+import { planCrossMediaSeed, seedCrossMedia, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
 import { showcaseFranchiseSelection } from '../../../importer/src/showcase-franchise.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
