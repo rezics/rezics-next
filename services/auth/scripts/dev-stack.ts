@@ -735,10 +735,11 @@ async function launch(action: 'pages' | 'web', args: string[]) {
 }
 
 /**
- * Starts the local stack in three ordered phases. The worker goes first: its DBOS launch creates the system schema the
+ * Starts the local stack in three ordered phases, each gated on what the next one needs. The issuer origin is served by
+ * the Pages process, which proxies to the native Auth host, and the kernel fetches its keys from that issuer while it
+ * boots. So identity, Pages and the workflow worker start first: the worker's DBOS launch creates the system schema the
  * kernel boots against, and its "Worker ready" line marks that launch complete. The kernel boots next and must answer
- * before the Pages and Web processes, whose compilation is the heaviest startup work, begin. Each phase logs when it
- * is ready, so the stack output names the phase that stalled.
+ * before Web, the heaviest compilation, begins. Each phase logs when it is ready and names itself when it stalls.
  */
 async function start() {
   const env = {
@@ -762,18 +763,18 @@ async function start() {
   try {
     const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
     const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
-    await Promise.all([
-      untilOutput(worker, 'Worker ready'),
-      untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker]),
-    ]);
-    console.info('stack: worker and identity ready');
+    const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+    await phase(
+      'identity',
+      Promise.all([
+        untilOutput(worker, 'Worker ready'),
+        untilReady([`${origins.issuer}/.well-known/openid-configuration`], [identity, worker, pages]),
+      ]),
+    );
     const kernel = launch(['bun', 'run', '--cwd', 'services/kernel', 'dev']);
-    await untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity]);
-    console.info('stack: kernel ready');
-    launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+    await phase('kernel', untilReady([`${origins.kernel}/v1/definitions`], [kernel, worker, identity, pages]));
     const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
-    await untilReady([`${origins.web}/`], [web]);
-    console.info('stack: web ready');
+    await phase('web', untilReady([`${origins.web}/`], [web]));
     const first = await Promise.race(children.map(async (child) => await child.exited));
     const interrupted = stopping;
     await stopChildren(children);
@@ -784,6 +785,17 @@ async function start() {
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
+  }
+}
+
+/** Names the startup phase that failed, so the stack output says which dependency was missing. */
+async function phase<T>(name: string, work: Promise<T>): Promise<T> {
+  try {
+    const value = await work;
+    console.info(`stack: ${name} ready`);
+    return value;
+  } catch (error) {
+    throw new Error(`walk: the ${name} phase did not start: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
