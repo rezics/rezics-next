@@ -670,7 +670,8 @@ One trusted [kernel clock][clock] supplies authoritative T for command attempts 
 production uses the system clock, without request overrides. Grants, role assignments, memberships and denials
 use native `tstzrange` validity at T, with `WITHOUT OVERLAPS`; cleanup is not an expiry correctness barrier.
 See [permission-time.sql][permission-time], [permission-check.sql][permission-sql], [schema][schema] and
-[Evaluator time][access-time].
+[Evaluator time][access-time]. Decision: `permission-check.sql` returns that deadline operand as one
+`deadlineLive` column plus statement-level `live`; the policy adapter reads `live`.
 
 Bearer credentials originate outside the kernel: `iat`, `exp` and every bearer-expiry comparison use wall time.
 Kernel-issued approvals, operator openings, registration proofs, capabilities and cursors use kernel T. An
