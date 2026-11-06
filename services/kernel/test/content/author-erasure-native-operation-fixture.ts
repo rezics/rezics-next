@@ -19,6 +19,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { imageSource } from './support/media-fixtures.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -73,6 +74,7 @@ export async function createAuthorErasureFixture(databaseUrl = process.env.DATAB
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
       receiptKeys: testReceiptKeys(),
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       clock,
       workClient,
       content: { workflows: createContentOperationClient({ pool, client: workClient, clock }) },

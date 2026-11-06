@@ -7,7 +7,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import {
   completeAgentVerification,
@@ -34,6 +34,12 @@ import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 import { runCommand, noEffect } from '../../src/command/command.ts';
 import { bindCommandHistoryEvidence } from '../../src/history/command-evidence.ts';
 import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/index.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+import { startIdentityWorkProcess } from '../support/identity-work-process.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import {
   loadAccountIdentitySource,
   deliverAccountIdentity,
@@ -64,6 +70,9 @@ let access: ReturnType<typeof admittedAccess>;
 let kernel: ReturnType<typeof createKernel>;
 let staff: Seeded;
 let manager: Seeded;
+let workClient: WorkClient | undefined;
+let registration: Awaited<ReturnType<typeof composeWork>> | undefined;
+let identityWork: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
 
 function key(): string {
   return randomUUID();
@@ -193,7 +202,14 @@ beforeAll(async () => {
   pool = createPool(databaseUrl);
   await bootstrapRelease(pool, bundledRelease);
   const receiptKeys = testReceiptKeys();
-  const initial = createKernel({ pool, routeKey, tokens, clock, receiptKeys });
+  const initial = createKernel({
+    pool,
+    routeKey,
+    tokens,
+    clock,
+    receiptKeys,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+  });
   const actions = new Map(actionCatalogue(initial));
   for (const [action, value] of LIFECYCLE_ACTIONS) actions.set(action, value);
   actions.set('account:manage', { anonymous: false });
@@ -204,6 +220,7 @@ beforeAll(async () => {
     tokens,
     clock,
     receiptKeys,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     access: () => access,
     writeRate: {
       async spend() {
@@ -211,21 +228,53 @@ beforeAll(async () => {
       },
     },
   });
+  workClient = await createWorkClient(databaseUrl, pool);
+  const routeKeyText = Buffer.from(routeKey).toString('base64url');
+  const searchPrefix = `reversal-${randomUUID().slice(0, 8)}-`;
+  registration = await composeWork(KERNEL_WORK_MODULES, {
+    databaseUrl,
+    pool,
+    client: workClient,
+    env: workerTestEnv({
+      KERNEL_ROUTE_KEY: routeKeyText,
+      OPENSEARCH_URL: process.env.OPENSEARCH_URL,
+      KERNEL_SEARCH_PREFIX: searchPrefix,
+    }),
+    receiptKeys,
+  });
+  identityWork = await startIdentityWorkProcess({
+    databaseUrl,
+    routeKey: routeKeyText,
+    openSearchUrl: process.env.OPENSEARCH_URL,
+    searchPrefix,
+  });
   staff = await seedAccount('reversal_staff');
   manager = await seedAccount('reversal_manager');
   await bootstrapGovernance(pool, staff.id);
+  await pool.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES (0, $1, $2, 'subject:create', '(,)', $2)
+     ON CONFLICT DO NOTHING`,
+    [GLOBAL_CONTEXT, staff.id],
+  );
   const opened = await post('/v1/platform/exposure/agent_verification:open', await bearer(staff));
   expect(opened.response.status).toBe(200);
-}, 120_000);
+}, 180_000);
 
 afterAll(async () => {
-  await pool?.end();
   try {
-    if (databaseName) await dropTestDatabase(admin, databaseName);
+    await identityWork?.stop();
+    await registration?.shutdown();
+    await workClient?.close();
+    await pool?.end();
   } finally {
-    await admin?.end();
+    try {
+      if (databaseName) await dropTestDatabase(admin, databaseName);
+    } finally {
+      await admin?.end();
+    }
   }
-}, 30_000);
+}, 60_000);
 
 async function verified(kind: 'actor' | 'organization' = 'actor') {
   const account = await seedAccount(`reversal_${randomUUID().slice(0, 8)}`, { kind });

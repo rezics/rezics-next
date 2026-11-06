@@ -6,7 +6,8 @@ import { fromPlainText } from '@rezics/document';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { runCommand, principalCommandIdentity } from '../../src/command/command.ts';
-import { declareCommandHistory } from '../../src/history/application/index.ts';
+import { bindCommandHistoryEvidence, declareCommandHistory } from '../../src/history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/index.ts';
 import { appendAuthoredField, eraseAuthoredField, readAuthoredField } from '../../src/content/authored-fields.ts';
 import { ContentNotFoundError } from '../../src/content/commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -103,7 +104,20 @@ async function appendThroughSemanticSubjectCommand(): Promise<{ id: string; subj
       ...identity,
       partition: partitionOf(subjectRoute),
       deadline: context.deadline,
-      authorization,
+      authorization: {
+        ...authorization,
+        async authorize(tx, attempt, proof) {
+          const mode = await authorization.authorize(tx, attempt, proof);
+          bindCommandHistoryEvidence(tx, [
+            {
+              accountRoute: routeOf(authorId)!,
+              accountId: authorId,
+              roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+            },
+          ]);
+          return mode;
+        },
+      },
       receipt: {
         kind: 'subject.propose',
         key: context.idempotencyKey,

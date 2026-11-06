@@ -230,9 +230,8 @@ test('missing original native floor evidence remains pending and ownership chang
         [missing],
       ),
     ).rejects.toThrow();
-    const before = (
-      await db.admin.query('SELECT node,epoch,write_state FROM core.partition WHERE partition_no=1')
-    ).rows;
+    const before = (await db.admin.query('SELECT node,epoch,write_state FROM core.partition WHERE partition_no=1'))
+      .rows;
     await expect(db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1')).rejects.toThrow(
       'Live copy domain requires native lineage reconciliation before activation',
     );
