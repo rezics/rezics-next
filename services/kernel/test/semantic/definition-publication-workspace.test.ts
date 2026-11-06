@@ -22,16 +22,16 @@ const accounts = {
   suspended: newId(0x7315),
 };
 const actions = [
-  'access:grant',
-  'gate:any',
   'definitions:publish',
   'definitions:activate',
   'definitions:read',
+  'gate:definition_publication',
   'subject:create',
   'subject:read',
   'context:create',
   'context:read',
-  'openapi:read',
+  'access:grant',
+  'gate:any',
 ];
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let real: Awaited<ReturnType<typeof createRealAccess<typeof accounts>>>;

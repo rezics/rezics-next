@@ -18,6 +18,7 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
+import { withReadTransaction } from '../read.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -639,6 +640,7 @@ export function definitionRoutes(
           'x-exposure': 'gate:definition_publication',
           'x-action': 'definitions:publish',
           'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           'x-body-limit': MAX_BODY_LIMIT(),
           security: [{ bearerAuth: [] }],
         },
@@ -648,7 +650,8 @@ export function definitionRoutes(
         const check = await authorize(resource());
         try {
           return await admission.run('normal', job, async () => {
-            if (!(await withConnection(pool, (client) => check(client)))) throw new DefinitionAccessDeniedError();
+            if (!(await withReadTransaction(pool, (client) => check(client), job.deadline)))
+              throw new DefinitionAccessDeniedError();
             return await previewImportedDocument(pool, body.document, {
               ...(body.context === undefined ? {} : { context: body.context }),
               expectedHead: body.expected_head ?? null,
