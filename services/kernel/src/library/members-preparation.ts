@@ -408,6 +408,7 @@ export function createMembersPreparation(config: {
             digest,
             filter: item.definition.filter,
             sort: item.definition.sort,
+            source: item.definition.source,
             releaseDigest: item.definition.release.digest,
             release: item.definition.release.value,
           }),
