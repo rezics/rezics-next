@@ -1371,6 +1371,9 @@ cannot admit that stack. Each walk retires leftover seed journals (the stack dat
 journey from `apps/web` so root bun-test preloads cannot ship it to those hosts. Search hit figures stay Search's
 composition; a missing figure on `subject.search` does not fail the walk when the Subject `/figure` producer agrees.
 
+Decision: existing vote, own-votes and seeded suites remain the fewest tests. Kernel typecheck repairs SearchService
+fixtures that omit `savedCatalogueMembers`; it does not add rating behaviour cases.
+
 #### Native vote receipt reconciliation
 
 Decision: retain only the producer-prepared native key/digest and question/target disclosure context for an
