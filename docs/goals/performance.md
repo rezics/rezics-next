@@ -79,7 +79,9 @@ producer declarations composed through `admitOriginalWork` and Kind-audience wor
 Decision: pin this increment's user-visible check-infrastructure behaviour with the existing remote-check, check-ssh,
 compiler-database, Kernel script and page-data unit files rather than a second suite. Observed bounds: one OpenSSH
 ControlMaster per configured host under a short owned `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when
-unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `container:<id>` isolated-stack
+unix_listener would overflow); throwaway PostgreSQL `--rm` plus owner-pid cleanup; `docker run`/`rm -f` spawn 120s (Auth
+`DEFAULT_RUN_TIMEOUT`) and exec/ps/port probes 5s, because a 10s cap timed out a live host-b `database-image` at 10.012s;
+labelled volume not 1 GiB tmpfs; a failed create reaps its nonce; `container:<id>` isolated-stack
 attachment with an independent TCP-to-Unix forwarder; migrations wait for in-container `pg_isready` and a protocol
 reply, not a TCP accept that EOFs; empty-directory manifests hash `directory\0`; page-data boot keeps the first
 substantive error after Task `$ ` echoes. After output-tree restore, candidate fingerprints ignore the published
