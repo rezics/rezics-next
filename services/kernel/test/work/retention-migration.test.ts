@@ -12,6 +12,7 @@ if (databaseUrl === '') throw new Error('DATABASE_URL must name the migrated tes
 
 const kernelRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const migrationFile = resolve(kernelRoot, 'db/migrations/20261103020222_workflow_retention_selector.sql');
+const payloadSql = resolve(kernelRoot, 'src/work/retention-payload-count.sql');
 const timeout = 120_000;
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 1 });
 const names: string[] = [];
@@ -95,6 +96,23 @@ test(
   },
   timeout,
 );
+
+test('owned payload inventory SQL counts rows and admitted payload bytes together', () => {
+  const sql = readFileSync(payloadSql, 'utf8');
+  expect(sql).toContain('work:workflow-retention-payload');
+  for (const column of [
+    'workflow_status_bytes',
+    'workflow_input_bytes',
+    'workflow_output_bytes',
+    'operation_outputs_bytes',
+    'workflow_events_bytes',
+    'workflow_events_history_bytes',
+    'notifications_bytes',
+    'streams_bytes',
+  ]) {
+    expect(sql).toContain(column);
+  }
+});
 
 test(
   'the selector migration refuses an absent workflow_status table',

@@ -256,6 +256,65 @@ export function growthByteViolations(
   return violations;
 }
 
+export type AffineEnvelope = Readonly<{
+  intercept: number;
+  slope: number;
+  predicted: readonly number[];
+  residuals: readonly number[];
+  maxResidual: number;
+}>;
+
+/** Least-squares a + b·x envelope with a ≥ 0, b ≥ 0. Packing or a plan floor shows up as a residual, not a new family. */
+export function affineEnvelope(scales: readonly number[], values: readonly number[]): AffineEnvelope {
+  requireDenseArray(scales, 'Affine envelope scales');
+  requireDenseArray(values, 'Affine envelope values');
+  if (scales.length !== values.length || scales.length < 2)
+    throw new TypeError('Affine envelope needs paired scales and values');
+  for (const [index, scale] of scales.entries()) {
+    requireNonNegativeFiniteNumber(scale, `Affine envelope scale ${index}`);
+    requireNonNegativeFiniteNumber(values[index]!, `Affine envelope value ${index}`);
+  }
+  const count = scales.length;
+  let sumX = 0;
+  let sumY = 0;
+  for (let index = 0; index < count; index += 1) {
+    sumX = checkedAdd(sumX, scales[index]!, 'Affine envelope scale total');
+    sumY = checkedAdd(sumY, values[index]!, 'Affine envelope value total');
+  }
+  const meanX = checkedDivide(sumX, count, 'Affine envelope mean scale');
+  const meanY = checkedDivide(sumY, count, 'Affine envelope mean value');
+  let variance = 0;
+  let covariance = 0;
+  for (let index = 0; index < count; index += 1) {
+    const dx = checkedSubtract(scales[index]!, meanX, 'Affine envelope scale difference');
+    const dy = checkedSubtract(values[index]!, meanY, 'Affine envelope value difference');
+    variance = checkedAdd(variance, checkedMultiply(dx, dx, 'Affine envelope variance term'), 'Affine envelope variance');
+    covariance = checkedAdd(
+      covariance,
+      checkedMultiply(dx, dy, 'Affine envelope covariance term'),
+      'Affine envelope covariance',
+    );
+  }
+  const slope = variance === 0 ? 0 : Math.max(0, checkedDivide(covariance, variance, 'Affine envelope slope'));
+  const intercept = Math.max(
+    0,
+    checkedSubtract(meanY, checkedMultiply(slope, meanX, 'Affine envelope fitted mean'), 'Affine envelope intercept'),
+  );
+  const predicted = scales.map((scale) =>
+    checkedAdd(intercept, checkedMultiply(slope, scale, 'Affine envelope prediction term'), 'Affine envelope prediction'),
+  );
+  const residuals = values.map((value, index) =>
+    checkedSubtract(value, predicted[index]!, 'Affine envelope residual'),
+  );
+  return {
+    intercept,
+    slope,
+    predicted,
+    residuals,
+    maxResidual: Math.max(0, ...residuals.map(Math.abs)),
+  };
+}
+
 const MAX_DIAGNOSTIC_ITEMS = 5;
 const MAX_DIAGNOSTIC_VIOLATIONS = 15;
 const MAX_RELATION_NAME_LENGTH = 80;
@@ -308,6 +367,41 @@ function formatRelationContext(samples: readonly GrowthSample[]): string[] {
     lines.push(
       `Relations whose reltuples did not grow from scale ${first.scale} to ${last.scale}: ${formatLimited(nonGrowing.map(([name, initial, final]) => `${formatRelationName(name)} (${initial} to ${final})`))}`,
     );
+  const packing = Object.entries(firstSizes)
+    .flatMap(([name, size]) => {
+      const lastSize = lastSizes[name];
+      if (!lastSize || size.relpages <= 0 || lastSize.relpages <= 0) return [];
+      const firstDensity = size.reltuples / size.relpages;
+      const lastDensity = lastSize.reltuples / lastSize.relpages;
+      if (!(lastDensity > firstDensity * 1.25) && !(firstDensity > lastDensity * 1.25)) return [];
+      return [
+        [
+          name,
+          firstDensity,
+          lastDensity,
+          lastDensity > firstDensity ? 'heap packing' : 'page expansion',
+        ] as const,
+      ];
+    })
+    .toSorted(([left], [right]) => left.localeCompare(right));
+  if (packing.length > 0)
+    lines.push(
+      `Physical packing from scale ${first.scale} to ${last.scale}: ${formatLimited(packing.map(([name, firstDensity, lastDensity, kind]) => `${formatRelationName(name)} ${kind} (${firstDensity.toFixed(1)} to ${lastDensity.toFixed(1)} tuples/page)`))}`,
+    );
+  const planTransitions = samples.flatMap(({ scale, cost }, index) => {
+    if (index === 0) return [];
+    const previous = samples[index - 1]!;
+    return Object.entries(cost.relations ?? {}).flatMap(([name, relation]) => {
+      const before = previous.cost.relations?.[name]?.sequentialScans ?? 0;
+      const after = relation.sequentialScans ?? 0;
+      if (before === after) return [];
+      return [
+        `${formatRelationName(name)} sequential scans ${before} at scale ${previous.scale} to ${after} at scale ${scale}`,
+      ];
+    });
+  });
+  if (planTransitions.length > 0)
+    lines.push(`Plan transitions: ${formatLimited(planTransitions)} (the growth bounds still apply)`);
   return lines;
 }
 

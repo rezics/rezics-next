@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
+  affineEnvelope,
   assertGrowth,
   GrowthBoundError,
   growthViolations,
@@ -393,4 +394,53 @@ test('settled PostgreSQL pages govern scans without changing measured costs or g
       await database.close();
     }
   }
+});
+
+test('an affine intercept plus linear slope passes the linear family and records packing residuals', () => {
+  const scales = [1, 8, 64] as const;
+  const affine = scales.map((scale) => 80 + 2.5 * scale) as [number, number, number];
+  expect(growthViolations(series(scales, affine), allBounds('linear'))).toEqual([]);
+  const envelope = affineEnvelope(scales, affine);
+  expect(envelope.intercept).toBeCloseTo(80, 6);
+  expect(envelope.slope).toBeCloseTo(2.5, 6);
+  expect(envelope.maxResidual).toBeLessThan(1e-6);
+});
+
+test('a packing jump that is not affine fails linear and keeps relation and scan evidence', () => {
+  const samples = series([1, 8, 64], [80, 90, 400]).map((sample, index) => ({
+    ...sample,
+    cost: {
+      ...sample.cost,
+      relations: {
+        'dbos.workflow_events': {
+          rows: [10, 80, 640][index]!,
+          blocks: [80, 90, 400][index]!,
+          sequentialScans: index === 2 ? 1 : 0,
+        },
+      },
+    },
+    relationSizes: {
+      'dbos.workflow_events': {
+        reltuples: [32_778, 32_848, 33_408][index]!,
+        relpages: [200, 180, 90][index]!,
+      },
+    },
+  }));
+  const violations = growthViolations(samples, allBounds('linear'), { rows: { absolute: 0, relative: 0 } });
+  expect(violations.length).toBeGreaterThan(0);
+  let error: unknown;
+  try {
+    assertGrowth(samples, allBounds('linear'), { rows: { absolute: 0, relative: 0 } });
+  } catch (caught) {
+    error = caught;
+  }
+  expect(error).toBeInstanceOf(GrowthBoundError);
+  expect((error as Error).message).toContain('dbos.workflow_events');
+  expect((error as Error).message).toContain('Plan transitions');
+  expect((error as Error).message).toContain('heap packing');
+  const envelope = affineEnvelope(
+    [1, 8, 64],
+    [80, 90, 400],
+  );
+  expect(envelope.maxResidual).toBeGreaterThan(50);
 });
