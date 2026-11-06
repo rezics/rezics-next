@@ -5,7 +5,7 @@ import { type AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { ScopeWork } from '../search/scope-execution.ts';
 import { type SearchService } from '../search/service-scope.ts';
-import { type WorkAllowance, type WorkReceipt, type WorkDimensions } from './collection-source.ts';
+import { type WorkAllowance, type WorkReceipt, type WorkDimensions } from './contract/work-dimensions.ts';
 import { type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 export type OwnerQueryDependencies = {
     pool: Pool;
@@ -119,13 +119,13 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
                 allowance: WorkAllowance;
                 candidateLimit?: number;
             }): Promise<{
-                basis: import("../search/scope-source.ts").ScopeBasis;
-                work: WorkReceipt;
                 kind: 'canonical_subject_prefix';
                 candidates: readonly import("./collection-source.ts").CanonicalCollectionCandidate[];
                 coveredThrough: string | null;
                 exhausted: boolean;
                 observation: import("./collection-source.ts").CollectionSourceObservation;
+                basis: import("../search/scope-source.ts").ScopeBasis;
+                work: WorkReceipt;
             }>;
             ordinalPrefix(prepared: import("../search/scope-source.ts").PreparedSearchScope, request: {
                 after: import("./collection-source-order.ts").NativeOrdinalKey | null;

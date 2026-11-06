@@ -11,22 +11,22 @@ export declare function readNativePublicCollectionOutput(pool: Pool, identity: N
 export declare function lockNativePublicCollectionOutput(tx: CommandTransaction, identity: NativePublicOutputIdentity, context: PublicOutputCommandContext): Promise<PublicOutputRefusal | Readonly<{
     status: 'locked';
     tuple: PublicOutputTuple;
-    work: import('./collection-source.ts').WorkReceipt;
+    work: import('./contract/work-dimensions.ts').WorkReceipt;
 }>>;
 export declare function bindAndHoldNativePublicCollectionOutput(tx: CommandTransaction, selection: PublicOutputBindingSelection, context: PublicOutputCommandContext): Promise<PublicOutputRefusal | Readonly<{
     status: 'bound';
     binding: NativePublicOutputBinding;
-    work: import('./collection-source.ts').WorkReceipt;
+    work: import('./contract/work-dimensions.ts').WorkReceipt;
 }>>;
 export declare function revalidateNativePublicCollectionOutputHold(tx: CommandTransaction, binding: NativePublicOutputBinding, context: PublicOutputCommandContext): Promise<PublicOutputRefusal | Readonly<{
     status: 'locked';
     binding: NativePublicOutputBinding;
-    work: import('./collection-source.ts').WorkReceipt;
+    work: import('./contract/work-dimensions.ts').WorkReceipt;
 }>>;
 export declare function transferNativePublicCollectionOutputHold(tx: CommandTransaction, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("./collection-source.ts").WorkReceipt;
+    work: import("./contract/work-dimensions.ts").WorkReceipt;
 }> | {
     status: 'transferred';
     successorHoldId: string;
@@ -36,13 +36,13 @@ export declare function transferNativePublicCollectionOutputHold(tx: CommandTran
         position: bigint;
         transactionId: string;
     }>;
-    work: import("./collection-source.ts").WorkReceipt;
+    work: import("./contract/work-dimensions.ts").WorkReceipt;
     release?: never;
 }>;
 export declare function releaseNativePublicCollectionOutputHold(tx: CommandTransaction, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("./collection-source.ts").WorkReceipt;
+    work: import("./contract/work-dimensions.ts").WorkReceipt;
 }> | {
     successorHoldId?: never;
     transfer?: never;
@@ -53,5 +53,5 @@ export declare function releaseNativePublicCollectionOutputHold(tx: CommandTrans
         position: bigint;
         transactionId: string;
     }>;
-    work: import("./collection-source.ts").WorkReceipt;
+    work: import("./contract/work-dimensions.ts").WorkReceipt;
 }>;
