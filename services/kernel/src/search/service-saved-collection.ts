@@ -15,7 +15,7 @@ export type SavedCatalogueMembersInput = Readonly<{
   revalidate: () => Promise<void>;
 }>;
 export type SavedCatalogueMembersPage = Readonly<{
-  members: readonly Readonly<{ kind: 'dynamic'; subjectId: string }>[];
+  members: Readonly<{ kind: 'dynamic'; subjectId: string }>[];
   next: PublicSearchPage['next'];
 }>;
 /** The Search service's saved-membership entry, reached by Library through its injected Search service. */
