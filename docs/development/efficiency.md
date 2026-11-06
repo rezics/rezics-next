@@ -82,7 +82,13 @@ record the effect, including when it is not yet observable.
 - Plan a few complete journeys at a time, each with one integrating owner and a native demo receipt.
 - Write consumer-first briefs: name the caller, the export or route it needs and one failing native outcome.
   Implement a missing port together with its binding in the same task; do not create a contract-only tier.
-- Make a task one useful behaviour: one implementation plus its caller. Group symmetric readers or adapters.
+- Make a task one complete outcome of about 1,500 to 3,000 product lines, landed with one check: a whole capability
+  row, a whole system or one migration step across a module. Chain similar work in one worker, not in slivers. State
+  the expected line count in the brief. Keep at most six tasks in flight per Goal.
+- Take outcomes in this order: capability rows still red, each built end to end until its composed acceptance passes;
+  systems that [scope](../scope.md) lists as built but closed, finished to the polish bar and kept closed; then the
+  [architecture migration](../research/architecture-paradigms-opus-5-5.md) steps in the Goal's own modules. Deferred
+  systems stay deferred until the scope table changes.
 - Commission research only for a named open choice with a consumer task; use one report by default.
 - Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
   Co-owner review answers accept or one counterexample.
