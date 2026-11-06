@@ -740,19 +740,32 @@ async function launch(action: 'pages' | 'web', args: string[]) {
   }
 }
 
+/** Walk stacks skip `--watch` and can omit Vite until the child starts mounted pages. */
+export function stackProcessCommands(env: Record<string, string | undefined> = process.env): string[][] {
+  const walk = env.REZICS_WALK_STACK_SLOT !== undefined;
+  const frontends = env.REZICS_WALK_DEFER_FRONTENDS !== '1';
+  return [
+    ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
+    ...(frontends
+      ? [
+          ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
+          ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
+        ]
+      : []),
+    ['bun', 'run', '--cwd', 'services/kernel', walk ? 'start' : 'dev'],
+    ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
+  ];
+}
+
 async function start() {
   const env = {
     ...process.env,
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
-  const children = [
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
-    ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'dev'],
-    ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
-  ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
+  const children = stackProcessCommands(env).map((command) =>
+    Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }),
+  );
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -830,6 +843,10 @@ async function walk(command: string[]): Promise<number> {
   try {
     slot = await admitWalkStack(task, process.env, root, controller.signal);
     const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
+    if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
+      env.OPENSEARCH_JAVA_OPTS ??= '-Xms128m -Xmx128m';
+      env.KERNEL_SEARCH_MEMORY ??= '400m';
+    }
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     try {
@@ -857,7 +874,12 @@ async function walk(command: string[]): Promise<number> {
         stdout: Bun.file(log),
         stderr: Bun.file(log),
       });
-      await untilReady([`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`], starting);
+      await untilReady(
+        env.REZICS_WALK_DEFER_FRONTENDS === '1'
+          ? [`http://127.0.0.1:${ports.native}/`, `http://127.0.0.1:${ports.kernel}/health`]
+          : [`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`],
+        starting,
+      );
       current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
       code = await current.exited;
     } finally {

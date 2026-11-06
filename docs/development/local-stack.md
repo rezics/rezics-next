@@ -227,8 +227,10 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Kernel, 4 for PostgreSQL and 5 for search.
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
-   answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
+3. Runs `db up`, `search up` and `setup`, starts native Auth, Kernel (`start`, not `--watch`) and the Kernel worker,
+   and waits until Web and the Auth pages answer, for at most ten minutes. `REZICS_WALK_DEFER_FRONTENDS=1` omits Vite
+   and waits for native Auth and Kernel health instead; the child starts issuer and Web when it needs mounted pages.
+   Output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
    inside `<command>`: run `dev-stack.ts persona`, then load its private `seed.env` and run
    `bun scripts/datasets/cross-media-seed.ts --dev`, as described under seeded journey walks below.

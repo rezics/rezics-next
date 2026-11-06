@@ -24,6 +24,7 @@ import {
   resetLocalContentMedia,
   localShowcaseClientRegistration,
   importerScopes,
+  stackProcessCommands,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -307,6 +308,16 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('walk stacks start Kernel without a watcher and can omit Vite until mounted pages', () => {
+  expect(stackProcessCommands({}).some((command) => command.includes('dev'))).toBe(true);
+  expect(stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1' }).some((command) => command.at(-1) === 'start')).toBe(
+    true,
+  );
+  const deferred = stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1', REZICS_WALK_DEFER_FRONTENDS: '1' });
+  expect(deferred.some((command) => command.includes('pages') || command.includes('web'))).toBe(false);
+  expect(deferred.some((command) => command.includes('host'))).toBe(true);
 });
 
 test('an authorized password rotation retains the original registration input', async () => {

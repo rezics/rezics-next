@@ -4,6 +4,8 @@
  * Catalogue seed is not consumed: these operations do not use catalogue identities.
  * The stack host already provisions the developer; a second persona assemble would
  * load another Kernel and Auth beside the live stack and exceed the 6 GiB check cap.
+ * With REZICS_WALK_DEFER_FRONTENDS=1 the walk stack omits Vite until after native
+ * HTTP, then starts issuer and Web only for the mounted-page phase.
  */
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -371,6 +373,34 @@ const evidence: Evidence = {
 function note(step: string) {
   evidence.sequence.push(step);
   console.log(`managed-accounts-walk: ${step}`);
+}
+
+async function persistEvidence() {
+  await writeFile(join(evidenceDir, 'passing.json'), `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
+}
+
+async function startFrontends() {
+  const children = (['pages', 'web'] as const).map((action) =>
+    Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
+      cwd: root,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }),
+  );
+  const stop = async () => {
+    for (const child of children) child.kill('SIGTERM');
+    await Promise.all(children.map((child) => child.exited));
+  };
+  try {
+    await untilAnswers(`${stack.issuer}/`, 'Auth pages');
+    await untilAnswers(`${stack.web}/`, 'Web');
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+  return { stop };
 }
 
 await untilAnswers(`${stack.native}/`, 'native Auth');
@@ -858,6 +888,32 @@ evidence.native.push({
 });
 note('persona-management-reads');
 
+await writeFile(
+  join(evidenceDir, 'identities.json'),
+  `${JSON.stringify(
+    {
+      sourceRevision,
+      developer: developer.accountId,
+      organizationId,
+      delegated: delegated.accountId,
+      member: member.accountId,
+      outsider: outsider.accountId,
+      destination: dest.accountId,
+      humanSoftwareId,
+      orgSoftwareId,
+      roster: roster.length,
+    },
+    null,
+    2,
+  )}\n`,
+  { mode: 0o600 },
+);
+await persistEvidence();
+note('native-complete');
+
+const deferFrontends = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
+const frontends = deferFrontends ? await startFrontends() : undefined;
+if (frontends) note('frontends-ready');
 await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
 if (typeof Bun.gc === 'function') Bun.gc(true);
 const require = createRequire(resolve(root, 'apps/web/package.json'));
@@ -871,10 +927,9 @@ const browser = await chromium.launch({
     '--disable-gpu',
     '--disable-software-rasterizer',
     '--disable-extensions',
-    '--no-zygote',
-    '--single-process',
+    '--disable-background-networking',
+    '--mute-audio',
     '--renderer-process-limit=1',
-    '--js-flags=--max-old-space-size=256',
   ],
 });
 try {
@@ -907,7 +962,7 @@ try {
     return response;
   };
 
-  const context = await browser.newContext({ locale: 'en-US' });
+  const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 1000 } });
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
   await page.route('**/*', loopbackOnly);
@@ -1003,29 +1058,9 @@ try {
   await context.close();
 } finally {
   await browser.close();
+  await frontends?.stop();
+  await persistEvidence();
 }
-
-await writeFile(join(evidenceDir, 'passing.json'), `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
-await writeFile(
-  join(evidenceDir, 'identities.json'),
-  `${JSON.stringify(
-    {
-      sourceRevision,
-      developer: developer.accountId,
-      organizationId,
-      delegated: delegated.accountId,
-      member: member.accountId,
-      outsider: outsider.accountId,
-      destination: dest.accountId,
-      humanSoftwareId,
-      orgSoftwareId,
-      roster: roster.length,
-    },
-    null,
-    2,
-  )}\n`,
-  { mode: 0o600 },
-);
 if (evidence.defects.length) throw new Error(evidence.defects.join('; '));
 console.log(
   `managed-accounts-walk: org=${organizationId} software=${humanSoftwareId},${orgSoftwareId} roster=${roster.length} sequence=${evidence.sequence.join(',')}`,
