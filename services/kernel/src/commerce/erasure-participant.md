@@ -44,12 +44,15 @@ inferred from a subject or edition identifier. The shared sink owns local seal l
 locators, including foreign creator associations on buyer homes. No family coverage or downstream disposition is
 declared: these public graphs and their copied custody remain retained pending real consumer completion proof.
 
-Checkout creation/refresh/apply and royalty/payment reconciliation remain unconverted. The delivered shared sink
-rejects production after its local seal; applying it to those financial commands would prevent required late money
-reconciliation. Their conversion needs the shared producer's exact late-copy custody/settlement protocol and
-trusted service-identity evidence, rather than a reconstructed Actor or a local replacement. Existing named DBOS
-identities also cannot use `stageHistoryWork`'s UUID-only request port without the owning durable migration. This is
-an unavailable binding, not a claim that an unregistered financial copy is absent or minimized.
+Checkout creation/refresh/apply and royalty/payment reconciliation remain unconverted. Their `order.updated`
+envelopes still reach creator-sale native admit. Missing shared-history locator inventory stays a pending
+projection gap: admit records the receipt and must not fail the effects checkpoint, or later tombstones on that
+buyer home never run. The delivered shared sink rejects production after its local seal; applying it to those
+financial commands would prevent required late money reconciliation. Their conversion needs the shared producer's
+exact late-copy custody/settlement protocol and trusted service-identity evidence, rather than a reconstructed
+Actor or a local replacement. Existing named DBOS identities also cannot use `stageHistoryWork`'s UUID-only request
+port without the owning durable migration. This is an unavailable binding, not a claim that an unregistered
+financial copy is absent or minimized.
 
 Before enabling `none`, the actual producer must supply sealed complete role/custody coverage with exact physical
 store/owner locators. Effect-written locators must close their account-home fence before paging; each locator
@@ -188,12 +191,14 @@ not an eagerly composed `KERNEL_WORK_MODULES` list. That constant remains a regi
 decorator unsubscribes every tombstone consumer except `commerce_erasure`, including Semantic's overflowing
 Subject-source page, so unfinished foreign participants cannot occupy the shared effects executor. Content
 collection schedules are removed after launch, as in the financial outcome driver. Readiness is the ready line,
-the existing 5ms queue poll, and an effects consumer that has ticked with no pending envelopes; the parent reaps
-the child with SIGKILL because retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only: Content's native
-identities already install `subject:create`, `space:create` and `realm:create`. Positive purchase targets are real
-subjects created through the native API from released metadata on that public Realm board. Business assertions, including unused-actor History-coverage `pending`, replay, private
-concealment and late paid/refund money outcomes, remain required. The independent terminal-benefit cases remain
-unchanged. Neither topology correction nor local pure settlement tests prove the missing custody outcome.
+the existing 5ms queue poll, and an effects consumer that has ticked with no pending envelopes. Paid-order checks
+wait for committed entitlement and settlement rows, not a moving partition head. The parent reaps the child with
+SIGKILL because retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only:
+Content's native identities already install `subject:create`, `space:create` and `realm:create`. Positive purchase
+targets are real subjects created through the native API from released metadata on that public Realm board. One
+native journey plus unused-actor operator history pins paid minimization, expiry purge, restricted readback and late
+paid/refund; the independent terminal-benefit cases remain unchanged. Neither topology correction nor local pure
+settlement tests prove the missing custody outcome.
 
 ## Cost
 

@@ -1012,9 +1012,9 @@ seeds `thread:read` on each protected source thread and `board:read` on that Rea
 `thread:read`. The composed worker is
 startWorker's live default composition under `workerTestEnv`, decorated so only `commerce_erasure` consumes
 account tombstones; `KERNEL_WORK_MODULES` pins registration names only. Semantic's overflowing Subject-source
-page stays that owner's repair. Financial outcome-driver children use the same live composition. Readiness waits for the
-effects consumer to observe and catch up and uses the existing 5ms queue poll. Tombstone drain waits for that
-account's tombstone envelope, not a moving partition head, with the 120s ceiling other native erasure suites use.
+page stays that owner's repair. Financial outcome-driver children use the same live composition. Readiness waits for
+the effects consumer to catch up and the 5ms queue poll. Tombstone drain waits for that envelope, not a moving
+partition head. Paid-order checks wait for committed entitlement and settlement rows. Ceiling is 120s.
 The board-read current-role projection stays with Accounts.
 Decision: fresh native `POST /v1/offers` sends only `contentEditionId` and ordinary commercial terms;
 `targetSubjectId` is the historical-replay body and is rejected on the same object. Native genuine-order

@@ -143,9 +143,18 @@ describe('native genuine-order retention', () => {
       await grantAccess(subject.accountId, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
     return offer;
   }
+  async function awaitTombstone(accountId: string) {
+    try {
+      await drainTombstone(pool, accountId, { deadlineMs: EFFECTS_DRAIN_MS });
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} worker=${worker?.errors.slice(-2000) ?? ''}`,
+      );
+    }
+  }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
-    await drainTombstone(pool, persona.accountId, { deadlineMs: EFFECTS_DRAIN_MS });
+    await awaitTombstone(persona.accountId);
     const id = commerceErasureWorkflowId(persona.accountId);
     const seen = await waitUntil(
       async () => ({
@@ -359,8 +368,9 @@ describe('native genuine-order retention', () => {
     const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;
     provider.fake.pay(firstNative.checkoutSessionId!);
     await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
-    await drainPartition(pool, buyer.accountId);
-    const entitlement = (await entitlementRows(buyer.accountId))[0]!.entitlement_id as string;
+    const entitlement = (
+      await waitUntil(async () => entitlementRows(buyer.accountId), (rows) => rows.length === 1)
+    )[0]!.entitlement_id as string;
     const second = (
       await accepted(buyer, '/v1/orders', { offerId: lateOffer.id, expectedOfferRevision: lateOffer.revision })
     ).order as { id: string };
@@ -394,7 +404,7 @@ describe('native genuine-order retention', () => {
         [routeOf(buyer.accountId), buyer.accountId],
       );
       const buyerBarrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, buyer);
-      await drainTombstone(pool, buyer.accountId, { deadlineMs: EFFECTS_DRAIN_MS });
+      await awaitTombstone(buyer.accountId);
       expect(await entitlementRows(buyer.accountId)).toHaveLength(1);
       expect(await commerceOutcome(buyer.accountId)).toEqual({ outcome: 'pending', retained: [] });
       for (const path of [`/v1/orders/${first.id}`, `/v1/entitlements/${entitlement}`, '/v1/entitlements'])
@@ -554,14 +564,17 @@ describe('native genuine-order retention', () => {
     );
     await finish(await postSignedEvent(latePaidSigned));
     await finish(latePaid);
-    await drainPartition(pool, buyer.accountId);
     expect(
-      (
-        await pool.query('SELECT settlement FROM commerce.purchase_order WHERE route=$1 AND order_id=$2', [
-          routeOf(second.id),
-          second.id,
-        ])
-      ).rows,
+      await waitUntil(
+        async () =>
+          (
+            await pool.query('SELECT settlement FROM commerce.purchase_order WHERE route=$1 AND order_id=$2', [
+              routeOf(second.id),
+              second.id,
+            ])
+          ).rows,
+        (rows) => rows[0]?.settlement === 'paid',
+      ),
     ).toEqual([{ settlement: 'paid' }]);
     expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
     expect(await inspectNativeRetainedOrder(pool, second.id)).toBeNull();
@@ -578,15 +591,18 @@ describe('native genuine-order retention', () => {
     await finish(await event('charge.refunded', provider.fake.chargeId(firstNative.checkoutSessionId!)));
     provider.fake.failRefund(refund);
     await finish(await event('refund.updated', refund));
-    await drainPartition(pool, buyer.accountId);
     expect(await entitlementRows(buyer.accountId)).toHaveLength(0);
     expect(
-      (
-        await pool.query('SELECT kind FROM commerce.order_transaction WHERE route=$1 AND order_id=$2 ORDER BY kind', [
-          routeOf(first.id),
-          first.id,
-        ])
-      ).rows,
+      await waitUntil(
+        async () =>
+          (
+            await pool.query(
+              'SELECT kind FROM commerce.order_transaction WHERE route=$1 AND order_id=$2 ORDER BY kind',
+              [routeOf(first.id), first.id],
+            )
+          ).rows,
+        (rows) => rows.length === 3,
+      ),
     ).toEqual([{ kind: 'charge' }, { kind: 'refund' }, { kind: 'refund_reversal' }]);
     expect(
       (
