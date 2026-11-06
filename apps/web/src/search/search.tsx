@@ -22,7 +22,7 @@ export type {
 } from './search-params';
 export { SearchInputRecovery } from './search-input-recovery';
 import { useSearchWindow } from './search-window';
-import { realmCatalogueWindow } from '../community/realm-catalogue-window';
+import { realmCatalogueWindow } from './realm-catalogue-window';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';

@@ -1,6 +1,6 @@
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
-import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/index.ts';
+import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/space-discovery.ts';
 import type { DiscoveryKey } from './discovery.ts';
 import type { DiscoveryProjection } from './account-discovery.ts';
 import type { Pool } from 'pg';
