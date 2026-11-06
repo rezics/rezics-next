@@ -34,10 +34,10 @@ install();
 installManagedModuleMocks();
 beforeAll(install);
 const { failure, issuerPage, loadDetail, loadInventory, readCursors } = await import('../src/accounts/management/data');
-const { AccountManagementPage } = await import('../src/accounts/management/pages');
+const { AccountManagementPage, ManagedAccountsPage } = await import('../src/accounts/management/pages');
 const { inventoryExample, detailExample, organization, human, automation } =
   await import('../src/accounts/management/story-api');
-const { getLocale, locales, setLocale } = await import('../src/paraglide/runtime.js');
+const { getLocale, locales, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 const { isSignedInPath } = await import('../src/session/guard');
 const { managedAccountHref } = await import('../src/settings/managed-accounts-read');
@@ -127,7 +127,7 @@ test('issuer links retain the two supported page profiles and account routes are
 });
 
 test('Legacy account and organization management reaches the current selected Settings target without inferring permission or another fetch', async () => {
-  const previousLocale = getLocale();
+  const previousLocale = getLocale;
   const requests: Request[] = [];
   const targets = [
     detailExample(human.id),
@@ -151,8 +151,7 @@ test('Legacy account and organization management reaches the current selected Se
       const page = await loadDetail(client, 'Bearer current-viewer', value.account.id, {});
       const requestCount = requests.length;
       for (const locale of locales) {
-        window.history.replaceState(null, '', `/${locale}/settings`);
-        setLocale(locale, { reload: false });
+        overwriteGetLocale(() => locale);
         const html = renderToStaticMarkup(
           createElement(AccountManagementPage, {
             page: { ...page, issuer: 'https://auth.example.test', organizationsAvailable: null },
@@ -184,7 +183,7 @@ test('Legacy account and organization management reaches the current selected Se
       });
       const page = await loadDetail(client, 'Bearer current-viewer', organization.id, {});
       for (const locale of locales) {
-        setLocale(locale, { reload: false });
+        overwriteGetLocale(() => locale);
         const html = renderToStaticMarkup(createElement(AccountManagementPage, { page, retry() {} }));
         expect(html).not.toContain('managedAccount=');
         expect(html).not.toContain(organization.id);
@@ -192,6 +191,74 @@ test('Legacy account and organization management reaches the current selected Se
       }
     }
   } finally {
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousLocale);
   }
+});
+
+test('current native inventory and detail DTOs retain viewer and navigation and expose only native-admitted management entries', async () => {
+  const { loadManagedAccounts } = await import('../src/settings/managed-accounts-read');
+  const { loadManagedAccountDetail } = await import('../src/settings/managed-account-detail-read');
+  const { projectManagedAuthNavigation } = await import('../src/accounts/management/auth-navigation');
+  const value = inventoryExample();
+  value.viewer = { state: 'current', account: human };
+  value.organizations.items[0]!.navigation = { state: 'admitted' };
+  value.responsibilities.items[0]!.navigation = { state: 'unavailable' };
+  value.responsibilities.items[1]!.navigation = { state: 'concealed' };
+  const detail = detailExample(organization.id);
+  detail.responsibilities = value.responsibilities;
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input) => Response.json(String(input).endsWith('/management') ? detail : value)) as typeof fetch,
+  });
+  const inventory = await loadManagedAccounts(client, 'Bearer fixture', human.id, {});
+  expect(inventory.ok).toBe(true);
+  if (!inventory.ok) throw new Error('native inventory rejected');
+  expect(inventory.page.viewer).toEqual(value.viewer);
+  expect(inventory.page.responsibilities.items[0]!.navigation).toEqual({ state: 'unavailable' });
+  const selected = await loadManagedAccountDetail(client, 'Bearer fixture', {
+    viewerId: human.id,
+    accountId: organization.id,
+  });
+  expect(selected.ok).toBe(true);
+  if (!selected.ok) throw new Error('native detail rejected');
+  expect(selected.value.responsibilities).toEqual(detail.responsibilities);
+  const html = renderToStaticMarkup(
+    createElement(ManagedAccountsPage, {
+      page: { state: 'ready', value, issuer: 'http://127.0.0.1:4200', organizationsAvailable: true },
+      retry() {},
+    }),
+  );
+  expect(html).toContain(`/${getLocale()}/organizations/${organization.id}`);
+  expect(html).not.toContain(`/${getLocale()}/accounts/${automation.id}`);
+  expect(html).toContain('http://127.0.0.1:4200/automated/new');
+  expect(html).toContain('http://127.0.0.1:4200/automated/open');
+  const software = detailExample(automation.id);
+  const authNavigation = projectManagedAuthNavigation(
+    {
+      state: 'ready',
+      operations: [
+        {
+          operationId: 'auth.operator.transfer',
+          action: 'account:manage',
+          resource: { route: 0, id: organization.id },
+        },
+      ],
+    },
+    software,
+    human.id,
+    { AUTH_ISSUER: 'http://127.0.0.1:4200', AUTH_MANAGEMENT_PAGE_ROUTES: '["/operators/transfer"]' },
+  );
+  const target = renderToStaticMarkup(
+    createElement(AccountManagementPage, {
+      page: {
+        state: 'ready',
+        value: software,
+        issuer: 'http://127.0.0.1:4200',
+        organizationsAvailable: null,
+        authNavigation,
+      },
+      retry() {},
+    }),
+  );
+  expect(target).toContain(`http://127.0.0.1:4200/operators/transfer?accountId=${automation.id}`);
+  expect(target).not.toContain('account:read');
 });

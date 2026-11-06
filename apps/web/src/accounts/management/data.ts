@@ -1,16 +1,55 @@
 import type { KernelClient } from '@rezics/client';
+import type { ManagedAuthNavigation } from './auth-navigation';
 import { readWithin } from './read-deadline';
 
-// Page contracts follow the generated client rather than introducing a second HTTP interface.
-type InventoryResponse = Awaited<ReturnType<KernelClient['me']['managedAccounts']['get']>>;
-type DetailResponse = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['management']['get']>>;
-export type Inventory = NonNullable<InventoryResponse['data']>;
-export type Detail = NonNullable<DetailResponse['data']>;
-export type Identity = Inventory['account'];
+export type Identity = {
+  id: string;
+  kind: 'actor' | 'organization';
+  handle: string | null;
+  displayName: string | null;
+};
+export type DirectoryNavigation = { state: 'admitted' | 'unavailable' | 'concealed' };
+export type Responsibility = {
+  reservationId: string;
+  accountId: string;
+  account: Identity | null;
+  state: 'current' | 'reconciling';
+  navigation?: DirectoryNavigation;
+};
+export type Inventory = {
+  account: Identity;
+  viewer: { state: 'current'; account: Identity };
+  organizations: {
+    state: 'ready' | 'preparing';
+    items: { account: Identity; role: 'owner' | 'member'; navigation?: DirectoryNavigation }[];
+    next: string | null;
+  };
+  responsibilities: { items: Responsibility[]; next: string | null };
+};
+export type Detail = {
+  account: Identity;
+  self: boolean;
+  role: 'owner' | 'member' | null;
+  operator: Identity | null;
+  relation: { operatorAccountId: string; reservationId: string; version: string } | null;
+  members: {
+    state: 'ready' | 'denied';
+    items: { accountId: string; account: Identity | null; role: 'owner' | 'member' }[];
+    next: string | null;
+  };
+  responsibilities: Inventory['responsibilities'] | null;
+};
 export type PageFailure = { state: 'denied' | 'unavailable' | 'preparing' | 'missing' | 'signed-out' };
 export type Page<T> =
-  | { state: 'ready'; value: T; issuer: string | null; organizationsAvailable: boolean | null }
+  | {
+      state: 'ready';
+      value: T;
+      issuer: string | null;
+      organizationsAvailable: boolean | null;
+      authNavigation?: ManagedAuthNavigation;
+    }
   | PageFailure;
+export type DetailLoad = PageFailure | { state: 'ready'; value: Detail; authActions?: unknown };
 export type Cursors = { organizationsCursor?: string; operatorsCursor?: string; membersCursor?: string };
 
 export function readCursors(value: Record<string, unknown>): Cursors {
@@ -53,7 +92,7 @@ export async function loadInventory(
     );
     return result.error || !result.data
       ? failure(result.status, result.error?.value)
-      : { state: 'ready' as const, value: result.data };
+      : { state: 'ready' as const, value: result.data as Inventory };
   } catch {
     return { state: 'unavailable' as const };
   }
@@ -65,7 +104,7 @@ export async function loadDetail(
   accountId: string,
   cursors: Cursors,
   signal?: AbortSignal,
-) {
+): Promise<DetailLoad> {
   try {
     const result = await readWithin(
       (signal) =>
@@ -80,9 +119,14 @@ export async function loadDetail(
       signal,
       10_000,
     );
-    return result.error || !result.data
-      ? failure(result.status, result.error?.value)
-      : { state: 'ready' as const, value: result.data };
+    if (result.error || !result.data) return failure(result.status, result.error?.value);
+    const data = result.data as Detail & { authActions?: unknown };
+    const { authActions, ...value } = data;
+    return {
+      state: 'ready' as const,
+      value,
+      ...(authActions === undefined ? {} : { authActions }),
+    };
   } catch {
     return { state: 'unavailable' as const };
   }
@@ -102,7 +146,10 @@ export async function loadOrganizationsAvailable(client: KernelClient, authoriza
   }
 }
 
-export function issuerPage(issuer: string | null, path: '/organizations/new' | '/account/delete'): string | null {
+export function issuerPage(
+  issuer: string | null,
+  path: '/organizations/new' | '/account/delete' | '/automated/new' | '/automated/open',
+): string | null {
   if (!issuer) return null;
   try {
     const url = new URL(issuer);

@@ -11339,5 +11339,7 @@
   "library_archive_observation_correct": "保留或修正現有觀察紀錄",
   "library_archive_observation_admit": "建立新的觀察紀錄",
   "library_archive_observation_revision": "目前觀察紀錄修訂版本",
-  "library_archive_observation_admit_help": "建立時會使用封存中的所有欄位，包括明確清除的值。原生審核會確認沒有現有紀錄。"
+  "library_archive_observation_admit_help": "建立時會使用封存中的所有欄位，包括明確清除的值。原生審核會確認沒有現有紀錄。",
+  "managed_create_automation": "建立軟體帳號",
+  "managed_open_automation": "開啟軟體帳號"
 }

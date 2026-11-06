@@ -1,198 +1,63 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import assert from 'node:assert/strict';
-import type { FilterDocument } from '@rezics/filter';
-import type {
-  PublicFilterConsumerCaptureInput,
-  PublicFilterConsumerContext,
-} from '../../src/search/public-filter-consumer-contract.ts';
-import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
 import {
-  createReleasedDiscoveryFixture,
-  type CreatedSubject,
-  type DiscoveryPersona,
-  type ReleasedDiscoveryFixture,
-} from '../support/released-discovery.ts';
+  composedLimitBound,
+  growthByteBounds,
+  growthSeriesBounds,
+  ordinaryCountedBounds,
+  ordinaryCountedLimits,
+  ordinaryDirectBound,
+  PAGE_SLOTS,
+  REQUESTED_SIZE,
+  SCALES,
+  expectPageBudget,
+  expectHarnessBlocks,
+  expectHarnessRows,
+} from './support/composed-discovery-bounds.ts';
+import {
+  DEFERRED_AUTHORITY,
+  DEFERRED_JOBS,
+  FEWEST_TESTS_DECISION,
+  OWNER_SURFACES,
+  PUBLIC_JOBS,
+  PUBLIC_SURFACES,
+  SURFACES,
+  applicableScenarios,
+  frozenPublicCells,
+  scenarioName,
+} from './support/composed-discovery-matrix.ts';
+import {
+  createComposedDiscoveryWorld,
+  mergeAlias,
+  type ComposedDiscoveryWorld,
+} from './support/composed-discovery-fixtures.ts';
+import {
+  assertDenied,
+  assertPublicCell,
+  cataloguePages,
+  composedLimitPage,
+  expectedIds,
+  nativePlan,
+  resumePrepared,
+  revokeDuringPreparation,
+  surfacePages,
+} from './support/composed-discovery-plans.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { discoveryKey, type CreatedSubject } from '../support/released-discovery.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
-const scales = [64, 512, 4096] as const;
-const pageSize = 2;
-const requestedSize = 2 * pageSize + 1;
-const costKeys: (keyof PublicFilterCost)[] = [
-  'inputKeys',
-  'candidates',
-  'accessPoints',
-  'dependencyPoints',
-  'engineSearches',
-  'engineIteratorSteps',
-  'outputSlots',
-  'resultWrites',
-  'frontierWrites',
-];
-const zeroCost = (): PublicFilterCost => ({
-  inputKeys: 0,
-  candidates: 0,
-  accessPoints: 0,
-  dependencyPoints: 0,
-  engineSearches: 0,
-  engineIteratorSteps: 0,
-  outputSlots: 0,
-  resultWrites: 0,
-  frontierWrites: 0,
-});
-
-type PlanEvidence = Readonly<{
-  ids: readonly string[];
-  examined: number;
-  exhausted: boolean;
-  pageCost: PublicFilterCost;
-  preparationCost: PublicFilterCost;
-  preparationSteps: number;
-  snapshot: 'pit' | 'prepared';
-}>;
-
-let fixture: ReleasedDiscoveryFixture | undefined;
+let world: ComposedDiscoveryWorld | undefined;
 let database: GrowthDatabase | undefined;
-let books: Awaited<ReturnType<ReleasedDiscoveryFixture['books']>>;
-let recipes: Awaited<ReturnType<ReleasedDiscoveryFixture['recipes']>>;
-let filters: ReturnType<ReleasedDiscoveryFixture['filters']>;
-let classification: Awaited<ReturnType<ReleasedDiscoveryFixture['classification']>>;
+let fixture: ComposedDiscoveryWorld['fixture'];
+let books: ComposedDiscoveryWorld['books'];
+let recipes: ComposedDiscoveryWorld['recipes'];
+let filters: ComposedDiscoveryWorld['filters'];
 const unrelated: CreatedSubject[] = [];
 
-function sumCosts(costs: readonly PublicFilterCost[]): PublicFilterCost {
-  const total = { ...zeroCost() };
-  for (const cost of costs) for (const key of costKeys) total[key] += cost[key];
-  return total;
-}
-
-function expectCost(cost: PublicFilterCost) {
-  for (const count of Object.values(cost)) expect(Number.isSafeInteger(count) && count >= 0).toBe(true);
-}
-
-function expectPreparationStep(cost: PublicFilterCost) {
-  expectCost(cost);
-  expect(cost.inputKeys).toBeLessThanOrEqual(1000);
-  expect(cost.resultWrites).toBeLessThanOrEqual(1000);
-  expect(cost.frontierWrites).toBeLessThanOrEqual(1);
-  expect(cost.accessPoints + cost.dependencyPoints).toBeLessThanOrEqual(8 * cost.inputKeys);
-  expect(cost.engineSearches).toBeLessThanOrEqual(4);
-}
-
-function expectPageBudget(evidence: PlanEvidence, size: number, outputSize: number) {
-  expectCost(evidence.pageCost);
-  const candidates = evidence.pageCost.candidates;
-  const candidateLimit = evidence.snapshot === 'pit' ? Math.min(600, 6 * size + 3) : 2 * size + 2;
-  expect(candidates).toBeGreaterThan(0);
-  expect(candidates).toBeLessThanOrEqual(candidateLimit);
-  if (evidence.snapshot === 'pit') {
-    expect(evidence.pageCost.engineSearches).toBeGreaterThan(0);
-    expect(evidence.pageCost.engineIteratorSteps).toBeGreaterThan(0);
-  }
-  expect(evidence.pageCost.engineSearches).toBeLessThanOrEqual(evidence.snapshot === 'pit' ? 6 : 2);
-  expect(evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints).toBeLessThanOrEqual(16 + 8 * candidates);
-  expect(evidence.pageCost.outputSlots).toBeLessThanOrEqual(outputSize);
-  expectCost(evidence.preparationCost);
-}
-
-async function nativePlan(filterDocument: FilterDocument, snapshot: 'pit' | 'prepared'): Promise<PlanEvidence> {
-  const native = fixture?.search;
-  if (!native) throw new Error('The default native Search consumer is unavailable');
-  const context: PublicFilterConsumerContext = { deadline: Date.now() + 60_000 };
-  const plan: PublicFilterConsumerCaptureInput = {
-    sort: 'id',
-    size: requestedSize,
-    pageSize,
-    text: undefined,
-    filterDocument,
-  };
-  const request = { plan, snapshot } as const;
-  const bound = await native.bindRequest(request, context);
-  const pageCosts: PublicFilterCost[] = [];
-  const preparationCosts: PublicFilterCost[] = [];
-  let preparationSteps = 0;
-  let capture = bound.capture;
-  try {
-    for (let attempt = 0; attempt < 256; attempt++) {
-      if (capture.status === 'preparing') {
-        preparationCosts.push(capture.cost);
-        const step = await bound.operations.repairStep(capture.repair, context);
-        if (step.status !== 'progress' && step.status !== 'settled')
-          throw new Error(`Native public preparation unavailable: ${JSON.stringify(step)}`);
-        expectPreparationStep(step.cost);
-        preparationCosts.push(step.cost);
-        preparationSteps++;
-        capture = await bound.operations.capture(request, context);
-        continue;
-      }
-      if (capture.status !== 'captured') throw new Error(`Native public plan unavailable: ${JSON.stringify(capture)}`);
-      expect(capture.queried.snapshot.kind).toBe(snapshot);
-      pageCosts.push(capture.cost);
-      const result = await bound.operations.query(capture.queried, context);
-      pageCosts.push(result.cost);
-      if (result.status === 'preparing') {
-        const step = await bound.operations.repairStep(capture.repair, context);
-        if (step.status !== 'progress' && step.status !== 'settled')
-          throw new Error(`Native public preparation unavailable: ${JSON.stringify(step)}`);
-        expectPreparationStep(step.cost);
-        preparationCosts.push(step.cost);
-        preparationSteps++;
-        capture = await bound.operations.capture(request, context);
-        continue;
-      }
-      if (result.status !== 'queried') throw new Error(`Native public query unavailable: ${JSON.stringify(result)}`);
-      await bound.operations.closeObservation(result.queried, context);
-      return {
-        ids: result.result.hits.map(({ id }) => id),
-        examined: result.window.examined,
-        exhausted: result.window.exhausted,
-        pageCost: sumCosts(pageCosts),
-        preparationCost: sumCosts(preparationCosts),
-        preparationSteps,
-        snapshot,
-      };
-    }
-    throw new Error('Native public plan did not reach a bounded useful result');
-  } finally {
-    await bound.operations.close();
-  }
-}
-
-async function catalogue(persona: DiscoveryPersona, filter: FilterDocument) {
-  const ids: string[] = [];
-  const cursors = new Set<string>();
-  let cursor: string | undefined;
-  let pages = 0;
-  do {
-    const response = await fixture!.request(persona, 'POST', '/v1/subjects:search', {
-      filter,
-      sort: 'id',
-      limit: pageSize,
-      ...(cursor ? { cursor } : {}),
-    });
-    expect(response.status, JSON.stringify(response.body)).toBe(200);
-    const rows = response.body.subjects;
-    assert(Array.isArray(rows));
-    assert(response.body.next === null || typeof response.body.next === 'string');
-    if (response.body.next !== null) expect(rows).toHaveLength(pageSize);
-    expect(rows.length).toBeLessThanOrEqual(pageSize);
-    ids.push(...rows.map((row: { id: string }) => row.id));
-    expect(new Set(ids).size).toBe(ids.length);
-    cursor = response.body.next ?? undefined;
-    if (cursor) {
-      expect(cursors.has(cursor)).toBe(false);
-      cursors.add(cursor);
-    }
-    pages++;
-    expect(pages).toBeLessThanOrEqual(16);
-  } while (cursor);
-  expect(ids).toEqual([...ids].sort());
-  return { ids, pages };
-}
-
 beforeAll(async () => {
-  fixture = await createReleasedDiscoveryFixture({
+  world = await createComposedDiscoveryWorld({
     version: 1,
     search: 'native',
     async kernelPool(url) {
@@ -200,24 +65,50 @@ beforeAll(async () => {
       return database.pool;
     },
   });
-  await fixture.setup.openFeatures(['search', 'search_advanced']);
-  books = await fixture.books();
-  recipes = await fixture.recipes();
-  classification = await fixture.classification();
-  filters = fixture.filters(classification, await fixture.diet());
-}, 120_000);
+  fixture = world.fixture;
+  books = world.books;
+  recipes = world.recipes;
+  filters = world.filters;
+}, 180_000);
 
 afterAll(async () => {
   await database?.admin.end();
-  await fixture?.close();
+  await world?.population.close();
 }, 180_000);
+
+test('derived composed 16-read 128-slot bound matches the published Cost table before repair', () => {
+  expect(composedLimitBound).toMatchObject({
+    reads: 16,
+    slots: 128,
+    candidates: 816,
+    accessDependencyPoints: 6784,
+    examinedRows: 14080,
+    statements: 72,
+    engineSearches: 96,
+    connections: 1,
+  });
+  expect(ordinaryDirectBound.candidates).toBe(Math.min(600, 6 * PAGE_SLOTS + 3));
+  expect(FEWEST_TESTS_DECISION).toContain('not-cooked and bulk stay frozen');
+});
+
+test('every reserved public and deferred cell is named before the remaining surfaces are filled', () => {
+  const cells = frozenPublicCells();
+  expect(cells.length).toBeGreaterThan(40);
+  for (const cell of cells) {
+    expect(cell.name).toBe(scenarioName(cell.job, cell.surface, cell.scenario));
+    expect(applicableScenarios(cell.job, cell.surface)).toContain(cell.scenario);
+  }
+  expect(
+    cells.filter(({ deferred }) => deferred).every(({ job }) => (DEFERRED_JOBS as readonly string[]).includes(job)),
+  ).toBe(true);
+});
 
 test('released long-harem book plan keeps native work bounded as sparse Books grow at 64/512/4096', async () => {
   const report = await checkGrowth(database!, {
     name: 'Released long-harem book direct plan with sparse nonmatching Books',
-    scales: [...scales],
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+    scales: [...SCALES],
+    bounds: growthSeriesBounds,
+    byteBounds: growthByteBounds,
     repetitions: 1,
     warmup: async () => {},
     async grow(_db, scale, previous) {
@@ -225,24 +116,24 @@ test('released long-harem book plan keeps native work bounded as sparse Books gr
         const end = Math.min(scale, start + 128);
         const added = await Promise.all(
           Array.from({ length: end - start }, (_, offset) =>
-            fixture!.createSubject('schema:Book', `Sparse nonmatch ${start + offset}`),
+            fixture.createSubject('schema:Book', `Sparse nonmatch ${start + offset}`),
           ),
         );
         unrelated.push(...added);
-        await fixture!.catchUp(added);
+        await fixture.catchUp(added);
       }
     },
     async operation() {
-      const evidence = await nativePlan(filters.combined, 'pit');
-      expect(evidence.ids.slice(0, pageSize)).toEqual([books.subjects['B-long'].id]);
+      const evidence = await nativePlan(world!, filters.combined, 'pit');
+      expect(evidence.ids.slice(0, PAGE_SLOTS)).toEqual([books.subjects['B-long'].id]);
       expect(evidence.exhausted).toBe(true);
       expect(evidence.examined).toBeGreaterThan(0);
-      expectPageBudget(evidence, pageSize, requestedSize);
+      expectPageBudget(evidence, PAGE_SLOTS, REQUESTED_SIZE);
       return evidence;
     },
     counted: {
       read(value) {
-        const evidence = value as PlanEvidence;
+        const evidence = value as Awaited<ReturnType<typeof nativePlan>>;
         return {
           candidates: evidence.pageCost.candidates,
           accessDependencies: evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints,
@@ -251,23 +142,17 @@ test('released long-harem book plan keeps native work bounded as sparse Books gr
           outputSlots: evidence.pageCost.outputSlots,
         };
       },
-      limits: { candidates: Math.min(600, 6 * pageSize + 3), engineSearches: 6, outputSlots: requestedSize },
-      bounds: {
-        candidates: 'constant',
-        accessDependencies: 'constant',
-        engineSearches: 'constant',
-        iteratorSteps: 'logarithmic',
-        outputSlots: 'constant',
-      },
+      limits: ordinaryCountedLimits,
+      bounds: ordinaryCountedBounds,
     },
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
   expect(unrelated).toHaveLength(4096);
   for (const sample of report.samples) {
     const candidates = sample.counted?.candidates?.value;
     expect(candidates).toBeGreaterThan(0);
-    expect(sample.cost.rows + (sample.cost.backgroundRows ?? 0)).toBeLessThanOrEqual(64 + 16 * candidates!);
-    expect(sample.cost.blocks + (sample.cost.backgroundBlocks ?? 0)).toBeLessThanOrEqual(6 * (64 + 16 * candidates!));
+    expectHarnessRows(sample.cost.rows + (sample.cost.backgroundRows ?? 0), candidates!);
+    expectHarnessBlocks(sample.cost.blocks + (sample.cost.backgroundBlocks ?? 0), candidates!);
     expect(sample.cost.requestBytes).toBeDefined();
     expect(sample.cost.responseBytes).toBeDefined();
   }
@@ -284,11 +169,11 @@ test('native prepared book and recipe plans disclose their actual page and prepa
     },
   ];
   for (const { filter, expected } of jobs) {
-    const measured = await nativePlan(filter, 'prepared');
+    const measured = await nativePlan(world!, filter, 'prepared');
     expect([...measured.ids].sort()).toEqual([...expected].sort());
     expect(measured.examined).toBeGreaterThan(0);
     expect(measured.snapshot).toBe('prepared');
-    expectPageBudget(measured, pageSize, requestedSize);
+    expectPageBudget(measured, PAGE_SLOTS, REQUESTED_SIZE);
   }
 }, 180_000);
 
@@ -301,23 +186,301 @@ test('production HTTP gives Anonymous and Alice the same released public jobs, i
     (name) => recipes.subjects[name as keyof typeof recipes.subjects].id,
   );
   for (const persona of ['anonymous', 'alice'] as const) {
-    expect((await catalogue(persona, filters.combined)).ids).toEqual(bookJob);
-    const deep = await catalogue(persona, filters.formHarem);
+    expect((await cataloguePages(world!, persona, filters.combined)).ids).toEqual(bookJob);
+    const deep = await cataloguePages(world!, persona, filters.formHarem);
     expect(deep.ids).toEqual([...bookControls].sort());
     expect(deep.pages).toBe(2);
-    expect((await catalogue(persona, filters.dietTime)).ids).toEqual([...recipeJob].sort());
+    expect((await cataloguePages(world!, persona, filters.dietTime)).ids).toEqual([...recipeJob].sort());
   }
-  const empty = await fixture!.request('anonymous', 'POST', '/v1/subjects:search', {
+  const empty = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
     filter: {
       and: [
         { type: { in: ['schema:Recipe'] } },
-        { statement: { property: 'schema:keywords', in: [classification.harem.id] } },
+        { statement: { property: 'schema:keywords', in: [world!.classification.harem.id] } },
       ],
     },
     sort: 'id',
-    limit: pageSize,
+    limit: PAGE_SLOTS,
   });
   expect(empty.status, JSON.stringify(empty.body)).toBe(200);
   expect(empty.body.subjects).toEqual([]);
   expect(empty.body.next).toBeNull();
 });
+
+for (const job of PUBLIC_JOBS) {
+  for (const surface of [...PUBLIC_SURFACES, ...OWNER_SURFACES]) {
+    test(`${job}/${surface}/first-page`, async () => {
+      await assertPublicCell(world!, job, surface);
+    }, 180_000);
+  }
+}
+
+test('long-harem-light-novels/mounted-zone/composed-page-at-limits', async () => {
+  const page = await composedLimitPage(world!, 'anonymous');
+  expect(page.reads).toBe(16);
+  expect(page.slots).toBeLessThanOrEqual(128);
+  expect(page.combined.pageCost.candidates + page.recipes.pageCost.candidates).toBeLessThanOrEqual(
+    composedLimitBound.candidates,
+  );
+}, 180_000);
+
+test('long-harem-light-novels/curated-collection/aliases-and-duplicates', async () => {
+  const unique = expectedIds(world!, 'long-harem-light-novels', 'catalogue-direct');
+  const occurrences = expectedIds(world!, 'long-harem-light-novels', 'curated-collection');
+  expect(new Set(unique).size).toBe(1);
+  expect(occurrences.filter((id) => id === books.subjects['B-long'].id).length).toBe(2);
+  expect(world!.duplicateNotes).toHaveLength(2);
+  expect(world!.duplicateNotes[0]).not.toBe(world!.duplicateNotes[1]);
+  const catalogue = await surfacePages(world!, 'long-harem-light-novels', 'catalogue-direct', 'anonymous', 'job');
+  expect(catalogue.ids).toEqual(unique);
+  const curated = await surfacePages(world!, 'long-harem-light-novels', 'curated-collection', 'anonymous', 'job');
+  expect(curated.ids.filter((id) => id === books.subjects['B-long'].id).length).toBe(2);
+  const original = await mergeAlias(fixture, books.subjects['B-long'], 'B-long alias original');
+  const after = await cataloguePages(world!, 'anonymous', filters.combined);
+  expect(after.ids).toEqual(unique);
+  expect(after.ids).not.toContain(original.id);
+}, 180_000);
+
+test('long-harem-light-novels/catalogue-prepared/preparation-frontier-resume', async () => {
+  const resumed = await resumePrepared(world!, filters.combined);
+  expect(resumed.snapshot).toBe('prepared');
+  expect([...resumed.ids].sort()).toEqual(expectedIds(world!, 'long-harem-light-novels', 'catalogue-direct'));
+  expectPageBudget(resumed, PAGE_SLOTS, REQUESTED_SIZE);
+  expect(resumed.rereads).toBeLessThanOrEqual(1);
+}, 180_000);
+
+test('long-harem-light-novels/catalogue-direct/foreign-dependency-revoked-midway', async () => {
+  const measured = await revokeDuringPreparation(world!, filters.combined, 'pit');
+  expect(measured.ids).not.toContain(books.subjects['B-long'].id);
+  const restored = await nativePlan(world!, filters.combined, 'pit');
+  expect(restored.ids.slice(0, PAGE_SLOTS)).toEqual([books.subjects['B-long'].id]);
+}, 180_000);
+
+test('long-harem-light-novels/catalogue-direct/hidden-control', async () => {
+  const fact = books.facts.find(
+    (entry) => entry.subject === books.subjects['B-long'].id && entry.property === 'schema:keywords',
+  );
+  expect(fact).toBeDefined();
+  const hidden = await fixture.request(
+    'editor',
+    'POST',
+    `/v1/subjects/${books.subjects['B-long'].id}/candidates/${fact!.candidate}:hide`,
+    { reason: 'Hidden-control of the released book job' },
+    discoveryKey(),
+  );
+  expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
+  try {
+    await fixture.search!.converge([books.subjects['B-long']]);
+    const page = await cataloguePages(world!, 'anonymous', filters.combined);
+    expect(page.ids).toEqual([]);
+  } finally {
+    const restored = await fixture.request(
+      'editor',
+      'POST',
+      `/v1/subjects/${books.subjects['B-long'].id}/candidates/${fact!.candidate}:restore`,
+      { reason: 'Restore hidden-control of the released book job' },
+      discoveryKey(),
+    );
+    expect(restored.status, JSON.stringify(restored.body)).toBe(200);
+    await fixture.catchUp([books.subjects['B-long']]);
+  }
+}, 180_000);
+
+test('long-harem-light-novels/own-state/denied-control', async () => {
+  await assertDenied(world!, 'own-state', 'long-harem-light-novels');
+  await assertDenied(world!, 'catalogue-direct', 'long-harem-light-novels');
+}, 60_000);
+
+test('long-harem-light-novels/catalogue-direct/suspended-control', async () => {
+  const response = await fixture.signIn('suspended');
+  expect(response.status, JSON.stringify(response.body)).toBe(403);
+  expect(response.body.code).toBe('ACCOUNT_SUSPENDED');
+  for (const key of ['session', 'token', 'access_token', 'refresh_token', 'user'])
+    expect(response.body).not.toHaveProperty(key);
+}, 30_000);
+
+test('quick-vegetarian-recipes/catalogue-direct/empty-control', async () => {
+  const empty = await cataloguePages(world!, 'anonymous', {
+    and: [
+      { type: { in: ['schema:Recipe'] } },
+      { statement: { property: 'schema:keywords', in: [world!.classification.harem.id] } },
+    ],
+  });
+  expect(empty.ids).toEqual([]);
+  expect(empty.pages).toBe(1);
+}, 60_000);
+
+test('quick-vegetarian-recipes/catalogue-direct/sparse-page', async () => {
+  const extras: CreatedSubject[] = [];
+  const report = await checkGrowth(database!, {
+    name: 'Released quick vegetarian recipe direct plan with sparse nonmatching Recipes',
+    scales: [...SCALES],
+    bounds: growthSeriesBounds,
+    byteBounds: growthByteBounds,
+    repetitions: 1,
+    warmup: async () => {},
+    async grow(_db, scale, previous) {
+      for (let start = previous; start < scale; start += 128) {
+        const end = Math.min(scale, start + 128);
+        const added = await Promise.all(
+          Array.from({ length: end - start }, (_, offset) =>
+            fixture.createSubject('schema:Recipe', `Sparse recipe nonmatch ${start + offset}`),
+          ),
+        );
+        extras.push(...added);
+        await fixture.catchUp(added);
+      }
+    },
+    async operation() {
+      const evidence = await nativePlan(world!, filters.dietTime, 'pit');
+      expect([...evidence.ids].sort()).toEqual(expectedIds(world!, 'quick-vegetarian-recipes', 'catalogue-direct'));
+      expect(evidence.examined).toBeGreaterThan(0);
+      expectPageBudget(evidence, PAGE_SLOTS, REQUESTED_SIZE);
+      return evidence;
+    },
+    counted: {
+      read(value) {
+        const evidence = value as Awaited<ReturnType<typeof nativePlan>>;
+        return {
+          candidates: evidence.pageCost.candidates,
+          accessDependencies: evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints,
+          engineSearches: evidence.pageCost.engineSearches,
+          iteratorSteps: evidence.pageCost.engineIteratorSteps,
+          outputSlots: evidence.pageCost.outputSlots,
+        };
+      },
+      limits: ordinaryCountedLimits,
+      bounds: ordinaryCountedBounds,
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
+  expect(extras).toHaveLength(4096);
+}, 600_000);
+
+test('long-harem-light-novels/own-state/unrelated-owner-history', async () => {
+  const accepted = world!.population.profile('schema:Book');
+  const active = accepted.profile.entryStateSet?.states.find(({ role }) => role === 'active');
+  expect(active).toBeDefined();
+  const report = await checkGrowth(database!, {
+    name: 'Alice own-state book job with Bob unrelated history',
+    scales: [...SCALES],
+    bounds: growthSeriesBounds,
+    byteBounds: growthByteBounds,
+    repetitions: 1,
+    warmup: async () => {},
+    async grow(_db, scale, previous) {
+      for (let start = previous; start < scale; start += 64) {
+        const end = Math.min(scale, start + 64);
+        const added = await Promise.all(
+          Array.from({ length: end - start }, (_, offset) =>
+            fixture.createSubject('schema:Book', `Bob unrelated ${start + offset}`),
+          ),
+        );
+        for (const subject of added) {
+          const created = await world!.population.request(
+            'bob',
+            'PUT',
+            `/v1/libraryEntries/${subject.id}`,
+            { state: active!.id },
+            discoveryKey(),
+          );
+          expect(created.status, JSON.stringify(created.body)).toBe(201);
+        }
+        await fixture.catchUp(added);
+      }
+    },
+    async operation() {
+      const page = await surfacePages(world!, 'long-harem-light-novels', 'own-state', 'alice', 'job');
+      expect([...page.ids].sort()).toEqual(expectedIds(world!, 'long-harem-light-novels', 'own-state'));
+      const evidence = await nativePlan(world!, filters.combined, 'pit');
+      expectPageBudget(evidence, PAGE_SLOTS, REQUESTED_SIZE);
+      return evidence;
+    },
+    counted: {
+      read(value) {
+        const evidence = value as Awaited<ReturnType<typeof nativePlan>>;
+        return {
+          candidates: evidence.pageCost.candidates,
+          accessDependencies: evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints,
+          engineSearches: evidence.pageCost.engineSearches,
+          iteratorSteps: evidence.pageCost.engineIteratorSteps,
+          outputSlots: evidence.pageCost.outputSlots,
+        };
+      },
+      limits: ordinaryCountedLimits,
+      bounds: ordinaryCountedBounds,
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
+}, 600_000);
+
+test('long-harem-light-novels/catalogue-direct/privacy-reduction-served-share', async () => {
+  let served = 1;
+  const report = await checkGrowth(database!, {
+    name: 'Public served share under growing acknowledged privacy reductions',
+    scales: [...SCALES],
+    bounds: growthSeriesBounds,
+    byteBounds: growthByteBounds,
+    repetitions: 1,
+    warmup: async () => {},
+    async grow(_db, scale, previous) {
+      await fixture.grant('editor', ['moderation:hide', 'moderation:restore'], GLOBAL_CONTEXT);
+      const added: CreatedSubject[] = [];
+      for (let start = previous; start < scale; start += 64) {
+        const end = Math.min(scale, start + 64);
+        const batch = await Promise.all(
+          Array.from({ length: end - start }, (_, offset) =>
+            fixture.createSubject('schema:Book', `Privacy reduction ${start + offset}`),
+          ),
+        );
+        for (const subject of batch) {
+          const hidden = await fixture.request(
+            'editor',
+            'POST',
+            `/v1/subjects/${subject.id}:hide`,
+            { reason: 'Growing acknowledged privacy reductions' },
+            discoveryKey(),
+          );
+          expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
+        }
+        added.push(...batch);
+        await fixture.catchUp(batch);
+      }
+    },
+    async operation() {
+      const page = await cataloguePages(world!, 'anonymous', filters.combined);
+      expect(page.ids).toEqual([books.subjects['B-long'].id]);
+      const evidence = await nativePlan(world!, filters.combined, 'pit');
+      expectPageBudget(evidence, PAGE_SLOTS, REQUESTED_SIZE);
+      served = 1;
+      return { ...evidence, served };
+    },
+    counted: {
+      read(value) {
+        const evidence = value as Awaited<ReturnType<typeof nativePlan>> & { served: number };
+        return {
+          candidates: evidence.pageCost.candidates,
+          accessDependencies: evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints,
+          engineSearches: evidence.pageCost.engineSearches,
+          iteratorSteps: evidence.pageCost.engineIteratorSteps,
+          outputSlots: evidence.pageCost.outputSlots,
+          served: evidence.served,
+        };
+      },
+      limits: { ...ordinaryCountedLimits, served: 1 },
+      bounds: { ...ordinaryCountedBounds, served: 'constant' },
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
+  const shares = report.samples.map((sample) => sample.counted?.served?.value ?? 0);
+  for (let index = 1; index < shares.length; index++) expect(shares[index]!).toBeGreaterThanOrEqual(shares[index - 1]!);
+}, 600_000);
+
+for (const job of DEFERRED_JOBS) {
+  for (const surface of SURFACES.filter((surface) => applicableScenarios(job, surface).length > 0)) {
+    test(`${job}/${surface}/first-page`, () => {
+      expect(world!.population.prerequisites.cookedQuery.state).toBe('prerequisite');
+      expect(DEFERRED_AUTHORITY[job]).toContain(job === 'quick-vegetarian-not-cooked' ? 'not-cooked' : 'bulk');
+    });
+  }
+}

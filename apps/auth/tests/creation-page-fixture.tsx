@@ -7,18 +7,22 @@ const { Window } = require(
 );
 let currentSignal: AbortSignal | undefined;
 const nativeEnv = { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' };
-// Start's compiled RPC bridge validates input; the fixture forwards the value unchanged.
+// Run Start's input validator before invoking the fixture's server handler.
 type ServerFnInput = { data?: unknown; signal?: AbortSignal | undefined };
 type ServerFnBuilder = {
-  validator(validate: unknown): ServerFnBuilder;
+  validator(validate: (value: unknown) => unknown): ServerFnBuilder;
   handler(handler: (context: ServerFnInput) => unknown): (options?: ServerFnInput) => unknown;
 };
 function serverFn(): ServerFnBuilder {
+  let validate = (value: unknown) => value;
   const builder: ServerFnBuilder = {
-    validator: () => builder,
+    validator: (check) => {
+      validate = check;
+      return builder;
+    },
     handler: (handler) => (options) => {
       currentSignal = options?.signal;
-      return handler({ data: options?.data, signal: options?.signal });
+      return handler({ data: validate(options?.data), signal: options?.signal });
     },
   };
   return builder;
@@ -73,7 +77,7 @@ const { securityResponseByteBudgets, securityScopeLimit } = await import('@rezic
 mock.module('../src/account-session', () => ({
   ...nativeSession,
   requestAccountSession: async (signal: AbortSignal) => {
-    const response = await fetch('/session', { signal });
+    const response = await fetch('/session', { signal, credentials: 'same-origin', cache: 'no-store' });
     if (response.status === 401) return { kind: 'signed-out' };
     if (response.status !== 200) return { kind: 'failure' };
     return nativeSession.parseAccountSession(
@@ -164,8 +168,9 @@ export async function open(page: ReactNode, sessionBody: object) {
 }
 export const send = (host: HTMLElement) => host.querySelector<HTMLFormElement>('form')!.requestSubmit();
 export const leave = () => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
+export const nativeApprovalReference = 'bmF0aXZl.' + 'a'.repeat(43);
 export const approval = () =>
-  Response.json({ reference: 'bmF0aXZl.' + 'a'.repeat(43), expiresAt: new Date(Date.now() + 60000).toISOString() });
+  Response.json({ reference: nativeApprovalReference, expiresAt: new Date(Date.now() + 60000).toISOString() });
 
 /** Closed native selected-page fixture; identity remains admitted presentation only. */
 export const automatedOperatorPage = (accountId: string, operator: object) =>

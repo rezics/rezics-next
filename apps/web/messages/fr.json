@@ -11225,5 +11225,7 @@
   "library_archive_observation_correct": "Conserver ou corriger une observation existante",
   "library_archive_observation_admit": "Ajouter une nouvelle observation",
   "library_archive_observation_revision": "Révision actuelle de l’observation",
-  "library_archive_observation_admit_help": "L’ajout utilise tous les champs archivés, y compris les effacements explicites. La vérification native confirme qu’aucune observation n’existe."
+  "library_archive_observation_admit_help": "L’ajout utilise tous les champs archivés, y compris les effacements explicites. La vérification native confirme qu’aucune observation n’existe.",
+  "managed_create_automation": "Créer un compte logiciel",
+  "managed_open_automation": "Ouvrir un compte logiciel"
 }

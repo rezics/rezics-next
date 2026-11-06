@@ -767,7 +767,7 @@ function sourceIdentity(record: ShowcaseRecord): { property: string; value: stri
   return null;
 }
 
-/** Bangumi Organizations and BookSeries admit no provider identifier, so their identity is their cited schema:name. */
+/** Bangumi Organizations have no provider identifier. BookSeries still uses its durable source tuple and cited name as identity; the released profile also admits wdt:P5732 as a statement on that subject. */
 function nameIdentified(record: ShowcaseRecord): boolean {
   return (
     record.provider === 'bangumi' &&

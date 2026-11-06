@@ -1218,10 +1218,23 @@ routes accept this optional comparison field. When supplied, the host compares t
 native fresh human's account, client and exact operation profile before obtaining an
 Access token through `accessTokenForProof`; no browser proof or bearer is accepted.
 Existing native approval resolution and workflow authorization still decide authority.
-Transfer acceptance is approve-only: its complete result contains the real `reference`
-and `expiresAt`, to be used as the source transfer's `acceptance`. It never executes.
-Other complete results contain the native subject `accountId`. Refusal, step-up,
-unavailable dependencies and uncertain execution are distinct typed outcomes.
+Transfer acceptance is approve-only: `{ reference, expiresAt }` acknowledges destination approval alone.
+Decision: transfer replies use the public account-operation approval/error bounds and exact native `{ accountId }`
+execution projection. Access `workflow-approvals.ts` seals the opaque reference and emits `Date.toISOString()`;
+`workflows.ts` transfer success/replay returns only the original subject ID. Pending, expired, extra-field and wrong-
+subject results are incompatible; after workflow entry they answer 503 `{ error: "account_operation_unavailable" }`
+without a `not_applied` guarantee. Workflow exceptions also remain uncertain because publication or final disclosure
+may already have occurred. Fresh-human proof, descriptor resolution, both approvals, preparations, original tuple/
+version comparisons, CAS, fences and replay are unchanged. Unrelated operation outputs retain compatibility.
+
+Approval bytes: empty `{ reference: "", expiresAt: "" }` JSON skeleton plus `6 × 4096 + 27` (worst UTF-16 JSON
+escaping and ISO extended-year expiry). Execution bytes: empty `{ accountId: "" }` skeleton plus UUID36. Errors:
+max of fixed `{ error, effect_status: "not_applied" }` for `account_operation_denied` (400/401/403/409/413/415/503),
+`step_up_required` (401), `platform_closed` (403), and the fixed uncertain envelope above. Only matching closed
+status/error pairs classify pre-effect refusal. Source acknowledgement and separately authorized current relation
+observation are distinct; acceptance cannot establish source execution. Each browser command retains its own five-
+second headers/body lifetime; session/advice/readback retain independent read lifetimes. Finite parsing adds zero
+native calls. Native/browser/integration acceptance remains pending.
 
 Page owners supply the forms for `/account/rename`, `/organizations/members` and
 `/operators/transfer`; the Auth page server and production triggers dispatch these

@@ -11225,5 +11225,7 @@
   "library_archive_observation_correct": "Vorhandene Beobachtung beibehalten oder korrigieren",
   "library_archive_observation_admit": "Neue Beobachtung aufnehmen",
   "library_archive_observation_revision": "Aktuelle Revision der Beobachtung",
-  "library_archive_observation_admit_help": "Die Aufnahme verwendet alle archivierten Felder einschließlich ausdrücklicher Löschungen. Die native Prüfung bestätigt, dass keine Beobachtung vorhanden ist."
+  "library_archive_observation_admit_help": "Die Aufnahme verwendet alle archivierten Felder einschließlich ausdrücklicher Löschungen. Die native Prüfung bestätigt, dass keine Beobachtung vorhanden ist.",
+  "managed_create_automation": "Softwarekonto erstellen",
+  "managed_open_automation": "Softwarekonto öffnen"
 }

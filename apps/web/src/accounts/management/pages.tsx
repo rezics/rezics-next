@@ -8,7 +8,7 @@ import { Tombstone } from '@rezics/ui/tombstone';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
-import { managedAccountHref } from '../../settings/managed-accounts-read';
+import { managedAccountHref } from './auth-navigation';
 import type { WindowNavigation } from './window-route';
 import { readCursors, issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
@@ -143,7 +143,7 @@ function Responsibilities({
   cursors,
   navigation,
 }: {
-  page: Inventory['responsibilities'];
+  page: Inventory['responsibilities'] | NonNullable<Detail['responsibilities']>;
   cursors: Cursors;
   navigation?: WindowNavigation | undefined;
 }) {
@@ -169,14 +169,11 @@ function Responsibilities({
                 key={item.reservationId}
                 headingLevel={3}
                 title={item.account ? name(item.account) : m.managed_missing_title()}
-                {...(item.account && (item.state === 'current' || item.account.handle)
-                  ? {
-                      href:
-                        item.state === 'current'
-                          ? managementHref(item.account)
-                          : `/${getLocale()}/@${encodeURIComponent(item.account.handle!)}`,
-                    }
-                  : {})}
+                {...(item.account && item.state === 'current' && item.navigation?.state === 'admitted'
+                  ? { href: managementHref(item.account) }
+                  : item.account?.handle && item.navigation?.state !== 'concealed'
+                    ? { href: `/${getLocale()}/@${encodeURIComponent(item.account.handle)}` }
+                    : {})}
                 metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
                 state={
                   <Badge
@@ -265,12 +262,12 @@ export function ManagedAccountsPage({
             <p role="status">{m.managed_preparing_text()}</p>
           ) : page.value.organizations.items.length ? (
             <ul>
-              {page.value.organizations.items.map(({ account, role }) => (
+              {page.value.organizations.items.map(({ account, role, navigation }) => (
                 <ContentItem
                   key={account.id}
                   headingLevel={3}
                   title={name(account)}
-                  href={managementHref(account)}
+                  {...(navigation?.state === 'admitted' ? { href: managementHref(account) } : {})}
                   metadata={account.handle && account.displayName ? <p>@{account.handle}</p> : null}
                   state={
                     <Badge
@@ -306,10 +303,7 @@ export function ManagedAccountsPage({
         </CardContent>
       </Card>
       <Responsibilities page={page.value.responsibilities} cursors={cursors} navigation={navigation} />
-      <Alert>
-        <AlertTitle>{m.managed_automation_title()}</AlertTitle>
-        <AlertDescription>{m.managed_automation_unavailable()}</AlertDescription>
-      </Alert>
+      <AutomationEntries issuer={page.issuer} />
       <Button className={retryClass} variant="outline" onClick={retry}>
         {m.managed_refresh()}
       </Button>
@@ -461,7 +455,27 @@ export function AccountManagementPage({
             {m.managed_options()}
           </a>
           <p>{m.managed_options_guidance()}</p>
-          {value.relation ? <p>{m.managed_transfer_unavailable()}</p> : null}
+          {page.authNavigation ? (
+            <nav aria-label={m.managed_actions_title()} className="flex flex-wrap gap-x-6 gap-y-2">
+              {(['rename', 'members', 'transfer'] as const).map((name) => {
+                const action = page.authNavigation!.actions[name];
+                const label =
+                  name === 'rename'
+                    ? m.managed_actions_rename()
+                    : name === 'members'
+                      ? m.managed_actions_members()
+                      : m.managed_actions_transfer();
+                return action.state === 'available' ? (
+                  <a key={name} className={linkClass} href={action.href}>
+                    {label}
+                  </a>
+                ) : null;
+              })}
+            </nav>
+          ) : null}
+          {value.relation && page.authNavigation?.actions.transfer?.state !== 'available' ? (
+            <p>{m.managed_transfer_unavailable()}</p>
+          ) : null}
           <p>{m.managed_operation_status()}</p>
           {deletion ? (
             <a className={linkClass} href={deletion}>
@@ -474,5 +488,35 @@ export function AccountManagementPage({
         {m.managed_refresh()}
       </Button>
     </Frame>
+  );
+}
+
+function AutomationEntries({ issuer }: { issuer: string | null }) {
+  const create = issuerPage(issuer, '/automated/new');
+  const open = issuerPage(issuer, '/automated/open');
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <ContentItemHeading level={2}>{m.managed_automation_title()}</ContentItemHeading>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">{m.managed_actions_selection()}</p>
+        <nav aria-label={m.managed_automation_title()} className="flex flex-wrap gap-x-6 gap-y-2">
+          {create ? (
+            <a className={linkClass} href={create}>
+              {m.managed_create_automation()}
+            </a>
+          ) : null}
+          {open ? (
+            <a className={linkClass} href={open}>
+              {m.managed_open_automation()}
+            </a>
+          ) : null}
+          {!create && !open ? <p>{m.managed_actions_unavailable()}</p> : null}
+        </nav>
+      </CardContent>
+    </Card>
   );
 }

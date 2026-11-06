@@ -38,7 +38,7 @@ const source: TransferAttempt = {
     version: 1,
     previous: {
       operatorAccountId: 'current-operator',
-      subjectAccountId: 'operated-account',
+      subjectAccountId: '00000000-0000-7000-8000-000000000001',
       reservationId: 'current-reservation',
     },
     expectedVersion: '12',
@@ -112,9 +112,12 @@ function Fixture({
                 JSON.parse(String(init?.body)).operation.kind === 'transfer-acceptance'
                   ? 'opaque-destination-acceptance'
                   : 'opaque-source-approval',
-              expiresAt: '2030-01-01T00:00:00Z',
+              expiresAt: '2030-01-01T00:00:00.000Z',
             })
-          : Response.json({ error: 'account_operation_denied' }, { status: mode === 'conflict' ? 409 : 403 });
+          : Response.json(
+              { error: 'account_operation_denied', effect_status: 'not_applied' },
+              { status: mode === 'conflict' ? 409 : 403 },
+            );
       if (path === '/account-operations/execute') {
         if (mode === 'uncertain') throw new TypeError('Story: response lost');
         if (mode === 'ready') {
