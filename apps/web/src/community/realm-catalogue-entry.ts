@@ -1,12 +1,13 @@
-import { parse } from 'valibot';
-import { isSearchResourceScope, searchResourceScopeAction } from '../search/advanced-scope';
+import * as v from 'valibot';
 import { isWithinGlobalSearchQueryLimit } from '../search/query-text-limit';
-import { searchParams } from '../search/search-params';
 import { realmReadingSearch } from './realm-reading-return';
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const pageSearch = v.record(v.string(), v.unknown());
 
 /** Search and the native shelves share an address, but retain separate continuations. */
 export function realmCataloguePageSearch(value: Record<string, unknown>) {
-  const search = { ...parse(searchParams, value) };
+  const search = { ...v.parse(pageSearch, value) };
   delete search.node;
   delete search.cursor;
   return { ...search, ...realmReadingSearch(value) };
@@ -22,16 +23,14 @@ export type RealmCatalogueEntry = Readonly<{
 
 /** Only the admitted Realm identity can supply membership. Never pass a Space as a fallback. */
 export function realmCatalogueEntry(realmId: string | null | undefined, locale: string): RealmCatalogueEntry | null {
-  const scope = { kind: 'realm', id: realmId };
-  if (!isSearchResourceScope(scope)) return null;
-  const browseHref = searchResourceScopeAction(locale, scope);
-  const separator = browseHref.indexOf('?');
-  const filter = new URLSearchParams(browseHref.slice(separator + 1)).get('filter');
-  if (!filter) return null;
+  if (!realmId || !uuid.test(realmId)) return null;
+  const id = realmId.toLowerCase();
+  const filter = JSON.stringify({ realm: { id } });
+  const action = `/${encodeURIComponent(locale)}/search`;
   return {
-    realmId: scope.id.toLowerCase(),
-    browseHref,
-    action: browseHref.slice(0, separator),
+    realmId: id,
+    browseHref: `${action}?filter=${encodeURIComponent(filter)}`,
+    action,
     filter,
   };
 }

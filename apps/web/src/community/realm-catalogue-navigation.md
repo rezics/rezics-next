@@ -92,6 +92,8 @@ Decision: the Realm query entry enforces the shared byte limit independently of 
 Direct Search URLs retain oversized operands for local correction, following the Search owner contract;
 that preservation does not admit an oversized Realm draft or enable its submit action. Community publishes
 the catalogue entry and shelf-return ports; Search consumes those public edges rather than a second writer.
+The entry port encodes the closed `{realm:{id}}` membership URL locally and uses Search's public query-byte-limit;
+it does not import Search parser internals.
 
 Encoding and validation are O(Q), with Q at most 512 UTF-8 bytes, and source identity is O(1).
 The navigation retains no result page and makes no page, row, background, population or command request.
