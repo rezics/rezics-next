@@ -1040,6 +1040,7 @@
         "apps/web/src/subject/definitions.ts",
         "apps/web/src/subject/quantity-presentation.ts",
         "apps/web/src/subject/reading-state/index.tsx",
+        "apps/web/src/shell/current-reading.tsx",
         "apps/web/src/paraglide/messages.js",
         "apps/web/src/paraglide/messages.d.ts",
         "apps/web/src/paraglide/runtime.js",

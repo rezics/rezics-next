@@ -1,4 +1,4 @@
-import { CurrentReadingHead, CurrentReadingOutlet } from './-current-reading';
+import { CurrentReadingHead, CurrentReadingOutlet } from '../shell/current-reading';
 import { createRootRouteWithContext, isNotFound, Scripts, useRouter, useRouterState } from '@tanstack/react-router';
 import type { BuyerHistoryVisit } from '../checkout/buyer-history-visit';
 import type { QueryClient } from '@tanstack/react-query';

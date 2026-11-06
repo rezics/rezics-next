@@ -27,7 +27,7 @@ const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider, useLoaderData } =
   await import('@tanstack/react-router');
 const { CurrentReadingHead, CurrentReadingOutlet, currentReadingTags, publicReadingWithdrawn } =
-  await import('../src/routes/-current-reading');
+  await import('../src/shell/current-reading');
 afterAll(async () => {
   await window.happyDOM.close();
   for (const [key, descriptor] of previous) {

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { isPreparingReadError } from '../session/unavailable';
-import { PendingPage } from '../shell/pending';
+import { PendingPage } from './pending';
 
 type ReadingMatch = { status: string; isFetching?: boolean | string; _notFound?: boolean };
 type ReadingRoute = { pathname: string; isLoading: boolean; matches: readonly ReadingMatch[] };
