@@ -156,27 +156,33 @@ function site(): Promise<string> {
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
     };
+    // Diagnostic for the Worker startup: Vite's optimizer timeline (scan, crawl end, rerun) reaches the check log.
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env,
+      env: { ...env, DEBUG: 'vite:deps' },
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
     const missingMedia = `${origin}/media/${randomUUID()}/original`;
     const deadline = Date.now() + 150_000;
+    let probe = 'no response yet';
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
         // The fixture implements media APIs, so readiness must not depend on home-page discovery or rendering.
         const response = await fetch(missingMedia, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
         const ready = response.status === 404 && response.headers.get('content-type')?.includes('application/problem+json');
+        probe = `HTTP ${response.status} ${response.headers.get('content-type') ?? 'no content type'}`;
         await response.body?.cancel();
         if (ready) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve the media route in time:\n${output}`);
+      } catch (error) {
+        probe = error instanceof Error ? error.message : String(error);
+      }
+      if (Date.now() > deadline)
+        throw new Error(`dev server did not serve the media route in time; last probe: ${probe}\n${output}`);
       await Bun.sleep(500);
     }
   })();
