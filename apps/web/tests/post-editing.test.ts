@@ -1,14 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type Page } from 'playwright';
 import type { KernelClient } from '@rezics/client';
+import { startDevServer } from './support/dev-server.ts';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -464,34 +461,13 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
-// The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+    server = await startDevServer({
       env: {
-        ...process.env,
         KERNEL_ORIGIN: fake.url.origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
@@ -499,20 +475,9 @@ function site(): Promise<string> {
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
       },
+      warmUpPaths: ['/en'],
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
+    return server.origin;
   })();
   return started;
 }
@@ -606,10 +571,7 @@ async function hydrated(page: Page) {
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 const editor = (page: Page) => page.locator('main .ProseMirror[contenteditable="true"]');
