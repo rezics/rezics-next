@@ -19,6 +19,7 @@ import type {
   PromotionRun,
   RetryIntent,
   Task,
+  TaskState,
   TerminationIntent,
   WorktreeCleanupDisposition,
 } from './types.ts';
@@ -375,12 +376,15 @@ export class WorkerStore implements AttemptFence {
   }
   /** All non-terminal tasks, bounded by the worker_tasks_state expression index. */
   activeTasks(): Task[] {
+    return this.tasksInStates(['held', 'ready', 'running', 'landing', 'stopped']);
+  }
+  /** Tasks in the given states, read through the worker_tasks_state expression index instead of every task body. */
+  tasksInStates(states: readonly TaskState[]): Task[] {
     this.refreshSnapshot();
+    const marks = states.map(() => '?').join(', ');
     return this.db
-      .query(
-        "SELECT id, body FROM worker_tasks WHERE json_extract(body, '$.state') IN ('held','ready','running','landing','stopped') ORDER BY sequence",
-      )
-      .all()
+      .query(`SELECT id, body FROM worker_tasks WHERE json_extract(body, '$.state') IN (${marks}) ORDER BY sequence`)
+      .all(...states)
       .map((row) => {
         const value = row as { id: string; body: string };
         const cached = this.taskSnapshot.get(value.id);

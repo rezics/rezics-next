@@ -15,8 +15,46 @@ export interface AppServer {
   close(): void | Promise<void>;
 }
 
-async function stopChild(child: ChildProcessWithoutNullStreams, graceMs: number): Promise<void> {
+/** Whether a process group still has a member; a dead leader's helpers keep their group alive. */
+function groupExists(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+function signalGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
+/**
+ * Ends the process group of an app-server that connectPool started detached: its MCP helpers, code-mode hosts and
+ * thread writers share the group, so they stop with it, and members that outlive the leader are signalled too.
+ */
+async function stopGroup(child: ChildProcessWithoutNullStreams, graceMs: number): Promise<void> {
+  const pid = child.pid!;
+  if (!groupExists(pid)) return stopChild(child, graceMs);
+  const groupGone = async (ms: number) => {
+    const deadline = Date.now() + ms;
+    while (groupExists(pid) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, defaultPolicy.appServer.exitPollMs));
+    return !groupExists(pid);
+  };
+  signalGroup(pid, 'SIGTERM');
+  if (await groupGone(graceMs)) return;
+  signalGroup(pid, 'SIGKILL');
+  await groupGone(defaultPolicy.appServer.killWaitMs);
+}
+
+async function stopChild(child: ChildProcessWithoutNullStreams, graceMs: number, group = false): Promise<void> {
   if (!child.pid) return;
+  if (group) return stopGroup(child, graceMs);
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   child.kill('SIGTERM');
@@ -125,7 +163,7 @@ export class WebSocketAppServer implements AppServer {
     try {
       this.socket.close();
     } catch {}
-    return stopChild(this.child, this.terminationGraceMs);
+    return stopChild(this.child, this.terminationGraceMs, true);
   }
 }
 
@@ -152,18 +190,24 @@ export async function connectPool(
   };
   delete env.FORCE_COLOR;
   delete env.CLICOLOR_FORCE;
-  const child = spawn(executable, ['app-server', '--listen', 'ws://127.0.0.1:0'], { env, stdio: 'pipe' });
+  // The app-server leads its own process group, so its helpers and thread writers form one unit that a replacement host
+  // can reclaim after this host dies; the group id is the app-server's pid (see stopGroup).
+  const child = spawn(executable, ['app-server', '--listen', 'ws://127.0.0.1:0'], {
+    env,
+    stdio: 'pipe',
+    detached: true,
+  });
   if (onStart) {
     const identity = child.pid ? readProcessIdentity(child.pid) : null;
     if (!child.pid) throw new Error('Cannot start app-server process');
     if (!identity) {
-      await stopChild(child, policy.terminationGraceMs);
+      await stopChild(child, policy.terminationGraceMs, true);
       throw new Error('Cannot identify app-server process');
     }
     try {
       onStart(identity);
     } catch (error) {
-      await stopChild(child, policy.terminationGraceMs);
+      await stopChild(child, policy.terminationGraceMs, true);
       throw error;
     }
   }
@@ -228,7 +272,7 @@ export async function connectPool(
       throw error;
     }
   } catch (error) {
-    await stopChild(child, policy.terminationGraceMs);
+    await stopChild(child, policy.terminationGraceMs, true);
     throw error;
   }
 }

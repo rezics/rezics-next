@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task, WorktreeCleanupDisposition } from './types.ts';
@@ -11,7 +14,7 @@ export const IO_PRESSURE_WAIT_ATTEMPTS = 30;
 export type LifetimeRuntime = {
   pressure: () => number | null;
   sleep: (ms: number) => Promise<void>;
-  command: (command: string, args: string[], cwd: string) => void;
+  command: (command: string, args: string[], cwd: string) => void | Promise<void>;
 };
 
 class CommandStartError extends Error {
@@ -36,10 +39,16 @@ const runtime: LifetimeRuntime = {
     }
   },
   sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
-  command: (command, args, cwd) => {
-    const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
-    if (result.error) throw new CommandStartError(result.error.message, (result.error as NodeJS.ErrnoException).code);
-    if (result.status !== 0) throw new Error(result.stderr || `${command} exited ${result.status}`);
+  // Removal can take minutes for a worktree with a large dependency tree: run it off the host loop.
+  command: async (command, args, cwd) => {
+    try {
+      await execFileAsync(command, args, { cwd, encoding: 'utf8' });
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException & { stderr?: string; signal?: string | null };
+      // A string code is a failure to start the program; a numeric code is the program's own exit status.
+      if (typeof failure.code === 'string') throw new CommandStartError(failure.message, failure.code);
+      throw new Error(failure.stderr || `${command} exited ${failure.code ?? failure.signal}`);
+    }
   },
 };
 
@@ -231,8 +240,9 @@ export async function removeFinishedWorktree(
   })();
   if (!lease) return null;
   try {
+    // Finished states are read through the state index; the full task list held the host loop every sweep.
     const candidates = store
-      .tasks()
+      .tasksInStates([...finished] as Task['state'][])
       .filter((task) => finished.has(task.state) && !protectedStates.has(task.state))
       .sort((a, b) => a.sequence - b.sequence);
     const roots = [...new Set([settings.worktreeRoot, join(settings.mainCheckout, '.temp/worktrees')])];
@@ -293,7 +303,7 @@ export async function removeFinishedWorktree(
 
         let removed = false;
         try {
-          io.command(
+          await io.command(
             'ionice',
             ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', afterPressure.worktree],
             settings.mainCheckout,
@@ -336,7 +346,11 @@ export async function removeFinishedWorktree(
         if (!removed) continue;
         store.clearWorktreeCleanup(afterPressure.id);
         if (!unresolvedCleanup)
-          io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
+          await io.command(
+            'ionice',
+            ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'],
+            settings.mainCheckout,
+          );
         return afterPressure.id;
       } finally {
         taskLease.release();
@@ -345,7 +359,7 @@ export async function removeFinishedWorktree(
 
     // Pruning stale registrations is safe after candidate work has been attempted; it does not traverse task paths.
     if (!unresolvedCleanup)
-      io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
+      await io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
     return null;
   } finally {
     lease.release();

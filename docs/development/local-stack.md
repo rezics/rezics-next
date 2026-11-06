@@ -239,6 +239,11 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
 
+Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
+loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same
+tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification
+remain separate acceptance outcomes.
+
 ## Cross-media dump cache
 
 `seed:dev` fetches the pinned Bangumi Archive release and a VNDB dump, verifies them, extracts source tables and seeds

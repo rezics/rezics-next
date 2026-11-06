@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
@@ -91,13 +92,21 @@ function inspectProcessSnapshot(
   }
 }
 /** User plus system ticks for live members of an identified process group; missing when none are visible. */
-export function processGroupCpuTicks(identity: ProcessIdentity | null, procRoot = '/proc'): bigint | undefined {
+/** Scans of /proc yield to the event loop every this many entries, so one sample never holds the host loop. */
+const PROC_SCAN_CHUNK = 128;
+
+export async function processGroupCpuTicks(
+  identity: ProcessIdentity | null,
+  procRoot = '/proc',
+): Promise<bigint | undefined> {
   if (!identity) return undefined;
   try {
     let total = 0n;
     let any = false;
-    for (const name of readdirSync(procRoot)) {
+    let visited = 0;
+    for (const name of await readdir(procRoot)) {
       if (!/^\d+$/.test(name)) continue;
+      if (++visited % PROC_SCAN_CHUNK === 0) await new Promise<void>((resolve) => setImmediate(resolve));
       let snapshot: ReturnType<typeof inspectProcessSnapshot>;
       try {
         snapshot = inspectProcessSnapshot(Number(name), procRoot);

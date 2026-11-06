@@ -502,9 +502,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     },
     dispatchDailyStepAudit() {
       const template = join(import.meta.dir, '../templates/daily-step-audit.md');
+      // The host tick checks for an open audit every minute: read only unsettled tasks, not every task body.
       dispatchDailyStepAudit(
         db,
-        store.tasks(),
+        store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
         () => tasks.dispatch(template),
         new Date(),
         (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),

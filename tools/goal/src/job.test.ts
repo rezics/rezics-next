@@ -5,7 +5,7 @@ import type { LandingRequest } from './contracts.ts';
 import { newestWorktreeMtime, WorkerJob } from './job.ts';
 import { harness, tempDirectory } from './test-support.ts';
 
-test('newest worktree mtime ignores node_modules and .temp', () => {
+test('newest worktree mtime ignores node_modules and .temp', async () => {
   const root = tempDirectory();
   mkdirSync(join(root, 'src'), { recursive: true });
   mkdirSync(join(root, 'node_modules/pkg'), { recursive: true });
@@ -21,7 +21,7 @@ test('newest worktree mtime ignores node_modules and .temp', () => {
   utimesSync(kept, past, past);
   utimesSync(join(root, 'node_modules/pkg/index.js'), future, future);
   utimesSync(join(root, '.temp/scratch'), future, future);
-  expect(newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
+  expect(await newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
 });
 
 const fileActiveEmptyLogCli = `#!/usr/bin/env bun
