@@ -422,6 +422,7 @@ async function worker() {
             },
             routeKey: Buffer.from(process.env.CONTENT_TEST_ROUTE_KEY!, 'base64url'),
             fetchConfig: { allowedHosts: [] },
+            now: () => Date.now(),
           }).register(context);
           context.addEffects(contentEffects(db.pool, client));
         },

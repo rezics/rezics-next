@@ -434,6 +434,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
     readConsent,
     routeKey,
     fetchConfig: { allowedHosts: [] },
+    now: () => Date.now(),
   });
   const module: WorkModule = {
     name: 'content',
