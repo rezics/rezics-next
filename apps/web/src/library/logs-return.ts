@@ -119,11 +119,7 @@ export function logsDestinationClick(
 }
 
 /** Attach a captured My Logs visit to this public-log history entry, once. */
-export function bindLogsReturnVisit(
-  locale: string,
-  subject: string | null,
-  logId: string,
-): LogsReturnFrontier | null {
+export function bindLogsReturnVisit(locale: string, subject: string | null, logId: string): LogsReturnFrontier | null {
   if (typeof window === 'undefined') return null;
   const existing = logsReturnVisitFromState(window.history.state, locale, subject, logId);
   const pending = pendingReturn;
@@ -167,12 +163,7 @@ export function logsReturnVisitFromState(
  * Ordinary left-click restores the captured My Logs visit through history. Direct visitors and a replaced
  * session follow the cursor-free My Logs href. Modified clicks keep that href without history.back().
  */
-export function logsReturnBackClick(
-  event: Pointer,
-  logId: string,
-  locale: string,
-  subject: string | null,
-): boolean {
+export function logsReturnBackClick(event: Pointer, logId: string, locale: string, subject: string | null): boolean {
   if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return false;
   if (typeof window === 'undefined') return true;

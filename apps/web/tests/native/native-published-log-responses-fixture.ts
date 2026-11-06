@@ -710,7 +710,8 @@ export async function createNativePublishedLogResponseFixture(): Promise<NativeP
       'progressSession',
       'Retire completed private source',
     );
-    if (retiredSession.state !== 'retired') throw new Error('Private source retirement did not mark the session retired');
+    if (retiredSession.state !== 'retired')
+      throw new Error('Private source retirement did not mark the session retired');
     if (retiredSession.completedAt !== null)
       throw new Error('Retiring a completed private session must clear completedAt');
 
