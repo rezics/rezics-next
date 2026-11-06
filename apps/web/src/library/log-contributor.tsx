@@ -23,8 +23,7 @@ export function LogContributor({
       <span data-log-contribution="live">
         <AccountRef
           account={
-            account ??
-            (contribution.kind === 'live' ? { handle: null, displayName: contribution.displayName } : null)
+            account ?? (contribution.kind === 'live' ? { handle: null, displayName: contribution.displayName } : null)
           }
         />
       </span>
@@ -32,10 +31,7 @@ export function LogContributor({
   return <span data-log-contribution="unknown">{logContributionLabel({ kind: 'unknown' }, locale)}</span>;
 }
 
-export function logByline(
-  input: { attribution?: unknown; account?: AccountReference | null },
-  locale: string,
-): string {
+export function logByline(input: { attribution?: unknown; account?: AccountReference | null }, locale: string): string {
   const contribution = logContribution(input.attribution);
   if (contribution.kind === 'deleted') return logContributionLabel(contribution, locale);
   if (contribution.kind === 'live') return liveName(input.account, logContributionLabel(contribution, locale));

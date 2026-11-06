@@ -15,9 +15,8 @@ const { RatingControlView, applyOptimisticRatingChange } = await import('../src/
 const { RatingsView } = await import('../src/features/pages/subject-ratings-view');
 const { subjectHead } = await import('../src/features/pages/subject-head');
 const { subjectOwnRatingQuery, subjectRatingQuery } = await import('../src/features/pages/subject-queries');
-const { GLOBAL, QUESTION, preparedRatingReader, readRatings, readOwnRating, writeOwnRating } = await import(
-  '../src/features/pages/subject-ratings'
-);
+const { GLOBAL, QUESTION, preparedRatingReader, readRatings, readOwnRating, writeOwnRating } =
+  await import('../src/features/pages/subject-ratings');
 const { ResultRow } = await import('../src/search/results');
 
 const subjectId = recorded.subject;

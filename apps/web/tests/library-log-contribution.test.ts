@@ -44,7 +44,10 @@ test('log bylines keep live names, deleted labels, and unknown without claiming 
   expect(logContributionLabel({ kind: 'unknown' }, 'en')).toBe('Unknown account');
   expect(
     logByline(
-      { attribution: { id: liveId, kind: 'actor', displayName: 'Ada' }, account: { displayName: 'Ada', handle: 'ada' } },
+      {
+        attribution: { id: liveId, kind: 'actor', displayName: 'Ada' },
+        account: { displayName: 'Ada', handle: 'ada' },
+      },
       'en',
     ),
   ).toBe('Ada @ada');

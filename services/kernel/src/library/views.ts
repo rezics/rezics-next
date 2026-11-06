@@ -10,10 +10,7 @@ import type {
   FollowingSpaceDestination,
   FollowingSpaceProjection,
 } from './following-space-contract.ts';
-import {
-  ContributionAttributionSchema,
-  type ContributionAttribution,
-} from '../access/contribution-attribution.ts';
+import { ContributionAttributionSchema, type ContributionAttribution } from '../access/contribution-attribution.ts';
 import { readContributionAttributions } from '../access/public-identity.ts';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';

@@ -28,10 +28,12 @@ export function likedMemberScore(
 function likedProjectionScore(
   projection: CollectionViewerProjection,
   member: CollectionViewerMember,
-): {
-  units: number | null;
-  question: NonNullable<Extract<CollectionViewerProjection, { state: 'current' }>['question']>;
-} | undefined {
+):
+  | {
+      units: number | null;
+      question: NonNullable<Extract<CollectionViewerProjection, { state: 'current' }>['question']>;
+    }
+  | undefined {
   if (projection.state !== 'current' || !member.subjectId || !projection.question) return undefined;
   const row = projection.rows.find((item) => item.rowKey === member.id && item.subjectId === member.subjectId);
   if (!row || !collectionViewerVoteCurrent(row, projection.question)) return undefined;

@@ -507,14 +507,7 @@ export function SubjectRatingControl({
     const command = personalScoreWriteCommand(pendingCommand.current, units);
     pendingCommand.current = command;
     const expectedCredential = queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken ?? '';
-    const request = boundRatingCommand(
-      subjectId,
-      units,
-      originatingBinding,
-      question,
-      command.key,
-      expectedCredential,
-    );
+    const request = boundRatingCommand(subjectId, units, originatingBinding, question, command.key, expectedCredential);
     boundCommand.current = request;
     const id = ++pendingId.current;
     activePending.current = { scope, id };

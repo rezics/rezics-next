@@ -462,11 +462,7 @@ function postgresContainerLogs(container: string): string {
   return `network ${inspect.stdout.toString().trim()}\n${logs.stdout}${logs.stderr}`;
 }
 
-async function waitForOwnedPostgres(
-  container: string,
-  databaseUrl: string,
-  socketDirectory?: string,
-): Promise<void> {
+async function waitForOwnedPostgres(container: string, databaseUrl: string, socketDirectory?: string): Promise<void> {
   const deadline = Date.now() + 60_000;
   const socketPath = socketDirectory ? join(socketDirectory, '.s.PGSQL.5432') : undefined;
   while (true) {
@@ -485,9 +481,7 @@ async function waitForOwnedPostgres(
     }
     if (socketPath && !existsSync(socketPath)) {
       if (Date.now() >= deadline)
-        throw new Error(
-          `Disposable PostgreSQL did not create ${socketPath}.\n${postgresContainerLogs(container)}`,
-        );
+        throw new Error(`Disposable PostgreSQL did not create ${socketPath}.\n${postgresContainerLogs(container)}`);
       await Bun.sleep(500);
       continue;
     }
@@ -530,15 +524,9 @@ async function startOwnedPostgres(): Promise<{
   // Docker does not join ns:/proc/.../ns/net (it looks up that string as a
   // named network). A published host port is also invisible on unshare --net
   // loopback. The unix socket is a filesystem object, so it remains reachable.
-  const socketDirectory = ownedPostgresIsolated()
-    ? await mkdtemp(join(tmpdir(), 'native-owned-pg-'))
-    : undefined;
-  const container = socketDirectory
-    ? startPostgresContainer(docker, { socketDirectory })
-    : startPostgresContainer();
-  const databaseUrl = socketDirectory
-    ? isolatedOwnedPostgresUrl(socketDirectory)
-    : publishedPostgresUrl(container);
+  const socketDirectory = ownedPostgresIsolated() ? await mkdtemp(join(tmpdir(), 'native-owned-pg-')) : undefined;
+  const container = socketDirectory ? startPostgresContainer(docker, { socketDirectory }) : startPostgresContainer();
+  const databaseUrl = socketDirectory ? isolatedOwnedPostgresUrl(socketDirectory) : publishedPostgresUrl(container);
   reportStackProgress(
     `Native web stack startup: PostgreSQL ${socketDirectory ? `unix socket ${socketDirectory}` : 'published host port'} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
   );

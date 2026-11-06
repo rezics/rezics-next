@@ -65,7 +65,11 @@ test('host identity admits an absolute unix-socket host and refuses a TCP host o
     );
     await rejected({ ...base, database: other }, 'database');
     await rejected(
-      { ...base, database: pool, systemDatabaseUrl: 'postgres://user:secret@localhost/kernel?host=/tmp/native-owned-pg' },
+      {
+        ...base,
+        database: pool,
+        systemDatabaseUrl: 'postgres://user:secret@localhost/kernel?host=/tmp/native-owned-pg',
+      },
       'database',
     );
   } finally {

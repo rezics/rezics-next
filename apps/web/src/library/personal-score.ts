@@ -26,7 +26,9 @@ export function personalScoreWriteCommand(
   return { units, key: crypto.randomUUID() };
 }
 
-export function personalScoreWriteNotice(result: PersonalScoreWriteResult | boolean): 'uncertain' | 'stale' | undefined {
+export function personalScoreWriteNotice(
+  result: PersonalScoreWriteResult | boolean,
+): 'uncertain' | 'stale' | undefined {
   if (result === 'uncertain') return 'uncertain';
   if (result === 'stale') return 'stale';
   return undefined;

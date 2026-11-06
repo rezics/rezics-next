@@ -6,11 +6,7 @@ import type { NativeWebStack } from './stack.ts';
  * Matches grant-routes: PLATFORM_RESOURCE, account subject, open interval, governor bearer.
  * Do not import bootstrap-governance here: that graph loads Reylo named SQL before the stack registers it.
  */
-export async function grantGlobalCatalogueWrite(
-  stack: NativeWebStack,
-  accountId: string,
-  actions: readonly string[],
-) {
+export async function grantGlobalCatalogueWrite(stack: NativeWebStack, accountId: string, actions: readonly string[]) {
   return stack.kernel(
     '/v1/grants',
     {

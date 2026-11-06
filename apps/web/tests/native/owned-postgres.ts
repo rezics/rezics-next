@@ -136,9 +136,7 @@ export async function listenOwnedPostgresSocketProxy(socketDirectory: string): P
 
 export function networkInterfaceNames(source = '/proc/net/dev'): string[] {
   try {
-    return [...readFileSync(source, 'utf8').matchAll(/^\s*([A-Za-z][A-Za-z0-9._-]*)\s*:/gm)].map(
-      (match) => match[1]!,
-    );
+    return [...readFileSync(source, 'utf8').matchAll(/^\s*([A-Za-z][A-Za-z0-9._-]*)\s*:/gm)].map((match) => match[1]!);
   } catch {
     return [];
   }
