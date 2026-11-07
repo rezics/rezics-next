@@ -1603,6 +1603,7 @@
         "@rezics/definitions/extension",
         "@rezics/definitions/compile",
         "@rezics/definitions/bundled",
+        "@rezics/definitions/reviewed-vocabulary",
         "@rezics/definitions/validate",
         "@rezics/definitions/bulk",
         "@rezics/definitions/media-import",

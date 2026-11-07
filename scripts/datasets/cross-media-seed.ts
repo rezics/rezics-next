@@ -12,6 +12,10 @@ import {
   type ShowcasePersonalListUpload,
 } from '../../services/importer/src/showcase-personal-list.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
+import {
+  installReviewedCatalogueComposition,
+  releasedReviewedVocabulary,
+} from '../../services/importer/src/showcase-cross-media.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { formatSeedError } from '../../services/importer/src/seed-cli.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
@@ -165,14 +169,18 @@ export async function runDevelopmentSeed(
     authOrigin: auth,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
-  const reviewedCatalogue = await (options.seedCatalogue ?? seedReviewedCatalogue)({
-    path: state,
-    port: createImportTransport({
-      origin: api,
-      tokenProvider,
-      onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
-    }),
+  const catalogueTransport = createImportTransport({
+    origin: api,
+    tokenProvider,
+    onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
   });
+  const reviewedCatalogue = await (options.seedCatalogue
+    ? options.seedCatalogue({ path: state, port: catalogueTransport })
+    : installReviewedCatalogueComposition({
+        path: state,
+        transport: catalogueTransport,
+        vocabulary: releasedReviewedVocabulary(),
+      }).seed());
   const args = [
     '--bangumi',
     dumps.bangumi,

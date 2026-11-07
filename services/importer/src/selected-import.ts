@@ -1,5 +1,6 @@
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import { planCrossMediaSeed, seedCrossMedia } from './cross-media-seed.ts';
+import { releasedReviewedVocabulary, type ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 import { importBangumiEpisodeFidelity as runBangumiEpisodeFidelity } from './bangumi-episode-fidelity.ts';
 import { importShowcaseBooks as runShowcaseBooks } from './showcase-books.ts';
 import { importShowcaseTags as runShowcaseTags } from './showcase-tags.ts';
@@ -55,12 +56,18 @@ export async function importShowcaseBooks(input: Seeded<Parameters<typeof runSho
 }
 
 export async function seedShowcaseVndbReleases(
-  input: Omit<Parameters<typeof runShowcaseVndbReleases>[0], 'seed' | 'plan'> & {
+  input: Omit<Parameters<typeof runShowcaseVndbReleases>[0], 'seed' | 'plan' | 'vocabulary'> & {
     tables: CrossMediaTables;
     plan?: CrossMediaPlan;
     bindings?: SourceVocabularyBindings;
+    vocabulary?: ReviewedVocabularyPort;
   },
 ): Promise<ShowcaseVndbReleaseResult> {
   const plan = input.plan ?? (await planCrossMediaSeed(input.tables));
-  return runShowcaseVndbReleases({ ...input, plan, seed: seedCrossMedia });
+  return runShowcaseVndbReleases({
+    ...input,
+    plan,
+    seed: seedCrossMedia,
+    vocabulary: input.vocabulary ?? releasedReviewedVocabulary(),
+  });
 }

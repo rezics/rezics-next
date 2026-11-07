@@ -4,6 +4,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { createReviewedCatalogueLookup, inspectReviewedBangumiBinding } from './reviewed-catalogue.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import { reviewedCatalogueSource } from './reviewed-catalogue.ts';
+import { releasedReviewedVocabulary } from './reviewed-vocabulary-port.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
 import { ImportTransportError, type ReviewedCandidatePage } from './import-client.ts';
@@ -99,7 +100,10 @@ export function createShowcaseBangumiGenreLookup(
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
   port: ReviewedCataloguePort,
 ) {
-  const reviewedLookup = createReviewedCatalogueLookup(bindings, port, { preserveKeywordOnUnavailable: true });
+  const reviewedLookup = createReviewedCatalogueLookup(bindings, port, {
+    preserveKeywordOnUnavailable: true,
+    vocabulary: releasedReviewedVocabulary(),
+  });
   const diagnostics = new Map<string, BangumiGenreDiagnostic>();
   const reference = reviewedReferenceKey(bangumiPublicTagScheme, HAREM_EDITOR_TAG);
   const lookup: ImportIdentifierLookup = {
@@ -146,7 +150,12 @@ export async function prepareShowcaseBangumiGenres(input: {
       diagnostics: [...diagnostics.values()],
     };
 
-  const current = await inspectReviewedBangumiBinding(input.bindings, input.port);
+  const current = await inspectReviewedBangumiBinding(
+    input.bindings,
+    input.port,
+    undefined,
+    releasedReviewedVocabulary(),
+  );
   if (current.state !== 'bound') {
     const code = current.state === 'unavailable' ? 'reviewed-binding-unavailable' : 'reviewed-binding-withdrawn';
     for (const row of tagged) diagnostics.set(row.key, { sourceKey: row.key, code });
