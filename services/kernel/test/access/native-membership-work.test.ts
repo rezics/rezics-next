@@ -517,3 +517,24 @@ test('existing deployment seal ring is reused with bounded rotation and canonica
   ])
     expect(() => readMembershipWorkConfig({ ...env, KERNEL_SESSION_KEYS: value })).toThrow('KERNEL_SESSION_KEYS');
 });
+
+test('loopback walk stacks may serve JWKS from native Auth on a distinct port', () => {
+  expect(
+    readMembershipWorkConfig({
+      ...env,
+      AUTH_ISSUER: 'http://127.0.0.1:20021',
+      AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
+    }).auth,
+  ).toEqual({
+    issuer: 'http://127.0.0.1:20021',
+    audience: env.AUTH_AUDIENCE,
+    jwksUrl: 'http://127.0.0.1:20022/.well-known/jwks.json',
+  });
+  expect(() =>
+    readMembershipWorkConfig({
+      ...env,
+      AUTH_ISSUER: 'http://127.0.0.1:20021',
+      AUTH_JWKS_URL: 'http://127.0.0.1:20022/jwks',
+    }),
+  ).toThrow('AUTH_JWKS_URL');
+});
