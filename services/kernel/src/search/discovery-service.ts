@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';

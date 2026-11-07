@@ -1,18 +1,12 @@
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { routeOf } from '../route/route.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { ownQueryInput } from './query-input.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, type OpenSearch, SearchUnavailableError } from './opensearch.ts';
-import {
-  EVIDENCE_HIT_TEMPLATE,
-  EVIDENCE_SEARCH_TEMPLATE,
-  HIT_TEMPLATE,
-  type HitResult,
-  type SearchPlan,
-  type SearchResult,
-} from './query.ts';
+import { EVIDENCE_HIT_TEMPLATE, EVIDENCE_SEARCH_TEMPLATE, HIT_TEMPLATE } from './query-templates.ts';
+import { type HitResult, type SearchPlan, type SearchResult } from './query.ts';
 import { MATCH_EVIDENCE_LIMITS, readEngineMatchEvidence } from './match-evidence.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 

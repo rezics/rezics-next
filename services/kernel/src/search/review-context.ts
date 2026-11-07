@@ -9,7 +9,7 @@ import {
 } from '../content/reads.ts';
 import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
 import type { ReadContext, ReviewVoteCitation } from '../content/model.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   readSubjectSummaryObservation,

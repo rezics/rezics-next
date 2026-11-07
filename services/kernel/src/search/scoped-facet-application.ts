@@ -7,7 +7,7 @@ import {
   type FacetAccessClosedStatus,
   type FacetAccessObservationPort,
 } from './facet-access-port.ts';
-import { ScopeWork, zeroScopeWork } from './scope-execution.ts';
+import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { ScopeEvaluationProgress, PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
 import type { PreparedRealmScope } from './realm-scope.ts';

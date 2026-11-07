@@ -17,7 +17,7 @@ import { admitCollectionMemberQuery } from '../library/owner-filter.ts';
 import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
 import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
 import type { NativeOrdinalKey } from '../library/contract/index.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
@@ -41,7 +41,8 @@ import { createOrderedScopePreparation, readOrderedScopeRows } from './scope-pre
 import { createScopeOrderedNative } from './scope-ordered-native.ts';
 import { checkHits } from './disclosure/check.ts';
 import type { PublicFilterSourceDefinition } from '../semantic/public-filter-source-binding.ts';
-import { ScopeWork, scopeAllowance, zeroScopeWork, evaluateScopeSubjects } from './scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-work.ts';
+import { evaluateScopeSubjects } from './scope-execution.ts';
 import { compileCurrentOwnerFilter, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import { discoveryIndexUuid, subjectGenerations, subjectIndexName } from './indices.ts';
 import { searchSubjectHits } from './query.ts';

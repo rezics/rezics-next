@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import type { OpenSearch } from './opensearch.ts';
 import { createOrderedScopePreparation } from './scope-preparation-ordered.ts';
-import { createFacetPopulationSource } from '../semantic/index.ts';
-import { ProblemError } from '../http/problem.ts';
+import { createFacetPopulationSource } from '../semantic/copy-work-application.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { PublicFilterSourceFactory } from '../semantic/public-filter-source-contract.ts';
 import { createPublicIdentitySourceCapture } from '../semantic/identity-scoped-public-source.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
@@ -10,7 +10,7 @@ import { createNativeLibrarySourceCustody } from '../library/native-source-custo
 import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityScopeRegistration, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { createScopePreparationStore, type ScopePreparationRecord } from './scope-preparation-store.ts';
-import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-work.ts';
 import { sameScopeObservation } from './service-scope-order.ts';
 import {
   advanceConceptBrowse,

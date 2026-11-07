@@ -2,7 +2,7 @@ import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimens
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import { routeOf } from '../route/route.ts';
 import { MAX_NAME_SORT_CHARACTERS } from './document.ts';
-import { scopeWorkAxes } from './scope-execution.ts';
+import { scopeWorkAxes } from './scope-work.ts';
 import type { SearchHit } from './query.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { PublicFilterConsumerJob, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';

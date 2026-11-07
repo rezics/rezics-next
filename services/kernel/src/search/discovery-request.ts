@@ -6,7 +6,7 @@ import {
   type DiscoveryFilterDocument,
   type FilterRelease,
 } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { CollectionDirectorySelection, DiscoveryOwnerRegistry, DiscoveryRegistry } from './discovery.ts';

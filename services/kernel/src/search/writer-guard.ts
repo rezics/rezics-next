@@ -1,10 +1,11 @@
+import { SEARCH_IDENTITY_WRITER_CHUNK } from './writer-limits.ts';
 import type { Pool } from 'pg';
 import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
 } from '../access/account-discovery-source.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
-import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
+import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './publication-proof-copy.ts';
 import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicFilterConsumerContext,
@@ -15,11 +16,8 @@ import { currentCommand, noEffect, runCommand, type CommandTransaction } from '.
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
-import {
-  identityEpochStore,
-  IdentityEpochStoreError,
-  recordIdentityEpochNativeCommit,
-} from '../semantic/identity-adapters/index.ts';
+import { identityEpochStore, recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/index.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import gateSql from './writer-guard-gate.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
@@ -649,7 +647,7 @@ export function createDiscoveryRepairWriter(options: {
   };
 }
 
-export const SEARCH_IDENTITY_WRITER_CHUNK = 100;
+export { SEARCH_IDENTITY_WRITER_CHUNK } from './writer-limits.ts';
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 
 function keys(partition: number, ids: readonly string[]): string[] {

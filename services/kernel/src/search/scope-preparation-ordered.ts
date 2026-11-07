@@ -3,14 +3,14 @@ import type { PublicFilterSourceFactory } from '../semantic/public-filter-source
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import type { PublicFilterSourceDefinition } from '../semantic/public-filter-source-binding.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
 import { createScopeOrderedNative } from './scope-ordered-native.ts';
 import { scopeOrderedNameKey, validateScopeOrderedHit, type ScopeOrderedPreparation } from './scope-ordered.ts';
 import type { ScopePreparationRecord, ScopeCaptureFrontier } from './scope-preparation-store.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { ScopeWork, zeroScopeWork } from './scope-execution.ts';
+import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import stateSql from './scope-ordered-state.sql';
 import saveSql from './scope-ordered-save.sql';
 import pageSql from './scope-ordered-page.sql';

@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { isCalendarDate } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 export type SuggestionContextLabel = Readonly<{ value: string; language: string }>;
 

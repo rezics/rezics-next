@@ -9,7 +9,7 @@ import {
   createSearchIdentityEpochParticipant,
   searchIdentityReceivingComposition,
 } from '../search/identity-epoch-participant.ts';
-import { readSearchConfig } from '../search/work.ts';
+import { readSearchConfig } from '../search/config.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
 import type { IdentityEpochParticipantPorts } from '../semantic/contract/identity-epoch-ports.ts';
 import {
