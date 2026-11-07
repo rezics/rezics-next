@@ -28,7 +28,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } f
 import { parentCreationAuthorization } from '../../access/index.ts';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { authoritativeTimeValue } from '../../command/command.ts';
-import { activeRelease } from '../definitions.ts';
+import { activeRelease } from '../definition-release-read.ts';
 import type { Access } from '../../request/access.ts';
 import readCreatedContext from './contexts-read-creation.sql';
 

@@ -25,12 +25,12 @@ import { accessCheck, type Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { globalReadEligibility, subjectReadEligibility } from './eligibility.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { slotView } from './slots.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { readCandidateDisclosure } from './disclosure.ts';
 import { candidateSources, fencedIds } from './fences.ts';
-import { loadRelated } from './subject.ts';
+import { loadRelated } from './related-subject-read.ts';
 import { withReadTransaction } from './read.ts';
 import locateCandidate from './moderation-read-live-candidate.sql';
 import {

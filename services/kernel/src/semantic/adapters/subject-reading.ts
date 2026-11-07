@@ -4,8 +4,8 @@ import type { ContentCoverRef, ContentQueryClient } from '../contract/domain-por
 import type { SubjectReadingNativePort, SubjectReadingFence, SubjectReadingFenceTuple } from '../contract/index.ts';
 import type { ContextRecord } from '../context.ts';
 import { contextSnapshot } from '../context.ts';
-import { activeRelease, readRelease } from '../definitions.ts';
-import { layeredRelease } from '../extensions.ts';
+import { activeRelease, readRelease } from '../definition-release-read.ts';
+import { layeredRelease } from '../definition-release-read.ts';
 import type { Access } from '../../request/access.ts';
 import type { Actor } from '../../request/access.ts';
 import { readCurrentContentDocument, type CurrentContentDocumentRuntime } from '../../content/adapters/index.ts';

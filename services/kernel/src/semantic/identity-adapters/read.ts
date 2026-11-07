@@ -4,6 +4,7 @@ export {
   readIdentityBasis,
   readIdentityHome,
   readIdentityMappings,
+  readIdentityMapping,
   readIdentityRatingEvidenceInTransaction,
   readIdentityRatingReview,
   readIdentityRepairEvidenceInTransaction,

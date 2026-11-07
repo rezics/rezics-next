@@ -20,7 +20,7 @@ import type {
 } from './copy-work-disclosure-contract.ts';
 import readCopyWorkLocators from './copy-work-disclosure.sql';
 import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate } from './current-relations.ts';
-import { activeRelease } from './definitions.ts';
+import { activeRelease } from './definition-release-read.ts';
 import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts';
 import { candidateSources, fenceKey, sourceTuple } from './fences.ts';
 import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';

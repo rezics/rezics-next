@@ -1,3 +1,4 @@
+import { readIdentityMapping } from './identity-adapters/read.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { releaseDigest } from '@rezics/definitions';
@@ -8,7 +9,8 @@ import { readPartition } from '../partition/partition.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
-import { identityEpochStore, identityJobPartition } from './identity-adapters/index.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
 import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
 import type {
   IdentitySourceSupportReaderFactory,
@@ -331,7 +333,7 @@ export const createIdentitySourceSupportReader: IdentitySourceSupportReaderFacto
           const original = next.pending;
           charge(1);
           const mapping = await withIdentitySourceSupportJob(request.job, () =>
-            identityEpochStore().readMapping(config.pool, original),
+            readIdentityMapping(config.pool, original),
           );
           if (mapping.state === 'pending') return { status: 'unready', cost };
           if (mapping.state !== 'mapped') return { status: 'unavailable', cost };

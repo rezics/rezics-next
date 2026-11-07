@@ -10,7 +10,7 @@ import {
 } from './subject-source-key-pages.ts';
 import type { Release } from '@rezics/definitions';
 import { relationSource } from './search-relations.ts';
-import { readRelease } from './definitions.ts';
+import { readRelease } from './definition-release-read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -32,7 +32,7 @@ import { readPartition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
-import { identityEpochStore } from './identity-adapters/index.ts';
+import { readIdentityMapping } from './identity-adapters/read.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
 import type {
   PublicFilterCost,
@@ -436,7 +436,7 @@ export async function readIdentitySourceProjection(
     return await withPublicStatementReader(() =>
       withIdentitySourceSupportJob(request.job, async () => {
         charge('dependencyPoints');
-        const mapping = await identityEpochStore().readMapping(config.pool, request.original);
+        const mapping = await readIdentityMapping(config.pool, request.original);
         if (mapping.state === 'pending') return { status: 'unready', cost };
         if (mapping.state !== 'mapped') return { status: 'unavailable', cost };
         if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
@@ -455,7 +455,7 @@ export async function readIdentitySourceProjection(
         if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
           return { status: 'changed', cost };
         charge('dependencyPoints');
-        const current = await identityEpochStore().readMapping(config.pool, request.original);
+        const current = await readIdentityMapping(config.pool, request.original);
         if (current.state !== 'mapped' || current.epoch !== request.job.epoch || current.terminal !== request.terminal)
           return { status: 'changed', cost };
         requireAccessDeadline(request.context.deadline);

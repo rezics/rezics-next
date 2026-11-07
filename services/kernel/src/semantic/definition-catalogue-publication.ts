@@ -1,6 +1,6 @@
 import { catalogueCheckpoint } from './definition-catalogue-checkpoint.ts';
 import type { Pool } from 'pg';
-import { stageTypeDirectory, typeDirectoryReady } from './definition-type-directory.ts';
+import { stageTypeDirectory, typeDirectoryReady } from './definition-type-directory-stage.ts';
 import {
   cataloguePublisherInvocation,
   cataloguePublisherQuery,
@@ -39,14 +39,10 @@ import {
   type TypeDefinition,
 } from '@rezics/definitions';
 import { runCommand, type CommandTransaction, type CommandEvent } from '../command/command.ts';
-import {
-  commandOptions,
-  DefinitionNotFoundError,
-  DefinitionInputError,
-  GLOBAL_CONTEXT,
-  readRelease,
-  type WriteOptions,
-} from './definitions.ts';
+import { commandOptions, type WriteOptions } from './definitions.ts';
+import { DefinitionNotFoundError, DefinitionInputError } from './contract/definition-values.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import { readRelease } from './definition-release-read.ts';
 import {
   CATALOGUE_BUILD_REQUESTED,
   CATALOGUE_PROGRESS,

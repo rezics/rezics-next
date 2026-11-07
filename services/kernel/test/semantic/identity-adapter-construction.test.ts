@@ -1,3 +1,4 @@
+import { createIdentityNativeCommitRecorder } from '../../src/semantic/identity-adapters/native-commit.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
@@ -479,4 +480,40 @@ test('two constructed applications retain independent capabilities across store,
   } finally {
     installIdentityAdapterRuntime(createNativeIdentityCapabilities());
   }
+});
+
+test('native commit leaves retain one transaction callback and purpose across capability sets', async () => {
+  const callbacks: Array<(transactionId: string) => void | Promise<void>> = [];
+  const writes: unknown[][] = [];
+  const transaction = {
+    async query(_sql: string, params: unknown[]) {
+      writes.push(params);
+      return { rows: [], rowCount: 1 };
+    },
+  } as unknown as CommandTransaction;
+  const base = capabilities();
+  const native = {
+    ...base,
+    command: {
+      ...base.command,
+      registerCommandCallback(_tx: CommandTransaction, callback: (transactionId: string) => void | Promise<void>) {
+        callbacks.push(callback);
+      },
+    },
+  };
+  const first = createIdentityNativeCommitRecorder(native);
+  const second = createIdentityNativeCommitRecorder({ ...native });
+  expect(callbacks).toHaveLength(0);
+  first(transaction, 'admission');
+  second(transaction, 'admission');
+  expect(callbacks).toHaveLength(1);
+  expect(writes).toEqual([]);
+  expect(() => second(transaction, 'different-purpose')).toThrow('Conflicting identity native commit purposes');
+  await callbacks[0]!('tx-committed');
+  expect(writes).toEqual([[0, 'tx-committed', 'admission']]);
+
+  const unavailable = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as CommandTransaction;
+  first(unavailable, 'admission');
+  expect(callbacks).toHaveLength(2);
+  await expect(callbacks[1]!('tx-unavailable')).rejects.toBeInstanceOf(ContractStoreError);
 });

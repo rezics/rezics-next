@@ -2,17 +2,17 @@ import { guardReviewedPersonIdentity, type ReviewedPersonExpectation } from './r
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { retainSubjectPageContinuation } from './subject-page-publication-store.ts';
 import { invalidateSubjectPage } from './subject-page-publication-native.ts';
-import { identityEpochStore, identityJobPartition } from './identity-adapters/index.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
 import selectJobById from './identity-epoch-store-select-job-by-id.sql';
 import type { Pool } from 'pg';
 import { noEffect, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
+import { EditorialConflictError, SubjectNotFoundError } from './contract/subject-errors.ts';
 import { SUBJECT_MERGED } from './events.ts';
 import type { Release } from '@rezics/definitions';
-import readRedirect from './read-redirect.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import updateSubjectRelease from './update-subject-release.sql';
 import insertRedirect from './merges-insert-redirect.sql';
@@ -22,19 +22,9 @@ import readVisible from './merges-read-visible.sql';
 import { AccountAgentVerificationError, accountAgentsForSubjects } from './agents.ts';
 import markProjectionPending from './merge-mark-projection-pending.sql';
 
-export class SubjectRedirectError extends Error {
-  constructor(
-    public readonly from: string,
-    public readonly to: string,
-  ) {
-    super('Subject has been redirected');
-  }
-}
-
-export async function redirectOf(client: CommandTransaction, id: string): Promise<string | null> {
-  const row = await readRedirect.run(client, { route: routeOf(id)!, subject_id: id });
-  return row?.target ?? null;
-}
+export { SubjectRedirectError } from './contract/subject-errors.ts';
+export { redirectOf } from './subject-redirect.ts';
+import { redirectOf } from './subject-redirect.ts';
 
 async function mergeSubject(client: CommandTransaction, id: string) {
   const row = await readVisible.run(client, { route: routeOf(id)!, subject_id: id });

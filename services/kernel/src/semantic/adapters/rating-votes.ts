@@ -3,7 +3,7 @@ import { readableSubjects, resolveSubject } from '../../library/subject-anchor.t
 import { withRequestDeadline } from '../../request/deadline.ts';
 import { globalReadEligibility } from '../eligibility.ts';
 import { withReadTransaction } from '../read.ts';
-import { identityEpochStore } from '../identity-adapters/index.ts';
+import { readIdentityMappings } from '../identity-adapters/read.ts';
 import { readIdentityRatingReview } from '../identity-adapters/identity-epoch-read.ts';
 import { createIdentityRatingCommitParticipant } from '../identity-rating-commit-participant.ts';
 import { admitIdentityRatingEffect, readIdentityRatingEpochs } from '../identity-rating-admission.ts';
@@ -16,8 +16,7 @@ export function createNativeRatingVoteSemantic(): RatingVoteSemantic {
   return Object.freeze({
     snapshot: withReadTransaction,
     definitionsEligibility: () => globalReadEligibility('definitions:read'),
-    mappings: (pool, ids, deadline) =>
-      withRequestDeadline(deadline, () => identityEpochStore().readMappings(pool, ids)),
+    mappings: (pool, ids, deadline) => withRequestDeadline(deadline, () => readIdentityMappings(pool, ids)),
     readable: (context, actor, ids, deadline) =>
       withRequestDeadline(deadline, () => readableSubjects(context, actor, ids)),
     resolve: (context, actor, id, deadline) =>

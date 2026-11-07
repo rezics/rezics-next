@@ -19,8 +19,9 @@ import {
 } from '@rezics/definitions';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { activeExtension, readPublishedExtension } from './extensions.ts';
+import { activeRelease, readRelease } from './definition-release-read.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import { activeExtension, readPublishedExtension } from './definition-release-read.ts';
 
 export type ImportedPreview = {
   kind: 'release' | 'sources' | 'extension' | 'invalid';

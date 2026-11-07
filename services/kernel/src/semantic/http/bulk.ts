@@ -32,8 +32,9 @@ import { readPartition } from '../../partition/partition.ts';
 import { accessCommandAuthorization, AuthenticationError, type Access } from '../../request/access.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { batchCommand, batchRoute, guardBatchAuthorization } from '../bulk.ts';
-import { EditorialConflictError, SubjectNotFoundError } from '../candidates.ts';
-import { activeRelease, GLOBAL_CONTEXT } from '../definitions.ts';
+import { EditorialConflictError, SubjectNotFoundError } from '../contract/subject-errors.ts';
+import { activeRelease } from '../definition-release-read.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 import {
   enforceSourceFence,
   FencePending,
@@ -45,7 +46,7 @@ import {
   type SourceFencePlan,
 } from '../fences.ts';
 import { SubjectInputError } from '../item.ts';
-import { SubjectRedirectError } from '../merges.ts';
+import { SubjectRedirectError } from '../contract/subject-errors.ts';
 import { SubjectAccessDeniedError, type SubjectComponent } from '../subject.ts';
 import { globalContextAnchor } from '../context.ts';
 import type { subjectRoutes } from './subjects.ts';

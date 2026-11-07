@@ -4,10 +4,10 @@ import type { AuthoritativeTime } from '../../command/command.ts';
 import { accessCheck, type Access, type AccessContext, type Actor } from '../../request/access.ts';
 import { routeOf } from '../../route/route.ts';
 import type { IdentityMapping } from '../contract/index.ts';
-import { identityEpochStore } from '../identity-adapters/index.ts';
+import { readIdentityMappings } from '../identity-adapters/read.ts';
 import { subjectReadEligibility } from '../eligibility.ts';
 import { readSubjectReference } from '../references.ts';
-import { SubjectRedirectError } from '../merges.ts';
+import { SubjectRedirectError } from '../contract/subject-errors.ts';
 import { readSubjectSummaryObservation, type SummaryReaderDependencies } from '../summaries.ts';
 
 export type LibrarySubjectIdentityContext = Readonly<{
@@ -26,7 +26,7 @@ export function createLibrarySubjectIdentityAdapter(): SubjectIdentityCapability
   return {
     redirected: (from, to) => new SubjectRedirectError(from, to),
     validId: (id) => routeOf(id) !== null,
-    readMappings: (context, ids) => identityEpochStore().readMappings(context.pool, ids),
+    readMappings: (context, ids) => readIdentityMappings(context.pool, ids),
     async prepareReference(context, id) {
       const route = routeOf(id)!;
       const check = await accessCheck(
@@ -60,5 +60,5 @@ export function observeLibrarySubjectSummaries(deps: SummaryReaderDependencies, 
 
 /** Original inputs retain the exact producer mapping including epoch, pending job and unavailable reason. */
 export function readLibraryIdentityMappings(pool: Pool, ids: readonly string[]) {
-  return identityEpochStore().readMappings(pool, ids);
+  return readIdentityMappings(pool, ids);
 }

@@ -11,7 +11,7 @@ import type { Access, AccessClient, Actor, Resource } from '../request/access.ts
 import { partitionOf, routeOf } from '../route/route.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
 import { readItemIdentityVersion } from './item-identity.ts';
-import { SubjectRedirectError } from './merges.ts';
+import { SubjectRedirectError } from './contract/subject-errors.ts';
 import { effectiveGlobalSlotFacts } from './slots.ts';
 import readSources from './concept-scheme-reference.sql';
 import readVisibility from './read-visibility.sql';

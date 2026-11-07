@@ -1,3 +1,4 @@
+import { createIdentityNativeCommitRecorder } from './native-commit.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { statementBytes } from '../../database/statement-bytes.ts';
 import { bindSemanticProducerRoles } from '../erasure-producer.ts';
@@ -19,7 +20,7 @@ import type { CommandTransaction } from '../../command/command.ts';
 import { partitionOf, routeOf, newId } from '../../route/route.ts';
 import { serializeIdentityValue as json } from '../identity-core/index.ts';
 import { IdentityEpochStoreError } from '../contract/identity-errors.ts';
-import { GLOBAL_CONTEXT } from '../definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
 import type { NativeIdentityCapabilities } from '../identity-adapter-port.ts';
 import {
@@ -32,7 +33,6 @@ import {
   type IdentityJobRef,
   type IdentityReceipt,
 } from './identity-epoch-contract.ts';
-import storeInsertNativeCommit from '../identity-epoch-store-insert-native-commit.sql';
 import selectClaim from '../identity-epoch-binding-select.sql';
 import insertClaim from '../identity-epoch-binding-insert.sql';
 import acceptClaim from '../identity-epoch-binding-accept.sql';
@@ -110,7 +110,6 @@ const accountSources = new WeakMap<IdentityReceiptBinding, AccountIdentitySource
 const transactionSources = new WeakMap<CommandTransaction, AccountIdentitySource>();
 const rowSources = new WeakMap<object, AccountIdentitySource>();
 const verified = new WeakMap<IdentityReceiptBinding, IdentityBindingData>();
-const nativeCommitPurposes = new WeakMap<CommandTransaction, string>();
 
 export function identityBindingData(proof: IdentityReceiptBinding): IdentityBindingData {
   const value = verified.get(proof);
@@ -262,23 +261,7 @@ export function createIdentityBindingOperations(capabilities: NativeIdentityCapa
       throw new TypeError('Identity admission requires current native Global subject:merge authorization');
   }
 
-  function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose: string): void {
-    const command = cmd().currentCommand(tx);
-    const prior = nativeCommitPurposes.get(tx);
-    if (prior) {
-      if (prior !== purpose) throw new TypeError('Conflicting identity native commit purposes');
-      return;
-    }
-    nativeCommitPurposes.set(tx, purpose);
-    cmd().registerCommandCallback(tx, async (transactionId) => {
-      const result = await tx.query(storeInsertNativeCommit.sql, [command.partition, transactionId, purpose]);
-      if (result.rowCount !== 1)
-        throw new IdentityEpochStoreError(
-          'identity_epoch_unavailable',
-          'Identity source, native group generation or bootstrap closure is not current',
-        );
-    });
-  }
+  const recordIdentityEpochNativeCommit = createIdentityNativeCommitRecorder(capabilities);
   function identityBindingData(proof: IdentityReceiptBinding): IdentityBindingData {
     const value = verified.get(proof);
     if (!value) throw new TypeError('Identity binding requires released committed native custody');
@@ -934,9 +917,7 @@ export async function authorizeIdentityAdmission(
 ) {
   return defaultBinding().authorizeIdentityAdmission(tx, receipt, binding, intent);
 }
-export function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose: string): void {
-  defaultBinding().recordIdentityEpochNativeCommit(tx, purpose);
-}
+export { recordIdentityEpochNativeCommit } from './native-commit.ts';
 export function assertIdentityBindingSource(
   binding: IdentityReceiptBinding,
   receipt: IdentityAdmissionInput['receipt'],

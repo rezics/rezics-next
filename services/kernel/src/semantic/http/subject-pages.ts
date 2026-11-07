@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import type { subjectRoutes } from './subjects.ts';
 import { PageCursorError } from '../page.ts';
-import { GLOBAL_CONTEXT } from '../definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 import { globalReadEligibility } from '../eligibility.ts';
 import { withReadTransaction } from '../read.ts';
 import type { Pool } from 'pg';

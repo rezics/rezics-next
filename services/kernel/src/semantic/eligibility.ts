@@ -8,7 +8,7 @@ import type { PoolClient, QueryResultRow } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import subjectPublicEvidence from './scope-leaf-evidence-eligibility.sql';
 
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? 'null');

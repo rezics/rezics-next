@@ -44,13 +44,10 @@ import {
   lookupIdentityBinding,
   readAccountIdentityUndo,
 } from './identity-adapters/identity-epoch-binding.ts';
-import {
-  identityEpochStore,
-  identityJobPartition,
-  identityReceiptKey,
-  IdentityEpochStoreError,
-  serializeIdentityValue,
-} from './identity-adapters/index.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
+import { identityJobPartition, identityReceiptKey } from './identity-adapters/identity-epoch-contract.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { serializeIdentityValue } from './identity-core/index.ts';
 import { SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
 import claim from './identity-source-consumer-custody-claim.sql';
 import job from './identity-source-consumer-custody-job.sql';

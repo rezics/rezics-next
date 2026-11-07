@@ -5,7 +5,8 @@ import { currentCommand, runCommand, type CommandAuthorization, type CommandTran
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import { readRelease } from './definition-release-read.ts';
 import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from './events.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';

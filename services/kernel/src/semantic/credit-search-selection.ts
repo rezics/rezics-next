@@ -2,7 +2,7 @@ import { createReleasedRelationDirectionResolver, releaseDigest, type Release } 
 import type { Pool, PoolClient } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CreditSearchQualifier } from '../search/credit-search.ts';
-import { readRelease } from './definitions.ts';
+import { readRelease } from './definition-release-read.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { workCreditProperties } from './list-presentation-work-context.ts';
 import { semanticCopyWorkApplication } from './copy-work-application.ts';

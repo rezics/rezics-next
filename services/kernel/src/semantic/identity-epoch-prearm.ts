@@ -8,12 +8,10 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withReadTransaction } from './read.ts';
-import {
-  IdentityEpochStoreError,
-  identityJobPartition,
-  recordIdentityEpochNativeCommit,
-  serializeIdentityValue as json,
-} from './identity-adapters/index.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
+import { serializeIdentityValue as json } from './identity-core/index.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from './erasure-producer.ts';
 import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
 import { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';

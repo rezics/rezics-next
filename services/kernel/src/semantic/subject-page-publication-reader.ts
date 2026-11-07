@@ -1,7 +1,7 @@
 import type { CommandTransaction } from '../command/command.ts';
 import type { ContentImportedFieldGroup as ImportedFieldGroup } from './contract/domain-ports.ts';
 import { readFences } from '../content/source-fences.ts';
-import { readRelease } from './definitions.ts';
+import { readRelease } from './definition-release-read.ts';
 import { subjectPageFacts, subjectPageSlot } from './subject-page-publication-native.ts';
 import {
   readSubjectPageOwnerTime,

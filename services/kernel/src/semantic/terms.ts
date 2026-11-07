@@ -4,7 +4,7 @@ import { runCommand, noEffect, type CommandAuthorization, type CommandEvent } fr
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { initializeRevisionAuthorship } from './authorship.ts';
-import { SubjectNotFoundError } from './candidates.ts';
+import { SubjectNotFoundError } from './contract/subject-errors.ts';
 import { SubjectAccessDeniedError, type SubjectComponent } from './subject.ts';
 import { fencedIds, sourceTuple, fenceKey } from './fences.ts';
 import { SUBJECT_REVISED } from './events.ts';

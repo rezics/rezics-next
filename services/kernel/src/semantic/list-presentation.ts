@@ -8,7 +8,7 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type AccessClient } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -28,7 +28,7 @@ import {
   finishListWorkContext,
   type WorkTarget,
 } from './list-presentation-work-context.ts';
-import { activeRelease } from './definitions.ts';
+import { activeRelease } from './definition-release-read.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
