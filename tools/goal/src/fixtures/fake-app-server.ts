@@ -7,6 +7,7 @@ let nextThread = 0;
 let nextTurn = 0;
 const goals = new Map<string, any>();
 const turns = new Map<string, any>();
+let autoTurnDuringGoalPauseSent = false;
 const delayed = new Map<number, any>();
 const send = (message: unknown) => process.stdout.write(`${JSON.stringify(message)}\n`);
 
@@ -56,6 +57,17 @@ function respond(message: any): void {
       result = { goal };
       send({ method: 'thread/goal/updated', params: { threadId: p.threadId, goal } });
       if (process.env.FAKE_RPC_AUTO_TURN_ON_GOAL_ACTIVATION === '1' && p.status === 'active' && previouslyPaused) {
+        const turn = { id: `turn-${++nextTurn}`, status: 'inProgress' };
+        turns.set(p.threadId, turn);
+        send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+      }
+      if (
+        process.env.FAKE_RPC_AUTO_TURN_DURING_GOAL_PAUSE === '1' &&
+        p.status === 'paused' &&
+        !autoTurnDuringGoalPauseSent
+      ) {
+        // Deliver the provider continuation while the pause request is still in flight.
+        autoTurnDuringGoalPauseSent = true;
         const turn = { id: `turn-${++nextTurn}`, status: 'inProgress' };
         turns.set(p.threadId, turn);
         send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
