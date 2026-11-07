@@ -1,4 +1,10 @@
 import { expect, mock, test } from 'bun:test';
+import {
+  contributionAttribution,
+  contributionDeleted,
+  contributionFromPublicIdentity,
+  ContributionAttributionSchema,
+} from '../../src/access/contribution-attribution.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 
 const original = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -51,6 +57,20 @@ mock.module('../../src/access/account-data.ts', () => ({
     new Map(ids.map((id) => [id, attributions.has(id) ? attributions.get(id)! : null])),
 }));
 mock.module('../../src/access/public-identity.ts', () => ({
+  contributionAttribution,
+  contributionDeleted,
+  contributionFromPublicIdentity,
+  ContributionAttributionSchema,
+  agentContributionAttribution: async () => null,
+  readPublicAccountByHandle: async () => [],
+  readPublicAccountByAgent: async () => [],
+  readPublicAccount: async () => ({
+    accountId: original,
+    kind: 'actor',
+    state: 'active',
+    handle: 'owner',
+    displayName: 'Owner',
+  }),
   readContributionAttributions: async (_client: unknown, ids: readonly string[]) =>
     new Map(ids.map((id) => [id, attributions.has(id) ? attributions.get(id)! : null])),
 }));

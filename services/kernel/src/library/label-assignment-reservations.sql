@@ -1,4 +1,4 @@
-WITH input AS MATERIALIZED (
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id,
          :subject_id::uuid AS subject_id, :label_id::uuid AS label_id
 ), reserved AS MATERIALIZED (
@@ -24,7 +24,6 @@ WITH input AS MATERIALIZED (
     WHERE a.route = input.route AND a.account_id = input.account_id AND a.subject_id = input.subject_id
       AND a.label_id = input.label_id
     ORDER BY a.route, a.account_id, a.subject_id, a.label_id
-    LIMIT 1
   ) AS a
 )
 SELECT * FROM reserved

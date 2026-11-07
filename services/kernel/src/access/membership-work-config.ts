@@ -1,12 +1,19 @@
+import type { FetchImplementation } from 'jose';
 import { ConfigError } from '../commerce/config.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { AuthenticationConfig } from './authenticate.ts';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 type Environment = Readonly<Record<string, string | undefined>>;
+/** JWKS identity and optional public fetch. Kept here so Auth setup can import this leaf without SQL. */
+export type MembershipAuthConfig = {
+  issuer: string;
+  audience: string;
+  jwksUrl: string;
+  fetch?: FetchImplementation;
+};
 export const MEMBERSHIP_WORK_DEADLINE_MS = 30_000;
-export type MembershipWorkConfig = { routeKey: Buffer; referenceKeys: KeyRing; auth: AuthenticationConfig };
+export type MembershipWorkConfig = { routeKey: Buffer; referenceKeys: KeyRing; auth: MembershipAuthConfig };
 
 export function readMembershipRouteKey(env: Environment): Buffer {
   const encoded = env.KERNEL_ROUTE_KEY ?? '';
@@ -116,8 +123,8 @@ function loopbackHttpOrigin(value: string, variable: string): string {
   return parsed.origin;
 }
 
-function requestedHref(url: string | URL): string {
-  return typeof url === 'string' ? url : url.href;
+function requestedHref(url: string | URL | Request): string {
+  return typeof url === 'string' ? url : url instanceof Request ? url.url : url.href;
 }
 
 /**
@@ -125,7 +132,7 @@ function requestedHref(url: string | URL): string {
  * loopback transport for that exact public document; other URLs are not forwarded.
  * A different loopback port is not an allowed JWKS identity.
  */
-export function localJwksTransport(env: Environment, auth: AuthenticationConfig): AuthenticationConfig {
+export function localJwksTransport(env: Environment, auth: MembershipAuthConfig): MembershipAuthConfig {
   const native = env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
   if (native === undefined || native === '') return auth;
   let issuer: URL;

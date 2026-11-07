@@ -1,5 +1,7 @@
--- Correlated LIMIT-1 primary-key points retain the unique index under generic prepared plans.
-WITH input AS MATERIALIZED (
+-- Unique PK as a parameterized nested-loop inner so generic prepared plans
+-- use entry_pkey. LATERAL LIMIT 1 Seq Scanned because LIMIT 1 lets Seq Scan
+-- stop early. ORDER BY names the primary key with no LIMIT.
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id
 )
 SELECT entry."subjectId", entry.state, entry.revision, entry."createdAt", entry."updatedAt",
@@ -15,5 +17,4 @@ CROSS JOIN LATERAL (
   WHERE tile.route = input.route AND tile.account_id = input.account_id
     AND tile.subject_id = requested.subject_id
   ORDER BY tile.route, tile.account_id, tile.subject_id
-  LIMIT 1
 ) AS entry;

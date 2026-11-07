@@ -1,4 +1,8 @@
-WITH input AS MATERIALIZED (
+-- Unique PK as a parameterized nested-loop inner so generic prepared plans
+-- use personal_label_pkey. LATERAL LIMIT 1 Seq Scanned because LIMIT 1 lets
+-- Seq Scan stop early. ORDER BY names the primary key with no LIMIT.
+-- Filter deleted parents in the store after this unique row.
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id
 ), keys AS MATERIALIZED (
   SELECT label_id FROM unnest(:label_ids::uuid[]) AS labels(label_id) ORDER BY label_id
@@ -13,6 +17,5 @@ CROSS JOIN LATERAL (
   WHERE label.route = input.route AND label.account_id = input.account_id
     AND label.label_id = keys.label_id
   ORDER BY label.route, label.account_id, label.label_id
-  LIMIT 1
   FOR SHARE
 ) AS parent;
