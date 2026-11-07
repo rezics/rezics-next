@@ -182,6 +182,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     requestDeadlineMs: options.requestDeadlineMs ?? TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     routeKey,
+    subjectReading: defaults.subjectReading,
     receiptKeys: defaults.receiptKeys,
     tokens: defaults.tokens,
     clock: defaults.clock,

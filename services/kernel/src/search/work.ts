@@ -103,7 +103,7 @@ type SearchDiscoveryComposer = (input: {
 type SearchRuntimeDefaults = Required<
   Pick<
     Parameters<typeof createKernel>[0],
-    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
+    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access' | 'subjectReading'
   >
 > & {
   facetAccess: FacetAccessObservationPort;

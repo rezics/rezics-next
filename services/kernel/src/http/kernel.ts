@@ -1,5 +1,4 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
-import { composeSubjectReadingApplication } from '../composition/semantic.ts';
 import {
   ensureContentApplication,
   createNativeContentRealmApplication,
@@ -124,7 +123,7 @@ import { searchRoutes } from '../search/http/routes.ts';
 import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { configureDefinitionCatalogue, createNativeDefinitionCatalogue } from '../semantic/definition-catalogue.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
-import type { DefinitionImportRoutes } from '../semantic/index.ts';
+import type { DefinitionImportRoutes, SubjectReadingApplication } from '../semantic/index.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
@@ -179,6 +178,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   receiptKeys?: KeyRing;
   /** Trusted modules mount declarations before composition validation. */
   modules?: readonly ((app: ReturnType<typeof createApp>) => void)[];
+  /** Composed Semantic native reads; Semantic's route facade serves older direct hosts. */
+  subjectReading?: SubjectReadingApplication;
   viewerActionResources?: ViewerActionResources;
   resourceRoles?: import('../access/resource-roles.ts').ResourceRoleCatalogue;
   /** Trusted domain time only; authentication and request budgets retain real time. */
@@ -500,7 +501,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     opened ??= createWorkClient(url, dependencies.pool).then(bindKernelExecution);
     return opened;
   };
-  const subjectReading = composeSubjectReadingApplication();
   const subjects = subjectRoutes(
     createApp({
       ...dependencies,
@@ -517,7 +517,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         if (!viewerBindings) throw new ProblemError('dependency_unavailable');
         return viewerBindings;
       },
-      reading: subjectReading,
+      ...(dependencies.subjectReading === undefined ? {} : { reading: dependencies.subjectReading }),
     },
   );
   let publication: SubjectPagePublication | undefined;

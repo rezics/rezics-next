@@ -2,7 +2,11 @@ export { nativeHashing } from './hashing.ts';
 export { nativeRouting } from './routing.ts';
 export { nativeFactStore } from './fact-store.ts';
 export { nativeContentLifecycle } from './content-lifecycle.ts';
-export { createNativeSubjectReadingPort, nativeSubjectReadingApplication } from './subject-reading.ts';
+export {
+  createNativeSubjectReadingPort,
+  installNativeSubjectReadingApplication,
+  nativeSubjectReadingApplication,
+} from './subject-reading.ts';
 export { importedTupleRouteOf } from './imported-route.ts';
 export {
   nativeRatingReview,

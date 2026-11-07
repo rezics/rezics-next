@@ -222,6 +222,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       moneyPolicy,
       pool,
       routeKey: config.routeKey,
+      subjectReading: defaults.subjectReading,
       tokens: defaults.tokens,
       receiptKeys: defaults.receiptKeys,
       writeRate: defaults.writeRate,

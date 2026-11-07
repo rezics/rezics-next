@@ -20,6 +20,9 @@ adapter capability. Nested reads use the same application instance and retain th
 deadline, bounds, disclosure and redirect behavior. `subject.ts`, `summaries.ts` and `viewer-actions.ts` remain
 compatibility facades for installed callers.
 
+Summary: Composition installs the sole native `SubjectReadingApplication`; server and Search-worker runtime defaults
+inject it into Kernel, tests pass it explicitly, and direct compatibility hosts resolve the same installed binding.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 `contract/released-definitions.ts` and `adapters/released-definitions.ts` expose the existing digest-validated producer;

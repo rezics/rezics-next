@@ -102,8 +102,17 @@ export function createNativeSubjectReadingPort(): SubjectReadingNativePort<
 
 let installedApplication: SubjectReadingApplication | undefined;
 
-/** Compatibility clients share one native application; Kernel composition installs its own instance. */
-export function nativeSubjectReadingApplication(): SubjectReadingApplication {
-  installedApplication ??= createSubjectReadingApplication(createNativeSubjectReadingPort() as SubjectReadingPorts);
+/** Install the process's native reading application once for compatibility clients and composed hosts. */
+export function installNativeSubjectReadingApplication(
+  create: () => SubjectReadingApplication,
+): SubjectReadingApplication {
+  installedApplication ??= create();
   return installedApplication;
+}
+
+/** Compatibility clients share the application installed by composition, creating it lazily for old hosts. */
+export function nativeSubjectReadingApplication(): SubjectReadingApplication {
+  return installNativeSubjectReadingApplication(
+    () => createSubjectReadingApplication(createNativeSubjectReadingPort() as SubjectReadingPorts),
+  );
 }

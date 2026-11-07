@@ -16,6 +16,7 @@ import {
   StatementDisclosureNotFoundError,
 } from '../statement-disclosure.ts';
 import type { SubjectReadingApplication } from '../subject-reading-application.ts';
+import { nativeSubjectReadingApplication } from '../adapters/subject-reading.ts';
 import { summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, RelatedSubjectSummarySchema, SubjectSummarySchema } from './summaries.ts';
@@ -667,7 +668,7 @@ type SubjectRouteDependencies = {
   access: () => Access;
   clock: () => Date;
   viewerActionBindings?: () => ViewerActionBindings;
-  reading: SubjectReadingApplication;
+  reading?: SubjectReadingApplication;
 };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
@@ -730,6 +731,8 @@ function subjectRoutes(
   app: ReturnType<typeof createApp>,
   { pool, routeKey, tokens, access, clock, viewerActionBindings, reading }: SubjectRouteDependencies,
 ) {
+  const subjectReading = reading ?? nativeSubjectReadingApplication();
+
   function contributionAuthorization(
     actor: AccountActor,
     action: 'statement:delete' | 'statement:restore',
@@ -1272,7 +1275,7 @@ function subjectRoutes(
             bindings = undefined;
           }
         }
-        const result = await reading.readPage({
+        const result = await subjectReading.readPage({
           runtime: {
             pool,
             access: access(),
