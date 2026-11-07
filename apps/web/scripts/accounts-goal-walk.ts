@@ -137,6 +137,16 @@ type Json = Record<string, unknown>;
 type Origins = { web: string; issuer: string; native: string; kernel: string };
 type Person = { handle: string; email: string; accountId: string };
 type Session = { accountId: string; cookie: string; clientId: string; scopes: string[] };
+type WalkEvidence = {
+  sourceRevision: string;
+  observedAt: string;
+  stack: Origins;
+  personas: string[];
+  sequence: string[];
+  native: Json[];
+  pages: Json[];
+  defects: string[];
+};
 
 function requestedWebsiteScopes(configured: string): string {
   return [...new Set(['openid', 'offline_access', ...configured.split(/\s+/).filter(Boolean)])].join(' ');
@@ -282,7 +292,9 @@ export function finishUnobservedJourneys(
           observedAt,
           elapsed: `${elapsedMs}ms`,
           cause,
-          owner: 'Content (walk stack infrastructure)',
+          owner: cause.includes('/tmp/rezics-walk-stacks/')
+            ? 'Performance (shared walk admission)'
+            : 'Content (walk stack startup)',
           persona: 'not reached: no persona provisioned',
           evidence: '.temp/accounts/launcher.log',
         },
@@ -868,7 +880,7 @@ if (import.meta.main && !process.argv.includes('--launch')) {
       },
     ]),
   );
-  const evidence: Json = {
+  const evidence: WalkEvidence = {
     sourceRevision,
     observedAt,
     stack,
@@ -890,7 +902,7 @@ if (import.meta.main && !process.argv.includes('--launch')) {
     reached: string,
     elapsedMs: number,
     cause: string,
-    owner = JOURNEYS.find((journey) => journey.id === id)!.owner,
+    owner: string = JOURNEYS.find((journey) => journey.id === id)!.owner,
   ) {
     rows.set(id, {
       ...rows.get(id)!,
@@ -1706,11 +1718,10 @@ if (import.meta.main && !process.argv.includes('--launch')) {
       return `open access HTTP ${actual.status}; closed HTTP ${afterActual.status}`;
     });
 
-    const deferFrontends = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
     const frontends: Array<{ stop: () => Promise<void> }> = [];
     let browser: import('playwright').Browser | undefined;
     try {
-      if (deferFrontends) {
+      if (process.env.REZICS_WALK_STACK_SLOT) {
         frontends.push(await startFrontend('pages', stack));
         note('auth-pages-ready');
         frontends.push(await startFrontend('web', stack));

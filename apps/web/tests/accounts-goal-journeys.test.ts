@@ -22,7 +22,9 @@ test('every first-public Accounts journey has a published row with causal repair
   for (const [index, row] of rows.entries()) {
     const expected = JOURNEYS[index]!;
     expect(row.journey).toBe(expected.journey);
-    expect([expected.owner, 'Content (walk stack infrastructure)']).toContain(row.owner);
+    expect([expected.owner, 'Performance (shared walk admission)', 'Content (walk stack startup)']).toContain(
+      row.owner,
+    );
     expect(row.persona.length).toBeGreaterThan(0);
     expect(row.evidence).toMatch(/^\.temp\/accounts\//);
     expect(['PASS', 'FAIL', 'unobserved']).toContain(row.result);
@@ -121,7 +123,7 @@ test('admission EACCES replaces only unobserved rows with the exact first cause 
     expect(row.result).toBe('FAIL');
     expect(row.reached).toBe('not reached: dev-stack walk admission/startup');
     expect(row.cause).toBe(cause);
-    expect(row.owner).toBe('Content (walk stack infrastructure)');
+    expect(row.owner).toBe('Performance (shared walk admission)');
     expect(row.persona).toBe('not reached: no persona provisioned');
     expect(row.elapsed).toBe('317ms');
     expect(row.evidence).toBe('.temp/accounts/launcher.log');
