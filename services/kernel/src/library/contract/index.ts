@@ -1,6 +1,18 @@
 /** Library contract barrel. Cross-module callers import this entry or work-dimensions.ts. */
 
 export type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
+export type {
+  LibrarySemanticMapping,
+  LibrarySemanticObservationCapability,
+  LibrarySemanticObservationResult,
+  LibrarySemanticScopeKey,
+  LibrarySemanticScopeObservation,
+  LibrarySemanticScopeRegistration,
+  LibrarySemanticScopeResult,
+  LibrarySemanticScopeRevalidation,
+  LibrarySemanticSummaryContext,
+  LibrarySemanticSummaryObservation,
+} from './semantic-observation.ts';
 export type * from './native-public-output.ts';
 export type {
   MembersPreparationApplicationAdapters,

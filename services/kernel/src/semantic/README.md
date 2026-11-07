@@ -2732,3 +2732,12 @@ bound, and F the fixed assertion/reference/slot framing. The credit payload is b
 summary budget. This is a response ceiling, not another truncation rule. Explicit inspection adds one keyed revision
 read with its existing finite change/reference budgets; correction adds one existing exact-holder/Context authority
 projection with at most three Subjects. Neither operation grows with obsolete history or unrelated Subjects.
+
+## Library observation provider
+
+Decision: Semantic supplies Library one typed observation capability and owns canonical identity, Follow reference,
+release and summary reads, plus shelf identity/type reads. Its native adapter owns SQL and parameter order, array and
+JSON decoding, result projections, language fallback, currentness and each finite work declaration; the application
+returns declarations with the work reached. Library keeps its actor, deadline, transaction/pool and reservation and
+composes the declarations without treating them as funding or authorization. Production composition supplies one
+instance to all nested consumers.

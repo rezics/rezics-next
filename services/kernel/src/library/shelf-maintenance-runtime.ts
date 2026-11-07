@@ -58,6 +58,7 @@ import {
   withShelfDerivedTypePreparation,
 } from './shelf-type-dictionary.ts';
 import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
+import { librarySemanticObservations } from './semantic-observation.ts';
 import type { TypePreparationIdentity } from './type-preparation-contract.ts';
 import {
   EMPTY_SHELF_GENERATION,
@@ -510,6 +511,7 @@ async function purgePage(
 export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependencies): ShelfMaintenanceOps {
   const deps: ShelfMaintenanceDependencies = {
     ...dependencies,
+    semanticObservations: dependencies.semanticObservations ?? librarySemanticObservations(),
     derivedKeys:
       dependencies.derivedKeys ??
       createShelfTypeKeys(

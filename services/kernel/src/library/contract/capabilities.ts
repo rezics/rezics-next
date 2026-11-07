@@ -18,6 +18,7 @@ import type {
   CollectionListFilter,
   SpecializeCollectionListInput,
 } from './collection-policy.ts';
+import type { LibrarySemanticObservationCapability } from './semantic-observation.ts';
 
 export type IdentityWorkHandle = Readonly<{
   resultByteBound(key: string): number | undefined;
@@ -321,6 +322,7 @@ export interface CollectionRuleAuthorityCapability {
 }
 
 export type LibraryCapabilities = Readonly<{
+  semanticObservations: LibrarySemanticObservationCapability;
   collectionRetentionNative?: import('./collection-mutation.ts').CollectionRetentionNativeCapability;
   collectionPublicationNative?: CollectionPublicationNativeCapability;
   collectionRuleAuthority?: CollectionRuleAuthorityCapability;

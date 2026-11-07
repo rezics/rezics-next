@@ -50,6 +50,10 @@ export function peekLibraryDomain(): NativeLibraryDomain | undefined {
   return binding.domain;
 }
 
+export function peekLibraryPresentation(): NativeLibraryPresentation | undefined {
+  return binding.presentation;
+}
+
 export function requireLibraryDomain(): NativeLibraryDomain {
   if (!binding.domain) throw new TypeError('Library domain is not composed');
   return binding.domain;

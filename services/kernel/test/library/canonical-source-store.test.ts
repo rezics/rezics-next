@@ -11,6 +11,7 @@ import {
 } from '../../src/library/canonical-source-bounds.ts';
 import * as store from '../../src/library/canonical-source-store.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
+import { createLibraryObservationApplication } from '../../src/semantic/library-observation.ts';
 import { accessCheck } from '../../src/request/access-check.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -660,11 +661,13 @@ test('pending group fits the shared encrypted cursor without permissions or a se
 });
 
 test('canonical Source plan refuses overflow, engine requests and oversized statement parameters', () => {
-  expect(CANONICAL_SOURCE_DECLARATION().status).toBe('complete');
-  expect(CANONICAL_SOURCE_DECLARATION().repair.engineRequests).toBe(0);
-  expect(CANONICAL_SOURCE_DECLARATION().repair.candidateKeys).toBeLessThanOrEqual(CANONICAL_SOURCE_RAW_KEY_LIMIT);
-  expect(() => canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT + 1)).toThrow(RangeError);
-  expect(() => repeatBound(CANONICAL_SOURCE_DECLARATION().repair, Number.MAX_SAFE_INTEGER)).toThrow(TypeError);
+  const observations = createLibraryObservationApplication();
+  const declaration = CANONICAL_SOURCE_DECLARATION(observations);
+  expect(declaration.status).toBe('complete');
+  expect(declaration.repair.engineRequests).toBe(0);
+  expect(declaration.repair.candidateKeys).toBeLessThanOrEqual(CANONICAL_SOURCE_RAW_KEY_LIMIT);
+  expect(() => canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT + 1, observations)).toThrow(RangeError);
+  expect(() => repeatBound(declaration.repair, Number.MAX_SAFE_INTEGER)).toThrow(TypeError);
   expect(() =>
     canonicalSourceWorkDimensions(
       declareBound({

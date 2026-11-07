@@ -20,6 +20,19 @@ export {
   type IdentityEpochParticipantName,
   type IdentityStepReceiptLocator,
 } from './identity-epoch-ports.ts';
+export type { LibraryObservationProvider } from './library-observation.ts';
+export type {
+  LibrarySemanticMapping,
+  LibrarySemanticObservationCapability,
+  LibrarySemanticObservationResult,
+  LibrarySemanticScopeKey,
+  LibrarySemanticScopeObservation,
+  LibrarySemanticScopeRegistration,
+  LibrarySemanticScopeResult,
+  LibrarySemanticScopeRevalidation,
+  LibrarySemanticSummaryContext,
+  LibrarySemanticSummaryObservation,
+} from './library-observation.ts';
 export {
   ITEM_SLOT_NAMESPACE,
   ITEM_STATEMENT_NAMESPACE,

@@ -1,14 +1,18 @@
 import type { Pool } from 'pg';
-import type { SubjectIdentityCapability } from '../../library/contract/index.ts';
+import type { SubjectIdentityCapability, SubjectReferenceObservation } from '../../library/contract/index.ts';
 import type { AuthoritativeTime } from '../../command/command.ts';
 import { accessCheck, type Access, type AccessContext, type Actor } from '../../request/access.ts';
 import { routeOf } from '../../route/route.ts';
 import type { IdentityMapping } from '../contract/index.ts';
-import { readIdentityMappings } from '../identity-adapters/read.ts';
-import { subjectReadEligibility } from '../eligibility.ts';
-import { readSubjectReference } from '../references.ts';
 import { SubjectRedirectError } from '../contract/subject-errors.ts';
-import { readSubjectSummaryObservation, type SummaryReaderDependencies } from '../summaries.ts';
+import { subjectReadEligibility } from '../eligibility.ts';
+import type { SummaryReaderDependencies } from '../summaries.ts';
+import type {
+  LibrarySemanticObservationCapability,
+  LibrarySemanticObservationResult,
+  LibrarySemanticSummaryContext,
+} from '../../library/contract/semantic-observation.ts';
+import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';
 
 export type LibrarySubjectIdentityContext = Readonly<{
   pool: Pool;
@@ -19,14 +23,20 @@ export type LibrarySubjectIdentityContext = Readonly<{
 }>;
 
 /** Uses the single Identity producer. Mapping never supplies authorization or native disclosure. */
-export function createLibrarySubjectIdentityAdapter(): SubjectIdentityCapability<
-  LibrarySubjectIdentityContext,
-  IdentityMapping
-> {
+export type LibrarySubjectReferenceResult = SubjectReferenceObservation & Readonly<{ work: WorkDimensions }>;
+export type LibrarySubjectIdentityAdapter = SubjectIdentityCapability<LibrarySubjectIdentityContext, IdentityMapping> & {
+  prepareReference(context: LibrarySubjectIdentityContext, id: string): Promise<() => Promise<LibrarySubjectReferenceResult>>;
+};
+
+export function createLibrarySubjectIdentityAdapter(
+  observations: LibrarySemanticObservationCapability,
+): LibrarySubjectIdentityAdapter {
   return {
     redirected: (from, to) => new SubjectRedirectError(from, to),
     validId: (id) => routeOf(id) !== null,
-    readMappings: (context, ids) => readIdentityMappings(context.pool, ids),
+    async readMappings(context, ids) {
+      return (await observations.follow.readMappings(context.pool, ids)).value as readonly IdentityMapping[];
+    },
     async prepareReference(context, id) {
       const route = routeOf(id)!;
       const check = await accessCheck(
@@ -41,24 +51,35 @@ export function createLibrarySubjectIdentityAdapter(): SubjectIdentityCapability
         context.context,
       );
       return async () => {
-        try {
-          const value = await readSubjectReference(context.pool, id, (client) => check(client, context.at));
-          return { state: value ? ('present' as const) : ('absent' as const) };
-        } catch (error) {
-          if (!(error instanceof SubjectRedirectError)) throw error;
-          return { state: 'redirect', from: error.from, to: error.to };
-        }
+        const result = await observations.follow.readSubjectReference({
+          pool: context.pool,
+          subjectId: id,
+          check: (client) => check(client as Parameters<typeof check>[0], context.at),
+        });
+        return Object.freeze({ ...result.value, work: result.work }) as LibrarySubjectReferenceResult;
       };
     },
   };
 }
 
 /** One native bounded summary observation; all its Source, cover and disclosure fences survive composition. */
-export function observeLibrarySubjectSummaries(deps: SummaryReaderDependencies, ids: readonly string[]) {
-  return readSubjectSummaryObservation(deps, ids, { displayFallback: true });
+export async function observeLibrarySubjectSummaries(
+  observations: LibrarySemanticObservationCapability,
+  deps: SummaryReaderDependencies,
+  ids: readonly string[],
+) {
+  return observations.follow.observeSubjects({
+    context: deps as LibrarySemanticSummaryContext,
+    ids,
+  });
 }
 
 /** Original inputs retain the exact producer mapping including epoch, pending job and unavailable reason. */
-export function readLibraryIdentityMappings(pool: Pool, ids: readonly string[]) {
-  return readIdentityMappings(pool, ids);
+export async function readLibraryIdentityMappings(
+  observations: LibrarySemanticObservationCapability,
+  pool: Pool,
+  ids: readonly string[],
+) {
+  const result = await observations.follow.readMappings(pool, ids);
+  return { ...result, value: result.value as readonly IdentityMapping[] };
 }

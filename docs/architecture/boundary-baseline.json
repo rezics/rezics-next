@@ -6810,22 +6810,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "type import \"../semantic/identity-scope-types.ts\" #1 => services/kernel/src/semantic/identity-scope-types.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/canonical-source-store.ts",
           "edge": "value import \"../access/parent-creation.ts\" #1 => services/kernel/src/access/parent-creation.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/canonical-source-store.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts"
         },
         {
           "rule": "rule 2",
@@ -9836,16 +9826,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/library/canonical-source-store.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",

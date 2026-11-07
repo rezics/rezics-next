@@ -1,6 +1,7 @@
 import { createLibraryAccessPorts } from '../access/adapters/library.ts';
 import { createNativeCopyAccountAdmission, nativeCopyAccountWork } from '../access/adapters/copy-account.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
+import { createLibraryObservationApplication } from '../semantic/index.ts';
 import {
   createLibrarySubjectIdentityAdapter,
   observeLibrarySubjectSummaries,
@@ -81,6 +82,7 @@ import {
   bindLibraryAccess,
   bindLibraryPresentation,
   peekLibraryDomain,
+  peekLibraryPresentation,
   requireLibraryDomain,
   unbindLibraryDomain,
 } from '../library/domain-binding.ts';
@@ -261,13 +263,14 @@ function stubSource(): PreparedCollectionSource {
   };
 }
 
-function nativeLibraryPresentation() {
+function nativeLibraryPresentation(semanticObservations: LibraryCapabilities['semanticObservations']) {
   return createNativeLibraryPresentation({
-    identity: createLibrarySubjectIdentityAdapter(),
-    readMappings: readLibraryIdentityMappings,
+    semanticObservations,
+    identity: createLibrarySubjectIdentityAdapter(semanticObservations),
+    readMappings: (pool, ids) => readLibraryIdentityMappings(semanticObservations, pool, ids),
     accountEligibility: createLibraryAccountEligibilityAdapter(),
     createResourcePublicEligibility,
-    observeSubjects: observeLibrarySubjectSummaries,
+    observeSubjects: (context, ids) => observeLibrarySubjectSummaries(semanticObservations, context, ids),
     observeAccount: observeLibraryPublicAccount,
     observeAttributions: observeLibraryAttributions,
     observeSpace: observeLibrarySpaceSummary,
@@ -300,12 +303,19 @@ function composeLibraryCopies(): void {
 export function composeLibraryPresentation(): void {
   composeLibraryCopies();
   bindLibraryAccess(createLibraryAccessPorts());
-  bindLibraryPresentation(nativeLibraryPresentation());
+  const semanticObservations = peekLibraryDomain()?.semanticObservations ?? createLibraryObservationApplication();
+  bindLibraryPresentation(nativeLibraryPresentation(semanticObservations));
 }
 
 export function composeLibraryDomain(options: LibraryComposeOptions = {}): ReturnType<typeof bindLibraryDomain> {
   composeLibraryCopies();
   bindLibraryAccess(createLibraryAccessPorts());
+  const previous = peekLibraryDomain();
+  const semanticObservations =
+    options.capabilities?.semanticObservations ??
+    previous?.semanticObservations ??
+    peekLibraryPresentation()?.semanticObservations ??
+    createLibraryObservationApplication();
   const identityNative =
     options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
   const sourceCapture =
@@ -342,6 +352,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
   if (options.access !== undefined) extras.access = options.access;
   if (options.routeKey !== undefined) extras.routeKey = options.routeKey;
   const capabilities: LibraryCapabilities & { search?: unknown; access?: unknown; routeKey?: Uint8Array } = {
+    semanticObservations,
     authorization:
       options.capabilities?.authorization ??
       createAuthorizationAdapter({ access: options.access, pool: options.pool, ports: nativeAuthorizationPorts() }),
@@ -416,7 +427,6 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
       lockDisposition: resolvePublicIdentityOutputCaptureDisposition,
     }),
   );
-  const previous = peekLibraryDomain();
   const applications = createLibraryApplications(capabilities);
   return bindLibraryDomain({
     ...applications,
@@ -424,7 +434,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
     membersPreparation: createMembersPreparationAdapter(applications),
     copyContext: nativeCopyListContext(),
     copyPorts: requireLibraryCopyBinding().ports,
-    presentation: nativeLibraryPresentation(),
+    presentation: nativeLibraryPresentation(semanticObservations),
     followCounts: nativeFollowCountRuntime(),
     preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
     scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,

@@ -19,6 +19,7 @@ export {
 } from './contract/index.ts';
 /** Native shelf maintenance contracts. Locators are never capabilities. */
 import type { Pool } from 'pg';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import type { KernelClock } from '../clock.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -137,6 +138,7 @@ export interface ShelfMaintenanceOps {
 export interface ShelfMaintenanceDependencies {
   readonly pool: Pool;
   readonly access: Access;
+  readonly semanticObservations?: LibrarySemanticObservationCapability;
   readonly clock?: KernelClock;
   readonly client?: WorkClient | (() => Promise<WorkClient>);
   readonly shelfTypeDigest?: ShelfTypeDigest;

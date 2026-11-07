@@ -1,9 +1,11 @@
 import type { Pool } from 'pg';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import { readAccount, within } from './access-port.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+import { librarySemanticObservations, semanticObservationBound } from './semantic-observation.ts';
+import { consumeFollowWork } from './follow-operation-bounds.ts';
 import { decodeCursor, encodeCursor } from '../content/feed-source-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -31,8 +33,28 @@ export function createFollowActivitySource(deps: {
   tokens: KeyRing;
   workClient: WorkClient;
   activityStore: FeedActivityStore;
+  semanticObservations?: LibrarySemanticObservationCapability;
 }) {
   const clock = deps.clock ?? systemClock;
+  const semanticObservations = deps.semanticObservations ?? librarySemanticObservations();
+  async function readMapping(original: string) {
+    const result = await consumeFollowWork(
+      'activity.identity.mapping',
+      semanticObservationBound(semanticObservations.follow.mappingWork([original])),
+      () => semanticObservations.follow.readMapping(deps.pool, original),
+      (value) => semanticObservationBound(value.work),
+    );
+    return result.value;
+  }
+  async function readMappings(originals: readonly string[]) {
+    const result = await consumeFollowWork(
+      'activity.identity.mapping',
+      semanticObservationBound(semanticObservations.follow.mappingWork(originals)),
+      () => semanticObservations.follow.readMappings(deps.pool, originals),
+      (value) => semanticObservationBound(value.work),
+    );
+    return result.value;
+  }
   return {
     async pageRecipients(
       target: FeedActivityTarget,
@@ -156,7 +178,7 @@ export function createFollowActivitySource(deps: {
           result.push({ target, status: exact?.state === 'following' ? 'following' : 'not_following' });
           continue;
         }
-        const mapping = await within(deadline, () => identityEpochStore().readMapping(deps.pool, target.id));
+        const mapping = await within(deadline, () => readMapping(target.id));
         if (mapping.state === 'absent') {
           result.push({ target, status: 'not_following' });
           continue;
@@ -171,7 +193,7 @@ export function createFollowActivitySource(deps: {
           continue;
         }
         if (exact?.state === 'following') {
-          const final = await within(deadline, () => identityEpochStore().readMapping(deps.pool, target.id));
+          const final = await within(deadline, () => readMapping(target.id));
           const native = await ownerRows([target.id]);
           result.push({
             target,
@@ -207,9 +229,9 @@ export function createFollowActivitySource(deps: {
           continue;
         }
         const ids = pairs.map((pair) => pair.original_id);
-        const mappings = await within(deadline, () => identityEpochStore().readMappings(deps.pool, ids));
+        const mappings = await within(deadline, () => readMappings(ids));
         const originalRows = await ownerRows(ids);
-        const finalMappings = await within(deadline, () => identityEpochStore().readMappings(deps.pool, ids));
+        const finalMappings = await within(deadline, () => readMappings(ids));
         const finalRows = await ownerRows(ids);
         const positive = mappings.some(
           (value) =>
@@ -230,7 +252,7 @@ export function createFollowActivitySource(deps: {
               (row) => row.target_id === value.original && row.target_type === 'subject' && row.state === 'following',
             ),
         );
-        const final = await within(deadline, () => identityEpochStore().readMapping(deps.pool, target.id));
+        const final = await within(deadline, () => readMapping(target.id));
         result.push({
           target,
           status:
