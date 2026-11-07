@@ -1,5 +1,5 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
-import { GREGORIAN_CALENDAR } from '../../../subject/reader';
+import { GREGORIAN_CALENDAR } from '../../../subject/time-presentation';
 import definitions from '../../../kernel/recorded/definitions-release.json';
 import { readReleaseFidelity } from './read';
 import type { ReleaseFidelityTransport } from './view';
