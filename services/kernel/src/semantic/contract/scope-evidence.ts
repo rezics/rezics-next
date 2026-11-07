@@ -1,13 +1,14 @@
 /** Scope readers preserve the actual principal or independent work authority. */
+type IndependentScopeWork<Work> = Work extends unknown
+  ? Readonly<{ actor?: never; nativeT?: never; work: Work }>
+  : never;
+
 export type ScopeEvidenceReader<Access, Actor, NativeTime, Work> = Readonly<{
   access: Access;
   routeKey: Uint8Array;
   deadline: number;
 }> &
-  (
-    | Readonly<{ actor: Actor; nativeT?: NativeTime; work?: never }>
-    | Readonly<{ actor?: never; nativeT?: never; work: Work }>
-  );
+  (Readonly<{ actor: Actor; nativeT?: NativeTime; work?: never }> | IndependentScopeWork<Work>);
 export type ScopeEvidenceObservation<A> = Readonly<{ signature: string; anchors: readonly A[] }>;
 export type ScopeEvidenceHost<D, C, Client, A> = Readonly<{
   hash(value: unknown): string;
