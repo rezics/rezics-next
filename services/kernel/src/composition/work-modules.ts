@@ -97,11 +97,16 @@ export function createKernelWorkModules(
   installIdentityRatingRepairProducer();
   installRatingVoteSemantic();
   const composeNativePorts = suppliedSearchNativePorts ?? createSearchNativePortsComposer();
+  const composeNativeAccess: Parameters<typeof createSearchWorkModule>[4] = async (input) => {
+    const { composeSearchNativeAccess } = await import('./search-native.ts');
+    return composeSearchNativeAccess(input);
+  };
   const searchWorkModule = createSearchWorkModule(
     composeDiscovery,
     composeRuntimeDefaults,
     composeCreditSearch,
     composeNativePorts,
+    composeNativeAccess,
   );
   const semanticWorkModule = createSemanticWorkModule(composeSemantic, composeNativePorts);
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));

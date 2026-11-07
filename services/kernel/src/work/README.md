@@ -11,6 +11,10 @@ growth-work-client, selected-runtime-native, sdk-transaction-fence, sdk-retireme
 fixtures remain the causal native set. Search keeps both `search_account_erasure` and `search_erasure` tombstone
 effects.
 
+Decision: direct WorkContext hosts supply the real pool, queue catalogue, client, clock and effect collector before
+registration, start every owned service, and drain them before closing the client. Search derives worker Access from
+the complete native action catalogue instead of compiling an unused HTTP host.
+
 Public entries: `work/contract/index.ts`, `work/contract/bounds.ts`, `work/contract/vocabulary.ts`,
 `work/contract/cost.ts`, `work/core/index.ts`, `work/application/index.ts`, `work/adapters/index.ts`,
 and the stable facades `client.ts`, `registry.ts`, `retries.ts`, `queues.ts`, `selected-runtime.ts`,

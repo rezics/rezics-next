@@ -155,12 +155,15 @@ test('ordinary configured server returns current mixed discovery through its def
     const registrations = await worker.rpc.request<{
       registeredModules: string[];
       startedServices: Record<string, number>;
+      searchStarterInvocations: number;
     }>('stats');
     expect(registrations.registeredModules.indexOf('semantic')).toBeGreaterThanOrEqual(0);
     expect(registrations.registeredModules.indexOf('search')).toBeGreaterThan(
       registrations.registeredModules.indexOf('semantic'),
     );
     expect(registrations.startedServices.semantic).toBeGreaterThan(0);
+    expect(registrations.startedServices.search).toBeGreaterThan(0);
+    expect(registrations.searchStarterInvocations).toBe(1);
     server = await startServer(readConfig(env));
     const origin = server.url;
     const request = {
@@ -247,7 +250,13 @@ test('ordinary configured server returns current mixed discovery through its def
     expect(current.hits.map(({ key }) => key.id)).toEqual([account.accountId]);
     expect(current.next).toBeNull();
     const routeKey = new Uint8Array(Buffer.from(runtime.routeKey, 'base64url'));
-    const registry = await nativeDiscoveryRegistry(pool, routeKey, createRatedSubjectSource(pool, routeKey).source);
+    const { composeSearchNativePorts } = await import('../../src/composition/search-native.ts');
+    const nativePorts = composeSearchNativePorts();
+    const registry = await nativeDiscoveryRegistry(
+      pool,
+      routeKey,
+      createRatedSubjectSource(pool, routeKey, undefined, nativePorts).source,
+    );
     await allocateDiscovery(pool, prefix, registry);
     await eventually(async () =>
       (await discoveryGenerations(pool, prefix)).some(
