@@ -45,11 +45,7 @@ export type {
   OccurrenceDraft,
   OrderedOccurrence,
 } from './membership.ts';
-export {
-  SESSION_LIMITS,
-  emptyProgressOperationCatalog,
-  emptySessionWork,
-} from './progress-operations.ts';
+export { SESSION_LIMITS, emptyProgressOperationCatalog, emptySessionWork } from './progress-operations.ts';
 export type {
   ProgressAccessSqlCatalog,
   ProgressCommandSqlCatalog,

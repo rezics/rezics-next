@@ -392,9 +392,7 @@ test('Library applications run with fake capabilities through Source, members, p
   expect(startPlan.total.engineRequests).toBe(0);
   expect(startPlan.total.statements).toBeGreaterThan(0);
   expect(domain.progressOperations.planCommand('journal', startPlan.original, 1).kind).toBe('journal');
-  expect((await domain.progressOperations.admit({ actor, deadline: Date.now() - 1, subjectId })).admitted).toBe(
-    false,
-  );
+  expect((await domain.progressOperations.admit({ actor, deadline: Date.now() - 1, subjectId })).admitted).toBe(false);
   expect(
     (await domain.progressOperations.admit({ actor: { kind: 'anonymous' }, deadline: Date.now() + 1_000, subjectId }))
       .admission.terms[0]?.name,

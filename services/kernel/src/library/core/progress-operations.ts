@@ -272,7 +272,11 @@ function sqlWork(sql: string, input: unknown, rows: number, points: number, outp
   });
 }
 
-function descriptorWork(descriptor: ProgressSqlDescriptor, input: unknown, outputBytes = descriptor.resultBytes): Bound {
+function descriptorWork(
+  descriptor: ProgressSqlDescriptor,
+  input: unknown,
+  outputBytes = descriptor.resultBytes,
+): Bound {
   return sqlWork(
     descriptor.sql,
     input,
@@ -303,7 +307,9 @@ function boundedCommandReadWork(): Bound {
 
 function snapshotControls(): Bound {
   return sumBounds(
-    ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((sql) => sqlWork(sql, [], 0, 0, 0)),
+    ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((sql) =>
+      sqlWork(sql, [], 0, 0, 0),
+    ),
   );
 }
 
@@ -369,7 +375,10 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
   function progressRefresh() {
     return sumBounds(
       nativePoint(1 + 1 + 2 + 3 + 2 + 3 + 2 + 2 + 1 + 4 + 1 + 2 + 4 + 3 + 3 + 3, 16, 16, 2 * facts),
-      repeatBound(sumBounds(nativePoint(3 + 1 + 3, 3, 3, (3 + 1 + 3) * progressRow), progressApply()), 2 * SESSION_LIMITS.measures),
+      repeatBound(
+        sumBounds(nativePoint(3 + 1 + 3, 3, 3, (3 + 1 + 3) * progressRow), progressApply()),
+        2 * SESSION_LIMITS.measures,
+      ),
     );
   }
   function migration() {
@@ -497,16 +506,22 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
       shelf('gate-ensure', owner, input),
       shelf('gate-lock', owner, input),
       shelf('inputs', owner, input),
-      shelf(
-        'run-create',
-        [route, accountId, runId, epoch, 'backfill', 'drain', null],
-        { ...input, run_id: runId, epoch, kind: 'backfill', phase: 'drain', build_generation: null },
-      ),
-      shelf(
-        'gate-save',
-        [route, accountId, 'open', false, epoch, uuid, runId],
-        { ...input, mode: 'open', ready: false, epoch, active_generation: uuid, run_id: runId },
-      ),
+      shelf('run-create', [route, accountId, runId, epoch, 'backfill', 'drain', null], {
+        ...input,
+        run_id: runId,
+        epoch,
+        kind: 'backfill',
+        phase: 'drain',
+        build_generation: null,
+      }),
+      shelf('gate-save', [route, accountId, 'open', false, epoch, uuid, runId], {
+        ...input,
+        mode: 'open',
+        ready: false,
+        epoch,
+        active_generation: uuid,
+        run_id: runId,
+      }),
       shelf('step-save', [route, accountId, runId], { ...input, run_id: runId }),
       repeatBound(shelf('run-read', [route, accountId, runId], { ...input, run_id: runId }), 2),
       repeatBound(shelf('gate-share', owner, input), 2),
@@ -516,11 +531,12 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
           gate,
           shelf('counter-initialize', [route, accountId, uuid], { ...input, fence_id: uuid }),
           repeatBound(shelf('counter-read', owner, input), 2),
-          shelf(
-            'counter-complete',
-            [route, accountId, false, epoch, uuid],
-            { ...input, ready: false, epoch, generation_id: uuid },
-          ),
+          shelf('counter-complete', [route, accountId, false, epoch, uuid], {
+            ...input,
+            ready: false,
+            epoch,
+            generation_id: uuid,
+          }),
         )
       : gate;
   }
@@ -589,7 +605,9 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
         transaction_id: uuid,
         receipt,
         basis: { principal: { kind: 'account', id: accountId }, clientId: uuid, requestedBy: uuid },
-        events: [{ type: 'com.rezics.library.label.changed.v1', subject: accountId, id: uuid, data: { labelId: uuid } }],
+        events: [
+          { type: 'com.rezics.library.label.changed.v1', subject: accountId, id: uuid, data: { labelId: uuid } },
+        ],
       },
       4 + 6 + 4 + 4,
       1 + 5 + 3 + 3,
@@ -602,7 +620,10 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
       1 + 3,
       size({ epoch: 2_147_483_647, position: '-9223372036854775808' }),
     );
-    const terminal = alternative(sqlWork('COMMIT', [], 0, 0, 0), sumBounds(sqlWork('ROLLBACK', [], 0, 0, 0), sessionPartitionWork(4095)));
+    const terminal = alternative(
+      sqlWork('COMMIT', [], 0, 0, 0),
+      sumBounds(sqlWork('ROLLBACK', [], 0, 0, 0), sessionPartitionWork(4095)),
+    );
     return sumBounds(
       ...controls,
       boundedCommandReadWork(),
@@ -622,7 +643,11 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
     const input = original.input as Record<string, unknown>;
     const bindBytes = size(original.input) + 2 * facts + size({ time: timestamp, transactionId: uuid });
     const read = statementWork(catalog.session.read, size({ route, session_id: uuid }), point(facts));
-    const lock = statementWork(catalog.session.lock, size({ route, session_id: uuid }), point(size({ session_id: uuid })));
+    const lock = statementWork(
+      catalog.session.lock,
+      size({ route, session_id: uuid }),
+      point(size({ session_id: uuid })),
+    );
     const head = sessionHeadWork({ route, account_id: original.accountId, subject_id: uuid });
     const activity = sessionActivityWork({
       route,
@@ -638,12 +663,7 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
         lock,
         read,
         statementWork(catalog.session.journalLock, bindBytes, point(journalBytes)),
-        statementWork(
-          catalog.session.journalUpdate,
-          bindBytes,
-          point(journalBytes),
-          sessionMutationEffects(),
-        ),
+        statementWork(catalog.session.journalUpdate, bindBytes, point(journalBytes), sessionMutationEffects()),
       );
     }
     const owner = sessionShelfWork(route, original.accountId, true);
@@ -740,7 +760,12 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
       repeatBound(read, 2),
       lock,
       statementWork(catalog.session.update, bindBytes, point(sessionBytes), sessionMutationEffects()),
-      statementWork(catalog.session.changeAppend, bindBytes, { ...point(changeBytes), rows: 3, points: 2 }, childFence()),
+      statementWork(
+        catalog.session.changeAppend,
+        bindBytes,
+        { ...point(changeBytes), rows: 3, points: 2 },
+        childFence(),
+      ),
       ...changes,
     );
   }
@@ -1000,7 +1025,9 @@ export function createProgressOperationBounds(catalog: ProgressOperationCatalog)
             statementWork(sql, binds, { keys: sent, rows: sent, points: 1, seeks: 1, output: sent, rowBytes: width }),
           );
           if (limit === SESSION_LIMITS.page)
-            parts.push(statementWork(sql, binds, { keys: 1, rows: 1, points: 1, seeks: 1, output: 1, rowBytes: width }));
+            parts.push(
+              statementWork(sql, binds, { keys: 1, rows: 1, points: 1, seeks: 1, output: 1, rowBytes: width }),
+            );
           parts.push(sessionBytesWork(2 + limit * (width + 1)));
         }
         break;

@@ -25,7 +25,13 @@ import discoveryReleases from './progress-discovery-releases.sql';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import { createProgressOperationBounds, retainSessionOperands, sessionBytesWork } from './core/index.ts';
 import { SESSION_LIMITS } from './contract/index.ts';
-import type { SessionCommandOriginal, SessionOperationKind, SessionReadInput, SessionReadKind, SessionSqlKind } from './contract/index.ts';
+import type {
+  SessionCommandOriginal,
+  SessionOperationKind,
+  SessionReadInput,
+  SessionReadKind,
+  SessionSqlKind,
+} from './contract/index.ts';
 import {
   createProgressOperationCatalog,
   PROGRESS_MEANING_SQL,
@@ -202,7 +208,12 @@ export const sessionChangePagePlan = (input: Input<typeof changePage>) =>
     rowBytes: bounds().changeBytes,
   });
 export const sessionDiscoveryGenerationPlan = (input: Input<typeof discoveryGeneration>) =>
-  statement('owner-generation', discoveryGeneration, input, bounds().point(size({ generation: '-9223372036854775808' })));
+  statement(
+    'owner-generation',
+    discoveryGeneration,
+    input,
+    bounds().point(size({ generation: '-9223372036854775808' })),
+  );
 export function sessionDiscoveryPagePlan(input: Input<typeof discoveryPage>) {
   return statement('owner-page', discoveryPage, input, {
     keys: input.limit,
@@ -241,8 +252,7 @@ export function sessionMeaningRefreshPlan(input: { route: number; sessionId: str
     'meaning-refresh',
     {
       sql: PROGRESS_REFRESH_SQL,
-      run: (client, original: typeof input) =>
-        client.query(PROGRESS_REFRESH_SQL, [original.route, original.sessionId]),
+      run: (client, original: typeof input) => client.query(PROGRESS_REFRESH_SQL, [original.route, original.sessionId]),
     },
     input,
     { keys: 0, rows: 0, points: 0, seeks: 0, output: 1, rowBytes: 4 },
@@ -323,7 +333,11 @@ export function sessionReadTimeWork(): Bound {
   return bounds().sessionReadTimeWork();
 }
 
-export function sessionReadOperationPlan(kind: SessionReadKind, accountId: string, input: SessionReadInput): SessionReadPlan {
+export function sessionReadOperationPlan(
+  kind: SessionReadKind,
+  accountId: string,
+  input: SessionReadInput,
+): SessionReadPlan {
   const plan = bounds().sessionReadOperationPlan(kind, accountId, input);
   return Object.freeze({
     kind: plan.kind,
@@ -331,7 +345,9 @@ export function sessionReadOperationPlan(kind: SessionReadKind, accountId: strin
     total: plan.total,
     run<T>(dispatch: () => Promise<T>) {
       if (enclosingSessionPlan.getStore()) return dispatch();
-      return consumeNativeSessionWork(kind, plan.total, () => enclosingSessionPlan.run({ total: plan.total }, dispatch));
+      return consumeNativeSessionWork(kind, plan.total, () =>
+        enclosingSessionPlan.run({ total: plan.total }, dispatch),
+      );
     },
   });
 }
