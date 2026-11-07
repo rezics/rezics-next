@@ -15,7 +15,8 @@ type PointPutCall = Awaited<ReturnType<FollowsPointClient['put']>>;
 type PointDeleteCall = Awaited<ReturnType<FollowsPointClient['delete']>>;
 
 export type FollowListQuery = NonNullable<Parameters<FollowsListGet>[0]>['query'];
-export type FollowListPage = NonNullable<ListCall['data']>;
+/** The overloaded `/follows` handle also exposes its point GET; select the page arm explicitly. */
+export type FollowListPage = Extract<NonNullable<ListCall['data']>, { follows: readonly unknown[] }>;
 export type FollowEdge = FollowListPage['follows'][number];
 export type FollowPointPage = NonNullable<PointGetCall['data']>;
 export type FollowWritePage = NonNullable<PointPutCall['data']> | NonNullable<PointDeleteCall['data']>;

@@ -241,12 +241,47 @@ describe('native private Following destination', () => {
 
     const more = followingPage.getByRole('link', { name: 'More', exact: true });
     await more.waitFor({ state: 'visible' });
-    await more.click();
+    await more.focus();
+    await followingPage.keyboard.press('Enter');
     await followingPage.waitForURL((url) => url.searchParams.has('cursor'));
     const secondPageRows = followingPage.locator('li[data-slot="list-row"]');
     await secondPageRows.first().waitFor({ state: 'visible' });
     expect(await secondPageRows.count()).toBe(1);
     expect(await secondPageRows.first().innerText()).toContain(targetLabel(aliceInitialPages[1]!.follows[0]!)!);
+
+    const returnedTarget = aliceInitialPages[1]!.follows[0]!;
+    const returnedTitle = targetLabel(returnedTarget)!;
+    const returnedRow = secondPageRows.filter({ hasText: returnedTitle });
+    const destination = returnedRow.locator('a[href]').first();
+    const destinationHref = await destination.getAttribute('href');
+    expect(destinationHref).not.toBeNull();
+    const targetUrl = new URL(destinationHref!, stack.web);
+    expect(targetUrl.searchParams.has('cursor')).toBe(false);
+    const returnedCursor = new URL(followingPage.url()).searchParams.get('cursor');
+    const destinationPath = targetUrl.pathname;
+    const departureRequestStart = stack.kernelRequests().length;
+    const destinationLoad = followingPage.waitForURL((url) => url.pathname === destinationPath);
+    await destination.click();
+    await destinationLoad;
+    expect(new URL(followingPage.url()).searchParams.has('cursor')).toBe(false);
+    const departure = selectedRequests(departureRequestStart).filter((request) =>
+      targetRead(request, [returnedTarget.targetId]),
+    );
+    expect(departure.length).toBeGreaterThan(0);
+    expect(departure.every(({ failure }) => failure === undefined)).toBe(true);
+
+    await followingPage.goBack({ waitUntil: 'domcontentloaded' });
+    await followingPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    await followingPage.waitForURL((url) => url.searchParams.get('cursor') === returnedCursor);
+    const returnedRowAfterBack = followingPage.locator(
+      `li[data-slot="list-row"][data-follow-target="${returnedTarget.targetId}"]`,
+    );
+    await returnedRowAfterBack.waitFor({ state: 'visible' });
+    expect(
+      await returnedRowAfterBack
+        .getByRole('button', { name: `Inspect ${returnedTitle}`, exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
   }, 600_000);
 
   test('Following uses embedded target summaries and has no public or fabricated follower total', async () => {
@@ -363,17 +398,18 @@ describe('native private Following destination', () => {
     ).toBe(0);
 
     await followingPage.setViewportSize({ width: 390, height: 844 });
-    await followingPage.goto(new URL('/en/library/following', stack.web).href, { waitUntil: 'domcontentloaded' });
+    await followingPage.goto(new URL('/zh-Hans/library/following', stack.web).href, { waitUntil: 'domcontentloaded' });
     await followingPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    expect(await followingPage.getByRole('heading', { level: 1, name: '正在关注' }).count()).toBe(1);
     const spaceRow = followingPage.locator('li[data-slot="list-row"]').filter({ hasText: fixture.space.title });
     const phoneTrigger = spaceRow.getByRole('button', {
-      name: `More actions for ${fixture.space.title}`,
+      name: `${fixture.space.title}的更多操作`,
       exact: true,
     });
     await phoneTrigger.focus();
     await followingPage.keyboard.press('Enter');
     await followingPage.getByRole('dialog').waitFor({ state: 'visible' });
-    const phoneUnfollow = followingPage.getByRole('button', { name: 'Unfollow', exact: true });
+    const phoneUnfollow = followingPage.getByRole('button', { name: '取消关注', exact: true });
     await phoneUnfollow.focus();
     await followingPage.keyboard.press('Enter');
     await spaceRow.waitFor({ state: 'detached' });
@@ -411,5 +447,47 @@ describe('native private Following destination', () => {
     expect(body).not.toContain(fixture.collection.title);
     expect(await followingPage.locator(`a[href*="/collections/${fixture.collection.id}"]`).count()).toBe(0);
     expect(noFollowerTotal(body)).toBe(true);
+
+    const replacedContext = await auth.newContext('alice');
+    const freshAlice = await auth.signIn('alice', {
+      context: replacedContext,
+      returnTo: '/en/library/following',
+    });
+    expect((await freshAlice.response()).status()).toBe(200);
+    const freshAlicePage = await visit(replacedContext, '/en/library/following');
+    expect(freshAlicePage.response?.status()).toBe(200);
+    expect(await freshAlicePage.page.locator('li[data-slot="list-row"]').count()).toBe(1);
+    expect(await freshAlicePage.page.getByRole('heading', { level: 1, name: 'Following' }).count()).toBe(1);
+    const freshAliceBody = await freshAlicePage.page.locator('body').innerText();
+    expect(freshAliceBody).not.toContain(fixture.collection.title);
+    expect(await freshAlicePage.page.locator(`a[href*="/collections/${fixture.collection.id}"]`).count()).toBe(0);
+
+    const replaced = await auth.signIn('bob', {
+      context: replacedContext,
+      returnTo: '/en/library/following',
+    });
+    expect((await replaced.response()).status()).toBe(200);
+    const bobAfterReplacement = await visit(replacedContext, '/en/library/following');
+    expect(bobAfterReplacement.response?.status()).toBe(200);
+    const replacedBody = await bobAfterReplacement.page.locator('body').innerText();
+    expect(replacedBody).toContain(fixture.subject.title);
+    expect(replacedBody).not.toContain(fixture.collection.title);
+    expect(replacedBody).not.toContain(fixture.fillerSubjects[0]!.title);
+    expect(noFollowerTotal(replacedBody)).toBe(true);
+
+    const removedPrivate = await nativeFollowingJson<{ follow: { targetId: string; state: string } }>(
+      stack,
+      'alice',
+      `/v1/follows/${encodeURIComponent(fixture.collection.id)}`,
+      { method: 'DELETE', key: fixtureKey() },
+    );
+    expect(removedPrivate.follow).toMatchObject({ targetId: fixture.collection.id, state: 'unfollowed' });
+    expect(await fullAliceList()).toEqual([{ follows: [], next: null }]);
+
+    await followingPage.setViewportSize({ width: 390, height: 844 });
+    await followingPage.goto(new URL('/zh-Hans/library/following', stack.web).href, { waitUntil: 'domcontentloaded' });
+    await followingPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    expect(await followingPage.getByRole('heading', { level: 1, name: '正在关注' }).count()).toBe(1);
+    expect(await followingPage.locator('li[data-slot="list-row"]').count()).toBe(0);
   }, 240_000);
 });

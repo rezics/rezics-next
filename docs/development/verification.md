@@ -52,9 +52,11 @@ a second such brief while one of that Goal is ready, running, held or landing. O
 their own walk rarely landed: on 2026-11-06, 2 of 81 tasks integrated after 12:00 UTC carried one, while 14 of 29
 running tasks did, at 17 hours and 3.7 attempts on average.
 
-Decision: private follow native/browser/growth capability stays open until the installed controller-owned driver and
-Auth-persona walk pass after integration; typed transport, FULL withhold, frozen command frame and list-frontier
-return land under ordinary clean-workspace typing.
+Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
+fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
+controller-owned native/browser run after integration; the worker's minimal check covers changed-workspace typing
+and selected outcome tests. Typed transport, FULL withhold, frozen command frame and list-frontier return remain
+ordinary clean-workspace checks.
 
 Decision: Web's focused runner (`apps/web/scripts/focused.ts`) canonicalizes explicit test-file selectors to the child
 `apps/web` working directory before isolated per-file execution. Repository-relative (`apps/web/tests/foo.test.ts`),

@@ -92,9 +92,17 @@ import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.t
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
 
-import { followContributionTarget } from './follow-contribution.ts';
+import { followContributionTarget, withFollowContribution } from './follow-contribution.ts';
 import { followResponse as serializeFollowResponse, withFollowWork } from './follow-operation-bounds.ts';
-import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
+import {
+  basicQuery,
+  embedded,
+  fullView,
+  subjectFields,
+  summaryTargetFields,
+  targetFields,
+  viewQuery,
+} from './views.ts';
 
 type Dependencies = {
   routeKey: Uint8Array;
@@ -711,6 +719,13 @@ const followActionsSchema = t.Union([
 function fullFollowFields() {
   return memoizedValue(fullFollowFields, () => ({
     ...targetFields(),
+    destination: t.Optional(followDestinationSchema),
+    actions: t.Optional(followActionsSchema),
+  }));
+}
+function fullFollowListFields() {
+  return memoizedValue(fullFollowListFields, () => ({
+    ...summaryTargetFields(),
     destination: t.Optional(followDestinationSchema),
     actions: t.Optional(followActionsSchema),
   }));
@@ -2188,8 +2203,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 follow: true,
               },
             );
-            const target = await followContributionTarget(dependencies.pool, follow.targetId, follow.targetType);
-            return serializeFollowResponse(target ? { follow: { ...shown.follow, target } } : shown);
+            const sourceWithheld = query.view === 'FULL' && shown.follow.target === null;
+            const contribution = sourceWithheld
+              ? null
+              : await followContributionTarget(dependencies.pool, follow.targetId, follow.targetType);
+            return serializeFollowResponse({
+              follow: withFollowContribution(shown.follow, contribution, query.view === 'FULL'),
+            });
           }),
         );
       },
@@ -2205,7 +2225,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: {
-          200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowFields())), next: nullable }, closed),
+          200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowListFields())), next: nullable }, closed),
           ...failures(),
         },
         detail: detail('follow.list', 'follow:list'),

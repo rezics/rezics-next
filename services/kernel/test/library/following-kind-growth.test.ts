@@ -7,10 +7,16 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { followPagePlan } from '../../src/library/follow-operation-bounds.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/contracts.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import {
   assertGrowth,
+  capture,
+  costOf,
   measure,
   openGrowthDatabase,
   type GrowthDatabase,
@@ -67,7 +73,8 @@ test('FULL kind pages keep a fixed whole-request cost as matching and nonmatchin
     writeRate: createWriteRateLimiter({ secret: 'following-kind-growth-write-secret-32b' }),
     ratePeer: () => '127.0.0.1',
     routeKey,
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+    receiptKeys: testReceiptKeys(),
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) },
     access: (config) =>
       createAccess({
         ...config,
@@ -113,7 +120,21 @@ test('FULL kind pages keep a fixed whole-request cost as matching and nonmatchin
     digest: createHash('sha256').update(subjectKey).digest(),
     item: { type: 'schema:Book', labels: { en: subjectKey } },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+    authorization: {
+      action: 'subject:create',
+      resource: subjectTarget(routeKey, accountId, subjectKey),
+      denied: () => new Error('Subject growth fixture authorization failed'),
+      async authorize(tx) {
+        bindCommandHistoryEvidence(tx, [
+          {
+            accountRoute: route,
+            accountId,
+            roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+          },
+        ]);
+        return 'execute';
+      },
+    },
   });
   expect((await request('PUT', `/v1/follows/${subject.subject.id}`)).status).toBe(200);
   await database.admin.query(
@@ -187,4 +208,261 @@ test('FULL kind pages keep a fixed whole-request cost as matching and nonmatchin
 
   await runSeries('subject', '50000000');
   await runSeries('collection', '60000000');
+
+  const unrelatedAccount = newId(route);
+  await database.admin.query(
+    `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+     VALUES ($1, $2, 'actor', 'active', $2)`,
+    [route, unrelatedAccount],
+  );
+  const foreignFollowSamples: Record<string, GrowthSample[]> = { first: [], deep: [], empty: [], denied: [] };
+  const sharedHistorySamples: Record<string, GrowthSample[]> = { first: [], deep: [], empty: [], denied: [] };
+  const restrictedToken = await new SignJWT({
+    client_id: actor.clientId,
+    scope: scopes.filter((scope) => scope !== 'follow:list').join(' '),
+    authn_epoch: 1,
+    auth_time: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'following-kind-growth', typ: 'at+jwt' })
+    .setIssuer('https://auth.example.test')
+    .setAudience('https://api.rezics.test')
+    .setSubject(accountId)
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(signing.privateKey);
+  const revisionResult = Bun.spawnSync(['git', 'rev-parse', 'HEAD']);
+  const revision = revisionResult.exitCode === 0 ? revisionResult.stdout.toString().trim() : 'unknown';
+  const seed =
+    '40000000:fixed-selected-subject;50000000:unrelated-followers;71000000:receipt;72000000:outbox;73000000:write-basis';
+  const fixedSelectedIds = Array.from({ length: 20 }, (_, index) => fixtureId('40000000', route, index + 1));
+
+  const seedForeignFollows = async (previous: number, scale: number) => {
+    await database!.admin.query(
+      `INSERT INTO library.follow
+         (route, account_id, target_id, target_type, state, reason, created_at, updated_at, transaction_id)
+       SELECT $1, $2,
+              ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
+              'subject', 'following', 'explicit', '2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z',
+              ($4::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid
+       FROM generate_series($5::int + 1, $6::int) AS n`,
+      [route, unrelatedAccount, '50000000', '51000000', previous, scale],
+    );
+  };
+  const seedSharedHistory = async (previous: number, scale: number) => {
+    await database!.admin.query(
+      `INSERT INTO core.receipt
+         (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
+          epoch, position, transaction_id, response)
+       SELECT $1 >> 4, 'account', $2, 'library.follow.growth.seed',
+              'following-growth-' || n::text, decode(repeat('00', 32), 'hex'),
+              1, 3000000000::bigint + n,
+              ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
+              '{}'::jsonb
+       FROM generate_series($4::int + 1, $5::int) AS n`,
+      [route, unrelatedAccount, '71000000', previous, scale],
+    );
+    await database!.admin.query(
+      `INSERT INTO core.outbox
+         (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
+       SELECT $1 >> 4, 3100000000::bigint + n, 0, 1, 1,
+              ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
+              'com.rezics.library.follow.updated.v1', $2::text, '{}'::jsonb
+       FROM generate_series($4::int + 1, $5::int) AS n`,
+      [route, unrelatedAccount, '72000000', previous, scale],
+    );
+    await database!.admin.query(
+      `INSERT INTO editorial.write_basis
+         (partition_no, transaction_id, epoch, position, principal_kind, principal_id, client_id, requested_by)
+       SELECT $1 >> 4,
+              ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
+              1, 3200000000::bigint + n, 'account', $2, 'following-kind-growth', NULL
+       FROM generate_series($4::int + 1, $5::int) AS n`,
+      [route, unrelatedAccount, '73000000', previous, scale],
+    );
+  };
+  const requestAs = (path: string, authToken: string) =>
+    app.handle(
+      new Request('http://kernel.test' + path, {
+        method: 'GET',
+        headers: {
+          authorization: 'Bearer ' + authToken,
+          'x-request-id': 'following-kind-growth',
+          'idempotency-key': JSON.stringify(randomUUID()),
+        },
+      }),
+    );
+  const measurePath = async (
+    scale: number,
+    samples: GrowthSample[],
+    path: string,
+    kind: 'first' | 'deep' | 'empty' | 'denied',
+    expectedLength: number,
+    authToken = token,
+  ) => {
+    const measured = await capture(database!, async () => {
+      const response = await requestAs(path, authToken);
+      return { status: response.status, body: await response.json() };
+    });
+    const cost = costOf(measured.capture);
+    expect(measured.value.status).toBe(kind === 'denied' ? 403 : 200);
+    if (kind === 'denied') expect(measured.value.body.code).toBe('forbidden');
+    else expect(measured.value.body.follows).toHaveLength(expectedLength);
+    const pageSql = measured.capture.statements.filter((statement) =>
+      /FROM library\.follow AS follow/i.test(statement),
+    );
+    const pageStatementIndexes = measured.capture.statements.flatMap((statement, index) =>
+      /FROM library\.follow AS follow/i.test(statement) ? [index] : [],
+    );
+    expect(pageSql).toHaveLength(kind === 'denied' ? 0 : 1);
+    const selectedRelation = cost.relations['library.follow'];
+    if (kind !== 'denied') {
+      expect(selectedRelation).toBeDefined();
+      expect(selectedRelation!.sequentialScans).toBe(0);
+      expect(selectedRelation!.rows).toBeLessThanOrEqual(kind === 'deep' ? 192 : 108);
+    }
+    samples.push({ scale, cost });
+    const pagePlans = measured.capture.plans.filter((_, index) =>
+      pageStatementIndexes.includes(measured.capture.planStatements?.[index] ?? -1),
+    );
+    const planSummary = pagePlans.map((document) => {
+      const root = (document as Record<string, unknown>)['Plan'] as Record<string, unknown> | undefined;
+      return {
+        node: root?.['Node Type'],
+        actualRows: root?.['Actual Rows'],
+        sharedHitBlocks: root?.['Shared Hit Blocks'],
+        sharedReadBlocks: root?.['Shared Read Blocks'],
+      };
+    });
+    const nativePlan =
+      kind === 'denied'
+        ? null
+        : followPagePlan({
+            route,
+            account_id: accountId,
+            target_type: kind === 'empty' ? 'space' : 'subject',
+            has_target_type: true,
+            after_updated_at: kind === 'deep' ? '2099-01-01T00:00:00.000Z' : '2026-01-01T00:00:00.000Z',
+            after_target_id:
+              kind === 'deep' ? fixtureId('40000000', route, 100) : '00000000-0000-0000-0000-000000000000',
+            has_cursor: kind === 'deep',
+            limit: 21,
+          });
+    console.info(
+      'following-kind-growth-evidence: ' +
+        JSON.stringify({
+          revision,
+          seed,
+          scale,
+          kind,
+          request: path.replace(/cursor=[^&]+/, 'cursor=[sealed]'),
+          status: measured.value.status,
+          resultCount: measured.value.body.follows?.length ?? 0,
+          targetIds: measured.value.body.follows?.slice(0, 2).map((follow: { targetId: string }) => follow.targetId),
+          hasNext: typeof measured.value.body.next === 'string',
+          sql: pageSql,
+          binds: nativePlan?.operands,
+          derived: nativePlan?.total,
+          plans: pagePlans,
+          planSummary,
+          nativeRows: cost.rows,
+          relationRows: selectedRelation?.rows ?? 0,
+          buffers: { hit: cost.sharedHit, read: cost.sharedRead },
+          statements: cost.statements,
+          requestBytes: measured.capture.requestBytes,
+          responseBytes: measured.capture.responseBytes,
+        }),
+    );
+    return measured.value.body;
+  };
+  const runFixedNeighborhood = async (
+    scale: number,
+    previous: number,
+    axis: 'foreign-follows' | 'shared-history',
+    samples: Record<string, GrowthSample[]>,
+  ) => {
+    if (axis === 'foreign-follows') await seedForeignFollows(previous, scale);
+    else await seedSharedHistory(previous, scale);
+    await database!.admin.query('ANALYZE library.follow');
+    await database!.admin.query('ANALYZE core.receipt');
+    await database!.admin.query('ANALYZE core.outbox');
+    await database!.admin.query('ANALYZE editorial.write_basis');
+    const firstPath = '/v1/follows?targetType=subject&limit=20&view=FULL';
+    const first = await measurePath(scale, samples.first!, firstPath, 'first', 20);
+    expect(first.follows.map((follow: { targetId: string }) => follow.targetId)).toEqual(fixedSelectedIds);
+    expect(first.next).toEqual(expect.any(String));
+
+    const maximumResponse = await request('GET', '/v1/follows?targetType=subject&limit=100');
+    const maximum = await maximumResponse.json();
+    expect(maximumResponse.status).toBe(200);
+    expect(maximum.follows).toHaveLength(100);
+    expect(maximum.next).toEqual(expect.any(String));
+    const deepPath = '/v1/follows?targetType=subject&limit=20&view=FULL&cursor=' + encodeURIComponent(maximum.next);
+    const deep = await measurePath(scale, samples.deep!, deepPath, 'deep', 2);
+    expect(deep.follows.map((follow: { targetId: string }) => follow.targetId)).toEqual([
+      fixtureId('40000000', route, 101),
+      subject.subject.id,
+    ]);
+    expect(deep.next).toBeNull();
+    const empty = await measurePath(
+      scale,
+      samples.empty!,
+      '/v1/follows?targetType=space&limit=20&view=FULL',
+      'empty',
+      0,
+    );
+    expect(empty).toEqual({ follows: [], next: null });
+    const denied = await measurePath(scale, samples.denied!, firstPath, 'denied', 0, restrictedToken);
+    expect(denied.code).toBe('forbidden');
+  };
+  let previous = 0;
+  for (const scale of [64, 512, 4096]) {
+    await runFixedNeighborhood(scale, previous, 'foreign-follows', foreignFollowSamples);
+    previous = scale;
+  }
+  previous = 0;
+  for (const scale of [64, 512, 4096]) {
+    await runFixedNeighborhood(scale, previous, 'shared-history', sharedHistorySamples);
+    previous = scale;
+  }
+  const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
+  for (const samples of [foreignFollowSamples, sharedHistorySamples]) {
+    for (const path of Object.values(samples)) {
+      assertGrowth(path, bounds);
+      for (const metric of ['requestBytes', 'responseBytes'] as const) {
+        const values = path.map(({ cost }) => cost[metric]).filter((value): value is number => value !== undefined);
+        if (values.length === path.length) expect(new Set(values).size).toBe(1);
+      }
+    }
+  }
+  const selected = await database.admin.query(
+    `SELECT count(*)::int AS count FROM library.follow
+     WHERE route = $1 AND account_id = $2 AND target_type = 'subject' AND state = 'following'`,
+    [route, accountId],
+  );
+  expect(selected.rows[0]?.count).toBe(102);
+  const firstPlan = followPagePlan({
+    route,
+    account_id: accountId,
+    target_type: 'subject',
+    has_target_type: true,
+    after_updated_at: '2026-01-01T00:00:00.000Z',
+    after_target_id: '00000000-0000-0000-0000-000000000000',
+    has_cursor: false,
+    limit: 21,
+  });
+  const deepPlan = followPagePlan({
+    route,
+    account_id: accountId,
+    target_type: 'subject',
+    has_target_type: true,
+    after_updated_at: '2099-01-01T00:00:00.000Z',
+    after_target_id: fixtureId('40000000', route, 100),
+    has_cursor: true,
+    limit: 21,
+  });
+  expect(firstPlan.total.nativeRows).toBe(108);
+  expect(firstPlan.total.candidateKeys).toBe(21);
+  expect(deepPlan.total.nativeRows).toBe(192);
+  expect(deepPlan.total.candidateKeys).toBe(42);
 }, 300_000);

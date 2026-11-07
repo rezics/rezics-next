@@ -147,9 +147,31 @@ Decision: FULL follow original/current Source mismatch or a non-current summary 
 with `dependency_unavailable`. Create/unfollow freeze original actor, client, owner, edge, request key, typed target
 body and absolute deadline before receipt replay; replay returns that acknowledged result. Empty exhaustion and
 other-member/anonymous views use their own admission. Web binds list GET and the callable point separately; Following
-return stores cursor, kind and target on the private list history entry with the current session. Fewest tests: one
-HTTP follow/replay/foreign/empty journey, one FULL withhold, one typed transport bind, one return-frontier pin.
-Native/browser/growth walks stay with later integration.
+return stores cursor, kind and target on the private list history entry with the current session.
+Decision: complete the served native Follow journey and independently scaled whole-request growth evidence in this
+increment; retain native/browser execution and capability promotion for the post-integration controller check.
+Point FULL response composition also preserves this gate: agent contribution attribution is added only when the
+FULL target survived the current-Source disclosure. If the embedded target is withheld, the point route skips the
+attribution lookup and cannot replace `target: null` with the contributor identity. The list response declares only
+the native target-summary shape; callable point recovery retains its separate contribution-attribution shape.
+
+`test/library/following-kind-growth.test.ts` keeps the selected 102 Subject follows fixed. It measures first FULL
+pages, the FULL continuation after the first 100, empty Space exhaustion, and denied list admission while unrelated
+followers grow at 64, 512 and 4,096; it then holds that 4,096-row population fixed while Core receipt/outbox and
+Editorial write-basis history grow independently at the same scales. The captures retain the whole HTTP/native
+composition, emit dispatched page SQL and derived positional binds, plan nodes, result and relation rows, shared
+buffers, statements, and native request/response bytes. The first and deep Follow leaves assert against
+`followPagePlan`'s 108-row and 192-row native ceilings respectively; first/deep/empty/denied rows and statements
+remain constant and blocks logarithmic. The page bound includes lookahead/discarded candidates and both cursor
+arms; FULL additionally retains target, Source/currentness, summary and serialization work. Count delivery and
+other independently owned background work remain visible separately.
+
+`apps/web/tests/native/native-following.host.test.ts` now encodes the served Auth/browser path through Follow,
+replay, FULL list reload, deep continuation, destination departure and exact cursor/row/focus return, removal,
+private-target tombstone, same-context session replacement, and empty exhaustion. It uses keyboard controls on
+desktop English and phone zh-Hans. This worker owns those fixture and measurement changes; the installed
+controller's native/browser execution and root acceptance remain post-integration checks and have not been run on
+this source.
 
 ## Whole-query publication
 

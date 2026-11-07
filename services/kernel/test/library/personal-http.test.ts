@@ -4,14 +4,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
+import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import * as collections from '../../src/library/collection-store.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/application/index.ts';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/contracts.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { capture, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
@@ -35,6 +40,7 @@ const scopes = [
   'follow:read',
   'follow:list',
   'subject:read',
+  'collection:read',
   'space:read',
   'space:create',
 ];
@@ -83,15 +89,30 @@ async function problem(response: Response, status: number, code?: string) {
 }
 async function subject() {
   const key = randomUUID();
+  const target = subjectTarget(routeKey, owner.accountId, key);
   return (
     await createSubject(db.pool, {
       actor: owner,
-      target: subjectTarget(routeKey, owner.accountId, key),
+      target,
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
       item: { type: 'schema:Book', labels: { en: key } },
       release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
+      authorization: {
+        action: 'subject:create',
+        resource: target,
+        denied: () => new Error('Personal HTTP fixture authorization failed'),
+        async authorize(tx) {
+          bindCommandHistoryEvidence(tx, [
+            {
+              accountRoute: routeOf(owner.accountId)!,
+              accountId: owner.accountId,
+              roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+            },
+          ]);
+          return 'execute';
+        },
+      },
     })
   ).subject.id;
 }
@@ -127,7 +148,8 @@ beforeAll(async () => {
     ratePeer: () => '127.0.0.1',
     routeKey,
     clock,
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+    receiptKeys: testReceiptKeys(),
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) },
     access: (config) =>
       createAccess({
         ...config,
@@ -526,6 +548,39 @@ test('follow replay returns the acknowledged own edge and other viewers keep the
       (row: { targetId: string }) => row.targetId === targetId,
     ),
   ).toBe(false);
+});
+
+test('FULL point keeps an inaccessible agent Follow target withheld while BASIC retains contribution attribution', async () => {
+  const account = await readAccount(db.admin, routeOf(accounts.owner)!, accounts.owner);
+  expect(account).not.toBeNull();
+  const agent = await ensureAccountAgent(db.pool, { account: account!, kind: 'person', name: 'Current contributor' });
+  const targetId = agent.subject.id;
+  await db.admin.query(
+    `INSERT INTO library.follow
+       (route, account_id, target_id, target_type, state, reason, created_at, updated_at, transaction_id)
+     VALUES ($1, $2, $3, 'subject', 'following', 'explicit', $4, $4, $5)`,
+    [routeOf(targetId), accounts.owner, targetId, clock().toISOString(), randomUUID()],
+  );
+  const list = await json(await request('GET', '/v1/follows?targetType=subject&view=FULL'));
+  expect(list.follows).toHaveLength(1);
+  expect(list.follows[0]).toMatchObject({ targetId, target: { id: targetId, type: expect.any(String) } });
+  const route = routeOf(targetId);
+  expect(route).not.toBeNull();
+  await db.admin.query(
+    `INSERT INTO access.resource_denial
+       (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+     VALUES ($1, $2, $3, '', 'subject:read', 'resource', '(,)'::tstzrange, $4)`,
+    [route, targetId, accounts.owner, randomUUID()],
+  );
+
+  const basic = await json(await request('GET', `/v1/follows/${targetId}`));
+  expect(basic.follow).toMatchObject({
+    targetId,
+    state: 'following',
+    target: { id: accounts.owner, kind: 'actor' },
+  });
+  const full = await json(await request('GET', `/v1/follows/${targetId}?view=FULL`));
+  expect(full.follow).toMatchObject({ targetId, state: 'following', target: null });
 });
 
 test('private reads conceal owner unknown and malformed ids and denied writes leave state unchanged', async () => {
