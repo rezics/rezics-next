@@ -16,11 +16,14 @@ import { messagesCurrent } from './scripts/messages-ready.ts';
 import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
+  elysiaTypeboxLiveModuleCode,
   webViteClientOptimizeDeps,
+  webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
   webViteWorkerSsrEnvironment,
   webViteWorkerSsrOptimizeDeps,
   type ViteDepCacheAlignEnvironment,
+  type ViteWorkerResolveAlias,
 } from './tests/support/vite-dep-cache.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
@@ -160,9 +163,12 @@ const urlpatternPolyfillDir = dirname(urlpatternPolyfillCjs);
 const urlpatternPolyfillEsm = join(urlpatternPolyfillDir, 'index.js');
 const urlpatternPolyfillDistEsm = join(urlpatternPolyfillDir, 'dist/urlpattern.js');
 const urlpatternPolyfillAlias = { find: 'urlpattern-polyfill', replacement: urlpatternPolyfillEsm } as const;
+const workerResolveAliases: ViteWorkerResolveAlias[] = [urlpatternPolyfillAlias, ...webViteTypeboxWorkerGraph.aliases];
 const urlpatternPolyfillId = /urlpattern-polyfill/;
+const typeboxBareSpecifierId = /^typebox(?:\/|$)/;
 const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
 const workerSelectorShimPath = join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts');
+const typeboxAliasByFind = new Map(webViteTypeboxWorkerGraph.aliases.map((alias) => [alias.find, alias.replacement]));
 
 function filePathOf(id: string): string {
   return (id.split('?')[0] ?? id).replace(/\\/g, '/');
@@ -189,22 +195,24 @@ function urlpatternPolyfillReplacement(id: string): string | undefined {
   return undefined;
 }
 
-function pinUrlpatternAlias(resolveConfig: { alias?: unknown }): void {
+function pinWorkerResolveAliases(resolveConfig: { alias?: unknown }): void {
+  const finds = new Set(workerResolveAliases.map((entry) => entry.find));
   const alias = resolveConfig.alias;
   if (Array.isArray(alias)) {
     const next = alias.filter(
-      (entry) => !(entry && typeof entry === 'object' && 'find' in entry && entry.find === 'urlpattern-polyfill'),
+      (entry) => !(entry && typeof entry === 'object' && 'find' in entry && finds.has(String(entry.find))),
     );
-    next.unshift(urlpatternPolyfillAlias);
+    next.unshift(...workerResolveAliases);
     alias.length = 0;
     alias.push(...next);
     return;
   }
   if (alias && typeof alias === 'object') {
-    (alias as Record<string, string>)['urlpattern-polyfill'] = urlpatternPolyfillEsm;
+    const record = alias as Record<string, string>;
+    for (const entry of workerResolveAliases) record[entry.find] = entry.replacement;
     return;
   }
-  resolveConfig.alias = [urlpatternPolyfillAlias];
+  resolveConfig.alias = [...workerResolveAliases];
 }
 
 function looksLikeCjs(id: string, code: string): boolean {
@@ -342,8 +350,13 @@ export default defineConfig((context) => {
     return {
       ...(viteCacheDir ? { cacheDir: viteCacheDir } : {}),
       ssr: { target: 'webworker', noExternal: true },
-      environments: { ssr: webViteWorkerSsrEnvironment },
-      resolve: { alias: [urlpatternPolyfillAlias] },
+      environments: {
+        ssr: {
+          ...webViteWorkerSsrEnvironment,
+          resolve: { ...webViteWorkerSsrEnvironment.resolve, alias: [...workerResolveAliases] },
+        },
+      },
+      resolve: { alias: [...workerResolveAliases] },
       optimizeDeps: { noDiscovery: true, include: [] },
     };
   }
@@ -365,7 +378,7 @@ export default defineConfig((context) => {
       ? { cacheDir: resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT) }
       : {}),
     html: { cspNonce: viteNonceMarker },
-    resolve: { alias: [urlpatternPolyfillAlias] },
+    resolve: { alias: [...workerResolveAliases] },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
@@ -489,14 +502,14 @@ export default defineConfig((context) => {
         enforce: 'post' as const,
         config() {
           return {
-            resolve: { alias: [urlpatternPolyfillAlias] },
+            resolve: { alias: [...workerResolveAliases] },
             environments: { ssr: { optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] } } },
           };
         },
         configEnvironment(name: string) {
           if (name === 'client') return;
           return {
-            resolve: { alias: [urlpatternPolyfillAlias] },
+            resolve: { alias: [...workerResolveAliases] },
             optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] },
           };
         },
@@ -505,15 +518,35 @@ export default defineConfig((context) => {
           ssr: { resolve?: { alias?: unknown }; optimizeDeps?: Record<string, unknown> };
           environments?: Record<string, { resolve: { alias?: unknown }; optimizeDeps?: Record<string, unknown> }>;
         }) {
-          pinUrlpatternAlias(config.resolve);
+          pinWorkerResolveAliases(config.resolve);
           if (!config.ssr.resolve) config.ssr.resolve = {};
-          pinUrlpatternAlias(config.ssr.resolve);
+          pinWorkerResolveAliases(config.ssr.resolve);
           pinWorkerSsrOptimizeDeps(config.ssr);
           for (const [name, environment] of Object.entries(config.environments ?? {})) {
             if (name === 'client') continue;
-            pinUrlpatternAlias(environment.resolve);
+            pinWorkerResolveAliases(environment.resolve);
             pinWorkerSsrOptimizeDeps(environment);
           }
+        },
+      },
+      {
+        // Elysia's default TypeBox stubs call require("typebox/type"). Workerd has no sync loader, so the Worker
+        // loads the sibling live ESM and aliases those subpaths to installed TypeBox exports.
+        name: 'web-worker-typebox-esm',
+        enforce: 'pre',
+        applyToEnvironment(environment) {
+          return environment.name !== 'client';
+        },
+        resolveId: {
+          filter: { id: typeboxBareSpecifierId },
+          handler(id) {
+            return typeboxAliasByFind.get(id);
+          },
+        },
+        load(id) {
+          const code = elysiaTypeboxLiveModuleCode(id);
+          if (!code) return null;
+          return { code, map: null };
         },
       },
       // Before the denied-dependency loader, which returns raw file contents for denied paths.
