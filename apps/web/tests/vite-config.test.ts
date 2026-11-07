@@ -25,18 +25,20 @@ function installedElysiaTypeFile(name: string): string {
   return realpathSync(join(dirname(require.resolve('elysia/package.json')), 'dist', 'type', name));
 }
 
-test('Worker Vite rewrites Elysia TypeBox loaders to static imports', () => {
+test('Worker Vite replaces Elysia TypeBox loaders with live ESM re-exports', () => {
   const typeFile = installedElysiaTypeFile('typebox-type.mjs');
-  const valueFile = installedElysiaTypeFile('typebox-value-require.mjs');
+  const valueFile = installedElysiaTypeFile('typebox-value.mjs');
+  const requireFile = installedElysiaTypeFile('typebox-value-require.mjs');
+  const typeJs = installedElysiaTypeFile('typebox-type.js');
   const type = transformElysiaTypeboxLoader(readFileSync(typeFile, 'utf8'), typeFile);
   const value = transformElysiaTypeboxLoader(readFileSync(valueFile, 'utf8'), valueFile);
-  if (!type || !value) throw new Error('Elysia TypeBox loaders were not rewritten');
-  expect(type).toContain('import * as typeboxType from "typebox/type"');
-  expect(type).toContain('type: typeboxType');
-  expect(type).not.toContain('req("typebox/type")');
-  expect(value).toContain('import * as typeboxValueOps from "./typebox-value-ops.mjs"');
-  expect(value).toContain('fromOps(typeboxValueOps)');
-  expect(value).not.toContain('require("./typebox-value-ops.mjs")');
+  const required = transformElysiaTypeboxLoader(readFileSync(requireFile, 'utf8'), requireFile);
+  if (!type || !value || !required) throw new Error('Elysia TypeBox loaders were not rewritten');
+  expect(type).toBe("export * from './typebox-type-live.mjs';\n");
+  expect(value).toBe("export * from './typebox-value-live.mjs';\n");
+  expect(required).toContain('requireTypebox = () => undefined');
+  expect(required).not.toContain('require("./typebox-value-ops.mjs")');
+  expect(transformElysiaTypeboxLoader(readFileSync(typeJs, 'utf8'), typeJs)).toBeNull();
   expect(elysiaWorkerdTypebox().name).toBe('elysia-workerd-typebox');
 });
 

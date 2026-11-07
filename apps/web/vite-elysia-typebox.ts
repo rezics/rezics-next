@@ -1,54 +1,22 @@
 import type { Plugin } from 'vite';
 
-const typeLoader = /(?:^|\/)elysia\/dist\/type\/typebox-type\.(?:mjs|js)$/u;
-const valueRequire = /(?:^|\/)elysia\/dist\/type\/typebox-value-require\.(?:mjs|js)$/u;
+const typeLoader = /(?:^|\/)elysia\/(?:dist|src)\/type\/typebox-type\.mjs$/u;
+const valueLoader = /(?:^|\/)elysia\/(?:dist|src)\/type\/typebox-value\.mjs$/u;
+const valueRequire = /(?:^|\/)elysia\/(?:dist|src)\/type\/typebox-value-require\.mjs$/u;
 
-/** Replace the first top-level `{...}` block that starts at `marker`. */
-export function replaceLeadingBlock(source: string, marker: string, replacement: string): string | null {
-  const start = source.indexOf(marker);
-  if (start === -1) return null;
-  const brace = source.indexOf('{', start);
-  if (brace === -1) return null;
-  let depth = 0;
-  for (let index = brace; index < source.length; index++) {
-    const character = source[index];
-    if (character === '{') depth += 1;
-    else if (character === '}') {
-      depth -= 1;
-      if (depth === 0) return `${source.slice(0, start)}${replacement}${source.slice(index + 1)}`;
-    }
-  }
-  return null;
-}
-
-/** Elysia 2 lazy-loads TypeBox through `require`. Workerd has no Node module loader for `typebox/type`. */
-export function transformElysiaTypeboxLoader(code: string, id: string): string | null {
+/**
+ * Elysia 2 lazy-loads TypeBox through Node `require` / `createRequire`. Workerd has neither, and evaluating
+ * those loaders throws `module is not defined`. Elysia's AOT TypeBox wiring swaps the lazy files for the
+ * live ESM modules that import TypeBox statically; this plugin applies that swap in Vite serve as well as build.
+ * CommonJS `.js` copies stay untouched: rewriting them emits `module.exports`, which workerd cannot evaluate.
+ */
+export function transformElysiaTypeboxLoader(_code: string, id: string): string | null {
   const file = id.split('?', 1)[0]!.replaceAll('\\', '/');
-  if (typeLoader.test(file)) {
-    const replaced = replaceLeadingBlock(
-      code,
-      'function resolveNamespaces()',
-      `function resolveNamespaces() {
-	return {
-		type: typeboxType,
-		system: typeboxSystemLite
-	};
-}`,
-    );
-    if (!replaced || replaced === code) return null;
-    return `import * as typeboxType from "typebox/type";
-import * as typeboxSystemLite from "./typebox-system-lite.mjs";
-${replaced}`;
-  }
+  if (file.endsWith('.js')) return null;
+  if (typeLoader.test(file)) return "export * from './typebox-type-live.mjs';\n";
+  if (valueLoader.test(file)) return "export * from './typebox-value-live.mjs';\n";
   if (valueRequire.test(file)) {
-    const replaced = replaceLeadingBlock(
-      code,
-      'const requireTypebox = () =>',
-      'const requireTypebox = () => fromOps(typeboxValueOps);',
-    );
-    if (!replaced || replaced === code) return null;
-    return `import * as typeboxValueOps from "./typebox-value-ops.mjs";
-${replaced}`;
+    return 'export const requireTypebox = () => undefined;\nexport const importTypebox = () => undefined;\n';
   }
   return null;
 }
