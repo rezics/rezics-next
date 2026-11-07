@@ -261,7 +261,11 @@ export class WorkerJob implements GateOutcomeSink {
       }
       await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
     } catch (error) {
-      if (error instanceof PoolUnavailableError) return;
+      if (error instanceof PoolUnavailableError) {
+        const current = this.tasks.store.task(taskId);
+        this.deferPoolRefusal({ taskId, attempt: current.currentAttempt });
+        return;
+      }
       throw error;
     }
   }
@@ -303,7 +307,10 @@ export class WorkerJob implements GateOutcomeSink {
         try {
           await this.offloadStart(ref.taskId, 'retry');
         } catch (error) {
-          if (error instanceof PoolUnavailableError) return;
+          if (error instanceof PoolUnavailableError) {
+            this.deferPoolRefusal(ref);
+            return;
+          }
           throw error;
         }
       } finally {
@@ -409,7 +416,10 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       // Capacity refusal is an admission wait: leave the durable intent pending for the next existing recovery pass.
-      if (error instanceof PoolUnavailableError) return;
+      if (error instanceof PoolUnavailableError) {
+        this.deferPoolRefusal(ref);
+        return;
+      }
       throw error;
     } finally {
       this.retryIntentsInProgress.delete(key);
@@ -438,6 +448,25 @@ export class WorkerJob implements GateOutcomeSink {
       value.nextAttempt = task.currentAttempt;
     });
   }
+  private deferPoolRefusal(ref: AttemptRef): void {
+    const intent = this.tasks.store.retryIntent(ref);
+    if (!intent || intent.status !== 'pending') return;
+    const previous = intent.options.notBefore;
+    const previousAt = previous === undefined ? undefined : Date.parse(previous);
+    if (previous !== undefined && !Number.isFinite(previousAt))
+      throw new Error('pending retry intent has an invalid notBefore value');
+    // Leave the wait visible through one scheduled recovery pass; the existing lead lets that pass retry on time.
+    const now = Date.now();
+    const recoveryWindowMs = this.policy.host.recoveryIntervalMs + this.policy.worker.retryIntentLeadMs;
+    const deferredUntil = Math.max(
+      now + this.policy.worker.capacityPauseMs,
+      now + recoveryWindowMs,
+      previousAt ?? 0,
+    );
+    this.tasks.store.updateRetryIntent(ref, (value) => {
+      value.options.notBefore = new Date(deferredUntil).toISOString();
+    });
+  }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
     if (!this.startsAllowed()) return;
     const task = this.tasks.store.task(taskId);
@@ -449,7 +478,10 @@ export class WorkerJob implements GateOutcomeSink {
       try {
         await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
       } catch (error) {
-        if (error instanceof PoolUnavailableError) return;
+        if (error instanceof PoolUnavailableError) {
+          this.deferPoolRefusal(ref);
+          return;
+        }
         throw error;
       }
       return;
@@ -464,7 +496,10 @@ export class WorkerJob implements GateOutcomeSink {
       this.markRetryIntentStarted(ref);
       await this.follow(worker);
     } catch (error) {
-      if (error instanceof PoolUnavailableError) return;
+      if (error instanceof PoolUnavailableError) {
+        this.deferPoolRefusal(ref);
+        return;
+      }
       if (error instanceof TaskHeldForDependenciesError || error instanceof ProofCapacityQueuedError) return;
       // Another process already started the attempt this start expected to create.
       if (options.expectedAttempt !== undefined && error instanceof StaleAttemptError) return;
@@ -548,7 +583,11 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         // Another process is starting it.
         if (error instanceof LeaseHeldError) return;
-        if (error instanceof PoolUnavailableError) return;
+        if (error instanceof PoolUnavailableError) {
+          const task = this.tasks.store.task(taskId);
+          this.deferPoolRefusal({ taskId, attempt: task.currentAttempt });
+          return;
+        }
         if (!(error instanceof HeldTaskConflictError)) throw error;
         const task = this.tasks.store.task(taskId),
           ref = { taskId, attempt: task.currentAttempt };
