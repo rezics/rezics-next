@@ -6,8 +6,9 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createConnection, createServer, type Server } from 'node:net';
+import { join } from 'node:path';
 import { type StackSlot, acquireStackSlot } from './stack-lease.ts';
-import { walkStackDirectory } from './stack-run.ts';
+import { ensureWalkStackDirectory, walkStackDirectory } from './stack-run.ts';
 
 export {
   dropFileCache,
@@ -483,14 +484,17 @@ export function admitWalkStack(
   blocked: ReadonlySet<number> = new Set(),
 ): Promise<StackSlot> {
   walkStackNames(task, 1);
+  const directory = walkStackDirectory(root, env);
+  ensureWalkStackDirectory(directory);
   return acquireStackSlot(
     `walk ${task}`,
-    { REZICS_STACK_LEASE_DIR: walkStackDirectory(root, env), REZICS_STACK_SLOTS: String(walkStackLimit(env)) },
+    { REZICS_STACK_LEASE_DIR: directory, REZICS_STACK_SLOTS: String(walkStackLimit(env)) },
     1,
     undefined,
     POSITION_INTERVAL_MS,
     signal,
     async (index) => !blocked.has(index) && (await walkStackPortsAvailable(walkStackPorts(index))),
+    join(directory, 'tickets'),
   );
 }
 

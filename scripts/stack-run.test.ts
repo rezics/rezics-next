@@ -10,12 +10,14 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   LOCAL_CONTAINER_REFUSAL,
   WALK_STACK_DIRECTORY,
+  ensureWalkStackDirectory,
   onCheckHost,
   runOnCheckHost,
   walkStackDirectory,
@@ -1325,7 +1327,7 @@ test('a walk ready probe gives up when a listener never writes a response', asyn
   }
 });
 
-test('walk admission is host-wide so concurrent check-host runs share ports', () => {
+test('walk admission is host-wide and creators set its sticky directory despite restrictive umask', () => {
   expect(walkStackDirectory(repository, {})).toBe(WALK_STACK_DIRECTORY);
   expect(walkStackDirectory('/srv/rezics-check/runs/example', { KERNEL_CHECK_ON_REMOTE: '1' })).toBe(
     WALK_STACK_DIRECTORY,
@@ -1333,6 +1335,14 @@ test('walk admission is host-wide so concurrent check-host runs share ports', ()
   expect(walkStackDirectory(repository, { REZICS_WALK_STACK_DIR: '/custom', KERNEL_CHECK_ON_REMOTE: '1' })).toBe(
     '/custom',
   );
+  const directory = join(root, `walk-directory-${counter++}`);
+  const previousUmask = process.umask(0o077);
+  try {
+    ensureWalkStackDirectory(directory);
+  } finally {
+    process.umask(previousUmask);
+  }
+  expect(statSync(directory).mode & 0o7777).toBe(0o1777);
 });
 
 test('a local stack container needs a worker whose brief lists native or browser and a slot lock its launch holds', async () => {
