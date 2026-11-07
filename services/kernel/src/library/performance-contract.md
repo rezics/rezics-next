@@ -42,8 +42,10 @@ library-entry authorization; native fixtures defer that denial and keep `library
 withheld pages open `reading_progress` and carry `progress_session:list`; a suspended own-account viewer is
 unauthenticated. Whitespace-only prefix continuation matches the unfiltered page; authenticated list tokens stay
 unique per issuance. Growth seed encoding resets its visited-node ceiling on each insert batch. Generic prefix plans may
-Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment Seq Scan oracles stay the
-existing SQL. FULL empty-shelf gate denials keep raw capture so private Library plans must be absent; FULL HTTP
+Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment owner-label pages, reserved-source
+pages, unique points and desired-tuple seeks use the same MATERIALIZED input, Access ROW-bounded index range and
+`OFFSET 0` fence so a custom plan cannot Seq Scan a small assignment table; page `LIMIT` stays after that fence.
+FULL empty-shelf gate denials keep raw capture so private Library plans must be absent; FULL HTTP
 growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry cap, charging one
 provenance summary per notice rather than one telemetry entry per EXPLAIN node, and walks each notice
 under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
@@ -52,7 +54,7 @@ request deadline and one Semantic `prepareReadDecisions` page, not per-subject A
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans. Point reads use that typed MATERIALIZED LATERAL unique-key inner with the ROW-bounded
+observations and zero sequential scans on `personal_label` and `label_assignment`. Point reads use that typed MATERIALIZED LATERAL unique-key inner with the ROW-bounded
 primary-key range and `OFFSET 0`; the store filters
 `include_deleted` on the unique row so a generic prepared plan cannot hide `personal_label_pkey` behind
 `OR deleted_at IS NULL`, inline a `NOT MATERIALIZED` CTE, stop a Seq Scan at `LIMIT 1`, or Seq Scan a small

@@ -131,7 +131,9 @@ identity, Source/member/publication, assignment-growth and lifecycle-growth case
 Label catalogue, assignment and parent SQL use typed input CTEs and LATERAL primary-key or reserved-source
 points so generic prepared plans cannot Seq Scan an owner catalogue. Those `ORDER BY` lists name the index
 columns in index order. Point reads take a typed `MATERIALIZED` input row and LATERAL unique
-`(route, account_id, label_id)` so the inner is a parameterized `personal_label_pkey` nested loop. `ORDER BY`
+`(route, account_id, label_id)` so the inner is a parameterized `personal_label_pkey` nested loop. Assignment
+owner-label pages, reserved-source pages and desired-tuple seeks use the same MATERIALIZED ROW-bounded `OFFSET 0`
+fence on `label_assignment_owner_label`, `label_assignment_reserved_source` and `label_assignment_pkey`. `ORDER BY`
 names that primary key. The inner is an Access ROW-bounded primary-key range plus `OFFSET 0`, so a custom plan
 that inlines the UUID cannot Seq Scan a small catalogue. They do not `LIMIT 1` or `OR include_deleted` in SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a
 small catalogue (FULL warmup 34/34 nodes), equality filters Seq Scan when the UUID is a constant, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique index. The store filters

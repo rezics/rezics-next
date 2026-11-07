@@ -32,9 +32,10 @@ nothing; it becomes frozen with its executable acceptance. Existing frozen tests
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
 workers where relevant, and recorded revision evidence.
 
-Decision: Label unique-key points keep MATERIALIZED input, Access ROW-bounded primary-key range and `OFFSET 0`;
-prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. Auth setup does not copy `DATABASE_URL`
-into `process.env`, so Reylo keeps cached analysis during host-scope tests.
+Decision: Label unique-key points and FULL assignment pages keep MATERIALIZED input, Access ROW-bounded index
+range and `OFFSET 0`; prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. Auth setup does
+not copy the host-scope `catalogue_only` URL into `process.env`, so Reylo keeps cached analysis when a real
+`DATABASE_URL` is already present. Seeded frontends wait until `/auth/sign-in` redirects before signed-in probes.
 
 Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. Native,
 browser and growth evidence is the sole Goal walk
@@ -44,8 +45,8 @@ pass a row. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a st
 and launcher failures are recorded causes; this walk does not repair startup. A missing or failed cross-media seed
 does not fail-rest the 17 paths: mixed anonymous P02/P17 and other seed-free surfaces still run on the admitted
 stack, and each signed-in row records its own first unreached cause. Semantic owns importer
-`Import transport request failed`. Native Web sign-in is `/auth/sign-in` (302 to Auth); Kernel probes
-`/v1/definitions/active` and `/health`; public Log list GET requires `accountId`. The walk source pin does not start
+`Import transport request failed`. Native Web sign-in is `/auth/sign-in` (302 to Auth); Kernel probes the stack-ready
+`/v1/definitions` URL and `/v1/definitions/active`; public Log list GET requires `accountId`. The walk source pin does not start
 shared Vite. Fewest tests: `apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
 
 <!-- first-public-journeys:begin -->
