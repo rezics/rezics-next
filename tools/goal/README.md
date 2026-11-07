@@ -2040,6 +2040,17 @@ The supermanager sets direction and the managers own the work. This applies to e
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
   every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
 
+#### Resident event delivery
+
+The resident watchdog service runs `bun tools/goal/scripts/supermanager-watch.ts --db <store> --tmux-socket
+<socket> --pane <target>`. It reads the registered provider and thread from the store and delivers real inbox events
+within its two-second coalescing interval, independently of read, acknowledgement and host notification state.
+A separate atomic `--cursor <file>` checkpoints successful verified tmux submission; failed transport retains pending
+IDs. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
+An initial `--start-after <id>` explicitly selects the historical backlog boundary when no cursor exists.
+The same script accepts `--emit --source hourly-report --summary <report>` to write the existing report's computed
+alarm into the native inbox. Metrics remain owned by the hourly report; the bridge does not recompute them.
+
 #### Shared inbox
 
 Any authenticated manager, including the registered supermanager, can inspect every recipient's conversation. Shared
