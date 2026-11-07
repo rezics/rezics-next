@@ -34,6 +34,12 @@ then `tsconfig.scripts.json`. The scripts program still runs after a red web pro
 substitute `bun check --no-script`. Pin with `apps/web/scripts/typecheck.test.ts`. Native, browser and full root
 journeys remain separate acceptance.
 
+Decision: Web prepares SQL-derived types once per migrated schema with Kernel's immutable Reylo analysis cache, which
+covers the Kernel SQL imported by Web's compiler programs. Both programs share that prepared view; unchanged schema
+and SQL reuse it across runs, while timings report SQL type analysis and each TypeScript program separately.
+Warm-cache measurement on check host a: SQL analysis took 4.06 s, `tsconfig.json` took 20.28 s, and
+`tsconfig.scripts.json` took 11.91 s; the remote command completed in 108.56 s with all 2,028 Kernel SQL files reused.
+
 Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving
 entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
 projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes declare their bounded
