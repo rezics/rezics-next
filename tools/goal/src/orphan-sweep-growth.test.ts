@@ -1,15 +1,18 @@
 import { expect, test } from 'bun:test';
-import { existsSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, watch, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import type { DirectoryLease } from './lease.ts';
-import { openDb } from './db.ts';
-import { WorkerStore } from './store.ts';
-import type { Attempt } from './types.ts';
+import { migrate, openDb } from './db.ts';
+import { WorkerStore, workerMigrations } from './store.ts';
+import type { Attempt, Settings } from './types.ts';
 import { harness, repository } from './test-support.ts';
 import type { ProcessIdentity } from './process.ts';
 import { observeSqliteWork, type SqliteWork } from '../test-support/sqlite-work.ts';
+import { runMaintenance } from './maintenance.ts';
+import type { Runtime } from './config.ts';
+import type { LifetimeRuntime, LifetimeWorkUnit } from './worktree-lifetime.ts';
 
 const deadDriver: ProcessIdentity = { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 };
 
@@ -65,6 +68,79 @@ function recoveryWork(work: SqliteWork[]): SqliteWork[] {
     expect(row.fullscanSteps).toBe(0);
   }
   return selected;
+}
+
+function maintenanceFixture(taskCount: number, attemptCount = taskCount * 2, eventCount = taskCount * 3) {
+  const repositoryFixture = repository();
+  const stateDirectory = join(repositoryFixture.path, 'state');
+  const worktreeRoot = join(repositoryFixture.path, 'worktrees');
+  const procRoot = join(repositoryFixture.path, 'proc');
+  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(join(procRoot, '1'), { recursive: true });
+  mkdirSync(join(procRoot, 'sys'), { recursive: true });
+  mkdirSync(join(worktreeRoot, 'settled-00000'), { recursive: true });
+  writeFileSync(join(worktreeRoot, 'settled-00000', 'leftover'), 'owned fixture remnant');
+  const db = openDb(':memory:');
+  migrate(db, workerMigrations.filter((migration) => !(migration.module === 'worker' && migration.version === 14)));
+  const insertTask = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, 2, ?)');
+  const insertAttempt = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)');
+  const insertEvent = db.query(
+    "INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, 'fixture', '2000-01-01', '{}')",
+  );
+  db.transaction(() => {
+    for (let index = 0; index < taskCount; index++) {
+      const id = `settled-${String(index).padStart(5, '0')}`;
+      insertTask.run(
+        id,
+        index + 1,
+        JSON.stringify({
+          id,
+          sequence: index + 1,
+          state: 'integrated',
+          currentAttempt: 2,
+          worktree: join(worktreeRoot, id),
+          brief: { after: [] },
+          createdAt: '2000-01-01T00:00:00.000Z',
+        }),
+      );
+    }
+    for (let ordinal = 1; ordinal <= attemptCount; ordinal++) {
+      const taskIndex = (ordinal - 1) % taskCount;
+      const attempt = Math.floor((ordinal - 1) / taskCount) + 1;
+      const id = `settled-${String(taskIndex).padStart(5, '0')}`;
+      insertAttempt.run(
+        id,
+        attempt,
+        JSON.stringify({
+          taskId: id,
+          attempt,
+          state: 'superseded',
+          process:
+            ordinal === 1
+              ? { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 }
+              : null,
+        }),
+      );
+    }
+    for (let ordinal = 1; ordinal <= eventCount; ordinal++) {
+      const taskIndex = (ordinal - 1) % taskCount;
+      insertEvent.run(`settled-${String(taskIndex).padStart(5, '0')}`, ordinal);
+    }
+  }).immediate();
+  const store = new WorkerStore(db);
+  const settings = { stateDirectory, mainCheckout: repositoryFixture.main, worktreeRoot } as Settings;
+  return { db, store, settings, procRoot, repositoryFixture };
+}
+
+function assertMaintenanceWork(work: SqliteWork[]): void {
+  expect(work.length).toBeGreaterThan(0);
+  for (const row of work) {
+    expect(row.runs).toBe(1);
+    expect(row.vmSteps).toBeGreaterThan(0);
+    expect(row.vmSteps).toBeLessThanOrEqual(2_000);
+    expect(row.fullscanSteps).toBe(0);
+    expect(row.sorts).toBe(0);
+  }
 }
 
 test('command and host sweeps read and lease a constant live candidate set as settled history grows', async () => {
@@ -237,6 +313,166 @@ test('command and host sweeps read and lease a constant live candidate set as se
   expect(measurements[0]?.attemptRows).toBeGreaterThan(0);
   expect(measurements[0]?.taskRows).toBeGreaterThan(0);
 });
+
+test('host maintenance reaches a fixed cleanup and process neighbourhood across three settled-history scales', async () => {
+  const traces: SqliteWork[][] = [];
+  const unitScales: Record<string, number>[] = [];
+  const scales = [
+    [100, 200, 300],
+    [1_000, 200, 300],
+    [5_000, 200, 300],
+    [100, 100, 300],
+    [100, 1_000, 300],
+    [100, 5_000, 300],
+    [100, 200, 100],
+    [100, 200, 1_000],
+    [100, 200, 5_000],
+  ] as const;
+  for (const [taskCount, attemptCount, eventCount] of scales) {
+    const { db, store, settings, procRoot, repositoryFixture } = maintenanceFixture(taskCount, attemptCount, eventCount);
+    const label = `${taskCount}/${attemptCount}/${eventCount}`;
+    const native = observeSqliteWork(db, join(repositoryFixture.path, `native-maintenance-${label}`));
+    const units: Record<string, number> = {};
+    const observe = (unit: string) => {
+      units[unit] = (units[unit] ?? 0) + 1;
+    };
+    const lifetime: LifetimeRuntime = {
+      pressure: () => null,
+      sleep: async () => {},
+      command: () => {},
+      procRoot,
+      observe: (unit: LifetimeWorkUnit) => observe(unit),
+    };
+    try {
+      expect(
+        await runMaintenance(
+          'reap',
+          { stateDirectory: settings.stateDirectory, settings, store } as Runtime,
+          (unit) => observe(unit),
+          lifetime,
+        ),
+      ).toBe(0);
+      const work = native.drain(`maintenance-full-trace:${label}`);
+      assertMaintenanceWork(work);
+      expect(work.some((row) => /worker_maintenance_candidates/.test(row.sql))).toBe(true);
+      expect(work.some((row) => /worker_maintenance_progress/.test(row.sql))).toBe(true);
+      expect(work.some((row) => /json_type\(body, '\$\.process'\)/.test(row.sql))).toBe(true);
+      expect(work.some((row) => /worker_events/.test(row.sql))).toBe(false);
+      expect(work.filter((row) => /worker_worktree_cleanup/.test(row.sql))).toHaveLength(2);
+      expect(work.some((row) => /SELECT id, body FROM worker_tasks ORDER BY sequence/i.test(row.sql))).toBe(false);
+      expect(units).toMatchObject({
+        'maintenance-backfill-task-row': 32,
+        'maintenance-backfill-attempt-row': 32,
+        'reap-worktree-existence': 1,
+        'process-directory-entry': 4,
+        'process-cwd-enumeration': 2,
+        'candidate-path-stat': 19,
+        'worktree-tree-expansion': 1,
+        'worktree-tree-entry': 1,
+      });
+      expect(units['process-group-termination'] ?? 0).toBe(0);
+      traces.push(work);
+      unitScales.push(units);
+    } finally {
+      native.restore();
+      db.close();
+      repositoryFixture.close();
+    }
+  }
+  for (const trace of traces.slice(1)) expect(trace).toEqual(traces[0]);
+  for (const units of unitScales.slice(1)) expect(units).toEqual(unitScales[0]);
+}, 60_000);
+
+test('deep cleanup backlog drains in fixed pages and empty passes stop scanning history', () => {
+  const taskCount = 5_000;
+  const { db, store, repositoryFixture } = maintenanceFixture(taskCount, taskCount * 2, taskCount * 3);
+  const native = observeSqliteWork(db, join(repositoryFixture.path, 'native-maintenance-drain'));
+  let reached = 0;
+  let passes = 0;
+  try {
+    while (!store.maintenanceTasksBootstrapped() || store.hasPendingWorktreeCandidates()) {
+      store.bootstrapMaintenanceTasks(32);
+      const candidates = store.worktreeMaintenanceCandidates(16);
+      expect(candidates.length).toBeLessThanOrEqual(16);
+      reached += candidates.length;
+      store.completeMaintenanceCandidates(candidates);
+      expect(++passes).toBeLessThan(1_000);
+    }
+    expect(reached).toBe(taskCount);
+    expect(store.bootstrapMaintenanceTasks(32)).toEqual({ examined: 0, complete: true });
+    // The first empty selection wraps the durable round-robin ticket; later empty passes are identical.
+    expect(store.worktreeMaintenanceCandidates(16)).toEqual([]);
+    const firstEmpty = store.worktreeMaintenanceCandidates(16);
+    const secondEmpty = store.worktreeMaintenanceCandidates(16);
+    expect(firstEmpty).toEqual([]);
+    expect(secondEmpty).toEqual([]);
+    const work = native.drain(`maintenance-drain:${taskCount}/${taskCount * 2}/${taskCount * 3}`);
+    assertMaintenanceWork(work);
+    expect(work.some((row) => /worker_maintenance_candidates/.test(row.sql))).toBe(true);
+    expect(work.some((row) => /SELECT id, body FROM worker_tasks ORDER BY sequence/i.test(row.sql))).toBe(false);
+  } finally {
+    native.restore();
+    db.close();
+    repositoryFixture.close();
+  }
+}, 60_000);
+
+test('unregistered directory recovery keeps its complete native trace fixed across task history', async () => {
+  const traces: SqliteWork[][] = [];
+  const unitScales: Record<string, number>[] = [];
+  for (const taskCount of [100, 1_000, 5_000]) {
+    const { db, store, settings, procRoot, repositoryFixture } = maintenanceFixture(taskCount, 200, 300);
+    const unknown = join(settings.worktreeRoot!, 'unknown-leftover');
+    mkdirSync(unknown, { recursive: true });
+    writeFileSync(join(unknown, 'payload'), 'owned unregistered remnant');
+    const lastSequence = (db.query('SELECT max(sequence) AS value FROM worker_tasks').get() as { value: number }).value;
+    db.query(`INSERT INTO worker_maintenance_task_paths(path, task_id, sequence)
+      SELECT json_extract(body, '$.worktree'), id, sequence FROM worker_tasks
+      WHERE json_type(body, '$.worktree')='text'`)
+      .run();
+    db.query('DELETE FROM worker_maintenance_candidates').run();
+    db.query(`UPDATE worker_maintenance_progress SET task_sequence=?, tasks_complete=1 WHERE id=1`).run(lastSequence);
+    const native = observeSqliteWork(db, join(repositoryFixture.path, `native-stray-${taskCount}`));
+    const units: Record<string, number> = {};
+    const io: LifetimeRuntime = {
+      pressure: () => null,
+      sleep: async () => {},
+      command: () => {},
+      procRoot,
+      observe: (unit: LifetimeWorkUnit) => {
+        units[unit] = (units[unit] ?? 0) + 1;
+      },
+    };
+    try {
+      expect(await removeFinishedWorktree(settings, store, io)).toBe(unknown);
+      expect(existsSync(unknown)).toBe(false);
+      const work = native.drain(`maintenance-stray-full-trace:${taskCount}/200/300`);
+      assertMaintenanceWork(work);
+      expect(work.some((row) => /worker_maintenance_scan_directories/.test(row.sql))).toBe(true);
+      expect(work.some((row) => /worker_maintenance_task_paths/.test(row.sql))).toBe(true);
+      expect(work.some((row) => /worker_maintenance_strays/.test(row.sql))).toBe(true);
+      expect(work.some((row) => /worker_events/.test(row.sql))).toBe(false);
+      expect(work.some((row) => /SELECT id, body FROM worker_tasks ORDER BY sequence/i.test(row.sql))).toBe(false);
+      expect(units).toMatchObject({
+        'maintenance-backfill-task-row': 0,
+        'worktree-root-entry': 2,
+        'worktree-tree-expansion': 1,
+        'worktree-tree-entry': 1,
+        'process-cwd-enumeration': 2,
+        'process-directory-entry': 4,
+        'git-registration-prune': 1,
+      });
+      traces.push(work);
+      unitScales.push(units);
+    } finally {
+      native.restore();
+      db.close();
+      repositoryFixture.close();
+    }
+  }
+  for (const trace of traces.slice(1)) expect(trace).toEqual(traces[0]);
+  for (const units of unitScales.slice(1)) expect(units).toEqual(unitScales[0]);
+}, 60_000);
 
 test('the next command settles an exited attempt that remains current and unsettled', async () => {
   for (const settledCount of [100, 1_000, 5_000]) {

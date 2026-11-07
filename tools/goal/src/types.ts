@@ -406,6 +406,28 @@ export type WorktreeCleanupDisposition = {
   detail: string;
   recordedAt: string;
 };
+export type MaintenanceCandidateRef = {
+  ticket: number;
+  kind: 'worktree' | 'reap';
+  taskId: string;
+  attempt: number;
+};
+export type WorktreeMaintenanceCandidate = MaintenanceCandidateRef & { kind: 'worktree'; task: Task };
+export type ProcessMaintenanceCandidate = MaintenanceCandidateRef & {
+  kind: 'reap';
+  worktree: string;
+  process: ProcessIdentity;
+};
+export type StrayWorktreeCandidate = { ticket: number; path: string };
+export type WorktreeScanDirectory = {
+  watch_ticket: number;
+  root: string;
+  path: string;
+  generation: string | null;
+  offset: number;
+  complete: boolean;
+};
+export type MaintenanceBackfillProgress = { examined: number; complete: boolean };
 export type PromotionGateResult = {
   commit: string;
   command: string[];

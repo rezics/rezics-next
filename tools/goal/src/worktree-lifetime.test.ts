@@ -125,7 +125,53 @@ test('a task worktree is removed after integration, merge or cancellation while 
   }
 }, 30_000);
 
-test('orphan worktree maintenance yields during tree cleanup and keeps a live stray cwd', async () => {
+test('finished cleanup drains a deep missing-path backlog in fixed candidate batches', async () => {
+  const h = harness();
+  const count = 40;
+  const insert = h.store.db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, 0, ?)');
+  h.store.db.transaction(() => {
+    for (let sequence = 1; sequence <= count; sequence++) {
+      const id = `old-${String(sequence).padStart(3, '0')}`;
+      insert.run(
+        id,
+        sequence,
+        JSON.stringify({
+          id,
+          sequence,
+          state: 'integrated',
+          currentAttempt: 0,
+          worktree: join(h.settings.worktreeRoot, id),
+          brief: { after: [] },
+          createdAt: '2000-01-01T00:00:00.000Z',
+        }),
+      );
+    }
+  }).immediate();
+  const units: Record<string, number> = {};
+  const io = fake({
+    command: () => {
+      units.prune = (units.prune ?? 0) + 1;
+    },
+    observe: (unit) => {
+      units[unit] = (units[unit] ?? 0) + 1;
+    },
+  });
+  try {
+    for (let pass = 0; pass < 3; pass++) await removeFinishedWorktree(h.settings, h.store, io);
+    expect(h.store.maintenanceTasksBootstrapped()).toBe(true);
+    expect(h.store.hasPendingWorktreeCandidates()).toBe(false);
+    expect(units['candidate-path-stat']).toBe(count);
+    expect(units.prune).toBe(1);
+    await removeFinishedWorktree(h.settings, h.store, io);
+    await removeFinishedWorktree(h.settings, h.store, io);
+    expect(units['candidate-path-stat']).toBe(count);
+    expect(units.prune).toBe(1);
+  } finally {
+    h.dispose();
+  }
+}, 30_000);
+
+test('orphan worktree cleanup yields and sweeps a no-task root directory after its process exits', async () => {
   const { h, task } = setup('integrated');
   const heavy = join(task.worktree, '.temp/orphan-cleanup');
   const stray = join(h.settings.worktreeRoot, 'orphan-live-cwd');
@@ -157,7 +203,7 @@ test('orphan worktree maintenance yields during tree cleanup and keeps a live st
     const exited = new Promise<void>((resolveExit) => child.once('exit', () => resolveExit()));
     child.kill('SIGTERM');
     await exited;
-    await removeFinishedWorktree(h.settings, h.store);
+    for (let pass = 0; pass < 4 && existsSync(stray); pass++) await removeFinishedWorktree(h.settings, h.store);
     expect(existsSync(stray)).toBe(false);
     expect(h.store.task(task.id).state).toBe('integrated');
     expect(gitListsWorktree(h.root, task.worktree)).toBe(false);
@@ -373,7 +419,7 @@ test('a changed offending path generation permits one bounded retry after operat
   }
 });
 
-test('cleanup leaves active worktrees, shared dependency stores and external symlink targets intact, and sweeps no-.git leftovers', async () => {
+test('cleanup leaves active worktrees, shared stores and symlink targets intact, and sweeps no-.git leftovers', async () => {
   const { h, task } = setup('integrated');
   const active = h.tasks.dispatch(h.briefFile);
   h.store.updateTask({ taskId: active.id, attempt: 0 }, (row) => {
@@ -403,6 +449,8 @@ test('cleanup leaves active worktrees, shared dependency stores and external sym
 
   try {
     expect(await removeFinishedWorktree(h.settings, h.store, fake())).toBe(task.id);
+    for (let pass = 0; pass < 5 && existsSync(unrelated); pass++)
+      await removeFinishedWorktree(h.settings, h.store, fake());
     expect(existsSync(active.worktree)).toBe(true);
     expect(existsSync(unrelated)).toBe(false);
     expect(readFileSync(outside, 'utf8')).toBe('external data');

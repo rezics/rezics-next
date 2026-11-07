@@ -7,9 +7,16 @@ import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { REUSED_PID_REFUSAL, terminateProcessGroup } from './process.ts';
 import { regenerateDerivedHead } from './promotion.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
+import { MAINTENANCE_BOOTSTRAP_PAGE_SIZE, MAINTENANCE_CANDIDATE_BATCH_SIZE } from './store.ts';
+import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
 
 export const MAINTENANCE_JOBS = ['reap', 'alarm', 'detect', 'regenerate'] as const;
 export type MaintenanceJob = (typeof MAINTENANCE_JOBS)[number];
+export type MaintenanceWorkUnit =
+  | 'reap-worktree-existence'
+  | 'process-group-termination'
+  | 'maintenance-backfill-attempt-row'
+  | 'process-directory-entry';
 
 /** A timed-out subprocess and all its descendants belong to this maintenance run. */
 export async function maintenanceCommand(argv: string[], cwd: string, signal: AbortSignal): Promise<void> {
@@ -37,7 +44,12 @@ export async function maintenanceCommand(argv: string[], cwd: string, signal: Ab
 }
 
 /** The periodic sweep excludes generators; explicit regeneration runs as a separate, bounded process. */
-export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runtime): Promise<number> {
+export async function runMaintenance(
+  job: MaintenanceJob | 'all',
+  runtime: Runtime,
+  observe?: (unit: MaintenanceWorkUnit) => void,
+  lifetimeRuntime?: LifetimeRuntime,
+): Promise<number> {
   const policy = runtime.settings?.policy ?? defaultPolicy;
   const budget = job === 'regenerate' ? policy.maintenance.regenerationBudgetMs : policy.maintenance.budgetMs;
   const controller = new AbortController();
@@ -77,20 +89,34 @@ export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runti
       await step(name, async () => {
         switch (name) {
           case 'reap':
-            // One broken identity must not prevent reaping other recorded groups or running later jobs.
-            for (const task of runtime.store.tasks()) {
+            // The process index is backfilled in fixed pages, then task writers keep its queue current.
+            const processBackfill = runtime.store.bootstrapMaintenanceProcesses(MAINTENANCE_BOOTSTRAP_PAGE_SIZE);
+            for (let index = 0; index < processBackfill.examined; index++)
+              observe?.('maintenance-backfill-attempt-row');
+            const candidates = runtime.store.reapMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE);
+            const completed: typeof candidates = [];
+            for (const candidate of candidates) {
               signal.throwIfAborted();
-              if (existsSync(task.worktree)) continue;
-              for (const attempt of runtime.store.attempts(task.id))
-                if (attempt.process)
-                  await step(`reap ${task.id}`, () =>
-                    terminateProcessGroup(attempt.process, 1000).catch((error: unknown) => {
-                      // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
-                      if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
-                      throw error;
-                    }),
-                  );
+              try {
+                observe?.('reap-worktree-existence');
+                // The worktree is the custody boundary: retain the candidate until deletion makes reaping eligible.
+                if (existsSync(candidate.worktree)) continue;
+                observe?.('process-group-termination');
+                await terminateProcessGroup(candidate.process, 1000, undefined, () =>
+                  observe?.('process-directory-entry'),
+                ).catch((error: unknown) => {
+                  // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
+                  if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
+                  throw error;
+                });
+                completed.push(candidate);
+              } catch (error) {
+                failed = true;
+                console.error(`maintenance reap ${candidate.taskId}:${candidate.attempt}:`, error);
+              }
             }
+            runtime.store.completeMaintenanceCandidates(completed);
+            await removeFinishedWorktree(runtime.settings, runtime.store, lifetimeRuntime);
             break;
           case 'detect':
             await runtime.deliverReminders?.();
