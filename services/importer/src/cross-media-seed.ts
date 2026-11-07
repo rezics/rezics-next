@@ -168,6 +168,7 @@ import {
   CrossMediaTableScanLimitError,
   VNDB_ENTRY_META_SCAN_PAGE,
   collectSelectedDumpRows,
+  isCrossMediaTableScanLimitError,
   showcaseLimits,
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
@@ -175,7 +176,12 @@ import {
   type ShowcaseManifest,
 } from './showcase-contract.ts';
 
-export { CrossMediaTableScanLimitError, VNDB_ENTRY_META_SCAN_PAGE, collectSelectedDumpRows };
+export {
+  CrossMediaTableScanLimitError,
+  VNDB_ENTRY_META_SCAN_PAGE,
+  collectSelectedDumpRows,
+  isCrossMediaTableScanLimitError,
+};
 export type { CrossMediaTableScanLimits, CrossMediaTables };
 
 type Provider = 'bangumi' | 'vndb';
@@ -1366,7 +1372,7 @@ export async function planCrossMediaSeed(
       plan.releasePlatforms = releasePlan.releasePlatforms;
       for (const entity of releasePlan.entities.vndb) releases.add(entity.key);
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
       gap('vndb', error.table, { table: error.table }, error.message);
     }
   }

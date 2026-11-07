@@ -368,6 +368,35 @@ test('bounded VNDB entry_meta pages continue until selected revisions are found'
       },
     });
     expect(found).toEqual(new Map([['v1', 7]]));
+
+    const duckFound = new Map<string, number>();
+    const duckRemaining = new Set(['v1']);
+    const duck: CrossMediaTables = {
+      async *rows(provider, table, limits) {
+        if (provider !== 'vndb' || table !== 'entry_meta') return;
+        if ((limits?.resumeBytes ?? 0) === 0) {
+          yield { id: 'c1', revision: 1, lastmod: '2026-10-25 00:00:00+00' };
+          const error = new Error('Cross-media vndb/entry_meta exceeded its bounded scan');
+          error.name = 'CrossMediaTableScanLimitError';
+          Object.assign(error, { resumeBytes: 48, table: 'entry_meta' });
+          throw error;
+        }
+        yield { id: 'v1', revision: 9, lastmod: '2026-10-25 00:00:00+00' };
+      },
+    };
+    await collectSelectedDumpRows(duck, 'vndb', 'entry_meta', {
+      limits: { maxRows: 2, maxBytes: 1024 },
+      select: (row) => duckRemaining.has(String(row.id ?? '')),
+      onRow(row) {
+        duckFound.set(String(row.id), Number(row.revision));
+        duckRemaining.delete(String(row.id));
+      },
+      done: () => duckRemaining.size === 0,
+      onLimit() {
+        throw new Error('duck-typed VNDB entry_meta stopped before continuation finished');
+      },
+    });
+    expect(duckFound).toEqual(new Map([['v1', 9]]));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

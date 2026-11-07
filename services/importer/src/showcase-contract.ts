@@ -68,6 +68,20 @@ export class CrossMediaTableScanLimitError extends Error {
   }
 }
 
+/** Dump files and planners share this class; name matching covers a duplicate module instance. */
+export function isCrossMediaTableScanLimitError(error: unknown): error is CrossMediaTableScanLimitError {
+  return (
+    error instanceof CrossMediaTableScanLimitError ||
+    (error instanceof Error && error.name === 'CrossMediaTableScanLimitError')
+  );
+}
+
+function scanResumeBytes(error: { resumeBytes?: unknown }): number {
+  return typeof error.resumeBytes === 'number' && Number.isSafeInteger(error.resumeBytes) && error.resumeBytes >= 0
+    ? error.resumeBytes
+    : 0;
+}
+
 /** Read selected dump rows in bounded pages until the selector is done, EOF, or a page cannot advance. */
 export async function collectSelectedDumpRows(
   input: CrossMediaTables,
@@ -94,8 +108,8 @@ export async function collectSelectedDumpRows(
       }
       return;
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
-      const next = error.resumeBytes;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
+      const next = scanResumeBytes(error);
       if (advanced === 0 || next <= resumeBytes) {
         options.onLimit();
         return;

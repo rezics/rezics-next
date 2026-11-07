@@ -10,17 +10,16 @@ import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/con
 import type { Owner } from './record-bindings.ts';
 import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
-  CrossMediaTableScanLimitError,
   collectSelectedDumpRows,
   collectSelectedReleaseTitles,
   crossMediaAliases,
   emptyCrossMediaPlan,
+  isCrossMediaTableScanLimitError,
   type CrossMediaGap,
   type CrossMediaMember,
   type CrossMediaPlan,
   type CrossMediaPort,
   type CrossMediaReading,
-  type CrossMediaTableScanLimits,
   type CrossMediaTables,
 } from './showcase-contract.ts';
 import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
@@ -58,7 +57,8 @@ const WORK_ID = vndbWorkIdentity;
 const RELEASE_ID = vndbReleaseIdentity;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-const RELEASE_SCAN_LIMITS: Readonly<Record<string, { maxRows: number; maxBytes: number }>> = Object.freeze({
+/** One page of a VNDB release table. Continuation reads the next dump offset instead of raising this cap. */
+export const VNDB_RELEASE_SCAN_LIMITS: Readonly<Record<string, { maxRows: number; maxBytes: number }>> = Object.freeze({
   vn: { maxRows: 100_000, maxBytes: 64 * 1024 * 1024 },
   vn_titles: { maxRows: 500_000, maxBytes: 128 * 1024 * 1024 },
   entry_meta: { maxRows: 100_000, maxBytes: 64 * 1024 * 1024 },
@@ -71,26 +71,30 @@ const RELEASE_SCAN_LIMITS: Readonly<Record<string, { maxRows: number; maxBytes: 
 });
 
 async function* boundedRows(input: CrossMediaTables, table: string): AsyncGenerator<Row> {
-  const limit = RELEASE_SCAN_LIMITS[table];
+  const limit = VNDB_RELEASE_SCAN_LIMITS[table];
   ensure(limit, `Missing VNDB release scan budget: ${table}`);
-  let rows = 0;
-  let bytes = 0;
-  const limits: CrossMediaTableScanLimits = {
-    ...limit,
-    consumeRow(size) {
-      if (rows >= limit.maxRows || bytes + size > limit.maxBytes)
-        throw new CrossMediaTableScanLimitError('vndb', table);
-      rows += 1;
-      bytes += size;
-    },
-  };
-  let accountedRows = 0;
-  for await (const row of input.rows('vndb', table, limits)) {
-    if (rows === accountedRows) {
-      limits.consumeRow!(Buffer.byteLength(JSON.stringify(row), 'utf8') + 1);
+  let resumeBytes = 0;
+  for (;;) {
+    let advanced = 0;
+    try {
+      for await (const row of input.rows('vndb', table, {
+        maxRows: limit.maxRows,
+        maxBytes: limit.maxBytes,
+        resumeBytes,
+      })) {
+        advanced += 1;
+        yield row;
+      }
+      return;
+    } catch (error) {
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
+      const next =
+        typeof error.resumeBytes === 'number' && Number.isSafeInteger(error.resumeBytes) && error.resumeBytes >= 0
+          ? error.resumeBytes
+          : 0;
+      if (advanced === 0 || next <= resumeBytes) throw error;
+      resumeBytes = next;
     }
-    accountedRows = rows;
-    yield row;
   }
 }
 
@@ -397,7 +401,7 @@ export async function planVndbReleaseFidelity(
       workRows.set(id, row);
     }
   } catch (error) {
-    if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+    if (!isCrossMediaTableScanLimitError(error)) throw error;
     workScanComplete = false;
     scanGap('vn');
   }
@@ -448,7 +452,7 @@ export async function planVndbReleaseFidelity(
       addMembership(row, id, vid);
     }
   } catch (error) {
-    if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+    if (!isCrossMediaTableScanLimitError(error)) throw error;
     membershipScanComplete = false;
     scanGap('releases_vn');
   }
@@ -474,7 +478,7 @@ export async function planVndbReleaseFidelity(
         outgoing.set(id, rows);
       }
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
       supersessionScanComplete = false;
       scanGap('releases_supersedes');
     }
@@ -562,7 +566,7 @@ export async function planVndbReleaseFidelity(
         addMembership(row, id, vid);
       }
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
       membershipScanComplete = false;
       scanGap('releases_vn');
     }
@@ -592,7 +596,7 @@ export async function planVndbReleaseFidelity(
         if (membershipWorkIds.has(id) && !workRows.has(id)) workRows.set(id, row);
       }
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
       extraWorkScanComplete = false;
       scanGap('vn');
     }
@@ -615,14 +619,14 @@ export async function planVndbReleaseFidelity(
       workTitles.set(id, rows);
     }
   } catch (error) {
-    if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+    if (!isCrossMediaTableScanLimitError(error)) throw error;
     titlesScanComplete = false;
     scanGap('vn_titles');
   }
   let revisionsScanComplete = true;
   const pendingRevisions = new Set(allWorkIds);
   await collectSelectedDumpRows(input, 'vndb', 'entry_meta', {
-    limits: RELEASE_SCAN_LIMITS.entry_meta!,
+    limits: VNDB_RELEASE_SCAN_LIMITS.entry_meta!,
     select: (row) => pendingRevisions.has(String(row.id ?? '')),
     onRow(row) {
       const id = String(row.id ?? '');
@@ -696,7 +700,7 @@ export async function planVndbReleaseFidelity(
       ]),
     ),
   ).catch((error: unknown) => {
-    if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+    if (!isCrossMediaTableScanLimitError(error)) throw error;
     platformScanComplete = false;
     scanGap(error.table);
     const empty = new Map<string, VndbReleasePlatformFacts>(
@@ -720,7 +724,7 @@ export async function planVndbReleaseFidelity(
         releaseRows.set(id, row);
       }
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
       releasesScanComplete = false;
       scanGap('releases');
     }
@@ -733,7 +737,7 @@ export async function planVndbReleaseFidelity(
         if (releaseIds.has(String(row.id ?? ''))) releaseTitleRows.push(row);
       }
     } catch (error) {
-      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
       releaseTitlesScanComplete = false;
       scanGap('releases_titles');
     }
