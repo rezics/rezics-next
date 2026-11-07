@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
-import { createServer as createViteServer } from 'vite';
+import { createServer as createViteServer, type Plugin, type ViteDevServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
 import { shouldGenerateLocalization } from '../vite.config.ts';
 import {
+  bindViteDepCacheAlign,
   viteEnvironmentDepHashes,
   webViteWarmSsrEnvName,
   webViteWorkerSsrOptimizeDeps,
@@ -81,6 +82,17 @@ test('test Worker bindings are startup-only and production has no fixture header
     if (previousBindings === undefined) delete process.env.WEB_TEST_WORKER_BINDINGS;
     else process.env.WEB_TEST_WORKER_BINDINGS = previousBindings;
   }
+});
+
+test('the dep-cache align hook is a Vite Plugin configureServer', () => {
+  const plugin: Plugin = {
+    name: 'web-vite-dep-cache-align',
+    enforce: 'pre',
+    configureServer(server: ViteDevServer) {
+      return bindViteDepCacheAlign('/cache', server.environments);
+    },
+  };
+  expect(plugin.enforce).toBe('pre');
 });
 
 async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<string> {

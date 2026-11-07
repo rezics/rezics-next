@@ -11,6 +11,7 @@ const { Window } = await import(
 const browser = new Window({ url: 'https://site.test/en/' });
 const globals = {
   window: browser,
+  location: browser.location,
   document: browser.document,
   navigator: browser.navigator,
   HTMLElement: browser.HTMLElement,
@@ -167,8 +168,11 @@ test('reaction names expose exact localized operands and the signed score', asyn
     />,
   );
   const exact = new Intl.NumberFormat('de').format(count);
+  const compact = new Intl.NumberFormat('de', { notation: 'compact' }).format(count);
   expect(
-    host.querySelector(`[data-slot="reaction-chip"][aria-label="${m.reaction_like({}, { locale: 'de' })} ${exact}"]`),
+    host.querySelector(
+      `[data-slot="reaction-chip"][aria-label="${m.reaction_like({}, { locale: 'de' })} ${compact} (${exact})"]`,
+    ),
   ).not.toBeNull();
   expect(
     host.querySelector(
@@ -408,7 +412,8 @@ test('Home uses actual FeedResults action slots, retains Continue and never inve
     />,
   );
   expect(host.querySelectorAll('[data-slot="feed-action-bar"]')).toHaveLength(2);
-  expect(host.querySelectorAll('[data-slot="vote-unavailable"]')).toHaveLength(2);
+  expect(host.querySelectorAll('[data-slot="vote-unavailable"]')).toHaveLength(1);
+  expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"]')).toHaveLength(1);
   expect(host.querySelector('[data-slot="vote-control"]')).toBeNull();
   expect(host.querySelector('a[href="/en/library/progress?subjectId=work"]')).not.toBeNull();
   expect(

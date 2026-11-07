@@ -132,10 +132,10 @@ export function followingDestinationClick(
 }
 
 export function followingReturnTrigger(
-  root: { querySelector(selector: string): Element | null } | null,
+  root: Pick<ParentNode, 'querySelector'> | null,
   targetId: string,
 ): HTMLButtonElement | null {
   if (!root || !uuid.test(targetId)) return null;
   const row = root.querySelector(`[data-follow-target="${targetId}"]`);
-  return (row?.querySelector('button[aria-label^="Inspect "]') ?? null) as HTMLButtonElement | null;
+  return row?.querySelector<HTMLButtonElement>('button[aria-label^="Inspect "]') ?? null;
 }

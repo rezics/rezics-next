@@ -4,6 +4,7 @@ import type { DocumentMentions } from '@rezics/ui/document-body';
 import type { ThreadPost } from './thread-page';
 
 export type ThreadMentionProjection = NonNullable<ReadingPageResponse['mentions']>;
+export type ThreadDocumentMentions = Pick<ThreadMentionProjection, 'state' | 'sources' | 'identities'>;
 type MentionIdentity = ThreadMentionProjection['identities'][number];
 
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -21,7 +22,7 @@ function referencedInPost(post: Extract<ThreadPost, { availability: 'available' 
   return found;
 }
 
-function admittedIdentities(projection: ThreadMentionProjection) {
+function admittedIdentities(projection: ThreadDocumentMentions) {
   const identities = new Map<MentionIdentity['id'], MentionIdentity>();
   for (const identity of projection.identities) {
     // The wire schema bounds identities but does not require unique IDs. The first
@@ -31,16 +32,15 @@ function admittedIdentities(projection: ThreadMentionProjection) {
   return identities;
 }
 
-/** Resolve only active identities referenced by an exact current post on this admitted page. */
-export function receiveThreadDocumentMentions(
-  projection: ThreadMentionProjection | undefined,
-  posts: readonly ThreadPost[],
+function receiveMentions(
+  projection: ThreadDocumentMentions | undefined,
+  postAt: (pageIndex: number) => ThreadPost | undefined,
 ): DocumentMentions {
   if (!projection || projection.state !== 'current') return {};
   const identities = admittedIdentities(projection);
   const resolved: Record<string, { handle: string }> = {};
   for (const source of projection.sources) {
-    const post = posts[source.pageIndex];
+    const post = postAt(source.pageIndex);
     if (
       !post ||
       post.availability !== 'available' ||
@@ -58,4 +58,21 @@ export function receiveThreadDocumentMentions(
     }
   }
   return resolved;
+}
+
+/** Resolve only active identities referenced by exact current posts on this admitted page. */
+export function receiveThreadDocumentMentions(
+  projection: ThreadDocumentMentions | undefined,
+  posts: readonly ThreadPost[],
+): DocumentMentions {
+  return receiveMentions(projection, (pageIndex) => posts[pageIndex]);
+}
+
+/** Each rendered occurrence retains its page position, even when another row has the same post identity. */
+export function receiveThreadPostMentions(
+  projection: ThreadDocumentMentions,
+  post: ThreadPost,
+  pageIndex: number,
+): DocumentMentions {
+  return receiveMentions(projection, (index) => (index === pageIndex ? post : undefined));
 }
