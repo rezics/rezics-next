@@ -3346,13 +3346,11 @@ test('a dropped run reconnects through repeated status losses, then returns its 
   expect(result.code).toBe(0);
   expect(result.stderr).toMatch(/reconnected to a in [0-9.]+ s/);
   expect(result.stderr.match(/reconnected to a in [0-9.]+ s/g)).toHaveLength(2);
-  expect(events().filter((event) => event.kind === 'status').map((event) => event.attempt)).toEqual([
-    1,
-    2,
-    3,
-    4,
-    5,
-  ]);
+  expect(
+    events()
+      .filter((event) => event.kind === 'status')
+      .map((event) => event.attempt),
+  ).toEqual([1, 2, 3, 4, 5]);
   expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
   expect(events().filter((event) => event.kind === 'rsync' && event.step === 'returns copy')).toHaveLength(1);
   expect(events().filter((event) => event.kind === 'stop')).toHaveLength(0);

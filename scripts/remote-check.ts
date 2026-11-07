@@ -4238,9 +4238,7 @@ async function waitForRemoteCommandStatus(
     const remainingMs = deadlineAt - Date.now();
     const status = await probe(Math.max(1, Math.min(5_000, remainingMs)));
     if (status && status.kind !== 'started') return status;
-    const delay = status
-      ? pollMs
-      : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
+    const delay = status ? pollMs : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
     await sleep(Math.max(1, Math.min(delay, deadlineAt - Date.now())), signal);
   }
 
