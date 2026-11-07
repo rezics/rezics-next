@@ -12,3 +12,5 @@ export { ensureCommunityApplication, startCommunityApplication } from './runtime
 export { readSpace } from '../space.ts';
 
 export { createRealmScopeEvidence } from './scope-evidence.ts';
+
+export { observeLibrarySpaceSummary } from './library-presentation.ts';

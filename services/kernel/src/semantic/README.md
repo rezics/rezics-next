@@ -1163,14 +1163,13 @@ or two different partition cuts for one home during assembly answers
 - Growth check: `test/semantic/growth-copy-work-disclosure.test.ts` at
   64/512/4096 unrelated subjects and growing old relation history.
 
-`readSubjectSummaries` is the shared display projection. Callers provide the trusted server `routeKey`
-and native pool, plus either the actual Access/Actor/deadline or a pinned release and prepared resource
-checks. `summaryAuthorization` preserves a callable related-read check while letting the batch prepare
-native evidence before checkout. The default subject/related/links/relations/graph and Search route bindings
-use it; Search Discovery, Account-linked subjects, Commerce, Library and Zone defaults use the native
-Access form. Preparation retains the actual Actor and original request deadline, and never retains allow.
-The existing current-original AND one-hop terminal checks and final-use revalidation of owning readers
-remain required; a display snapshot does not establish later privacy, identity or publication currency.
+`contract/index.ts` owns disclosed Subject/Cover schemas, types and summary observations; HTTP consumes them.
+`readSubjectSummaries` remains the native display producer, with trusted route key, pool and Access/Actor/deadline
+or pinned release/prepared checks. `summaryAuthorization` prepares related-key evidence before checkout, retaining
+actor/deadline but never allow. The Library adapter binds this observation and the single Identity producer into
+Library-owned capabilities. Exact epochs, pending/unavailable outcomes, authorized original/terminal anchors and
+redirect errors remain native. Library orchestrates one bounded batch and final checks; display grants no authority.
+Source, cover, language/profile/type and original/terminal disclosure fences retain their owners.
 
 The deployed Kernel has one physical pool. A batch uses one final `REPEATABLE READ READ ONLY` checkout
 through `withReadTransaction`, reusing that executor's scoped client if the caller already owns a snapshot.

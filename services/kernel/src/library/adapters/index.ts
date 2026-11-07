@@ -69,3 +69,9 @@ export {
   type NativeCopyTypes,
   type NativeCopyProducers,
 } from './copies.ts';
+export { createNativeLibraryPresentation } from './presentation.ts';
+export type {
+  NativeLibraryPresentation,
+  NativeLibraryPresentationPorts,
+  LibraryPresentationDependencies,
+} from './presentation.ts';

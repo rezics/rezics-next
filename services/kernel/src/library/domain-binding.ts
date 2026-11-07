@@ -3,6 +3,7 @@ import type { NativeCopyListContext } from '../semantic/adapters/index.ts';
 
 import type { CopyApplicationPorts } from './contract/index.ts';
 import type { NativeCopyConfig, NativeCopyTypes } from './adapters/copies.ts';
+import type { NativeLibraryPresentation } from './adapters/presentation.ts';
 import type { LibraryDomain } from './contract/index.ts';
 import type { NativePreparationWorkFactory, NativeScopeWork } from './adapters/preparation-work.ts';
 
@@ -12,25 +13,38 @@ export type NativeLibraryDomain = LibraryDomain &
     scopeWork?: NativeScopeWork;
     copyContext?: NativeCopyListContext;
     copyPorts?: (config: NativeCopyConfig) => CopyApplicationPorts<NativeCopyTypes>;
+    presentation?: NativeLibraryPresentation;
   }>;
 
-let domain: NativeLibraryDomain | undefined;
+let binding: { domain?: NativeLibraryDomain; presentation?: NativeLibraryPresentation } = {};
 
 export function bindLibraryDomain(value: NativeLibraryDomain): NativeLibraryDomain {
-  domain = value;
+  binding = { domain: value, ...(value.presentation ? { presentation: value.presentation } : {}) };
   return value;
 }
 
 export function peekLibraryDomain(): NativeLibraryDomain | undefined {
-  return domain;
+  return binding.domain;
 }
 
 export function requireLibraryDomain(): NativeLibraryDomain {
-  if (!domain) throw new TypeError('Library domain is not composed');
-  return domain;
+  if (!binding.domain) throw new TypeError('Library domain is not composed');
+  return binding.domain;
 }
 
 /** Tests restore the process binding; createKernel/server/worker rebind native adapters. */
 export function unbindLibraryDomain(): void {
-  domain = undefined;
+  binding = {};
+}
+
+/** The single Library domain binding also owns its native presentation capabilities. */
+export function requireLibraryPresentation(): NativeLibraryPresentation {
+  const presentation = binding.presentation;
+  if (!presentation) throw new TypeError('Library presentation is not composed');
+  return presentation;
+}
+
+/** Direct native readers install the presentation slice without inventing a Source capability. */
+export function bindLibraryPresentation(presentation: NativeLibraryPresentation): void {
+  binding = { ...binding, presentation };
 }

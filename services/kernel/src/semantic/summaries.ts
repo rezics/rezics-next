@@ -1,23 +1,16 @@
 import { nativeSubjectReadingApplication } from './adapters/subject-reading.ts';
-import type {
-  CoverSummary,
-  RelatedSubjectSummary,
-  SubjectSummary,
-  SummaryDependencies,
-  SummaryReaderDependencies,
-  SummaryCoverState,
-  SubjectSummaryObservation,
-} from './subject-reading-application.ts';
+import type { SubjectSummary, SubjectSummaryObservation } from './contract/index.ts';
+import type { SummaryDependencies, SummaryReaderDependencies } from './subject-reading-application.ts';
 
 export type {
   CoverSummary,
   RelatedSubjectSummary,
   SubjectSummary,
-  SummaryDependencies,
-  SummaryReaderDependencies,
+  SummarySources,
   SummaryCoverState,
   SubjectSummaryObservation,
-};
+} from './contract/index.ts';
+export type { SummaryDependencies, SummaryReaderDependencies };
 export { summaryAuthorization } from './subject-reading-application.ts';
 
 /** Compatibility facade; native Subject pages call the same operation through their injected application. */

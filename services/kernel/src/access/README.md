@@ -32,13 +32,13 @@ Work execution contract as server and worker on each client it opens; there is n
 receiver and reversal ports are the same constructed native capabilities used for epoch binding, publication and
 replay. IdentityEpochStoreError remains the single runtime class from Semantic `contract/identity-errors`.
 
-Decision: Content and Library consume `contribution-attribution.ts` and `public-identity.ts`; immutable authorship
-stays separate from current presentation and command ownership. Missing, pending and unavailable attribution is
-null. Only an authoritative tombstone produces an id-free Deleted account/organization label; partial identity
-cannot establish deletion. Batches deduplicate at most 100 owners. Agent attribution confirms the exact Semantic
-relation and anchored Account through `IdentitySemanticPort`; absent subject overlay stays null. Public identity
-imports neither private account-data nor Semantic recovery/Source maintenance. Revision, SHA, licence, references
-and readable bodies retain native disclosure. Progress uses the public resource-access and unavailable errors.
+Decision: `contract/index.ts` owns contribution attribution types/schemas; native helpers remain in
+`contribution-attribution.ts`. Immutable authorship is separate from current presentation/command ownership.
+Missing/pending/unavailable attribution is null; only authoritative tombstones supply id-free deletion labels.
+Batches deduplicate at most 100 owners. Library's adapter supplies current account eligibility and initial/final
+public account/attribution observations. Agent attribution confirms the exact Semantic relation through
+`IdentitySemanticPort`; absent overlay stays null. Public identity imports neither private account data nor Semantic
+recovery/maintenance. Bodies, revisions, SHA, licence and reference disclosure retain their owners.
 
 Decision: `contract/reading.ts` owns active/deleted/unknown reading identity observations. The native reading adapter
 uses the caller's pool, route-first public projection and original optional deadline, returning explicit unavailable

@@ -107,3 +107,10 @@ export type {
   CollectionListResourceOperand,
   CollectionPolicyPort,
 } from './collection-policy.ts';
+
+export { ContributionAttributionSchema } from './contribution-attribution.ts';
+export type {
+  ContributionAttribution,
+  LiveContributionAttribution,
+  DeletedContributionAttribution,
+} from './contribution-attribution.ts';
