@@ -1,10 +1,32 @@
 # Semantic
 
+Integration decision: retain current Search and Library producer bindings and the completed Kernel action catalogue; worker authorization uses its native Access callback. Workspace typing is the worker gate; original native and browser assertions run after integration.
+
 Decision: disclosed Subject and cover summaries live in `contract/summaries.ts`. HTTP schemas are
 `adapters/public-summary-schema.ts`; the native reader adapter is `adapters/public-summary.ts`. Content Home
 and Library Continue consume those public entries. `http/summaries.ts` re-exports the schema for existing
 routes. Wire shapes are unchanged. Cover credit obligations stay the CC literals; schemas stay TypeBox objects
 so callers can spread `.properties` and `.anyOf`.
+The inward-layer import check permits the declared Definitions contract entry and TypeBox in contract schemas.
+Native public-output journeys bind the independently read published release body to its digest and retain Source
+refusal reasons in setup failures; compiler intermediates do not substitute for the published JSON body.
+Source query metering uses the existing database query-accounting scope with the original Pool and client methods.
+It charges SQL strings and PostgreSQL query configurations without replacing pg callbacks or Reylo decoders. Restoring
+a checked-out client's query method cannot leave a promise-only wrapper on the pooled connection. Source availability
+failures retain their dependency reason during public-output acceptance; only a resolved definition change is `changed`.
+Bounded Source binding and immutable release queries execute the declared SQL through Reylo's Standard Query
+encoder and text decoder. Runtime catalog freshness probes and source comments cannot add undeclared statements to
+an accepted native work plan. Unknown SQL, including additions to transaction controls, remains refused.
+Native receiving fixtures finish all 4,096 homes through the existing bounded preparation continuation and retain
+the original bootstrap; their full-domain timeout covers those native steps. Unexpected SQL errors propagate.
+The shelf deletion race fixture takes internal action metadata from Access's public catalogue; its account deletion
+authority and native race assertions are unchanged. Every command pool receives the trusted receipt-key configuration
+before constructing its command entry points.
+The bulk no-effect fixture queries the encoded receipt key for the same account principal, command kind and
+idempotency key submitted to the command. Its original no-effect and authorized replay assertions remain unchanged.
+Source-funded Core commands open one serializable transaction inside Core's cleanup scope. Binding the live query
+surface requires no preceding transaction; a second BEGIN would conflict with the native ledger's retained COMMIT
+and ROLLBACK funding. The existing public-output capture and deferred-COMMIT rollback assertions retain this contract.
 
 Public-filter Collection reduction exposes `adapters/collection-reduction.ts` contract statement declarations
 without command-work implementation. Native reduction executes that exact SQL/bind plan; Library composes complete
@@ -27,11 +49,27 @@ supplies Account repair/enrollment, authorization and deadline classification th
 runtime defaults compose this application before Search runtime factories are used. Existing pool, route key, Access,
 request deadline, transaction, reached-child work and publication writer ownership flow through unchanged.
 
+The installed WorkModule journey streams actual authorization, registration, SDK launch and service phases before
+startup cleanup. A failure retains the first producer error alongside its last phase; readiness, native convergence
+and shutdown still require the original assertions and deadlines.
+Ordinary Work composition supplies its authorization factory before registration so the first Accounts producer
+does not load the Kernel graph synchronously from inside the registration callback.
+The journey distinguishes authorization module loading from factory execution. Worker authorization uses the same
+completed Kernel catalogue as HTTP without compiling HTTP request handlers; real Content roles and Access remain
+covered by the existing native authorization tests.
+
 Decision: `composeSemanticIdentityParticipants` installs Search native ports before constructing the fixed worker
 participant because Semantic registration precedes Search service startup. It passes the real typed
 `createIdentitySourceSupportReader` into the receiving configuration; each receiving adapter creates its own reader
 from the supplied `{pool, routeKey, access, clock}` tuple. Native Source mapping, Access, custody, transaction and
 cost authority remain with their owner commands.
+
+Direct Search hosts and workers obtain Access from the completed `createKernelActionCatalogue` assembly through its
+`onAccessReady` callback, preserving the owner interface without compiling HTTP handlers. Configured-host fixtures
+serialize the same dedicated receipt ring used by native command fixtures. Lifecycle observers collect every registered
+effect batch before asserting the complete effect set; startup, projection and shutdown retain their original deadlines
+and assertions. Native write fixtures submit valid boundary bodies and the current revision returned by publication
+transitions.
 
 Summary: Composition installs the sole native `SubjectReadingApplication`; server and Search-worker runtime defaults
 inject it into Kernel, tests pass it explicitly, and direct compatibility hosts resolve the same installed binding.

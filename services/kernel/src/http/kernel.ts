@@ -960,7 +960,6 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     deadlineNow: communityAmbient.deadlineNow,
     access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
   });
-  declareKernelWriteRates(sourceStatistics);
   const zones = zoneRoutes(sourceStatistics, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -994,9 +993,12 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       return viewerBindings;
     },
   });
-  declareKernelWriteRates(zones);
-  viewerBindings = compileViewerActionBindings(zones.routes);
-  viewerGuestSecurity = compileGuestSecurity(zones.routes);
+  // Elysia composes hooks and schema views on every routes read before compilation.
+  // All mounts are complete: share one view across native catalogue validation.
+  const routes = zones.routes;
+  declareKernelWriteRates(zones, routes);
+  viewerBindings = compileViewerActionBindings(routes);
+  viewerGuestSecurity = compileGuestSecurity(routes);
   for (const [type, resource] of mountedViewerResources) {
     const actions = new Set([
       resource.readAction,
@@ -1006,7 +1008,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${type}: viewer actions exceed 64 candidate actions or 256 operation bindings`);
   }
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
-  for (const route of zones.routes) {
+  for (const route of routes) {
     const segments = route.path.split('/');
     for (const [position, segment] of segments.entries()) {
       if (segment.startsWith(':')) {
@@ -1035,7 +1037,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  const actions = actionCatalogue(zones, communityHttp.actions);
+  const actions = actionCatalogue({ routes }, communityHttp.actions);
   const consentedScopeCount = accessActionCatalogue(actions).size;
   if (consentedScopeCount > MAX_CONSENTED_SCOPES)
     throw new Error(

@@ -222,7 +222,34 @@ export const importerScopes = [
 export const localClientIds = {
   importer: 'rezics-dev-importer',
   showcase: 'rezics-dev-showcase',
+  semanticWalk: 'rezics-dev-semantic-walk',
 } as const;
+/** Exact native scopes for the first-public catalogue and static Zone walk. Grants remain ordinary Access. */
+export function semanticWalkClientRegistration() {
+  return {
+    clientId: localClientIds.semanticWalk,
+    firstParty: true,
+    scopes: [
+      'definitions:read',
+      'subject:create',
+      'subject:read',
+      'statement:propose',
+      'statement:delete',
+      'statement:restore',
+      'context:create',
+      'context:read',
+      'context:accept',
+      'context:adopt',
+      'zone:create',
+      'zone:read',
+      'zone:configure',
+      'zone:publish',
+      'zone:delete',
+      'zone:restore',
+      'moderation:takedown',
+    ],
+  };
+}
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
 export function localShowcaseClientRegistration() {
@@ -268,6 +295,21 @@ export async function privateFile(path: string, value: string) {
   }
   await writeFile(path, value, { mode: 0o600 });
   await chmod(path, 0o600);
+}
+
+async function snapshotPrivateFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+/** Walk setup rewrites Kernel/Web local files onto slot ports; restore the caller's copies when the slot ends. */
+async function restorePrivateFile(path: string, snapshot: string | undefined) {
+  if (snapshot === undefined) await rm(path, { force: true });
+  else await privateFile(path, snapshot);
 }
 
 /** Dotenv retains backslash-escaped quotes inside double quotes; JWK JSON must stay literal. */
@@ -675,6 +717,7 @@ export async function assemble(options?: {
         scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
       });
       await service.internal.registerClient(localShowcaseClientRegistration());
+      await service.internal.registerClient(semanticWalkClientRegistration());
     })(),
   );
   await phase('auth-worker', host.start());
@@ -829,7 +872,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       REZICS_DEV_PERSONA_CLIENT: personaClient,
       REZICS_DEV_SHOWCASE_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
       REZICS_DEV_SHOWCASE_CLIENT: showcaseClient,
-      AUTH_ORIGIN: origins.issuer,
+      AUTH_ORIGIN: process.env.REZICS_WALK_STACK_SLOT ? origins.native : origins.issuer,
       KERNEL_ORIGIN: origins.kernel,
     })
       .map(([name, value]) => `${name}=${value}`)
@@ -991,9 +1034,9 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
 }
 
 /**
- * Starts native Auth, the worker and Kernel first. Kernel verifies issuer-origin JWKS and fetches that exact
- * document from native Auth, so Auth pages and Web can wait until seeding finishes on an admitted walk.
- * Local `task dev` still starts pages after Kernel.
+ * Starts native Auth, Kernel, then the worker. Kernel bootstraps the bundled release before worker discovery
+ * reads it. Kernel reads issuer JWKS from native Auth, so Auth pages and Web can wait until seeding finishes on
+ * an admitted walk. Local `task dev` still starts pages after Kernel.
  * Explicit deferred account walks serve Kernel HTTP from the Auth host and omit the worker and OpenSearch.
  */
 async function start() {
@@ -1058,14 +1101,7 @@ async function start() {
     if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
       await phase('identity', untilReady([...plan.nativeReady, `${origins.kernel}/health`], [identity]));
     } else {
-      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
-      await phase(
-        'identity',
-        Promise.all([
-          phase('identity-worker', untilOutput(worker, 'Worker ready')),
-          phase('identity-auth', untilReady(plan.nativeReady, [identity, worker])),
-        ]),
-      );
+      await phase('identity', untilReady(plan.nativeReady, [identity]));
       if (stopping) return;
       if (plan.deferPages) {
         const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
@@ -1073,7 +1109,10 @@ async function start() {
         if (stopping) return;
       }
       const kernel = launch(plan.kernel);
-      await phase('kernel', untilReady(plan.kernelReady, [kernel, worker, identity]));
+      await phase('kernel', untilReady(plan.kernelReady, [kernel, identity]));
+      if (stopping) return;
+      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
+      await phase('worker', untilOutput(worker, 'Worker ready'));
       if (stopping) return;
       if (!plan.deferPages) {
         const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
@@ -1326,6 +1365,10 @@ export async function runWalk(
     ]);
     return { status, recorded: `${stdout}${stderr}` };
   };
+  const kernelEnvFile = resolve(root, 'services/kernel/.env');
+  const webVarsFile = resolve(root, 'apps/web/.dev.vars');
+  const kernelEnvSnapshot = await snapshotPrivateFile(kernelEnvFile);
+  const webVarsSnapshot = await snapshotPrivateFile(webVarsFile);
   try {
     while (true) {
       slot = await admitWalkStack(task, process.env, root, controller.signal, blocked, portsAvailable);
@@ -1421,7 +1464,13 @@ export async function runWalk(
     console.error(firstRedactedDiagnostic(error instanceof Error ? error.message : String(error)));
   } finally {
     for (const [signal, handler] of handlers) process.off(signal, handler);
-    await slot?.release();
+    const cleanup = await Promise.allSettled([
+      restorePrivateFile(kernelEnvFile, kernelEnvSnapshot),
+      restorePrivateFile(webVarsFile, webVarsSnapshot),
+      slot?.release(),
+    ]);
+    const failures = cleanup.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+    if (failures.length) throw new AggregateError(failures, 'walk binding and slot cleanup failed');
   }
   return interrupted === undefined ? code : 128 + SIGNAL_NUMBERS[interrupted];
 }

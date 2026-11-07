@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { systemClock } from '../../src/clock.ts';
 import { currentCommand, runCommand } from '../../src/command/command.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { partitionOf } from '../../src/route/route.ts';
 import {
   beginCollectionSourceOutput,
   appendCollectionSourceOutput,
@@ -44,8 +44,12 @@ import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts'
 import type { PoolClient } from 'pg';
 
 let f: SourceRuntimeFixture;
+let release: SourceRuntimeFixture['original'];
 beforeAll(async () => {
   f = await sourceRuntimeFixture();
+  const published = await f.send('anonymous', 'GET', `/v1/definitions/releases/${f.originalDigest}`);
+  expect(published.status).toBe(200);
+  release = (await published.json()).release;
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -69,15 +73,9 @@ const work = (): PublicIdentityOutputWork => ({
 });
 const config = () => ({ pool: f.pool, access: f.access, routeKey: testRouteKey(), clock: systemClock });
 async function setup(ids: readonly string[], visibility: 'public' | 'private' = 'public') {
-  const response = await f.send(f.owner.bearer, 'POST', '/v1/collections', {
-    membershipKind: 'dynamic',
-    title: 'Canonical output capture',
-    visibility,
-    rule: { filter: { owner: { presence: true } } },
-  });
-  expect(response.status).toBe(201);
-  const collectionId = (await response.json()).collection.id as string;
-  const ref = { route: routeOf(collectionId)!, collectionId, generation: randomUUID() };
+  const collection = await f.collection(visibility);
+  const collectionId = collection.collectionId;
+  const ref = { ...collection, generation: randomUUID() };
   await f.command(collectionId, { begin: ref }, (tx) =>
     beginCollectionSourceOutput(tx, { ...ref, expectedMembers: ids.length }),
   );
@@ -99,12 +97,12 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
   const resolved = await createPublicFilterSourceBinding(f.pool, c.routeKey, c.access).resolve(
     {
       source,
-      meaning: { digest: f.originalDigest, release: f.original, type: 'ex:Child' },
+      meaning: { digest: f.originalDigest, release, type: 'ex:Child' },
       capture: { sort: 'id', size: 20, filterDocument: undefined, text: undefined },
     },
     { deadline: Date.now() + 30000 },
   );
-  if (resolved.status !== 'resolved') throw new Error('Real registered public Source definition must resolve');
+  if (resolved.status !== 'resolved') throw new Error(`Real registered public Source definition: ${resolved.reason}`);
   for (let step = 0; (await readIdentityEpochCutover(f.pool)).state !== 'ready'; step++) {
     expect(step).toBeLessThan(100000);
     await stepIdentityEpochBootstrapWork(f.pool);
@@ -112,7 +110,7 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
   const request = { captureId: randomUUID(), definition: resolved.definition, publication };
   const producer = composePublicIdentityOutputCapture(c);
   const accepted = await producer.accept(request, work());
-  expect(accepted.status).toBe('accepted');
+  expect(accepted.status, JSON.stringify(accepted)).toBe('accepted');
   if (accepted.status !== 'accepted') throw new Error('Real native public output binding did not commit');
   return { producer, request, capture: accepted.capture, ref };
 }
@@ -280,7 +278,7 @@ test('eligibility loss refuses fresh use while the original binding, pages and c
   expect(
     (
       await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + s.ref.collectionId, {
-        revision: 1,
+        revision: 2,
         visibility: 'private',
       })
     ).status,
@@ -558,7 +556,7 @@ test('a private Collection cannot establish a fresh public output binding or rep
   expect(
     (
       await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + s.ref.collectionId, {
-        revision: 1,
+        revision: 2,
         visibility: 'private',
       })
     ).status,
@@ -612,7 +610,7 @@ test('Exact public COMPLETE output can be bound and held natively for the existi
   expect(
     (
       await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + s.ref.collectionId, {
-        revision: 1,
+        revision: 2,
         visibility: 'private',
       })
     ).status,

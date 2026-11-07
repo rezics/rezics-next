@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT } from '@rezics/composition';
@@ -43,6 +44,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   real = await createRealAccess(db.admin, accounts, actions);
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     access: real.access,
     clock,
@@ -224,6 +226,7 @@ test('native platform grants expose real development commands while preserving r
   const publicIds = ids((await call('anonymous', 'GET', '/v1/openapi.json')).body);
   for (const id of gated) expect(publicIds).not.toContain(id);
   expect(publicIds).toContain('subject.create');
+  expect(publicIds).toContain('definitions.read');
   expect(publicIds).toContain('definitions.read_active');
   const generated = openApiDocument(app);
   const generatedOps = Object.values(generated.paths).flatMap((path) => Object.values(path));
@@ -305,15 +308,21 @@ test('native platform grants expose real development commands while preserving r
   );
   const subjects = [await person('Development identity one'), await person('Development identity two')];
   const merged = await call('editor', 'POST', '/v1/subjects:merge', { subjects });
-  status(merged, 200);
-  expect(merged.body).toMatchObject({
-    survivor: expect.any(String),
-    redirected: expect.any(String),
-    revision: expect.any(Number),
-  });
-  const redirect = await call('anonymous', 'GET', `/v1/subjects/${merged.body.redirected}`);
-  status(redirect, 308);
-  expect(redirect.headers.get('location')).toBe(`/v1/subjects/${merged.body.survivor}`);
+  status(merged, 202);
+  expect(merged.body).toEqual({ operation: { id: expect.any(String) } });
+  expect(merged.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${merged.body.operation.id}`);
+  const operation = await call('editor', 'GET', `/v1/subjectIdentityOperations/${merged.body.operation.id}`);
+  status(operation, 200);
+  expect(operation.body).toEqual({ operation: { id: merged.body.operation.id, done: false } });
+  const [, original] = [...subjects].sort();
+  const pending = await call('anonymous', 'GET', `/v1/subjects/${original}`);
+  status(pending, 200);
+  expect(pending.body.subject).toMatchObject({ id: original, revision: 1 });
+  const history = await call('anonymous', 'GET', `/v1/subjects/${original}/revisions`);
+  status(history, 200);
+  expect(
+    history.body.revisions.map((revision: { kind: string; revision: number }) => [revision.kind, revision.revision]),
+  ).toEqual([['create', 1]]);
   const ungranted = ids((await call('anonymous', 'GET', '/v1/openapi.json')).body);
   for (const id of gated) expect(ungranted).not.toContain(id);
 }, 180_000);

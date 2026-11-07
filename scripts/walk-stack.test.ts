@@ -35,6 +35,8 @@ import {
   walkPublishedPortAllocated,
   WalkPublishedPortAllocated,
   walkCommerceProviderEnvironment,
+  walkDefinitionsPath,
+  walkReadyHttpStatus,
   walkReadyResponse,
   walkReadyUrls,
   walkReadyWaitingMessage,
@@ -520,4 +522,29 @@ test('walk acquisition failure settles all acquired resources and retains its or
   expect((failure as AggregateError).cause).toBe(original);
   expect((failure as AggregateError).message).toContain('frontend stop');
   expect(settled).toContain('browser settled');
+});
+
+test('Kernel /v1/definitions is ready only on HTTP 200 with an active digest', async () => {
+  expect(walkDefinitionsPath('http://127.0.0.1:20003/v1/definitions')).toBe(true);
+  expect(walkDefinitionsPath('http://127.0.0.1:20003/v1/definitions/active')).toBe(false);
+  expect(walkReadyHttpStatus('http://127.0.0.1:20003/v1/definitions', 404)).toBe(false);
+  expect(walkReadyHttpStatus('http://127.0.0.1:20003/v1/definitions', 200)).toBe(true);
+  expect(walkReadyHttpStatus('http://127.0.0.1:20002/.well-known/jwks.json', 404)).toBe(true);
+  const missing = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => Response.json({ type: 'https://rezics.com/problems/not_found', code: 'not_found' }, { status: 404 }),
+  });
+  const ready = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => Response.json({ digest: 'abc', head: 1 }),
+  });
+  try {
+    expect(await walkReadyResponse(`http://127.0.0.1:${missing.port}/v1/definitions`)).toBe(false);
+    expect(await walkReadyResponse(`http://127.0.0.1:${ready.port}/v1/definitions`)).toBe(true);
+  } finally {
+    await missing.stop(true);
+    await ready.stop(true);
+  }
 });

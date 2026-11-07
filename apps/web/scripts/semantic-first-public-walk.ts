@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import {
   kernelEnvironment,
+  semanticWalkClientRegistration,
   retireDevelopmentSeedState,
   retireStaleSeedJournals,
   startSeededFrontends,
@@ -45,17 +46,22 @@ import {
   takedownZone,
   walkReadinessUrls,
   walkSeedProcessEnv,
-  websiteAccessToken,
+  nativeWalkAccessToken,
   type Json,
   type KernelCall,
   type WalkStackOrigins,
 } from './semantic-first-public-native.ts';
+
+import { nativeWalkCall, type NativeObservation } from './semantic-first-public-request.ts';
+import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
+import { withWalkResources } from '../../../scripts/walk-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
 const token = randomUUID().slice(0, 8);
 
 type Stack = WalkStackOrigins;
+
 type Result = {
   id: FirstPublicJourneyId;
   name: string;
@@ -63,9 +69,13 @@ type Result = {
   ms: number;
   persona: string;
   native?: unknown;
+  commands?: NativeObservation[];
   browser?: unknown;
   failure?: { transition: string; expected: string; actual: string; owner: string };
 };
+
+const roundResults: Result[] = [];
+let roundRevision = '';
 
 function loopback(variable: string): string {
   const value = process.env[variable];
@@ -150,41 +160,9 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
   return values;
 }
 
-function fetchCall(stack: Stack): KernelCall {
-  return async (method, path, options = {}) => {
-    const url = new URL(path, stack.kernel);
-    for (const [name, value] of Object.entries(options.query ?? {})) url.searchParams.set(name, value);
-    const response = await fetch(url, {
-      method,
-      signal: AbortSignal.timeout(60_000),
-      headers: {
-        ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(randomUUID()) }),
-        ...(options.ifMatch ? { 'if-match': `"${options.ifMatch}"` } : {}),
-        ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : {}),
-        'accept-language': 'en',
-      },
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-    });
-    const text = await response.text();
-    const etag = response.headers.get('etag') ?? undefined;
-    return {
-      status: response.status,
-      headers: response.headers,
-      body: text ? (JSON.parse(text) as Json) : {},
-      ...(etag === undefined ? {} : { etag }),
-    };
-  };
-}
-
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
-  const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
-  return websiteAccessToken(stack.issuer, {
-    email,
-    password,
-    clientId: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
-    ...(bindings.WEBSITE_SCOPES === undefined ? {} : { scope: bindings.WEBSITE_SCOPES }),
-  });
+  const client = semanticWalkClientRegistration();
+  return nativeWalkAccessToken(stack, { email, password, clientId: client.clientId, scopes: client.scopes });
 }
 
 async function hydrated(page: Page): Promise<void> {
@@ -203,10 +181,7 @@ async function openPage(
   await page.emulateMedia({ colorScheme: theme });
   const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
   await hydrated(page);
-  await page
-    .locator('main')
-    .waitFor({ state: 'visible', timeout: 120_000 })
-    .catch(() => undefined);
+  await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
   return { page, status: response?.status() ?? 0, url: page.url() };
 }
 
@@ -234,46 +209,30 @@ function failingRow(row: (typeof FIRST_PUBLIC_JOURNEYS)[number], cause: string, 
   };
 }
 
-function inventoryCell(row: Result, revision: string, utc: string): string {
-  if (row.status === 'Passing') return `Passing ${revision.slice(0, 12)} ${utc} ${row.persona}`;
-  const actual = (row.failure?.actual ?? 'unknown').replaceAll('|', '/').slice(0, 120);
-  return `Failing ${row.failure?.owner ?? 'semantic'} ${actual}`;
-}
-
 async function recordInventory(revision: string, utc: string, results: Result[]): Promise<void> {
   const path = join(root, 'docs/goals/semantic.capabilities.md');
-  const byName = new Map(results.map((row) => [row.name, row]));
-  const text = await readFile(path, 'utf8');
-  const next = text
-    .split('\n')
-    .map((line) => {
-      const match = /^\| (?<name>[^|]+?) \| (?<path>[^|]+) \| (?<result>[^|]+) \|$/.exec(line);
-      const name = match?.groups?.name;
-      const capability = match?.groups?.path;
-      if (name === undefined || capability === undefined) return line;
-      const row = byName.get(name.trim());
-      if (!row) return line;
-      return `| ${name.trim()} | ${capability.trim()} | ${inventoryCell(row, revision, utc)} |`;
-    })
-    .join('\n');
-  if (next !== text) await writeFile(path, next);
+  const document = await readFile(path, 'utf8');
+  const next = updateFirstPublicInventory(document, revision, utc, results);
+  if (next !== document) await writeFile(path, next);
 }
 
 type Session = {
   stack: Stack;
   call: KernelCall;
+  trace: NativeObservation[];
   editor: string;
   outsider?: string;
   anonymous: BrowserContext;
   member: BrowserContext;
   revision: string;
   frontendCause?: string;
+  refreshEditor?: () => Promise<void>;
 };
 
 async function visit(
   session: Session,
   href: string,
-  options: { width?: number; theme?: 'light' | 'dark'; persona?: 'anonymous' | 'member' } = {},
+  options: { width?: number; theme?: 'light' | 'dark'; persona?: 'anonymous' | 'member'; expectedStatus?: number } = {},
 ) {
   if (session.frontendCause) throw new Error(session.frontendCause);
   const context = options.persona === 'member' ? session.member : session.anonymous;
@@ -284,9 +243,16 @@ async function visit(
     .first()
     .textContent()
     .catch(() => null);
+  const screenshot = join(
+    evidenceDir,
+    'screenshots',
+    `${randomUUID()}-${options.width ?? 1280}-${options.theme ?? 'light'}.png`,
+  );
+  await opened.page.screenshot({ path: screenshot, fullPage: true });
   await opened.page.close();
-  if (opened.status >= 500) throw new Error(`${href} returned HTTP ${opened.status}`);
-  return { url: opened.url, status: opened.status, title, heading };
+  if (opened.status !== (options.expectedStatus ?? 200))
+    throw new Error(`${href} returned HTTP ${opened.status}; screenshot ${screenshot}`);
+  return { url: opened.url, status: opened.status, title, heading, screenshot };
 }
 
 async function journey(
@@ -296,7 +262,9 @@ async function journey(
 ): Promise<Result> {
   const meta = FIRST_PUBLIC_JOURNEYS.find((row) => row.id === id)!;
   const started = Date.now();
+  const traceOffset = session.trace.length;
   try {
+    await session.refreshEditor?.();
     const observed = await run();
     return {
       id,
@@ -305,6 +273,7 @@ async function journey(
       ms: Date.now() - started,
       persona: observed.persona ?? 'editor+anonymous',
       native: observed.native,
+      commands: session.trace.slice(traceOffset),
       browser: observed.browser,
     };
   } catch (error) {
@@ -315,7 +284,14 @@ async function journey(
       status: 'Failing',
       ms: Date.now() - started,
       persona: 'editor+anonymous',
-      failure: fail(id, meta.native, actual),
+      commands: session.trace.slice(traceOffset),
+      failure: fail(
+        session.trace.at(-1)?.status && session.trace.at(-1)!.status! >= 400
+          ? `${session.trace.at(-1)!.method} ${session.trace.at(-1)!.url}`
+          : id,
+        meta.native,
+        actual,
+      ),
     };
   }
 }
@@ -382,142 +358,167 @@ async function lastLogLine(name: string): Promise<string | undefined> {
 }
 
 async function main() {
-  const stack = stackOrigins();
-  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
-  const revision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim();
-  const readinessUrls = walkReadinessUrls(stack);
-  const readiness = {
-    jwks: await typedProbe(readinessUrls.jwks, 'identity'),
-    definitions: await typedProbe(readinessUrls.definitions, 'kernel'),
-    active: await typedProbe(readinessUrls.active, 'kernel'),
-  };
-  await writeFile(join(evidenceDir, 'readiness.json'), `${JSON.stringify({ stack, readiness }, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  if (readiness.jwks.status === 0) throw new Error(describeProbe(readiness.jwks, 'HTTP 200 JWKS'));
-  const kernelCause =
-    readiness.definitions.status === 200 || readiness.active.status === 200
-      ? undefined
-      : describeProbe(readiness.definitions.status !== 0 ? readiness.definitions : readiness.active, 'HTTP 200 digest');
-  if (readiness.definitions.status === 0 && readiness.active.status === 0)
-    throw new Error(kernelCause ?? describeProbe(readiness.definitions, 'HTTP 200 digest'));
-  await retireDevelopmentSeedState(root);
-  const kernelEnv = await kernelEnvironment();
-  if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
-  let personaCause: string | undefined;
-  const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona', process.env, {
-    allowFailure: true,
-  });
-  if (personaCode !== 0)
-    personaCause = `persona ${(await lastLogLine('persona')) ?? `exited ${personaCode} without a log line`}`;
-  let seedCode = 0;
-  let seedCause: string | undefined;
-  if (!kernelCause && !personaCause) {
-    const seedEnv = walkSeedProcessEnv(
-      stack,
-      await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({})),
-    );
-    seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
+  return withWalkResources(async (own) => {
+    const stack = stackOrigins();
+    await mkdir(join(evidenceDir, 'screenshots'), { recursive: true, mode: 0o700 });
+    const revision = (roundRevision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim());
+    const readinessUrls = walkReadinessUrls(stack);
+    const readiness = {
+      jwks: await typedProbe(readinessUrls.jwks, 'identity'),
+      definitions: await typedProbe(readinessUrls.definitions, 'kernel'),
+      active: await typedProbe(readinessUrls.active, 'kernel'),
+    };
+    await writeFile(join(evidenceDir, 'readiness.json'), `${JSON.stringify({ stack, readiness }, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    if (readiness.jwks.status === 0) throw new Error(describeProbe(readiness.jwks, 'HTTP 200 JWKS'));
+    const kernelCause =
+      readiness.definitions.status === 200 || readiness.active.status === 200
+        ? undefined
+        : describeProbe(
+            readiness.definitions.status !== 0 ? readiness.definitions : readiness.active,
+            'HTTP 200 digest',
+          );
+    if (readiness.definitions.status === 0 && readiness.active.status === 0)
+      throw new Error(kernelCause ?? describeProbe(readiness.definitions, 'HTTP 200 digest'));
+    await retireDevelopmentSeedState(root);
+    const kernelEnv = await kernelEnvironment();
+    if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
+    let personaCause: string | undefined;
+    const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona', process.env, {
       allowFailure: true,
     });
-    seedCause =
-      seedCode === 0 ? undefined : `seed ${(await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`}`;
-  }
-  const setupRecord = kernelCause ?? personaCause ?? seedCause;
-  if (setupRecord)
-    await writeFile(
-      join(evidenceDir, 'setup-failure.json'),
-      `${JSON.stringify(
-        {
-          utc: new Date().toISOString(),
-          error: setupRecord,
-          seedExit: seedCode,
-          stack,
-          readiness,
-        },
-        null,
-        2,
-      )}\n`,
-      { mode: 0o600 },
-    );
-  let frontends: { stop(): Promise<void> } = { stop: async () => undefined };
-  let frontendCause: string | undefined;
-  try {
-    frontends = await startSeededFrontends();
-  } catch (error) {
-    frontendCause = error instanceof Error ? error.message : String(error);
-    await writeFile(
-      join(evidenceDir, 'frontend-failure.json'),
-      `${JSON.stringify({ utc: new Date().toISOString(), error: frontendCause, stack, readiness }, null, 2)}\n`,
-      { mode: 0o600 },
-    );
-  }
-  let keys: { password: string } | undefined;
-  try {
-    keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
-  } catch (error) {
-    personaCause ??= error instanceof Error ? error.message : String(error);
-  }
-  let editor = '';
-  let editorCause: string | undefined;
-  if (keys) {
-    try {
-      editor = await accessToken(stack, 'developer@rezics.test', keys.password);
-    } catch (error) {
-      editorCause = error instanceof Error ? error.message : String(error);
+    if (personaCode !== 0)
+      personaCause = `persona ${(await lastLogLine('persona')) ?? `exited ${personaCode} without a log line`}`;
+    let seedCode = 0;
+    let seedCause: string | undefined;
+    if (!kernelCause && !personaCause) {
+      const seedEnv = walkSeedProcessEnv(
+        stack,
+        await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({})),
+      );
+      seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
+        allowFailure: true,
+      });
+      seedCause =
+        seedCode === 0 ? undefined : `seed ${(await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`}`;
     }
-  } else {
-    editorCause = personaCause ?? 'persona keys.json missing';
-  }
-  const call = fetchCall(stack);
-  await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
-  const results: Result[] = [];
-  let browser: Browser | undefined;
-  try {
-    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    results.push(...FIRST_PUBLIC_JOURNEYS.map((row) => failingRow(row, cause)));
-  }
-  const anonymous = browser
-    ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
-    : undefined;
-  const member = browser
-    ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
-    : undefined;
-  const session: Session | undefined =
-    anonymous && member
-      ? {
-          stack,
-          call,
-          editor,
-          anonymous,
-          member,
-          revision,
-          ...(frontendCause === undefined ? {} : { frontendCause }),
-        }
+    const setupRecord = kernelCause ?? personaCause ?? seedCause;
+    if (setupRecord)
+      await writeFile(
+        join(evidenceDir, 'setup-failure.json'),
+        `${JSON.stringify(
+          {
+            utc: new Date().toISOString(),
+            error: setupRecord,
+            seedExit: seedCode,
+            stack,
+            readiness,
+          },
+          null,
+          2,
+        )}\n`,
+        { mode: 0o600 },
+      );
+    let frontends: { stop(): Promise<void> } = { stop: async () => undefined };
+    let frontendCause: string | undefined;
+    try {
+      frontends = await startSeededFrontends();
+      own('frontends', () => frontends.stop());
+    } catch (error) {
+      frontendCause = error instanceof Error ? error.message : String(error);
+      await writeFile(
+        join(evidenceDir, 'frontend-failure.json'),
+        `${JSON.stringify({ utc: new Date().toISOString(), error: frontendCause, stack, readiness }, null, 2)}\n`,
+        { mode: 0o600 },
+      );
+    }
+    let keys: { password: string } | undefined;
+    try {
+      keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+    } catch (error) {
+      personaCause ??= error instanceof Error ? error.message : String(error);
+    }
+    let editor = '';
+    let editorCause: string | undefined;
+    if (keys) {
+      try {
+        editor = await accessToken(stack, 'developer@rezics.test', keys.password);
+      } catch (error) {
+        editorCause = error instanceof Error ? error.message : String(error);
+      }
+    } else {
+      editorCause = personaCause ?? 'persona keys.json missing';
+    }
+    const trace: NativeObservation[] = [];
+    const call = nativeWalkCall(stack.kernel, trace);
+    const browserTemp = join(evidenceDir, 'browser');
+    await mkdir(browserTemp, { recursive: true, mode: 0o700 });
+    const results = roundResults;
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: browserTemp } });
+      own('browser', () => browser!.close());
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      results.push(...FIRST_PUBLIC_JOURNEYS.map((row) => failingRow(row, cause)));
+    }
+    const anonymous = browser
+      ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
       : undefined;
-  try {
+    const member = browser
+      ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
+      : undefined;
+    let editorIssued = editor ? Date.now() : 0;
+    const session: Session | undefined =
+      anonymous && member
+        ? {
+            stack,
+            call,
+            trace,
+            editor,
+            anonymous,
+            member,
+            revision,
+            ...(frontendCause === undefined ? {} : { frontendCause }),
+            ...(keys
+              ? {
+                  async refreshEditor() {
+                    if (editor && Date.now() - editorIssued < 240_000) return;
+                    const token = await accessToken(stack, 'developer@rezics.test', keys.password);
+                    editor = token;
+                    session!.editor = token;
+                    editorIssued = Date.now();
+                  },
+                }
+              : {}),
+          }
+        : undefined;
     if (!session) {
       // Playwright did not start: every row already carries that cause.
     } else {
       if (editor && !frontendCause && keys) {
-        const signIn = await session.member.newPage();
-        await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
-          waitUntil: 'domcontentloaded',
-          timeout: 180_000,
-        });
-        for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
-          await hydrated(signIn);
-          const email = signIn.locator('input[type="email"]');
-          if (await email.count()) {
-            await email.fill('developer@rezics.test');
-            await signIn.locator('input[type="password"]').fill(keys.password);
+        try {
+          const signIn = await session.member.newPage();
+          await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 180_000,
+          });
+          for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
+            await hydrated(signIn);
+            const email = signIn.locator('input[type="email"]');
+            if (await email.count()) {
+              await email.fill('developer@rezics.test');
+              await signIn.locator('input[type="password"]').fill(keys.password);
+            }
+            await signIn.locator('form button[type="submit"]').first().click();
+            await signIn.waitForLoadState('domcontentloaded');
           }
-          await signIn.locator('form button[type="submit"]').first().click();
-          await signIn.waitForLoadState('domcontentloaded');
+          await signIn.close();
+        } catch (error) {
+          session.frontendCause = error instanceof Error ? error.message : String(error);
+          frontendCause = session.frontendCause;
         }
-        await signIn.close();
       }
       const setupCause = editorCause ?? personaCause ?? kernelCause ?? seedCause;
       if (setupCause && !editor) {
@@ -851,20 +852,43 @@ async function main() {
         );
         results.push(
           await journey(session, 'statement-consent', async () => {
-            const person = await createSubject(call, editor, 'schema:Person', `Walk consent person ${token}`);
-            const proposal = await propose(call, editor, termsBookId, cited('schema:author', person.id));
-            const disclosed = await discloseStatement(call, editor, proposal.candidate);
-            const retracted = await retractStatement(call, editor, proposal.candidate);
-            if (![200, 400, 403, 404, 409].includes(disclosed.status))
-              throw new Error(`disclose HTTP ${disclosed.status}: ${JSON.stringify(disclosed.body).slice(0, 400)}`);
-            return {
-              native: { candidate: proposal.candidate, disclose: disclosed.status, retract: retracted.status },
-              browser: await visit(
-                session,
-                `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent('schema:author')}&candidate=${proposal.candidate}`,
-                { persona: 'member' },
-              ),
-            };
+            const identity = await call('GET', '/v1/accounts', { query: { handle: 'developer' } });
+            requireStatus(identity, 200, 'discover consent account agent');
+            const account = (identity.body.accounts as { subject?: { id?: string } | null }[])[0];
+            const target = requireId(account?.subject?.id, 'developer account agent');
+            const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
+            const property = 'rezics:penNameOf';
+            const proposal = await propose(call, editor, person.id, {
+              property: { id: property },
+              value: { type: 'value', content: target },
+              references: [],
+              qualifiers: [],
+            });
+            const selected = (body: Json) =>
+              ((body.subject as Json).statements as Record<string, { id: string }[]>)[property]?.some(
+                (row) => row.id === proposal.candidate,
+              ) ?? false;
+            const before = await readSubject(call, person.id);
+            requireStatus(before, 200, 'private consent public read');
+            if (selected(before.body)) throw new Error('private consent assertion leaked before disclosure');
+            const browser = await visit(
+              session,
+              `${stack.web}${subjectHref(person.id, `Walk consent identity ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent(property)}&candidate=${proposal.candidate}&target=${target}`,
+              { persona: 'member' },
+            );
+            requireStatus(
+              await discloseStatement(call, editor, proposal.candidate),
+              200,
+              'disclose own private assertion',
+            );
+            const disclosed = await readSubject(call, person.id);
+            requireStatus(disclosed, 200, 'disclosed public read');
+            if (!selected(disclosed.body)) throw new Error('disclosed assertion absent from public read');
+            requireStatus(await retractStatement(call, editor, proposal.candidate), 200, 'retract own disclosure');
+            const retracted = await readSubject(call, person.id);
+            requireStatus(retracted, 200, 'retracted public read');
+            if (selected(retracted.body)) throw new Error('retracted assertion remained public');
+            return { native: { id: person.id, target, candidate: proposal.candidate }, browser };
           }),
         );
         results.push(
@@ -933,7 +957,7 @@ async function main() {
             requireStatus(deleted, 200, 'delete Zone');
             const missing = await readZonePage(call, zoneId, '');
             if (missing.status !== 404) throw new Error(`deleted Zone read HTTP ${missing.status}`);
-            const unavailable = await visit(session, `${stack.web}/en/zones/${zoneId}`);
+            const unavailable = await visit(session, `${stack.web}/en/zones/${zoneId}`, { expectedStatus: 404 });
             const restored = await restoreZone(
               call,
               editor,
@@ -949,8 +973,7 @@ async function main() {
               String((restored.body.zone as { revision: string }).revision),
               '/labels/en',
             );
-            if (![200, 403].includes(withheld.status))
-              throw new Error(`takedown HTTP ${withheld.status}: ${JSON.stringify(withheld.body).slice(0, 400)}`);
+            requireStatus(withheld, 200, 'Zone pointer takedown');
             return {
               native: { delete: deleted.status, restore: restored.status, takedown: withheld.status },
               browser: { unavailable, restored: await visit(session, `${stack.web}/en/zones/${zoneId}`) },
@@ -959,54 +982,64 @@ async function main() {
         );
       }
     }
-  } finally {
-    await browser?.close();
-    await frontends.stop();
-  }
 
-  const missing = FIRST_PUBLIC_JOURNEYS.filter((row) => !results.some((result) => result.id === row.id));
-  if (missing.length) {
-    results.push(
-      ...missing.map((row) =>
-        failingRow(row, `walk omitted this row after recording ${results.length}/${FIRST_PUBLIC_JOURNEYS.length}`),
-      ),
+    const missing = FIRST_PUBLIC_JOURNEYS.filter((row) => !results.some((result) => result.id === row.id));
+    if (missing.length) {
+      results.push(
+        ...missing.map((row) =>
+          failingRow(row, `walk omitted this row after recording ${results.length}/${FIRST_PUBLIC_JOURNEYS.length}`),
+        ),
+      );
+    }
+    const passing = results.filter((row) => row.status === 'Passing');
+    const failing = results.filter((row) => row.status === 'Failing').sort((a, b) => b.ms - a.ms);
+    const slowest = failing[0];
+    const summary = {
+      revision,
+      utc: new Date().toISOString(),
+      stack,
+      seedExit: seedCode,
+      seedCause: seedCause ?? null,
+      kernelCause: kernelCause ?? null,
+      editorCause: editorCause ?? null,
+      personaCause: personaCause ?? null,
+      frontendCause: frontendCause ?? null,
+      passing: passing.length,
+      total: FIRST_PUBLIC_JOURNEYS.length,
+      slowestFailing: slowest
+        ? { id: slowest.id, ms: slowest.ms, owner: slowest.failure?.owner, detail: slowest.failure }
+        : null,
+      results,
+    };
+    await writeFile(join(evidenceDir, 'evidence.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+    await recordInventory(revision, summary.utc, results);
+    console.log(
+      `semantic first-public ${passing.length}/${FIRST_PUBLIC_JOURNEYS.length}; slowest failing: ${
+        slowest ? `${slowest.name} (${slowest.failure?.owner})` : 'none'
+      }`,
     );
-  }
-  const passing = results.filter((row) => row.status === 'Passing');
-  const failing = results.filter((row) => row.status === 'Failing').sort((a, b) => b.ms - a.ms);
-  const slowest = failing[0];
-  const summary = {
-    revision,
-    utc: new Date().toISOString(),
-    stack,
-    seedExit: seedCode,
-    seedCause: seedCause ?? null,
-    kernelCause: kernelCause ?? null,
-    editorCause: editorCause ?? null,
-    personaCause: personaCause ?? null,
-    frontendCause: frontendCause ?? null,
-    passing: passing.length,
-    total: FIRST_PUBLIC_JOURNEYS.length,
-    slowestFailing: slowest
-      ? { id: slowest.id, ms: slowest.ms, owner: slowest.failure?.owner, detail: slowest.failure }
-      : null,
-    results,
-  };
-  await writeFile(join(evidenceDir, 'evidence.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
-  await recordInventory(revision, summary.utc, results);
-  console.log(
-    `semantic first-public ${passing.length}/${FIRST_PUBLIC_JOURNEYS.length}; slowest failing: ${
-      slowest ? `${slowest.name} (${slowest.failure?.owner})` : 'none'
-    }`,
-  );
-  if (failing.length) process.exitCode = 1;
+    if (failing.length) process.exitCode = 1;
+  });
 }
 
 if (import.meta.main) {
   try {
     await main();
   } catch (error) {
+    const actual = error instanceof Error ? error.message : String(error);
+    const utc = new Date().toISOString();
+    const revision = roundRevision || (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim();
+    const completed = new Set(roundResults.map((row) => row.id));
+    roundResults.push(
+      ...FIRST_PUBLIC_JOURNEYS.filter((row) => !completed.has(row.id)).map((row) => failingRow(row, actual)),
+    );
     await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(evidenceDir, 'evidence.json'),
+      `${JSON.stringify({ revision, utc, results: roundResults, error: actual }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    await recordInventory(revision, utc, roundResults);
     await writeFile(
       join(evidenceDir, 'setup-failure.json'),
       `${JSON.stringify({ utc: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) }, null, 2)}\n`,

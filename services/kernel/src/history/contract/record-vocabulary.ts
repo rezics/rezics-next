@@ -36,6 +36,7 @@ export const COMMAND_HISTORY_KINDS = Object.freeze({
   'subject.adopt': 3024,
   'subject.batch_propose': 3025,
   'subject.batch_retract': 3026,
+  'subject.terms': 3027,
 });
 export type CommandHistoryKind = string;
 export type CommandHistoryScopes = Readonly<{ response: HistoryScope; events: readonly HistoryScope[] }>;
