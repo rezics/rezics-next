@@ -23,6 +23,7 @@ import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from './access-port.ts';
 import type { Access, Actor, Resource } from '../request/access.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   AuthorErasureDependencies,
@@ -96,6 +97,7 @@ export async function beginAuthorErasure(
         captured = await captureDurableInitiator(preparation, actor);
       } catch (error) {
         if (error instanceof AccessUnavailableError) throw error;
+        if (error instanceof AuthenticationError) throw error;
         throw new GrantDeniedError();
       }
       const rows = await withConnection(deps.pool, async (client) => {
