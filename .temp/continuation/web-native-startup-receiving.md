@@ -13,6 +13,7 @@ paths:
   - apps/web/tests/with-dev-server.test.ts
   - apps/web/README.md
 ---
+
 # Web native startup receiving
 
 ## Resume condition
