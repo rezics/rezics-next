@@ -2,7 +2,11 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
-import { LibraryNotFoundError } from '../../src/library/command-support.ts';
+import {
+  libraryCommandReceiptDigestForActor,
+  LibraryNotFoundError,
+} from '../../src/library/command-support.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import {
@@ -70,16 +74,17 @@ async function fact(subjectId: string, accountId = native.owner.actor.accountId)
 }
 
 type Inspection = Awaited<ReturnType<NativeProfileFixture['inspect']>>;
-/** The fixture's short Type completes in the create command: one metadata receipt/event and one business pair. */
+/** The short Type creates one metadata receipt/event, then one revalidation receipt and the business command. */
 function freshEntryEffects(
   before: Inspection,
   after: Inspection,
-  accountId: string,
+  actor: AccountActor,
   subjectId: string,
   requestKey: string,
   fullType: string,
   impliedFollow = false,
 ) {
+  const accountId = actor.accountId;
   const receipts = after.receipts
     .filter(
       ({ row }) =>
@@ -91,6 +96,7 @@ function freshEntryEffects(
   expect(receipts.map((row) => row.command_kind).sort()).toEqual([
     'library.entry.put',
     'library.type-preparation.create',
+    'library.type-preparation.revalidate',
   ]);
   for (const receipt of receipts) {
     expect(receipt.principal_kind).toBe('account');
@@ -105,6 +111,10 @@ function freshEntryEffects(
   expect(
     nativeReceiptKeyCandidates(native.pool, 'library.type-preparation.create', accountId, `create:${preparationId}`),
   ).toContain(metadata.idempotency_key);
+  const revalidation = receipts.find((row) => row.command_kind === 'library.type-preparation.revalidate')!;
+  expect(revalidation.request_digest).toBe(
+    `\\x${libraryCommandReceiptDigestForActor(actor, 'library.type-preparation.revalidate', { preparationId })}`,
+  );
   expect(metadata.response.checkpoint).toEqual({
     state: 'ready',
     typeId: expect.any(String),
@@ -168,7 +178,7 @@ test('native entry commands accept active data profiles pin fresh values and rep
   privateFree(first.value);
   const after = await native.inspect(writer.actor.accountId);
   expect(after.entries.length - before.entries.length).toBe(1);
-  const event = freshEntryEffects(before, after, writer.actor.accountId, subjectId, key, entryTypes.game);
+  const event = freshEntryEffects(before, after, writer.actor, subjectId, key, entryTypes.game);
   expect(after.sessions).toEqual(before.sessions);
   expect(after.copies).toEqual(before.copies);
   expect(after.entitlements).toEqual(before.entitlements);
@@ -225,7 +235,7 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
     expect(fresh.copies).toEqual(before.copies);
     expect(fresh.entitlements).toEqual(before.entitlements);
     expect(fresh.follows).toEqual(before.follows);
-    freshEntryEffects(before, fresh, native.owner.actor.accountId, subjectId, key, entryTypes[vertical]);
+    freshEntryEffects(before, fresh, native.owner.actor, subjectId, key, entryTypes[vertical]);
     await problem(await native.send('owner', 'PUT', path(subjectId), { state: 'planned' }), 409, 'conflict');
     expect(await native.inspect()).toEqual(fresh);
     const changed = await json(
@@ -276,7 +286,7 @@ test('the literal in_progress state follows once and preserves an explicit unfol
     freshEntryEffects(
       before,
       after,
-      native.owner.actor.accountId,
+      native.owner.actor,
       subjectId,
       key,
       entryTypes.recipe,

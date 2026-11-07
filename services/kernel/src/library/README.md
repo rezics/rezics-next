@@ -1,5 +1,11 @@
 # Library
 
+Decision: a successful revisioned write to a historical NULL-incarnation entry stamps and returns its new
+incarnation before storing the receipt; the exact caller body remains the digest. A fresh entry may add one
+type-preparation create receipt and one no-effect revalidation receipt; only creation and entry emit events.
+Session writes resolve accepted releases by their stored digest through Semantic's native Definitions reader and
+validate against both original and current profiles.
+
 Decision: Library consumes native Access behaviour through `access-port.ts`; the existing domain binding holds that
 consumer-owned port and `composition/library.ts` installs Access's native adapter. Shared refusal constructors,
 erasure participant lists and work/policy vocabulary belong to Access contract leaves; compatibility entries re-export
@@ -2413,7 +2419,13 @@ reauthorize native actor retirement and target readability. Other consumers must
 
 ### Entry put
 
-- Touches: One subject resolve, then own-account `library_entry:update`. A missing revision inserts one `entry` primary key. A supplied revision compare-and-swaps that primary key. State `in_progress` also runs one follow upsert in the same command and may emit a second event. The event subject is the account id.
+- Touches: One subject resolve, then own-account `library_entry:update`. A missing revision inserts one `entry`
+  primary key. A supplied revision compare-and-swaps that primary key. A successful revisioned write to a legacy
+  NULL-incarnation row stamps a fresh incarnation in that transaction and returns it; its caller-supplied body and
+  digest remain unchanged. A fresh profiled create may commit one `library.type-preparation.create` receipt and
+  one `library.type-preparation.revalidate` receipt before the entry receipt; revalidation emits no event, and exact
+  replay repeats neither preparation effect. State `in_progress` also runs one follow upsert in the same command
+  and may emit a second event. The event subject is the account id.
 - Bound: Constant exact-key rows and statements, logarithmic index blocks, including the native profile,
   owner sequence, fact hooks and command envelope. Revisioned writes add one locked current entry point before
   their existing state CAS. In-progress writes retain their existing follow upsert/event envelope.
