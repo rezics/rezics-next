@@ -374,6 +374,44 @@ test('a control-plane decision prevents the turn from counting as empty', async 
   }
 });
 
+test('a control-plane decision resets the consecutive empty-turn count', async () => {
+  const s = await setup();
+  try {
+    const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
+    const manager = await s.managers.start(spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id).turnsWithoutDecision).toBe(1);
+
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId: manager.threadId, turn: { id: 'productive', status: 'inProgress' } },
+    });
+    await s.managers.noteCommand(manager.id);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: 'productive', status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id).turnsWithoutDecision).toBe(0);
+
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId: manager.threadId, turn: { id: 'empty-after-decision', status: 'inProgress' } },
+    });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: 'empty-after-decision', status: 'completed' } },
+    });
+    await s.managers.flush();
+    expect(s.managers.get(manager.id).turnsWithoutDecision).toBe(1);
+    expect(s.managers.get(manager.id).status).toBe('running');
+  } finally {
+    await s.close();
+  }
+});
+
 test('completion is checked, unmet evidence is delivered, and only a validated goal stops', async () => {
   const s = await setup();
   try {

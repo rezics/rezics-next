@@ -785,7 +785,7 @@ export class ManagerSessions {
           this.backlogWrittenSince(state, state.turnStartedAt)
         )
           state.decision = true;
-        if (!state.decision) state.turnsWithoutDecision++;
+        state.turnsWithoutDecision = state.decision ? 0 : state.turnsWithoutDecision + 1;
         state.activeTurnId = null;
         this.save(state);
       })

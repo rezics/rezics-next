@@ -2683,10 +2683,10 @@ is pending. When an event is delivered, the host steers it into the manager's ac
 persisted thread; if the app-server has not loaded that thread, the host resumes it once and starts the turn there. The
 opening also states the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the
 message limits, and that the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
-the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. For the
-turns-without-decision limit, a turn in which a ready brief in the Goal's backlog was written or moved back (by
-modification or status time), or a brief the backlog run dispatched was written, counts as a decision, as any
-control-plane command already does.
+the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. The
+turns-without-decision limit counts consecutive completed turns. A turn in which a ready brief in the Goal's backlog was
+written or moved back (by modification or status time), or a brief the backlog run dispatched was written, counts as a
+decision, as any control-plane command already does; a decision resets the count to zero.
 This controller behavior does not disable native Goal continuation. The installed `codex-cli 0.164.0` experimental
 bindings, generated with `codex app-server generate-ts --experimental`, expose no persistent idle-continuation setting
 in `ThreadGoalSetParams` or `ThreadSettingsUpdateParams`. `ThreadForkParams.deferGoalContinuation`
