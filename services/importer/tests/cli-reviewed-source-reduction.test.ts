@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import { runImportCli } from '../src/cli.ts';
@@ -105,7 +105,9 @@ for (const source of ['vndb', 'openlibrary', 'wikidata'] as const) {
     expect(await acquire(0)).toEqual([]);
     if (source !== 'vndb') return;
 
-    const directory = await mkdtemp('/dev/shm/reviewed-reduction-local-');
+    const temporaryRoot = join(import.meta.dir, '../../../.temp');
+    await mkdir(temporaryRoot, { recursive: true });
+    const directory = await mkdtemp(join(temporaryRoot, 'reviewed-reduction-local-'));
     try {
       const state = join(directory, 'state.sqlite');
       const session = new ImportSession(state);
@@ -136,6 +138,25 @@ for (const source of ['vndb', 'openlibrary', 'wikidata'] as const) {
       } finally {
         session.close();
       }
+      const api = 'https://api.import.test';
+      const destinationArgs = ['destination', '--state', state, '--source', source, '--api', api, '--json'];
+      const review = await runImportCli(destinationArgs);
+      expect(review.code, review.stderr).toBe(0);
+      const destination = JSON.parse(review.stdout) as { status: string; reviewRevision: string };
+      expect(destination.status).toBe('unbound');
+      const declaration = await runImportCli([
+        ...destinationArgs,
+        '--review-revision',
+        destination.reviewRevision,
+        '--declare',
+        '--acknowledge-unverified',
+      ]);
+      expect(declaration.code, declaration.stderr).toBe(0);
+      expect(JSON.parse(declaration.stdout)).toMatchObject({
+        status: 'bound',
+        origin: api,
+        provenance: 'operator-declared',
+      });
       const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
       const key = join(directory, 'account.jwk');
       await writeFile(
@@ -160,7 +181,7 @@ for (const source of ['vndb', 'openlibrary', 'wikidata'] as const) {
             '--state',
             state,
             '--api',
-            'https://api.import.test',
+            api,
             '--auth',
             'https://auth.import.test',
             '--account-key',
