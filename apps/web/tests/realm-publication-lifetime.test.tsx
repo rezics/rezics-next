@@ -157,7 +157,7 @@ const { usePublicationControls, releasePublicationSessionSource } =
   await import('../src/community/publication-controls-view');
 const { releaseSpacePageSessionSource } = await import('../src/community/space-page-lifetime');
 const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
-const { RealmShelf } = await import('../src/community/space-page');
+const { RealmShelf } = await import('../src/session/community-application');
 const { m } = await import('../src/paraglide/messages.js');
 
 async function mountHook(session = viewer()) {
@@ -512,7 +512,7 @@ describe('Complete Realm publication original caller lifetime', () => {
         as_of: '2026-10-31T00:00:00Z',
       }) satisfies SuggestionResult,
   );
-  type Completion = import('../src/community/space-page').RealmPublicationCompletion;
+  type Completion = import('../src/session/community-application').RealmPublicationCompletion;
   let onCompleted: ((receipt: Completion) => boolean) | undefined;
   let useOriginalHost = false;
   let completionRead:

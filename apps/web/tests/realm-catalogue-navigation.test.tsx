@@ -70,7 +70,7 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/session/community-application');
 const { RealmCatalogueCurrent } = await import('../src/community/realm-catalogue-current');
 const { SpacePageLifetimeHost, captureSpacePageAdmission, bindSpacePageResult } =
   await import('../src/community/space-page-lifetime');

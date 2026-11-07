@@ -5,7 +5,7 @@ import { createKernelClient, type KernelClient } from '@rezics/client';
 import { RealmHomeHeader } from '../community/realm-home-header';
 import { RealmMembership } from '../community/realm-membership';
 import { loadSpacePage } from '../community/space';
-import { SpacePage } from '../community/space-page';
+import { SpacePage } from '../session/community-application';
 import type { RealmClaimAdapter } from '../community/realm-claim';
 import { readRealmClaim, writeRealmClaim } from '../community/realm-claim-native';
 import { createStoryRecordedKernelFetch } from '../kernel/fake';

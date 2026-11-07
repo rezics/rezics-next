@@ -1086,6 +1086,7 @@
         "apps/web/src/library/saved-query-editor/presentation.ts"
       ],
       "publicEntries": [
+        "apps/web/src/library/adapters/community-follow.tsx",
         "apps/web/src/library/application.tsx",
         "apps/web/src/library/private-lifetime.tsx",
         "apps/web/src/library/follow-control.tsx",
@@ -1184,6 +1185,7 @@
         "apps/web/src/search/contracts/**"
       ],
       "publicEntries": [
+        "apps/web/src/features/pages/subject-visit-navigation.ts",
         "apps/web/src/features/pages/subject-slots.tsx",
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/query-text-limit.ts",
@@ -1237,6 +1239,7 @@
       "owner": "accounts",
       "paths": ["apps/web/src/accounts/**", "apps/web/src/account-verification/**"],
       "publicEntries": [
+        "apps/web/src/accounts/resource-access/link.tsx",
         "apps/web/src/accounts/resource-access/data.ts",
         "apps/web/src/accounts/resource-access/visits.ts",
         "apps/web/src/accounts/profile-editor/address.ts",
@@ -1316,6 +1319,7 @@
         "apps/web/src/media/**"
       ],
       "publicEntries": [
+        "apps/web/src/community/index.ts",
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
         "apps/web/src/media/cover-src.ts",
@@ -1452,6 +1456,7 @@
         "apps/web/src/reader/lifetime/**"
       ],
       "publicEntries": [
+        "apps/web/src/session/community-application.tsx",
         "apps/web/src/content-editions/sale-review.tsx",
         "apps/web/src/session/state.ts",
         "apps/web/src/kernel/client.ts",

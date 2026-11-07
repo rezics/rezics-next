@@ -27,7 +27,7 @@ const { subjectCommunityVisitReturn, withSubjectVisitReturn } =
   await import('../src/features/pages/subject-visit-navigation');
 const { boardSearch } = await import('../src/routes/boards/$id');
 const { threadCreationPreset } = await import('../src/threads/thread-creation-lifetime');
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/session/community-application');
 const { loadSpacePage } = await import('../src/community/space');
 const { readBoardPage, readThreadPage } = await import('../src/threads/reads');
 const { ThreadReading } = await import('../src/threads/thread-reading');

@@ -367,3 +367,8 @@ An aborted aggregate starts no profile controls. The two fixed concurrent contro
 immutable digest/template witness and separately observed active-head checks. Abort is best effort: serial and
 current-context fences still discard retired results, and native failure semantics remain unchanged. The transport
 strips credentials at the boundary with explicit omit/manual/no-store fetch options; inspection never shares viewer or page query caches.
+
+Community's application host consumes the public `communityPublicationVisitHref` navigation capability from
+`subject-visit-navigation.ts`. It composes the existing canonical Subject address, exact Realm operand and admitted
+public shelf return. Community does not import Search's private Subject application. The handoff supplies no
+membership, publication or access authority; the destination performs its ordinary read admission.
