@@ -244,6 +244,39 @@ function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
 
 export type ImportTransportPhase = 'readiness' | 'merge403' | 'SubjectGET503';
 
+const CONNECTION_CODES = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH'] as const;
+
+/** Public connection classifier only: no URLs, headers, bodies or credentials. */
+export function importConnectionClassifier(error: unknown, depth = 0): string | undefined {
+  if (error === null || error === undefined || depth > 4) return undefined;
+  if (error instanceof DOMException) {
+    if (error.name === 'TimeoutError') return 'timeout';
+    if (error.name === 'AbortError') return 'aborted';
+  }
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = String(error.code);
+    if ((CONNECTION_CODES as readonly string[]).includes(code)) return code;
+  }
+  if (error instanceof Error) {
+    for (const code of CONNECTION_CODES) if (error.message.includes(code)) return code;
+    if (/fetch failed/i.test(error.message))
+      return importConnectionClassifier(error.cause, depth + 1) ?? 'fetch-failed';
+    const nested = importConnectionClassifier(error.cause, depth + 1);
+    if (nested) return nested;
+  }
+  if (typeof error === 'object' && error !== null && 'cause' in error)
+    return importConnectionClassifier(error.cause, depth + 1);
+  return undefined;
+}
+
+function transportMessage(status?: number, phase?: ImportTransportPhase, connection?: string): string {
+  const parts = ['Import transport request failed'];
+  if (phase) parts.push(`at ${phase}`);
+  if (status !== undefined) parts.push(`HTTP ${status}`);
+  if (connection) parts.push(connection);
+  return parts.join(' ');
+}
+
 /** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
 export class ImportTransportError extends Error {
   constructor(
@@ -253,8 +286,9 @@ export class ImportTransportError extends Error {
     readonly retryable = false,
     readonly retry?: ImportRetryState,
     readonly phase?: ImportTransportPhase,
+    readonly connection?: string,
   ) {
-    super(phase ? `Import transport request failed at ${phase}` : 'Import transport request failed');
+    super(transportMessage(status, phase, connection));
     this.name = 'ImportTransportError';
   }
 }
@@ -281,7 +315,7 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
   const code = field('code');
   const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
   return new ImportTransportError(
-    reply.response?.status,
+    reply.response?.status ?? (typeof reply.status === 'number' ? reply.status : undefined),
     safeType,
     safeCode,
     field('retryable') === true,
@@ -297,9 +331,23 @@ async function response(
   let reply: ClientResponse;
   try {
     reply = await call();
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted();
-    throw new ImportTransportError();
+    if (error instanceof ImportTransportError) throw error;
+    if (
+      error instanceof Error &&
+      (error.name === 'CredentialServiceError' || error.name === 'CredentialDeniedError')
+    )
+      throw error;
+    throw new ImportTransportError(
+      undefined,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      importConnectionClassifier(error),
+    );
   }
   signal?.throwIfAborted();
   if (

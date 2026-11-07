@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { KernelClient, ReviewedPersonMerge } from '@rezics/client';
-import { createImportTransport } from '../src/import-client.ts';
+import { createImportTransport, importConnectionClassifier, ImportTransportError } from '../src/import-client.ts';
 import type {
   ClassificationAssociation,
   ImportSourceClassificationPutResult,
@@ -398,4 +398,51 @@ test('served-variant reads accept only the admitted image decision for the reque
     `/v1/media/${mediaId}:authorizeDownload?variant=avif-320`,
     `/v1/media/${mediaId}:authorizeDownload?variant=avif-320`,
   ]);
+});
+
+test('a refused loopback fetch keeps the connection classifier without credentials or bodies', async () => {
+  const thrown = new TypeError('fetch failed');
+  (thrown as Error & { cause: Error }).cause = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:1'), {
+    code: 'ECONNREFUSED',
+  });
+  expect(importConnectionClassifier(thrown)).toBe('ECONNREFUSED');
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    client: {
+      sourceFences: { $check: { get: async () => Promise.reject(thrown) } },
+    } as never,
+  });
+  const failure = await transport
+    .fence({ source: 'bangumi', externalId: '1', fieldGroup: 'facts' })
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ImportTransportError);
+  expect((failure as ImportTransportError).message).toBe('Import transport request failed ECONNREFUSED');
+  expect((failure as Error).message).not.toContain('127.0.0.1');
+  expect((failure as Error).message).not.toContain('test-token');
+});
+
+test('an HTTP refusal names the status without remote diagnostic text', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    fetch: (async () =>
+      Response.json(
+        {
+          type: 'https://rezics.com/problems/unavailable',
+          code: 'unavailable',
+          detail: 'private remote diagnostic',
+        },
+        { status: 503 },
+      )) as typeof fetch,
+  });
+  const failure = await transport
+    .fence({ source: 'bangumi', externalId: '1', fieldGroup: 'facts' })
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ImportTransportError);
+  expect((failure as ImportTransportError).status).toBe(503);
+  expect((failure as ImportTransportError).message).toBe('Import transport request failed HTTP 503');
+  expect(JSON.stringify(failure)).not.toContain('private remote diagnostic');
 });
