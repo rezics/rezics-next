@@ -2730,6 +2730,22 @@ CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smo
 
 ## Control plane on dev: cp-sync
 
+The existing fast snapshot publisher calls `bun tools/goal/scripts/cp-fast-preserve.ts prepare <owner>` before
+capturing its candidate. Set `GOAL_MAIN_CHECKOUT` to the main checkout and, if different from its `.temp/goal`,
+`GOAL_STATE_DIRECTORY` to the native state directory. Success prints the captured main and adopted dev SHAs;
+publish that dev SHA, and check main still equals the captured SHA immediately before replacing its tree. After
+the publisher's smoke succeeds, call `bun tools/goal/scripts/cp-fast-preserve.ts checkpoint <published-main> <source-dev>`.
+The helper retains publication/adoption anchors in `watch/cp-fast-state.json`. On first use it derives the latest
+fast publication from its commit subject and verifies an exact full-tree match with the recorded source; an explicit
+checkpoint can bootstrap an older verified snapshot. A checkpoint is never recorded for a failed or reverted smoke.
+
+Before each snapshot, main changes since the retained anchor are three-way merged into current dev using an
+explicit merge base and an atomic main-verification/dev compare-and-swap. Neither checkout is modified. Replays
+produce no duplicate adoption commit, and unrelated dev advances survive. A genuine overlap leaves both refs intact
+and sends the supplied owner one native inbox question per main revision, with paths in `watch/cp-fast-conflict.json`.
+Only fast publication waits: reconcile the hotfix onto dev and retry; product work continues. This helper belongs to
+the existing publisher and introduces no timer, model loop, or separate release gate.
+
 Control-plane changes iterate on `dev` with the products: a `control-plane` brief without a `target` lands there
 mechanically, like product work. `cp-sync` is their release gate; it makes dev's `tools/goal` live on `main` without the
 main-release proof:
