@@ -439,10 +439,7 @@ export type BangumiJourneyOptions = {
   startFrontends?: boolean | 'web';
 };
 
-export async function startWalkStackActions(
-  actions: readonly ('pages' | 'web')[],
-  readyUrls: readonly string[],
-) {
+export async function startWalkStackActions(actions: readonly ('pages' | 'web')[], readyUrls: readonly string[]) {
   const children = actions.map((action) =>
     Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
       cwd: root,
