@@ -1,7 +1,8 @@
 /** Trusted host/deployment composition. Never import this module into the browser. */
 import { writeFile } from 'node:fs/promises';
 import type { ActionCatalogue } from '../../kernel/src/request/access.ts';
-import { websiteDeploymentScopes, type AuthService } from '../src/index.ts';
+import type { AuthService } from '../src/index.ts';
+import { websiteDeploymentScopes } from '../src/website-scopes.ts';
 
 type Registration = Parameters<AuthService['internal']['registerWebsiteClient']>[0];
 

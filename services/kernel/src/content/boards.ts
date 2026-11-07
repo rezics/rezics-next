@@ -523,6 +523,7 @@ async function listBoardThreadsFromSource(
   // Release every thread/parent disclosure snapshot before taking the final
   // board-home observation. A changed cohort (including pin/unpin ABA) cannot
   // issue a token under an old exclusion set. Parent access is current here too.
+  await dependencies.pageDisclosureBarrier?.({ boardId });
   const finalObservation = await readBoardPageCandidateSnapshot(dependencies, boardId, context, decisions, (client) =>
     readBoardPinRevision(client, boardId),
   );
