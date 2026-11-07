@@ -106,9 +106,29 @@ Landing retry decision: complete the controller-started rebase onto `d83d857aa1c
 preserving current message preparation, process custody, Vite and Library setup behavior together with the original
 curated-occurrence assertions and safe HTTP failure diagnostics. The ignored-artifact staging failure reproduced
 with `git add -- .temp/search-walk`; narrow `.gitignore` exceptions now retain only the five reviewed evidence files.
-This is the additional outside-path change. The retry runs the three prescribed Kernel, Web and scripts selections
-once on the rebased source; prior typing remains historical evidence, not a fresh native or mounted pass. No new
-assertions or second walk stack are added for conflict resolution. The six-path census stays unchanged.
+This is the additional outside-path change. The controller-started rebase is complete. The active integration
+contract now requires only changed-workspace typing; the former three behavior selections are superseded as
+prelanding gates. Refresh Kernel and Web typing against the rebased owner contracts, retaining the unchanged
+Auth and Importer results above. One identical app-entry test is deduplicated without removing an assertion.
+Original native, mounted browser and six-path acceptance remain on integrated dev; the census is unchanged.
+
+The already submitted behavior selection settled with exit 1 at `95f42c24002cf0ee266b91d99b5f7f30d07eb4b9`.
+Its complete log is
+`.temp/goal/checks/worker-check-2a15e9a0-81d6-47fe-a55c-b5b41618bcc3-2026-11-07T16-59-07.592Z-5dba72aa.log`.
+Kernel compilation passed in 22.519 seconds. Search original receiving still fails at Collection native custody
+reservation (`collection-native-work.ts:327`, `dependency_unavailable`) before the intended interruption assertion.
+Semantic capture cannot resolve its real registered public Source definition; projector startup/convergence and
+the direct Semantic fixture's missing native ports remain with the existing Source/Semantic owners. The Web
+selection reached viewer replacement in the root shell, then separately hit the Vite readiness deadline and Bun's
+refusal to load `cloudflare.config.ts`; these remain Web receiving failures. The scripts selection passed all
+thirteen documentation cases and failed nineteen stack-placement cases, retained for the placement owner.
+These observations do not become passes through typing. No behavior selection or second stack is repeated here.
+
+The typing refresh runs one sequential wrapper command, keeping either workspace's failure status:
+
+```sh
+bun scripts/worker-check.ts -- sh -c 'bun run --cwd services/kernel typecheck; s=$?; bun run --cwd apps/web typecheck || s=1; exit $s'
+```
 
 The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
 in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
