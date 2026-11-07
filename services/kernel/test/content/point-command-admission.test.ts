@@ -16,6 +16,7 @@ import { actionCatalogue } from '../../src/http/request.ts';
 import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 let db: GrowthDatabase;
 const statements: { text: string; values?: unknown[] }[] = [];
@@ -44,6 +45,7 @@ beforeAll(async () => {
   db.pool.options.max = 1;
   // Fixture grants go through the public grant routes on their own uninstrumented pool.
   permissionPool = createPool(db.url);
+  configureTestReceiptKeys(permissionPool);
   permissionKernel = createKernel({
     pool: permissionPool,
     routeKey: new Uint8Array(32).fill(93),
@@ -439,7 +441,6 @@ test('shared admission and native point/author commands stay bounded at three po
   const jwksReads = fetches;
   const report = await checkGrowth(db, {
     name: 'Authenticated content command admission',
-    rule: 'series',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,

@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import { configureTestReceiptKeys } from './receipt-keys.ts';
 import {
   GrowthCaptureBudget,
   parseNativePlanNotice,
@@ -1016,6 +1017,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
   const lifecycle = createGrowthDatabaseLifecycle();
   return lifecycle.setup(async () => {
     const pool = lifecycle.acquire('instrumented pool', () => createPool(url, { connectionTimeoutMillis: 10_000 }));
+    configureTestReceiptKeys(pool);
     const admin = lifecycle.acquire('admin pool', () => new pg.Pool({ connectionString: url, max: 2 }));
     const state: CaptureState = {
       lifecycle,
@@ -1035,6 +1037,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
       admin,
       openPool: (config = {}) => {
         const libraryPool = lifecycle.acquire('library pool', () => new pg.Pool({ ...config, connectionString: url }));
+        configureTestReceiptKeys(libraryPool);
         instrumentPool(libraryPool, state);
         return libraryPool;
       },
