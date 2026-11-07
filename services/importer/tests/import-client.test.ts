@@ -152,7 +152,7 @@ test('a thrown fetch keeps the remaining request method and path', async () => {
     tokenProvider: async () => 'test-token',
     maxAttempts: 1,
     sleep: async () => {},
-    fetch: (async (_request: Request) => {
+    fetch: (async (_request: Request): Promise<Response> => {
       throw new TypeError('ECONNREFUSED');
     }) as typeof fetch,
   });
