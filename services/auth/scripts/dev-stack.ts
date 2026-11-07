@@ -92,6 +92,7 @@ export function developmentKernelBindings(
     AUTH_ISSUER: selected.issuer,
     AUTH_AUDIENCE: selected.audience,
     AUTH_JWKS_URL: issuerJwksUrl(selected.issuer),
+    REZICS_LOCAL_STACK_NATIVE_ORIGIN: selected.native,
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(localPort(selected.kernel)),
   };
@@ -390,11 +391,9 @@ export async function resetWalkSeedJournals(repository: string, databaseUrl: str
   const archived = await retireDevelopmentSeedState(repository);
   const seedDirectory = resolve(repository, '.temp/cross-media-seed');
   await mkdir(seedDirectory, { recursive: true, mode: 0o700 });
-  await writeFile(
-    resolve(seedDirectory, SEED_JOURNAL_IDENTITY_FILE),
-    `${seedJournalDatabaseIdentity(databaseUrl)}\n`,
-    { mode: 0o600 },
-  );
+  await writeFile(resolve(seedDirectory, SEED_JOURNAL_IDENTITY_FILE), `${seedJournalDatabaseIdentity(databaseUrl)}\n`, {
+    mode: 0o600,
+  });
   return archived;
 }
 
