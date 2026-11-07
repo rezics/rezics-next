@@ -113,6 +113,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     ...(config.facetAccess === undefined ? {} : { access: config.facetAccess }),
   }).source;
   const sourcePublication = searchSourcePublicationApplication();
+  type ActiveRelease = NonNullable<Awaited<ReturnType<typeof sourcePublication.activeRelease>>>;
   async function requestMeaning(acceptedRelease?: string) {
     if (acceptedRelease === undefined) return sourcePublication.activeRelease(config.pool);
     const release = await sourcePublication.readRelease(config.pool, acceptedRelease);
