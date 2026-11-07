@@ -102,11 +102,13 @@ export function createScopedSearchLibraryOperations(): ScopedSearchLibraryOperat
         options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
       ) {
         const resources = currentOperationalResources(work.tx);
-        return requireLibraryMembersPreparation().createPreparation({
-          pool: resources.pool,
-          workClient: resources.workClient,
-          access: options.access,
-        }).readWorkDefinition(work.tx, work.locator);
+        return requireLibraryMembersPreparation()
+          .createPreparation({
+            pool: resources.pool,
+            workClient: resources.workClient,
+            access: options.access,
+          })
+          .readWorkDefinition(work.tx, work.locator);
       },
     }),
   });

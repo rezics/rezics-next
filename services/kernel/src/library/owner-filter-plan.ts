@@ -301,8 +301,7 @@ async function readWorkingOwnerFilterPage(
   // The saved rule is versioned Source state, while caller filters are request identity. Keeping those
   // separate lets an authenticated old cursor report stale when the owner edits the stored rule.
   const savedRule =
-    readNativeCollectionMemberAdmission(admission)?.retainedMeaning &&
-    native.binding(binding)?.metadata.ruleReady;
+    readNativeCollectionMemberAdmission(admission)?.retainedMeaning && native.binding(binding)?.metadata.ruleReady;
   const query = savedRule
     ? createHash('sha256')
         .update(canonicalize(options.filter === undefined ? null : parseStrictJson(options.filter))!)
@@ -368,7 +367,14 @@ async function readWorkingOwnerFilterPage(
         throw unavailable();
       after = candidate.subjectId;
       if (!membership.result) continue;
-      const closure = await readOwnerFilterCandidateClosureNative(native, binding, current, candidate.subjectId, work, true);
+      const closure = await readOwnerFilterCandidateClosureNative(
+        native,
+        binding,
+        current,
+        candidate.subjectId,
+        work,
+        true,
+      );
       if (closure.status !== 'complete') throw unavailable();
       if (closure.closure.subjectId !== candidate.subjectId) throw new TypeError('Foreign native owner closure');
       const transaction = work.reserve({ ...zero, nativePoints: 1, statements: 3, bytes: 256 });
@@ -458,7 +464,16 @@ async function readOwnerFilterPageNative(
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const plan = ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
   const admission = await admitCollectionMemberQuery(deps, actor, options, deadline);
-  const bound = await bindOwnerFilterReadNative(deps, native, actor, collectionId, admission, deadline, undefined, plan);
+  const bound = await bindOwnerFilterReadNative(
+    deps,
+    native,
+    actor,
+    collectionId,
+    admission,
+    deadline,
+    undefined,
+    plan,
+  );
   if (bound.status !== 'bound') throw unavailable();
   if (
     bound.binding.input.actor !== actor ||
@@ -518,16 +533,7 @@ export function bindOwnerFilterRead(
   pagePlan?: OrdinaryCollectionPagePlan,
   ceilings?: NativeOwnerFilterCeilings,
 ) {
-  return installed().native.bind(
-    dependencies,
-    actor,
-    collectionId,
-    admission,
-    deadline,
-    attempt,
-    pagePlan,
-    ceilings,
-  );
+  return installed().native.bind(dependencies, actor, collectionId, admission, deadline, attempt, pagePlan, ceilings);
 }
 
 export function readOwnerFilterCandidateClosure(

@@ -7,10 +7,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { runOperationalTransaction } from '../../../src/command/operational.ts';
 import { requireLibraryMembersPreparation } from '../../../src/library/domain-binding.ts';
-import {
-  type PreparationDefinition,
-  type PreparationLocator,
-} from '../../../src/library/members-preparation.ts';
+import { type PreparationDefinition, type PreparationLocator } from '../../../src/library/members-preparation.ts';
 import { accessCheck } from '../../../src/request/access-check.ts';
 import { actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
