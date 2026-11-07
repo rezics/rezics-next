@@ -22,6 +22,8 @@ Contributors demonstrate those bounds with shared native evidence, rather than m
 - Every violated derivation or growth assertion is corrected with its owner and verified through native acceptance.
   Load-sensitive classification and background-work attribution preserve visible diagnostic evidence.
 
+Decision: Board mappings name the real producer and caller, retain raw candidate preparation and nested disclosure work before filtering, cover both created-at directions, rank orders, deep/empty/withheld pages and projection, and leave native execution open until the original integrated-dev selections record revision-qualified evidence.
+
 ## Scope
 
 Includes the shared native growth harness, fixtures, operation derivations, hot-path corrections and cross-owner
