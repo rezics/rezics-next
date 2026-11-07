@@ -1571,9 +1571,7 @@ export async function loadReviewedTagCandidatePages(
       return {
         pages,
         candidates,
-        adoption: current
-          ? { head: current.head, selection: currentCandidateSelection(candidates) }
-          : null,
+        adoption: current ? { head: current.head, selection: currentCandidateSelection(candidates) } : null,
         complete: true,
       };
     }

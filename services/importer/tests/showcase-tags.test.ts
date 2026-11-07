@@ -1308,9 +1308,7 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     expect(review.adoptKeys).toHaveLength(1);
     const sealedKey = review.adoptKeys[0]!;
     review.moveHead();
-    review.addCandidate(
-      candidateRow(extraEditorialId, { source: 'editorial', external_id: 'note-2' }, 'accepted'),
-    );
+    review.addCandidate(candidateRow(extraEditorialId, { source: 'editorial', external_id: 'note-2' }, 'accepted'));
     journal.close();
     journal = new ShowcaseJournal(journalPath);
 

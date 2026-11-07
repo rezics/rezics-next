@@ -1,10 +1,7 @@
 import { showcaseDigest, type ShowcaseReviewPort } from './showcase-contract.ts';
 import type { ShowcaseJournal, ShowcaseJournalActionRow } from './showcase-journal.ts';
 import { sameAdoptionSelection, type AdoptionSnapshot } from './showcase-current-reads.ts';
-import {
-  showcaseAdoptInvocationBound,
-  type ShowcaseAdoptBody,
-} from './showcase-publication-contract.ts';
+import { showcaseAdoptInvocationBound, type ShowcaseAdoptBody } from './showcase-publication-contract.ts';
 export { showcaseAdoptInvocationBound } from './showcase-publication-contract.ts';
 
 export function showcaseReviewActionKey(kind: 'accept' | 'adopt', identity: string, digest: string): string {
@@ -25,11 +22,7 @@ export function showcaseAdoptGenerationKey(
   intent: string,
   generation: number,
 ): string {
-  return showcaseReviewActionKey(
-    'adopt',
-    `${subjectId}:${property}`,
-    showcaseDigest({ intent, generation }),
-  );
+  return showcaseReviewActionKey('adopt', `${subjectId}:${property}`, showcaseDigest({ intent, generation }));
 }
 
 export type ShowcaseActionRefusalDisposition = 'retry' | 'stale' | 'refused';
@@ -301,5 +294,3 @@ export function permanentReviewRefusal(code: string | null | undefined): boolean
     code ?? '',
   );
 }
-
-

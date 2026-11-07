@@ -204,4 +204,3 @@ export function publicHasValue(read: ReviewedSubjectRead, property: string, expe
     return showcaseDigest(value?.content) === showcaseDigest(expected);
   });
 }
-

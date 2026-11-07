@@ -10,11 +10,7 @@ import {
   type ShowcaseManifest,
 } from './showcase-contract.ts';
 import { showcaseAdoptInvocationBound } from './showcase-publication-contract.ts';
-import type {
-  BangumiCoverSource,
-  BangumiPersonCareerSource,
-  CrossMediaMediaOutcome,
-} from './showcase-media.ts';
+import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { BangumiCoverSourceJournal } from './showcase-media.ts';
 import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import type { VndbTagRatingObservation, VndbTagRatingSnapshot } from './showcase-vndb-tag-ratings.ts';
@@ -301,8 +297,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 
   action(actionKey: string): ShowcaseJournalActionRow | null {
     return (
-      this.#db.query<ShowcaseJournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?').get(actionKey) ??
-      null
+      this.#db
+        .query<ShowcaseJournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?')
+        .get(actionKey) ?? null
     );
   }
 
