@@ -4,6 +4,8 @@ Rating owns native ratings: questions, votes, and the aggregates of those votes 
 interface text, "rating" and "score" alone mean this opinion measure; an age or content classification is always
 named in full ("age rating", "suitability") and lives with classification.
 
+Decision: `VoteObservation` is the public type contract at `rating/index.ts` and `rating/vote-observation.ts`; Library list-import consumes that type rather than Rating internals.
+
 ## Questions, votes and populations
 
 A **question** is what a rating answers ("How much did you like this work?", "How good is this translation?"). It

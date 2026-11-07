@@ -154,7 +154,8 @@ function commandsFor(scenario: StoryArgs['scenario']): OwnDraftCommands {
             licence: 'LicenseRef-rezics-terms',
             createdAt: '2026-10-28T09:42:00.000Z',
             revisedAt: '2026-10-28T10:42:00.000Z',
-          } satisfies CurrentPost,
+            attribution: null,
+          } as unknown as CurrentPost,
         };
       return { ok: false, reason: 'unavailable' };
     },

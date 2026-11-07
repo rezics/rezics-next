@@ -36,7 +36,7 @@ import {
   type VoteReview,
   type VoteReviewGuard,
 } from '../rating/votes.ts';
-import type { VoteObservation } from '../rating/vote-observation.ts';
+import type { VoteObservation } from '../rating/index.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { reviewMalLabels } from './list-import-mal-labels.ts';

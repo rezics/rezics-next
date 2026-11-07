@@ -267,18 +267,10 @@ async function publicIdentityForAccount(
     ...(movedTo ? { movedTo } : {}),
   };
   const subjectId = row.agentVerified ? row.agentSubjectId : boundAccountAgentId(row.accountId);
-  let subject: PublicSubject | null = null;
-  if (subjectId !== undefined && subjectId !== null) {
-    const [{ readItemTypes, readLabels }, { subjectLabel }] = await Promise.all([
-      import('../semantic/subject.ts'),
-      import('../semantic/link-keys.ts'),
-    ]);
-    const [labels, types] = await Promise.all([readLabels(client, [subjectId]), readItemTypes(client, [subjectId])]);
-    const labelSet = labels.get(subjectId);
-    const type = types.get(subjectId);
-    const label = labelSet ? subjectLabel(labelSet) : '';
-    if (type && label) subject = { id: subjectId, label, type };
-  }
+  const subject =
+    subjectId !== undefined && subjectId !== null
+      ? ((await identitySemantic()?.readPublicSubject?.(client as AccessQueryClient, subjectId)) ?? null)
+      : null;
   const avatar = row.avatar
     ? ((await tryAccessApplication()?.readAvatarSummaries(client, [row.avatar]))?.get(row.avatar) ?? null)
     : null;
