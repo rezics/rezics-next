@@ -14,8 +14,8 @@ export function createSubjectAnchorApplication<Context, Mapping extends SubjectI
   identity: SubjectIdentityCapability<Context, Mapping>,
 ) {
   async function resolveMapped(context: Context, id: string, mapping: Mapping): Promise<AnchoredSubject | null> {
-    if (mapping.state === 'absent' || mapping.state === 'pending') return null;
     if (mapping.state === 'unavailable') throw new SubjectIdentityUnavailableError(mapping.reason);
+    if (mapping.state !== 'mapped') return null;
     if (!identity.validId(mapping.terminal)) return null;
     // Prepare both permissions outside either native reference snapshot.
     const original = await identity.prepareReference(context, id);

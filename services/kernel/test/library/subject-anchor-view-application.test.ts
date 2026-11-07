@@ -145,7 +145,7 @@ test('FULL checks final account and target authority after related reads; BASIC 
   expect(events).toEqual([]);
   const result = await full('FULL', body, { withholdChangedSource: true });
   expect(result.rows[0]).toEqual({
-    ...body.rows[0],
+    ...body.rows[0]!,
     account: null,
     target: null,
     subject: { id: 's' },
