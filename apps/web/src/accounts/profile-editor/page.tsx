@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import {
@@ -13,28 +12,27 @@ import {
   AlertDialogAction,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
-import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
-import { sessionQuery, useSession } from '../../session/query';
-import { normalizeSessionObservation } from '../../session/browser-state';
-import { ProfileCard, ProfileFeedback } from '../../settings/profile';
-import { PublicViewsCard } from '../../settings/public-views';
-import { ProfileNavigation } from '../../settings/profile-navigation';
-import { usePreferenceRetry } from '../../settings/preferences';
-import { readAccountProfile, saveAccountProfile } from './actions';
+import type * as ProfilePresentation from '../../settings/ports/profile-editor-view';
+import { usePreferenceRetry } from '../../settings/ports/profile-editor';
+import type { AccountProfileRuntime, ProfileSessionObservation } from './ports';
 import { AccountProfileEditor } from './editor';
 import { profilePageReadError, type ProfilePage } from './data';
 
-export function accountProfileHref(accountId: string, locale = getLocale()) {
-  return `/${locale}/accounts/${encodeURIComponent(accountId)}/profile`;
-}
-export function AccountProfilePage({ accountId }: { accountId: string }) {
-  const session = useSession();
-  const client = useQueryClient();
-  const record = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
-  const revision = record?.state.dataUpdateCount;
-  // A new committed session observation or provider starts a fresh draft lifetime.
-  const observation = useMemo(() => crypto.randomUUID(), [client, record, revision]);
+import { accountProfileHref } from './address';
+export { accountProfileHref } from './address';
+export type AccountProfilePresentation = typeof ProfilePresentation;
+export function AccountProfilePage({
+  accountId,
+  presentation,
+  runtime,
+}: {
+  accountId: string;
+  presentation: AccountProfilePresentation;
+  runtime: AccountProfileRuntime;
+}) {
+  const boundSession = runtime.useSession();
+  const { session, observation } = boundSession;
   return (
     <article className="mx-auto w-full max-w-2xl space-y-6 pb-8">
       <PageHeading>{m.account_profile_title()}</PageHeading>
@@ -42,6 +40,9 @@ export function AccountProfilePage({ accountId }: { accountId: string }) {
         <BoundProfile
           key={`${accountId}:${observation}:${session.subject}:${session.csrfToken}`}
           accountId={accountId}
+          presentation={presentation}
+          runtime={runtime}
+          boundSession={boundSession}
           viewerId={session.subject}
           csrfToken={session.csrfToken}
         />
@@ -53,31 +54,33 @@ export function AccountProfilePage({ accountId }: { accountId: string }) {
     </article>
   );
 }
-function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; viewerId: string; csrfToken: string }) {
-  const client = useQueryClient();
+function BoundProfile({
+  accountId,
+  viewerId,
+  csrfToken,
+  presentation,
+  runtime,
+  boundSession,
+}: {
+  accountId: string;
+  viewerId: string;
+  csrfToken: string;
+  presentation: AccountProfilePresentation;
+  runtime: AccountProfileRuntime;
+  boundSession: ProfileSessionObservation;
+}) {
+  const { ProfileNavigation } = presentation;
   const [page, setPage] = useState<ProfilePage | null>(null);
   const [binding] = useState(() => {
-    const record = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
-    const revision = record?.state.dataUpdateCount;
-    let attachments = 0;
-    const current = () => {
-      const latest = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
-      if (!attachments || !record || latest !== record || latest.state.status !== 'success') return false;
-      const session = normalizeSessionObservation(latest.state.data);
-      return (
-        latest.state.dataUpdateCount === revision &&
-        session.state === 'signed-in' &&
-        session.subject === viewerId &&
-        session.csrfToken === csrfToken
-      );
-    };
+    const lease = boundSession.bind(viewerId, csrfToken);
+    const current = lease.isCurrent;
     const editor = new AccountProfileEditor({
       isCurrent: current,
       read: async (signal) => {
         if (!current()) throw new Error('Profile selection changed');
         let next: ProfilePage;
         try {
-          next = await readAccountProfile({ data: { accountId, viewerId }, ...(signal ? { signal } : {}) });
+          next = await runtime.read({ accountId, viewerId }, signal);
         } catch {
           next = { state: 'unavailable' };
         }
@@ -92,17 +95,17 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
       save: async (attempt, signal) => {
         if (!current() || attempt.before.accountId !== accountId || attempt.after.accountId !== accountId)
           throw new Error('Profile selection changed');
-        const result = await saveAccountProfile({
-          data: {
+        const result = await runtime.save(
+          {
             accountId,
             viewerId,
             patch: attempt.patch,
             idempotencyKey: attempt.idempotencyKey,
             confirmed: true,
           },
-          headers: { 'X-CSRF-Token': csrfToken },
-          ...(signal ? { signal } : {}),
-        });
+          csrfToken,
+          signal,
+        );
         if (current() && !signal?.aborted && !result.ok && [401, 403, 404].includes(result.status))
           setPage({ state: result.status === 404 ? 'missing' : result.status === 401 ? 'signed-out' : 'denied' });
         return result;
@@ -110,22 +113,7 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
     });
     return {
       editor,
-      attach: () => {
-        attachments++;
-        if (!current()) editor.retire();
-        // Cache notifications revoke callbacks before React renders the replacement session.
-        const unsubscribe = client.getQueryCache().subscribe(() => {
-          if (!current()) editor.retire();
-        });
-        return () => {
-          attachments--;
-          unsubscribe();
-          // StrictMode can reconnect within the same turn. No command is current while detached.
-          queueMicrotask(() => {
-            if (!attachments) editor.retire();
-          });
-        };
-      },
+      attach: () => lease.attach(() => editor.retire()),
     };
   });
   const { editor } = binding;
@@ -135,7 +123,7 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
   }, [editor]);
   return (
     <ProfileNavigation editor={editor}>
-      <AccountProfileView accountId={accountId} editor={editor} page={page} />
+      <AccountProfileView accountId={accountId} editor={editor} page={page} presentation={presentation} />
     </ProfileNavigation>
   );
 }
@@ -144,11 +132,14 @@ export function AccountProfileView({
   accountId,
   editor,
   page,
+  presentation,
 }: {
   accountId: string;
   editor: AccountProfileEditor;
   page: ProfilePage | null;
+  presentation: AccountProfilePresentation;
 }) {
+  const { ProfileCard, ProfileFeedback, PublicViewsCard } = presentation;
   const confirmation = useSyncExternalStore(
     editor.subscribeConfirmation,
     editor.confirmationSnapshot,

@@ -2,7 +2,7 @@ import { beforeAll, expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type {
   DetailRequest,
@@ -20,16 +20,19 @@ beforeAll(installMocks);
 let ManagedAccountDetailCard: (typeof import('../src/settings/managed-account-detail'))['ManagedAccountDetailCard'];
 let ManagedAccountReader: (typeof import('../src/settings/managed-account-detail-read'))['ManagedAccountReader'];
 let detailFailure: (typeof import('../src/settings/managed-account-detail-read'))['detailFailure'];
-let loadManagedAccountDetail: (typeof import('../src/settings/managed-account-detail-read'))['loadManagedAccountDetail'];
+let loadManagedAccountDetail: (typeof import('../src/settings/adapters/accounts'))['loadManagedAccountDetail'];
 let managedAccountTarget: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountTarget'];
 let managedAccountsBackHref: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountsBackHref'];
 let m: (typeof import('../src/paraglide/messages.js'))['m'];
 let AnonymousSessionContext: (typeof import('../src/session/query'))['AnonymousSessionContext'];
+let QueryClientProvider: (typeof import('./fixtures/accounts-composition'))['AccountsQueryProvider'];
 beforeAll(async () => {
   installMocks();
+  ({ AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition'));
   ({ ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail'));
-  ({ ManagedAccountReader, detailFailure, loadManagedAccountDetail, managedAccountTarget, managedAccountsBackHref } =
+  ({ ManagedAccountReader, detailFailure, managedAccountTarget, managedAccountsBackHref } =
     await import('../src/settings/managed-account-detail-read'));
+  ({ loadManagedAccountDetail } = await import('../src/settings/adapters/accounts'));
   ({ m } = await import('../src/paraglide/messages.js'));
   ({ AnonymousSessionContext } = await import('../src/session/query'));
 });
@@ -344,7 +347,7 @@ test('Connect exact native Auth entries to deployed management destinations pres
 });
 
 test('detail Refresh and feed reads drop stale Auth links immediately and older replies cannot override newer missing or denied observations', async () => {
-  const { projectManagedAuthNavigation } = await import('../src/settings/managed-account-actions-read');
+  const { projectManagedAuthNavigation } = await import('../src/settings/adapters/accounts');
   const value = detail();
   value.account.displayName = 'Current target';
   value.role = 'member';

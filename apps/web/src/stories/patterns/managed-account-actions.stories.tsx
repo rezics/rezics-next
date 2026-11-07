@@ -4,9 +4,13 @@ import { expect, userEvent, within } from 'storybook/test';
 import { createKernelClient } from '@rezics/client';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { AccountsProvider } from '../../settings/managed-account-capabilities';
+import { accountProfileHref } from '../../accounts/profile-editor/address';
 import { ManagedAccountActionsForViewer } from '../../settings/managed-account-actions';
-import { loadManagedAccountActions, type ManagedAccountActionsIO } from '../../settings/managed-account-actions-read';
-import { loadManagedAccountDetail, ManagedAccountReader } from '../../settings/managed-account-detail-read';
+import { type ManagedAccountActionsIO } from '../../settings/managed-account-actions-read';
+import { loadManagedAccountActions } from '../../settings/adapters/accounts';
+import { ManagedAccountReader } from '../../settings/managed-account-detail-read';
+import { loadManagedAccountDetail } from '../../settings/adapters/accounts';
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const organizationId = '019a0000-0000-7000-8000-000000000002';
@@ -14,6 +18,9 @@ const operatedId = '019a0000-0000-7000-8000-000000000003';
 const sourceId = '019a0000-0000-7000-8000-123400000004';
 type Outcome = 'available' | 'denied' | 'unavailable' | 'failed-then-ready' | 'delayed-retry';
 type AuthEntry = 'self' | 'organization' | 'transfer' | 'undeployed' | 'unavailable';
+async function unusedCapability(): Promise<never> {
+  throw new Error('This action story does not consume other account capabilities');
+}
 function Example({ outcome = 'available', authEntry }: { outcome?: Outcome; authEntry?: AuthEntry }) {
   const organization = authEntry === 'organization' || authEntry === 'undeployed';
   const operated = authEntry === 'transfer';
@@ -121,18 +128,29 @@ function Example({ outcome = 'available', authEntry }: { outcome?: Outcome; auth
     };
   }, [outcome]);
   return (
-    <div className="mx-auto max-w-2xl p-4">
-      <ManagedAccountActionsForViewer
-        key={outcome}
-        accountId={accountId}
-        viewerId={viewerId}
-        nativeAccountKind={organization ? 'organization' : 'actor'}
-        operated={operated}
-        self={accountId === viewerId}
-        authNavigation={authEntry ? authNavigation : undefined}
-        io={io}
-      />
-    </div>
+    <AccountsProvider
+      value={{
+        session: { state: 'unknown', csrfToken: null },
+        sessionSource: undefined,
+        profileHref: accountProfileHref,
+        readActions: io,
+        readDetail: unusedCapability,
+        loadRename: unusedCapability,
+        refreshSession: unusedCapability,
+      }}
+    >
+      <div className="mx-auto max-w-2xl p-4">
+        <ManagedAccountActionsForViewer
+          key={outcome}
+          accountId={accountId}
+          viewerId={viewerId}
+          nativeAccountKind={organization ? 'organization' : 'actor'}
+          operated={operated}
+          self={accountId === viewerId}
+          authNavigation={authEntry ? authNavigation : undefined}
+        />
+      </div>
+    </AccountsProvider>
   );
 }
 const meta = {

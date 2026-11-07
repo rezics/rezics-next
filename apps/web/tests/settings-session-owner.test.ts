@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
 import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
@@ -30,6 +30,7 @@ mock.module('@tanstack/react-start/server', () => ({
   },
 }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
 const { SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
 const { accountPreferenceIO, SettingsPageView } = await import('../src/settings/settings-page');

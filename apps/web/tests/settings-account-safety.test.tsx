@@ -1,6 +1,7 @@
+import { AccountsQueryProvider as QueryClientProvider } from './fixtures/accounts-composition';
 import { expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { sessionQuery } from '../src/session/query';

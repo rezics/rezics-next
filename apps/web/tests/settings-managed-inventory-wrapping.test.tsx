@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type {
   ManagedAccountsCursors,
@@ -23,9 +23,11 @@ let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-rea
 let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
 let m: (typeof import('../src/paraglide/messages.js'))['m'];
 let setLocale: (typeof import('../src/paraglide/runtime.js'))['setLocale'];
+let QueryClientProvider: (typeof import('./fixtures/accounts-composition'))['AccountsQueryProvider'];
 beforeAll(async () => {
   install();
   installMocks();
+  ({ AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition'));
   ({ createRoot } = await import('react-dom/client'));
   ({ ManagedAccounts, ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
   ({ managedAccountHref, managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));

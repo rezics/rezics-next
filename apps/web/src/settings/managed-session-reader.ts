@@ -1,6 +1,6 @@
-import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { sessionQuery } from '../session/query';
+import type { AccountSessionSource } from './ports/accounts';
+import { useAccounts } from './managed-account-capabilities';
+import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 
 /** Read-only custody of one original session observation, never a credential or an authority grant. */
 export class ManagedSessionReader {
@@ -10,15 +10,13 @@ export class ManagedSessionReader {
   private release: (() => void) | undefined;
   private listeners = new Set<() => void>();
   constructor(
-    private readonly client: QueryClient | undefined,
+    private readonly source: AccountSessionSource | undefined,
     readonly subject: string | null | undefined,
     readonly target: string | null | undefined,
     readonly token?: string | null,
   ) {}
   matches() {
-    const query = this.client?.getQueryState<{ state: string; subject?: string | null; csrfToken: string | null }>(
-      sessionQuery.queryKey,
-    );
+    const query = this.source?.snapshot();
     const data = query?.data;
     return (
       !!this.subject &&
@@ -51,9 +49,8 @@ export class ManagedSessionReader {
     if (this.retired) return () => {};
     this.started = true;
     this.attached = true;
-    this.release ??= this.client?.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
-      if (event.type === 'removed' || !this.matches()) this.retire();
+    this.release ??= this.source?.subscribe((removed) => {
+      if (removed || !this.matches()) this.retire();
     });
     if (!this.matches()) this.retire();
     return () => {
@@ -72,31 +69,25 @@ export function useManagedSessionReader(
   target: string | null | undefined,
   token?: string | null,
 ) {
-  const client = useContext(QueryClientContext);
-  const subscribe = useCallback(
-    (changed: () => void) =>
-      client?.getQueryCache().subscribe((event) => {
-        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === sessionQuery.queryKey[0]) changed();
-      }) ?? (() => {}),
-    [client],
-  );
-  const snapshot = useCallback(() => client?.getQueryState(sessionQuery.queryKey), [client]);
+  const { sessionSource: source } = useAccounts();
+  const subscribe = useCallback((changed: () => void) => source?.subscribe(() => changed()) ?? (() => {}), [source]);
+  const snapshot = useCallback(() => source?.snapshot(), [source]);
   // Keep observing recovery after an individual owner has permanently released its subscription.
   useSyncExternalStore(subscribe, snapshot, snapshot);
-  const ref = useRef<{ client: typeof client; owner: ManagedSessionReader } | null>(null);
+  const ref = useRef<{ source: typeof source; owner: ManagedSessionReader } | null>(null);
   const previous = ref.current;
   // A retired owner is replaced only by a fresh observation that currently matches. Replacing it while the
   // session is unavailable would retire the replacement on attach and re-render forever.
   if (
     !previous ||
-    previous.client !== client ||
+    previous.source !== source ||
     previous.owner.subject !== subject ||
     previous.owner.target !== target ||
     previous.owner.token !== token ||
-    (previous.owner.snapshot() && new ManagedSessionReader(client, subject, target, token).matches())
+    (previous.owner.snapshot() && new ManagedSessionReader(source, subject, target, token).matches())
   ) {
     previous?.owner.retire();
-    ref.current = { client, owner: new ManagedSessionReader(client, subject, target, token) };
+    ref.current = { source, owner: new ManagedSessionReader(source, subject, target, token) };
   }
   const owner = ref.current!.owner;
   useSyncExternalStore(owner.subscribe, owner.snapshot, owner.snapshot);

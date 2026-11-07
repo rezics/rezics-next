@@ -1193,7 +1193,10 @@
       "paths": ["apps/web/src/accounts/**", "apps/web/src/account-verification/**"],
       "publicEntries": [
         "apps/web/src/accounts/resource-access/data.ts",
-        "apps/web/src/accounts/resource-access/visits.ts"
+        "apps/web/src/accounts/resource-access/visits.ts",
+        "apps/web/src/accounts/profile-editor/address.ts",
+        "apps/web/src/accounts/profile-editor/page.tsx",
+        "apps/web/src/accounts/profile-editor/adapters.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1212,8 +1215,15 @@
       "kind": "UI/transport library",
       "owner": "performance",
       "paths": ["apps/web/src/settings/**", "apps/web/src/inbox/**"],
-      "publicEntries": ["apps/web/src/settings/preferences.ts"],
-      "allowedDependencies": ["client", "ui", "web-accounts", "web-app", "web-content", "web-library", "web-search"],
+      "publicEntries": [
+        "apps/web/src/settings/preferences.ts",
+        "apps/web/src/settings/ports/accounts.ts",
+        "apps/web/src/settings/ports/profile-editor.ts",
+        "apps/web/src/settings/ports/profile-editor-view.ts",
+        "apps/web/src/settings/adapters/accounts-browser.tsx",
+        "apps/web/src/settings/managed-account-capabilities.tsx"
+      ],
+      "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]
     },
     {
@@ -1386,7 +1396,9 @@
         "apps/web/src/shell/head-context.ts",
         "apps/web/src/subject/subject-href.ts",
         "apps/web/src/subject/collection-return.ts",
-        "apps/web/src/shell/collection-presentation.tsx"
+        "apps/web/src/shell/collection-presentation.tsx",
+        "apps/web/src/session/auth-page-routes.ts",
+        "apps/web/src/session/csrf.ts"
       ],
       "allowedDependencies": [
         "client",

@@ -1,7 +1,8 @@
+import { AccountsQueryProvider as QueryClientProvider } from './fixtures/accounts-composition';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';

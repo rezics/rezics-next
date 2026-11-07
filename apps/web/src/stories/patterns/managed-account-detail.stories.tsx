@@ -6,6 +6,7 @@ import { automation, detailExample, human, organization } from '../../accounts/m
 import { m } from '../../paraglide/messages.js';
 import { ManagedAccountDetailCard } from '../../settings/managed-account-detail';
 import { ManagedAccountReader, type DetailRead, type DetailSection } from '../../settings/managed-account-detail-read';
+
 import { sessionQuery } from '../../session/query';
 import { PatternStory } from '../page';
 
