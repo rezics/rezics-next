@@ -15,7 +15,6 @@ import { installSemanticCopyWork } from './semantic-copy-work.ts';
 import { installNativeHistory } from './history.ts';
 import { composeRatingDependencies } from './rating.ts';
 import { composeSemanticAdapters, composeSubjectReadingApplication } from './semantic.ts';
-import { composeSearchSemanticSource } from './search-semantic.ts';
 import { composePresentationApplication } from './presentation.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
@@ -30,8 +29,11 @@ import type { SearchLibraryScopePort } from '../search/index.ts';
 import { composeSearchAccess } from './search-access.ts';
 import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
 import type { SubjectReadingApplication } from '../semantic/index.ts';
+import { bindSearchNativeCapabilities, type SearchNativePorts } from '../search/composition.ts';
 
 export type KernelRuntimeDefaults = {
+  /** Complete producers retained when this root has prepared or received Search composition. */
+  searchNativePorts?: SearchNativePorts;
   /** Bind the complete native application for each Search transport. */
   searchDisclosure: typeof createNativeSearchDisclosure;
   tokens: KeyRing;
@@ -60,6 +62,8 @@ export type KernelRuntimeOverrides = {
   clock?: () => Date;
   deadlineNow?: () => number;
   auth?: AuthenticationConfig;
+  /** Optional process-root producer instance; defaults to the real Search composition. */
+  searchNativePorts?: SearchNativePorts;
 };
 
 function readTokenKeys(env: NodeJS.ProcessEnv): KeyRing {
@@ -104,10 +108,12 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeContentApplication();
   composeCommunityApplication();
   installNativeHistory();
-  // Semantic registration binds Search native ports before its receiving participant is built;
-  // runtime defaults repeat that install for server and Search service consumers.
+  // This root supplies the full producer set for HTTP consumers. Worker registration passes its
+  // already constructed instance through this override so separate applications keep their own port.
   composeSemanticAdapters();
-  composeSearchSemanticSource();
+  const searchNativePorts = overrides.searchNativePorts
+    ? bindSearchNativeCapabilities(overrides.searchNativePorts)
+    : undefined;
   composePresentationApplication();
   composeLibraryDomain({ scopeWork: createNativeLibraryScopeWork(libraryScope) });
   composeZones();
@@ -129,6 +135,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   const auth = overrides.auth ?? readAuthConfig(env);
   const access: AccessFactory = auth ? (config: AccessConfig) => createAccess({ ...config, auth }) : createAccess;
   return {
+    ...(searchNativePorts === undefined ? {} : { searchNativePorts }),
     searchDisclosure: createNativeSearchDisclosure,
     tokens,
     receiptKeys,

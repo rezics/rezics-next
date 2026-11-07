@@ -61,7 +61,7 @@ import { relationSource } from '../semantic/search-relations.ts';
 import { readIdentitySourceProjection, subjectSource } from '../semantic/search-source.ts';
 import { readScopeLeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
-import { bindSearchNativePorts, bindSearchSemanticSourcePort, type SearchNativePorts } from '../search/composition.ts';
+import { bindSearchNativeCapabilities, type SearchNativePorts } from '../search/composition.ts';
 
 /** Bind existing native producers to Search's consumer-owned ports. */
 export function composeSearchNativePorts(): SearchNativePorts {
@@ -126,9 +126,7 @@ export function composeSearchNativePorts(): SearchNativePorts {
     withOwnerFilterNativeRead,
     withReadTransaction,
   });
-  bindSearchNativePorts(port);
-  bindSearchSemanticSourcePort(port);
-  return port;
+  return bindSearchNativeCapabilities(port);
 }
 
 /** Compatibility name used by ordinary Kernel composition. */
