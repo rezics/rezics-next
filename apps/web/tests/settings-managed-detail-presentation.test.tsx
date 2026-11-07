@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import type {
   DetailRequest,
@@ -34,6 +34,7 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const { AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition');
 const { createRoot } = await import('react-dom/client');
 const { ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail');
 const { ManagedAccountReader } = await import('../src/settings/managed-account-detail-read');

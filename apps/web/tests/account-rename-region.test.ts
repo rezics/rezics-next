@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
-import { loadAccountRenameRegion } from '../src/settings/account-rename-data';
+import { loadAccountRenameRegion } from '../src/settings/adapters/accounts';
 import type { AccountRenameResult } from '../src/settings/account-rename-actions';
 import { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } from '../src/settings/account-safety';
 import { loadSettingsPage } from '../src/settings/preferences';
@@ -241,13 +241,13 @@ test('retired module loading never issues a later account request, and a late su
   let current = true;
   let imports = 0;
   let reads = 0;
-  let resolveLoad!: (value: typeof import('../src/settings/account-rename-actions')) => void;
+  let resolveLoad!: (value: typeof import('../src/settings/adapters/accounts')) => void;
   const loaded = {
     readAccountRename: async () => {
       reads++;
       return ready;
     },
-  } as unknown as typeof import('../src/settings/account-rename-actions');
+  } as unknown as typeof import('../src/settings/adapters/accounts');
   const pending = readCurrentAccountRename(
     csrfToken,
     () => current,

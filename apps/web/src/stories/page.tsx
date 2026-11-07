@@ -1,3 +1,5 @@
+import { NativeAccountsProvider } from '../settings/adapters/accounts-browser';
+import { accountProfileHref } from '../accounts/profile-editor/address';
 import { selectHomeFeedStory, type HomeFeedStory } from '../kernel/fake/home-feed-stories';
 import { setLabelCatalogueStory } from '../kernel/fake/library-labels';
 import { resetLabelAssignmentStory } from '../kernel/fake/library-label-assignments';
@@ -222,7 +224,9 @@ export function PatternStory({
   return (
     <PatternChildren.Provider value={children}>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <NativeAccountsProvider profileHref={accountProfileHref}>
+          <RouterProvider router={router} />
+        </NativeAccountsProvider>
       </QueryClientProvider>
     </PatternChildren.Provider>
   );

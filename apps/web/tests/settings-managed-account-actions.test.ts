@@ -2,13 +2,12 @@ import { expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { MediaProblem } from '../src/media/kernel';
 import {
-  LOCAL_authManagementPageHref,
   ManagedAccountActionsRead,
-  loadManagedAccountActions,
   managedAccountActionNames,
   type ManagedAccountActionsResult,
   type ManagedAccountActionsTarget,
 } from '../src/settings/managed-account-actions-read';
+import { LOCAL_authManagementPageHref, loadManagedAccountActions } from '../src/settings/adapters/accounts';
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const accountId = '019a0000-0000-7000-8000-000000000002';
@@ -327,7 +326,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { usePreferenceRetry } from '../src/settings/preference-failure-retry';
 import { ManagedAccountActionsForViewer } from '../src/settings/managed-account-actions';
-import { projectManagedAuthNavigation } from '../src/settings/managed-account-actions-read';
+import { projectManagedAuthNavigation } from '../src/settings/adapters/accounts';
 import type { ManagementDetail } from '../src/settings/managed-account-detail-read';
 
 function renderRetryWait(retryAt: number) {

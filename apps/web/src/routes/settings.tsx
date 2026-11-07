@@ -1,3 +1,5 @@
+import { NativeAccountsProvider } from '../settings/adapters/accounts-browser';
+import { accountProfileHref } from '../accounts/profile-editor/address';
 import { requirePrivatePageAccess } from '../session/guard';
 import { loadPrivatePage } from '../session/private-page';
 import { pageHead } from '../shell/head';
@@ -29,5 +31,9 @@ export const Route = createFileRoute('/settings')({
 function SettingsRoute() {
   const data = Route.useLoaderData();
   const { page, requestSession } = data;
-  return <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />;
+  return (
+    <NativeAccountsProvider profileHref={accountProfileHref}>
+      <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />
+    </NativeAccountsProvider>
+  );
 }
