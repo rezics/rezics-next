@@ -108,7 +108,7 @@ exceptions to infrastructure 75. Pin with the existing typecheck-placement and r
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
-rather than 1 GiB tmpfs, nonce reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix
+rather than 1 GiB tmpfs, nonce reap on create failure then one retry, `container:<id>` attachment and an independent TCP-to-Unix
 forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
 returns a string or a Buffer; cleanup retains the original failure and the exact cleanup diagnostic. Host-lifetime
 Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;

@@ -74,8 +74,8 @@ contribution-story, public-scope walk and Auth retirement fixtures to current co
 waits for `docker rm -f -v` then inspects the container and labelled volume gone; that error stays beside native
 0/23 and does not become 75. Root's shared-database cleanup uses the same keep-status rule, and its SIGINT/SIGTERM handlers pass `wait=false` into that removal. spawnSync removal waits
 in-process; only SIGTERM/SIGINT uses `beginDetachedDockerRm` so a 200ms SIGKILL cannot abort it. `docker run` retries once after spawn
-timeout and nonce reap; that failure stays 75. Labelled reap lists (`ps -aq`) use the run timeout. Combined units
-run after landing.
+timeout and nonce reap; that failure stays 75. Kernel derived throwaway create and check-host PostgreSQL create use that
+same one retry. Labelled reap lists (`ps -aq`) use the run timeout. Combined units run after landing.
 
 Decision: receive Search's unchanged default heap and explicit heap/container overrides, additive account messages
 and History's distinct local/full native module assertion through the combined selection. SSH retirement requires

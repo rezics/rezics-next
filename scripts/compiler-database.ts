@@ -95,11 +95,21 @@ export function compilerDatabaseVolumeLsArgs(pid: number): string[] {
   return ['volume', 'ls', '-q', '--filter', `label=${COMPILER_PID_LABEL}=${pid}`];
 }
 
-function isDockerTimeout(error: unknown): boolean {
+export function isDockerTimeout(error: unknown): boolean {
   return (
     (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ETIMEDOUT') ||
     (error instanceof Error && error.message.includes('ETIMEDOUT'))
   );
+}
+
+/** A timed-out create already reaped its nonce; retry once with a fresh identity. The second failure stays with the caller. */
+export function retryDockerCreateOnce<T>(nonce: string, create: (nonce: string) => T, nextNonce: () => string): T {
+  try {
+    return create(nonce);
+  } catch (error) {
+    if (!isDockerTimeout(error)) throw error;
+    return create(nextNonce());
+  }
 }
 
 /**
@@ -268,13 +278,7 @@ export function startCompilerContainer(
       throw error;
     }
   };
-  try {
-    return start(nonce);
-  } catch (error) {
-    // One retry after a spawn timeout: a previous volume delete can occupy the daemon for the whole 120s window.
-    if (!isDockerTimeout(error)) throw error;
-    return start(newCompilerNonce(pid));
-  }
+  return retryDockerCreateOnce(nonce, start, () => newCompilerNonce(pid));
 }
 
 /**
