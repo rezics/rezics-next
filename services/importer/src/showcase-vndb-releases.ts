@@ -33,7 +33,7 @@ import {
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 import {
   type CrossMediaGap,
   type CrossMediaPlan,

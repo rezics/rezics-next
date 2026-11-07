@@ -6,7 +6,7 @@ import type { CrossMediaSeedResult } from './cross-media-seed.ts';
 import { createImportFetch } from './import-fetch.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { showcaseDigest } from './showcase-contract.ts';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 
 /** Separate creator credential; these are not importer scopes or additional platform grants. */
 export const developmentCollectionScopes = [

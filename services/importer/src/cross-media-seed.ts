@@ -94,12 +94,9 @@ import {
 } from './vndb-character-profile.ts';
 import { createImportTransport, ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import { createPublicBulkClient } from './public-bulk-client.ts';
-import {
-  captureShowcaseCommands,
-  publishShowcase,
-  ShowcaseJournal,
-  type ShowcasePublicationResult,
-} from './showcase-publication.ts';
+import { publishShowcase } from './showcase-publication.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
+import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import {
   prepareShowcaseBangumiSelectedCharacterVocabulary,
   readShowcaseBangumiSelectedCharacterVocabulary,

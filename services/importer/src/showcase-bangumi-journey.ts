@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
-import type { ShowcasePublicationResult } from './showcase-publication.ts';
+import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/anime-journey', randomUUID().slice(0, 8));

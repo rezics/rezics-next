@@ -5,7 +5,7 @@ import {
   readShowcaseBangumiCharacterVocabulary,
   type ShowcaseBangumiCharacterVocabulary,
 } from './showcase-bangumi-characters.ts';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 
 type PrepareInput = {
   plan: CrossMediaPlan;

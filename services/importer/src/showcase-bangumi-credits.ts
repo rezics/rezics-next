@@ -27,13 +27,10 @@ import {
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import {
-  captureShowcaseCommands,
-  publishShowcase,
-  ShowcaseJournal,
-  type ShowcasePublicationResult,
-  type ShowcaseReviewPort,
-} from './showcase-publication.ts';
+import { publishShowcase } from './showcase-publication.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
+import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
+import type { ShowcaseReviewPort } from './showcase-contract.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 
 const alias = 'bangumi_cross_media';

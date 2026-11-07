@@ -29,7 +29,8 @@ import {
   type BangumiCreditPriorPublication,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
-import type { ShowcaseJournal, ShowcaseReviewPort } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
+import type { ShowcaseReviewPort } from './showcase-contract.ts';
 import { showcaseBookFamilies, showcaseBookFamily, type ShowcaseBookFamily } from './showcase-book-series.ts';
 
 type Row = Record<string, unknown>;
