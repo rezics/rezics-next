@@ -453,7 +453,11 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     });
     const f = native;
     const target = f.baselineSubject;
-    const { current: initialCurrent, original, old } = await withRequestDeadline(Date.now() + 30_000, async () => {
+    const {
+      current: initialCurrent,
+      original,
+      old,
+    } = await withRequestDeadline(Date.now() + 30_000, async () => {
       let current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
       const original = current;
       await f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!);
