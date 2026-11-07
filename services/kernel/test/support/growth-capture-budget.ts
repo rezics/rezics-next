@@ -4,6 +4,8 @@ export const MAX_GROWTH_CAPTURE_ENTRIES = 20_000;
 export const MAX_GROWTH_CAPTURE_BYTES = 32 * 1024 * 1024;
 export const MAX_GROWTH_NATIVE_NOTICE_BYTES = 1024 * 1024;
 export const GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER = 8;
+const GROWTH_FAILURE_CONTEXT_RESERVE_BYTES = 72 * 1024;
+const GROWTH_FAILURE_CONTEXT_RESERVE_ENTRIES = 16;
 
 export type GrowthCaptureEvidenceSide = 'foreground' | 'background';
 
@@ -44,6 +46,11 @@ export class GrowthCaptureBudget {
   readonly limits: GrowthCaptureBudgetLimits;
   #entries = 0;
   #bytes = 0;
+  #failureEntries = 0;
+  #failureBytes = 0;
+  #failureReserveEntries: number;
+  #failureReserveBytes: number;
+  #failureReserveActive = true;
 
   constructor(captureId: number, limits: Partial<GrowthCaptureBudgetLimits> = {}) {
     this.#label = `Growth capture #${captureId}`;
@@ -52,6 +59,18 @@ export class GrowthCaptureBudget {
       bytes: limitValue('byte', limits.bytes, defaultLimits.bytes),
       nativeNoticeBytes: limitValue('native notice byte', limits.nativeNoticeBytes, defaultLimits.nativeNoticeBytes),
     };
+    this.#failureReserveEntries =
+      this.limits.entries === 0
+        ? 0
+        : Math.min(GROWTH_FAILURE_CONTEXT_RESERVE_ENTRIES, Math.max(1, Math.floor(this.limits.entries * 0.001)));
+    this.#failureReserveBytes =
+      this.limits.bytes === 0
+        ? 0
+        : Math.min(
+            this.limits.bytes,
+            GROWTH_FAILURE_CONTEXT_RESERVE_BYTES,
+            Math.max(128, Math.floor(this.limits.bytes * 0.001)),
+          );
   }
 
   retainStatementText(side: GrowthCaptureEvidenceSide, bytes: number): void {
@@ -92,27 +111,47 @@ export class GrowthCaptureBudget {
   }
 
   get entriesUsed(): number {
-    return this.#entries;
+    return this.#entries + this.#failureEntries;
   }
 
   get chargedBytes(): number {
-    return this.#bytes;
+    return this.#bytes + this.#failureBytes;
   }
 
   retainNativePlanNode(side: GrowthCaptureEvidenceSide): void {
     this.reserve(`${side} native plan node`, 1, 0);
   }
 
+  /** Charges the small failure envelope from capacity held aside during ordinary capture. */
+  retainFailureContext(bytes: number): void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError('Failure context bytes must be non-negative');
+    const nextEntries = this.#entries + this.#failureEntries + 1;
+    const nextBytes = this.#bytes + this.#failureBytes + bytes;
+    if (nextEntries > this.limits.entries || nextBytes > this.limits.bytes)
+      throw new GrowthCaptureBudgetExceededError(
+        `Growth capture failure context exceeded its reserved capacity; requested ${bytes} bytes and one entry, total ${nextEntries} entries and ${nextBytes} charged bytes of ${this.limits.entries} entries and ${this.limits.bytes} bytes.`,
+      );
+    this.#failureEntries += 1;
+    this.#failureBytes += bytes;
+  }
+
+  /** Successful captures return unused failure headroom to ordinary result accounting. */
+  releaseFailureContextReserve(): void {
+    this.#failureReserveActive = false;
+  }
+
   private reserve(evidence: string, entries: number, bytes: number): void {
     const nextEntries = this.#entries + entries;
-    if (nextEntries > this.limits.entries)
+    const entryLimit = this.limits.entries - (this.#failureReserveActive ? this.#failureReserveEntries : 0);
+    if (nextEntries > entryLimit)
       throw new GrowthCaptureBudgetExceededError(
-        `${this.#label} exceeded telemetry entry capacity (${this.limits.entries} entries); current ${this.#entries}, requested ${entries}, total ${nextEntries} entries for ${evidence}; charged bytes current ${this.#bytes}, requested ${bytes}, total ${this.#bytes + bytes}.`,
+        `${this.#label} exceeded telemetry entry capacity (${this.limits.entries} entries); current ${this.#entries}, requested ${entries}, total ${nextEntries} entries for ${evidence}; ${this.#failureReserveActive ? `${this.#failureReserveEntries} entries reserved for failure context; ` : ''}charged bytes current ${this.#bytes}, requested ${bytes}, total ${this.#bytes + bytes}.`,
       );
     const nextBytes = this.#bytes + bytes;
-    if (nextBytes > this.limits.bytes)
+    const byteLimit = this.limits.bytes - (this.#failureReserveActive ? this.#failureReserveBytes : 0);
+    if (nextBytes > byteLimit)
       throw new GrowthCaptureBudgetExceededError(
-        `${this.#label} exceeded telemetry byte capacity (${this.limits.bytes} charged bytes); current ${this.#bytes}, requested ${bytes}, total ${nextBytes} charged bytes for ${evidence}; evidence entries current ${this.#entries}, requested ${entries}, total ${nextEntries}.`,
+        `${this.#label} exceeded telemetry byte capacity (${this.limits.bytes} charged bytes); current ${this.#bytes}, requested ${bytes}, total ${nextBytes} charged bytes for ${evidence}; ${this.#failureReserveActive ? `${this.#failureReserveBytes} bytes reserved for failure context; ` : ''}evidence entries current ${this.#entries}, requested ${entries}, total ${nextEntries}.`,
       );
     this.#entries = nextEntries;
     this.#bytes = nextBytes;

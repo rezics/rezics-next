@@ -469,7 +469,12 @@ A failed raw or folded capture preserves the initiating thrown value. Call `grow
 `services/kernel/test/support/growth.ts` to retrieve its explicit incomplete diagnostic; this also works when the thrown
 value is not an `Error`. The record retains observed foreground/background statements, plan occurrence ownership,
 available costs, SQLSTATEs, database/backend attribution, write targets, transaction tokens, and bounded primary and
-secondary causes. `checkGrowth` adds check name, source revision when available, failure phase, scale and repetition.
+secondary causes. Object throws are weakly keyed; because primitive values cannot own metadata, the helper retains the
+most recently recorded primitive failure. `checkGrowth` adds check name, source revision when available, failure phase,
+scale and repetition.
+Cause summaries use one bounded-safe descriptor throughout capture accounting and profile export. If a thrown error has
+hostile `name`, `message` or SQLSTATE accessors, its exact value remains primary and the unavailable fields are listed
+under `omittedDescriptionFields`.
 
 When `GROWTH_PROFILE` is configured, `checkGrowth` appends the diagnostic as a separate JSONL record. `GROWTH_PROFILE_REQUIRED=1`
 continues to require normal profile export. If diagnostic export itself fails while preserving a native failure, the

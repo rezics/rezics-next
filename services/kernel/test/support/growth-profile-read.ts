@@ -83,8 +83,22 @@ export type GrowthProfileShadowOutcome = Readonly<{
   outcomes: Readonly<Record<GrowthProfileMetric, GrowthProfileOutcome>>;
 }>;
 
+/** Failed native runs remain inspectable but never become calibration entries. */
+export type GrowthProfileDiagnostic = Readonly<{
+  run: string;
+  file: string;
+  check: string;
+  phase: string;
+  source?: string;
+  scale?: number;
+  repetition?: number;
+  captureMode?: 'raw' | 'cost-folded';
+  record: Readonly<Record<string, unknown>>;
+}>;
+
 export type GrowthProfileRead = Readonly<{
   entries: readonly GrowthProfileEntry[];
+  diagnostics: readonly GrowthProfileDiagnostic[];
   series: Readonly<Record<GrowthProfileMetric, readonly CalibrationCheck[]>>;
   omitted: readonly OmittedGrowthProfileCheck[];
   nonGrowingRelations: readonly NonGrowingRelation[];
@@ -347,7 +361,11 @@ export function growthProfileCheckId(file: string, check: string, occurrence = 1
   return occurrence === 1 ? identity(file, check) : JSON.stringify([file, check, occurrence]);
 }
 
-function parseRun(source: GrowthProfileRunSource, expansion: ProfileExpansion): GrowthProfileEntry[] {
+function parseRun(
+  source: GrowthProfileRunSource,
+  expansion: ProfileExpansion,
+  diagnostics: GrowthProfileDiagnostic[],
+): GrowthProfileEntry[] {
   if (!source.name) throw new TypeError('Each profile run requires a name');
   const entries: GrowthProfileEntry[] = [];
   const occurrences = new Map<string, number>();
@@ -365,6 +383,40 @@ function parseRun(source: GrowthProfileRunSource, expansion: ProfileExpansion): 
     const decodedRecord = record(decoded, description);
     const file = stringField(decodedRecord, 'file', description);
     const check = stringField(decodedRecord, 'check', description);
+    if (decodedRecord.kind === 'growth-failure-diagnostic') {
+      if (decodedRecord.version !== 1)
+        throw new TypeError(`${description}.version must be 1 for growth failure diagnostics`);
+      if (decodedRecord.status !== 'incomplete')
+        throw new TypeError(`${description}.status must be 'incomplete' for growth failure diagnostics`);
+      const phase = stringField(decodedRecord, 'phase', description);
+      const sourceRevision = decodedRecord.source;
+      if (sourceRevision !== undefined && (typeof sourceRevision !== 'string' || sourceRevision.length === 0))
+        throw new TypeError(`${description}.source must be a non-empty string when present`);
+      const scale = decodedRecord.scale;
+      if (scale !== undefined && (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0))
+        throw new TypeError(`${description}.scale must be finite and non-negative when present`);
+      const repetition = decodedRecord.repetition;
+      if (
+        repetition !== undefined &&
+        (typeof repetition !== 'number' || !Number.isSafeInteger(repetition) || repetition < 0)
+      )
+        throw new TypeError(`${description}.repetition must be a non-negative integer when present`);
+      const captureMode = decodedRecord.captureMode;
+      if (captureMode !== undefined && captureMode !== 'raw' && captureMode !== 'cost-folded')
+        throw new TypeError(`${description}.captureMode must be 'raw' or 'cost-folded' when present`);
+      diagnostics.push({
+        run: source.name,
+        file,
+        check,
+        phase,
+        ...(sourceRevision === undefined ? {} : { source: sourceRevision }),
+        ...(scale === undefined ? {} : { scale }),
+        ...(repetition === undefined ? {} : { repetition }),
+        ...(captureMode === undefined ? {} : { captureMode }),
+        record: decodedRecord,
+      });
+      continue;
+    }
     const id = identity(file, check);
     const occurrence = (occurrences.get(id) ?? 0) + 1;
     occurrences.set(id, occurrence);
@@ -419,7 +471,8 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
     runNames.add(source.name);
   }
   const expansion = { values: 0 };
-  const entries = sources.flatMap((source) => parseRun(source, expansion));
+  const diagnostics: GrowthProfileDiagnostic[] = [];
+  const entries = sources.flatMap((source) => parseRun(source, expansion, diagnostics));
   const entriesByCheck = new Map<string, GrowthProfileEntry[]>();
   for (const entry of entries) {
     const id = growthProfileCheckId(entry.file, entry.check, entry.occurrence);
@@ -516,6 +569,7 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
   }));
   return {
     entries,
+    diagnostics,
     series,
     omitted,
     nonGrowingRelations: nonGrowingRelations(entries),

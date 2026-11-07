@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
 import { growthRunEligibility, type GrowthCheck, type ReportSample } from './growth.ts';
 import { GROWTH_PROFILE_EXPANSION } from './growth-profile-input.ts';
+import { growthFailureProfileRecord, recordGrowthFailureEvidence } from './growth-failure-evidence.ts';
 import { keyedRelationEntries, type RelationIdentity } from './growth-relation-identity.ts';
 import {
   growthMeasurementIdentity,
@@ -323,6 +324,57 @@ test('invalid profile lines identify the run and line', () => {
   expect(() => readGrowthProfiles([{ name: 'bad-eligibility', text: JSON.stringify(broken) }])).toThrow(
     'bad-eligibility:1.eligibility.status is unknown',
   );
+});
+
+test('incomplete failure records export bounded context and stay outside calibration', () => {
+  const diagnostic = recordGrowthFailureEvidence(new Error('verification failed'), {
+    phase: 'verification',
+    context: {
+      file: 'test/search/growth-example.test.ts',
+      check: 'failed native check',
+      source: TEST_SOURCE,
+      scale: 8,
+      repetition: 2,
+      captureMode: 'cost-folded',
+    },
+    native: {
+      statements: [{ index: 0, text: 'SELECT '.repeat(10_000), background: false, database: 'application' }],
+      foldedCostAvailability: 'partial',
+    },
+  });
+  const exported = growthFailureProfileRecord(diagnostic);
+  const diagnosticLine = JSON.stringify(exported);
+  const onlyFailure = readGrowthProfiles([{ name: 'failed-run', text: diagnosticLine }]);
+
+  expect(onlyFailure.entries).toEqual([]);
+  expect(onlyFailure.series.rows).toEqual([]);
+  expect(onlyFailure.diagnostics).toMatchObject([
+    {
+      run: 'failed-run',
+      file: 'test/search/growth-example.test.ts',
+      check: 'failed native check',
+      phase: 'verification',
+      source: TEST_SOURCE,
+      scale: 8,
+      repetition: 2,
+      captureMode: 'cost-folded',
+    },
+  ]);
+  expect(exported).toMatchObject({ status: 'incomplete', phase: 'verification' });
+  expect(exported.omissions).toMatchObject({ profileEvidenceBytes: expect.any(Number) });
+
+  const mixed = readGrowthProfiles([
+    {
+      name: 'same-run',
+      text: [diagnosticLine, profileLine({ check: 'failed native check' })].join('\n'),
+    },
+  ]);
+  expect(mixed.diagnostics).toHaveLength(1);
+  expect(mixed.entries).toHaveLength(1);
+  expect(mixed.entries[0]?.occurrence).toBe(1);
+  expect(mixed.series.rows.map(({ check }) => check)).toEqual([
+    growthProfileCheckId('test/search/growth-example.test.ts', 'failed native check'),
+  ]);
 });
 
 test('ineligible runs are omitted from calibration with their reason', () => {
