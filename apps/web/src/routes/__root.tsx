@@ -152,13 +152,11 @@ export const Route = createRootRouteWithContext<{
 
 function RootRoutes() {
   return (
-    <LibraryApplicationBoundary>
-      <PageVisitBinding>
-        <OwnVotesReturnProvider>
-          <CurrentReadingOutlet />
-        </OwnVotesReturnProvider>
-      </PageVisitBinding>
-    </LibraryApplicationBoundary>
+    <PageVisitBinding>
+      <OwnVotesReturnProvider>
+        <CurrentReadingOutlet />
+      </OwnVotesReturnProvider>
+    </PageVisitBinding>
   );
 }
 
@@ -178,7 +176,7 @@ const clientLoadRecovery = String.raw`(() => {
   });
 })()`;
 
-function Root({ children }: { children: ReactNode }) {
+export function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
   const readerNavigation = useReaderNavigationHost();
   useLayoutEffect(() => router.options.context.buyerHistory?.mount(router), [router]);
@@ -250,19 +248,21 @@ function Root({ children }: { children: ReactNode }) {
             {m.shell_client_reload({}, options)}
           </a>
         </div>
-        <ReaderNavigationContext value={readerNavigation}>
-          <SettingsAmbientProvider ambient={performanceAmbient.settings}>
-            <InboxAmbientProvider ambient={performanceAmbient.inbox}>
-              <LocaleNavigationProvider>
-                <RecentSearchBinding>
-                  <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-                    {platformClosed ? <ClosedPage /> : children}
-                  </AppShell>
-                </RecentSearchBinding>
-              </LocaleNavigationProvider>
-            </InboxAmbientProvider>
-          </SettingsAmbientProvider>
-        </ReaderNavigationContext>
+        <LibraryApplicationBoundary>
+          <ReaderNavigationContext value={readerNavigation}>
+            <SettingsAmbientProvider ambient={performanceAmbient.settings}>
+              <InboxAmbientProvider ambient={performanceAmbient.inbox}>
+                <LocaleNavigationProvider>
+                  <RecentSearchBinding>
+                    <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                      {platformClosed ? <ClosedPage /> : children}
+                    </AppShell>
+                  </RecentSearchBinding>
+                </LocaleNavigationProvider>
+              </InboxAmbientProvider>
+            </SettingsAmbientProvider>
+          </ReaderNavigationContext>
+        </LibraryApplicationBoundary>
         <Scripts />
       </body>
     </html>
