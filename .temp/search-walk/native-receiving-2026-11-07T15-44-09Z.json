@@ -1,0 +1,149 @@
+{
+  "revision": "cea61c8e7dbf418048ea308a87b37031cb7d08ad",
+  "command": [
+    "bun",
+    "scripts/worker-check.ts",
+    "--",
+    "bun",
+    "run",
+    "--cwd",
+    "services/kernel",
+    "check",
+    "test/access/account-discovery-work.test.ts",
+    "test/boot/kernel-boots.test.ts",
+    "test/library/collection-source-output.test.ts",
+    "test/library/copy-construction.test.ts",
+    "test/library/members-preparation-composition.test.ts",
+    "test/search/default-discovery.test.ts",
+    "test/search/identity-receiving-native-store.test.ts",
+    "test/search/identity-receiving-native.test.ts",
+    "test/search/second-scope-generations.test.ts",
+    "test/semantic/batch-write-diagnostics.test.ts",
+    "test/semantic/bulk-no-effect.test.ts",
+    "test/semantic/identity-public-output-capture.test.ts",
+    "test/semantic/work-module.test.ts",
+    "test/search/default-public-runtime.test.ts",
+    "test/search/production-source-fences.test.ts",
+    "test/search/server.test.ts",
+    "test/semantic/domain-composition.test.ts"
+  ],
+  "exitStatus": 1,
+  "host": "b",
+  "run": "mw6kq36c-98380ece",
+  "log": ".temp/goal/checks/worker-check-e3b27aa8-09bc-463d-92fe-0f4209c4b106-2026-11-07T15-44-09.792Z-121e98b4.log",
+  "compiler": {
+    "result": "PASS",
+    "elapsedSeconds": 21.100506313
+  },
+  "commandElapsedSeconds": 1722.93,
+  "peakMemoryMiB": 7649,
+  "files": [
+    {
+      "file": "test/library/copy-construction.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/access/account-discovery-work.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/library/members-preparation-composition.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/search/identity-receiving-native-store.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 4
+    },
+    {
+      "file": "test/search/identity-receiving-native.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 4
+    },
+    {
+      "file": "test/search/second-scope-generations.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/search/server.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/search/default-public-runtime.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/library/collection-source-output.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 2
+    },
+    {
+      "file": "test/semantic/batch-write-diagnostics.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/semantic/domain-composition.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/semantic/bulk-no-effect.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 3
+    },
+    {
+      "file": "test/semantic/identity-public-output-capture.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 1
+    },
+    {
+      "file": "test/search/production-source-fences.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 0
+    },
+    {
+      "file": "test/boot/kernel-boots.test.ts",
+      "result": "PASS",
+      "peakDatabaseConnections": 10
+    },
+    {
+      "file": "test/semantic/work-module.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 4
+    },
+    {
+      "file": "test/search/default-discovery.test.ts",
+      "result": "FAIL",
+      "peakDatabaseConnections": 0
+    }
+  ],
+  "receivingFailures": [
+    {
+      "owner": "Search composition",
+      "stage": "native producer binding",
+      "detail": "nativePorts.subjectSource is undefined at rated-source.ts:29 from outcome-supervisor.ts:455; missing receipt keys and addEffects in server fixtures; default discovery preparation times out at 240 seconds"
+    },
+    {
+      "owner": "native public output custody",
+      "stage": "reserve/build/read",
+      "detail": "dependency_unavailable at collection-native-work.ts:327; conflict at collection-source-output.ts:119; projection exceeds plan at native-public-output-work.ts:68; SQLSTATE 25006 read-only INSERT"
+    },
+    {
+      "owner": "Semantic composition",
+      "stage": "module registration and contract fixture",
+      "detail": "semantic_links start/drain and relation convergence timeouts; nativePorts.createIdentitySourceSupportReader undefined at composition/semantic.ts:79; dependency assertion rejects typebox and @rezics/definitions/contract"
+    }
+  ],
+  "decision": "Retain current Kernel typing; finish relevant changed-workspace typing. Original broad native/browser and six-path acceptance run on integrated dev without another prelanding stack or behavior selection.",
+  "journeyPasses": 0,
+  "journeyCount": 6,
+  "journeyExecution": "all unexecuted; setup failure only",
+  "slowestMeasuredFailingJourney": null
+}

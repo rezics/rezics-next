@@ -53,8 +53,8 @@ integrated binding `6948a89278c0383165a7ed4ca69f1c99506c74a2`, received here as
 `2aa83f1adb21aca8b4718d7ba5193176bf14c521`. Ordinary admission succeeded in the new census below.
 The prior permission failure is historical. The complete dependency delivery `452da6ea5f43e26967726283ed2fec7c04d3e8ca`
 and Source factory delivery `5db0f76f7fc3e81841541152cb1a471692fa5ff7` are also received.
-The complete installed-producer repair remains with its existing Search owner; the original default-worker assertions
-remain required after its repair commit and integrated revision are supplied.
+The installed-producer delivery is received below; its original default-worker assertions remain required on
+integrated dev.
 
 The complete producer range `311230ca33..91c91989eb` is now received, together with the cumulative root/custody
 and Settings deliveries ending at `1b0a5e366a` and `90fe893300`. This includes deferred startup imports, generator
@@ -62,6 +62,28 @@ settlement, Library capabilities around the root shell, normalized test selector
 split. Conflict resolution follows those complete deliveries; the exact issuer-origin JWKS tests and original
 Mapping receipt assertions remain. One identical overlapping source-binding test is deduplicated without removing
 an assertion. No second stack is launched by this integration.
+
+Landing decision: retain the complete producer/current-owner integration and require current changed-workspace
+typing. Original six-path, native/default-worker, mounted browser, Character local-selection and with-dev-server
+acceptance run on integrated dev; they remain unaccepted here. No further broad prelanding selection or second stack
+is launched. Unchanged passing compilation and independently passing test files remain valid.
+
+The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
+in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
+receiving-store custody, bulk no-effect and Members composition. Nine files failed. These are native receiving
+measurements, not six-path journey durations. Exact command and file results are retained in
+`.temp/search-walk/native-receiving-2026-11-07T15-44-09Z.json`; full owned evidence is
+`.temp/goal/checks/worker-check-e3b27aa8-09bc-463d-92fe-0f4209c4b106-2026-11-07T15-44-09.792Z-121e98b4.log`.
+
+| Existing cause owner         | Reached native failure retained for integrated receiving                                                                                                                                                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Search composition           | `nativePorts.subjectSource` undefined at `rated-source.ts:29` from the outcome supervisor; server fixtures omit `KERNEL_RECEIPT_KEYS` and `addEffects`; both complete default-discovery cases time out at 240 seconds.                                                                 |
+| Native public output custody | Original receiving reserve returns `dependency_unavailable` at `collection-native-work.ts:327`; Collection build returns `conflict` at `collection-source-output.ts:119`; projection exceeds its plan at `native-public-output-work.ts:68`; read-only INSERT returns SQLSTATE `25006`. |
+| Semantic composition         | Native projector start/drain and relation convergence time out; the direct composition fixture has undefined `nativePorts.createIdentitySourceSupportReader` at `composition/semantic.ts:79`; the layer assertion rejects `typebox` and `@rezics/definitions/contract`.                |
+
+No HTTP endpoint, status or correlation is invented for these native calls. The existing cause owners receive this
+packet through Semantic. None of these failures changes the last observed census: **0/6 passing**, all six journeys
+unexecuted after setup, with no measured failing journey or slowest journey duration.
 
 The preceding fifteen-file Web selection at `dfad29c91c92f247a0f6b8ff43d79819b2248fa5` returned exit 1 after its
 own infrastructure rerun. The first physical run, host b `mw6ekf4h-47d3d1a9`, reached four pre-Vite readiness failures
