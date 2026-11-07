@@ -8,6 +8,7 @@ import {
   generatedMessageModules,
   messagesCurrent,
 } from './messages-ready.ts';
+import { processIdentity } from '../tests/support/server-custody.ts';
 
 const wrapperSource = readFileSync(join(import.meta.dir, 'isolated.ts'), 'utf8');
 
@@ -62,6 +63,14 @@ function writeGeneratedOutput(app: ReturnType<typeof makeApp>, barrel = 'export 
   const access = join(leaves, REQUIRED_PER_MESSAGE_MODULE);
   writeFileSync(access, 'export const access_account = () => "Account";\n');
   return [app.output, join(output, 'runtime.js'), access];
+}
+
+async function waitForFile(path: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${path}`);
+    await Bun.sleep(10);
+  }
 }
 
 test('missing Paraglide messages are generated once before bun test runs', async () => {
@@ -141,6 +150,41 @@ test('simultaneous preparation callers share one compile and recheck freshness u
     app.cleanup();
   }
 });
+
+test('canceling message preparation settles the generator process group before releasing its lock', async () => {
+  if (process.platform === 'win32') return;
+  const app = makeApp();
+  const descendantPidFile = join(app.directory, 'compiler-descendant.pid');
+  const abort = new AbortController();
+  let preparation: Promise<number> | undefined;
+  try {
+    writeFileSync(
+      join(app.directory, 'generate.ts'),
+      `import { spawn } from 'node:child_process';\n` +
+        `import { writeFileSync } from 'node:fs';\n` +
+        `const descendant = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });\n` +
+        `descendant.once('spawn', () => writeFileSync(${JSON.stringify(descendantPidFile)}, String(descendant.pid)));\n` +
+        `process.on('SIGTERM', () => {});\n` +
+        `setInterval(() => {}, 1000);\n`,
+    );
+    preparation = ensureMessagesReady(app.directory, process.env, { signal: abort.signal });
+    await waitForFile(descendantPidFile);
+    const descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+
+    abort.abort('SIGTERM');
+    expect(await preparation).toBe(143);
+    const identity = processIdentity(descendantPid);
+    expect(identity === undefined || identity.state === 'Z').toBe(true);
+    expect(existsSync(join(app.directory, '.temp/paraglide-generate.lock'))).toBe(false);
+  } finally {
+    abort.abort('SIGTERM');
+    try {
+      await preparation;
+    } finally {
+      app.cleanup();
+    }
+  }
+}, 15_000);
 
 test('messages newer than the output cause generation again', async () => {
   const app = makeApp();

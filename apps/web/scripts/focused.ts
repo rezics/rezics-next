@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
 import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
+import { ownBunProcess } from '../tests/support/server-custody.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -80,23 +81,46 @@ export type FocusedRunnerOptions = {
   place?: (run: { root: string; cwd: string; command: string[] }, env: NodeJS.ProcessEnv) => Promise<number | null>;
 };
 
-async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv, signal?: AbortSignal): Promise<number> {
+export async function prepareFocusedRun(
+  appDirectory: string,
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+): Promise<number> {
   const messages = await ensureMessagesReady(appDirectory, env, signal === undefined ? {} : { signal });
   if (messages !== 0) return messages;
   const generated = Bun.spawn(['bun', 'run', 'generate:routes'], {
     cwd: appDirectory,
     env,
+    detached: true,
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  const abort = () => generated.kill('SIGTERM');
+  const custody = ownBunProcess(generated, {
+    label: 'Focused Web route generator',
+    termGraceMs: 2_000,
+    settleTimeoutMs: 5_000,
+  });
+  let cleanup: Promise<void> | undefined;
+  let cleanupError: unknown;
+  const stop = () =>
+    (cleanup ??= custody.close().catch((error) => {
+      cleanupError = error;
+      throw error;
+    }));
+  const abort = () => {
+    void stop().catch(() => {});
+  };
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) abort();
   try {
-    return await generated.exited;
+    const status = await generated.exited;
+    await stop();
+    if (cleanupError) throw cleanupError;
+    return status;
   } finally {
     signal?.removeEventListener('abort', abort);
+    await stop();
   }
 }
 
