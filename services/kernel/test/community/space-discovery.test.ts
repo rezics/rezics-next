@@ -184,6 +184,7 @@ test('a real source fence delivers one durable tuple obligation, without enumera
 }, 120_000);
 
 test('Space bootstrap has exact native positions, sparse bounded pages and current anonymous hydration through lifecycle and media changes', async () => {
+  await system.close();
   const f = await mediaRealmDownloadFixture();
   try {
     const access = testAccess({
@@ -194,7 +195,12 @@ test('Space bootstrap has exact native positions, sparse bounded pages and curre
         fetch: (url: string | URL, init?: RequestInit) => f.auth.host.service.handler(new Request(url, init)),
       },
     });
-    const deps = { clock: () => new Date(), pool: f.db.pool, access };
+    const deps = {
+      clock: () => new Date(),
+      pool: f.db.pool,
+      access,
+      deadlineNow: () => Date.now(),
+    };
     const source = spaceDiscoverySource(deps);
     const hydrate = (ids: string[], currentAccess = access) =>
       readSpaceDiscoverySummaries({ ...deps, access: currentAccess }, ids, {

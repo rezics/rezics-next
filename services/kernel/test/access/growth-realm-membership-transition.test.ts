@@ -96,6 +96,7 @@ async function setup() {
   };
   const membership = createRealmMembership({
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool: system.database.pool,
     access: system.access,
     referenceKeys: system.tokenKeys,
@@ -571,6 +572,7 @@ test.serial(
       const publisherPid = (await publisherPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
       const publisher = createRealmMembership({
         clock: () => new Date(),
+        deadlineNow: () => Date.now(),
         pool: publisherPool,
         access: state.system.access,
         referenceKeys: state.system.tokenKeys,

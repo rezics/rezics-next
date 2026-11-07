@@ -20,6 +20,7 @@ import {
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
+  type CommandAttempt,
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
@@ -27,13 +28,21 @@ import { platformRootAnchor } from '../commerce/catalogue.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
+import {
+  accessCheck,
+  type Access,
+  type AccessCheck,
+  type AccessClient,
+  type Actor,
+  type Resource,
+} from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
 import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
+import { systemCommunityAmbient, type CommunityAmbient } from './ambient.ts';
 import { emptyRealmPresentation, realmPresentation, type RealmPresentation } from './presentation.ts';
 import { claimRealmPresentationMedia } from '../content/realm-media.ts';
 import { prepareRealmRulesSelection } from '../content/community-presentation-rules.ts';
@@ -199,32 +208,33 @@ export async function readRealmSettingsHead(
  * and no current ban required for protected Realms. Missing and denied resources both return null.
  */
 export async function readRealm(
-  deps: Pick<RealmDependencies, 'pool' | 'access'>,
+  deps: Pick<RealmDependencies, 'pool' | 'access'> & Partial<CommunityAmbient>,
   actor: Actor,
   realmId: string,
   context: { deadline: number },
 ): Promise<RealmView | null> {
   const route = routeOf(realmId);
-  if (route === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline) return null;
+  const now = deps.deadlineNow ?? systemCommunityAmbient.deadlineNow;
+  if (route === null || !Number.isFinite(context.deadline) || now() >= context.deadline) return null;
   let current: RealmRow | null = null;
   const resource = { route, id: realmId };
   const eligibility = readEligibility(resource, (row) => {
     current = row;
   });
-  const check = await accessCheck(
-    deps.access,
-    actor,
-    'realm:read',
-    { ...resource, eligibility },
-    { pool: deps.pool, deadline: context.deadline },
-  );
   try {
+    const check = await accessCheck(
+      deps.access,
+      actor,
+      'realm:read',
+      { ...resource, eligibility },
+      { pool: deps.pool, deadline: context.deadline },
+    );
     return await withConnection(deps.pool, async (client) => {
-      if (!(await check(deadlineClient(client, context.deadline)))) return null;
+      if (!(await allowRealmRead(check, deadlineClient(client, context.deadline)))) return null;
       return current ? record(current) : null;
     });
   } catch (error) {
-    if (error instanceof Error && realmReadDenials.has(error)) return null;
+    if (realmReadDenied(error)) return null;
     throw error;
   }
 }
@@ -237,9 +247,42 @@ function realmReadDeniedError(): ProblemError {
   return error;
 }
 
+function realmReadDenied(error: unknown): boolean {
+  return (
+    (error instanceof Error && realmReadDenials.has(error)) ||
+    (error instanceof ProblemError && error.code === 'not_found')
+  );
+}
+
+/** Boolean Realm-read checks conceal eligibility not_found as a closed miss. */
+export async function allowRealmRead(
+  check: AccessCheck,
+  client: AccessClient,
+  time?: AuthoritativeTime,
+): Promise<boolean> {
+  try {
+    return await check(client, time);
+  } catch (error) {
+    if (realmReadDenied(error)) return false;
+    throw error;
+  }
+}
+
+type BindingRow = Awaited<ReturnType<typeof bindingRead.run>>;
+/** Identity and lifecycle only. Heads change on metadata revisions; visibility is rechecked from the current row. */
+function containerChain(binding: NonNullable<BindingRow>) {
+  return {
+    realm_id: binding.realm_id,
+    space_id: binding.space_id,
+    context_id: binding.context_id,
+    realm_version: binding.realm_version,
+    space_version: binding.space_version,
+  };
+}
+
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
-  const native = realmEligibilityAccessWork<{ binding: Awaited<ReturnType<typeof bindingRead.run>> }>(resource);
+  const native = realmEligibilityAccessWork<{ binding: BindingRow }>(resource);
   return createResourcePublicEligibility({
     resource,
     action: 'realm:read',
@@ -264,8 +307,14 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
         const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
         const binding = { ...resource, at, subject: null };
         const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
-        if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding)) throw realmReadDeniedError();
-        if (row?.visibility === 'protected' && actor.kind === 'account') {
+        if (
+          !row ||
+          !current ||
+          !evidence.binding ||
+          canonicalize(containerChain(current)) !== canonicalize(containerChain(evidence.binding))
+        )
+          throw realmReadDeniedError();
+        if (row.visibility === 'protected' && actor.kind === 'account') {
           // Auth/Access validates the assignment reference. Its principal is a
           // second fixed identity, never an expansion of grants or memberships.
           const accountIds = realmReadBanAccounts(actor);
@@ -275,7 +324,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
             throw realmReadDeniedError();
         }
         observe?.(row);
-        return row?.visibility === 'public';
+        return row.visibility === 'public';
       });
     },
   });
@@ -292,9 +341,10 @@ type Requirement = { action: string; resource: Resource };
 function requirements(
   access: Access,
   extra: readonly Requirement[],
+  deadlineNow: () => number,
   validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
 ) {
-  const deadlines = new WeakMap<AuthoritativeTime, number>();
+  const preparedAttempts = new WeakMap<CommandAttempt, number>();
   async function prepareAnchors(
     actor: Parameters<NonNullable<Access['prepare']>>[0],
     context: Parameters<NonNullable<Access['prepare']>>[3],
@@ -310,7 +360,7 @@ function requirements(
       deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
       checks.push({ ...requirement, evidence });
     }
-    if (Date.now() >= deadline) throw new GrantDeniedError();
+    if (deadlineNow() >= deadline) throw new GrantDeniedError();
     await within(deadline, () =>
       withConnection(context.pool, async (client) => {
         const bounded = deadlineClient(client, deadline);
@@ -320,7 +370,7 @@ function requirements(
             throw new GrantDeniedError();
       }),
     );
-    deadlines.set(attempt.time, deadline);
+    preparedAttempts.set(attempt, deadline);
     return primary;
   }
   const combined = deriveAccess(access, {
@@ -342,8 +392,15 @@ function requirements(
     bound(authorization: CommandAuthorization): CommandAuthorization {
       return {
         ...authorization,
+        async prepare(attempt) {
+          const proof = await authorization.prepare!(attempt);
+          if (preparedAttempts.get(attempt) === undefined) throw new GrantDeniedError();
+          return proof;
+        },
         async authorize(tx, attempt, proof) {
-          if (Date.now() >= (deadlines.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+          // Extras already ran at prepare for this attempt. Access re-checks parent
+          // evidence TTL on the proof; a missing extras record is a grant denial.
+          if (preparedAttempts.get(attempt) === undefined) throw new GrantDeniedError();
           return authorization.authorize(tx, attempt, proof);
         },
       };
@@ -357,7 +414,12 @@ function contextRequirement(id: string): Requirement {
   return { action: 'context:read', resource: { ...resource, eligibility: publicContextEligibility(resource) } };
 }
 
-export async function createRealm(deps: RealmDependencies, actor: Actor, input: RealmInput, context: RealmContext) {
+export async function createRealm(
+  deps: RealmDependencies & CommunityAmbient,
+  actor: Actor,
+  input: RealmInput,
+  context: RealmContext,
+) {
   const creator = account(actor).accountId;
   const votes = input.votes === undefined ? undefined : voteMap(input.votes, RealmInputError);
   const body = {
@@ -377,9 +439,11 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
   const combined = requirements(
     deps.access,
     [{ action: 'space:manage', resource: { route, id: body.spaceId } }, contextRequirement(body.contextId)],
+    deps.deadlineNow,
     async (client, time) => {
       const row = await host.run(client, { route, space: body.spaceId, at: authoritativeTimeValue(time) });
-      available.set(time, !!row && row.realm_id === null);
+      const free = !!row && row.realm_id === null;
+      available.set(time, free);
       return !!row;
     },
   );
@@ -461,7 +525,12 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
   );
 }
 
-export async function updateRealm(deps: RealmDependencies, actor: Actor, input: RealmUpdate, context: RealmContext) {
+export async function updateRealm(
+  deps: RealmDependencies & CommunityAmbient,
+  actor: Actor,
+  input: RealmUpdate,
+  context: RealmContext,
+) {
   const author = account(actor).accountId;
   let presentation: RealmPresentation | undefined;
   try {
@@ -483,7 +552,11 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
   const route = routeOf(body.realmId);
   if (route === null) throw new RealmInputError();
   const current = new WeakMap<AuthoritativeTime, RealmView>();
-  const combined = requirements(deps.access, body.contextId === undefined ? [] : [contextRequirement(body.contextId)]);
+  const combined = requirements(
+    deps.access,
+    body.contextId === undefined ? [] : [contextRequirement(body.contextId)],
+    deps.deadlineNow,
+  );
   const authorization = resourceAuthorization({
     access: combined.access,
     actor,

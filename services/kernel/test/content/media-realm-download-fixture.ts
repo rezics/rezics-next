@@ -439,6 +439,7 @@ export async function mediaRealmDownloadFixture() {
   }
 
   const protectedRealm = await realmBoard('protected', 'protected');
+  await allowGrantor(protectedRealm.realmId);
   await allowGrantor(protectedRealm.boardId);
   await grant(alice.accountId, protectedRealm.realmId, ['realm:read', 'realm:participate']);
   await grant(alice.accountId, protectedRealm.boardId, ['board:read', 'thread:create']);
@@ -451,6 +452,7 @@ export async function mediaRealmDownloadFixture() {
   await grant(bob.accountId, privateImage.id, ['media:read']);
 
   const publicRealm = await realmBoard('public', 'protected');
+  await allowGrantor(publicRealm.realmId);
   await allowGrantor(publicRealm.boardId);
   await grant(alice.accountId, publicRealm.boardId, ['board:read', 'thread:create']);
   await grant(alice.accountId, publicRealm.realmId, ['realm:participate']);

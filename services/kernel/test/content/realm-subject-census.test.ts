@@ -38,7 +38,12 @@ test.serial(
       pool: world.db.pool,
       access,
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({
+        clock: () => new Date(),
+        pool: world.db.pool,
+        access,
+        deadlineNow: () => Date.now(),
+      }),
     };
     const context = () => ({
       deadline: deadline(),

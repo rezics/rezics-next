@@ -23,7 +23,7 @@ export type ZoneSubjectListItem = {
                 color: string;
             };
             variants: {
-                format: "avif" | "webp";
+                format: 'avif' | 'webp';
                 width: number;
             }[];
             focalPoint: {

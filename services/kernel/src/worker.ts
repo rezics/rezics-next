@@ -11,6 +11,7 @@ import { createKernelCreditSearchSource, createKernelRuntimeDefaults } from './c
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
+import { composeCommunityApplication } from './composition/community.ts';
 import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
 import { composeLibraryDomain } from './composition/library.ts';
@@ -80,6 +81,7 @@ export async function startWorker(
 ) {
   composeAccessApplication();
   composeWorkApplication();
+  const community = composeCommunityApplication();
   installNativeHistory();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
@@ -93,6 +95,7 @@ export async function startWorker(
         id: content.application.ambient.id,
       },
       createKernelCreditSearchSource,
+      community.ambient,
     );
   const resolvedModules =
     modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;

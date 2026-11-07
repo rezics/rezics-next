@@ -15,6 +15,9 @@ import {
   SPACE_DISCOVERY_DEPENDENCY_PAGE,
   spaceDiscoveryDependencyReadiness,
 } from './space-discovery-dependencies.ts';
+import ownerHead from './space-discovery-tuple-owner-head.sql';
+import witnessRead from './space-discovery-tuple-witness-read.sql';
+import witnessRefs from './space-discovery-tuple-witness-refs.sql';
 
 const sourcePattern = /^[a-z][a-z0-9_-]{0,31}$/;
 const controls = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -209,16 +212,7 @@ async function currentHead(
   route: number,
   spaceId: string,
 ): Promise<OwnerHead | null> {
-  const row = (
-    await client.query<OwnerHead>(
-      `SELECT s.head_revision_id::text AS space_revision,r.realm_id::text AS realm_id,
-              r.head_revision_id::text AS realm_revision
-       FROM community.space s LEFT JOIN community.realm r ON r.route=s.route AND r.space_id=s.space_id
-       WHERE s.route=$1 AND s.space_id=$2 FOR UPDATE OF s`,
-      [route, spaceId],
-    )
-  ).rows[0];
-  return row ?? null;
+  return (await ownerHead.run(client, { route, space_id: spaceId })) ?? null;
 }
 
 function receiptDigest(input: SpaceDiscoveryTupleWitnessInput): Buffer {
@@ -678,72 +672,23 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
           )
         ).rows[0];
         if (!capability) throw new Error('Space tuple owner capability is unavailable');
-        const rows = (
-          await connection.query<{
-            route: number;
-            space_id: string;
-            current_space_revision: string;
-            current_realm_id: string | null;
-            current_realm_revision: string | null;
-            witness_generation: string | null;
-            space_revision: string | null;
-            realm_id: string | null;
-            realm_revision: string | null;
-            producer_generation: string | null;
-            producer_epoch: string | null;
-            source_position: string | null;
-            tuple_count: number | null;
-            state: 'preparing' | 'unavailable' | 'ready' | null;
-          }>(
-            `WITH requested AS MATERIALIZED (
-               SELECT * FROM jsonb_to_recordset($1::jsonb) AS k(route integer,id uuid)
-             )
-             SELECT s.route,s.space_id,s.head_revision_id::text AS current_space_revision,
-                    r.realm_id::text AS current_realm_id,r.head_revision_id::text AS current_realm_revision,
-                    w.witness_generation::text,w.space_revision::text,w.realm_id::text,w.realm_revision::text,
-                    w.producer_generation,w.producer_epoch::text,w.source_position::text,w.tuple_count,w.state
-             FROM requested k JOIN community.space s ON s.route=k.route AND s.space_id=k.id
-             LEFT JOIN community.realm r ON r.route=s.route AND r.space_id=s.space_id
-             LEFT JOIN community.space_discovery_tuple_witness w ON w.route=s.route AND w.space_id=s.space_id`,
-            [JSON.stringify(group)],
-          )
-        ).rows;
-        const refs = rows.length
-          ? (
-              await connection.query<
-                Identity & { space_id: string; witness_generation: string; kind: 'reference' | 'expected' }
-              >(
-                `WITH requested AS MATERIALIZED (
-                   SELECT * FROM jsonb_to_recordset($1::jsonb) AS k(route integer,id uuid)
-                 )
-                 SELECT k.id AS space_id,d.tuple_route AS route,d.source,d.external_id,d.field_group,
-                        d.witness_generation::text,'reference' AS kind
-                 FROM requested k JOIN LATERAL (
-                   SELECT * FROM community.space_discovery_tuple_reference d
-                   WHERE d.route=k.route AND d.space_id=k.id
-                   ORDER BY d.tuple_route,d.source,d.external_id,d.field_group LIMIT 51
-                 ) d ON true
-                 UNION ALL
-                 SELECT k.id AS space_id,d.tuple_route AS route,d.source,d.external_id,d.field_group,
-                        d.witness_generation::text,'expected' AS kind
-                 FROM requested k
-                 JOIN community.space_discovery_tuple_witness w ON w.route=k.route AND w.space_id=k.id
-                 JOIN LATERAL (
-                   SELECT * FROM community.space_discovery_tuple_expected d
-                   WHERE d.route=k.route AND d.space_id=k.id AND d.witness_generation=w.witness_generation
-                   ORDER BY d.tuple_route,d.source,d.external_id,d.field_group LIMIT 51
-                 ) d ON true`,
-                [JSON.stringify(group)],
-              )
-            ).rows
-          : [];
+        const keysJson = JSON.stringify(group.map(({ route, id }) => ({ route, id })));
+        const rows = await witnessRead.run(connection, { keys: keysJson });
+        const refs = rows.length ? await witnessRefs.run(connection, { keys: keysJson }) : [];
         const tuples = new Map<string, SourceFenceTuple[]>();
         const expected = new Map<string, string[]>();
         const generations = new Map<string, Set<string>>();
         for (const ref of refs) {
+          if (ref.space_id === null) throw new TypeError('Space tuple witness reference is missing its Space');
+          const tuple = checkedTuple({
+            route: ref.route,
+            source: ref.source,
+            external_id: ref.external_id,
+            field_group: ref.field_group,
+          });
           if (ref.kind === 'expected') {
             const list = expected.get(ref.space_id) ?? [];
-            list.push(identity(ref));
+            list.push(identity(tuple));
             expected.set(ref.space_id, list);
             continue;
           }
@@ -751,12 +696,7 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
           observed.add(ref.witness_generation);
           generations.set(ref.space_id, observed);
           const list = tuples.get(ref.space_id) ?? [];
-          list.push({
-            route: ref.route,
-            source: ref.source,
-            external_id: ref.external_id,
-            field_group: ref.field_group,
-          });
+          list.push(tuple);
           tuples.set(ref.space_id, list);
         }
         for (const row of rows) {
@@ -873,8 +813,15 @@ export async function readSpaceDiscoveryTupleWitnesses(
       tuples: [],
     }) satisfies SpaceDiscoveryTupleWitness;
   const before = await spaceDiscoveryDependencyReadiness(pool);
-  if (before.state !== 'ready') return new Map(keys.map(({ id }) => [id, unavailable(id, before.state)]));
   const first = await readOwnerWitnesses(pool, keys);
+  if (before.state !== 'ready')
+    return new Map(
+      keys.map(({ id }) => {
+        const current = first.get(id);
+        const state = current?.state === 'unavailable' || current?.state === 'preparing' ? current.state : before.state;
+        return [id, unavailable(id, state, current)];
+      }),
+    );
   const candidateTuples = [...first.values()].flatMap((witness) =>
     witness.state === 'ready' ? [...witness.tuples] : [],
   );

@@ -1,5 +1,6 @@
+-- Keys are a JSON array bound as text so the reader never treats the list as a PostgreSQL array.
 WITH input AS NOT MATERIALIZED (
-  SELECT k.route, k.id FROM jsonb_to_recordset(:keys::jsonb) AS k(route integer, id uuid)
+  SELECT k.route, k.id FROM jsonb_to_recordset((:keys::text)::jsonb) AS k(route integer, id uuid)
 )
 SELECT i.id AS realm_id, m.reservation_id
 FROM input i

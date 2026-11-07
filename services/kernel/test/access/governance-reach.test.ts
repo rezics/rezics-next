@@ -152,7 +152,7 @@ beforeAll(async () => {
     commandContext(),
   );
   const realm = await createRealm(
-    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey, deadlineNow: () => Date.now() },
     owner,
     {
       spaceId: space.value.spaceId,
@@ -165,7 +165,7 @@ beforeAll(async () => {
   spaceResource = { route: routeOf(space.value.spaceId)!, id: space.value.spaceId };
   realmResource = { route: routeOf(realm.value.realmId)!, id: realm.value.realmId };
   await setBoardScheme(
-    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey, deadlineNow: () => Date.now() },
     owner,
     { realmId: realm.value.realmId, schemeId: scheme.subject.id, expectedHead: realm.value.revisionId },
     commandContext(),

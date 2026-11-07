@@ -37,11 +37,11 @@ export function withRequestDeadline<T>(deadline: number, run: () => T): T {
   });
 }
 
-/** Returns the request deadline, or starts a fresh budget outside request work. */
-export function deadlineFor(budgetMs: number): number {
+/** Returns the request deadline, or starts a fresh budget from `now` outside request work. */
+export function deadlineFor(budgetMs: number, now: () => number = Date.now): number {
   if (!Number.isFinite(budgetMs) || budgetMs <= 0)
     throw new TypeError('Deadline budget must be positive finite milliseconds');
   const requestDeadline = requestDeadlines.getStore();
   if (requestDeadline && !requestDeadline.ended) return requestDeadline.deadline;
-  return Date.now() + budgetMs;
+  return now() + budgetMs;
 }

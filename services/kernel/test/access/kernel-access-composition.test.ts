@@ -15,6 +15,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { testRouteKey, testTokens } from '../support/test-kernel.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 
@@ -39,7 +40,7 @@ test('the default kernel Access receives every mounted action and resolves the c
     return installed;
   });
   try {
-    const kernel = createKernel({ pool: db.pool, routeKey: testRouteKey() });
+    const kernel = createKernel({ pool: db.pool, routeKey: testRouteKey(), receiptKeys: testReceiptKeys() });
     expect(factory).not.toHaveBeenCalled();
     const mounted = actionCatalogue(kernel);
     const read = () => kernel.handle(new Request(`http://kernel.test/v1/contexts/${GLOBAL_CONTEXT}`));
@@ -59,10 +60,9 @@ test('the default kernel Access receives every mounted action and resolves the c
     }
     expect(recognized).toEqual(new Set(mounted.keys()));
 
-    // Access adds the internal governance action; it has no mounted HTTP route.
-    const known = new Map(mounted).set('gate:any', { anonymous: false });
+    // Access adds internal actions that have no mounted HTTP route, then resolves roles from that complete catalogue.
     const roles = resourceRoleCatalogue(installed!);
-    expect(roles).toEqual(resolveResourceRoles(known));
+    expect(roles).toEqual(resolveResourceRoles(accessModule.accessActionCatalogue(factory.mock.calls[0]![0].actions)));
     for (const type of ['semantic.context', 'library.collection', 'community.realm', 'community.space'])
       expect(roles!.types.has(type)).toBe(true);
     for (const metadata of mounted.values())
@@ -75,6 +75,7 @@ test('the default kernel Access receives every mounted action and resolves the c
 test('a composing kernel refuses early Access resolution and uses its final catalogue instead of the caller subset', () => {
   let mounted: ActionCatalogue | undefined;
   const resolver = createKernelAccessResolver({
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     tokens: testTokens(),
     clock: () => new Date(),
@@ -83,17 +84,16 @@ test('a composing kernel refuses early Access resolution and uses its final cata
   const partial = { actions: new Map() };
   expect(() => resolver.resolveAccess(partial)).toThrow(KernelAccessCompositionError);
   expect(() => resolver.resolveAccess(partial)).toThrow('Access was resolved before kernel composition finished');
-  mounted = actionCatalogue(createKernel({ pool: db.pool, routeKey: testRouteKey() }));
+  mounted = actionCatalogue(createKernel({ pool: db.pool, routeKey: testRouteKey(), receiptKeys: testReceiptKeys() }));
   const installed = resolver.resolveAccess(partial);
-  expect(resourceRoleCatalogue(installed)).toEqual(
-    resolveResourceRoles(new Map(mounted).set('gate:any', { anonymous: false })),
-  );
+  expect(resourceRoleCatalogue(installed)).toEqual(resolveResourceRoles(accessModule.accessActionCatalogue(mounted)));
   expect(resolver.resolveAccess(partial)).toBe(installed);
 });
 
 test('an explicitly supplied Access instance keeps its identity during composition', () => {
   const installed = accessModule.createAccess({ actions: new Map() });
   const resolver = createKernelAccessResolver({
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     tokens: testTokens(),
     clock: () => new Date(),
@@ -177,6 +177,7 @@ test('an Auth-issued bearer with the Global Context creation grant creates a Con
   const kernel = createKernel({
     pool: db.pool,
     routeKey: testRouteKey(),
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       accessModule.createAccess({
         ...config,

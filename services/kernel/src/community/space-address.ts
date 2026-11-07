@@ -1,3 +1,4 @@
+import { systemCommunityClock } from './ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Actor, AccessClient } from '../request/access.ts';
@@ -118,7 +119,7 @@ async function verifyHandleHolder(dependencies: SpaceDependencies, actor: Actor,
   const holder = await withConnection(dependencies.pool, (client) => handleHolder(client, address));
   if (!holder || holder.accountId === claimant) return;
   const holderRoute = routeOf(holder.accountId);
-  const at = dependencies.clock();
+  const at = (dependencies.clock ?? systemCommunityClock)();
   if (!Number.isFinite(at.getTime())) throw new SpaceInputError();
   const role =
     holderRoute === null

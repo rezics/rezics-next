@@ -38,6 +38,7 @@ import { createReportEffect } from '../../src/content/report-effect.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import { projectBatch, type Envelope } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -987,13 +988,13 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       });
       const worker = await prepareDisclosureWorker();
       const child = Bun.spawn([process.execPath, worker.path, '--disclosure-worker'], {
-        env: {
+        env: workerTestEnv({
           ...process.env,
           DATABASE_URL: databaseUrl,
           CONTENT_TEST_STORAGE: storageServer.url.origin,
           CONTENT_TEST_CONSENT: consentServer.url.origin,
           CONTENT_TEST_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url'),
-        },
+        }),
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',

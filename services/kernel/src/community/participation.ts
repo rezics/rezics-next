@@ -82,12 +82,14 @@ export function createRealmParticipationCheck(input: {
   pool: Pool;
   access: Access;
   clock: () => Date;
+  /** Real wall time for the participation read's request deadline. */
+  deadlineNow: () => number;
 }): RealmParticipationCheck {
   return async (client, { realmId, actor, readDecision }, time) => {
     const route = routeOf(realmId);
     if (route === null) return false;
     const resource: Resource = { route, id: realmId };
-    const context = { pool: input.pool, deadline: deadlineFor(1500) };
+    const context = { pool: input.pool, deadline: deadlineFor(1500, input.deadlineNow) };
     const anchor = realmParticipationAnchor(resource);
     const participationCheck = await accessCheck(input.access, actor, 'realm:participate', anchor.resource, context);
     const checkedTime = time ?? commandTime(client) ?? (await mintReadTime(client, input.clock));

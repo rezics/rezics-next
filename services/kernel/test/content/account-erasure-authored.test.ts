@@ -13,6 +13,8 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createWorkClient } from '../../src/work/client.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 
@@ -273,18 +275,30 @@ beforeAll(async () => {
   });
   const url = pool.options.connectionString!;
   growth = await openGrowthDatabase(url);
+  configureTestReceiptKeys(growth.pool);
   growth.pool.options.max = 1; // Every cross-partition checkout must be released.
+  const { space } = await http<{ space: { spaceId: string } }>('other', 'POST', '/v1/spaces', {
+    title: 'Erasure space',
+    summary: '',
+  });
+  const { realm } = await http<{ realm: { realmId: string; headRevisionId: string } }>('other', 'POST', '/v1/realms', {
+    spaceId: space.spaceId,
+    title: 'Erasure realm',
+    summary: '',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
+  });
   worker = spawn(
     process.execPath,
     ['run', new URL('./support/disclosure-fixtures.ts', import.meta.url).pathname, '--disclosure-worker'],
     {
-      env: {
+      env: workerTestEnv({
         ...process.env,
         DATABASE_URL: url,
         CONTENT_TEST_STORAGE: 'http://127.0.0.1:1',
         CONTENT_TEST_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url'),
         CONTENT_TEST_DISABLE_ERASURE_PARTICIPANT: 'true',
-      },
+      }),
       stdio: 'pipe',
     },
   );
@@ -300,17 +314,6 @@ beforeAll(async () => {
     worker.once('exit', (code) => reject(new Error(`Worker exited ${code}: ${output}`)));
   });
   await ready;
-  const { space } = await http<{ space: { spaceId: string } }>('other', 'POST', '/v1/spaces', {
-    title: 'Erasure space',
-    summary: '',
-  });
-  const { realm } = await http<{ realm: { realmId: string; headRevisionId: string } }>('other', 'POST', '/v1/realms', {
-    spaceId: space.spaceId,
-    title: 'Erasure realm',
-    summary: '',
-    visibility: 'public',
-    contextId: GLOBAL_CONTEXT,
-  });
   const { subject: scheme } = await http<{ subject: { id: string } }>('other', 'POST', '/v1/subjects', {
     type: 'skos:ConceptScheme',
     labels: { en: 'Erasure scheme' },

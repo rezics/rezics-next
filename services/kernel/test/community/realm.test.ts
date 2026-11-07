@@ -11,11 +11,14 @@ import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { readAccount } from '../../src/access/account-data.ts';
+import { accessCommandAttempt } from '../../src/access/command-admission.ts';
+import type { CommandAttempt } from '../../src/command/command.ts';
 import { accessCheck, type AccountActor, type AccessContext } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
@@ -88,6 +91,40 @@ async function fixture(pool: Pool, admin: Pool) {
     },
   });
   const actors: AccountActor[] = [];
+  async function issueActors() {
+    actors.length = 0;
+    for (const id of ids) {
+      const signin = await auth.handler(
+        new Request(`${issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: `${id}@community.test`,
+            password,
+            client_id: 'community-test',
+            scope: actions,
+          }),
+        }),
+      );
+      expect(signin.status).toBe(200);
+      const cookie = signin.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const issued = await auth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: '{}',
+        }),
+      );
+      expect(issued.status).toBe(200);
+      const token = ((await issued.json()) as { access_token: string }).access_token;
+      const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
+      if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
+      actors.push(actor);
+    }
+  }
   for (const id of ids) {
     await admin.query(
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -95,31 +132,8 @@ async function fixture(pool: Pool, admin: Pool) {
     );
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@community.test`, password });
     await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
-    const signin = await auth.handler(
-      new Request(`${issuer}/signin`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: `${id}@community.test`, password, client_id: 'community-test', scope: actions }),
-      }),
-    );
-    expect(signin.status).toBe(200);
-    const cookie = signin.headers
-      .getSetCookie()
-      .map((value) => value.split(';')[0])
-      .join('; ');
-    const issued = await auth.handler(
-      new Request(`${issuer}/token`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json', cookie },
-        body: '{}',
-      }),
-    );
-    expect(issued.status).toBe(200);
-    const token = ((await issued.json()) as { access_token: string }).access_token;
-    const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
-    if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
-    actors.push(actor);
   }
+  await issueActors();
   async function grant(id: string, target = root, action = 'space:create') {
     await admin.query(
       "INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)'::tstzrange,$3) ON CONFLICT DO NOTHING",
@@ -128,9 +142,22 @@ async function fixture(pool: Pool, admin: Pool) {
   }
   return {
     access,
-    actor: actors[0]!,
-    other: actors[1]!,
+    get actor() {
+      return actors[0]!;
+    },
+    get other() {
+      return actors[1]!;
+    },
     grant,
+    async restoreAccounts() {
+      await admin.query(
+        `UPDATE access.account
+         SET state='active', authn_fenced=false, fence_receipt_id=NULL, suspension_reason=NULL
+         WHERE account_id=ANY($1::uuid[])`,
+        [ids],
+      );
+      await issueActors();
+    },
     async close() {
       await authPool.end();
       await dropTestDatabase(admin, database);
@@ -146,6 +173,7 @@ let space: typeof import('../../src/community/space.ts');
 beforeAll(async () => {
   pool = createPool(process.env.DATABASE_URL!);
   pool.options.max = 1;
+  configureTestReceiptKeys(pool);
   admin = new Pool({ connectionString: process.env.DATABASE_URL });
   f = await fixture(pool, admin);
   space = await import('../../src/community/space.ts');
@@ -155,9 +183,7 @@ beforeEach(async () => {
   await admin.query(
     'TRUNCATE community.realm, community.realm_revision, community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, access.resource_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
   );
-  await admin.query("UPDATE access.account SET state='active' WHERE account_id=ANY($1::uuid[])", [
-    [f.actor.accountId, f.other.accountId],
-  ]);
+  await f.restoreAccounts();
   await f.grant(f.actor.accountId);
 });
 afterAll(async () => {
@@ -165,7 +191,13 @@ afterAll(async () => {
   await pool?.end();
   await admin?.end();
 });
-const deps = () => ({ clock: () => new Date(), pool, access: f.access, routeKey });
+const deps = () => ({
+  clock: () => new Date(),
+  pool,
+  access: f.access,
+  routeKey,
+  deadlineNow: () => Date.now(),
+});
 async function createSpace() {
   return (await space.createSpace(deps(), f.actor, { title: 'Host Space' }, context())).value.spaceId;
 }
@@ -188,17 +220,28 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   const spaceId = await createSpace();
   await f.grant(f.actor.accountId, root, 'realm:create');
   const request = context();
-  const preparations: { action: string; context: AccessContext }[] = [];
+  const preparations: {
+    action: string;
+    context: AccessContext;
+    attempt: CommandAttempt | undefined;
+    via: 'prepare' | 'preparePage';
+  }[] = [];
   const prepare = f.access.prepare!.bind(f.access);
+  const preparePage = f.access.preparePage!.bind(f.access);
   f.access.prepare = async (actor, action, resource, context) => {
-    preparations.push({ action, context });
+    preparations.push({ action, context, attempt: accessCommandAttempt(context), via: 'prepare' });
     return prepare(actor, action, resource, context);
+  };
+  f.access.preparePage = async (actor, action, page, context) => {
+    preparations.push({ action, context, attempt: accessCommandAttempt(context), via: 'preparePage' });
+    return preparePage(actor, action, page, context);
   };
   let created;
   try {
     created = await realm.createRealm(deps(), f.actor, { ...input, spaceId }, request);
   } finally {
     f.access.prepare = prepare;
+    f.access.preparePage = preparePage;
   }
   const { realmId, revisionId } = created.value;
   const route = routeOf(spaceId)!;
@@ -208,9 +251,18 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
   expect(created.partition).toBe(partitionOf(route));
   const parent = preparations.find((entry) => entry.action === 'realm:create');
   const owner = preparations.find((entry) => entry.action === 'space:manage');
+  const contextRead = preparations.find((entry) => entry.action === 'context:read');
   expect(parent).toBeDefined();
   expect(owner).toBeDefined();
+  expect(contextRead).toBeDefined();
+  expect(parent!.via).toBe('preparePage');
+  expect(owner!.via).toBe('prepare');
+  expect(contextRead!.via).toBe('prepare');
   expect(owner!.context).toBe(parent!.context);
+  expect(contextRead!.context).toBe(parent!.context);
+  expect(parent!.attempt).toBeDefined();
+  expect(owner!.attempt).toBe(parent!.attempt);
+  expect(contextRead!.attempt).toBe(parent!.attempt);
   expect(await read(realmId)).toMatchObject({
     realmId,
     spaceId,
@@ -409,26 +461,26 @@ test('protected reads hide existence from non-members; public eligibility tracks
     { ...resource, eligibility: realm.realmReadEligibility(resource) },
     { pool, deadline: Date.now() + 5000 },
   );
-  expect(await check(pool)).toBe(false);
+  expect(await realm.allowRealmRead(check, pool)).toBe(false);
   const second = await realm.updateRealm(
     deps(),
     f.actor,
     { realmId, expectedHead: first.value.revisionId, visibility: 'public' },
     context(),
   );
-  expect(await check(pool)).toBe(true);
+  expect(await realm.allowRealmRead(check, pool)).toBe(true);
   expect(await realm.readRealm(deps(), { kind: 'anonymous' }, realmId, { deadline: Date.now() + 5000 })).toMatchObject({
     visibility: 'public',
   });
   const standing = await accessCheck(f.access, f.other, 'realm:read', resource, { pool, deadline: Date.now() + 5000 });
-  expect(await standing(pool)).toBe(false);
+  expect(await realm.allowRealmRead(standing, pool)).toBe(false);
   await realm.updateRealm(
     deps(),
     f.actor,
     { realmId, expectedHead: second.value.revisionId, visibility: 'protected' },
     context(),
   );
-  expect(await check(pool)).toBe(false);
+  expect(await realm.allowRealmRead(check, pool)).toBe(false);
   await suspendAccount(admin, f.actor.accountId);
   const before = await snapshot();
   expect(

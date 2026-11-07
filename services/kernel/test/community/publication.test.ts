@@ -16,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
@@ -91,6 +92,40 @@ async function fixture(pool: Pool, admin: Pool) {
     },
   });
   const actors: AccountActor[] = [];
+  async function issueActors() {
+    actors.length = 0;
+    for (const id of ids) {
+      const signin = await auth.handler(
+        new Request(`${issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: `${id}@community.test`,
+            password,
+            client_id: 'community-test',
+            scope: actions,
+          }),
+        }),
+      );
+      expect(signin.status).toBe(200);
+      const cookie = signin.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const issued = await auth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: '{}',
+        }),
+      );
+      expect(issued.status).toBe(200);
+      const token = ((await issued.json()) as { access_token: string }).access_token;
+      const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
+      if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
+      actors.push(actor);
+    }
+  }
   for (const id of ids) {
     await admin.query(
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -98,31 +133,8 @@ async function fixture(pool: Pool, admin: Pool) {
     );
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@community.test`, password });
     await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
-    const signin = await auth.handler(
-      new Request(`${issuer}/signin`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: `${id}@community.test`, password, client_id: 'community-test', scope: actions }),
-      }),
-    );
-    expect(signin.status).toBe(200);
-    const cookie = signin.headers
-      .getSetCookie()
-      .map((value) => value.split(';')[0])
-      .join('; ');
-    const issued = await auth.handler(
-      new Request(`${issuer}/token`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json', cookie },
-        body: '{}',
-      }),
-    );
-    expect(issued.status).toBe(200);
-    const token = ((await issued.json()) as { access_token: string }).access_token;
-    const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
-    if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
-    actors.push(actor);
   }
+  await issueActors();
   async function grant(id: string, target = root, action = 'space:create') {
     await admin.query(
       "INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)'::tstzrange,$3) ON CONFLICT DO NOTHING",
@@ -131,9 +143,22 @@ async function fixture(pool: Pool, admin: Pool) {
   }
   return {
     access,
-    actor: actors[0]!,
-    other: actors[1]!,
+    get actor() {
+      return actors[0]!;
+    },
+    get other() {
+      return actors[1]!;
+    },
     grant,
+    async restoreAccounts() {
+      await admin.query(
+        `UPDATE access.account
+         SET state='active', authn_fenced=false, fence_receipt_id=NULL, suspension_reason=NULL
+         WHERE account_id=ANY($1::uuid[])`,
+        [ids],
+      );
+      await issueActors();
+    },
     async close() {
       await authPool.end();
       await dropTestDatabase(admin, database);
@@ -150,6 +175,7 @@ let publication: typeof import('../../src/community/publication.ts');
 beforeAll(async () => {
   pool = createPool(process.env.DATABASE_URL!);
   pool.options.max = 1;
+  configureTestReceiptKeys(pool);
   admin = new Pool({ connectionString: process.env.DATABASE_URL });
   f = await fixture(pool, admin);
   space = await import('../../src/community/space.ts');
@@ -160,9 +186,7 @@ beforeEach(async () => {
   await admin.query(
     'TRUNCATE community.publication_head, community.publication, community.realm, community.realm_revision, community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, access.resource_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
   );
-  await admin.query("UPDATE access.account SET state='active' WHERE account_id=ANY($1::uuid[])", [
-    [f.actor.accountId, f.other.accountId],
-  ]);
+  await f.restoreAccounts();
   await f.grant(f.actor.accountId);
 });
 afterAll(async () => {
@@ -170,7 +194,13 @@ afterAll(async () => {
   await pool?.end();
   await admin?.end();
 });
-const deps = () => ({ clock: () => new Date(), pool, access: f.access, routeKey });
+const deps = () => ({
+  clock: () => new Date(),
+  pool,
+  access: f.access,
+  routeKey,
+  deadlineNow: () => Date.now(),
+});
 async function createSpace() {
   return (await space.createSpace(deps(), f.actor, { title: 'Host Space' }, context())).value.spaceId;
 }
@@ -459,7 +489,19 @@ test("a Realm's publication list is a keyset page whose every item passes final 
     await publication.listPublications(deps(), realmId, readContext({ kind: 'anonymous' }), { limit: 10 }),
   ).toBeNull();
   expect(await publication.readPublication(deps(), realmId, subjects[2]!, readContext(f.other))).toBeNull();
-  await admin.query('DELETE FROM semantic.subject WHERE subject_id=$1', [subjects[1]]);
+  const cleanup = await admin.connect();
+  try {
+    await cleanup.query('BEGIN');
+    await cleanup.query("SELECT set_config('semantic.erasure_cleanup','on',true)");
+    await cleanup.query('DELETE FROM semantic.search_selection_state WHERE subject_id=$1', [subjects[1]]);
+    await cleanup.query('DELETE FROM semantic.subject WHERE subject_id=$1', [subjects[1]]);
+    await cleanup.query('COMMIT');
+  } catch (error) {
+    await cleanup.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    cleanup.release();
+  }
   const disclosed = await publication.listPublications(deps(), realmId, owner, { limit: 10 });
   expect(disclosed!.items.map((item) => item.subjectId)).not.toContain(subjects[1]);
   expect(new Set(disclosed!.items.map((item) => item.subjectId))).toEqual(

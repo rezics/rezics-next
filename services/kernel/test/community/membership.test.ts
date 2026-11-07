@@ -25,6 +25,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createProductionAccess, type ProductionAccess } from './membership-fixture.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = Buffer.alloc(32, 59).toString('base64url');
 const actions = [
@@ -149,7 +150,8 @@ beforeAll(async () => {
   pool = createPool(url);
   pool.options.max = 10;
   pool.options.connectionTimeoutMillis = 10_000;
-  client = await createWorkClient(url);
+  configureTestReceiptKeys(pool);
+  client = await createWorkClient(url, pool);
   // The reader is installed before publication so a later member grant can use it.
   let roleReader: RealmMembership['roleReader'] = async () => null;
   // Production composition: its authenticator and command admission refuse every actor it did not produce.
@@ -167,6 +169,7 @@ beforeAll(async () => {
   });
   membership = createRealmMembership({
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool,
     access,
     referenceKeys: tokens,
@@ -187,6 +190,7 @@ beforeAll(async () => {
     pool,
     client,
     env: { KERNEL_ROUTE_KEY: routeKey },
+    receiptKeys: testReceiptKeys(),
   });
   await runtime.launch();
 }, 120_000);
@@ -739,7 +743,7 @@ function holdingClient() {
 }
 
 function acceptanceDependencies(held: ReturnType<typeof holdingClient>) {
-  return { clock: () => new Date(), pool, access, tokens, client: held.client };
+  return { pool, access, tokens, client: held.client, clock: () => new Date() };
 }
 
 function accepted(held: ReturnType<typeof holdingClient>, workflowId: string): Accepted {
@@ -841,7 +845,13 @@ test('a sealed step with no restorer, or a reference for another operation, fail
     await ports().reserve({ accountId: installed.memberId, principal, key: `closed-${crypto.randomUUID()}` })
   ).value;
   // The carrier's actor is a committed snapshot Access never authenticated: another adapter cannot use it.
-  const bare = createRealmMembership({ clock: () => new Date(), pool, access, referenceKeys: tokens });
+  const bare = createRealmMembership({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool,
+    access,
+    referenceKeys: tokens,
+  });
   await expect(bare.publish(carrier, input, reservation, `closed-${crypto.randomUUID()}`)).rejects.toBeInstanceOf(
     GrantDeniedError,
   );

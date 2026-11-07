@@ -13,7 +13,7 @@ import { createWorkClient } from './work/client.ts';
 import { readContentConfig } from './content/config.ts';
 import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
-import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
+import { configureReceiptKeys } from './command/receipt-key.ts';
 import {
   createKernelCreditSearchSource,
   createKernelRuntimeDefaults,
@@ -167,7 +167,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);
-    workClient = createWorkClient(config.databaseUrl);
+    workClient = createWorkClient(config.databaseUrl, pool);
     // Observe startup rejection immediately; the webhook and stop still receive it.
     void workClient.catch(() => {});
     const client = workClient;
@@ -261,6 +261,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               search: openSearch,
               prefix: searchConfig.prefix,
               keys: config.tokens,
+              deadlineNow: defaults.deadlineNow,
               clock: defaults.clock,
             },
             producers,

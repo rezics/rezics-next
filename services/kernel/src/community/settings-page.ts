@@ -21,6 +21,7 @@ import bindingRead from './container-lifecycle-binding.sql';
 import { RealmPresentationSchema } from './presentation.ts';
 import { readRealm, readRealmSettingsHead, realmReadEligibility, type RealmDependencies } from './realm.ts';
 import { readSpace, spaceReadEligibility } from './space.ts';
+import type { CommunityAmbient } from './ambient.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -97,7 +98,7 @@ export function RealmSettingsPageSchema() {
   );
 }
 export type RealmSettingsPage = Static<ReturnType<typeof RealmSettingsPageSchema>>;
-type Dependencies = Pick<RealmDependencies, 'pool' | 'access' | 'clock'>;
+type Dependencies = Pick<RealmDependencies, 'pool' | 'access' | 'clock'> & CommunityAmbient;
 const none = { state: 'none', value: null } as const;
 const unavailable = { state: 'unavailable', value: null } as const;
 const signature = (value: unknown) => JSON.stringify(value);
@@ -224,7 +225,8 @@ export async function readRealmSettingsPage(
   context: { deadline: number },
 ): Promise<RealmSettingsPage> {
   if (actor.kind !== 'account' || routeOf(realmId) === null) throw hidden();
-  if (!Number.isFinite(context.deadline) || Date.now() >= context.deadline) throw new ProblemError('deadline_exceeded');
+  if (!Number.isFinite(context.deadline) || deps.deadlineNow() >= context.deadline)
+    throw new ProblemError('deadline_exceeded');
   try {
     const current = await readRealm(deps, actor, realmId, context);
     if (!current) throw hidden();

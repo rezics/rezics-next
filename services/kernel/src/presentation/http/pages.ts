@@ -287,6 +287,7 @@ function nativePageRoute<App, const Path extends string>(
     tokens,
     clock,
     dispatch,
+    deadlineNow,
   }: {
     pool: Pool;
     routeKey: Uint8Array;
@@ -294,6 +295,8 @@ function nativePageRoute<App, const Path extends string>(
     tokens: KeyRing;
     clock: () => Date;
     dispatch: (request: Request) => Promise<Response>;
+    /** Real wall time for the page authority's request deadlines, supplied by composition. */
+    deadlineNow: () => number;
   },
   path: Path,
   draftPreview: boolean,
@@ -459,6 +462,7 @@ function nativePageRoute<App, const Path extends string>(
           access: pageAccess,
           routeKey,
           clock,
+          deadlineNow,
         },
         actor,
         deadline: job.deadline,

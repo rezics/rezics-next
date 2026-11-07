@@ -17,6 +17,7 @@ export function deriveAccess(base: Access, overrides: Partial<Access>): Access {
     ...(base.prepareReadDecisions ? { prepareReadDecisions: base.prepareReadDecisions.bind(base) } : {}),
     ...(base.replayAuthorization ? { replayAuthorization: base.replayAuthorization.bind(base) } : {}),
     authorize: base.authorize.bind(base),
+    ...(base.kindAudience ? { kindAudience: base.kindAudience } : {}),
     ...overrides,
   };
   bases.set(derived, base);

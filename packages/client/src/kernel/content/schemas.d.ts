@@ -1,5 +1,6 @@
 import { type DocumentSnapshot } from '@rezics/document';
 import type { Static, TSchema } from 'typebox';
+import type { ContributedPostEntry } from './contribution-present.ts';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { AuthorPostEntry, AuthorThreadEntry } from './author-item-reads.ts';
@@ -164,7 +165,6 @@ export declare const ReportResponseSchema: import("typebox").TObject<{
         }>;
     }>>>;
 }>;
-/** The erased variant cannot carry authored bytes, even to an authorized reader. */
 export declare function ItemViewSchema(): import("typebox").TUnsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>;
 export declare const ErasedPlaceholderSchema: import("typebox").TObject<{
     id: import("typebox").TString;
@@ -178,6 +178,10 @@ export declare const ErasedPlaceholderSchema: import("typebox").TObject<{
     sha256: import("typebox").TNull;
 }>;
 export declare function PostEntrySchema(): import("typebox").TUnsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>;
+/** Point reads serialize Accounts attribution without changing native authorization types. */
+export declare function ContributedPostResponseSchema(): import("typebox").TObject<{
+    post: import("typebox").TUnsafe<ContributedPostEntry & ViewerReactionSlot & ReactionCountsSlot>;
+}>;
 export declare function ThreadViewSchema(): import("typebox").TUnsafe<Omit<Readonly<{
     id: import("./model.ts").ThreadId;
     route: import("./model.ts").Route;

@@ -22,6 +22,7 @@ const deps = () => ({
   pool: system.database.pool,
   access: system.access,
   routeKey: system.routeKey,
+  deadlineNow: () => Date.now(),
   clock: () => new Date(at),
 });
 const claimant = () => system.actors.author;
