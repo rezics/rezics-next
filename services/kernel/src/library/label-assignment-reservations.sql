@@ -10,7 +10,7 @@ WITH input AS MATERIALIZED (
     FROM library.label_assignment AS a
     WHERE a.route = input.route AND a.account_id = input.account_id AND a.subject_id = input.subject_id
       AND a.slot_no IS NOT NULL
-    ORDER BY a.assignment_id
+    ORDER BY a.route, a.account_id, a.subject_id, a.assignment_id
     LIMIT 32
   ) AS a
 ), desired AS MATERIALIZED (

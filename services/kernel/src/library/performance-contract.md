@@ -18,7 +18,9 @@ declaration equality, ordinary native adapter install, Search filter-leaf ports,
 Source/member/publication, assignment-growth and lifecycle-growth cases keep their existing assertions.
 The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays unknown. Label
 admission SQL drives from the one-row request through typed input CTEs and LATERAL LIMIT-1 primary-key points and
-the 32-row reserved source, so generic prepared plans keep those indexes; restore, rename and point reads lock or
+the 32-row reserved source, so generic prepared plans keep those indexes. Those `ORDER BY` lists name the index
+columns in index order; ordering only the trailing key Seq Scanned `personal_label` once per parent observation.
+Restore, rename and point reads lock or
 seek the exact parent rather than scanning the owner catalogue. Those growth suites remain the oracles; this
 landing adds no parallel Label suite.
 Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants

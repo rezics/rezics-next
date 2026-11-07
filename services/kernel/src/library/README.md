@@ -123,7 +123,9 @@ identity-native declaration equality, ordinary `composeLibraryDomain` adapter in
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
 Label catalogue, assignment, parent and point SQL use typed input CTEs and LATERAL LIMIT-1 primary-key points
-(and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Point reads
+(and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Those
+`ORDER BY` lists name the index columns in index order; ordering only the trailing key Seq Scanned
+`personal_label` once per parent observation. Point reads
 seek the primary key then filter `include_deleted` on that row, and project `createdAt` as insert RETURNING does
 so Reylo still decodes timestamptz text; they do not UNION ALL `include_deleted`. Folded FULL
 warmup sees 34 `personal_label` parent observations and zero sequential scans. Set, unassign, restore and
