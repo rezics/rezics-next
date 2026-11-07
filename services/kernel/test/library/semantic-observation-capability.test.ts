@@ -37,3 +37,36 @@ test('Semantic observations return owner work for both summary hydration and its
   expect(observed.work).toEqual(work);
   expect(await observed.value.current()).toEqual({ value: true, work });
 });
+
+test('Semantic observations attach owner work to mapping, reference, and shelf reads', async () => {
+  const id = '00000000-0000-8000-8000-000000000001';
+  const native = {
+    follow: {
+      mappingWork: () => work,
+      subjectReferenceWork: () => work,
+      readMapping: async () => ({ state: 'absent' }),
+      readMappings: async () => [{ state: 'absent' }],
+      readSubjectReference: async () => ({ state: 'present' }),
+    },
+    shelf: {
+      identityVersionWork: () => work,
+      itemTypesWork: () => work,
+      readIdentityVersion: async () => null,
+      readItemTypes: async () => new Map([[id, 'schema:CreativeWork']]),
+    },
+  } as unknown as SemanticObservationNativeAdapter;
+  const observations = createLibraryObservationApplication(native);
+  const pool = {} as never;
+  const client = {} as never;
+
+  expect(await observations.follow.readMapping(pool, id)).toEqual({ value: { state: 'absent' }, work });
+  expect(await observations.follow.readMappings(pool, [id])).toEqual({ value: [{ state: 'absent' }], work });
+  expect(
+    await observations.follow.readSubjectReference({ pool, subjectId: id, check: async () => true }),
+  ).toEqual({ value: { state: 'present' }, work });
+  expect(await observations.shelf.readIdentityVersion(client, id)).toEqual({ value: null, work });
+  expect(await observations.shelf.readItemTypes(client, [id], 128)).toEqual({
+    value: new Map([[id, 'schema:CreativeWork']]),
+    work,
+  });
+});

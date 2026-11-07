@@ -1,6 +1,6 @@
 /** Native SQL, parameter order and finite projections for Library's observations. */
 
-import pg, { type Pool, type PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import { statementBytes } from '../../database/statement-bytes.ts';
@@ -12,6 +12,7 @@ import type {
   LibrarySemanticScopeObservation,
   LibrarySemanticScopeRegistration,
   LibrarySemanticScopeRevalidation,
+  LibrarySemanticSummaryObservation,
 } from '../../library/contract/semantic-observation.ts';
 import type { IdentityMapping } from '../contract/identity-values.ts';
 import type { IdentityScopeKey, IdentityScopeObservation, IdentityScopeWork } from '../identity-scope-types.ts';
@@ -33,6 +34,7 @@ import releaseActive from '../definitions-active.sql';
 import releaseExists from '../definitions-exists.sql';
 import release from '../definitions-read.sql';
 import partitions from '../../partition/read-batch.sql';
+import partitionRead from '../../partition/read.sql';
 import coverReferences from '../../content/read-cover-reference.sql';
 import sourceFences from '../../content/read-source-fences.sql';
 import commitCapture from '../identity-scoped-commit-capture.sql';
@@ -74,7 +76,7 @@ export type SemanticObservationNativeAdapter = Readonly<{
     observeSubjects(input: {
       context: SummaryReaderDependencies;
       ids: readonly string[];
-    }): Promise<unknown>;
+    }): Promise<Omit<LibrarySemanticSummaryObservation, 'current'> & Readonly<{ current(): Promise<boolean> }>>;
   }>;
   shelf: Readonly<{
     identityVersionWork(subjectId: string): WorkDimensions;
@@ -92,6 +94,7 @@ const uuid = 'ffffffff-ffff-8fff-bfff-ffffffffffff';
 const int8 = '-9223372036854775808';
 const xid = 'x'.repeat(32);
 const timestamp = 'x'.repeat(64);
+const maxImportedSourceBytes = 65_536;
 const size = (value: unknown) =>
   Buffer.byteLength(JSON.stringify(value, (_key, entry) => (typeof entry === 'bigint' ? entry.toString() : entry)));
 const zero = (): Bound =>
@@ -391,15 +394,40 @@ function followMappingDimensions(originals: readonly string[]): WorkDimensions {
 function summaryReferenceWork(subjectId: string): WorkDimensions {
   const route = routeOf(subjectId);
   if (route === null) throw new TypeError('Semantic reference observations require routed subjects');
-  return dimensions(
-    sqlWork(reference.sql, operandsOf(reference, { route, subject_id: subjectId }), {
+  const partition = partitionOf(route);
+  const partitionMetadata = sqlWork(
+    partitionRead.sql,
+    operandsOf(partitionRead, { partition_no: partition }),
+    {
       keys: 1,
-      rows: 6,
-      points: 2,
-      seeks: 2,
+      rows: 2,
+      points: 1,
+      seeks: 1,
       output: 1,
-      width: size({ id: uuid, redirect: uuid }),
-    }),
+      width:
+        size({
+          partitionNo: 4095,
+          node: '',
+          writeState: 'draining',
+          movedTo: '',
+          epoch: -2147483648,
+          position: int8,
+        }) +
+        2 * 6 * (2 ** 30 - 1),
+    },
+  );
+  return dimensions(
+    sumBounds(
+      partitionMetadata,
+      sqlWork(reference.sql, operandsOf(reference, { route, subject_id: subjectId }), {
+        keys: 1,
+        rows: 6,
+        points: 2,
+        seeks: 2,
+        output: 1,
+        width: size({ id: uuid, redirect: uuid }),
+      }),
+    ),
   );
 }
 
@@ -453,64 +481,72 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
   // bounded reader retries a changed plan at most twice after its first read.
   const projectionReads = repeatBound(sumBounds(...perSubject), 6);
   const coverIds = [...subjectIds];
+  const variants = 2 * 6;
   const coverOperands = operandsOf(coverReferences, {
     partition: 4095,
-    routes: coverIds.map((id) => routeOf(id)!),
-    media_ids: coverIds,
+    routes: [65535],
+    media_ids: [coverIds[0]!],
   });
-  const variants = 2 * 6;
-  const cover = sqlWork(coverReferences.sql, coverOperands, {
-    keys: (1 + variants) * coverIds.length,
-    rows: (5 + 3 * variants) * coverIds.length,
-    points: 2 * coverIds.length,
-    seeks: 2 * coverIds.length,
-    output: coverIds.length,
-    width:
-      size({
-        mediaId: uuid,
-        containerId: uuid,
-        sha256: 'f'.repeat(64),
-        sourceUrl: '',
-        credit: null,
-        provenance: null,
-        width: -2147483648,
-        height: -2147483648,
-        thumbhash: 'f'.repeat(44),
-        color: '#ffffff',
-        variantsJson: '',
-        focalX: -1,
-        focalY: -1,
-      }) +
-      6 * 2048 +
-      6 * 8192 +
-      6 * 65536 +
-      2 * variants * size({ format: 'webp', width: 2560 }),
+  const coverWidth =
+    size({
+      mediaId: uuid,
+      containerId: uuid,
+      sha256: 'f'.repeat(64),
+      sourceUrl: '',
+      credit: null,
+      provenance: null,
+      width: -2147483648,
+      height: -2147483648,
+      thumbhash: 'f'.repeat(44),
+      color: '#ffffff',
+      variantsJson: '',
+      focalX: -1,
+      focalY: -1,
+    }) +
+    6 * 2048 +
+    6 * 8192 +
+    6 * 65536 +
+    2 * variants * size({ format: 'webp', width: 2560 });
+  // Media and source-fence reads group by data discovered in the preceding
+  // projection. Price one singleton group per possible result so a spread of
+  // actual homes cannot hide SQL text or wire operands behind one assumed home.
+  const cover = sumBounds(
+    ...coverIds.map((id) =>
+      sqlWork(
+        coverReferences.sql,
+        operandsOf(coverReferences, { partition: 4095, routes: [65535], media_ids: [id] }),
+        {
+          keys: 1 + variants,
+          rows: 5 + 3 * variants,
+          points: 2,
+          seeks: 2,
+          output: 1,
+          width: coverWidth,
+        },
+      ),
+    ),
+  );
+  const source = 'x'.repeat(32);
+  const externalId = 'x'.repeat(maxImportedSourceBytes);
+  const tuple = { route: 65535, source, external_id: externalId, field_group: 'cover' };
+  const fenceWidth = size({
+    route: 65535,
+    source,
+    external_id: externalId,
+    field_group: 'cover',
+    takenDown: false,
+    securityRevision: int8,
+    takenDownAt: timestamp,
+    takedownId: uuid,
   });
-  const tuples = subjectIds.map((id) => ({
-    route: routeOf(id)!,
-    source: id,
-    external_id: id,
-    field_group: 'image',
-  }));
-  const sourceFenceOperands = operandsOf(sourceFences, { partition: 4095, tuples });
-  const fences = sqlWork(sourceFences.sql, sourceFenceOperands, {
-    keys: tuples.length,
-    rows: 5 * tuples.length,
-    points: tuples.length,
-    seeks: tuples.length,
-    output: tuples.length,
-    width:
-      size({
-        route: 65535,
-        source: '',
-        external_id: '',
-        field_group: 'image',
-        takenDown: false,
-        securityRevision: int8,
-        takenDownAt: timestamp,
-        takedownId: uuid,
-      }) + size(tuples),
-  });
+  const fences = repeatBound(
+    sqlWork(
+      sourceFences.sql,
+      operandsOf(sourceFences, { partition: 4095, tuples: [tuple] }),
+      { keys: 1, rows: 5, points: 1, seeks: 1, output: 1, width: fenceWidth },
+    ),
+    subjectIds.length,
+  );
   // A successful summary may read original, representative-edition, media and
   // imported-source homes, plus the global release home. Their exact homes
   // depend on native rows produced by the preceding owner reads.

@@ -40,9 +40,7 @@ export function createLibraryObservationApplication(
         return Object.freeze({ value, work: native.follow.subjectReferenceWork(input.subjectId) });
       },
       async observeSubjects(input) {
-        const observed = (await native.follow.observeSubjects(input)) as Omit<LibrarySemanticSummaryObservation, 'current'> & {
-          current(): Promise<boolean>;
-        };
+        const observed = await native.follow.observeSubjects(input);
         const value: LibrarySemanticSummaryObservation = Object.freeze({
           summaries: observed.summaries,
           async current() {
