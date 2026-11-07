@@ -166,6 +166,7 @@ import {
 } from './showcase-bangumi-credits.ts';
 import {
   CrossMediaTableScanLimitError,
+  VNDB_ENTRY_META_SCAN_PAGE,
   collectSelectedDumpRows,
   isCrossMediaTableScanLimitError,
   showcaseLimits,
@@ -175,7 +176,12 @@ import {
   type ShowcaseManifest,
 } from './showcase-contract.ts';
 
-export { CrossMediaTableScanLimitError, collectSelectedDumpRows, isCrossMediaTableScanLimitError };
+export {
+  CrossMediaTableScanLimitError,
+  VNDB_ENTRY_META_SCAN_PAGE,
+  collectSelectedDumpRows,
+  isCrossMediaTableScanLimitError,
+};
 export type { CrossMediaTableScanLimits, CrossMediaTables };
 
 type Provider = 'bangumi' | 'vndb';
@@ -1207,6 +1213,8 @@ export async function planCrossMediaSeed(
   const titles = new Map<string, Row[]>(),
     vns = new Map<string, Row>(),
     revisions = new Map<string, Row>();
+  const pendingRevisions = new Set(vnIds);
+  let entryMetaScanComplete = true;
   for await (const row of input.rows('vndb', 'vn_titles')) {
     const id = text(row, 'id');
     if (!vnIds.has(id)) continue;
@@ -1220,17 +1228,30 @@ export async function planCrossMediaSeed(
     ensure(!vns.has(id), 'Duplicate selected VNDB work');
     vns.set(id, row);
   }
-  for await (const row of input.rows('vndb', 'entry_meta')) {
-    const id = text(row, 'id');
-    if (!vnIds.has(id)) continue;
-    ensure(!revisions.has(id), 'Duplicate selected VNDB revision');
-    ensure(/^[1-9][0-9]*$/.test(text(row, 'revision')), 'Invalid VNDB revision');
-    revisions.set(id, { id, revision: Number(row.revision), lastmod: row.lastmod });
-  }
+  await collectSelectedDumpRows(input, 'vndb', 'entry_meta', {
+    limits: VNDB_ENTRY_META_SCAN_PAGE,
+    select: (row) => pendingRevisions.has(String(row.id ?? '')),
+    onRow(row) {
+      const id = text(row, 'id');
+      ensure(!revisions.has(id), 'Duplicate selected VNDB revision');
+      ensure(/^[1-9][0-9]*$/.test(text(row, 'revision')), 'Invalid VNDB revision');
+      revisions.set(id, { id, revision: Number(row.revision), lastmod: row.lastmod });
+      pendingRevisions.delete(id);
+    },
+    done: () => pendingRevisions.size === 0,
+    onLimit() {
+      entryMetaScanComplete = false;
+      gap('vndb', 'entry_meta', { table: 'entry_meta' }, 'Cross-media vndb/entry_meta exceeded its bounded scan');
+    },
+  });
   for (const id of vnIds) {
     const row = vns.get(id),
       entry_meta = revisions.get(id);
-    ensure(row && entry_meta && titles.has(id), `Missing selected VNDB record: ${id}`);
+    if (!row || !entry_meta || !titles.has(id)) {
+      if (entryMetaScanComplete) ensure(false, `Missing selected VNDB record: ${id}`);
+      gap('vndb', 'entry_meta', { id }, `Missing selected VNDB record: ${id}`);
+      continue;
+    }
     const vn: Row = { id, olang: row.olang, ...(row.alias === null ? {} : { alias: row.alias }) };
     if (row.c_votecount !== undefined || row.c_average !== undefined) {
       ensure(
@@ -1949,11 +1970,11 @@ export async function planCrossMediaSeed(
         [...plan.records.bangumi, ...plan.entities.bangumi].some((row) => row.key === String(id)),
         `Missing selected Bangumi work: ${id}`,
       );
-    for (const id of selection.vndb)
-      ensure(
-        plan.records.vndb.some((row) => row.key === id),
-        `Missing selected VNDB work: ${id}`,
-      );
+    for (const id of selection.vndb) {
+      if (plan.records.vndb.some((row) => row.key === id)) continue;
+      if (entryMetaScanComplete) ensure(false, `Missing selected VNDB work: ${id}`);
+      gap('vndb', 'entry_meta', { id }, `Missing selected VNDB work: ${id}`);
+    }
     ensure(
       plan.records.bangumi.length +
         plan.entities.bangumi.length +

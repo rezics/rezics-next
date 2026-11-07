@@ -602,20 +602,25 @@ export async function assemble(options?: {
     },
   });
   service = host.service;
-  await service.internal.registerWebsiteClient({
-    publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
-    redirectUris: [`${origins.web}/auth/callback`],
-    postLogoutRedirectUris: [`${origins.web}/`],
-    scopes: website.scopes,
-  });
-  await service.internal.registerClient({
-    clientId: personaClient,
-    firstParty: true,
-    scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
-  });
-  await service.internal.registerClient(localShowcaseClientRegistration());
-  await service.internal.registerClient(semanticWalkClientRegistration());
-  await host.start();
+  await phase(
+    'auth-registration',
+    (async () => {
+      await service.internal.registerWebsiteClient({
+        publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
+        redirectUris: [`${origins.web}/auth/callback`],
+        postLogoutRedirectUris: [`${origins.web}/`],
+        scopes: website.scopes,
+      });
+      await service.internal.registerClient({
+        clientId: personaClient,
+        firstParty: true,
+        scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+      });
+      await service.internal.registerClient(localShowcaseClientRegistration());
+      await service.internal.registerClient(semanticWalkClientRegistration());
+    })(),
+  );
+  await phase('auth-worker', host.start());
   const stop = async () => {
     try {
       await host.stop();
@@ -686,7 +691,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
           email: 'developer@rezics.test',
           password: keys.password,
           client_id: personaClient,
-          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
         }),
       }),
     );

@@ -5,6 +5,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { mintReadTime } from '../../src/command/command.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';
@@ -31,6 +32,7 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import readSubjectStatement from '../../src/semantic/read-subject.sql';
 import { createRealAccess } from '../semantic/real-access.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import type { DynamicCollectionsDriver } from '../../../../specs/dynamic-collections-driver.ts';
 
 export const NIL = '00000000-0000-0000-0000-000000000000';
@@ -179,6 +181,7 @@ export const sourceIndexExpectations = {
 };
 
 export async function canonicalFixture(db: GrowthDatabase) {
+  configureTestReceiptKeys(db.pool);
   const accounts = { editor: newId(0x6b10), reader: newId(0x6b20) };
   const actions = [
     'subject:create',
@@ -225,6 +228,7 @@ export async function canonicalFixture(db: GrowthDatabase) {
       return nativeAccess.authorize(client, actor, action, target, evidence, time);
     },
   });
+  composeLibraryDomain({ pool: db.pool, access });
   async function authenticate(persona: keyof typeof accounts) {
     const now = Math.floor(Date.now() / 1000);
     const token = await new SignJWT({
