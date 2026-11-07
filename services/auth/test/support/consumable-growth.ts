@@ -185,6 +185,15 @@ export async function seedRetentionAxes(db: GrowthDatabase, axis: RetentionAxis,
       );
     }
   }
+  const foreign = `z:retention-foreign:`;
+  await db.admin.query('DELETE FROM auth_dbos.workflow_status WHERE workflow_uuid LIKE $1', [`${foreign}%`]);
+  await db.admin.query(
+    `INSERT INTO auth_dbos.workflow_status
+    (workflow_uuid,status,name,created_at,updated_at,completed_at,application_name)
+    SELECT $1||lpad(i::text,6,'0'),'SUCCESS','accounts.operation',$3,$3,$3,'rezics-unrelated-app'
+    FROM generate_series(1,$2::int) i`,
+    [foreign, axis === 'workflows' ? scale : 256, now - 90 * 86400000],
+  );
 }
 
 /** One fresh raw page, with either 1000 or 10 eligible copies. Preparation is
@@ -205,13 +214,15 @@ export async function prepareRetentionPage(
   await db.admin.query("DELETE FROM auth_workflow_request WHERE workflow_id LIKE '!retention-page:%'");
   await db.admin.query('UPDATE auth_workflow_retention SET continuation=NULL');
   const tag = `!retention-page:${id}:`;
+  const created = now - 90 * 86400000;
   await db.admin.query(
     `INSERT INTO auth_dbos.workflow_status
     (workflow_uuid,status,name,created_at,updated_at,completed_at,application_name)
-    SELECT $1||lpad(i::text,6,'0'),'SUCCESS','auth.maintenance.tick',$3,$3,
+    SELECT $1||lpad(i::text,6,'0'),'SUCCESS','auth.maintenance.tick',
+      $3 + (i % 8), $3 + (i % 8),
       CASE WHEN i<=$4 THEN $3::bigint ELSE $5::bigint END,'rezics-auth-accounts'
     FROM generate_series(1,$2::int) i`,
-    [tag, rawCount - Number(personal), now - 90 * 86400000, eligible - Number(personal), now],
+    [tag, rawCount - Number(personal), created, eligible - Number(personal), now],
   );
   await db.admin.query(
     `INSERT INTO auth_workflow_request(workflow_id,digest,request)

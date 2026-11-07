@@ -6,6 +6,7 @@ import { createAuthHost, type AuthHostOptions } from '../src/host.ts';
 import type { AuthService } from '../src/index.ts';
 import { AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
 import { AUTH_WORKFLOW_STATUS_SCAN_UNAVAILABLE, workflowStatusScanReadiness } from '../src/retention-scan.ts';
+import { AUTH_WORKFLOW_RETENTION_COST } from '../src/retention-cost.ts';
 import {
   AUTH_WORKFLOW_APPLICATION,
   installWorkflowRequestRetention,
@@ -79,6 +80,24 @@ const page = (at = now, retire: WorkflowCopyRetirement = unclassified) =>
 async function continuation() {
   return (await pool.query('SELECT continuation FROM auth_workflow_retention')).rows[0].continuation;
 }
+
+test('Auth retention nested cost includes funded close, delete, request trigger and absence probes', () => {
+  expect(AUTH_WORKFLOW_RETENTION_COST.rawLimit).toBe(1000);
+  expect(AUTH_WORKFLOW_RETENTION_COST.maxPages).toBe(60);
+  expect(AUTH_WORKFLOW_RETENTION_COST.preparation.statements).toBe(3);
+  expect(AUTH_WORKFLOW_RETENTION_COST.examination.statements).toBe(5);
+  expect(AUTH_WORKFLOW_RETENTION_COST.initialization.statements).toBe(10);
+  expect(AUTH_WORKFLOW_RETENTION_COST.fundedClose.statements).toBeGreaterThan(
+    AUTH_WORKFLOW_RETENTION_COST.technicalDelete.applicationStatements,
+  );
+  expect(AUTH_WORKFLOW_RETENTION_COST.technicalDelete).toEqual({
+    applicationStatements: 4,
+    controlStatements: 2,
+    description: 'SDK deleteWorkflows(ids, false): BEGIN, four exact-ID deletes, COMMIT',
+  });
+  expect(AUTH_WORKFLOW_RETENTION_COST.requestTrigger.statements).toBe(1);
+  expect(AUTH_WORKFLOW_RETENTION_COST.absenceProbes.families).toBe(8);
+});
 
 test('Auth retention validates its independent configuration before constructing or launching a host', async () => {
   expect(readWorkflowRetentionConfig({})).toEqual({ retentionDays: 30 });

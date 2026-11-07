@@ -2,6 +2,8 @@ import { DBOS, type WorkflowStatusString } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { examineWorkflowRetentionPage, type WorkflowRetentionCandidate } from './retention-store.ts';
 
+export { AUTH_WORKFLOW_RETENTION_COST } from './retention-cost.ts';
+
 export const AUTH_WORKFLOW_APPLICATION = 'rezics-auth-accounts';
 
 export class WorkflowRetentionConfigurationError extends Error {

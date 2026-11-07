@@ -17,12 +17,12 @@ index 8a0fee5..9a05fef 100644
 +++ b/dist/src/client.d.ts
 @@ -1,3 +1,6 @@
 +import type { SelectedExecution, SelectedExecutionIdentity } from './selected_execution';
-+import type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
++import type { WorkflowWriterState, WorkflowWriterFence, WorkflowRetirementInvocation, WorkflowRetirementWork } from './workflow_retirement';
 +import type { OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanContinuation, WorkflowStatusScanHorizon, WorkflowStatusScanPage } from './workflow_status_scan';
  import { type SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
  import { DLogger } from './telemetry/logs';
  import { type GetWorkflowsInput, type StepInfo, type ListWorkflowStepsOptions, type WorkflowHandle, WorkflowSerializationFormat, type WorkflowStatus } from './workflow';
-@@ -221,6 +224,22 @@ export declare class DBOSClient {
+@@ -221,6 +224,23 @@ export declare class DBOSClient {
      }): Promise<WorkflowHandle<Awaited<T>>[]>;
      setWorkflowPriority(workflowID: string, priority: number, options?: ShardKeyOptions): Promise<void>;
      setWorkflowDelay(workflowID: string, options: number | SetWorkflowDelayOptions): Promise<void>;
@@ -34,6 +34,7 @@ index 8a0fee5..9a05fef 100644
 +    maintainWorkflowOnce(pool: Pool, expected: WorkflowWriterState, action: 'retire' | 'delete', deadline: number,
 +        reserve: (dispatch: string) => Promise<void>): Promise<WorkflowWriterFence | null>;
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    retireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementWork>;
 +    /** Exact native closure read, independent of execution/history existence. */
 +    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
 +    /** Observation only; missing native identity remains null. */
@@ -60,7 +61,7 @@ diff --git a/dist/src/client.js b/dist/src/client.js
 index 7a6d950..b22d125 100644
 --- a/dist/src/client.js
 +++ b/dist/src/client.js
-@@ -368,6 +368,33 @@ class DBOSClient {
+@@ -368,6 +368,35 @@ class DBOSClient {
          const shardKey = typeof options === 'object' ? options.shardKey : undefined;
          return await (0, shard_keys_1.bindShardKeys)([[workflowID, shardKey]], () => this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS));
      }
@@ -76,8 +77,10 @@ index 7a6d950..b22d125 100644
 +    maintainWorkflowOnce(pool, expected, action, deadline, reserve) {
 +        return this.systemDatabase.maintainWorkflowOnce(pool, expected, action, deadline, reserve);
 +    }
-+    retireWorkflow(workflowID) {
-+        return this.systemDatabase.retireWorkflow(workflowID);
++    retireWorkflow(workflowID, invocation) {
++        return arguments.length < 2
++            ? this.systemDatabase.retireWorkflow(workflowID)
++            : this.systemDatabase.retireWorkflow(workflowID, invocation);
 +    }
 +    getWorkflowWriterState(workflowID) {
 +        return this.systemDatabase.getWorkflowWriterState(workflowID);
@@ -219,7 +222,7 @@ index dd663ff..e956665 100644
 +++ b/dist/src/dbos.d.ts
 @@ -1,3 +1,6 @@
 +import type { SelectedExecution, SelectedExecutionLifecycle } from './selected_execution';
-+import type { WorkflowWriterFence } from './workflow_retirement';
++import type { WorkflowWriterFence, WorkflowRetirementInvocation, WorkflowRetirementWork } from './workflow_retirement';
 +import type { OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanContinuation, WorkflowStatusScanHorizon, WorkflowStatusScanPage } from './workflow_status_scan';
  import { StepStatus, DBOSLocalCtx } from './context';
  import { DBOSConfig, DBOSExecutor } from './dbos-executor';
@@ -235,12 +238,13 @@ index dd663ff..e956665 100644
      /**
       * Set the priority of a queued workflow.
       * Only affects workflows with ENQUEUED or DELAYED status.
-@@ -440,6 +447,10 @@ export declare class DBOS {
+@@ -440,6 +447,11 @@ export declare class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
 +    /** Permanently fence this actual workflow ID. No cancellation or deletion. */
 +    static retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    static retireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementWork>;
 +    /** Exact native closure read, independent of execution/history existence. */
 +    static getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
      static deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
@@ -274,14 +278,16 @@ index 370a89e..4d86270 100644
      static async listQueuedWorkflows(input) {
          (0, decorators_1.ensureDBOSIsLaunched)('listQueuedWorkflows');
          return await runInternalStep(async () => {
-@@ -909,6 +917,15 @@ class DBOS {
+@@ -909,6 +917,17 @@ class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
-+    static async retireWorkflow(workflowID) {
++    static async retireWorkflow(workflowID, invocation) {
 +        (0, decorators_1.ensureDBOSIsLaunched)('retireWorkflow');
 +        // The native receipt is independent of workflow checkpoints and execution deletion.
-+        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID);
++        return arguments.length < 2
++            ? dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID)
++            : dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID, invocation);
 +    }
 +    static async getWorkflowWriterFence(workflowID) {
 +        (0, decorators_1.ensureDBOSIsLaunched)('getWorkflowWriterFence');
@@ -313,7 +319,7 @@ index 5d56b40..208d5ff 100644
 +++ b/dist/src/index.d.ts
 @@ -1,3 +1,7 @@
 +export type { SelectedExecution, SelectedExecutionIdentity, SelectedExecutionLifecycle } from './selected_execution';
-+export type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
++export { WorkflowRetirementBudgetError, type WorkflowWriterState, type WorkflowWriterFence, type WorkflowRetirementInvocation, type WorkflowRetirementWork, type WorkflowRetirementFailedWork } from './workflow_retirement';
 +export type { WorkflowStatusScanKey, WorkflowStatusScanHorizon, WorkflowStatusScanContinuation, OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanCopy, WorkflowStatusScanPage } from './workflow_status_scan';
 +export { WORKFLOW_STATUS_SCAN_INDEX, WORKFLOW_STATUS_SCAN_RAW_LIMIT, WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES } from './workflow_status_scan';
  export { DBOS, RecvOptions, SleepOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, ShardKeyOptions, } from './dbos';
@@ -323,10 +329,11 @@ diff --git a/dist/src/index.js b/dist/src/index.js
 index f549f85..0cedd61 100644
 --- a/dist/src/index.js
 +++ b/dist/src/index.js
-@@ -37,6 +37,9 @@ var system_db_schema_1 = require("../schemas/system_db_schema");
+@@ -37,6 +37,10 @@ var system_db_schema_1 = require("../schemas/system_db_schema");
  Object.defineProperty(exports, "PortableWorkflowError", { enumerable: true, get: function () { return system_db_schema_1.PortableWorkflowError; } });
  var workflow_1 = require("./workflow");
  Object.defineProperty(exports, "StatusString", { enumerable: true, get: function () { return workflow_1.StatusString; } });
++Object.defineProperty(exports, "WorkflowRetirementBudgetError", { enumerable: true, get: function () { return require("./workflow_retirement").WorkflowRetirementBudgetError; } });
 +Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_INDEX", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_INDEX; } });
 +Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_RAW_LIMIT", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_RAW_LIMIT; } });
 +Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES; } });
@@ -731,12 +738,12 @@ index 8f66187..8fb1981 100644
 --- a/dist/src/system_database.d.ts
 +++ b/dist/src/system_database.d.ts
 @@ -1,3 +1,5 @@
-+import type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
++import type { WorkflowWriterState, WorkflowWriterFence, WorkflowRetirementInvocation, WorkflowRetirementWork } from './workflow_retirement';
 +import type { OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanContinuation, WorkflowStatusScanHorizon, WorkflowStatusScanPage } from './workflow_status_scan';
  /// <reference types="node" />
  import { Pool, PoolClient, ClientBase } from 'pg';
  import type { DatabaseError } from 'pg';
-@@ -486,6 +488,18 @@ export declare class SystemDatabase {
+@@ -486,6 +488,19 @@ export declare class SystemDatabase {
      private debounceDelayedWorkflowStandalone;
      protected getDirectChildren(workflowIDs: string[]): Promise<string[]>;
      getWorkflowChildren(workflowID: string): Promise<string[]>;
@@ -744,6 +751,7 @@ index 8f66187..8fb1981 100644
 +    maintainWorkflowOnce(pool: Pool, expected: WorkflowWriterState, action: 'retire' | 'delete', deadline: number,
 +        reserve: (dispatch: string) => Promise<void>): Promise<WorkflowWriterFence | null>;
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    retireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementWork>;
 +    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
 +    /** Observation only; missing native identity remains null. */
 +    getWorkflowWriterState(workflowID: string): Promise<WorkflowWriterState | null>;
@@ -778,7 +786,7 @@ index 79ef595..78edc70 100644
              // Check existence separately: a zero-row update also means "already complete", a legal no-op.
              const existingParams = [];
              const { rows } = await client.query(`SELECT workflow_uuid FROM "${this.schemaName}".workflow_status WHERE ${this.wfIn(undefined, workflowIDs, existingParams)}`, existingParams);
-@@ -2003,6 +2006,123 @@ class SystemDatabase {
+@@ -2003,6 +2006,183 @@ class SystemDatabase {
          }
          return [...descendants];
      }
@@ -817,8 +825,13 @@ index 79ef595..78edc70 100644
 +                }
 +            }
 +            await reserve('commit');
-+            await client.query('COMMIT');
-+            begun = false;
++            try {
++                await client.query('COMMIT');
++                begun = false;
++            } catch (error) {
++                begun = false;
++                throw error;
++            }
 +            if (action === 'delete') this.runningWorkflowMap.delete(expected.workflowID);
 +            return result;
 +        } catch (error) {
@@ -828,15 +841,70 @@ index 79ef595..78edc70 100644
 +            client.release();
 +        }
 +    }
-+    async retireWorkflow(workflowID) {
++    async retireWorkflow(workflowID, invocation) {
 +        if (typeof workflowID !== 'string' || workflowID.length === 0)
 +            throw new TypeError('An actual workflow ID is required');
-+        return withDbRetry(async () => {
-+            const schema = '"' + this.schemaName.replace(/"/g, '""') + '"';
-+            const { rows } = await this.pool.query(
-+                `SELECT * FROM ${schema}.retire_workflow_writers($1)`, [workflowID]);
-+            return this.workflowWriterFenceReceipt(rows[0]);
++        if (arguments.length < 2) {
++            return withDbRetry(async () => {
++                const schema = '"' + this.schemaName.replace(/"/g, '""') + '"';
++                const { rows } = await this.pool.query(
++                    `SELECT * FROM ${schema}.retire_workflow_writers($1)`, [workflowID]);
++                return this.workflowWriterFenceReceipt(rows[0]);
++            });
++        }
++        const { WorkflowRetirementBudgetError } = require('./workflow_retirement');
++        if (!invocation || typeof invocation.reserve !== 'function' || !Number.isFinite(invocation.deadline) ||
++            invocation.deadline <= Date.now() || !Number.isInteger(invocation.maxAttempts) ||
++            invocation.maxAttempts < 1 || invocation.maxAttempts > 8)
++            throw new TypeError('Funded workflow retirement requires a live invocation');
++        const failedWork = [];
++        const original = await this.getWorkflowWriterState(workflowID);
++        const closedReceipt = (state) => this.workflowWriterFenceReceipt({
++            workflow_uuid: state.workflowID, generation: state.generation,
++            closure_id: state.closureID, closed_at: state.closedAt,
 +        });
++        const closedWork = (state, attempts) => Object.freeze({
++            fence: closedReceipt(state), attempts, failedWork: Object.freeze([...failedWork]),
++        });
++        if (original && original.generation === '2')
++            return closedWork(original, 0);
++        if (!original || original.generation !== '1')
++            throw new Error('DBOS workflow writer state is unavailable');
++        for (let attempt = 1; attempt <= invocation.maxAttempts; attempt++) {
++            if (invocation.signal?.aborted || Date.now() >= invocation.deadline)
++                throw new WorkflowRetirementBudgetError('Funded workflow retirement deadline elapsed', failedWork);
++            let dispatch = 'attempt';
++            try {
++                const state = await this.getWorkflowWriterState(workflowID);
++                if (state && state.generation === '2') {
++                    if (state.workflowID !== original.workflowID)
++                        throw new Error('DBOS workflow writer identity changed');
++                    return closedWork(state, attempt);
++                }
++                if (!state || state.generation !== '1' || state.workflowID !== original.workflowID ||
++                    state.restoreGeneration !== original.restoreGeneration)
++                    throw new Error('DBOS workflow writer identity changed');
++                const fence = await this.maintainWorkflowOnce(this.pool, state, 'retire', invocation.deadline, (name) => {
++                    dispatch = name;
++                    return invocation.reserve(name);
++                });
++                return Object.freeze({ fence, attempts: attempt, failedWork: Object.freeze([...failedWork]) });
++            } catch (error) {
++                failedWork.push(Object.freeze({ attempt, dispatch }));
++                const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
++                if (code === '57014' || code === 'ETIMEDOUT') throw error;
++                try {
++                    const recovered = await this.getWorkflowWriterState(workflowID);
++                    if (recovered && recovered.generation === '2' && recovered.workflowID === original.workflowID)
++                        return closedWork(recovered, attempt);
++                } catch {
++                }
++                if (error instanceof WorkflowRetirementBudgetError) throw error;
++                if (attempt === invocation.maxAttempts)
++                    throw new WorkflowRetirementBudgetError(error instanceof Error ? error.message : 'Funded workflow retirement budget exhausted', failedWork);
++            }
++        }
++        throw new WorkflowRetirementBudgetError('Funded workflow retirement budget exhausted', failedWork);
 +    }
 +    async getWorkflowWriterFence(workflowID) {
 +        if (typeof workflowID !== 'string' || workflowID.length === 0)
@@ -937,10 +1005,10 @@ index 79ef595..78edc70 100644
      }
 diff --git a/dist/src/workflow_retirement.d.ts b/dist/src/workflow_retirement.d.ts
 new file mode 100644
-index 0000000..05c7fa3
+index 0000000..b7e4c21
 --- /dev/null
 +++ b/dist/src/workflow_retirement.d.ts
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,36 @@
 +/** Permanent technical writer closure; never an authorization to erase live work. */
 +export interface WorkflowWriterFence {
 +    readonly workflowID: string;
@@ -956,6 +1024,44 @@ index 0000000..05c7fa3
 +    readonly closureID: string | null;
 +    readonly closedAt: number | null;
 +}
++/** Caller-funded envelope. Failed reservations are never refunded. */
++export interface WorkflowRetirementInvocation {
++    readonly deadline: number;
++    readonly maxAttempts: number;
++    reserve(dispatch: string): Promise<void>;
++    readonly signal?: AbortSignal;
++}
++export interface WorkflowRetirementFailedWork {
++    readonly attempt: number;
++    readonly dispatch: string;
++}
++export interface WorkflowRetirementWork {
++    readonly fence: WorkflowWriterFence;
++    readonly attempts: number;
++    readonly failedWork: readonly WorkflowRetirementFailedWork[];
++}
++export declare class WorkflowRetirementBudgetError extends Error {
++    readonly name: "WorkflowRetirementBudgetError";
++    readonly failedWork: readonly WorkflowRetirementFailedWork[];
++    constructor(message?: string, failedWork?: readonly WorkflowRetirementFailedWork[]);
++}
+diff --git a/dist/src/workflow_retirement.js b/dist/src/workflow_retirement.js
+new file mode 100644
+index 0000000..c3d91aa
+--- /dev/null
++++ b/dist/src/workflow_retirement.js
+@@ -0,0 +1,11 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.WorkflowRetirementBudgetError = void 0;
++class WorkflowRetirementBudgetError extends Error {
++    constructor(message, failedWork) {
++        super(message);
++        this.name = "WorkflowRetirementBudgetError";
++        this.failedWork = Object.freeze([...(failedWork ?? [])]);
++    }
++}
++exports.WorkflowRetirementBudgetError = WorkflowRetirementBudgetError;
 diff --git a/dist/src/workflow_status_scan.d.ts b/dist/src/workflow_status_scan.d.ts
 new file mode 100644
 index 0000000..0c434b6

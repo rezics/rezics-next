@@ -332,9 +332,10 @@ bounding every page, including all rejected candidates and pending consumers.
 Fewest tests: extend the two existing growth suites, retention causal cases and SDK
 binding cases; use the existing genuine erasure fixture and consumable target helper.
 Do not substitute returned counts or a callback stub for retirement-body work.
-Pin funded close/delete, unavailable funded admission and same-identity replay on the
-existing binding suite. Auth does not query `auth_dbos.workflow_status`; producer
-inclusive `completed_at <= createdBefore` eligibility is received as-is.
+Pin one-arg funded close, `deleteWorkflows` payload deletion, unavailable funded
+admission and same-identity replay on the existing binding suite. Auth does not
+query `auth_dbos.workflow_status`; producer inclusive `completed_at <= createdBefore`
+eligibility is received as-is.
 
 Frozen full/short, zero-eligible and drain/repeated-empty titles remain in the Auth
 inventory. Each independently grows workflow rows, old-created/recent-completed
@@ -344,9 +345,14 @@ HTTP revoke request, closes native writers, deletes payload/FK families and veri
 raw absence. Missing consumer custody stays pending. Timestamp ties, late inserts
 inside the captured upper key, 60-page continuation, original-cut recovery,
 interruption and replay stay causal cases; old synthetic technical bindings have no
-source proof and must be retained. Personal closure uses funded `maintainWorkflowOnce`
-attempts and one deadline; scan-page connection retry stays an explicit unbounded
-producer bound.
+source proof and must be retained. Personal closure is Auth's one-argument
+`closeAuthSdkWriters`, which funds Accounts' `retireWorkflow(id, invocation)` from
+the original finite operation (`maxAttempts=1`, ceiling 8) and receives
+`{fence, attempts, failedWork}` as `readonly {attempt,dispatch}[]`. Aggregate
+counters are ignored. Work `SDK_RETIREMENT_DISPATCH` prices the envelope and retire
+body; maintain/delete identities are not used. Failed funded work remains charged.
+Scan-page connection retry stays an explicit unbounded producer bound.
+Decision: fewest tests extend those existing suites only; no new suite.
 
 Run through the Auth owning runner:
 
