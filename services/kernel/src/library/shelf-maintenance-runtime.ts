@@ -520,12 +520,12 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     sources: dependencies.sources ?? {
       observe: (id) =>
         observePreparationSource(
-          { ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
+          { ...deps, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
           id,
         ),
       observeIdentity: (id) =>
         observePreparationIdentity(
-          { ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
+          { ...deps, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
           id,
         ),
     },
