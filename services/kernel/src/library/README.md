@@ -143,8 +143,9 @@ or the first array element. They do not UNION ALL `include_deleted`. Existing La
 pin this; no extra tests. Prefix `ORDER BY` names `personal_label_live_name`
 `(route, account_id, normalized_name)`. Folded FULL warmup sees 34 `personal_label` parent observations and
 zero sequential scans on `personal_label`, `label_assignment`, `entry` and `progress_session`. FULL
-entry tiles and active-session seeks unnest subject IDs through a MATERIALIZED keys CTE plus the same
-Access ROW-bounded `OFFSET 0` fence; active-session `LIMIT 1` stays after that fence. Set, unassign, restore and rename select each named operand once in the one-row request
+entry tiles and active-session seeks unnest subject IDs through a MATERIALIZED keys CTE plus a
+MATERIALIZED one-row point CTE inside LATERAL with the same Access ROW-bounded `OFFSET 0` fence, so the
+unnest cannot be decorrelated into a hash join; active-session `LIMIT 1` stays after that fence. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use
