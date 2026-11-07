@@ -57,7 +57,7 @@ for (let index = 0; index < args.length;) {
     const value = args[index + 1];
     if (!value || value.startsWith('-')) reject('option ' + argument + ' must have one value');
     if (argument === '-o' && (!value.includes('=') || value.startsWith('='))) reject('invalid -o configuration');
-    if (argument === '-O' && value !== 'exit') reject('unsupported -O operation');
+    if (argument === '-O' && value !== 'exit' && value !== 'check') reject('unsupported -O operation');
     options.push(argument, value);
     index += 2;
   } else if (argument.startsWith('-')) reject('unexpected option ' + argument);
@@ -66,12 +66,12 @@ for (let index = 0; index < args.length;) {
     index += 1;
   }
 }
-const controlExit = options.includes('-O');
+const controlOperation = options.includes('-O') ? options[options.indexOf('-O') + 1] : undefined;
 if (options.filter((argument) => argument === '-O').length > 1) reject('duplicate -O operation');
-if (positionals.length !== (controlExit ? 1 : 2)) reject('expected host and optional command positionals');
+if (positionals.length !== (controlOperation ? 1 : 2)) reject('expected host and optional command positionals');
 const address = positionals[0]!;
 if (!address.startsWith('ops@') || !address.endsWith('.test')) reject('invalid host position');
-const script = controlExit ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
+const script = controlOperation ? 'REMOTE_CHECK_CONTROL_' + controlOperation.toUpperCase() : positionals[1]!;
 const config = JSON.parse(readFileSync(dir + '/config.json', 'utf8'))[address] ?? {};
 const controlPath = options.find((option) => option.startsWith('ControlPath='));
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, ...event }) + '\\n');
@@ -83,8 +83,9 @@ const count = (name: string) => {
   writeFileSync(file, String(seen + 1));
   return seen;
 };
-if (controlExit) {
-  log({ kind: 'control-close', controlPath });
+if (controlOperation) {
+  log({ kind: controlOperation === 'exit' ? 'control-close' : 'control-check', controlPath });
+  if (controlOperation === 'check' && config.controlCheckFails) process.exit(255);
   process.exit(0);
 }
 if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
@@ -558,6 +559,8 @@ async function missingGenericEvidenceRun(
   directory: string,
   events: () => Event[],
 ) {
+  const { currentCheckSourceManifest } = await import('./check-run.ts');
+  const expectedSourceManifest = await currentCheckSourceManifest(directory);
   const source = `const { remoteCheck } = await import(${JSON.stringify(join(repository, 'scripts/remote-check.ts'))});
 let settlement;
 let outcome;
@@ -567,7 +570,8 @@ try {
       cpuQuotaPercent: 800, slots: 2, processorsPerSlot: 4 }],
     workspace: process.env.TEST_WORKSPACE,
     command: ['true'],
-    expectedSourceSha256: '${'a'.repeat(64)}',
+    expectedSourceSha256: ${JSON.stringify(expectedSourceManifest.sourceSha256)},
+    expectedSourceManifest: ${JSON.stringify(expectedSourceManifest)},
     returns: ['missing-output.txt'],
     settled: (receipt) => { settlement = receipt; },
   }, new AbortController().signal);
@@ -735,7 +739,6 @@ test('a refused physical run keeps its predicate primary and cannot start nested
   const run = `${ROOT}/runs/m7v0a9-k1a2b3c4`;
   const diagnostics: string[] = [];
   const original = console.error;
-  let remoteAttempts = 0;
   console.error = (...values: unknown[]) => diagnostics.push(values.map(String).join(' '));
   let result: number | null = null;
   try {
@@ -747,10 +750,7 @@ test('a refused physical run keeps its predicate primary and cannot start nested
         command: ['bun', 'scripts/typecheck.ts'],
       },
       fixture.env,
-      async () => {
-        remoteAttempts += 1;
-        return 0;
-      },
+      undefined,
       () => ({ outcome: 'refused', reason: 'supervisor-marker-invalid' }),
     );
   } finally {
@@ -760,7 +760,6 @@ test('a refused physical run keeps its predicate primary and cannot start nested
   expect(diagnostics).toEqual([
     'stack-run: kernel typecheck physical run recognition refused (supervisor-marker-invalid)',
   ]);
-  expect(remoteAttempts).toBe(0);
   expect(fixture.events()).toEqual([]);
 });
 
@@ -820,19 +819,17 @@ test('growth profile: an unset profile adds no command or returned file', async 
   expect(run.script).not.toContain('GROWTH_PROFILE=');
 });
 
-test('a stack run runs locally when no check host answers, and when no host has enough slots', async () => {
+test('a stack run fails closed when no check host answers, and rejects a request larger than host capacity', async () => {
   const down = scenario({ a: { down: true }, b: { down: true } });
   const first = await stack(down.env, local);
 
-  expect(first.code).toBe(3);
-  expect(first.stderr).toContain('stack-run: the run local, no check host answered');
+  expect(first.code).toBe(REMOTE_TRANSPORT_FAILURE);
+  expect(first.stderr).toContain('no check host answered');
   expect(first.stderr).not.toContain('waiting');
-  expect(first.stdout).toContain('local slot=1/1');
+  expect(first.stdout).not.toContain('local slot');
   const seen = down.events();
   expect(seen.filter((event) => event.kind === 'probe')).toHaveLength(2);
   expect(seen.filter((event) => event.kind === 'slot' || event.kind === 'rsync' || event.kind === 'run')).toEqual([]);
-  expect(existsSync(join(down.lease, 'slot-1.lock'))).toBe(true);
-  expect(spawnSync('flock', ['-n', join(down.lease, 'slot-1.lock'), '-c', 'true']).status).toBe(0);
   expect(readdirSync(down.env.FAKE_DIR!).filter((entry) => entry.includes('.slot.'))).toEqual([]);
 
   // No host has two slots, so the run never asks one.
@@ -843,21 +840,31 @@ test('a stack run runs locally when no check host answers, and when no host has 
   expect(small.events().filter((event) => event.kind === 'slot')).toEqual([]);
 }, 30_000);
 
-test('a stack run that is already on a check host, or that writes files the caller keeps, runs locally', async () => {
-  const cases: [string, Record<string, string>, string[], string][] = [
-    ['inside a slot', { REZICS_STACK_SLOT: '2/4' }, [], 'already inside a stack slot'],
-    ['keeps files', {}, ['--keeps-files'], 'the run keeps files it writes'],
-    ['forced local', { REZICS_STACK_REMOTE: 'off' }, [], 'REZICS_STACK_REMOTE=off'],
+test('local markers do not change placement, and kept files need declared returns', async () => {
+  const cases: [string, Record<string, string>][] = [
+    ['inherited slot marker', { REZICS_STACK_SLOT: '2/4' }],
+    ['remote-off marker', { REZICS_STACK_REMOTE: 'off' }],
   ];
-  for (const [name, extra, options, reason] of cases) {
+  for (const [name, extra] of cases) {
     const { env, events } = scenario({ a: { available: 5 * 2 ** 30, exit: 7 } });
-    const result = await stack({ ...env, ...extra }, local, options);
-    expect(result.code, name).toBe(3);
-    expect(result.stderr, name).toContain(`stack-run: the run local, ${reason}`);
-    expect(events(), name).toEqual([]);
+    const result = await stack({ ...env, ...extra }, local);
+    expect(result.code, name).toBe(7);
+    expect(result.stderr, name).toContain('stack-run: the run on a');
+    expect(result.stdout, name).not.toContain('local slot');
+    expect(
+      events().some((event) => event.kind === 'run'),
+      name,
+    ).toBe(true);
   }
 
-  // The working directory under the remote run root is what counts, not an environment variable.
+  const kept = scenario({ a: { available: 30e9 } });
+  const rejected = await stack(kept.env, local, ['--keeps-files']);
+  expect(rejected.code).toBe(1);
+  expect(rejected.stderr).toContain('declares no returns');
+  expect(rejected.stdout).not.toContain('local slot');
+  expect(kept.events()).toEqual([]);
+
+  // A path-shaped candidate without admitted supervisor evidence is refused before host discovery.
   const onHost = scenario({ a: { available: 5 * 2 ** 30, exit: 7 } });
   const directory = workspace();
   const lines: string[] = [];
@@ -875,22 +882,19 @@ test('a stack run that is already on a check host, or that writes files the call
       },
       onHost.env,
     );
-    expect(code).toBeNull();
+    expect(code).toBe(REMOTE_TRANSPORT_FAILURE);
   } finally {
     console.error = original;
   }
-  expect(lines.join('\n')).toContain('stack-run: the run local, already on a check host');
+  expect(lines.join('\n')).toContain('stack-run: the run physical run recognition refused');
   expect(onHost.events()).toEqual([]);
 
-  // Without a hosts file, or with an unreadable one, the run is local as before and holds the local slot.
+  // An explicitly missing hosts file fails closed without a local slot.
   const none = scenario({ a: { available: 5 * 2 ** 30 } });
-  const unset = await stack({ ...none.env, KERNEL_CHECK_REMOTE: '' }, local);
-  expect(unset.code).toBe(3);
-  expect(unset.stderr).toContain('stack-run: the run local, no check host is configured');
-  expect(unset.stdout).toContain('local slot=1/1');
   const missing = await stack({ ...none.env, KERNEL_CHECK_REMOTE: join(root, 'missing.json') }, local);
-  expect(missing.code).toBe(3);
-  expect(missing.stderr).toContain('is not readable');
+  expect(missing.code).toBe(REMOTE_TRANSPORT_FAILURE);
+  expect(missing.stderr).toContain('hosts file');
+  expect(missing.stdout).not.toContain('local slot');
   expect(none.events()).toEqual([]);
 }, 30_000);
 
@@ -977,7 +981,7 @@ test('a worker does not run locally after a reachable host fails during workspac
   const { env, lease, events } = scenario({ a: { available: 30e9 } });
   const result = await stack({ ...env, GOAL_TASK_ID: 'worker', FAKE_RSYNC_FAIL: '1' }, local);
 
-  expect(result.code).toBe(1);
+  expect(result.code).toBe(REMOTE_TRANSPORT_FAILURE);
   expect(result.stderr).toContain('connection to a failed during workspace upload before a result');
   expect(result.stderr).not.toContain('stack-run: the run local');
   expect(result.stdout).not.toContain('local slot');
@@ -1055,7 +1059,7 @@ test('a worker cannot start a local stack container while a check host is reacha
     expect(stderr, script).toContain('root `bun test`');
   }
   expect(reachable.events().filter((event) => event.kind === 'docker')).toEqual([]);
-  expect(reachable.events().some((event) => event.kind === 'probe')).toBe(true);
+  expect(reachable.events().some((event) => event.kind === 'probe')).toBe(false);
 
   const ask = async (environment: Record<string, string>, cwd: string): Promise<string | null> => {
     const child = Bun.spawn(
@@ -1158,10 +1162,13 @@ function walkFixture(extra: Record<string, string> = {}): WalkFixture {
   };
 }
 
-/** A walk worker's dev-stack run; its stderr is a file, so a test can wait for a visible queue position. */
+/** A walk worker's dev-stack run; keep slot lifetimes real while isolating the fixture from unrelated host ports. */
 function spawnWalk(fixture: WalkFixture, task: string, command: string[]) {
   const stderr = join(fixture.dir, `${task}.stderr`);
-  const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'walk', '--', ...command], {
+  const invoke =
+    `import { runWalk } from ${JSON.stringify(join(repository, 'services/auth/scripts/dev-stack.ts'))};\n` +
+    `process.exitCode = await runWalk(${JSON.stringify(command)}, async () => true);\n`;
+  const child = Bun.spawn([process.execPath, '--eval', invoke], {
     cwd: repository,
     env: { ...fixture.env, GOAL_TASK_ID: task, GOAL_ACCEPTANCE_REQUIRES: 'native' },
     stdin: 'ignore',

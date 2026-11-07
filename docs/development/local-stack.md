@@ -293,6 +293,29 @@ A walk stack is admitted only while the slot lock its launch holds is held: the 
 name alone does not admit a container. Walk stacks do not change check placement; the worker's checks still run on
 hosts a and b.
 
+### Check-host command and output recovery
+
+The check-host supervisor stores the command's root exit in `.command-result` before it reaps detached descendants.
+After the root exits, it allows 250 ms for natural cleanup, sends TERM and then KILL, and stops waiting after eight
+seconds. The same bound applies when a timeout or signal prevents the root child from exiting. `exit-status` is
+published only when the owned tree is gone. If cleanup remains incomplete, the host retains any root result and
+`.owned-cleanup-incomplete.json` but leaves `exit-status` absent, so admission continues to count the active cgroup and
+stale-run cleanup keeps its evidence. Reconnect reports `CLEANING` while the root `.command-result`, lifetime receipt or
+incomplete-cleanup evidence exists without `exit-status`; it exposes the root code only after the terminal file appears.
+The run-lifetime receipt is written before process cleanup starts so a disconnected caller retains the deadline cause
+without mistaking the root command's exit for a terminal result.
+
+Compiler and Kernel database volumes carry the exact create nonce and physical check-run label. The host reconciles
+containers and volumes separately in three bounded attempts; a removal timeout is followed by a fresh listing, and
+failed Docker listings retain their stderr as unsettled cleanup evidence. Run-labeled volumes remain recoverable if
+the container removal completed first. Unsettled cleanup retains the root code in `.owned-resources-incomplete.json`,
+leaves `exit-status` absent and keeps reconnect at `CLEANING`.
+
+The declared return files remain in the physical run directory until the controller copies them. A return-copy
+transport interruption gets one retry against that same host and run before directory cleanup. The retry does not
+rerun the command or switch to another run. If both transfers fail, both transfer codes and bounded diagnostics are
+retained with the native exit and any recorded lifetime cause.
+
 Local Web bindings advertise the four installed Auth management review pages (rename, membership, transfer and
 organization deletion). An explicit `AUTH_MANAGEMENT_PAGE_ROUTES` deployment value is preserved. These links
 select review; native current authority and explicit confirmation still own every command.

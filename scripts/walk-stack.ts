@@ -36,6 +36,8 @@ export type WalkPorts = {
   search: number;
 };
 
+type WalkStackPortAvailability = (ports: WalkPorts) => Promise<boolean>;
+
 /** The host policy: a positive count, bounded so every slot's ports stay below the ephemeral range. */
 export function walkStackLimit(env: Record<string, string | undefined>): number {
   const value = env.REZICS_WALK_STACKS;
@@ -482,6 +484,7 @@ export function admitWalkStack(
   root: string,
   signal?: AbortSignal,
   blocked: ReadonlySet<number> = new Set(),
+  portsAvailable: WalkStackPortAvailability = walkStackPortsAvailable,
 ): Promise<StackSlot> {
   walkStackNames(task, 1);
   const directory = walkStackDirectory(root, env);
@@ -493,7 +496,7 @@ export function admitWalkStack(
     undefined,
     POSITION_INTERVAL_MS,
     signal,
-    async (index) => !blocked.has(index) && (await walkStackPortsAvailable(walkStackPorts(index))),
+    async (index) => !blocked.has(index) && (await portsAvailable(walkStackPorts(index))),
     join(directory, 'tickets'),
   );
 }

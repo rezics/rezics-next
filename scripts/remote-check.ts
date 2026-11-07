@@ -102,6 +102,10 @@ export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
   '.command-result',
   '.command-result.pending',
   '.preparation-started',
+  '.owned-cleanup-incomplete.json',
+  '.owned-cleanup-incomplete.json.pending',
+  '.owned-resources-incomplete.json',
+  '.owned-resources-incomplete.json.pending',
   '.remote-check-slot-count',
   '.remote-check-supervisor',
   '.remote-check-supervisor.pending',
@@ -1867,8 +1871,35 @@ def validate_producer_controls(root,run,host,stage):
     return True
 `;
 
-/** Both normal cleanup and the stale-directory sweep remove only containers labelled for this run. */
+/** Both normal cleanup and the stale-directory sweep reconcile only Docker resources labelled for this run. */
 function cleanupCommands(removeDirectory = true): string {
+  const settleResources = `settle_owned_docker_resources() {
+  attempt=0
+  while [ "$attempt" -lt 3 ]; do
+    containers=$(docker ps -aq --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not inspect owned containers' >&2; return 1; }
+    for container in $containers; do
+      case "$container" in *[!a-f0-9]*|'') echo 'cleanup: invalid owned container identity' >&2; return 1 ;; esac
+      if ! removal_error=$(timeout --kill-after=5s 120s docker rm -f -v "$container" 2>&1 >/dev/null); then
+        printf 'cleanup: container %s removal request failed: %s\\n' "$container" "$removal_error" >&2
+      fi
+    done
+    containers=$(docker ps -aq --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not verify owned containers' >&2; return 1; }
+    if [ -z "$containers" ]; then
+      volumes=$(docker volume ls -q --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not inspect owned volumes' >&2; return 1; }
+      for volume in $volumes; do
+        case "$volume" in ''|*[!A-Za-z0-9_.-]*) echo 'cleanup: invalid owned volume identity' >&2; return 1 ;; esac
+        if ! removal_error=$(timeout --kill-after=5s 120s docker volume rm -f "$volume" 2>&1 >/dev/null); then
+          printf 'cleanup: volume %s removal request failed: %s\\n' "$volume" "$removal_error" >&2
+        fi
+      done
+      volumes=$(docker volume ls -q --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not verify owned volumes' >&2; return 1; }
+      if [ -z "$volumes" ]; then return 0; fi
+    fi
+    attempt=$((attempt + 1))
+  done
+  echo 'cleanup: owned Docker resources remain after 3 settlement attempts' >&2
+  return 1
+}`;
   if (removeDirectory) {
     return `set -eu
 [ "$run_directory" = ${quote(`${ROOT}/runs/`)}"$run_id" ] || exit 1
@@ -1876,10 +1907,8 @@ ${stopSupervisor('"$run_directory"')} || exit 1
 systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1 || true
 if systemctl is-active --quiet "rezics-check-$run_id.scope"; then echo 'cleanup: command scope remains active' >&2; exit 1; fi
 command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
-containers=$(docker ps -aq --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not inspect owned containers' >&2; exit 1; }
-for container in $containers; do docker rm -f -v "$container" >/dev/null || { echo 'cleanup: owned container removal failed' >&2; exit 1; }; done
-remaining=$(docker ps -aq --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not verify owned containers' >&2; exit 1; }
-[ -z "$remaining" ] || { echo 'cleanup: owned containers remain' >&2; exit 1; }
+${settleResources}
+settle_owned_docker_resources || exit 1
 systemctl stop "$run_slice" >/dev/null 2>&1 || true
 if systemctl is-active --quiet "$run_slice"; then echo 'cleanup: run slice remains active' >&2; exit 1; fi
 mkdir -p ${quote(`${ROOT}/receipts`)}
@@ -1887,11 +1916,12 @@ if [ -e "$run_directory" ]; then rm -rf -- "$run_directory" || { echo 'cleanup: 
 [ ! -e "$run_directory" ] || { echo 'cleanup: run directory remains' >&2; exit 1; }
 printf 'CLEANED %s\\n' "$run_id"`;
   }
-  return `${stopSupervisor('"$run_directory"')} || exit 1
+  return `set -eu
+${settleResources}
+${stopSupervisor('"$run_directory"')} || exit 1
 systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
-docker ps -aq --filter "label=rezics.check.run=$run_id" | while IFS= read -r container; do
-  [ -z "$container" ] || docker rm -f -v "$container" >/dev/null 2>&1
-done
+command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
+settle_owned_docker_resources || exit 1
 systemctl stop "$run_slice" >/dev/null 2>&1
 `;
 }
@@ -3085,43 +3115,100 @@ def emit_nonblocking(message):
 # Auth DEFAULT_RUN_TIMEOUT: busy-host docker rm exceeds a 3s probe (host-b SIGTERM cleanup).
 DOCKER_RM_TIMEOUT = 120
 DOCKER_PROBE_TIMEOUT = 5
+DOCKER_SETTLEMENT_ATTEMPTS = 3
 
 def clean_run_resources(run):
     scope = 'rezics-check-' + run + '.scope'
     slice_name = 'rezics-check-' + run.replace('-', '_') + '.slice'
     def call(arguments, timeout=DOCKER_PROBE_TIMEOUT):
-        return subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, text=True)
-    call(['systemctl', 'stop', scope])
-    containers = call(['docker', 'ps', '-aq', '--filter', 'label=rezics.check.run=' + run])
-    delayed = None
-    for container in containers.stdout.split():
-        token = container.strip().lower()
-        if not token:
-            continue
-        if not re.fullmatch(r'[a-f0-9]{12,64}', token):
-            raise RuntimeError('invalid owned container identity')
+        return subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, text=True)
+    diagnostics = []
+    def docker_list(kind):
+        if kind == 'container':
+            arguments = ['docker', 'ps', '-aq', '--filter', 'label=rezics.check.run=' + run]
+        else:
+            arguments = ['docker', 'volume', 'ls', '-q', '--filter', 'label=rezics.check.run=' + run]
         try:
-            call(['docker', 'rm', '-f', '-v', token], DOCKER_RM_TIMEOUT)
+            result = call(arguments)
         except subprocess.TimeoutExpired as error:
-            delayed = error
+            raise RuntimeError('Docker ' + kind + ' listing timed out after ' + str(DOCKER_PROBE_TIMEOUT) + 's') from error
+        if result.returncode:
+            detail = (result.stderr or '').strip()
+            raise RuntimeError('Docker ' + kind + ' listing failed with status ' + str(result.returncode) +
+                (': ' + detail if detail else ''))
+        identities = result.stdout.split()
+        for identity in identities:
+            pattern = r'[a-f0-9]{12,64}' if kind == 'container' else r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
+            if not re.fullmatch(pattern, identity):
+                raise RuntimeError('invalid owned ' + kind + ' identity')
+        return identities
+    def request_remove(kind, identity):
+        arguments = ['docker', 'rm', '-f', '-v', identity] if kind == 'container' else ['docker', 'volume', 'rm', '-f', identity]
+        try:
+            result = call(arguments, DOCKER_RM_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return 'Docker ' + kind + ' ' + identity + ' removal request timed out after ' + str(DOCKER_RM_TIMEOUT) + 's'
+        if result.returncode:
+            detail = (result.stderr or '').strip()
+            return 'Docker ' + kind + ' ' + identity + ' removal request failed with status ' + str(result.returncode) + (
+                ': ' + detail if detail else '')
+        return None
+    def settle(kind):
+        remaining = []
+        for attempt in range(1, DOCKER_SETTLEMENT_ATTEMPTS + 1):
+            try:
+                identities = docker_list(kind)
+            except RuntimeError as error:
+                diagnostics.append(str(error))
+                continue
+            if not identities:
+                return
+            for identity in identities:
+                failure = request_remove(kind, identity)
+                if failure:
+                    diagnostics.append(failure)
+            try:
+                remaining = docker_list(kind)
+            except RuntimeError as error:
+                diagnostics.append(str(error))
+                continue
+            if not remaining:
+                return
+        raise RuntimeError('owned Docker ' + kind + ' resources were not observed absent after ' +
+            str(DOCKER_SETTLEMENT_ATTEMPTS) + ' attempts; remaining=' + ','.join(remaining) +
+            (('; evidence=' + '; '.join(diagnostics)) if diagnostics else ''))
+    call(['systemctl', 'stop', scope])
+    settle('container')
+    settle('volume')
     call(['systemctl', 'stop', slice_name])
-    group = call(['systemctl', 'show', '--property=ControlGroup', '--value', slice_name]).stdout.strip()
+    group_result = call(['systemctl', 'show', '--property=ControlGroup', '--value', slice_name])
+    if group_result.returncode:
+        detail = (group_result.stderr or '').strip()
+        raise RuntimeError('could not inspect owned run cgroup with status ' + str(group_result.returncode) +
+            (': ' + detail if detail else ''))
+    group = group_result.stdout.strip()
     if group:
         path = Path('/sys/fs/cgroup') / group.lstrip('/') / 'cgroup.events'
         try:
-            if 'populated 1' in path.read_text().splitlines():
+            events = path.read_text().splitlines()
+            populated = [line.split() for line in events if line.startswith('populated ')]
+            if len(populated) != 1 or len(populated[0]) != 2 or populated[0][1] not in ('0', '1'):
+                raise RuntimeError('owned run cgroup has no valid populated state')
+            if populated[0][1] != '0':
                 raise RuntimeError('owned run cgroup is still populated')
         except FileNotFoundError:
             pass  # systemd removed the empty cgroup.
-    if delayed:
-        raise delayed
+    for diagnostic in diagnostics:
+        emit_nonblocking('remote-check: Docker cleanup request reconciled: ' + diagnostic[:512])
 
 
 def try_clean_run_resources(run):
     try:
         clean_run_resources(run)
+        return None
     except Exception as error:
         emit_nonblocking('remote-check: owned-container cleanup: ' + str(error)[:512])
+        return str(error)
 
 
 RESOURCE_CGROUP_ROOT = '/sys/fs/cgroup'
@@ -3291,7 +3378,13 @@ def lifetime():
         pass
     reason = None
     stopped_at = None
-    descendants_seen = None
+    root_code = None
+    root_exited_at = None
+    cleanup_term_at = None
+    cleanup_kill_at = None
+    cleanup_deadline = None
+    cleanup_incomplete = False
+    remaining_processes = {}
     packages = []
     diagnostics = None
     while True:
@@ -3307,14 +3400,19 @@ def lifetime():
                 (root / '.resource-terminal-sampled').touch()
         except Exception:
             pass  # Observation cannot change a command's verdict, custody or lifetime.
+        code = child.poll()
         if reason is None:
             if resources is not None and resources.path is not None and oom_kill_count(resources.path) > 0:
                 reason = 'memory-limit'
-            elif (now - started) * 1000 >= limit_ms:
-                reason = 'run-lifetime'
-            elif interrupted:
-                reason = 'abort'
-            elif not (root / '.bun-install-complete').exists():
+            elif code is None and (now - started) * 1000 >= limit_ms:
+                code = child.poll()
+                if code is None:
+                    reason = 'run-lifetime'
+            elif code is None and interrupted:
+                code = child.poll()
+                if code is None:
+                    reason = 'abort'
+            elif code is None and not (root / '.bun-install-complete').exists():
                 current = active_packages(root)
                 if current:
                     packages = current
@@ -3323,12 +3421,25 @@ def lifetime():
         if reason is not None and stopped_at is None:
             diagnostics = preparation_diagnostics(root)
             stopped_at = now
+            cleanup_deadline = now + 8
+            if reason == 'run-lifetime':
+                receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host,
+                           'run': run, 'limitMs': limit_ms,
+                           'elapsedMs': max(limit_ms, round((now - started) * 1000)), 'command': command[:256]}
+                contents = json.dumps(receipt, sort_keys=True)
+                # Let a reconnected caller recover the deadline cause even while this supervisor reaps the run.
+                durable(root / 'run-lifetime-status.json', contents)
+                durable(root.parent.parent / 'receipts' / run / 'run-lifetime-status.json', contents)
             try: resources.sample('terminal', True)
             except Exception: pass
             stop_owned(signal.SIGTERM)
         if stopped_at is not None and now - stopped_at >= 0.2:
             stop_owned(signal.SIGKILL)
-        code = child.poll()
+        if code is not None and root_code is None:
+            root_code = code if code >= 0 else 128 - code
+            root_exited_at = now
+            if cleanup_deadline is None:
+                cleanup_deadline = now + 8
         if code is not None:
             while True:
                 try:
@@ -3336,33 +3447,43 @@ def lifetime():
                         break
                 except ChildProcessError:
                     break
-            remaining = owned_processes()
-            if not remaining:
+            remaining_processes = owned_processes()
+            if not remaining_processes:
                 break
             if reason is None:
-                if descendants_seen is None:
-                    descendants_seen = now
-                elif now - descendants_seen >= 0.25:
-                    reason = 'owned-descendants'
+                if cleanup_term_at is None and now - root_exited_at >= 0.25:
+                    cleanup_term_at = now
+                    stop_owned(signal.SIGTERM)
+                elif cleanup_term_at is not None and cleanup_kill_at is None and now - cleanup_term_at >= 0.2:
+                    cleanup_kill_at = now
+                    stop_owned(signal.SIGKILL)
+        if cleanup_deadline is not None and now >= cleanup_deadline:
+            cleanup_incomplete = True
+            remaining_processes = owned_processes()
+            break
         time.sleep(0.01)
     try: resources.finish()
     except Exception: pass
+    if cleanup_incomplete:
+        cleanup = {'schema': 1, 'status': 'incomplete', 'host': host, 'run': run,
+                   'rootExitCode': root_code, 'remainingProcessCount': len(remaining_processes),
+                   'elapsedMs': round((time.monotonic() - started) * 1000)}
+        contents = json.dumps(cleanup, sort_keys=True)
+        durable(root / '.owned-cleanup-incomplete.json', contents)
+        durable(root.parent.parent / 'receipts' / run / '.owned-cleanup-incomplete.json', contents)
     if reason == 'memory-limit':
-        try_clean_run_resources(run)
         if not (root / '.memory-limit-reported').exists():
             emit_nonblocking(memory_limit_message(root))
             try:
                 (root / '.memory-limit-reported').write_text('')
             except OSError:
                 pass
-        code = 137
+        result_code = 137
     elif reason:
-        # Containers started by a daemon are outside this process tree, but retain exact run labels and cgroup custody.
-        try_clean_run_resources(run)
         elapsed = round((time.monotonic() - started) * 1000)
         receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host, 'run': run,
                    'limitMs': limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
-        code = 124 if reason == 'run-lifetime' else 128 + interrupted[0] if interrupted else 70
+        result_code = 124 if reason == 'run-lifetime' else 128 + interrupted[0] if interrupted else 70
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
                             'packageClassification': 'active' if packages else 'unknown',
@@ -3375,11 +3496,24 @@ def lifetime():
         emit_nonblocking(('remote-check: infrastructure failure: remote run timed out ' if reason == 'run-lifetime'
                           else 'remote-check: infrastructure failure ') + contents)
     else:
-        code = code if code >= 0 else 128 - code
+        result_code = root_code
+    if cleanup_incomplete:
+        # Keep the native/root result and its evidence, but leave admission terminal state absent while owned work
+        # remains. The next admission still sees the live cgroup and stale-run cleanup retains this run directory.
+        return result_code
+    cleanup_error = try_clean_run_resources(run)
+    if cleanup_error is not None:
+        cleanup = {'schema': 1, 'status': 'incomplete', 'host': host, 'run': run,
+                   'rootExitCode': result_code, 'error': cleanup_error[:2048],
+                   'elapsedMs': round((time.monotonic() - started) * 1000)}
+        contents = json.dumps(cleanup, sort_keys=True)
+        durable(root / '.owned-resources-incomplete.json', contents)
+        durable(root.parent.parent / 'receipts' / run / '.owned-resources-incomplete.json', contents)
+        return result_code
     # Terminal admission state is published only after the entire owned tree is reaped and timeout cgroups are empty.
     schedule_maintenance(root, maintenance_source)
-    durable(root / 'exit-status', str(code) + '\n')
-    return code
+    durable(root / 'exit-status', str(result_code) + '\n')
+    return result_code
 
 
 def local_command():
@@ -4222,30 +4356,36 @@ function localRsyncSupportsZstd(): boolean {
 }
 
 /** Reads the command's recorded exit status when ssh itself reports 255. */
-function statusScript(directory: string): string {
+export function statusScript(directory: string): string {
   return `# REMOTE_CHECK_STATUS
 if [ -d ${quote(directory)} ]; then touch ${quote(`${directory}/.alive`)} || exit 75; fi
 if [ -e ${quote(`${directory}/exit-status`)} ]; then cat -- ${quote(`${directory}/exit-status`)}
+elif [ -e ${quote(`${directory}/.owned-cleanup-incomplete.json`)} ] || [ -e ${quote(`${directory}/.owned-resources-incomplete.json`)} ] || [ -e ${quote(`${directory}/run-lifetime-status.json`)} ] || [ -e ${quote(`${directory}/.command-result`)} ]; then printf 'CLEANING\\n'
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
 else printf 'NOT_STARTED\\n'; fi`;
 }
 
-type RemoteCommandStatus = { kind: 'not-started' } | { kind: 'started' } | { kind: 'completed'; code: number };
+type RemoteCommandStatus =
+  | { kind: 'not-started' }
+  | { kind: 'started' }
+  | { kind: 'cleaning' }
+  | { kind: 'completed'; code: number };
 
-function parseRemoteCommandStatus(
-  host: Host,
+export function parseRemoteCommandStatus(
+  host: Pick<Host, 'name'>,
   status: { code: number; output: string; stdout: string },
 ): RemoteCommandStatus {
   const recorded = status.stdout.trim();
   const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
   const invalid =
     status.code !== 0 ||
-    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
+    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING') ||
     parsed > 255;
   if (invalid)
     throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
   if (recorded === 'NOT_STARTED') return { kind: 'not-started' };
   if (recorded === 'STARTED') return { kind: 'started' };
+  if (recorded === 'CLEANING') return { kind: 'cleaning' };
   return { kind: 'completed', code: parsed };
 }
 
@@ -4293,7 +4433,7 @@ async function waitForRemoteCommandStatus(
     assertExecutionAllowed(options, signal);
     const remainingMs = deadlineAt - Date.now();
     const status = await probe(Math.max(1, Math.min(5_000, remainingMs)));
-    if (status && status.kind !== 'started') return status;
+    if (status && status.kind !== 'started' && status.kind !== 'cleaning') return status;
     const delay = status ? pollMs : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
     await sleep(Math.max(1, Math.min(delay, deadlineAt - Date.now())), signal);
   }
@@ -6243,28 +6383,59 @@ async function copyReturns(
     }
   }
   const started = performance.now();
-  const sync = Bun.spawn(
-    [
-      'rsync',
-      '-rpt',
-      '--dirs',
-      '--no-links',
-      '--info=progress2',
-      '--mkpath',
-      '--from0',
-      '--files-from=-',
-      '-e',
-      rshOptions(host, connectionId),
-      `${host.address}:${directory}/`,
-      `${resolve(options.workspace)}/`,
-    ],
-    { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'pipe', stderr: 'pipe' },
-  );
-  const { code: synced, vanishedFiles } = await finishedRsync(sync, signal, host, 'returns copy', transferLimit, false);
+  let synced = 0;
+  let vanishedFiles = 0;
+  let firstFailure: RemoteTransportError | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (signal.aborted) throw new Aborted();
+    const sync = Bun.spawn(
+      [
+        'rsync',
+        '-rpt',
+        '--dirs',
+        '--no-links',
+        '--info=progress2',
+        '--mkpath',
+        '--from0',
+        '--files-from=-',
+        '-e',
+        rshOptions(host, connectionId),
+        `${host.address}:${directory}/`,
+        `${resolve(options.workspace)}/`,
+      ],
+      { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'pipe', stderr: 'pipe' },
+    );
+    try {
+      ({ code: synced, vanishedFiles } = await finishedRsync(sync, signal, host, 'returns copy', transferLimit, false));
+      if (synced !== 0 && synced !== 24) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
+      break;
+    } catch (error) {
+      if (signal.aborted) throw new Aborted();
+      if (!(error instanceof RemoteTransportError) || error.step !== 'returns copy' || attempt !== 0) {
+        if (firstFailure && error instanceof RemoteTransportError && error.step === 'returns copy') {
+          const transferDiagnostic = (failure: RemoteTransportError) => {
+            const detail = failure.message.includes('; ')
+              ? failure.message.slice(failure.message.indexOf('; ') + 2, failure.message.indexOf('; ') + 162)
+              : '';
+            return detail ? `transport ${failure.code}: ${detail}` : `rsync exit ${failure.code}`;
+          };
+          throw new RemoteTransportError(
+            host.name,
+            'returns copy',
+            error.code,
+            false,
+            `same-run retry failed; first attempt: ${transferDiagnostic(firstFailure)}; retry: ${transferDiagnostic(error)}`,
+          );
+        }
+        throw error;
+      }
+      firstFailure = error;
+      console.error(`remote-check: retrying returned outputs from ${host.name} for the same physical run`);
+    }
+  }
   reportDuration('rsync back', started, host.name);
   if (signal.aborted) throw new Aborted();
   if (synced === 24) reportVanishedFiles('from', host.name, vanishedFiles);
-  else if (synced !== 0) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
   const result: RemoteReturnManifest = {
     schema: 1,
     status: missing.length ? 'missing' : 'complete',
@@ -7114,6 +7285,16 @@ async function runLeased(
       if (status.kind === 'not-started') {
         commandTerminal = true;
         throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
+      }
+      if (status.kind === 'cleaning') {
+        preserveRemoteRun = true;
+        throw new RemoteTransportError(
+          host.name,
+          'remote command cleanup',
+          REMOTE_TRANSPORT_FAILURE,
+          false,
+          'the host retained its root result but has not published terminal cleanup; the physical run remains owned',
+        );
       }
       if (status.kind === 'started') {
         console.error(`remote-check: deadline reached after ${maxMs} ms`);

@@ -155,48 +155,110 @@ test('a focused typecheck reports only diagnostics in the named files', () => {
 
 test("the check's PostgreSQL container keeps its logs when it exits early and is removed by cleanup", () => {
   const calls: string[][] = [];
+  const containers = new Map<string, string>();
+  const attemptNonces = new Set<string>();
   const stubDocker = (args: string[]): string => {
     calls.push(args);
-    return args[0] === 'run' ? 'postgres-container' : '';
+    if (args[0] === 'volume' && args[1] === 'create') return args.at(-1)!;
+    if (args[0] === 'run') {
+      const nonce = args
+        .find((arg) => arg.startsWith(`${KERNEL_CHECK_NONCE_LABEL}=`))
+        ?.slice(`${KERNEL_CHECK_NONCE_LABEL}=`.length);
+      if (nonce) containers.set(nonce, 'postgres-container');
+      return 'postgres-container';
+    }
+    if (args[0] === 'ps') return containers.get(args.at(-1)!.slice(`label=${KERNEL_CHECK_NONCE_LABEL}=`.length)) ?? '';
+    if (args[0] === 'rm') {
+      for (const [nonce, id] of containers) if (id === args.at(-1)) containers.delete(nonce);
+    }
+    if (args[0] === 'inspect')
+      throw new Error(`docker inspect ${args.at(-1)} failed with status 1: Error: No such object: ${args.at(-1)}`);
+    return '';
   };
 
-  const postgresContainer = startPostgresContainer(stubDocker);
+  const postgresContainer = startPostgresContainer(stubDocker, { attemptNonces, runId: 'host-run' });
 
-  expect(calls[0]?.[0]).toBe('run');
-  expect(calls[0]).toContain('--rm');
-  expect(calls[0]).toContain('shared_buffers=32MB');
+  const run = calls.find((args) => args[0] === 'run')!;
+  expect(calls[0]).toEqual([
+    'volume',
+    'create',
+    '--label',
+    `${KERNEL_CHECK_PID_LABEL}=${process.pid}`,
+    '--label',
+    `${KERNEL_CHECK_NONCE_LABEL}=${[...attemptNonces][0]}`,
+    '--label',
+    'rezics.check.run=host-run',
+    `rezics-kernel-pg-${process.pid}-${[...attemptNonces][0]}`,
+  ]);
+  expect(run).toContain('--rm');
+  expect(run).toContain('shared_buffers=32MB');
+  expect(run).toContain(
+    `type=volume,source=rezics-kernel-pg-${process.pid}-${[...attemptNonces][0]},destination=/var/lib/postgresql`,
+  );
   expect(postgresContainer).toBe('postgres-container');
 
-  cleanup(['search-container', postgresContainer], stubDocker);
-  expect(calls.slice(1)).toEqual([
-    ['rm', '-f', '-v', 'search-container'],
+  containers.set('search-nonce', 'search-container');
+  attemptNonces.add('search-nonce');
+  cleanup(['search-container', postgresContainer], stubDocker, true, attemptNonces);
+  expect(calls.filter((args) => args[0] === 'rm')).toEqual([
     ['rm', '-f', '-v', 'postgres-container'],
+    ['rm', '-f', '-v', 'search-container'],
   ]);
+  expect(
+    calls.some(
+      (args) =>
+        args[0] === 'volume' &&
+        args[1] === 'ls' &&
+        args.includes(`label=${KERNEL_CHECK_NONCE_LABEL}=${[...attemptNonces][0]}`),
+    ),
+  ).toBe(true);
 });
 
 test('a failed postgres create reaps the check nonce', () => {
   const calls: string[][] = [];
+  let present = true;
   const docker = (args: string[]): string => {
     calls.push(args);
+    if (args[0] === 'volume' && args[1] === 'create') return args.at(-1)!;
     if (args[0] === 'run') throw new Error('docker run failed with status 125: daemon error');
-    return args[0] === 'ps' ? 'half-pg' : '';
+    if (args[0] === 'ps') return present ? 'half-pg' : '';
+    if (args[0] === 'rm') present = false;
+    return '';
   };
   expect(() => startPostgresContainer(docker, { nonce: 'nonce-check' })).toThrow(/status 125/);
   expect(calls[0]).toContain(`${KERNEL_CHECK_PID_LABEL}=${process.pid}`);
   expect(calls[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
-  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
-  expect(calls[2]).toEqual(['rm', '-f', '-v', 'half-pg']);
+  expect(calls[1]![0]).toBe('run');
+  expect(calls[2]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
+  expect(calls[3]).toEqual(['rm', '-f', '-v', 'half-pg']);
+  expect(calls[4]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
   expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
 });
 
 test('a postgres spawn timeout reaps the nonce, retries once, then keeps the second failure', () => {
   const calls: string[][] = [];
+  const present = new Set<string>();
+  const attempts = new Set<string>();
   const docker = (args: string[]): string => {
     calls.push(args);
-    if (args[0] === 'run') throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
-    return args[0] === 'ps' ? 'half-pg' : '';
+    if (args[0] === 'volume' && args[1] === 'create') return args.at(-1)!;
+    if (args[0] === 'run') {
+      const nonce = args
+        .find((arg) => arg.startsWith(`${KERNEL_CHECK_NONCE_LABEL}=`))
+        ?.slice(`${KERNEL_CHECK_NONCE_LABEL}=`.length);
+      if (nonce) present.add(nonce);
+      throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    }
+    if (args[0] === 'ps') {
+      const nonce = args.at(-1)?.slice(`label=${KERNEL_CHECK_NONCE_LABEL}=`.length);
+      return nonce && present.has(nonce) ? `half-${nonce}` : '';
+    }
+    if (args[0] === 'rm') {
+      for (const nonce of present) if (args.at(-1) === `half-${nonce}`) present.delete(nonce);
+    }
+    return '';
   };
-  expect(() => startPostgresContainer(docker, { nonce: 'nonce-check' })).toThrow(/ETIMEDOUT/);
+  expect(() => startPostgresContainer(docker, { nonce: 'nonce-check', attemptNonces: attempts })).toThrow(/ETIMEDOUT/);
   const runs = calls.filter((args) => args[0] === 'run');
   expect(runs).toHaveLength(2);
   expect(runs[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
@@ -205,18 +267,41 @@ test('a postgres spawn timeout reaps the nonce, retries once, then keeps the sec
     ?.slice(`${KERNEL_CHECK_NONCE_LABEL}=`.length);
   expect(retryNonce).toBeDefined();
   expect(retryNonce).not.toBe('nonce-check');
-  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
-  expect(calls[2]).toEqual(['rm', '-f', '-v', 'half-pg']);
+  expect(calls[2]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
+  expect(calls).toContainEqual(['rm', '-f', '-v', 'half-nonce-check']);
+  expect(calls).toContainEqual(['rm', '-f', '-v', `half-${retryNonce}`]);
+  expect(attempts).toEqual(new Set(['nonce-check', retryNonce]));
+  expect(present.size).toBe(0);
 });
 
-test('OpenSearch check run carries a nonce and cleanup surfaces docker rm failure', () => {
+test('OpenSearch check run carries a nonce and cleanup distinguishes requested removal from observed absence', () => {
   const args = searchCheckRunArgs('rezics-search:test', 'search-nonce');
   expect(args[0]).toBe('run');
   expect(args).toContain(`${KERNEL_CHECK_NONCE_LABEL}=search-nonce`);
-  expect(() =>
-    cleanup(['search-only'], (command) => {
+  const calls: string[][] = [];
+  cleanup(
+    ['search-only'],
+    (command) => {
+      calls.push(command);
       if (command[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+      if (command[0] === 'inspect') throw new Error('Error: No such object: search-only');
       return '';
-    }),
-  ).toThrow('docker rm ETIMEDOUT');
+    },
+    true,
+    new Set(),
+  );
+  expect(calls[0]).toEqual(['rm', '-f', '-v', 'search-only']);
+  expect(calls[1]).toEqual(['inspect', '-f', '{{.Id}}', 'search-only']);
+
+  expect(() =>
+    cleanup(
+      ['unobserved'],
+      (command) => {
+        if (command[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+        throw new Error('docker inspect daemon unavailable');
+      },
+      true,
+      new Set(),
+    ),
+  ).toThrow(/unsettled.*daemon unavailable/);
 });

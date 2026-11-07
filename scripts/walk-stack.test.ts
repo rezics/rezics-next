@@ -207,14 +207,41 @@ test('walk admission preserves an occupied slot and reuses it after its listener
   }
 });
 
+test('walk admission checks each candidate port group before taking its lease slot', async () => {
+  const directory = await mkdtemp(join(import.meta.dir, '../.temp/walk-port-admission-'));
+  const env = { REZICS_WALK_STACK_DIR: directory, REZICS_WALK_STACKS: '2' };
+  const checked: number[] = [];
+  try {
+    const slot = await admitWalkStack('port-probe', env, import.meta.dir, undefined, new Set(), async (ports) => {
+      checked.push(ports.web);
+      return ports.web !== 20_010;
+    });
+    try {
+      expect(slot.index).toBe(2);
+      expect([...new Set(checked)]).toEqual([20_010, 20_020]);
+    } finally {
+      await slot.release();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 if (process.getuid && process.getuid() !== 0) {
-  test('the non-root walk caller repeatedly acquires and releases a real available host slot', async () => {
+  test('the non-root walk caller repeatedly acquires and releases host lease slots', async () => {
     const directory = await mkdtemp(join(import.meta.dir, '../.temp/walk-caller-'));
     const capacity = 6;
     const env = { REZICS_WALK_STACK_DIR: directory, REZICS_WALK_STACKS: String(capacity) };
     try {
       for (let attempt = 1; attempt <= 2; attempt++) {
-        const slot = await admitWalkStack(`caller-${attempt}`, env, import.meta.dir, AbortSignal.timeout(15_000));
+        const slot = await admitWalkStack(
+          `caller-${attempt}`,
+          env,
+          import.meta.dir,
+          AbortSignal.timeout(15_000),
+          new Set(),
+          async () => true,
+        );
         try {
           const index = slot.index;
           if (index === null) throw new Error('walk admission returned no slot');

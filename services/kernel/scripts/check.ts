@@ -47,11 +47,12 @@ import {
   newCompilerNonce,
   ownerProcessIdentity,
   postgresPublishArgs,
-  reapLabeledContainers,
   retainOriginalAndCleanupFailure,
   resolvePostgresListenUrl,
   retryDockerCreateOnce,
   runDocker,
+  settleDockerAttempt,
+  settleDockerContainerRemoval,
   type PostgresListen,
 } from '../../../scripts/compiler-database.ts';
 
@@ -63,6 +64,7 @@ let reyloDirectory = '';
 let analysisDispose: (() => void) | undefined;
 let postgresListen: PostgresListen | undefined;
 let failedFileOutputs: string[] = [];
+let currentCheckNonces = new Set<string>();
 const POSTGRES_MAX_CONNECTIONS = 500;
 const POSTGRES_CONNECTION_SAMPLE_MS = 250;
 const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname';
@@ -742,6 +744,10 @@ async function psql(sql: string): Promise<void> {
 export const KERNEL_CHECK_PID_LABEL = 'rezics.kernel.check.pid';
 export const KERNEL_CHECK_NONCE_LABEL = 'rezics.kernel.check.nonce';
 
+function postgresVolumeName(ownerPid: string, nonce: string): string {
+  return `rezics-kernel-pg-${ownerPid}-${nonce.replace(/[^A-Za-z0-9_.-]/g, '-')}`;
+}
+
 export function docker(args: string[]): string {
   return runDocker(args, { cwd: directory, env: process.env });
 }
@@ -933,6 +939,10 @@ export type PostgresContainerOptions = {
   socketDirectory?: string;
   /** Labels this start's container so a failed `docker run` can reap it; a fresh nonce by default. */
   nonce?: string;
+  /** Retains every exact create identity for same-run terminal cleanup, including a timed-out retry. */
+  attemptNonces?: Set<string>;
+  /** Host lifetime label lets the physical supervisor recover an orphaned data volume. */
+  runId?: string;
 };
 
 function postgresSocketMount(socketDirectory: string): string[] {
@@ -955,7 +965,22 @@ export function startPostgresContainer(
   const network = socketDirectory ? [] : dockerNetworkArgs();
   const publish = socketDirectory ? [] : postgresPublishArgs(Number(pid), network);
   const start = (attemptNonce: string): string => {
+    options.attemptNonces?.add(attemptNonce);
     try {
+      const volume = postgresVolumeName(pid, attemptNonce);
+      const volumeArgs = [
+        'volume',
+        'create',
+        '--label',
+        `${KERNEL_CHECK_PID_LABEL}=${pid}`,
+        '--label',
+        `${KERNEL_CHECK_NONCE_LABEL}=${attemptNonce}`,
+        ...(options.runId ? ['--label', `rezics.check.run=${options.runId}`] : []),
+        volume,
+      ];
+      const created = dockerCommand(volumeArgs).trim();
+      if (created !== volume)
+        throw new Error(`Kernel PostgreSQL created unexpected volume ${JSON.stringify(created)} (expected ${volume})`);
       return dockerCommand([
         'run',
         '-d',
@@ -971,7 +996,7 @@ export function startPostgresContainer(
         ...publish,
         // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
         '--mount',
-        `type=volume,destination=/var/lib/postgresql,volume-label=${KERNEL_CHECK_PID_LABEL}=${pid}`,
+        `type=volume,source=${volume},destination=/var/lib/postgresql`,
         ...socketMount,
         '-e',
         'POSTGRES_USER=rezics',
@@ -1000,7 +1025,17 @@ export function startPostgresContainer(
         ...(socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : []),
       ]);
     } catch (error) {
-      reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, attemptNonce, dockerCommand);
+      const settlement = settleDockerAttempt(
+        KERNEL_CHECK_NONCE_LABEL,
+        attemptNonce,
+        [
+          { name: KERNEL_CHECK_PID_LABEL, value: pid },
+          { name: KERNEL_CHECK_NONCE_LABEL, value: attemptNonce },
+        ],
+        dockerCommand,
+      );
+      if (settlement.status === 'unsettled')
+        throw retainOriginalAndCleanupFailure(error, settlement.error, 'Kernel PostgreSQL create failed');
       throw error;
     }
   };
@@ -1035,29 +1070,46 @@ export function searchCheckRunArgs(image: string, nonce: string): string[] {
 }
 
 export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand: DockerCommand = docker): void {
-  // One listing carries each owner, so a concurrent run that exits meanwhile cannot fail an inspect.
-  const rows = dockerCommand([
+  // The owner label drives both container and named-volume cleanup after its process is affirmatively gone.
+  const ownerLabel = `rezics.kernel.${kind}.pid`;
+  const containerOwners = dockerCommand([
     'ps',
     '-a',
     '--filter',
-    `label=rezics.kernel.${kind}.pid`,
+    `label=${ownerLabel}`,
     '--format',
-    `{{.ID}} {{.Label "rezics.kernel.${kind}.pid"}}`,
+    `{{.Label "${ownerLabel}"}}`,
   ])
     .split('\n')
-    .filter(Boolean);
-  for (const row of rows) {
-    const [id, owner] = row.split(' ');
+    .map((owner) => owner.trim())
+    .filter((owner) => owner.length > 0);
+  const volumeOwners = dockerCommand([
+    'volume',
+    'ls',
+    '--filter',
+    `label=${ownerLabel}`,
+    '--format',
+    `{{.Label "${ownerLabel}"}}`,
+  ])
+    .split('\n')
+    .map((owner) => owner.trim())
+    .filter((owner) => owner.length > 0);
+  for (const owner of new Set([...containerOwners, ...volumeOwners])) {
+    const ownerPid = Number(owner);
+    if (!/^[1-9]\d*$/.test(owner) || !Number.isSafeInteger(ownerPid))
+      throw new Error(`Kernel check Docker returned an invalid owner pid: ${owner}`);
+    let alive = true;
     try {
-      process.kill(Number(owner), 0);
-    } catch {
-      // Removing a container that is already gone is the outcome we want.
-      try {
-        dockerCommand(['rm', '-f', '-v', id!]);
-      } catch {
-        // A concurrent cleanup may already have removed it.
-      }
-      rmSync(isolatedPostgresSocketDir(Number(owner)), { recursive: true, force: true });
+      process.kill(ownerPid, 0);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') alive = false;
+      else if (code !== 'EPERM') throw error;
+    }
+    if (!alive) {
+      const settlement = settleDockerAttempt(ownerLabel, owner, [{ name: ownerLabel, value: owner }], dockerCommand);
+      if (settlement.status === 'unsettled') throw settlement.error;
+      rmSync(isolatedPostgresSocketDir(ownerPid), { recursive: true, force: true });
     }
   }
 }
@@ -1066,26 +1118,45 @@ export function cleanup(
   containers: readonly string[] = [searchContainer, container],
   dockerCommand: DockerCommand = docker,
   wait = true,
+  attemptNonces: ReadonlySet<string> = currentCheckNonces,
 ): void {
   postgresListen?.stop();
   postgresListen = undefined;
   rmSync(isolatedPostgresSocketDir(Number(pid)), { recursive: true, force: true });
   const failures: unknown[] = [];
-  for (const id of containers) {
-    if (!id) continue;
-    if (!wait) {
-      beginDetachedDockerRm(id, { cwd: directory, env: process.env });
-      continue;
+  if (!wait) {
+    for (const id of containers) {
+      if (id) beginDetachedDockerRm(id, { cwd: directory, env: process.env });
     }
-    try {
-      dockerCommand(['rm', '-f', '-v', id]);
-    } catch (error) {
-      failures.push(error);
+  } else {
+    // Every production-created container has one of these exact nonces; label reconciliation also finds a container
+    // whose docker run timed out before returning its ID. Direct-ID cleanup remains for isolated helper callers.
+    if (attemptNonces.size === 0) {
+      for (const id of containers) {
+        if (!id) continue;
+        const settlement = settleDockerContainerRemoval(id, dockerCommand);
+        if (settlement.status === 'unsettled') failures.push(settlement.error);
+      }
+    }
+    for (const nonce of attemptNonces) {
+      const settlement = settleDockerAttempt(
+        KERNEL_CHECK_NONCE_LABEL,
+        nonce,
+        [
+          { name: KERNEL_CHECK_PID_LABEL, value: pid },
+          { name: KERNEL_CHECK_NONCE_LABEL, value: nonce },
+        ],
+        dockerCommand,
+      );
+      if (settlement.status === 'unsettled') failures.push(settlement.error);
     }
   }
   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
   analysisDispose?.();
-  if (failures[0]) throw failures[0];
+  if (failures.length) {
+    const details = failures.map((error) => (error instanceof Error ? error.message : String(error)));
+    throw new AggregateError(failures, `Kernel check resource settlement is unsettled: ${details.join('; ')}`);
+  }
 }
 
 function fail(message: string): never {
@@ -1177,7 +1248,10 @@ async function main(): Promise<void> {
   let env: NodeJS.ProcessEnv = process.env;
   await withCommandPhase('database-image', async () => {
     process.stdout.write(`Kernel check database owner ${ownerProcessIdentity()}\n`);
-    container = startPostgresContainer();
+    container = startPostgresContainer(docker, {
+      attemptNonces: currentCheckNonces,
+      runId: process.env.REZICS_CHECK_RUN,
+    });
     postgresListen = await resolvePostgresListenUrl(container, Number(pid));
     url = postgresListen.url;
     process.env.KERNEL_DATABASE_CONTAINER = container;
@@ -1253,10 +1327,21 @@ async function main(): Promise<void> {
             withCommandPhase('database-image', async () => {
               const searchImage = buildSearchImage();
               const searchNonce = newCompilerNonce(Number(pid));
+              currentCheckNonces.add(searchNonce);
               try {
                 searchContainer = docker(searchCheckRunArgs(searchImage, searchNonce));
               } catch (error) {
-                reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, searchNonce, docker);
+                const settlement = settleDockerAttempt(
+                  KERNEL_CHECK_NONCE_LABEL,
+                  searchNonce,
+                  [
+                    { name: KERNEL_CHECK_PID_LABEL, value: pid },
+                    { name: KERNEL_CHECK_NONCE_LABEL, value: searchNonce },
+                  ],
+                  docker,
+                );
+                if (settlement.status === 'unsettled')
+                  throw retainOriginalAndCleanupFailure(error, settlement.error, 'Kernel search create failed');
                 throw error;
               }
               const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
@@ -1364,6 +1449,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
+  currentCheckNonces = new Set();
   // While the shared placement has the run, it forwards the signal and releases the host slot. A local run removes
   // the containers this process started.
   process.on('SIGINT', () => {

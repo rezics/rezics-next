@@ -51,6 +51,77 @@ export type PostgresListen = {
 
 export type DockerCommand = (args: string[]) => string;
 
+export type DockerLabel = { name: string; value: string };
+
+export type DockerSettlement =
+  | {
+      status: 'settled';
+      attempts: number;
+      containers: string[];
+      volumes: string[];
+      requestFailures: string[];
+    }
+  | {
+      status: 'unsettled';
+      attempts: number;
+      containers: string[];
+      volumes: string[];
+      error: Error;
+    };
+
+const DOCKER_SETTLEMENT_ATTEMPTS = 3;
+const DOCKER_RESOURCE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+
+function dockerErrorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function dockerObjectAbsent(error: unknown, id: string): boolean {
+  const text = dockerErrorText(error);
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|\\n|: )Error: No such object: ${escaped}(?:$|\\n)`).test(text);
+}
+
+function dockerResourceIds(output: string, kind: string): string[] {
+  const ids = output
+    .split('\n')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  for (const id of ids) {
+    // Docker output crosses a process boundary and is passed back as an argv token below.
+    if (!DOCKER_RESOURCE_IDENTITY.test(id))
+      throw new Error(`compiler-database: Docker returned an invalid ${kind} identity`);
+  }
+  return [...new Set(ids)];
+}
+
+function labelFilters(labels: readonly DockerLabel[]): string[] {
+  return labels.flatMap(({ name, value }) => ['--filter', `label=${name}=${value}`]);
+}
+
+function settlementError(
+  label: string,
+  value: string,
+  attempts: number,
+  containers: string[],
+  volumes: string[],
+  failures: string[],
+): DockerSettlement {
+  const details = [
+    ...failures,
+    ...(containers.length ? [`containers remain: ${containers.join(', ')}`] : []),
+    ...(volumes.length ? [`volumes remain: ${volumes.join(', ')}`] : []),
+  ];
+  const message = `compiler-database: owned Docker attempt ${label}=${value} is unsettled after ${attempts} attempts: ${details.join('; ') || 'Docker state was unavailable'}`;
+  return {
+    status: 'unsettled',
+    attempts,
+    containers,
+    volumes,
+    error: new Error(message),
+  };
+}
+
 /** Image builds and pulls are bounded; they are not the 5s probe window. */
 export const DOCKER_BUILD_TIMEOUT_MS = 600_000;
 
@@ -58,6 +129,7 @@ export function dockerTimeoutMs(args: readonly string[]): number {
   const verb = args[0];
   if (verb === 'run' || verb === 'create' || verb === 'start' || verb === 'stop') return DOCKER_RUN_TIMEOUT_MS;
   if (verb === 'rm' && args.includes('-f')) return DOCKER_RUN_TIMEOUT_MS;
+  if (verb === 'volume' && (args[1] === 'create' || args[1] === 'rm')) return DOCKER_RUN_TIMEOUT_MS;
   // Labelled reap lists every matching id; that is owned cleanup, not a 5s inspect/exec/port probe.
   if (verb === 'ps' && args.includes('-aq')) return DOCKER_RUN_TIMEOUT_MS;
   if (verb === 'build' || verb === 'pull') return DOCKER_BUILD_TIMEOUT_MS;
@@ -98,9 +170,27 @@ export function retainOriginalAndCleanupFailure(original: unknown, cleanup: unkn
   });
 }
 
-/** Forced removal of one owned container and its anonymous volume. */
+/** Forced removal of one owned container. Its separately labelled data volume is settled by nonce. */
 export function compilerDatabaseRemoveArgs(id: string): string[] {
   return ['rm', '-f', '-v', id];
+}
+
+export function compilerDatabaseVolumeName(pid: number, nonce: string): string {
+  const safeNonce = nonce.replace(/[^A-Za-z0-9_.-]/g, '-');
+  return `rezics-compiler-pg-${pid}-${safeNonce}`;
+}
+
+export function compilerDatabaseVolumeCreateArgs(pid: number, nonce: string, runId?: string): string[] {
+  return [
+    'volume',
+    'create',
+    '--label',
+    `${COMPILER_PID_LABEL}=${pid}`,
+    '--label',
+    `${COMPILER_NONCE_LABEL}=${nonce}`,
+    ...(runId ? ['--label', `rezics.check.run=${runId}`] : []),
+    compilerDatabaseVolumeName(pid, nonce),
+  ];
 }
 
 /** Presence check after ordinary removal; a missing object is settlement, not a probe timeout. */
@@ -109,14 +199,157 @@ export function compilerDatabaseInspectArgs(id: string): string[] {
 }
 
 /** Labelled volumes for this owner pid; ordinary cleanup requires the list to be empty. */
-export function compilerDatabaseVolumeLsArgs(pid: number): string[] {
-  return ['volume', 'ls', '-q', '--filter', `label=${COMPILER_PID_LABEL}=${pid}`];
+export function compilerDatabaseVolumeLsArgs(pid: number, nonce?: string): string[] {
+  return [
+    'volume',
+    'ls',
+    '-q',
+    '--filter',
+    `label=${COMPILER_PID_LABEL}=${pid}`,
+    ...(nonce ? ['--filter', `label=${COMPILER_NONCE_LABEL}=${nonce}`] : []),
+  ];
+}
+
+export function compilerDatabaseVolumeRemoveArgs(id: string): string[] {
+  return ['volume', 'rm', '-f', id];
+}
+
+function settleDockerVolumes(labels: readonly DockerLabel[], dockerCommand: DockerCommand): DockerSettlement {
+  const failures: string[] = [];
+  let volumes: string[] = [];
+  for (let attempt = 1; attempt <= DOCKER_SETTLEMENT_ATTEMPTS; attempt += 1) {
+    try {
+      volumes = dockerResourceIds(dockerCommand(['volume', 'ls', '-q', ...labelFilters(labels)]), 'volume');
+    } catch (error) {
+      failures.push(`volume listing: ${dockerErrorText(error)}`);
+      continue;
+    }
+    for (const id of volumes) {
+      try {
+        dockerCommand(compilerDatabaseVolumeRemoveArgs(id));
+      } catch (error) {
+        failures.push(`volume ${id} removal: ${dockerErrorText(error)}`);
+      }
+    }
+    try {
+      volumes = dockerResourceIds(dockerCommand(['volume', 'ls', '-q', ...labelFilters(labels)]), 'volume');
+    } catch (error) {
+      failures.push(`volume settlement listing: ${dockerErrorText(error)}`);
+      continue;
+    }
+    if (volumes.length === 0) {
+      return { status: 'settled', attempts: attempt, containers: [], volumes, requestFailures: failures };
+    }
+  }
+  return settlementError(
+    labels.map(({ name, value }) => `${name}=${value}`).join('&'),
+    'volumes',
+    DOCKER_SETTLEMENT_ATTEMPTS,
+    [],
+    volumes,
+    failures,
+  );
+}
+
+/**
+ * Reconcile one known Docker container. A timed-out rm is only a request: only the exact `No such object` inspect
+ * response proves absence. Other inspect failures remain visible and the bounded retry returns explicit uncertainty.
+ */
+export function settleDockerContainerRemoval(id: string, dockerCommand: DockerCommand = docker): DockerSettlement {
+  if (!id || !DOCKER_RESOURCE_IDENTITY.test(id))
+    throw new Error('compiler-database: Docker container identity is invalid');
+  const failures: string[] = [];
+  for (let attempt = 1; attempt <= DOCKER_SETTLEMENT_ATTEMPTS; attempt += 1) {
+    try {
+      dockerCommand(compilerDatabaseRemoveArgs(id));
+    } catch (error) {
+      failures.push(`container ${id} removal: ${dockerErrorText(error)}`);
+    }
+    try {
+      const observed = dockerCommand(compilerDatabaseInspectArgs(id)).trim();
+      if (observed) {
+        failures.push(`container ${id} remains after removal`);
+        continue;
+      }
+      failures.push(`container ${id} inspect returned no identity`);
+    } catch (error) {
+      if (dockerObjectAbsent(error, id)) {
+        return { status: 'settled', attempts: attempt, containers: [], volumes: [], requestFailures: failures };
+      }
+      failures.push(`container ${id} inspect: ${dockerErrorText(error)}`);
+    }
+  }
+  return settlementError('container', id, DOCKER_SETTLEMENT_ATTEMPTS, [id], [], failures);
+}
+
+/**
+ * Settle containers and volumes belonging to one exact create nonce. Lists are re-read after removal; an unavailable
+ * Docker daemon is returned as `unsettled` instead of being mistaken for absence.
+ */
+export function settleDockerAttempt(
+  label: string,
+  value: string,
+  volumeLabels: readonly DockerLabel[] = [],
+  dockerCommand: DockerCommand = docker,
+): DockerSettlement {
+  const failures: string[] = [];
+  let containers: string[] = [];
+  let volumes: string[] = [];
+  const filters = [{ name: label, value }];
+  for (let attempt = 1; attempt <= DOCKER_SETTLEMENT_ATTEMPTS; attempt += 1) {
+    try {
+      containers = dockerResourceIds(dockerCommand(['ps', '-aq', ...labelFilters(filters)]), 'container');
+    } catch (error) {
+      failures.push(`container listing: ${dockerErrorText(error)}`);
+      continue;
+    }
+    for (const id of containers) {
+      try {
+        dockerCommand(compilerDatabaseRemoveArgs(id));
+      } catch (error) {
+        failures.push(`container ${id} removal: ${dockerErrorText(error)}`);
+      }
+    }
+    try {
+      containers = dockerResourceIds(dockerCommand(['ps', '-aq', ...labelFilters(filters)]), 'container');
+    } catch (error) {
+      failures.push(`container settlement listing: ${dockerErrorText(error)}`);
+      continue;
+    }
+    if (containers.length) continue;
+    if (volumeLabels.length === 0) {
+      return { status: 'settled', attempts: attempt, containers, volumes: [], requestFailures: failures };
+    }
+    try {
+      volumes = dockerResourceIds(dockerCommand(['volume', 'ls', '-q', ...labelFilters(volumeLabels)]), 'volume');
+    } catch (error) {
+      failures.push(`volume listing: ${dockerErrorText(error)}`);
+      continue;
+    }
+    for (const id of volumes) {
+      try {
+        dockerCommand(compilerDatabaseVolumeRemoveArgs(id));
+      } catch (error) {
+        failures.push(`volume ${id} removal: ${dockerErrorText(error)}`);
+      }
+    }
+    try {
+      volumes = dockerResourceIds(dockerCommand(['volume', 'ls', '-q', ...labelFilters(volumeLabels)]), 'volume');
+    } catch (error) {
+      failures.push(`volume settlement listing: ${dockerErrorText(error)}`);
+      continue;
+    }
+    if (volumes.length === 0) {
+      return { status: 'settled', attempts: attempt, containers, volumes, requestFailures: failures };
+    }
+  }
+  return settlementError(label, value, DOCKER_SETTLEMENT_ATTEMPTS, containers, volumes, failures);
 }
 
 export function isDockerTimeout(error: unknown): boolean {
   return (
     (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ETIMEDOUT') ||
-    (error instanceof Error && error.message.includes('ETIMEDOUT'))
+    (error instanceof Error && error.cause === undefined && error.message.includes('ETIMEDOUT'))
   );
 }
 
@@ -140,38 +373,37 @@ export function beginDetachedDockerRm(id: string, extra: Pick<SpawnSyncOptions, 
   child.unref();
 }
 
-function compilerObjectExists(args: string[], dockerCommand: DockerCommand): boolean {
-  try {
-    return dockerCommand(args).length > 0;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Ordinary cleanup waits for `docker rm -f -v` and then proves the container and labelled volume are gone.
+ * Ordinary cleanup waits for `docker rm -f -v` and then proves the container and named, labelled volume are gone.
  * Signal-path callers use `beginDetachedDockerRm` instead: a 200ms SIGKILL must not abort that session.
  */
-export function settleCompilerDatabaseRemoval(id: string, pid = process.pid, dockerCommand?: DockerCommand): void {
+export function settleCompilerDatabaseRemoval(
+  id: string,
+  pid = process.pid,
+  dockerCommand?: DockerCommand,
+  nonces: readonly string[] = [],
+): void {
   const run = dockerCommand ?? docker;
   if (!id || !CONTAINER_IDENTITY.test(id)) return;
-  try {
-    run(compilerDatabaseRemoveArgs(id));
-  } catch (error) {
-    if (compilerObjectExists(compilerDatabaseInspectArgs(id), run)) throw error;
+  if (nonces.length) {
+    for (const nonce of new Set(nonces)) {
+      const attempt = settleDockerAttempt(
+        COMPILER_NONCE_LABEL,
+        nonce,
+        [
+          { name: COMPILER_PID_LABEL, value: String(pid) },
+          { name: COMPILER_NONCE_LABEL, value: nonce },
+        ],
+        run,
+      );
+      if (attempt.status === 'unsettled') throw attempt.error;
+    }
+    return;
   }
-  if (compilerObjectExists(compilerDatabaseInspectArgs(id), run)) {
-    throw new Error(`compiler-database: container ${id} remains after removal`);
-  }
-  let volumes: string;
-  try {
-    volumes = run(compilerDatabaseVolumeLsArgs(pid)).trim();
-  } catch (error) {
-    throw new Error(
-      `compiler-database: volume settlement could not be proven: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  if (volumes) throw new Error(`compiler-database: volume remains after removal: ${volumes}`);
+  const container = settleDockerContainerRemoval(id, run);
+  if (container.status === 'unsettled') throw container.error;
+  const volumes = settleDockerVolumes([{ name: COMPILER_PID_LABEL, value: String(pid) }], run);
+  if (volumes.status === 'unsettled') throw volumes.error;
 }
 
 /** Cleanup diagnostics stay attached to the original compiler identity; a completed native status is not replaced. */
@@ -250,7 +482,7 @@ export function compilerDatabaseRunArgs(
     ...labels.flatMap((label) => ['--label', label]),
     ...postgresPublishArgs(pid, network),
     '--mount',
-    `type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=${pid}`,
+    `type=volume,source=${compilerDatabaseVolumeName(pid, nonce)},destination=/var/lib/postgresql`,
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -276,7 +508,16 @@ export function compilerDatabaseRunArgs(
 }
 
 export function reapCompilerNonce(nonce: string, pid = process.pid, dockerCommand: DockerCommand = docker): void {
-  reapLabeledContainers(COMPILER_NONCE_LABEL, nonce, dockerCommand);
+  const settlement = settleDockerAttempt(
+    COMPILER_NONCE_LABEL,
+    nonce,
+    [
+      { name: COMPILER_PID_LABEL, value: String(pid) },
+      { name: COMPILER_NONCE_LABEL, value: nonce },
+    ],
+    dockerCommand,
+  );
+  if (settlement.status === 'unsettled') throw settlement.error;
   rmSync(isolatedPostgresSocketDir(pid), { recursive: true, force: true });
 }
 
@@ -286,13 +527,25 @@ export function startCompilerContainer(
   nonce = newCompilerNonce(pid),
   dockerCommand: DockerCommand = docker,
   env: NodeJS.ProcessEnv = process.env,
+  attemptNonces: string[] = [],
 ): string {
   const network = dockerNetworkArgs(env);
   const start = (attemptNonce: string): string => {
+    attemptNonces.push(attemptNonce);
     try {
+      const volume = compilerDatabaseVolumeName(pid, attemptNonce);
+      const created = dockerCommand(compilerDatabaseVolumeCreateArgs(pid, attemptNonce, env.REZICS_CHECK_RUN)).trim();
+      if (created !== volume)
+        throw new Error(
+          `compiler-database: Docker created unexpected volume ${JSON.stringify(created)} (expected ${volume})`,
+        );
       return dockerCommand(compilerDatabaseRunArgs(pid, attemptNonce, network));
     } catch (error) {
-      reapCompilerNonce(attemptNonce, pid, dockerCommand);
+      try {
+        reapCompilerNonce(attemptNonce, pid, dockerCommand);
+      } catch (cleanupError) {
+        throw retainOriginalAndCleanupFailure(error, cleanupError, 'Compiler database create failed');
+      }
       throw error;
     }
   };
@@ -611,29 +864,51 @@ export async function resolvePostgresListenUrl(
   };
 }
 
-/** Remove throwaway compiler databases whose labelled owner pid is gone, including killed owners. */
+/** Remove throwaway compiler databases and named volumes whose labelled owner pid is gone. */
 export function cleanupStaleCompilerDatabases(dockerCommand: DockerCommand = docker): void {
-  const rows = dockerCommand([
+  const containerOwners = dockerCommand([
     'ps',
     '-a',
     '--filter',
     `label=${COMPILER_PID_LABEL}`,
     '--format',
-    `{{.ID}} {{.Label "${COMPILER_PID_LABEL}"}}`,
+    `{{.Label "${COMPILER_PID_LABEL}"}}`,
   ])
     .split('\n')
-    .filter(Boolean);
-  for (const row of rows) {
-    const [id, owner] = row.split(' ');
+    .map((owner) => owner.trim())
+    .filter((owner) => owner.length > 0);
+  const volumeOwners = dockerCommand([
+    'volume',
+    'ls',
+    '--filter',
+    `label=${COMPILER_PID_LABEL}`,
+    '--format',
+    `{{.Label "${COMPILER_PID_LABEL}"}}`,
+  ])
+    .split('\n')
+    .map((owner) => owner.trim())
+    .filter((owner) => owner.length > 0);
+  for (const owner of new Set([...containerOwners, ...volumeOwners])) {
+    const ownerPid = Number(owner);
+    if (!/^[1-9]\d*$/.test(owner) || !Number.isSafeInteger(ownerPid))
+      throw new Error(`compiler-database: Docker returned an invalid owner pid: ${owner}`);
+    let alive = true;
     try {
-      process.kill(Number(owner), 0);
-    } catch {
-      try {
-        dockerCommand(compilerDatabaseRemoveArgs(id!));
-      } catch {
-        // A concurrent cleanup may already have removed it.
-      }
-      rmSync(isolatedPostgresSocketDir(Number(owner)), { recursive: true, force: true });
+      process.kill(ownerPid, 0);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') alive = false;
+      else if (code !== 'EPERM') throw error;
+    }
+    if (!alive) {
+      const settlement = settleDockerAttempt(
+        COMPILER_PID_LABEL,
+        owner,
+        [{ name: COMPILER_PID_LABEL, value: owner }],
+        dockerCommand,
+      );
+      if (settlement.status === 'unsettled') throw settlement.error;
+      rmSync(isolatedPostgresSocketDir(ownerPid), { recursive: true, force: true });
     }
   }
 }
@@ -650,11 +925,33 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     cleanupStaleCompilerDatabases();
   }
   const nonce = newCompilerNonce();
-  const container = await withCommandPhase(
-    'database-image',
-    () => startCompilerContainer(process.pid, nonce),
-    process.env,
-  );
+  const attemptNonces: string[] = [];
+  let container: string;
+  try {
+    container = await withCommandPhase(
+      'database-image',
+      () => startCompilerContainer(process.pid, nonce, docker, process.env, attemptNonces),
+      process.env,
+    );
+  } catch (error) {
+    const failures: unknown[] = [];
+    for (const attemptNonce of new Set(attemptNonces)) {
+      try {
+        reapCompilerNonce(attemptNonce, process.pid);
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+    }
+    if (failures.length) {
+      const details = failures.map(dockerErrorText);
+      throw retainOriginalAndCleanupFailure(
+        error,
+        new AggregateError(failures, details.join('; ')),
+        'Compiler database startup failed',
+      );
+    }
+    throw error;
+  }
   let listen: PostgresListen | undefined;
   let removed = false;
   const remove = (wait = true): void => {
@@ -669,7 +966,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
       beginDetachedDockerRm(container);
       return;
     }
-    settleCompilerDatabaseRemoval(container);
+    settleCompilerDatabaseRemoval(container, process.pid, docker, attemptNonces);
   };
   const onSigint = (): void => {
     try {

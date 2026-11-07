@@ -2,22 +2,20 @@
 
 ## Workspace imports
 
-`bun scripts/workspace-imports.ts` checks each workspace's source and declaration files against its own manifest,
-and root `specs/` against the root manifest. Diagnostics retain the workspace, source path and undeclared package;
-an unrelated package's declaration failure remains attributed to that package.
+Decision: keep this as the single owner section for Workspace imports behavior.
 
-Decision: extract module specifiers from TypeScript/TSX syntax with the root's pinned `oxc-parser`, including static
-imports, re-exports, literal dynamic imports, import types, import-equals and literal CommonJS `require` calls.
-Titles, comments, strings, regular expressions and JSX text are not imports; executable expressions inside JSX and
-template substitutions are visited. A parse failure names its source file and throws rather than certifying an
-incomplete scan. Existing builtin, relative path, alias and manifest dependency rules remain unchanged.
-`bun scripts/workspace-imports.ts` checks each consuming workspace's own manifest, including tests and declaration
-files. The root-owned `oxc-parser` reads TypeScript and TSX syntax: imports, re-exports, literal dynamic imports,
-CommonJS requires and TypeScript import types/requires count; JSX text, comments, regexes and string examples do not.
-Executable template substitutions still count. A syntax error names the file rather than silently skipping its imports.
-The fixture suite is `scripts/workspace-imports.test.ts`.
-Its repository-wide assertion has a 60-second deadline because it parses every workspace and generated declaration;
-the small syntax and dependency fixtures retain the default test deadline.
+`bun scripts/workspace-imports.ts` checks each consuming workspace's source, tests and declaration files against that
+workspace's own manifest. Root `specs/` is checked against the root manifest. Diagnostics retain the workspace,
+source path and undeclared package so a failure in one package stays attributed to its consumer.
+
+The root-owned pinned `oxc-parser` extracts TypeScript and TSX module specifiers from static imports, re-exports,
+literal dynamic imports, import types, import-equals and literal CommonJS `require` calls. Titles, comments, ordinary
+string and template text, regular expressions and JSX text are not imports; executable JSX expressions and template
+substitutions are visited. A parse failure names its source file and throws rather than certifying an incomplete scan.
+
+The fixture suite is `scripts/workspace-imports.test.ts`. Its repository-wide assertion has a 60-second deadline because it parses every workspace and generated declaration; the small syntax and dependency fixtures retain the default test deadline.
+
+Existing builtin, relative path, alias and manifest dependency rules remain unchanged.
 
 ## Page data check
 
@@ -101,6 +99,35 @@ This section owns the operational rules. The implementation is in [remote-check.
 [provision-check-host.sh](provision-check-host.sh) and the [Docker wrapper](check-host/docker).
 Their adjacent tests exercise placement, admission, accounting and cleanup.
 
+### Command result and returned-output custody
+
+Decision: a root result remains nonterminal until the host observes cleanup; a timeout is a removal request, not proof of absence.
+
+The host lifetime supervisor records the completed command in `.command-result`. That root result stays authoritative
+while it gives detached descendants 250 ms to finish, then sends TERM and KILL and bounds owned-process cleanup at
+eight seconds. The bound also applies when a timeout or signal prevents the root child from exiting. It publishes
+`exit-status` only after the owned process tree is reaped. If owned processes remain after the bound, it retains any
+root result, writes `.owned-cleanup-incomplete.json`, leaves `exit-status` absent and keeps the active cgroup visible
+to admission. A disconnected caller sees `CLEANING` while `.command-result`, a lifetime receipt or incomplete-cleanup
+evidence exists without `exit-status`; only the terminal file exposes the root result. The run-lifetime receipt is
+durably published as deadline cleanup begins, so recovery retains the deadline cause without treating it as terminal.
+
+Compiler and Kernel check databases create a named data volume labeled with its process owner, exact create nonce and
+physical check-run ID, then mount that volume by source name. Host lifetime cleanup removes run-labeled containers and
+then independently reconciles run-labeled volumes in three bounded attempts. A timed-out or rejected removal is
+followed by a fresh listing; only an empty listing establishes absence. Failed Docker listings and remaining resources
+keep cleanup unsettled with their actual diagnostics, while native command status remains intact. An unsettled result
+retains the root code and `.owned-resources-incomplete.json`, leaves `exit-status` absent and keeps reconnect at
+`CLEANING`.
+Decision: pre-create volumes with owner, nonce and check-run labels, mount by source name, and settle containers and
+volumes independently before publishing terminal cleanup.
+
+Declared returns are copied from the same physical host run after execution-slot release and before run-directory
+cleanup. One interrupted return-copy attempt gets one retry using the same host, run directory and declared paths.
+Cancellation, probe failures and other transport phases are not retried there. If both copies fail, the return manifest
+keeps both transfer codes and bounded diagnostics while the native command result and any recorded lifetime cause
+remain intact; the command is never replayed to repair a missing returned artifact.
+
 Every remote-check SSH and rsync path, including admission probes, polling, heartbeat, transfer, result fetch and
 cleanup, uses OpenSSH `ControlMaster=auto` with `ControlPersist=10m` and one socket per configured host under the short
 owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/<host>`). `REMOTE_CHECK_SSH_CONTROL_DIR`
@@ -126,9 +153,10 @@ refusing recognizer so check-host execution still relocates; Kernel/Auth map hos
 exceptions to infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files.
 Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
 the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
-labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
-rather than 1 GiB tmpfs, nonce reap on create failure then one retry, `container:<id>` attachment and an independent TCP-to-Unix
-forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
+labelled owner-pid and create-nonce cleanup, 120s `docker run`/`volume create`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a
+separately created nonce-labelled volume rather than 1 GiB tmpfs, bounded reconciliation before retry and final settlement of every
+create nonce, `container:<id>` attachment and an independent TCP-to-Unix forwarder after in-container `pg_isready`
+plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
 returns a string or a Buffer; cleanup retains the original failure and the exact cleanup diagnostic. Host-lifetime
 Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;
 ordinary compiler-database cleanup waits in-process for container and volume settlement and keeps native status; only SIGTERM/SIGINT removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
