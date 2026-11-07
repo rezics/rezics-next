@@ -315,8 +315,10 @@ test('root default database branch composes placement before loading any compile
     `
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
+import * as compilerDatabase from ${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))};
 const events = [];
 mock.module(${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))}, () => ({
+  ...compilerDatabase,
   prepareCompilerDatabase: async () => { events.push('database'); throw new Error('local database'); },
 }));
 const { typecheck } = await import(${JSON.stringify(join(repository, 'scripts/typecheck.ts'))});
