@@ -14,6 +14,13 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import {
+  lstat as lstatAsync,
+  open as openAsync,
+  readdir as readdirAsync,
+  rm as rmAsync,
+  type FileHandle,
+} from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { controlPlaneReleaseBrief } from './briefs.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
@@ -339,6 +346,7 @@ export function prepareProofWorktree(settings: Settings, store: WorkerStore, tas
 }
 
 const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+const OWNED_TREE_ASYNC_YIELD_ENTRIES = 128;
 
 function descriptorPath(fd: number): string {
   return `/proc/self/fd/${fd}`;
@@ -407,12 +415,78 @@ export function makeOwnedTreeWritable(path: string): number {
   return bytes;
 }
 
+/** Async cleanup walk for the manager host; keeps descriptor and inode checks while yielding between entries. */
+export async function makeOwnedTreeWritableAsync(path: string): Promise<number> {
+  const root = resolve(path);
+  const rootIdentity = await lstatAsync(root);
+  if (rootIdentity.isSymbolicLink() || !rootIdentity.isDirectory())
+    throw new Error(`refusing to rewrite a non-directory worktree path: ${path}`);
+  let bytes = 0;
+  let visited = 0;
+  const walk = async (fd: FileHandle): Promise<void> => {
+    const stat = await fd.stat();
+    if ((stat.mode & 0o700) !== 0o700) await fd.chmod((stat.mode & 0o7777) | 0o700);
+    for (const name of await readdirAsync(descriptorPath(fd.fd))) {
+      if (++visited % OWNED_TREE_ASYNC_YIELD_ENTRIES === 0)
+        await new Promise<void>((resolveYield) => setImmediate(resolveYield));
+      const child = join(descriptorPath(fd.fd), name);
+      let before: Awaited<ReturnType<typeof lstatAsync>>;
+      try {
+        before = await lstatAsync(child);
+      } catch (error) {
+        if (isDisappearedEntry(error)) continue;
+        throw error;
+      }
+      if (!before.isDirectory() || before.isSymbolicLink()) {
+        bytes += Number(before.size);
+        continue;
+      }
+      let childFd: FileHandle;
+      try {
+        childFd = await openAsync(child, directoryFlags);
+      } catch (error) {
+        if (isDisappearedEntry(error)) continue;
+        throw error;
+      }
+      try {
+        if (!sameInode(before, await childFd.stat()))
+          throw new Error(`refusing cleanup of replaced worktree directory: ${path}`);
+        await walk(childFd);
+      } finally {
+        await childFd.close();
+      }
+    }
+  };
+  const fd = await openAsync(root, directoryFlags);
+  try {
+    if (!sameInode(rootIdentity, await fd.stat()))
+      throw new Error(`refusing cleanup of replaced worktree directory: ${path}`);
+    await walk(fd);
+  } finally {
+    await fd.close();
+  }
+  return bytes;
+}
+
 /** Make owned directories writable, then remove the tree. Returns the file/symlink bytes counted on the walk. */
 export function removeOwnedTree(path: string): number {
   const bytes = makeOwnedTreeWritable(path);
   rmSync(path, { recursive: true, force: true });
   if (existsSync(path)) throw new Error(`worktree path remains after writable cleanup: ${path}`);
   return bytes;
+}
+
+/** Async counterpart used by host cleanup so a large worktree cannot block manager RPC or heartbeat turns. */
+export async function removeOwnedTreeAsync(path: string): Promise<number> {
+  const bytes = await makeOwnedTreeWritableAsync(path);
+  await rmAsync(path, { recursive: true, force: true });
+  try {
+    await lstatAsync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return bytes;
+    throw error;
+  }
+  throw new Error(`worktree path remains after writable cleanup: ${path}`);
 }
 
 export function gitListsWorktree(mainCheckout: string, worktree: string, policy = defaultPolicy.merge): boolean {

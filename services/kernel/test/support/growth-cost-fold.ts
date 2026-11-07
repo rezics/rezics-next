@@ -10,7 +10,7 @@ import {
 } from './growth-cost.ts';
 import { GrowthCaptureBudget, type GrowthCaptureEvidenceSide } from './growth-capture-budget.ts';
 import { checkedAdd, sumFinite } from './growth-numeric.ts';
-import { createPlanWalkSession, explainPlanEntries, type PlanWalkSession } from './growth-plan-walk.ts';
+import { createPlanWalkSession, explainPlanEntries, MAX_PLAN_NODES } from './growth-plan-walk.ts';
 import { keyedRelationEntries, relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 
 export type FoldedPlanNotice = Readonly<{
@@ -215,7 +215,6 @@ function relationRecord(relations: readonly RelationCost[]): Cost['relations'] {
 
 export class GrowthCostFolder {
   readonly #budget: GrowthCaptureBudget;
-  readonly #session: PlanWalkSession = createPlanWalkSession();
   readonly #foreground = new Map<number, MutableOccurrence>();
   readonly #background = new Map<number, MutableOccurrence>();
   readonly #planNotices: FoldedPlanNotice[] = [];
@@ -294,14 +293,15 @@ export class GrowthCostFolder {
       this.#unownedBackgroundNoticeCount++;
     }
 
+    const session = createPlanWalkSession(MAX_PLAN_NODES);
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
       const entry = entries[entryIndex]!;
       try {
-        const evidence = costOfPlanEvidence(entry.plan, entry.location, detail.database, this.#session);
-        const catalogOnly = isCatalogOnlyPlan(entry.plan, entry.location, this.#session);
+        const evidence = costOfPlanEvidence(entry.plan, entry.location, detail.database, session);
+        const catalogOnly = isCatalogOnlyPlan(entry.plan, entry.location, session);
         this.#foldEntry(side, statement, evidence, catalogOnly, notice, entryIndex, entry.queryText);
       } finally {
-        this.#session.forget(entry.location, entry.plan);
+        session.forget(entry.location, entry.plan);
       }
     }
     return index;

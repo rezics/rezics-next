@@ -281,8 +281,10 @@ DATABASE_URL='postgres://...' bun services/kernel/scripts/bootstrap-governance.t
 ```
 
 `DATABASE_URL` must name the migrated deployment database, including its seeded Global Context at route 0,
-`00000000-0000-8000-8000-000000000000`. The command registers Reylo before dynamically importing SQL-bearing
-code, so the root invocation needs neither a preload flag nor the kernel workspace's Bun configuration.
+`00000000-0000-8000-8000-000000000000`. The same dedicated `KERNEL_RECEIPT_KEYS` ring as HTTP and worker is required:
+standing-parent installation writes ordinary receipts. The command registers Reylo before dynamically importing
+SQL-bearing code, then installs native History and binds that ring the same way as server and worker, so the root
+invocation needs neither a preload flag nor the kernel workspace's Bun configuration.
 Malformed arguments fail before database access. Missing, pending, suspended, deleted, organization, automated
 and authentication-fenced accounts refuse. No HTTP route, Auth signing key or first-user inference participates.
 

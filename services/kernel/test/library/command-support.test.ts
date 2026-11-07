@@ -9,6 +9,7 @@ import {
   type CommandEvent,
   type CommandTransaction,
 } from '../../src/command/command.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import type { AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import * as followStore from '../../src/library/follow-store.ts';
@@ -258,8 +259,8 @@ test('trusted workflow steps replay by step key, keep account attribution, and r
   );
   const attributedReceipt = await pool.query(
     `SELECT principal_id AS "principalId" FROM core.receipt
-      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
-    [partitionOf(route), accountIds.other, kind, stepKey],
+      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+    [partitionOf(route), accountIds.other, kind, nativeReceiptKeyCandidates(pool, kind, accountIds.other, stepKey)],
   );
   expect(receipt.rows).toEqual([]);
   expect(attributedReceipt.rows).toEqual([{ principalId: accountIds.other }]);

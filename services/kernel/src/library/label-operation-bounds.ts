@@ -23,6 +23,7 @@ import assignmentParents from './label-assignment-parents.sql';
 import assignmentReservations from './label-assignment-reservations.sql';
 import assignmentReclaim from './label-assignment-reclaim.sql';
 import assignmentSet from './label-assignment-set.sql';
+import assignmentIdentityRead from './label-assignment-identity.sql';
 import assignmentRead from './label-assignment-read.sql';
 import assignmentUnassign from './label-assignment-unassign.sql';
 import assignmentLabelPage from './label-assignment-label-page.sql';
@@ -419,13 +420,15 @@ export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: (
 
 const parentInput = (route: number, accountId: string, labelId: string) =>
   Object.freeze({ route, account_id: accountId, label_id: labelId });
-const labelPoint = (route: number, accountId: string, labelId: string, includeDeleted = false) =>
-  labelSqlPlan(
-    'label.point',
-    labelRead.sql,
-    { ...parentInput(route, accountId, labelId), include_deleted: includeDeleted },
-    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, output: labelRow, outputRows: 1 },
-  );
+const labelPoint = (route: number, accountId: string, labelId: string) =>
+  labelSqlPlan('label.point', labelRead.sql, parentInput(route, accountId, labelId), {
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 1,
+    output: labelRow,
+    outputRows: 1,
+  });
 
 export function labelCreatePlan(input: {
   route: number;
@@ -495,7 +498,7 @@ export function labelLifecyclePlan(input: {
   restore: boolean;
   includeRead?: boolean;
 }): LabelOperationPlan {
-  const read = labelPoint(input.route, input.accountId, input.labelId, true);
+  const read = labelPoint(input.route, input.accountId, input.labelId);
   const lifecycle = labelSqlPlan(
     input.restore ? 'label.restore' : 'label.delete',
     labelLifecycle.sql,
@@ -730,12 +733,18 @@ export function labelAssignmentLifecyclePlan(input: {
     outputRows: 1,
   });
   const current = labelSqlPlan(
-    'assignment.current',
+    'assignment.current.identity',
+    assignmentIdentityRead.sql,
+    { ...tuple, assignment_id: input.assignmentId, time: input.time },
+    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, output: assignmentRow, outputRows: 1 },
+  );
+  const legacyFallback = labelSqlPlan(
+    'assignment.current.tuple-fallback',
     assignmentRead.sql,
     { ...tuple, assignment_id: input.assignmentId, time: input.time },
     { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, output: assignmentRow, outputRows: 1 },
   );
-  const leaves: LabelSqlPlan<unknown>[] = [guard, current];
+  const leaves: LabelSqlPlan<unknown>[] = [guard, current, legacyFallback];
   if (input.expectedLabelRevision !== undefined) {
     leaves.push(
       labelSqlPlan(

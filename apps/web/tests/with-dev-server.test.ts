@@ -73,6 +73,20 @@ test('walk Vite keeps Cloudflare local without test runtime, fixture bindings or
   expect(child.NODE_OPTIONS).toBe('--max-old-space-size=8192');
 });
 
+test('first-public journey source pins do not start a shared Vite server', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/first-public-journeys-walk.test.ts']),
+  ).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'apps/web/tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/with-dev-server.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/search.test.ts'])).toBe(true);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/first-public-journeys-walk.test.ts', 'tests/search.test.ts']),
+  ).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
+});
+
 test('private-network wrapping keeps the original command after the namespace setup', () => {
   expect(privateNetworkCommand(['bun', 'test', 'tests/search.test.ts'])).toEqual([
     'unshare',

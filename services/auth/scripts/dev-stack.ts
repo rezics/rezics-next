@@ -1206,6 +1206,24 @@ async function untilReady(
   await waitUntilWalkReady({ urls, children: processes });
 }
 
+/** Vite can answer /en before /auth/sign-in exists; keep waiting through 404, then let the walk record the status. */
+async function untilWebSignInRedirect(children: readonly ReturnType<typeof Bun.spawn>[]): Promise<void> {
+  const url = `${origins.web}/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`;
+  const deadline = Date.now() + 600_000;
+  while (Date.now() < deadline) {
+    const exited = children.find((child) => child.exitCode !== null || child.signalCode !== null);
+    if (exited) throw new Error(`walk: web exited (${exited.exitCode ?? exited.signalCode}) before sign-in redirected`);
+    try {
+      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+      if (response.status !== 404) return;
+    } catch {
+      // Compile or bind can refuse the first fetches; keep waiting inside the window.
+    }
+    await Bun.sleep(2_000);
+  }
+  throw new Error(`walk: web sign-in stayed HTTP 404 after compiling (${url})`);
+}
+
 /**
  * Starts Auth pages and Web for a journey that has already seeded its admitted stack. An admitted `start` leaves them
  * out, so Vite never compiles while the seed runs. Children are killed on exit, so a failed journey cannot leave the
@@ -1235,6 +1253,7 @@ export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }>
       ],
       children,
     );
+    await untilWebSignInRedirect(children);
   } catch (error) {
     await Promise.all(children.map((child) => stopSpawned(child)));
     process.off('exit', killOnExit);

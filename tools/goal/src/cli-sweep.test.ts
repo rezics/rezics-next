@@ -7,7 +7,7 @@ import type { AttemptFence } from './contracts.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { openDb } from './db.ts';
-import { temporaryDirectory } from './test-support.ts';
+import { harness, temporaryDirectory } from './test-support.ts';
 import { WorkerStore } from './store.ts';
 import type { Runtime } from './config.ts';
 
@@ -70,6 +70,63 @@ test('the train and inbox commands do not sweep orphans before they run', async 
   } finally {
     if (previousTrain === undefined) delete process.env.GOAL_TRAIN_MODE;
     else process.env.GOAL_TRAIN_MODE = previousTrain;
+  }
+});
+
+test('manager and urgent metadata commands skip orphan recovery while dispatch still performs it', async () => {
+  const h = harness();
+  const oldGoalManager = process.env.GOAL_MANAGER;
+  const oldCodexThread = process.env.CODEX_THREAD_ID;
+  const print = spyOn(console, 'log').mockImplementation(() => {});
+  const report = spyOn(console, 'error').mockImplementation(() => {});
+  let sweeps = 0;
+  const starts: string[] = [];
+  const db = new Proxy(h.store.db, {
+    get(target, property) {
+      if (property === 'close') return () => {};
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as Runtime['db'];
+  const runtime = {
+    db,
+    settings: h.settings,
+    store: h.store,
+    tasks: h.tasks,
+    managerServices: {},
+    job: {
+      async start(taskId: string) {
+        starts.push(taskId);
+      },
+      async drain() {},
+    },
+    async drain() {},
+    recoverOrphans: async () => {
+      sweeps++;
+    },
+  } as unknown as Runtime;
+  delete process.env.GOAL_MANAGER;
+  delete process.env.CODEX_THREAD_ID;
+  try {
+    const managerStatus = await run(['manager', 'status'], () => runtime);
+    if (managerStatus !== 0)
+      throw new Error(`manager status failed: ${String(report.mock.calls.at(-1)?.[0] ?? 'unknown error')}`);
+    expect(sweeps).toBe(0);
+    expect(await run(['urgent', 'grant', 'another-manager'], () => runtime)).toBe(1);
+    expect(sweeps).toBe(0);
+    const dispatched = await run(['dispatch', h.briefFile], () => runtime);
+    if (dispatched !== 0)
+      throw new Error(`dispatch failed: ${String(report.mock.calls.at(-1)?.[0] ?? 'unknown error')}`);
+    expect(sweeps).toBe(1);
+    expect(starts).toHaveLength(1);
+  } finally {
+    if (oldGoalManager === undefined) delete process.env.GOAL_MANAGER;
+    else process.env.GOAL_MANAGER = oldGoalManager;
+    if (oldCodexThread === undefined) delete process.env.CODEX_THREAD_ID;
+    else process.env.CODEX_THREAD_ID = oldCodexThread;
+    print.mockRestore();
+    report.mockRestore();
+    h.dispose();
   }
 });
 

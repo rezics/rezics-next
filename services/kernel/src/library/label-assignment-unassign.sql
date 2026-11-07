@@ -1,4 +1,4 @@
-WITH input AS NOT MATERIALIZED (
+WITH input AS MATERIALIZED (
   SELECT :time::timestamptz AS time, :transaction_id::uuid AS transaction_id,
          :route::integer AS route, :account_id::uuid AS account_id,
          :subject_id::uuid AS subject_id, :label_id::uuid AS label_id,
@@ -11,6 +11,10 @@ SET slot_no = NULL, deleted_at = input.time,
 FROM input
 WHERE a.route = input.route AND a.account_id = input.account_id AND a.subject_id = input.subject_id
   AND a.label_id = input.label_id
+  AND ROW(a.route, a.account_id, a.assignment_id)
+        >= ROW(input.route, input.account_id, input.assignment_id)
+  AND ROW(a.route, a.account_id, a.assignment_id)
+        <= ROW(input.route, input.account_id, input.assignment_id)
   AND a.assignment_id = input.assignment_id AND a.revision = input.revision
   AND a.revision < 2147483647 AND a.deleted_at IS NULL
 RETURNING a.route, a.account_id AS "accountId", a.subject_id AS "subjectId", a.label_id AS "labelId",

@@ -80,7 +80,8 @@ function isLifecycleDenied(error: unknown): boolean {
   return composedAuthorization()?.isLifecycleDenied(error) ?? error instanceof LifecycleDeniedError;
 }
 
-/** Authorization precedes identity disclosure. Missing disclosure defers to the native subject resolver. */
+/** Authorization precedes identity disclosure. Missing disclosure, unbound or Collection-shaped
+ * subject checks defer to the native subject resolver and library_entry admission. */
 export async function admitComposedEntryProgress(input: {
   actor: Actor;
   subjectId: string;
@@ -98,7 +99,15 @@ export async function admitComposedEntryProgress(input: {
   });
   if (result.admitted) return;
   const reason = result.admission.terms[0]?.name;
-  if (reason === 'identity-disclosure-unavailable' || reason === 'deadline' || reason === 'collection-read-unbound')
+  // Entry and progress authorize through library_entry / progress_session. Composed
+  // collection-read uses the subject id as a Collection; native Access then denies
+  // the actor-route/subject-id pair. Defer to the existing command admission.
+  if (
+    reason === 'identity-disclosure-unavailable' ||
+    reason === 'deadline' ||
+    reason === 'collection-read-unbound' ||
+    reason === 'collection-read-denied'
+  )
     return;
   throw new GrantDeniedError();
 }

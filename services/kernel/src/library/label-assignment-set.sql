@@ -15,6 +15,10 @@ WITH input AS MATERIALIZED (
   FROM input
   WHERE a.route = input.route AND a.account_id = input.account_id AND a.subject_id = input.subject_id
     AND a.label_id = input.label_id AND input.retained
+    AND ROW(a.route, a.account_id, a.assignment_id)
+          >= ROW(input.route, input.account_id, input.assignment_id)
+    AND ROW(a.route, a.account_id, a.assignment_id)
+          <= ROW(input.route, input.account_id, input.assignment_id)
     AND a.assignment_id = input.assignment_id AND a.revision = input.revision
     AND a.slot_no IS NULL AND a.deleted_at = input.deleted_at
     AND a.purge_after = input.purge_after

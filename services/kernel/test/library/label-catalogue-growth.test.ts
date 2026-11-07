@@ -194,6 +194,11 @@ function nodes(value: unknown, result: Record<string, unknown>[] = []) {
   return result;
 }
 
+function statementSource(statement: string): string | undefined {
+  const source = /\/\*\s*file=['"]([^'"]+)['"][^*]*\*\//i.exec(statement)?.[1];
+  return source === undefined ? undefined : decodeURIComponent(source);
+}
+
 test('all native catalogue operations keep point and limit-first costs at 64/512/4096 live deleted and same-partition rows', async () => {
   const actor = f.owner.actor;
   const other = await neighbour();
@@ -478,10 +483,13 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
     if (operation.name !== 'create')
       expect(labelNodes.some((node) => node['Index Name'] === primaryKeyIndex)).toBe(true);
     if (operation.name.startsWith('list')) {
-      const sql = result.capture.statements.find((statement) => /WITH source AS MATERIALIZED/i.test(statement));
+      const sql = result.capture.statements.find((statement) =>
+        statementSource(statement)?.endsWith('/services/kernel/src/library/label-catalogue-page.sql'),
+      );
       expect(sql).toBeDefined();
+      expect(sql).toMatch(/FROM library\.personal_label AS label[\s\S]*label\.label_id > input\.after_label_id/i);
+      expect(sql).toMatch(/ORDER BY label\.route,\s*label\.account_id,\s*label\.label_id\s+LIMIT input\.page_limit/i);
       expect(sql).not.toMatch(/deleted_at\s+IS\s+NULL|\bOFFSET\b|\bcount\s*\(/i);
-      expect(sql).toMatch(/label_id\s*>/);
       expect(plans.some((node) => node['Node Type'] === 'Limit' && Number(node['Actual Rows']) === 8)).toBe(true);
       expect(labelNodes.some((node) => Number(node['Actual Rows']) === 8)).toBe(true);
     }
