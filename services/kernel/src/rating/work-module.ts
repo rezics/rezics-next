@@ -24,10 +24,7 @@ export {
   continueIdentityRepairGeneration,
   runIdentityRepairGeneration,
 } from './identity-repair-run.ts';
-export {
-  createInstalledIdentityRepairCommands,
-  createNativeIdentityRepairHost,
-} from './adapters/identity-repair.ts';
+export { createInstalledIdentityRepairCommands, createNativeIdentityRepairHost } from './adapters/identity-repair.ts';
 export const RATING_COUNTER_SECRET_ENV = 'KERNEL_RATING_COUNTER_SECRET';
 
 type Runtime = Readonly<{ context: WorkContext; counter: RatingCounter; capabilities: RatingCapabilities }>;

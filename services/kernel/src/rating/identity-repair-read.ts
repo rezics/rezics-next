@@ -209,10 +209,7 @@ function workEffect(data: Record<string, unknown>): IdentityRepairWorkEffect {
   });
 }
 
-function effectData(
-  type: string,
-  data: Record<string, unknown>,
-): IdentityRepairOutboxEffect['data'] {
+function effectData(type: string, data: Record<string, unknown>): IdentityRepairOutboxEffect['data'] {
   if (type === 'com.rezics.rating.vote.changed.v1') return voteChange(data);
   if (type === 'com.rezics.rating.identity-repair.page.v1') return pageEffect(data);
   if (type === 'com.rezics.rating.identity-work.changed.v1') return workEffect(data);
@@ -349,10 +346,7 @@ export function createIdentityRepairRead(pool: Pool): IdentityRepairRead {
     return Object.freeze(rows.map(obligationOf));
   }
 
-  async function boundObligation(
-    voterId: string,
-    pageId: string,
-  ): Promise<IdentityRepairObligationRecord | null> {
+  async function boundObligation(voterId: string, pageId: string): Promise<IdentityRepairObligationRecord | null> {
     if (routeOf(pageId) === null) throw new TypeError('Invalid Rating identity page');
     return (await obligations(voterId)).find((row) => row.pageId === pageId && row.state === 'bound') ?? null;
   }

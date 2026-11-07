@@ -30,10 +30,7 @@ import { createRealmRankSource, createRealmRankOrderSource } from './realm-rank.
 import { RATING_EVENTS } from './events.ts';
 
 export { createNativeRatingCapabilities } from './adapters/native.ts';
-export {
-  createInstalledIdentityRepairCommands,
-  createNativeIdentityRepairHost,
-} from './adapters/identity-repair.ts';
+export { createInstalledIdentityRepairCommands, createNativeIdentityRepairHost } from './adapters/identity-repair.ts';
 export { createIdentityRepairRead } from './identity-repair-read.ts';
 export {
   admitIdentityRepairGeneration,

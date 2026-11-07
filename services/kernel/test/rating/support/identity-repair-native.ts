@@ -93,7 +93,12 @@ export async function openIdentityRepairNative(
     if (authenticated.kind !== 'account') throw new Error('expected account actor');
     return authenticated;
   }
-  async function seedVote(voter: AccountActor, targetId: string, units: number | null = 7, at = IDENTITY_REPAIR_NATIVE_AT) {
+  async function seedVote(
+    voter: AccountActor,
+    targetId: string,
+    units: number | null = 7,
+    at = IDENTITY_REPAIR_NATIVE_AT,
+  ) {
     await db.admin.query(
       `INSERT INTO rating.vote
         (route, voter_id, question_id, target_id, units, revision, changed_at, transaction_id)

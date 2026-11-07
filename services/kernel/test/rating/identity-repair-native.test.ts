@@ -212,9 +212,9 @@ test('later identity change and later vote remain under durable custody and conv
     expect(first.status).toBe('complete');
     if (first.status !== 'complete') throw new Error(first.reason);
     await isolated.seedVote(voter, later);
-    expect((await isolated.read.obligations(voter.accountId)).some((row) => row.laterVote && row.state === 'bound')).toBe(
-      true,
-    );
+    expect(
+      (await isolated.read.obligations(voter.accountId)).some((row) => row.laterVote && row.state === 'bound'),
+    ).toBe(true);
     await isolated.db.admin.query(`UPDATE semantic.identity_epoch_mapping SET epoch = epoch + 1 WHERE original = $1`, [
       original,
     ]);

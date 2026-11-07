@@ -1,9 +1,6 @@
 import type { Actor } from '../request/access.ts';
 import { newId } from '../route/route.ts';
-import {
-  createRatingIdentityRepairCommands,
-  type RatingRepairReceipt,
-} from './identity-repair.ts';
+import { createRatingIdentityRepairCommands, type RatingRepairReceipt } from './identity-repair.ts';
 import {
   identityRoute,
   validateIdentityWork,
@@ -58,7 +55,8 @@ export async function runIdentityRepairGeneration(
     const pendingSelect = asPending(selected);
     if (pendingSelect)
       return { status: 'pending', reason: pendingSelect.reason, ref, receipts: Object.freeze([...receipts]), pages };
-    if (selected.status !== 'selected') return { status: 'pending', reason: 'stale-work', ref, receipts: Object.freeze([...receipts]), pages };
+    if (selected.status !== 'selected')
+      return { status: 'pending', reason: 'stale-work', ref, receipts: Object.freeze([...receipts]), pages };
     const page = selected.page;
     const committed = await commitSelected(commands, actor, page, nextKey);
     if (committed.status === 'pending')
@@ -96,16 +94,18 @@ async function commitSelected(
     const pending = asPending(refreshed);
     if (pending) return pending;
     if (refreshed.status !== 'selected') return { status: 'pending', reason: 'stale-work' };
-    const retry = (await commands.commit(
-      actor,
-      {
-        workId: refreshed.page.workId,
-        generation: refreshed.page.generation,
-        pageId: refreshed.page.pageId,
-        digest: refreshed.page.digest,
-      },
-      nextKey(),
-    )).value;
+    const retry = (
+      await commands.commit(
+        actor,
+        {
+          workId: refreshed.page.workId,
+          generation: refreshed.page.generation,
+          pageId: refreshed.page.pageId,
+          digest: refreshed.page.digest,
+        },
+        nextKey(),
+      )
+    ).value;
     if (retry.status === 'committed') return retry;
     return asPending(retry) ?? { status: 'pending', reason: 'stale-page' };
   }

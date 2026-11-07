@@ -90,7 +90,8 @@ export async function continueInstalledIdentityRatingRepair(
     });
     return {
       value: authority,
-      events: authority.status === 'pending' && authority.events?.length ? [...authority.events] : [progress(data.partition)],
+      events:
+        authority.status === 'pending' && authority.events?.length ? [...authority.events] : [progress(data.partition)],
     };
   });
   const current = prepared.value;
@@ -105,7 +106,8 @@ export async function continueInstalledIdentityRatingRepair(
     });
     return {
       value: handed,
-      events: handed.status === 'pending' && handed.events?.length ? [...handed.events] : [progress(data.voterPartition)],
+      events:
+        handed.status === 'pending' && handed.events?.length ? [...handed.events] : [progress(data.voterPartition)],
     };
   });
 }
