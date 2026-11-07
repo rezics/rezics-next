@@ -43,11 +43,12 @@ if (values.emit) {
     throw new Error('--start-after must be a nonnegative event id');
   const db = new Database(values.db, { readonly: true, strict: true });
   db.exec('PRAGMA busy_timeout = 5000');
+  const cursor = values.cursor ?? join(dirname(values.db), 'watch', 'supermanager-delivery.json');
   const bridge = new ResidentWakeBridge(
     db,
     values.manager,
-    values.cursor ?? join(dirname(values.db), 'watch', 'supermanager-delivery.json'),
-    tmuxResidentSender(values['tmux-socket'], values.pane, values['tmux-command']),
+    cursor,
+    tmuxResidentSender(values['tmux-socket'], values.pane, values['tmux-command'], `${cursor}.transport.json`),
     startAfter,
   );
   let stopped = false;
