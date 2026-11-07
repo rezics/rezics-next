@@ -635,13 +635,8 @@ async function walkPersonCredits(api: string, report: CrossMediaSeedReport, publ
   assert.equal(left.subject.type, 'schema:Person');
   assert.equal(right.subject.type, 'schema:Person');
   const merge = report.personMerge;
-  const canonical =
-    merge && merge.state === 'published'
-      ? merge.survivor
-      : left.subject.id === right.subject.id
-        ? left.subject.id
-        : null;
-  assert.ok(canonical, 'reviewed Person pair is not one current canonical Person');
+  if (merge?.state !== 'published') throw new Error('reviewed Person pair is not one current canonical Person');
+  const canonical = merge.survivor;
   assert.ok(left.subject.id === canonical || right.subject.id === canonical);
   const credits = publication.published.filter((row) =>
     row.assertions.some((assertion) =>
@@ -652,6 +647,7 @@ async function walkPersonCredits(api: string, report: CrossMediaSeedReport, publ
     bangumi: bangumi.subjectId,
     vndb: vndb.subjectId,
     canonical,
+    operation: merge.operation,
     creditedWorks: credits.map((row) => ({ sourceKey: row.sourceKey, type: row.nativeType })),
   };
 }

@@ -343,7 +343,10 @@ test('review transport retains coherent query, nullable evidence, exact admissio
   const requests: Request[] = [];
   const answers = [
     Response.json({ subject: { id: first, type: 'schema:Person' }, reviewedIdentity: null }),
-    Response.json({ operation: { id: first } }, { status: 202 }),
+    Response.json(
+      { operation: { id: first } },
+      { status: 202, headers: { location: `/v1/subjectIdentityOperations/${first}` } },
+    ),
     Response.json({ survivor: first, redirected: second, revision: 3 }),
   ];
   const transport = createImportTransport({
@@ -361,11 +364,22 @@ test('review transport retains coherent query, nullable evidence, exact admissio
     query.get('reviewIdentityExternalId'),
     query.get('includeViewerActions'),
   ]).toEqual(['bangumi', 'person:123', 'true']);
-  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({ operation: { id: first } });
+  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({
+    operation: { id: first },
+    location: `/v1/subjectIdentityOperations/${first}`,
+  });
   expect(await requests[1]!.json()).toEqual(body);
   expect(requests[1]!.headers.get('authorization')).toBe('Bearer review-token');
   expect(requests[1]!.headers.get('idempotency-key')).toBe('"review-key"');
   await expect(transport.mergeReviewedPersons(body, 'review-key')).rejects.toMatchObject({ status: 200 });
+  const missingLocation = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'review-token',
+    fetch: (async () => Response.json({ operation: { id: first } }, { status: 202 })) as typeof fetch,
+  });
+  await expect(missingLocation.mergeReviewedPersons(body, 'review-key')).rejects.toThrow(
+    'Invalid native identity admission',
+  );
 });
 
 test('served-variant reads accept only the admitted image decision for the requested derivative', async () => {

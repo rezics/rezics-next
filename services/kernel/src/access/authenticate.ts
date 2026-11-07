@@ -38,7 +38,6 @@ import {
   runOriginalAuthentication,
   type OriginalAuthenticationInvocation,
 } from './authentication-work.ts';
-import { loopbackNativeJwksAllowed } from './auth-jwks-url.ts';
 
 export { requireAccessDeadline };
 
@@ -198,7 +197,8 @@ function settings(config?: AuthenticationConfig): AuthenticationConfig {
     audience.username ||
     audience.password ||
     audience.hash ||
-    !loopbackNativeJwksAllowed(issuer, jwks) ||
+    jwks.protocol !== issuer.protocol ||
+    jwks.origin !== issuer.origin ||
     jwks.href !== value.jwksUrl ||
     jwks.username ||
     jwks.password ||

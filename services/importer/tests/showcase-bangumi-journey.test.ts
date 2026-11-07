@@ -1,6 +1,16 @@
 import { expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { citedAnimeCreditTargets, journeyTargets, selectJourneyWorks } from '../src/showcase-bangumi-journey.ts';
 import { runImportCli } from '../src/cli.ts';
+import {
+  CrossMediaDumpFiles,
+  CrossMediaTableScanLimitError,
+  collectSelectedDumpRows,
+  planCrossMediaSeed,
+  type CrossMediaTables,
+} from '../src/cross-media-seed.ts';
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
   applyWalkInventoryToCapabilities,
@@ -314,4 +324,54 @@ test('ordinary CLI admits loopback HTTP Auth with the kernel test origin', async
   );
   expect(remote.code).toBe(2);
   expect(remote.stderr).toContain('Invalid importer arguments.');
+});
+
+test('bounded VNDB entry_meta pages continue until selected revisions are found', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'entry-meta-continue-'));
+  try {
+    const db = join(directory, 'db');
+    await mkdir(db);
+    await writeFile(join(db, 'entry_meta.header'), 'id\trevision\tlastmod\n');
+    await writeFile(
+      join(db, 'entry_meta'),
+      ['c1\t1\t2026-10-25 00:00:00+00', 'c2\t1\t2026-10-25 00:00:00+00', 'c3\t1\t2026-10-25 00:00:00+00', 'v1\t7\t2026-10-25 00:00:00+00']
+        .join('\n') + '\n',
+    );
+    const input = new CrossMediaDumpFiles(directory, directory);
+    const found = new Map<string, number>();
+    const remaining = new Set(['v1']);
+    await collectSelectedDumpRows(input, 'vndb', 'entry_meta', {
+      limits: { maxRows: 2, maxBytes: 1024 },
+      select: (row) => remaining.has(String(row.id ?? '')),
+      onRow(row) {
+        found.set(String(row.id), Number(row.revision));
+        remaining.delete(String(row.id));
+      },
+      done: () => remaining.size === 0,
+      onLimit() {
+        throw new Error('selected VNDB entry_meta stopped before continuation finished');
+      },
+    });
+    expect(found).toEqual(new Map([['v1', 7]]));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  const rows: Record<string, Record<string, unknown>[]> = {
+    'bangumi/subject': [{ id: 1, type: 2, name: 'STEINS;GATE' }],
+    'vndb/vn_titles': [{ id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null }],
+    'vndb/vn': [{ id: 'v1', olang: 'ja', alias: null }],
+  };
+  const stalled: CrossMediaTables = {
+    async *rows(provider, table, limits) {
+      if (provider === 'vndb' && table === 'entry_meta')
+        throw new CrossMediaTableScanLimitError(provider, table, limits?.resumeBytes ?? 0);
+      yield* rows[`${provider}/${table}`] ?? [];
+    },
+  };
+  const plan = await planCrossMediaSeed(stalled, {
+    selection: { bangumi: [1], vndb: ['v1'], includeReleases: false },
+  });
+  expect(plan.records.vndb).toEqual([]);
+  expect(plan.gaps.some((gap) => gap.reason.includes('entry_meta exceeded its bounded scan'))).toBe(true);
 });

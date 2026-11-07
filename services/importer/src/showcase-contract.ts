@@ -47,15 +47,61 @@ export type CrossMediaTableScanLimits = {
   maxRows: number;
   maxBytes: number;
   consumeRow?: (bytes: number) => void;
+  /** File offset of the first unread dump line; later pages continue from here. */
+  resumeBytes?: number;
 };
+
+/** One selected-family page of VNDB `entry_meta`. Continuation reads the next page instead of raising this cap. */
+export const VNDB_ENTRY_META_SCAN_PAGE: CrossMediaTableScanLimits = Object.freeze({
+  maxRows: 100_000,
+  maxBytes: 64 * 1024 * 1024,
+});
 
 export class CrossMediaTableScanLimitError extends Error {
   constructor(
     readonly provider: Provider,
     readonly table: string,
+    readonly resumeBytes = 0,
   ) {
     super(`Cross-media ${provider}/${table} exceeded its bounded scan`);
     this.name = 'CrossMediaTableScanLimitError';
+  }
+}
+
+/** Read selected dump rows in bounded pages until the selector is done, EOF, or a page cannot advance. */
+export async function collectSelectedDumpRows(
+  input: CrossMediaTables,
+  provider: Provider,
+  table: string,
+  options: {
+    limits: CrossMediaTableScanLimits;
+    select: (row: Row) => boolean;
+    onRow: (row: Row) => void;
+    done?: () => boolean;
+    onLimit: () => void;
+  },
+): Promise<void> {
+  let resumeBytes = options.limits.resumeBytes ?? 0;
+  for (;;) {
+    if (options.done?.()) return;
+    let advanced = 0;
+    try {
+      for await (const row of input.rows(provider, table, { ...options.limits, resumeBytes })) {
+        advanced += 1;
+        if (!options.select(row)) continue;
+        options.onRow(row);
+        if (options.done?.()) return;
+      }
+      return;
+    } catch (error) {
+      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      const next = error.resumeBytes;
+      if (advanced === 0 || next <= resumeBytes) {
+        options.onLimit();
+        return;
+      }
+      resumeBytes = next;
+    }
   }
 }
 

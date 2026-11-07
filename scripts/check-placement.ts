@@ -666,7 +666,10 @@ function classifyCommand(argv: readonly string[], cwd: string, root: string, dep
 /** Admitted `dev-stack.ts walk` sessions stay on this host when `--local` is set; remote runs drop GOAL_*. */
 export function isWalkStackCommand(argv: readonly string[]): boolean {
   const parsed = splitEnvironmentCommand(argv);
-  const command = parsed?.command ?? [...argv];
+  let command = [...(parsed?.command ?? argv)];
+  while (command[0] === '--local' || command[0] === '--returns' || command[0] === '--') {
+    command = command[0] === '--returns' ? command.slice(2) : command.slice(1);
+  }
   return command.some((arg) => /(?:^|[/\\])dev-stack\.ts$/.test(arg)) && command.includes('walk');
 }
 

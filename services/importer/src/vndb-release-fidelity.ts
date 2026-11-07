@@ -11,6 +11,7 @@ import type { Owner } from './record-bindings.ts';
 import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
   CrossMediaTableScanLimitError,
+  collectSelectedDumpRows,
   collectSelectedReleaseTitles,
   crossMediaAliases,
   emptyCrossMediaPlan,
@@ -619,21 +620,26 @@ export async function planVndbReleaseFidelity(
     scanGap('vn_titles');
   }
   let revisionsScanComplete = true;
-  try {
-    for await (const row of boundedRows(input, 'entry_meta')) {
+  const pendingRevisions = new Set(allWorkIds);
+  await collectSelectedDumpRows(input, 'vndb', 'entry_meta', {
+    limits: RELEASE_SCAN_LIMITS.entry_meta!,
+    select: (row) => pendingRevisions.has(String(row.id ?? '')),
+    onRow(row) {
       const id = String(row.id ?? '');
-      if (!allWorkIds.has(id)) continue;
       if (revisions.has(id) || !/^[1-9][0-9]*$/u.test(String(row.revision ?? ''))) {
         gap('entry_meta', row, revisions.has(id) ? 'Duplicate selected VNDB revision' : 'Invalid VNDB revision');
-        continue;
+        pendingRevisions.delete(id);
+        return;
       }
       revisions.set(id, { id, revision: Number(row.revision), lastmod: row.lastmod });
-    }
-  } catch (error) {
-    if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
-    revisionsScanComplete = false;
-    scanGap('entry_meta');
-  }
+      pendingRevisions.delete(id);
+    },
+    done: () => pendingRevisions.size === 0,
+    onLimit() {
+      revisionsScanComplete = false;
+      scanGap('entry_meta');
+    },
+  });
 
   const readyWorkIds = new Set<string>();
   for (const id of allWorkIds) {

@@ -1,5 +1,6 @@
 import {
   createKernelClient,
+  identityOperationLocation,
   reviewedPersonRequests,
   isReviewedPersonEndpoint,
   type ReviewedPersonRead,
@@ -310,9 +311,9 @@ async function response(
     throw httpFailure(reply);
   if (expected === 204) {
     ensure(reply.data === undefined || reply.data === null || reply.data === '');
-    return { status: reply.status, body: null };
+    return { status: reply.status, body: null, headers: reply.response.headers };
   }
-  return { status: reply.status, body: snapshot(reply.data, RESPONSE_BYTES) };
+  return { status: reply.status, body: snapshot(reply.data, RESPONSE_BYTES), headers: reply.response.headers };
 }
 
 function wait(ms: number, signal?: AbortSignal, sleep?: (ms: number) => Promise<void>): Promise<void> {
@@ -806,7 +807,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     body: ReviewedPersonMerge,
     key: string,
     signal?: AbortSignal,
-  ): Promise<ReviewedPersonAdmission> {
+  ): Promise<ReviewedPersonAdmission & { location: string }> {
     const safe = snapshot(body, BODY_BYTES) as ReviewedPersonMerge;
     try {
       const reply = await response(
@@ -820,19 +821,23 @@ export function createImportTransport(options: ImportTransportOptions) {
       );
       const result = reply.body as ReviewedPersonAdmission;
       ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
-      return result;
+      const location = identityOperationLocation(reply.headers, result.operation.id);
+      return { ...result, location };
     } catch (error) {
       if (error instanceof ImportTransportError && error.status === 403)
         throw new ImportTransportError(403, error.type, error.code, false, error.retry, 'merge403');
       throw error;
     }
   }
-  /** Admission is not completion: callers observe the native job until its survivor and redirect are final. */
-  async function readReviewedPersonOperation(id: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {
-    mediaId(id);
-    const reply = await response(() => reviewedPersonRequests(client).operation(id, fetchOptions(signal)), 200, signal);
+  /** Admission is not completion: callers observe the supplied Location until survivor and redirect are final. */
+  async function readReviewedPersonOperation(location: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {
+    const reply = await response(
+      () => reviewedPersonRequests(client).operationAt(location, fetchOptions(signal)),
+      200,
+      signal,
+    );
     const observed = (reply.body as { operation?: ReviewedPersonOperation } | null)?.operation;
-    ensure(observed?.id === id && typeof observed.done === 'boolean');
+    ensure(typeof observed?.id === 'string' && uuid.test(observed.id) && typeof observed.done === 'boolean');
     if (observed.done)
       ensure(
         typeof observed.result?.survivor === 'string' &&

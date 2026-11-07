@@ -376,6 +376,7 @@ test('admitted walk commands are distinct from other unknown Bun scripts', () =>
     'services/importer/src/imports-public-journey.ts',
   ];
   expect(classifyCheck(walk, repository).placement).toBe('remote');
+  expect(isWalkStackCommand(['--local', '--', ...walk])).toBe(true);
 });
 
 test('the hosts reader preserves explicit performance approval and rejects a nonboolean flag', () => {

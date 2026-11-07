@@ -140,10 +140,10 @@ test('Publish reviewed Person identities with Character and credit reads through
       },
       async mergeReviewedPersons(body, key) {
         merges.push({ body: structuredClone(body), key });
-        return { operation: { id: operation } };
+        return { operation: { id: operation }, location: `/v1/subjectIdentityOperations/${operation}` };
       },
-      async readReviewedPersonOperation(id) {
-        return { id, done: true, result: { survivor, redirected: vndbOriginal, revision: 4 } };
+      async readReviewedPersonOperation() {
+        return { id: operation, done: true, result: { survivor, redirected: vndbOriginal, revision: 4 } };
       },
     };
     const published = await publishReviewedPersonMerge({

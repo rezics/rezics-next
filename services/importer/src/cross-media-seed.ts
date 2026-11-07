@@ -166,6 +166,8 @@ import {
 } from './showcase-bangumi-credits.ts';
 import {
   CrossMediaTableScanLimitError,
+  VNDB_ENTRY_META_SCAN_PAGE,
+  collectSelectedDumpRows,
   showcaseLimits,
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
@@ -173,7 +175,7 @@ import {
   type ShowcaseManifest,
 } from './showcase-contract.ts';
 
-export { CrossMediaTableScanLimitError };
+export { CrossMediaTableScanLimitError, VNDB_ENTRY_META_SCAN_PAGE, collectSelectedDumpRows };
 export type { CrossMediaTableScanLimits, CrossMediaTables };
 
 type Provider = 'bangumi' | 'vndb';
@@ -1205,6 +1207,8 @@ export async function planCrossMediaSeed(
   const titles = new Map<string, Row[]>(),
     vns = new Map<string, Row>(),
     revisions = new Map<string, Row>();
+  const pendingRevisions = new Set(vnIds);
+  let entryMetaScanComplete = true;
   for await (const row of input.rows('vndb', 'vn_titles')) {
     const id = text(row, 'id');
     if (!vnIds.has(id)) continue;
@@ -1218,17 +1222,30 @@ export async function planCrossMediaSeed(
     ensure(!vns.has(id), 'Duplicate selected VNDB work');
     vns.set(id, row);
   }
-  for await (const row of input.rows('vndb', 'entry_meta')) {
-    const id = text(row, 'id');
-    if (!vnIds.has(id)) continue;
-    ensure(!revisions.has(id), 'Duplicate selected VNDB revision');
-    ensure(/^[1-9][0-9]*$/.test(text(row, 'revision')), 'Invalid VNDB revision');
-    revisions.set(id, { id, revision: Number(row.revision), lastmod: row.lastmod });
-  }
+  await collectSelectedDumpRows(input, 'vndb', 'entry_meta', {
+    limits: VNDB_ENTRY_META_SCAN_PAGE,
+    select: (row) => pendingRevisions.has(String(row.id ?? '')),
+    onRow(row) {
+      const id = text(row, 'id');
+      ensure(!revisions.has(id), 'Duplicate selected VNDB revision');
+      ensure(/^[1-9][0-9]*$/.test(text(row, 'revision')), 'Invalid VNDB revision');
+      revisions.set(id, { id, revision: Number(row.revision), lastmod: row.lastmod });
+      pendingRevisions.delete(id);
+    },
+    done: () => pendingRevisions.size === 0,
+    onLimit() {
+      entryMetaScanComplete = false;
+      gap('vndb', 'entry_meta', { table: 'entry_meta' }, 'Cross-media vndb/entry_meta exceeded its bounded scan');
+    },
+  });
   for (const id of vnIds) {
     const row = vns.get(id),
       entry_meta = revisions.get(id);
-    ensure(row && entry_meta && titles.has(id), `Missing selected VNDB record: ${id}`);
+    if (!row || !entry_meta || !titles.has(id)) {
+      if (entryMetaScanComplete) ensure(false, `Missing selected VNDB record: ${id}`);
+      gap('vndb', 'entry_meta', { id }, `Missing selected VNDB record: ${id}`);
+      continue;
+    }
     const vn: Row = { id, olang: row.olang, ...(row.alias === null ? {} : { alias: row.alias }) };
     if (row.c_votecount !== undefined || row.c_average !== undefined) {
       ensure(
@@ -1333,20 +1350,25 @@ export async function planCrossMediaSeed(
     chars = new Set<string>(),
     aliases = new Set<string>();
   if (selection?.includeReleases !== false && vnIds.size) {
-    const releasePlan = await (
-      await import('./vndb-release-fidelity.ts')
-    ).planVndbReleaseFidelity(input, {
-      selectedWorkIds: [...vnIds],
-    });
-    const existingWorkRecords = new Set(plan.records.vndb.map((record) => record.key));
-    plan.records.vndb.push(...releasePlan.records.vndb.filter((record) => !existingWorkRecords.has(record.key)));
-    plan.entities.vndb.push(...releasePlan.entities.vndb);
-    plan.edges.push(...releasePlan.edges);
-    plan.gaps.push(...releasePlan.gaps);
-    for (const item of releasePlan.members) member(item);
-    plan.releaseFacts = releasePlan.facts;
-    plan.releasePlatforms = releasePlan.releasePlatforms;
-    for (const entity of releasePlan.entities.vndb) releases.add(entity.key);
+    try {
+      const releasePlan = await (
+        await import('./vndb-release-fidelity.ts')
+      ).planVndbReleaseFidelity(input, {
+        selectedWorkIds: [...vnIds],
+      });
+      const existingWorkRecords = new Set(plan.records.vndb.map((record) => record.key));
+      plan.records.vndb.push(...releasePlan.records.vndb.filter((record) => !existingWorkRecords.has(record.key)));
+      plan.entities.vndb.push(...releasePlan.entities.vndb);
+      plan.edges.push(...releasePlan.edges);
+      plan.gaps.push(...releasePlan.gaps);
+      for (const item of releasePlan.members) member(item);
+      plan.releaseFacts = releasePlan.facts;
+      plan.releasePlatforms = releasePlan.releasePlatforms;
+      for (const entity of releasePlan.entities.vndb) releases.add(entity.key);
+    } catch (error) {
+      if (!(error instanceof CrossMediaTableScanLimitError)) throw error;
+      gap('vndb', error.table, { table: error.table }, error.message);
+    }
   }
   for await (const row of input.rows('vndb', 'vn_staff')) {
     if (!vnIds.has(text(row, 'id'))) continue;
@@ -1942,11 +1964,11 @@ export async function planCrossMediaSeed(
         [...plan.records.bangumi, ...plan.entities.bangumi].some((row) => row.key === String(id)),
         `Missing selected Bangumi work: ${id}`,
       );
-    for (const id of selection.vndb)
-      ensure(
-        plan.records.vndb.some((row) => row.key === id),
-        `Missing selected VNDB work: ${id}`,
-      );
+    for (const id of selection.vndb) {
+      if (plan.records.vndb.some((row) => row.key === id)) continue;
+      if (entryMetaScanComplete) ensure(false, `Missing selected VNDB work: ${id}`);
+      gap('vndb', 'entry_meta', { id }, `Missing selected VNDB work: ${id}`);
+    }
     ensure(
       plan.records.bangumi.length +
         plan.entities.bangumi.length +
@@ -2061,13 +2083,16 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');
       this.digests.set(headerKey, hash);
     }
-    const stream = createReadStream(file);
+    const resumeFrom = limits?.resumeBytes ?? 0;
+    if (resumeFrom < 0 || (resumeFrom > 0 && !Number.isSafeInteger(resumeFrom)))
+      throw new TypeError('Invalid cross-media table scan resume offset');
+    const stream = createReadStream(file, resumeFrom > 0 ? { start: resumeFrom } : {});
     const digest = createHash('sha256');
     const decoder = new TextDecoder('utf-8', { fatal: true });
     async function* lines() {
       let pending = '';
       for await (const chunk of stream) {
-        digest.update(chunk);
+        if (resumeFrom === 0) digest.update(chunk);
         pending += decoder.decode(chunk, { stream: true });
         let end: number;
         while ((end = pending.indexOf('\n')) !== -1) {
@@ -2082,6 +2107,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     }
     let rowsRead = 0;
     let bytesRead = 0;
+    let complete = false;
     try {
       for await (const line of lines()) {
         if (!line) continue;
@@ -2089,7 +2115,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
         ensure(rowBytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
         if (limits) {
           if (rowsRead >= limits.maxRows || bytesRead + rowBytes > limits.maxBytes)
-            throw new CrossMediaTableScanLimitError(provider, table);
+            throw new CrossMediaTableScanLimitError(provider, table, resumeFrom + bytesRead);
           rowsRead += 1;
           bytesRead += rowBytes;
           limits.consumeRow?.(rowBytes);
@@ -2104,6 +2130,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
           yield row as Row;
         }
       }
+      complete = true;
     } catch (error) {
       if (requiredLinkTable && (error as { code?: unknown }).code === 'ENOENT')
         throw new TypeError('Required VNDB external-link table is missing: ' + table);
@@ -2113,6 +2140,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     } finally {
       stream.destroy();
     }
+    if (!complete || resumeFrom > 0) return;
     const key = `${provider}/${table}`,
       hash = digest.digest('hex');
     ensure(!this.digests.has(key) || this.digests.get(key) === hash, 'Dump changed during selection');
