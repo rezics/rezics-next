@@ -566,8 +566,33 @@ public catalogue observation for seal and activation. The native proofs are
 Decision: an owner Source whole-query publication evaluates the complete predicate through Search's owner scope, and
 its catalogue leaves pin the public observation for seal and activation; a catalogue Source requires catalogue leaves
 only. The rule-results owner review keeps one instance across page observations and resets through its binding, so
-an in-flight owner read settles on the handler that started it. Server rendering cannot show admission-gated owner
-links, because operation admission is client-side.
+an in-flight owner read settles on the handler that started it. Saved-results rule and publish links belong in the
+first HTML when the authenticated page already names that curator; rule edit also requires `collection_rule.update` in
+the page's viewerActions. `useOperation` stays on command controls that have no page action list.
+
+Decision: Catalogue receives Imports cold-route compilation, lazy Access and the native collection fixture, and
+Performance's Semantic domain composition, inside this same publication outcome. Native proofs stay
+`collection-publication-catalogue.test.ts` plus `collection-kind-http` and `kernel-lazy-access`; no extra stories.
+
+Decision: Catalogue consumes Search's live `KernelWorkModuleDecorator` and Copies' Library repair-latch. Publication
+keeps `startWorker`'s default composition so Content ambient and the Semantic domain reach registrations; the latch
+decorates those live modules instead of substituting `KERNEL_WORK_MODULES`. Fewest tests stay the three catalogue
+publication cases already named; no extra stories.
+
+Decision: Web diary and import consumers take Diary, Bangumi and MAL tag types from the generated `@rezics/client`
+public entry, not Kernel source. Saved-results rule and publish links stay in the first HTML from page viewerActions.
+Fewest tests remain the existing catalogue publication cases plus `saved-query-results.test.ts`.
+
+Decision: Catalogue receives origin/dev producer and consumer typecheck repairs through a merge. Diary pages import
+the generated `@rezics/client` Diary types; Bangumi and MAL tag types stay on that same public entry. Probe routes
+keep the trusted module mount. Fewest tests stay the three catalogue publication cases plus `saved-query-results.test.ts`.
+
+Decision: Following return keeps the existing `following-return-frontier` assertions and the page window kind, not the
+row label. Leaf packages that the root typecheck selects also define a `check` script. No extra stories.
+
+Decision: after merging current main, publication keeps stored-Source population with Search owner-scope evaluation
+and public catalogue pins at seal/activation; History fixtures bind the public execution port; Score keeps Published
+Log journey composition. Fewest tests stay the three catalogue publication cases plus `saved-query-results.test.ts`.
 
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish

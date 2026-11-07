@@ -1,10 +1,12 @@
-import type { KernelClient, PersonalEntrySourceAdmission, RatingQuestion } from '@rezics/client';
 import type {
+  KernelClient,
   MalLabelOutcome,
   MalLabelReview,
   MalLabelSelection,
   MalTagEvidence,
-} from '../../../../../packages/client/src/kernel/library/list-import-mal-tags';
+  PersonalEntrySourceAdmission,
+  RatingQuestion,
+} from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 import type { OwnVoteReadback } from '../../ratings/own-votes/readback';

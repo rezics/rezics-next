@@ -24,8 +24,8 @@ import { BulkFilteredAdd } from './bulk-filtered-add-view';
 import { isOrdinarySavedQuery, RuleEditLink, savedQueryResultsAddress } from './saved-query-results';
 import { admitsCollectionOperation } from './collection-records';
 import { CollectionAccessState } from './collection-access';
-import { useOperation } from '../kernel/exposure';
 import { SavedQueryManagement } from './saved-query-management';
+import { SavedQueryPublicationAction } from './saved-query-publication';
 import { SavedFilterReviewEntry, SavedFilterReviewScopeBoundary } from './saved-filter-review';
 import type { ManagedSavedQuery } from './saved-query-management/controller';
 import type { QueryKey } from '@tanstack/react-query';
@@ -128,8 +128,6 @@ function DynamicCollectionPageLifetime({
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const focusResult = useRef(false);
   const [windowObservation, setWindowObservation] = useState(0);
-  const ruleRead = useOperation('collection.get');
-  const ruleUpdate = useOperation('collection.update');
   // The route's reader closes over the originating filter; callback churn must not retarget a timer.
   const origin = useRef({ read: readMembers, id: page.id, cursor: page.cursor });
   const active = useRef(false);
@@ -271,6 +269,13 @@ function DynamicCollectionPageLifetime({
   }
   const locale = getLocale();
   const saved = isOrdinarySavedQuery(current);
+  const ownerResults = Boolean(saved && viewerId && current.curatorAccountId === viewerId);
+  const savedIdentity = {
+    id: current.id,
+    curatorAccountId: current.curatorAccountId ?? null,
+    membershipKind: 'dynamic' as const,
+    ...(current.builtinKind ? { builtinKind: current.builtinKind } : {}),
+  };
   const resultsHref = savedQueryResultsAddress(locale, current.id, current.cursor, search, { layout, returnTo });
   const firstPageHref = savedQueryResultsAddress(locale, current.id, undefined, search, { layout, returnTo });
   if (access === 'denied') return <CollectionAccessState state="not-found" />;
@@ -306,20 +311,15 @@ function DynamicCollectionPageLifetime({
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <PinControlView control={pinActions} />
               <RuleEditLink
-                collection={{
-                  id: current.id,
-                  curatorAccountId: current.curatorAccountId ?? null,
-                  membershipKind: 'dynamic',
-                  ...(current.builtinKind ? { builtinKind: current.builtinKind } : {}),
-                }}
+                collection={savedIdentity}
                 viewerId={viewerId}
                 allowed={
-                  ruleRead &&
-                  ruleUpdate &&
+                  ownerResults &&
                   admitsCollectionOperation(current.viewerActions, 'collection:update', 'collection_rule.update')
                 }
                 resultsHref={resultsHref}
               />
+              <SavedQueryPublicationAction collection={savedIdentity} viewerId={viewerId} allowed={ownerResults} />
               <CollectionReadActions
                 onShare={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
               />

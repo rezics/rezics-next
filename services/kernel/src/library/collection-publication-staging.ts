@@ -11,6 +11,7 @@ import {
 } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import {
   observeCataloguePublication,
   readCataloguePublicationPage,
@@ -30,8 +31,6 @@ import {
 import type { CollectionOutputRef } from './collection-source-output.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
-import { classifyPublicationFilter } from './core/index.ts';
-import { peekLibraryDomain } from './domain-binding.ts';
 import { readCollectionSourceWorkState } from './collection-source-work-native.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity } from './native-source-custody.ts';
@@ -340,12 +339,14 @@ export async function stageCollectionPublicationStep(
     )
       throw unavailable();
     if (source.metadata.factFence === null) throw unavailable();
-    const searchPreparation = peekLibraryDomain()?.searchPreparation;
-    if (!searchPreparation) throw unavailable();
-    const filterKind = classifyPublicationFilter(searchPreparation.filterLeaves(native.definition.filter));
-    if (filterKind === 'unavailable') throw unavailable();
-    // Owner publication keeps the private capture. Catalogue publication uses Search's public population.
-    const catalogueOnly = filterKind === 'catalogue';
+    // The stored Source selects the population, not the predicate's leaves. A catalogue Source stages Search's
+    // public population, so each leaf must be catalogue. An owner Source stages the owner's private capture and
+    // evaluates every leaf through the owner Search seam; catalogue leaves also pin Search's public observation.
+    const plan = compileCurrentOwnerFilter(native.definition.filter);
+    const catalogueOnly = native.definition.source.kind === 'catalogue';
+    if (plan.leaves.length === 0 || (catalogueOnly && plan.leaves.some((leaf) => leaf.kind !== 'catalogue')))
+      throw unavailable();
+    const publicInputs = plan.leaves.some((leaf) => leaf.kind === 'catalogue');
     const scope = catalogueOnly ? null : createSearchScopeSource(options);
     const ownerPrepared: PreparedSearchScope | null = catalogueOnly
       ? null
@@ -365,7 +366,7 @@ export async function stageCollectionPublicationStep(
       prefix: options.prefix,
       deadline: evidence.deadline,
     };
-    const publicCatalogue: CataloguePublicationObservation | undefined = catalogueOnly
+    const publicCatalogue: CataloguePublicationObservation | undefined = publicInputs
       ? (
           await work.compose(async (allowance) => {
             try {
@@ -404,7 +405,7 @@ export async function stageCollectionPublicationStep(
           }),
           publicCatalogue: publicCatalogue!,
         })
-      : ownerPrepared!.basis;
+      : Object.freeze({ ...ownerPrepared!.basis, ...(publicCatalogue ? { publicCatalogue } : {}) });
     if (
       basis.release !== native.releaseDigest ||
       !basis.nativeOwner ||
@@ -455,7 +456,7 @@ export async function stageCollectionPublicationStep(
           json(initialCollectionPublicationFrontier()),
           native.rule.sourceGeneration,
           source.metadata.factFence,
-          catalogueOnly,
+          publicInputs,
         ],
       );
       row = await checkpoint(tx, locator, work);
@@ -469,8 +470,8 @@ export async function stageCollectionPublicationStep(
       row.canonical_generation !== source.generation ||
       row.canonical_basis_digest !== source.basis.digest ||
       row.fact_fence !== source.metadata.factFence ||
-      row.public_inputs !== catalogueOnly ||
-      (catalogueOnly && !row.scope_basis.publicCatalogue)
+      row.public_inputs !== publicInputs ||
+      (publicInputs && !row.scope_basis.publicCatalogue)
     )
       throw unavailable();
     if (row.frontier.exhausted) {
@@ -515,7 +516,10 @@ export async function stageCollectionPublicationStep(
             allowance,
           }),
         );
-        if (!isDeepStrictEqual(page.basis, row.scope_basis) || !isDeepStrictEqual(page.observation, native.observation))
+        if (
+          !isDeepStrictEqual(page.basis, ownerScopeBasis(row)) ||
+          !isDeepStrictEqual(page.observation, native.observation)
+        )
           throw unavailable();
         frontier = enterCollectionPublicationPrefix(frontier, page);
       }
@@ -550,7 +554,7 @@ export async function stageCollectionPublicationStep(
           });
           return { evaluation, work: scope!.work(evaluation) };
         });
-        if (!isDeepStrictEqual(evaluated.evaluation.basis, row.scope_basis)) throw unavailable();
+        if (!isDeepStrictEqual(evaluated.evaluation.basis, ownerScopeBasis(row))) throw unavailable();
         const settled = settleCollectionPublicationSubject(frontier, evaluated.evaluation);
         frontier = settled.frontier;
         included = settled.included;
@@ -647,6 +651,12 @@ async function writeCollectionPublicationCheckpoint(
     [locator.route, locator.collectionId, row.generation, row.version, json(next.frontier)],
   );
   if (!updated) throw conflict();
+}
+
+/** The owner scope's own basis. A mixed Source also pins Search's public catalogue observation beside it. */
+function ownerScopeBasis(row: Checkpoint): ScopeBasis {
+  const { publicCatalogue: _publicCatalogue, ...basis } = row.scope_basis;
+  return basis as ScopeBasis;
 }
 
 /** Public generation/uuid/index must still match the pinned observation. Library facts never enter this proof. */

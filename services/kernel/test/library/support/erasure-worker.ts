@@ -66,7 +66,7 @@ export async function createOwnedErasureFixture() {
   const { bootstrapRelease, GLOBAL_CONTEXT } = await import('../../../src/semantic/definitions.ts');
   const { createWorkClient } = await import('../../../src/work/client.ts');
   const { bindExecutionContract } = await import('../../../src/command/execution-contract.ts');
-  const { historyExecutionPort } = await import('../../../src/history/adapters/operational-work.ts');
+  const { historyExecutionPort } = await import('../../../src/history/application/index.ts');
   const { workExecutionPort } = await import('../../../src/work/selected-runtime.ts');
   const { nativeFixture } = await import('../../access/native-account-bindings-fixture.ts');
   const { openGrowthDatabase } = await import('../../support/growth.ts');
